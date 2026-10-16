@@ -10,7 +10,7 @@ from pydantic import ConfigDict, Field, JsonValue
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TextTranscript, TranscriptEvent
 
 from .shared import (
@@ -144,7 +144,7 @@ class ToolState(TaggedWire, ABC):
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
 
     def call(self, part: ToolPart) -> ToolCall:
-        return ToolCall(part.callID, part.tool,
+        return ToolCall(UnrecordedEventTime(), part.callID, part.tool,
                         self.input.model_dump(exclude_unset=True), self.input.filePath or '')
 
 

@@ -225,7 +225,7 @@ class ToolUse(AssistantBlock):
     input: JsonValue
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        call = ToolCall(self.id, self.name, self.input, started_at=RecordedEventTime(record.timestamp))
+        call = ToolCall(RecordedEventTime(record.timestamp), self.id, self.name, self.input)
         return (session.started(call),)
 
 

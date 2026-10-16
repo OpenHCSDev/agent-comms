@@ -347,7 +347,7 @@ class ToolItem(Item, ABC):
         return ""
 
     def call(self, started_at: EventTime = UnrecordedEventTime()) -> ToolCall:
-        return ToolCall(self.id, self.tool_name, self.arguments, self.tool_detail, started_at=started_at)
+        return ToolCall(started_at, self.id, self.tool_name, self.arguments, self.tool_detail)
 
     def accumulator(self, started_at: EventTime) -> ToolCall:
         return self.call(started_at)
@@ -666,7 +666,7 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return ToolCall(call_id, 'edit', {'file_path': self.path}, self.path).finished(
+        return ToolCall(UnrecordedEventTime(), call_id, 'edit', {'file_path': self.path}, self.path).finished(
             '', ok, diff=self.kind.patch(self.path, self.diff))
 
 

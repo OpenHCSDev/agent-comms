@@ -7,7 +7,10 @@ from agent_comms.cli_bridges.shared import (
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
+from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolStartTranscript, ToolEndTranscript
+from agent_comms.cli_bridges.claude_protocol import CLAUDE_RECORD, ClaudeSession
+from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
+from agent_comms.cli_bridges.opencode_parts import AssistantMessage, ToolPart
 from test_codex_items import _output
 
 
@@ -149,4 +152,75 @@ def test_completed_only_sources_do_not_retain_draft_state(tmp_path):
     output = _output(tmp_path)
     output.publish_batch([FinishedItem('t', 'a', (AssistantTranscript('complete'),))])
     assert not output.drafts
+    assert output.transcript.current_draft() is None
+
+
+def claude_tool_updates():
+    session = ClaudeSession(turn='t', catching_up=False)
+    start = CLAUDE_RECORD.validate_python(dict(type='assistant', uuid='start',
+        timestamp='1970-01-01T00:00:01Z', message=dict(content=[dict(
+            type='tool_use', id='tool', name='Bash', input={'command': 'printf prefix'})])))
+    finish = CLAUDE_RECORD.validate_python(dict(type='user', uuid='finish', promptId='t',
+        timestamp='1970-01-01T00:00:02Z', message=dict(content=[dict(
+            type='tool_result', tool_use_id='tool', content='done')])))
+    return start.updates(session), finish.updates(session)
+
+
+def codex_tool_updates():
+    stream = ItemStream('session')
+    command = dict(type='commandExecution', id='tool', command='printf prefix', status='inProgress')
+    start = stream.receive(RpcNotification(method='item/started', params=dict(
+        threadId='session', turnId='t', item=command, startedAtMs=1000)))
+    finish = stream.receive(RpcNotification(method='item/completed', params=dict(
+        threadId='session', turnId='t', item=command | dict(status='completed', exitCode=0,
+            aggregatedOutput='done'), completedAtMs=2000)))
+    return (start,), (finish,)
+
+
+def opencode_tool_updates():
+    message = AssistantMessage(id='t', sessionID='session', role='assistant',
+                               parentID='input', time={'created': 1000})
+    wire = dict(type='tool', id='tool', sessionID='session', messageID='t', callID='tool', tool='bash')
+    start = ToolPart.model_validate(wire | dict(state=dict(
+        status='pending', input={'command': 'printf prefix'})))
+    finish = ToolPart.model_validate(wire | dict(state=dict(status='completed',
+        input={'command': 'printf prefix'}, output='done', time={'start': 1000, 'end': 2000})))
+    return start.present(message), finish.present(message)
+
+
+@pytest.mark.parametrize('updates', [claude_tool_updates, codex_tool_updates, opencode_tool_updates])
+def test_every_adapter_shows_the_tool_before_result_and_closes_its_prefix(tmp_path, updates):
+    output = _output(tmp_path)
+    started, completed = updates()
+    output.publish_batch(list(started))
+    preview = output.transcript.current_draft()
+    event, = preview.events
+    assert isinstance(event, ToolStartTranscript)
+    assert event.raw_input == {'command': 'printf prefix'}
+    assert 'printf prefix' in event.title
+    output.publish_batch(list(completed))
+    assert output.transcript.current_draft() is None
+    with output.transcript.reading() as snapshot:
+        record, = snapshot.forward(0, snapshot.cut().offset)
+        beginning, end = record.events
+        assert isinstance(beginning, ToolStartTranscript) and isinstance(end, ToolEndTranscript)
+        assert beginning.title == event.title and end.text == 'done'
+        assert beginning.timestamp == end.timestamp == 1.0
+    output.publish_batch(list(started))  # An overlapping old start cannot reopen it.
+    assert output.transcript.current_draft() is None
+    output.publish_batch([AllTurnsEnded()])
+    assert not output.drafts
+
+
+def test_claude_turn_end_releases_tool_lookup_and_shared_prefix(tmp_path):
+    output = _output(tmp_path)
+    session = ClaudeSession(turn='t', catching_up=False)
+    use = CLAUDE_RECORD.validate_python(dict(type='assistant', uuid='start',
+        timestamp='1970-01-01T00:00:01Z', message=dict(content=[dict(
+            type='tool_use', id='tool', name='Bash', input={'command': 'pwd'})])))
+    output.publish_batch(list(use.updates(session)))
+    assert session.tools and output.transcript.current_draft() is not None
+    ended = CLAUDE_RECORD.validate_python(dict(type='system', subtype='turn_duration'))
+    output.publish_batch(list(ended.updates(session)))
+    assert not session.tools and not output.drafts
     assert output.transcript.current_draft() is None

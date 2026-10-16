@@ -51,7 +51,7 @@ class Binding(TypedTable):
     thread: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class DraftAccumulator:
     """One subscription's item prefix; the shared output owns its lifetime."""
 
@@ -103,10 +103,9 @@ class SnapshotDraft(DraftAccumulator, ABC):
         return (DraftItem(turn_id, item_id, self),)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolCall(SnapshotDraft):
     """The same invocation owns its pending preview and completed history."""
-    started_at: EventTime = field(default_factory=UnrecordedEventTime, kw_only=True)
     id: str
     name: str
     arguments: JsonValue
@@ -127,7 +126,7 @@ class ToolCall(SnapshotDraft):
                                                text=text, ok=ok, diff=diff))
 
 
-@dataclass
+@dataclass(frozen=True)
 class TextDraft(SnapshotDraft):
     event_type: type[TextTranscript]
     sections: dict[int, list[str]]

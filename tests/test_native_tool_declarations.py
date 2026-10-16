@@ -12,6 +12,7 @@ from agent_comms import backend
 from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
+from agent_comms.recorded_time import UnrecordedEventTime
 from delivery_owner_fixture import canonical_agent
 
 pytest_plugins = ("test_backend_native_lifecycle",)
@@ -48,7 +49,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         assert call.tool == tool and tool.detail in event.title
     unknown = ToolDeclaration.start("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
-        "external_extension",
+        "external_extension {'private': 'preserved'}",
         "other",
         {"private": "preserved"},
     )
@@ -66,12 +67,24 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
     foreign = {"file_path": "external.txt"}
     start = ToolStartTranscript(tool_call_id="saved", tool_name=name, raw_input=foreign)
     end = ToolEndTranscript(tool_call_id="saved", tool_name=name, text="saved result")
-    assert (start.title, start.kind, start.raw_input) == (label, kind, foreign)
+    caption = label + " {'file_path': 'external.txt'}"
+    assert (start.title, start.kind, start.raw_input) == (caption, kind, foreign)
     assert (end.title, end.kind) == (label, kind)
-    assert ToolDeclaration.start("saved", name, foreign).title == label
-    assert ToolStartTranscript(tool_call_id="scalar", tool_name=name, raw_input=17).title == label
+    assert ToolDeclaration.start("saved", name, foreign).title == caption
+    assert ToolStartTranscript(tool_call_id="scalar", tool_name=name, raw_input=17).title == label + ' 17'
     with pytest.raises(SelectedToolDenied):
         CodingCall.decode("execution", name, foreign)
+
+
+def test_input_caption_is_bounded_and_never_parses_an_execution_request(monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail('Presentation must not decode an executable coding request')
+
+    monkeypatch.setattr(CodingTool, 'parse_arguments', forbidden)
+    arguments = {'file_path': 'foreign.txt', 'payload': 'x' * 1_000_000}
+    caption = ToolDeclaration.start('opaque', 'read', arguments).title
+    assert 'foreign.txt' in caption and len(caption) < 200
+    assert arguments['payload'] == 'x' * 1_000_000
 
 
 def test_foreign_protocol_owners_supply_their_own_recorded_detail():
@@ -93,8 +106,8 @@ def test_foreign_protocol_owners_supply_their_own_recorded_detail():
     assert call.title == "Read open-code.txt"
     recorded, _ = call.finished("saved", True)
     assert recorded.title == call.title and recorded.raw_input == {"filePath": "open-code.txt"}
-    scalar, _ = ToolCall("opaque", "external_custom", ["not", "Pi"]).finished("saved", True)
-    assert scalar.title == "external_custom" and scalar.raw_input == ["not", "Pi"]
+    scalar, _ = ToolCall(UnrecordedEventTime(), "opaque", "external_custom", ["not", "Pi"]).finished("saved", True)
+    assert scalar.title == "external_custom ['not', 'Pi']" and scalar.raw_input == ["not", "Pi"]
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
@@ -217,7 +230,8 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     # The declared label/detail own the title; rawInput retains the native argument.
     # The SDK reports raw arguments, not a caption. Presentation does not validate
     # or reinterpret that object as an execution request; disclosure retains it.
-    expected_title = "Read"
+    expected_title = ToolDeclaration.caption('read', arguments={'path': str(source)})
+    assert 'owned.txt' in expected_title
     assert starts[0].kind == "read" and starts[0].title == expected_title
     assert ends[0].ok and "ACTUAL_READ_CONTENT" in ends[0].output
     assert len(native.starts) == len(native.saved_inputs()) == 1
