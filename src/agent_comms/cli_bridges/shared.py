@@ -11,7 +11,7 @@ import os
 import signal
 import sys
 from abc import ABC, abstractmethod
-from contextlib import aclosing, suppress
+from contextlib import aclosing
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -23,7 +23,7 @@ from metaclass_registry import RegistryConfig
 
 from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
     DeliveredOutcome, EmittedOutcome, Outcome, TaggedWire,
     UnconfirmedOutcome, WatchLine, WireModel,
@@ -557,32 +557,20 @@ class CoreConnection:
 
     async def watch(self, state: Path) -> AsyncIterator[WatchLine]:
         with (state / 'watch.stderr.log').open('a') as errors:
-            child = await asyncio.create_subprocess_exec(
+            child = await AttachedChild.start((
                 self.executable, '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment),
-                stdout=asyncio.subprocess.PIPE, stderr=errors)
+                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
+                stdio=StreamingChildStdio(input_enabled=False, stderr=errors))
             try:
                 item = await WatchLine.read_next(child)
                 while item is not None:
                     yield item
                     item = await item.read_next(child)
             finally:
-                await self.join(child)
+                await child.stop()
 
     async def acknowledge(self, message: Message) -> None:
         await asyncio.to_thread(self.comms.messaging.acknowledge, self.binding.bus, (message.reference,))
-
-    @staticmethod
-    async def join(child: asyncio.subprocess.Process) -> None:
-        # An exited child no longer accepts the signal.
-        with suppress(ProcessLookupError):
-            child.terminate()
-        try:
-            async with asyncio.timeout(5):
-                await child.wait()
-        except TimeoutError:
-            child.kill()
-            await child.wait()
 
 BridgeOptions = TypeVar('BridgeOptions', bound=Options)
 OperationBridge = TypeVar('OperationBridge', bound='CliBridge')

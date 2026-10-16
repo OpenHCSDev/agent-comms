@@ -16,6 +16,7 @@ from .declared_family import DeclaredFamily
 from .messages import Message
 
 if TYPE_CHECKING:
+    from .child_process import AttachedChild
     from .cli_bridges.shared import CliBridge, CoreConnection, LineMonitorBridge, ObservedMonitor
 
 
@@ -107,10 +108,11 @@ class WatchLine(TaggedWire):
     async def handle(self, bridge: CliBridge) -> None: ...
 
     @staticmethod
-    async def read_next(child: asyncio.subprocess.Process) -> WatchLine | None:
+    async def read_next(child: AttachedChild) -> WatchLine | None:
         line = await child.stdout.readline()
         if not line:
-            raise RuntimeError(f'Core watch ended, exit {await child.wait()}')
+            await child.wait()
+            raise RuntimeError(f'Core watch ended, exit {child.returncode}')
         return WATCH_LINE.validate_json(line)
 
 
@@ -135,7 +137,7 @@ class CoreError(WatchLine):
         raise TypeError('No declared Core error handles this exception')
 
     @staticmethod
-    async def read_next(child: asyncio.subprocess.Process) -> None:
+    async def read_next(child: AttachedChild) -> None:
         """An error is the final record, never another message subscription."""
         return None
 
