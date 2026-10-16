@@ -84,6 +84,26 @@ class ConversationHistoryView:
     """Historical views that present conversation content, not owner state."""
 
     @classmethod
+    def _display_identity(cls, page: MessagePage) -> tuple | None:
+        if page.historical_display is not None:
+            return ("historical", page.historical_display.displayed.viewer_identity,
+                    page.history_revision)
+        return cls._current_display_identity(page)
+
+    @classmethod
+    @abstractmethod
+    def _current_display_identity(cls, page: MessagePage) -> tuple | None: ...
+
+    @classmethod
+    def same_display(cls, page: MessagePage, earlier: MessagePage) -> bool:
+        """Read-scope safety uses the original pages, never a client identity copy."""
+        return cls._display_identity(page) == cls._display_identity(earlier)
+
+    @classmethod
+    def has_display_evidence(cls, page: MessagePage) -> bool:
+        return cls._display_identity(page) is not None
+
+    @classmethod
     def display_changed_since(cls, revision: WireRevision, earlier: WireRevision) -> bool:
         """Only stores which can replace the viewer, participants or history source."""
         return ((revision.registry, revision.history) != (earlier.registry, earlier.history)
@@ -109,6 +129,16 @@ class ChannelHistory(HistoryView):
 class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     channel: Channel
     viewer: str | None = None
+
+    @classmethod
+    def _current_display_identity(cls, page: MessagePage) -> tuple | None:
+        scope = page.display_scope
+        if scope is None or scope.displayed is None:
+            return None
+        return (scope.displayed.viewer_identity, scope.displayed.bus_identity,
+                scope.channel, scope.targets, scope.any_mode,
+                scope.participant_names if scope.any_mode else frozenset(),
+                page.history_revision)
 
     @classmethod
     def display_changed_since(cls, revision: WireRevision, earlier: WireRevision) -> bool:
@@ -137,6 +167,15 @@ class DMHistory(HistoryView):
 @dataclass(frozen=True, slots=True)
 class DMDisplayHistory(ConversationHistoryView, DMHistory):
     worktree: str
+
+    @classmethod
+    def _current_display_identity(cls, page: MessagePage) -> tuple | None:
+        basis = page.display_basis
+        if basis is None:
+            return None
+        return (basis.root_identity, basis.bus_identity, basis.worktree,
+                basis.requested_peer, basis.viewer_identity, basis.viewer_names,
+                basis.peer_identity, basis.peer_names, page.history_revision)
 
     @property
     def viewer(self) -> str:
