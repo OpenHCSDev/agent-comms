@@ -363,7 +363,6 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     with pytest.raises(ValueError, match="reserved by a saved view"):
         comms.threads.create(
             ForkSpec(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level="high", task="task", tags=frozenset({"reserved"})),
-            pi_bin="/bin/true",
         )
 
     after = comms.registry.snapshot()

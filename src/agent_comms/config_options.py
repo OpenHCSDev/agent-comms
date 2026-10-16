@@ -226,6 +226,12 @@ class ConfigOptions:
         self.configuration = configuration
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
 
+    @classmethod
+    def configured(cls) -> ConfigOptions:
+        """Catalogs of the native binary, arguments and environment this process is configured with."""
+        return cls(NativeArguments.configured_binary(), NativeArguments.configured(),
+                   RestartEnvironment.inherit(os.environ))
+
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
             self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration)

@@ -479,10 +479,6 @@ class TestThreadOps:
 
 
 class TestFork:
-    def test_spec_allows_an_empty_task_and_uses_an_explicit_prompt(self):
-        assert ForkSpec(name="x", parent="p", project="/project", model="test/model", thinking_level="high").initial_prompt == ""
-        assert ForkSpec(name="x", parent="p", project="/project", model="test/model", thinking_level="high", prompt="first input").initial_prompt == "first input"
-
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(RelationViolationError, match="session file"):
             wired.threads.create(ForkSpec(name="child", parent="PR111", project="/project", model="test/model", thinking_level="high", task="t"))

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import asyncio
 import os
 import re
 import shlex
@@ -227,8 +228,8 @@ class TargetAction:
     def editable_fields(self) -> tuple[TargetField, ...]:
         return self.bound[0].editable_fields
 
-    async def prepare_fields(self, comms: Comms) -> tuple[TargetField, ...]:
-        return await self.bound[0].prepare_fields(comms)
+    async def prepare_fields(self) -> tuple[TargetField, ...]:
+        return await self.bound[0].prepare_fields()
 
     @property
     def label(self) -> str:
@@ -464,11 +465,11 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return tuple(TargetField(item, hints[item.name], getattr(self, item.name))
                      for item in fields(self) if not item.metadata['target_bound'])
 
-    async def prepare_fields(self, comms: Comms) -> tuple[TargetField, ...]:
+    async def prepare_fields(self) -> tuple[TargetField, ...]:
         declared = self.editable_fields
         if not any(item.catalog is not None for item in declared):
             return declared
-        catalogs = ConfigOptions(comms)
+        catalogs = ConfigOptions.configured()
         return tuple([await item.prepare(catalogs, self) for item in declared])
 
     def describe(self, comms: Comms, target: CommandTarget | str, project: str) -> TargetAction:
@@ -789,10 +790,6 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
     service_tier: ServiceTier | None = option("--service-tier", default=None)
 
     def apply(self, ctx: Comms) -> Any:
-        import asyncio
-
-        from .config_options import ConfigOptions
-        from .launch_runtime import RestartEnvironment
         from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
 
@@ -806,12 +803,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             thinking_level=level,
             service_tier=self.service_tier,
         )
-        catalogs = ConfigOptions(
-            NativeArguments.configured_binary(),
-            NativeArguments.configured(),
-            RestartEnvironment.inherit(os.environ),
-        )
-        asyncio.run(catalogs.validate(candidate))
+        asyncio.run(ConfigOptions.configured().validate(candidate))
         updated = ctx.threads.set_thread_configuration(
             thread,
             model=candidate.model,
@@ -974,7 +966,6 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
         return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
-        import asyncio
         from contextlib import aclosing
 
         async def stream() -> None:
@@ -1433,9 +1424,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
         spec = self.spec_type(**{item.name: getattr(self, item.name)
                                  for item in fields(self.spec_type)})
-        import asyncio
-
-        asyncio.run(ConfigOptions(ctx).validate(self))
+        asyncio.run(ConfigOptions.configured().validate(self))
         child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.pid)
 
@@ -1522,7 +1511,6 @@ class ContextCliCommand(CliCommand):
                 raise ValueError("No preceding recorded turn exists for comparison")
             return {"manifests": tuple(reversed(selected)),
                     "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
-        import asyncio
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
