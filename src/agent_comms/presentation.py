@@ -25,7 +25,8 @@ from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import (ReadLedger, ReadMask, ReadSource, AbsentReadSource,
-                          ReadRevision, SelectedViewers, OneViewer, ReadNotice, NoReadNotice)
+                          ReadRevision, SelectedViewers, OneViewer, ReadNotice, NoReadNotice,
+                          ReadObservations)
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
@@ -67,6 +68,34 @@ class SentMessageOutcome:
     @property
     def recipient(self) -> str:
         return self.recipient_identity.canonical_thread
+
+
+class NotificationView:
+    def includes(self, source, recipient: FrozenRecipient) -> bool:
+        raise NotImplementedError
+
+    def includes_sent(self, source) -> bool:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, slots=True)
+class AllNotificationRecipients(NotificationView):
+    def includes(self, source, recipient: FrozenRecipient) -> bool:
+        return True
+
+    def includes_sent(self, source) -> bool:
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerNotificationRecipients(NotificationView):
+    lookup: str
+
+    def includes(self, source, recipient: FrozenRecipient) -> bool:
+        return self.includes_sent(source) or recipient.recipient_lookup == self.lookup
+
+    def includes_sent(self, source) -> bool:
+        return source.audience.sender_lookup == self.lookup
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,29 +198,38 @@ class MessageNotification:
     def delivery_window(
         cls, root: Path, registry: Registration, sources: Sequence[CommittedDelivery],
         assignment_read: NotificationAssignmentRead, *, snapshot: RegistrySnapshot,
-        identity: ReadSource, owner_lookup: str | None = None,
+        identity: ReadSource, view: NotificationView = AllNotificationRecipients(),
     ):
-        """Project this window using the caller's one acquired namespace."""
+        """Acquire exact indexed read rows for a standalone visible window."""
+        if not sources:
+            return {}
+        captured = ReadLedger(root).capture_observations(snapshot, sources)
+        return cls.observed_delivery_window(
+            root, registry, sources, assignment_read, snapshot=snapshot, identity=identity,
+            read_observations=captured, view=view,
+        )
+
+    @classmethod
+    def observed_delivery_window(
+        cls, root: Path, registry: Registration, sources: Sequence[CommittedDelivery],
+        assignment_read: NotificationAssignmentRead, *, snapshot: RegistrySnapshot,
+        identity: ReadSource, read_observations: ReadObservations, view: NotificationView,
+    ):
+        """Use the status owner's prepared masks; never reopen or prepare its ledger."""
         from .agent_activity import AgentActivity
 
         if not sources:
             return {}
         observations = AgentActivity(root, registry).observe_recipients(
             (recipient for source in sources for recipient in source.audience.recipients
-             if cls.includes_recipient(source, recipient, owner_lookup)),
+             if view.includes(source, recipient)),
             snapshot=snapshot,
         )
         return cls.project_delivery_window(
             root, snapshot, sources, observations,
-            owner_lookup=owner_lookup, assignment_read=assignment_read, identity=identity,
+            view=view, assignment_read=assignment_read, identity=identity,
+            read_observations=read_observations,
         )
-
-    @staticmethod
-    def includes_recipient(source: CommittedDelivery, recipient: FrozenRecipient,
-                           owner_lookup: str | None) -> bool:
-        """A sender sees all outcomes; a recipient sees only its original outcome."""
-        return (owner_lookup is None or source.audience.sender_lookup == owner_lookup
-                or recipient.recipient_lookup == owner_lookup)
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
@@ -199,6 +237,9 @@ class MessageNotification:
         from .agent_activity import RecordedRecipientActivity
         from .notification_assignment import NotificationAssignment
 
+        if not sources:
+            return {}
+        captured = ReadLedger(root).capture_observations(namespace, sources)
         observations = {
             recipient.recipient_lookup: RecordedRecipientActivity()
             for source in sources for recipient in source.audience.recipients
@@ -206,6 +247,7 @@ class MessageNotification:
         return cls.project_delivery_window(
             root, namespace, sources, observations,
             assignment_read=NotificationAssignment.read(root, sources), identity=identity,
+            read_observations=captured,
         )
 
     @classmethod
@@ -213,7 +255,7 @@ class MessageNotification:
         cls, root: Path, snapshot: RegistryProvenance,
         sources: Sequence[CommittedDelivery], observations: Mapping[str, RecipientActivity],
         *, assignment_read: NotificationAssignmentRead, identity: ReadSource,
-        owner_lookup: str | None = None,
+        read_observations: ReadObservations, view: NotificationView = AllNotificationRecipients(),
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Original assignment and read authorities own both display projections."""
         from .notification_assignment import NotificationAssignment
@@ -226,11 +268,11 @@ class MessageNotification:
             return {}
         rows = assignment_read.resolve(root)
         reads = ReadLedger(root)
-        document = reads.observations_for(snapshot, sources, identity)
+        document = read_observations.for_source(identity)
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
-                if not cls.includes_recipient(source, outcome.recipient, owner_lookup):
+                if not view.includes(source, outcome.recipient):
                     continue
                 observation = observations[outcome.recipient.recipient_lookup]
                 notification = observation.after_inbox_read(
@@ -247,7 +289,7 @@ class MessageNotification:
                     )
                 )
             direct_read = cls.direct_read_notification(
-                source, snapshot, reads, document, owner_lookup=owner_lookup
+                source, snapshot, reads, document, view=view
             )
             if direct_read is not None:
                 result[key].append(direct_read)
@@ -255,7 +297,7 @@ class MessageNotification:
 
     @classmethod
     def direct_read_notification(
-        cls, source, snapshot, reads, document, *, owner_lookup
+        cls, source, snapshot, reads, document, *, view: NotificationView
     ) -> MessageNotification | None:
         """Project a human DM read even though humans have no wake assignment."""
         from .bus_publication import stable_thread_lookup
@@ -265,7 +307,7 @@ class MessageNotification:
         if (
             source.audience.recipients
             or is_channel_target(message.target)
-            or (owner_lookup is not None and source.audience.sender_lookup != owner_lookup)
+            or not view.includes_sent(source)
         ):
             return None
         name = snapshot.canonical_name(message.target)
@@ -338,7 +380,7 @@ class MessageNotification:
 
         projected = cls.delivery_window(
             root, registry, sources,
-            owner_lookup=stable_thread_lookup(owner.created_at),
+            view=OwnerNotificationRecipients(stable_thread_lookup(owner.created_at)),
             assignment_read=assignment_read,
             snapshot=registry.snapshot(), identity=identity,
         )
@@ -369,7 +411,7 @@ class DisplaySelection:
         document: ReadDocument, viewer: str | None, source: ReadSource,
     ) -> DisplaySelection:
         canonical = snapshot.canonical_name(viewer) if viewer is not None else None
-        return cls(snapshot, catalog, canonical, source.memberships(document, snapshot), document)
+        return cls(snapshot, catalog, canonical, document.observations(snapshot).for_source(source), document)
 
     @classmethod
     @contextmanager

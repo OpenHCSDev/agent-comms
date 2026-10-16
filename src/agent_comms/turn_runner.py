@@ -305,7 +305,7 @@ class TurnRunner:
             with self.comms.bus.log.certified_read() as source:
                 delivery = source.delivery(sent_seq)
                 identity = ReadSource.from_revision(source.witness.revision)
-            readers = self.comms.bus.reads.observations_for(snapshot, (delivery,), identity)
+            readers = self.comms.bus.reads.capture_observations(snapshot, (delivery,)).for_source(identity)
             return any(name != thread_name and mask.contains(delivery.message)
                        for name, mask in readers.items())
         return False

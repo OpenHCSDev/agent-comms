@@ -14,9 +14,11 @@ from .catalog_store import ChannelCatalog
 from .goal_waits import GoalWaits
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
+from .read_ledger import SelectedViewers
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
+    from .read_ledger import ReadObservations
     from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .wire_log import OpenedWireSnapshot
@@ -78,6 +80,7 @@ class ThreadPresentations:
     views: Mapping[str, ThreadView]
     transcripts: Transcripts
     sent_source_limit: int
+    read_observations: ReadObservations
 
     def read(self, name: str) -> ThreadPresentation | None:
         view = self.views.get(self.snapshot.canonical_name(name))
@@ -89,7 +92,8 @@ class ThreadPresentations:
         owner = captured.read.identity.thread
         if not owner.incarnation.current(self.snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
-        return view.presentation.with_sources(captured, snapshot=self.snapshot)
+        return view.presentation.with_sources(
+            captured, snapshot=self.snapshot, read_observations=self.read_observations)
 
 
 class HistoryViews:
@@ -367,8 +371,16 @@ class HistoryViews:
             show_stopped=True,
             show_archived=False,
         )
+        reads = self.transcripts.bus.reads
+        viewers = SelectedViewers(tuple(thread.incarnation for thread in snapshot.threads.values()
+                                       if views and reads.human(thread.role)))
+        read_observations = reads.read(viewers).observations(snapshot)
         return ThreadPresentations(
-            snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
+            snapshot,
+            {view.thread.name: view for view in views},
+            self.transcripts,
+            sent_source_limit,
+            read_observations,
         )
 
     def require_thread_presentation(self, name: str) -> ThreadPresentation:

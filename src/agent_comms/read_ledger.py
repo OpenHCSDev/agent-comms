@@ -131,6 +131,16 @@ class ReadMask:
         return frozenset(n for state in self.conversations.values() for n in state.sparse)
 
 
+@dataclass(frozen=True, slots=True)
+class ReadObservations:
+    """One prepared namespace cut; its source guards every consuming window."""
+    source: ReadSource
+    readers: dict[str, ReadMask]
+
+    def for_source(self, source: ReadSource) -> dict[str, ReadMask]:
+        return source.memberships(self)
+
+
 class ReadNotice(DeclaredFamily, JsonShapeFamily, affix='ReadNotice'):
     def take(self, ledger: ReadLedger) -> ReadNotice:
         raise NotImplementedError
@@ -184,9 +194,7 @@ class ReadDocument:
             messages[key] = messages.get(key, ReadProgress()).merge(state)
         return replace(self, messages=messages)
 
-    def memberships(self, snapshot: RegistryProvenance, source: FileIdentity) -> dict[str, ReadMask]:
-        if self.source != PresentReadSource(source):
-            return {}
+    def observations(self, snapshot: RegistryProvenance) -> ReadObservations:
         viewers = {}
         for key, state in self.messages.items():
             if not key.viewer.current(snapshot) or not key.conversation.current(snapshot):
@@ -197,10 +205,10 @@ class ReadDocument:
         names = {}
         for name, participant in snapshot.named_members():
             names.setdefault(participant.incarnation, []).append(name)
-        return {viewer: ReadMask(conversations, {
+        return ReadObservations(self.source, {viewer: ReadMask(conversations, {
                     name: participant for conversation in conversations
                     for participant in conversation.participants for name in names[participant]
-                }) for viewer, conversations in viewers.items()}
+                }) for viewer, conversations in viewers.items()})
 
 
 class ReadSource(DeclaredFamily, affix='ReadSource'):
@@ -208,7 +216,7 @@ class ReadSource(DeclaredFamily, affix='ReadSource'):
     def from_revision(cls, revision):
         return AbsentReadSource() if revision is None else PresentReadSource(revision.identity)
 
-    def memberships(self, document, snapshot):
+    def memberships(self, captured: ReadObservations) -> dict[str, ReadMask]:
         raise NotImplementedError
 
 
@@ -216,13 +224,13 @@ class ReadSource(DeclaredFamily, affix='ReadSource'):
 class PresentReadSource(ReadSource):
     identity: FileIdentity
 
-    def memberships(self, document, snapshot):
-        return document.memberships(snapshot, self.identity)
+    def memberships(self, captured: ReadObservations) -> dict[str, ReadMask]:
+        return captured.readers if captured.source == self else {}
 
 
 @dataclass(frozen=True, slots=True)
 class AbsentReadSource(ReadSource):
-    def memberships(self, document, snapshot):
+    def memberships(self, captured: ReadObservations) -> dict[str, ReadMask]:
         return {}
 
 
@@ -455,19 +463,17 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
             replace(header, notice=NoReadNotice()).upsert(connection)
             return shown
 
-    def observations_for(self, snapshot, sources, identity: ReadSource):
-        """Read only visible conversation rows; never materialize the whole ledger."""
-        if not sources:
-            return {}
+    def capture_observations(self, snapshot, sources) -> ReadObservations:
+        """Prepare exact conversation rows once; consumers retain their original source."""
         with self.snapshot() as connection:
             header = ReadHeaderRow.current(connection)
             messages = ReadMessageRow.selected(connection, snapshot, sources)
-        return identity.memberships(ReadDocument(messages, header.source, {}, header.notice), snapshot)
+        return ReadDocument(messages, header.source, {}, header.notice).observations(snapshot)
 
     def membership(self, viewer, snapshot, source: ReadSource):
         participant = snapshot.participant(viewer)
         with self.reading(OneViewer(participant.incarnation)) as document:
-            return source.memberships(document, snapshot).get(participant.incarnation.name, ReadMask())
+            return document.observations(snapshot).for_source(source).get(participant.incarnation.name, ReadMask())
 
     def displayed_recipient(self, message, recipient, snapshot, *, readers):
         name = snapshot.canonical_name(recipient.canonical_thread)

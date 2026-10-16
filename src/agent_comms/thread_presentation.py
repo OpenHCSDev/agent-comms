@@ -13,6 +13,7 @@ from .child_process import ProcessIdentity
 if TYPE_CHECKING:
     from .presentation import MessageNotification
     from .registry_document import RegistrySnapshot
+    from .read_ledger import ReadObservations
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
 
 
@@ -188,20 +189,21 @@ class ThreadPresentation:
             return original is current
         return original.thread == current.thread and original.same_snapshot(current)
 
-    def with_sources(self, window: TranscriptSourceWindow, *, snapshot: RegistrySnapshot) -> ThreadPresentation:
+    def with_sources(self, window: TranscriptSourceWindow, *, snapshot: RegistrySnapshot,
+                     read_observations: ReadObservations) -> ThreadPresentation:
         """Incoming and sent outcomes are views of one captured notification window."""
         from .bus_publication import stable_thread_lookup
         from .notification_assignment import NotificationAssignment
-        from .presentation import MessageNotification
+        from .presentation import MessageNotification, OwnerNotificationRecipients
 
         transcripts = window.read.owner
         sources = tuple({source.message.reference: source
                          for source in (*window.sources, *window.sent_sources)}.values())
-        projected = MessageNotification.delivery_window(
+        projected = MessageNotification.observed_delivery_window(
             transcripts.root, transcripts.registry, sources,
             NotificationAssignment.read(transcripts.root, sources),
-            snapshot=snapshot, identity=window.read_source,
-            owner_lookup=stable_thread_lookup(window.read.identity.thread.created_at),
+            snapshot=snapshot, identity=window.read_source, read_observations=read_observations,
+            view=OwnerNotificationRecipients(stable_thread_lookup(window.read.identity.thread.created_at)),
         )
         incoming, sent = (
             tuple(replace(notification, message=source.message)

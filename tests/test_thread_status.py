@@ -179,12 +179,14 @@ def test_batch_presentations_acquire_documents_once_and_release_locks_before_row
     comms.agents.runtime_info.replace({})
     waits = GoalWaits(comms.root / GoalWaits.filename)
     waits.replace({})
+    comms.bus.reads.replace(comms.bus.reads.empty())
     counts = Counter()
     decode = JsonDocument._decode
     capture = ThreadView.capture.__func__
+    source = comms.transcripts.capture_page_window
 
     def counted(self, data):
-        if self.path.name in ("runtime_info.json", "goal_waits.json"):
+        if self.path.name in ("runtime_info.json", "goal_waits.json", "read_ledger.json"):
             counts[self.path.name] += 1
         return decode(self, data)
 
@@ -194,14 +196,21 @@ def test_batch_presentations_acquire_documents_once_and_release_locks_before_row
                 pass
         return capture(cls, *args, **kwargs)
 
+    def unlocked_source(*args, **kwargs):
+        for store in (comms.agents.runtime_info, waits, comms.registry.store, comms.bus.reads):
+            with store.locked(blocking=False):
+                pass
+        return source(*args, **kwargs)
+
     monkeypatch.setattr(JsonDocument, "_decode", counted)
     monkeypatch.setattr(ThreadView, "capture", classmethod(unlocked))
+    monkeypatch.setattr(comms.transcripts, "capture_page_window", unlocked_source)
     batch = comms.views.thread_presentations(("alpha", "beta", "missing"))
     assert set(batch.views) == {"alpha", "beta"}
     assert batch.read("missing") is None
     assert batch.read("alpha").read_identity.thread.incarnation == batch.views["alpha"].thread.incarnation
     assert batch.read("beta").read_identity.thread.incarnation == batch.views["beta"].thread.incarnation
-    assert counts == {"runtime_info.json": 1, "goal_waits.json": 1}
+    assert counts == {"runtime_info.json": 1, "goal_waits.json": 1, "read_ledger.json": 1}
 
     def unrelated(*args, **kwargs):
         pytest.fail("A missing thread acquired unrelated activity/documents")
