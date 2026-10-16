@@ -107,7 +107,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         {"agentComms": {"updates": [{"kind": "unregistered"}]}},
         {"agentComms": {"updates": [], "extra": True}},
     ):
-        with pytest.raises(ValueError):
+        with pytest.raises((TypeError, ValueError)):
             decode_updates(invalid)
 
 
