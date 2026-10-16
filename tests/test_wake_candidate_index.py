@@ -118,6 +118,18 @@ def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) ->
     assert count == distinct_count
 
 
+def test_existing_candidate_schema_reopens_in_wal_through_the_store_owner(tmp_path):
+    comms, _root_id, _lookup = _private(tmp_path)
+    index = WakeCandidateIndex(comms.bus.log)
+    assert index.maintain(bootstrap_new=True)
+    with sqlite3.connect(index.path) as db:
+        assert db.execute("PRAGMA journal_mode=DELETE").fetchone()[0] == "delete"
+    assert index.maintain()
+    with index.snapshot() as db:
+        assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 3
+
+
 def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     tmp_path: Path,
 ) -> None:
@@ -380,12 +392,11 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
     rows[1:3] = [_as_response(row, root_id, "duplicate-execution") for row in rows[1:3]]
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus.log)
-    with comms.bus.log.path.open("rb") as stream, index._connect(index.path, readonly=False) as db:
+    with comms.bus.log.path.open("rb") as stream:
         source = OpenedWireSnapshot(
             comms.bus.log._private_marker_unlocked(), 0, stream, FileRevision.from_file(stream)
         )
         stat = os.fstat(stream.fileno())
-        index._schema(db, create=True)
         first_batch = index._replay_prefix(
             source, 0, 0, max_rows=first_batch_rows, max_bytes=256 * 1024
         )
@@ -393,15 +404,16 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             with (
                 pytest.raises(ProjectionUnavailableError,
                               match="duplicate private response publication key"),
-                db,
+                index.writing() as db,
             ):
                 index._commit_batch(
                     db, first_batch, stat, root_id,
                     index._source_end(stream, first_batch.next_offset), rebuild=True,
                 )
-            assert db.execute("SELECT count(*) FROM candidate").fetchone()[0] == 0
+            with index.snapshot() as db:
+                assert db.execute("SELECT count(*) FROM candidate").fetchone()[0] == 0
         else:
-            with db:
+            with index.writing() as db:
                 index._commit_batch(
                     db, first_batch, stat, root_id,
                     index._source_end(stream, first_batch.next_offset), rebuild=True,
@@ -411,10 +423,11 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             assert [candidate.source_seq for candidate in first.entries] == [
                 m.seq for m in messages[:2]
             ]
-            saved = {
-                owner.declared_name: db.execute(f'SELECT * FROM "{owner.declared_name}"').fetchall()
-                for owner in TypedTable.members_with(CandidateTable)
-            }
+            with index.snapshot() as db:
+                saved = {
+                    owner.declared_name: db.execute(f'SELECT * FROM "{owner.declared_name}"').fetchall()
+                    for owner in TypedTable.members_with(CandidateTable)
+                }
             second_batch = index._replay_prefix(
                 source, first_batch.next_offset, first_batch.last_seq,
                 max_rows=2, max_bytes=256 * 1024,
@@ -422,14 +435,15 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             with (
                 pytest.raises(ProjectionUnavailableError,
                               match="duplicate private response publication key"),
-                db,
+                index.writing() as db,
             ):
                 index._commit_batch(
                     db, second_batch, stat, root_id,
                     index._source_end(stream, second_batch.next_offset), rebuild=False,
                 )
-            assert all(db.execute(f'SELECT * FROM "{table}"').fetchall() == values
-                       for table, values in saved.items())
+            with index.snapshot() as db:
+                assert all(db.execute(f'SELECT * FROM "{table}"').fetchall() == values
+                           for table, values in saved.items())
     with pytest.raises(ProjectionUnavailableError):
         index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
                    after_seq=0, required_through_seq=messages[3].seq)
