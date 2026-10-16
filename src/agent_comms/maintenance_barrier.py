@@ -31,7 +31,8 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
 
     @classmethod
     def require_open(cls) -> None:
-        raise RelationViolationError("Maintenance admission closed")
+        if cls.turn_pending:
+            raise RelationViolationError("Maintenance admission closed")
 
 
 class DrainingPhase(MaintenancePhase):
@@ -58,10 +59,6 @@ class ReadyPhase(MaintenancePhase):
     @classmethod
     def successors(cls):
         return (DrainingPhase,)
-
-    @classmethod
-    def require_open(cls) -> None:
-        pass
 
 
 @dataclass(frozen=True)
