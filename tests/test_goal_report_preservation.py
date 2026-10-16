@@ -1,7 +1,7 @@
-"""Current-format callers never enter the retained amended720 retirement.
+"""Current readers reject old shapes; only the one-shot tool can carry them.
 
-The unchanged amended720 controls are preserved at 60fa56ec in Git and exercised
-separately with producer 1c5ac5a8, not relabelled as current Thread controls.
+The old source/control bytes remain in Git for the unexecuted carry, not as a
+normal source compatibility path.
 """
 import os
 from pathlib import Path
@@ -22,8 +22,8 @@ from agent_comms.goal_history import GoalHistoryStore
 from agent_comms.owner_lifecycle import OwnerReleaseReceipt
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.threads import Thread
-from original_owner_capture import CurrentTypedCapture, OriginalTypedCapture
-from owner_read_projection import CurrentThreadProjection, RetiredGoalReportProjection
+from original_owner_capture import CurrentTypedCapture
+from owner_read_projection import CurrentThreadProjection
 from thread_format_retirement import GoalReportMemberRetirement
 from seed_original_owner_capture import author_model_report
 
@@ -70,21 +70,22 @@ def test_current_declaration_cannot_acquire_an_old_member_retirement(tmp_path):
     assert not tuple(tmp_path.iterdir())
 
 
-def test_capture_requires_explicit_source_projection(tmp_path):
-    with pytest.raises(TypeError, match='projection'):
-        OriginalTypedCapture(tmp_path, Path(sys.executable))
-    assert CurrentTypedCapture(tmp_path, Path(sys.executable)).projection is CurrentThreadProjection
-    assert OriginalTypedCapture(tmp_path, Path(sys.executable),
-                                RetiredGoalReportProjection).projection is RetiredGoalReportProjection
+def test_current_capture_cannot_select_a_legacy_projection(tmp_path):
+    with pytest.raises(TypeError):
+        CurrentTypedCapture(tmp_path, Path(sys.executable), 'retired_goal_report')
 
 
-@pytest.mark.parametrize('entry,arguments', [
-    ('read_original_owner.py', ('ROOT', 'unused', RetiredGoalReportProjection.declared_name)),
-    ('restart_original_thread_format.py', ('0',)),
-    ('seed_original_owner_capture.py', ('ROOT',)),
-    ('seed_thread_retirement_fixture.py', ('ROOT', 'ROUTE')),
+@pytest.mark.parametrize('entry,arguments,refusal', [
+    ('read_original_owner.py', ('ROOT', 'unused', 'retired_goal_report'), 'retired_goal_report'),
+    ('restart_original_thread_format.py', ('0',), 'retained amended720 Thread declaration'),
+    ('seed_original_owner_capture.py', ('ROOT',), 'Select the current-runtime owner fixture'),
+    ('seed_thread_retirement_fixture.py', ('ROOT', 'ROUTE'),
+     'retained amended720 Thread declaration'),
+    ('original_owner_capture_installed_pilot.py', (), 'Select a current-runtime attachment'),
 ])
-def test_old_operation_entrypoints_refuse_current_runtime_before_root_access(tmp_path, entry, arguments):
+def test_removed_read_modes_and_unexecuted_carry_refuse_before_root_access(
+    tmp_path, entry, arguments, refusal,
+):
     root, route = tmp_path / 'must-not-be-created', tmp_path / 'route'
     replacements = {'ROOT': str(root), 'ROUTE': str(route)}
     environment = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1',
@@ -93,6 +94,6 @@ def test_old_operation_entrypoints_refuse_current_runtime_before_root_access(tmp
                              *(replacements.get(value, value) for value in arguments)],
                             input='', env=environment, capture_output=True, text=True)
     assert result.returncode != 0
-    assert 'retained amended720 Thread declaration' in result.stderr
+    assert refusal in result.stderr
     assert 'AttributeError' not in result.stderr
     assert not root.exists() and not route.exists()
