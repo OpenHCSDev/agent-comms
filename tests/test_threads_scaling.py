@@ -108,7 +108,7 @@ def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monke
     def forbidden_scan():
         raise AssertionError("mounted snapshot reparsed historical bus rows")
 
-    monkeypatch.setattr(fresh.bus.log, '_iter_log_unlocked', forbidden_scan)
+    monkeypatch.setattr(fresh.bus.log, 'verified_snapshot', forbidden_scan)
     assert fresh.views.coordination_snapshot() == expected
 
     wired.messaging.send("PR111", "#base", "new channel activity")

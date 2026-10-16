@@ -437,7 +437,7 @@ def test_pending_projection_observes_external_changes_without_rescanning(tmp_pat
     comms.messaging.send("other", "#api", "one")
     assert comms.bus.pending_count("a") == 1
     with patch.object(
-        comms.bus.log, "_iter_log_unlocked", side_effect=AssertionError("rescanned idle log")
+        comms.bus.log, "verified_snapshot", side_effect=AssertionError("rescanned idle log")
     ):
         for _ in range(10):
             comms.threads.heartbeat("a")
@@ -540,7 +540,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     # Reading or re-sorting must never redefine a channel's creation time.
     assert comms.channels.catalog.read().resolve("#alpha").created_at == 300
     with patch.object(
-        comms.bus.log, "_iter_log_unlocked", side_effect=AssertionError("idle rescan")
+        comms.bus.log, "verified_snapshot", side_effect=AssertionError("idle rescan")
     ):
         comms.views.channel_views()
 

@@ -101,8 +101,11 @@ def test_valid_json_without_newline_not_exposed_by_any_gated_read(
         comms.bus.log.message_by_id("receipt")
     with pytest.raises(RelationViolationError, match="Incomplete"):
         comms.bus.log.latest_sequence()
-    with pytest.raises(RelationViolationError, match="Incomplete"):
-        comms.bus.log.total_messages()
+    with (
+        pytest.raises(RelationViolationError, match="Incomplete"),
+        comms.bus.log.verified_snapshot() as records,
+    ):
+        list(records)
     with pytest.raises(RelationViolationError, match="Incomplete"):
         comms.bus.log.claim_projection()
     with pytest.raises(RelationViolationError, match="Incomplete"):
@@ -581,8 +584,8 @@ def _private_verified_rows(comms: Comms) -> list[tuple[object, object, object]]:
 
 
 def _ordinary_locked_iterator(comms: Comms) -> list[Message]:
-    with store_files._store_lock(comms.bus.log.path):
-        return list(comms.bus.log._iter_log_unlocked())
+    with comms.bus.log.verified_snapshot() as records:
+        return [message for record in records for message in record.messages()]
 
 
 def _ordinary_snapshot(comms: Comms) -> list[object]:
@@ -623,7 +626,7 @@ def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(
         lambda: _ordinary_locked_iterator(comms),
         lambda: _ordinary_snapshot(comms),
         lambda: comms.views.full_history(),
-        lambda: comms.bus.log.total_messages(),
+        lambda: comms.bus.log.full_history(),
         lambda: comms.bus.log.latest_sequence(),
         lambda: comms.bus.log.claim_projection(),
         lambda: _private_verified_rows(comms),
@@ -638,7 +641,7 @@ def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(
     assert _ordinary_locked_iterator(comms) == [message]
     assert _ordinary_snapshot(comms)[0][0] == message
     assert comms.views.full_history() == [message]
-    assert comms.bus.log.total_messages() == 1
+    assert len(comms.bus.log.full_history()) == 1
     assert comms.bus.log.latest_sequence() == message.seq
     assert comms.bus.log.claim_projection()[str(worktree / "a.py")].owner == "alice"
     assert len(_private_verified_rows(comms)) == 1
@@ -657,7 +660,7 @@ def test_claim_bearing_json_valid_no_newline_never_exposed(tmp_path: Path) -> No
         lambda: _ordinary_locked_iterator(comms),
         lambda: _ordinary_snapshot(comms),
         lambda: comms.views.full_history(),
-        lambda: comms.bus.log.total_messages(),
+        lambda: comms.bus.log.full_history(),
         lambda: comms.bus.log.latest_sequence(),
         lambda: comms.bus.log.claim_projection(),
         lambda: _private_verified_rows(comms),
