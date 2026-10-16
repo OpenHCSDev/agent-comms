@@ -30,6 +30,7 @@ from agent_comms.thread_identity import ThreadRole
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent
+from agent_comms.typed_table import Column, TypedTable
 
 
 class SendResult(WireModel):
@@ -55,7 +56,7 @@ class ToolCall:
 
 
 @dataclass(frozen=True)
-class Binding:
+class Binding(TypedTable):
     root: str
     bus: str
     thread: str
@@ -333,6 +334,13 @@ class Outcome(Enum):
     DELIVERED = 'delivered'
     EMITTED = 'emitted'
 
+@dataclass(frozen=True)
+class DeliveryRow(TypedTable):
+    id: str = field(metadata={"sql": Column(primary_key=True)})
+    payload: str
+    outcome: Outcome
+
+
 class DeliveryJournal:
     """Transport outcomes only. Core still owns messages and inbox routing."""
 
@@ -341,40 +349,36 @@ class DeliveryJournal:
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db = sqlite3.connect(self.path)
         self.db.execute('PRAGMA synchronous=FULL')
-        self.db.execute('CREATE TABLE IF NOT EXISTS binding (root TEXT, bus TEXT, thread TEXT)')
-        self.db.execute('''CREATE TABLE IF NOT EXISTS delivery (
-            id TEXT PRIMARY KEY, payload TEXT NOT NULL, outcome TEXT NOT NULL)''')
+        for row in (Binding, DeliveryRow):
+            row.create(self.db, if_not_exists=True)
         self.db.commit()
 
     def bind(self, requested: Binding | None) -> Binding:
-        rows = self.db.execute('SELECT root,bus,thread FROM binding').fetchall()
+        rows = Binding.select(self.db)
         if not rows and requested is not None:
             with self.db:
-                self.db.execute('INSERT INTO binding VALUES (?,?,?)',
-                                (requested.root, requested.bus, requested.thread))
+                requested.insert(self.db)
             return requested
         if len(rows) != 1:
             raise ValueError('Supply one complete Core/CLI binding for this state directory')
-        current = Binding(*rows[0])
+        current = rows[0]
         if requested is not None and requested != current:
             raise ValueError('This state directory belongs to another Core/CLI conversation')
         return current
 
     def begin(self, message: Message, payload: str, outcome: Outcome) -> bool:
         with self.db:
-            return self.db.execute('INSERT OR IGNORE INTO delivery VALUES (?,?,?)',
-                                   (message.message_id, payload, outcome.value)).rowcount == 1
+            return DeliveryRow(message.message_id, payload, outcome).insert_if_absent(self.db).rowcount == 1
 
     def finish(self, message: Message, outcome: Outcome) -> None:
         with self.db:
-            self.db.execute('UPDATE delivery SET outcome=? WHERE id=?',
-                            (outcome.value, message.message_id))
+            DeliveryRow.update(self.db, where="id=?", parameters=(message.message_id,), outcome=outcome)
 
     def report_unconfirmed(self) -> None:
-        rows = self.db.execute('SELECT id FROM delivery WHERE outcome=?',
-                               (Outcome.UNCONFIRMED.value,)).fetchall()
+        rows = DeliveryRow.column_values(self.db, "id", where="outcome=?",
+                                         parameters=(Outcome.UNCONFIRMED.value,))
         if rows:
-            print(f'Unconfirmed messages retained without replay: {[row[0] for row in rows]}',
+            print(f'Unconfirmed messages retained without replay: {rows}',
                   file=sys.stderr, flush=True)
 
     def close(self) -> None:

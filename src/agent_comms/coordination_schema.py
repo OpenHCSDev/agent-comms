@@ -24,9 +24,10 @@ class CoordinatorTable:
     """Capability for the coordinator schema; cases and transitions come from their owners."""
 
     @classmethod
-    def schema_objects(cls):
+    def schema_objects(cls, *, if_not_exists: bool = False):
         return {
-            name: sql.format(**_schema_context()) for name, sql in super().schema_objects().items()
+            name: sql.format(**_schema_context())
+            for name, sql in super().schema_objects(if_not_exists=if_not_exists).items()
         }
 
 

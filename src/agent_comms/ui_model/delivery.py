@@ -3,10 +3,34 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Any
 
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
+from agent_comms.thread_presentation import ThreadPresentation, ThreadPresentationStatus
+
+
+class InputDeliveryReadState(DeclaredFamily, affix="InputDeliveryReadState"):
+    """One delivery read's availability, without inventing a new input outcome."""
+
+    error = ""
+
+    def present_status(self, status: ThreadPresentationStatus) -> ThreadPresentationStatus:
+        return status
+
+
+@dataclass(frozen=True)
+class LoadedInputDeliveryReadState(InputDeliveryReadState):
+    pass
+
+
+@dataclass(frozen=True)
+class FailedInputDeliveryReadState(InputDeliveryReadState):
+    error: str = field()
+
+    def present_status(self, status: ThreadPresentationStatus) -> ThreadPresentationStatus:
+        return status.with_attention()
 
 
 @dataclass(frozen=True)
@@ -23,6 +47,20 @@ class InputDelivery:
     dismissed_historical_count: int = 0
     historical_inputs: tuple[dict[str, Any], ...] = ()
     owner_queue: bool = False
+    read_state: InputDeliveryReadState = LoadedInputDeliveryReadState()
+
+    @property
+    def error(self) -> str:
+        return self.read_state.error
+
+    def failed(self, error: Exception) -> InputDelivery:
+        """Retain the last acquired input evidence when its refresh fails."""
+        return replace(self, read_state=FailedInputDeliveryReadState(str(error)))
+
+    def presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        """Pending input or a failed read warns without erasing genuine work."""
+        status = ordinary.status.with_attention() if self.current else ordinary.status
+        return replace(ordinary, status=self.read_state.present_status(status))
 
     SCOPES = {"owner_queue": True, "unobserved": False}
 
