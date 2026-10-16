@@ -20,14 +20,12 @@ T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(ABC, Generic[T]):
-    """One document owner; subclasses declare its type and missing-file value.
+class JsonDocument(ABC, Generic[T]):
+    """Declared JSON decoding and durable atomic file I/O, not transaction custody.
 
-    Update callbacks return a replacement value, or the original object to skip
-    writing. They must not mutate the original or call this store recursively.
-    No public method may be called while holding this document's canonical lock
-    on another descriptor. Distinct outer locks (for example wire) are allowed.
-    The append-only wire is not a document and must not use this abstraction.
+    Atomic reads see one complete file. Writers supply their own serialization
+    and source authority; authoritative documents add those through LockedStore,
+    while disposable append projections use their checked-prefix publisher.
     """
 
     path: Path
@@ -65,39 +63,8 @@ class LockedStore(ABC, Generic[T]):
         """Owners with an established external shape may project that encoding."""
         return FieldCodec.encode(value)
 
-    @contextmanager
-    def locked(self, *, shared: bool = False, blocking: bool = True) -> Iterator[int]:
-        """Canonical lock, including a descriptor for scoped child authority."""
-        with _store_lock(self.path, shared=shared, blocking=blocking) as lock:
-            yield lock.descriptor
-
-    @contextmanager
-    def reading(self, *, blocking: bool = True) -> Iterator[T]:
-        """Keep a shared lock through a dependent projection or source check."""
-        with self.locked(shared=True, blocking=blocking):
-            yield self._read_unlocked()
-
     def read(self) -> T:
-        with self.reading() as value:
-            return value
-
-    def update(self, change: Callable[[T], T]) -> T:
-        with self.locked():
-            original = self._read_unlocked()
-            changed = change(original)
-            if changed is not original:
-                self._publish_unlocked(changed)
-            return changed
-
-    def replace(self, value: T) -> None:
-        """Publish a complete owned snapshot without reading the discarded one.
-
-        Use update for merges. Derived projections must hold their source lock
-        through capture and replacement; this document lock alone is not source
-        authority or a cross-document transaction.
-        """
-        with self.locked():
-            self._publish_unlocked(value)
+        return self._read_unlocked()
 
     def _publish_unlocked(self, value: T) -> None:
         self._write_unlocked(
@@ -170,3 +137,49 @@ class LockedStore(ABC, Generic[T]):
             staged.unlink(missing_ok=True)
             if not keep_backup:
                 backup.unlink(missing_ok=True)
+
+
+@dataclass(frozen=True, slots=True)
+class LockedStore(JsonDocument[T]):
+    """One document's transactions, composed with its declared file codec.
+
+    Update callbacks return a replacement value, or the original object to skip
+    writing. They must not mutate the original or call this store recursively.
+    No public method may be called while holding this document's canonical lock
+    on another descriptor. Distinct outer locks (for example wire) are allowed.
+    The append-only wire is not a document and must not use this abstraction.
+    """
+
+    @contextmanager
+    def locked(self, *, shared: bool = False, blocking: bool = True) -> Iterator[int]:
+        """Canonical lock, including a descriptor for scoped child authority."""
+        with _store_lock(self.path, shared=shared, blocking=blocking) as lock:
+            yield lock.descriptor
+
+    @contextmanager
+    def reading(self, *, blocking: bool = True) -> Iterator[T]:
+        """Keep a shared lock through a dependent projection or source check."""
+        with self.locked(shared=True, blocking=blocking):
+            yield self._read_unlocked()
+
+    def read(self) -> T:
+        with self.reading() as value:
+            return value
+
+    def update(self, change: Callable[[T], T]) -> T:
+        with self.locked():
+            original = self._read_unlocked()
+            changed = change(original)
+            if changed is not original:
+                self._publish_unlocked(changed)
+            return changed
+
+    def replace(self, value: T) -> None:
+        """Publish a complete owned snapshot without reading the discarded one.
+
+        Use update for merges. Derived projections must hold their source lock
+        through capture and replacement; this document lock alone is not source
+        authority or a cross-document transaction.
+        """
+        with self.locked():
+            self._publish_unlocked(value)
