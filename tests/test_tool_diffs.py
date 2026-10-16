@@ -11,7 +11,7 @@ from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiToolResult
-from agent_comms.native_tools import NativeTool
+from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.threads import Thread
 from agent_comms.tool_results import ToolDiff, tool_result_content
 from agent_comms.transcript_events import ToolEndTranscript, TranscriptEvent
@@ -48,7 +48,7 @@ def result(patch=PATCH):
 )
 def test_native_edit_evidence(name, native, ok, expected):
     assert (
-        NativeTool.for_name(name).result_diff(
+        ToolDeclaration.for_name(name).result_diff(
             PiToolResult.from_wire(native), ok)
         == expected
     )
@@ -64,7 +64,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
             "type": "tool_execution_start",
             "toolCallId": "edit/1",
             "toolName": "edit",
-            "args": {"path": "src/example.py"},
+            "args": {"path": "src/example.py", "edits": [{"oldText": "old = 1", "newText": "new = 2"}]},
         },
         {
             "type": "tool_execution_end",

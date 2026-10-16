@@ -24,9 +24,8 @@ from .envelope_claim_transitions import (
     ClaimOwner,
     WakeAdmission,
 )
-from .field_codec import FieldCodec
 from .native_tool_call import NativeToolCall, SelectedToolDenied
-from .native_tools import CodingTool
+from .native_tools import NativeExecutableTool
 from .selected_tool_broker import (
     NativeToolMode,
     OwnerToolSocket,
@@ -38,11 +37,11 @@ from .selected_tool_broker import (
 
 @dataclass
 class CodingCall(NativeToolCall):
-    tool: CodingTool
+    tool: NativeExecutableTool
 
     @property
     def name(self) -> str:
-        return FieldCodec.encode(type(self.tool))
+        return self.tool.declared_name
 
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int
@@ -66,13 +65,21 @@ class CodingCall(NativeToolCall):
         ):
             raise SelectedToolDenied("Malformed native coding call")
         try:
-            return cls(call_id, CodingTool.from_call(name, arguments))
+            return NativeExecutableTool.from_call(name, arguments, call_id=call_id)
         except (ValueError, TypeError, KeyError) as error:
             raise SelectedToolDenied(f"Invalid native coding call: {error}") from error
 
     def slot(self, input_id: str, round_number: int) -> str:
         identity = f"{input_id}\0{round_number}\0{self.call_id}"
         return hashlib.sha256(identity.encode()).hexdigest()[:32]
+
+
+@dataclass
+class CoordinationCall(CodingCall):
+    """The declaration executes through Core; raw arguments still own exact call matching."""
+
+    tool: type[NativeExecutableTool]
+    arguments: dict[str, object]
 
 
 @dataclass
@@ -137,11 +144,13 @@ class CodingToolMode(NativeToolMode):
     owner: CodingToolOwner
 
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        extension = Path(package) / "dist/channel_coding_tools.mjs"
-        # The copied native package manifest verifies the extension bytes.
-        if not extension.is_file():
-            raise SelectedToolDenied("Native coding extension is not installed")
-        return ("--tools", ",".join(CodingTool.names()), "-e", str(extension))
+        declarations = NativeExecutableTool.members_with(NativeExecutableTool)
+        extensions = tuple(dict.fromkeys(tool.native_extension(package) for tool in declarations))
+        # The native package manifest verifies each declaration's extension bytes.
+        if any(not extension.is_file() for extension in extensions):
+            raise SelectedToolDenied("Native tool extension is not installed")
+        return ("--tools", ",".join(tool.declared_name for tool in declarations),
+                *(argument for extension in extensions for argument in ("-e", str(extension))))
 
     def socket(self, directory: Path, token: str) -> OwnerToolSocket:
         return CodingToolSocket(directory, token, self.owner)

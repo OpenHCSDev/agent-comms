@@ -24,8 +24,8 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import CORE_ERROR, CoreError, WireModel
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.messages import Message, MessageKind
-from agent_comms.native_tools import NativeTool
 from agent_comms.thread_identity import ThreadRole
+from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript, TranscriptEvent
 
@@ -39,17 +39,15 @@ class ToolCall:
     id: str
     name: str
     arguments: JsonValue
+    detail: str = ""
 
     @property
     def title(self) -> str:
-        # Some external tools accept a scalar. Native previews only inspect objects.
-        if isinstance(self.arguments, dict):
-            return NativeTool.start(self.id, self.name, self.arguments).title
-        return self.name
+        return ToolDeclaration.caption(self.name, self.detail)
 
     def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
         return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=self.arguments),
+                                    raw_input=self.arguments, detail=self.detail),
                 ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
                                   text=text, ok=ok, diff=diff))
 
