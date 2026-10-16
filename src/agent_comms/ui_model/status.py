@@ -32,7 +32,6 @@ class ThreadStatusModel:
     shown: bool
     lines: tuple[str, ...]
     status: ThreadPresentationStatus
-    available: bool = True
     summary: tuple[str, ...] = ()
     """Overview parts for a collapsed status: first summary line, latest inbound, recent count."""
 
@@ -64,7 +63,7 @@ class ThreadStatusModel:
     @classmethod
     def unavailable(cls, name: str, reason: str = "Agent status unavailable") -> ThreadStatusModel:
         return cls(name, True, (reason,), IdleThreadPresentationStatus().with_attention(),
-                   available=False, summary=(reason.partition("\n")[0],))
+                   summary=(reason.partition("\n")[0],))
 
 
 class OpenThreadStatus:

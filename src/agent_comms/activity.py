@@ -27,7 +27,12 @@ from .store_files import (
 )
 from .thread_identity import OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
-from .thread_presentation import ThreadPresentation, WorkingThreadPresentationStatus
+from .thread_presentation import (
+    IdleThreadPresentationStatus,
+    ThreadPresentation,
+    ThreadPresentationStatus,
+    WorkingThreadPresentationStatus,
+)
 
 if TYPE_CHECKING:
     from .activity_checkpoint import ActivityCheckpoint
@@ -35,16 +40,26 @@ if TYPE_CHECKING:
 
 
 class ActivityState(Enum):
-    IDLE = "idle"
-    THINKING = "thinking"
-    WORKING = "working"
+    """Durable event spellings and their declaration-owned display activity."""
+
+    presentation_status: ThreadPresentationStatus
+
+    def __new__(cls, value: str, presentation_status: ThreadPresentationStatus) -> ActivityState:
+        member = object.__new__(cls)
+        member._value_ = value
+        member.presentation_status = presentation_status
+        return member
+
+    IDLE = ("idle", IdleThreadPresentationStatus())
+    THINKING = ("thinking", WorkingThreadPresentationStatus())
+    WORKING = ("working", WorkingThreadPresentationStatus())
     # Appended once when the thread is permanently deleted. The log stays
     # append-only; the latest-per-thread fold drops the thread on this record.
-    DELETED = "deleted"
+    DELETED = ("deleted", IdleThreadPresentationStatus())
 
     @property
     def busy(self) -> bool:
-        return self in (self.THINKING, self.WORKING)
+        return self.presentation_status.busy
 
     @property
     def retires_thread(self) -> bool:
@@ -52,11 +67,11 @@ class ActivityState(Enum):
 
     def presentation(self, title: str, detail: str) -> ThreadPresentation:
         if not self.busy:
-            return ThreadPresentation(title, "✓", "Ready")
+            return ThreadPresentation(title, "✓", "Ready", status=self.presentation_status)
         summary = self.value.title()
         if detail := " ".join(detail.split()):
             summary += f" · {detail}"
-        return ThreadPresentation(title, "⌛", summary, status=WorkingThreadPresentationStatus())
+        return ThreadPresentation(title, "⌛", summary, status=self.presentation_status)
 
 
 @dataclass(frozen=True)
