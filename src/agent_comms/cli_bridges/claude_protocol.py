@@ -106,6 +106,7 @@ class ClaudeMonitorFrame(IncomingFrame):
 
 @dataclass
 class ClaudeSession:
+    id: str
     turn: str = ''
     tools: dict[str, ToolCall] = field(default_factory=dict)
     catching_up: bool = True
@@ -337,27 +338,27 @@ class TaskEnvelope(WireModel, ABC):
         return MonitorTaskNotification(frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
 
     @abstractmethod
-    def updates(self, record: UserRecord) -> tuple[TranscriptUpdate, ...]: ...
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]: ...
 
 
 class ForeignTaskNotification(TaskEnvelope):
     text: str
 
-    def updates(self, record: UserRecord) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return ()
 
 
 class MonitorTaskNotification(TaskEnvelope):
     frames: tuple[MonitorFrame, ...]
 
-    def updates(self, record: UserRecord) -> tuple[TranscriptUpdate, ...]:
-        return tuple(MonitorObservation(frame, record.sessionId,
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return tuple(MonitorObservation(frame, session.id,
                                         ObservedMonitor(record.uuid, record.timestamp))
                      for frame in self.frames)
 
 
-class TaskText(WireModel):
-    type: Literal['text'] = 'text'
+class TaskContent(WireModel):
+    """Both external task-record shapes share envelope decoding and observations."""
     text: TaskEnvelope
 
     @field_validator('text', mode='before')
@@ -365,8 +366,12 @@ class TaskText(WireModel):
     def envelope(cls, value: str) -> TaskEnvelope:
         return TaskEnvelope.from_text(value)
 
-    def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return self.text.updates(record)
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return self.text.updates(record, session)
+
+
+class TaskText(TaskContent):
+    type: Literal['text'] = 'text'
 
 
 class TaskMessage(ContentBlocks):
@@ -483,8 +488,44 @@ class MetadataRecord(ClaudeRecord, ABC):
     pass
 
 
-class Attachment(MetadataRecord):
+class AttachmentHeader(WireHeader):
+    @model_validator(mode='before')
+    @classmethod
+    def task_notification(cls, value: dict) -> dict:
+        if (value.get('type') == QueuedTaskNotification.wire_tag
+                and value.get('origin', {}).get('kind') == TaskNotification.wire_tag):
+            return value
+        return {'type': ForeignAttachment.wire_tag}
+
+
+class AttachmentPayload(TaggedWire, ABC):
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+    header = AttachmentHeader
+
+    @abstractmethod
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]: ...
+
+
+class QueuedTaskNotification(TaskContent, AttachmentPayload):
+    wire_tag = 'queued_command'
+    text: TaskEnvelope = Field(alias='prompt')
+    origin: TaskNotification
+
+
+class ForeignAttachment(AttachmentPayload):
+    wire_tag = 'foreign'
+
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return ()
+
+
+class Attachment(ClaudeRecord, TimedRecord):
     wire_tag = 'attachment'
+    attachment: AttachmentPayload.declared_union()
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return self.attachment.updates(self, session)
 
 
 class QueueOperation(MetadataRecord):

@@ -46,12 +46,12 @@ async def test_parts_require_matching_session_and_complete_exact_body_then_reope
         lines=[json.dumps(part,ensure_ascii=False) for part in parts]
         assert len(lines)==7
         assert all(len(line.encode('utf-16-le'))//2 <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
-        for update in notification(lines[0],'different-session').updates(ClaudeSession()):
+        for update in notification(lines[0],'different-session').updates(ClaudeSession('different-session')):
             await update.observed(bridge)
         assert MonitorPartRow.select(journal.db)==[]
         # Out-of-order observations and repeated history must not count twice.
         for number in (6,1,3,1,5,2):
-            for update in notification(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
+            for update in notification(lines[number],record_id=f'record-{number}').updates(ClaudeSession('session')):
                 await update.observed(bridge)
         assert not acknowledgments
         assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
@@ -59,11 +59,11 @@ async def test_parts_require_matching_session_and_complete_exact_body_then_reope
         bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,journal)
         bridge.core=Core()
         for number in (0,4):
-            for update in notification(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
+            for update in notification(lines[number],record_id=f'record-{number}').updates(ClaudeSession('session')):
                 await update.observed(bridge)
         assert acknowledgments==[message.reference]
         for line in lines:
-            for update in notification(line,record_id='later-overlap').updates(ClaudeSession()):
+            for update in notification(line,record_id='later-overlap').updates(ClaudeSession('session')):
                 await update.observed(bridge)
         assert acknowledgments==[message.reference]
     with closing(DeliveryJournal(state)) as reopened:
@@ -90,7 +90,7 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
         sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
         message=dict(content='Another task producer')))
     assert isinstance(record.message.content[0].text,ForeignTaskNotification)
-    assert record.updates(ClaudeSession())==()
+    assert record.updates(ClaudeSession('session'))==()
     from xml.etree.ElementTree import ParseError
     with pytest.raises(ParseError):
         CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',

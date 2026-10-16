@@ -940,9 +940,9 @@ class LineMonitorBridge(TranscriptBridge[Options]):
 
     async def prepare_delivery(self) -> None:
         print(self.probe.model_dump_json(), flush=True)
-        # A timeout refuses delivery. It never turns missing evidence into success.
-        async with asyncio.timeout(30):
-            await self.monitor_ready.wait()
+        # The harness owns notification scheduling. Missing proof never opens
+        # the inbox; the watch's existing cancellation owns this wait's lifetime.
+        await self.monitor_ready.wait()
 
     def confirm_probe(self, probe: MonitorProbe) -> None:
         if probe == self.probe:
