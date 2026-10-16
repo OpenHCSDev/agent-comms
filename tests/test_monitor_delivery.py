@@ -9,7 +9,8 @@ from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import CLAUDE_RECORD, ClaudeSession
 from agent_comms.cli_bridges.shared import (
     Binding, DeliveryJournal, DeliveryRow, MonitorAttemptRow, MonitorMessage,
-    Options, Outcome, ObservedMonitor, Watch, monitor_notifications,
+    Options, UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome, ObservedMonitor,
+    NO_MONITOR_ATTEMPT, Watch, monitor_notifications,
 )
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
@@ -36,9 +37,9 @@ async def test_monitor_requires_matching_session_token_and_complete_body_then_re
                 acknowledgments.append(message.reference)
         bridge.core=Core()
         message=Message(sender='peer',target='viewer',type=InfoKind,body='full body',timestamp=1.,seq=1)
-        assert journal.begin(message,json.dumps(message.to_wire()),Outcome.UNCONFIRMED)
-        assert await bridge.deliver(message) is Outcome.EMITTED
-        journal.finish(message,Outcome.EMITTED)
+        assert journal.begin(message,json.dumps(message.to_wire()),UnconfirmedOutcome)
+        assert await bridge.deliver(message) is EmittedOutcome
+        journal.finish(message,EmittedOutcome)
         frame=MonitorMessage.model_validate_json(capsys.readouterr().out)
         for update in notification(frame,'different-session').updates(ClaudeSession()):
             await update.observed(bridge)
@@ -57,7 +58,7 @@ async def test_monitor_requires_matching_session_token_and_complete_body_then_re
             await update.observed(bridge)
         assert acknowledgments==[message.reference]  # History overlap is not another delivery.
     with closing(DeliveryJournal(state)) as reopened:
-        assert DeliveryRow.select(reopened.db)[0].outcome is Outcome.DELIVERED
+        assert DeliveryRow.select(reopened.db)[0].outcome is DeliveredOutcome
         assert MonitorAttemptRow.select(reopened.db)[0].evidence==ObservedMonitor('notification-record',1792168805.123)
 
 
@@ -71,11 +72,11 @@ def test_truncated_monitor_notification_cannot_confirm_delivery(capsys):
 def test_old_emission_has_no_invented_evidence_or_replay(tmp_path):
     message=Message(sender='peer',target='viewer',type=InfoKind,body='retained',timestamp=1.,seq=1)
     with closing(DeliveryJournal(tmp_path)) as journal:
-        journal.begin(message,json.dumps(message.to_wire()),Outcome.EMITTED)
+        journal.begin(message,json.dumps(message.to_wire()),EmittedOutcome)
         frame=MonitorMessage(session='session',token='invented',id=message.message_id,text='retained')
-        assert journal.confirm_monitor(frame) is None
-        assert not journal.begin(message,'do not replace',Outcome.UNCONFIRMED)
-        assert DeliveryRow.select(journal.db)[0].outcome is Outcome.EMITTED
+        assert journal.monitor_attempt(frame) is NO_MONITOR_ATTEMPT
+        assert not journal.begin(message,'do not replace',UnconfirmedOutcome)
+        assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
         assert MonitorAttemptRow.select(journal.db)==[]
 
 

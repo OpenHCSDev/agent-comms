@@ -14,7 +14,6 @@ from abc import ABC, abstractmethod
 from contextlib import aclosing, suppress
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from enum import Enum
 from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar
@@ -350,21 +349,44 @@ class Options:
     session: str | None
     state: Path
 
-class Outcome(Enum):
-    FILTERED = 'filtered'
-    UNCONFIRMED = 'unconfirmed'
-    DELIVERED = 'delivered'
-    EMITTED = 'emitted'
+class Outcome(DeclaredFamily, affix='Outcome'):
+    """Stored spellings stay the same; their owners perform confirmation."""
 
-    @property
-    def acknowledges(self) -> bool:
-        return self in (Outcome.DELIVERED, Outcome.FILTERED)
+    @classmethod
+    async def acknowledge(cls, core: CoreConnection, message: Message) -> None:
+        """Pending transport outcomes cannot advance Core's read state."""
+
+    @classmethod
+    async def observe_monitor(cls, bridge: TranscriptBridge, message: Message,
+                              record: ObservedMonitor) -> None:
+        await bridge.finish_delivery(message, DeliveredOutcome, record)
+
+
+class FilteredOutcome(Outcome):
+    @classmethod
+    async def acknowledge(cls, core: CoreConnection, message: Message) -> None:
+        await core.acknowledge(message)
+
+
+class UnconfirmedOutcome(Outcome):
+    pass
+
+
+class DeliveredOutcome(FilteredOutcome):
+    @classmethod
+    async def observe_monitor(cls, bridge: TranscriptBridge, message: Message,
+                              record: ObservedMonitor) -> None:
+        """Reopened history preserves the first confirmation record and time."""
+
+
+class EmittedOutcome(UnconfirmedOutcome):
+    pass
 
 @dataclass(frozen=True)
 class DeliveryRow(TypedTable):
     id: str = field(metadata={"sql": Column(primary_key=True)})
     payload: str
-    outcome: Outcome = field(metadata={"sql": Column(index=True)})
+    outcome: type[Outcome] = field(metadata={"sql": Column(index=True)})
 
 
 @dataclass(frozen=True)
@@ -389,11 +411,34 @@ class ObservedMonitor(MonitorEvidence):
         MonitorAttemptRow.update(journal.db, where="id=?", parameters=(message.message_id,), evidence=self)
 
 
+class MonitorAttempt(ABC):
+    @abstractmethod
+    async def confirm(self, bridge: TranscriptBridge, notification: MonitorMessage,
+                      record: ObservedMonitor) -> None: ...
+
+
+class NoMonitorAttempt(MonitorAttempt):
+    async def confirm(self, bridge: TranscriptBridge, notification: MonitorMessage,
+                      record: ObservedMonitor) -> None:
+        """Historical or unrelated emissions have no matching new attempt."""
+
+
+NO_MONITOR_ATTEMPT = NoMonitorAttempt()
+
+
 @dataclass(frozen=True)
-class MonitorAttemptRow(TypedTable):
+class MonitorAttemptRow(TypedTable, MonitorAttempt):
     id: str = field(metadata={"sql": Column(primary_key=True)})
     token: str
     evidence: MonitorEvidence = field(default_factory=UnrecordedMonitor)
+
+    async def confirm(self, bridge: TranscriptBridge, notification: MonitorMessage,
+                      record: ObservedMonitor) -> None:
+        row, = DeliveryRow.select(bridge.journal.db, where='id=?', parameters=(self.id,))
+        message = Message.from_wire(json.loads(row.payload))
+        if notification.text != CliBridge.incoming_text(message):
+            raise ValueError('Monitor notification does not match the original message')
+        await row.outcome.observe_monitor(bridge, message, record)
 
 
 class DeliveryJournal:
@@ -429,19 +474,19 @@ class DeliveryJournal:
                 raise ValueError('This state directory belongs to another Core/CLI conversation')
             return current
 
-    def begin(self, message: Message, payload: str, outcome: Outcome) -> bool:
+    def begin(self, message: Message, payload: str, outcome: type[Outcome]) -> bool:
         with self.db:
             return DeliveryRow(message.message_id, payload, outcome).insert_if_absent(self.db).rowcount == 1
 
-    def finish(self, message: Message, outcome: Outcome,
+    def finish(self, message: Message, outcome: type[Outcome],
                evidence: MonitorEvidence = UnrecordedMonitor()) -> None:
         with self.db:
             evidence.record(self, message)
             DeliveryRow.update(self.db, where="id=?", parameters=(message.message_id,), outcome=outcome)
 
-    def acknowledged(self, message: Message) -> bool:
-        rows = DeliveryRow.select(self.db, where="id=?", parameters=(message.message_id,))
-        return bool(rows and rows[0].outcome.acknowledges)
+    def outcome(self, message: Message) -> type[Outcome]:
+        row, = DeliveryRow.select(self.db, where='id=?', parameters=(message.message_id,))
+        return row.outcome
 
     def emitting(self, message: Message) -> str:
         token = secrets.token_hex(24)
@@ -449,21 +494,13 @@ class DeliveryJournal:
             MonitorAttemptRow(message.message_id, token).insert(self.db)
         return token
 
-    def confirm_monitor(self, notification: MonitorMessage) -> Message | None:
-        attempts = MonitorAttemptRow.select(self.db, where="id=? AND token=?",
+    def monitor_attempt(self, notification: MonitorMessage) -> MonitorAttempt:
+        attempts = MonitorAttemptRow.select(self.db, where='id=? AND token=?',
                                            parameters=(notification.id, notification.token))
-        if not attempts:
-            return None  # Historical emissions have no new attempt; never guess or replay them.
-        row, = DeliveryRow.select(self.db, where="id=?", parameters=(notification.id,))
-        message = Message.from_wire(json.loads(row.payload))
-        if notification.text != CliBridge.incoming_text(message):
-            raise ValueError('Monitor notification does not match the original message')
-        if row.outcome is Outcome.DELIVERED:
-            return None  # Reopening history preserves the first confirmation record/time.
-        return message
+        return next(iter(attempts), NO_MONITOR_ATTEMPT)
 
     def report_unconfirmed(self) -> None:
-        pending = tuple(outcome.value for outcome in Outcome if not outcome.acknowledges)
+        pending = tuple(outcome.declared_name for outcome in Outcome.members_with(UnconfirmedOutcome))
         placeholders = ','.join('?' for _ in pending)
         rows = DeliveryRow.column_values(self.db, "id", where=f"outcome IN ({placeholders})",
                                          parameters=pending)
@@ -646,7 +683,7 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         self.core = CoreConnection(str(Path(sys.executable).with_name('agent-comms')), binding)
 
     @abstractmethod
-    async def deliver(self, message: Message) -> Outcome:
+    async def deliver(self, message: Message) -> type[Outcome]:
         """DELIVERED requires harness evidence; emission alone stays pending."""
 
     @abstractmethod
@@ -673,11 +710,10 @@ class CliBridge(ABC, Generic[BridgeOptions]):
     def confirm_probe(self, probe: MonitorProbe) -> None:
         """API transports do not use a line monitor."""
 
-    async def finish_delivery(self, message: Message, outcome: Outcome,
+    async def finish_delivery(self, message: Message, outcome: type[Outcome],
                               evidence: MonitorEvidence = UnrecordedMonitor()) -> None:
         self.journal.finish(message, outcome, evidence)
-        if outcome.acknowledges:
-            await self.core.acknowledge(message)
+        await outcome.acknowledge(self.core, message)
 
     async def watch(self) -> None:
         await self.prepare_delivery()
@@ -694,17 +730,16 @@ class CliBridge(ABC, Generic[BridgeOptions]):
                         break
                     message, payload = item
                     conversation = message.type.conversation_message
-                    outcome = Outcome.UNCONFIRMED if conversation else Outcome.FILTERED
+                    outcome = UnconfirmedOutcome if conversation else FilteredOutcome
                     if not self.journal.begin(message, payload, outcome):
-                        if self.journal.acknowledged(message):
-                            await self.core.acknowledge(message)
+                        await self.journal.outcome(message).acknowledge(self.core, message)
                         continue
                     if not conversation:
                         await self.finish_delivery(message, outcome)
                         continue
                     result = await self.deliver(message)
                     await self.finish_delivery(message, result)
-                    print(f'{result.value}: {message.message_id} from {message.sender}',
+                    print(f'{result.declared_name}: {message.message_id} from {message.sender}',
                           file=sys.stderr, flush=True)
 
     async def run(self) -> None:
@@ -787,9 +822,7 @@ class MonitorMessage(MonitorFrame):
     text: str
 
     async def confirm(self, bridge: TranscriptBridge, record: ObservedMonitor) -> None:
-        message = bridge.journal.confirm_monitor(self)
-        if message is not None:
-            await bridge.finish_delivery(message, Outcome.DELIVERED, record)
+        await bridge.journal.monitor_attempt(self).confirm(bridge, self, record)
 
 
 MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())
@@ -850,11 +883,11 @@ class LineMonitorBridge(CliBridge[Options]):
         # One reversible JSON string per line; no truncation or lost line breaks.
         print(json.dumps(text, ensure_ascii=False), flush=True)
 
-    async def deliver(self, message: Message) -> Outcome:
+    async def deliver(self, message: Message) -> type[Outcome]:
         frame = MonitorMessage(session=self.binding.thread, id=message.message_id,
                                token=self.journal.emitting(message), text=self.incoming_text(message))
         print(frame.model_dump_json(), flush=True)
-        return Outcome.EMITTED  # Only its session transcript can confirm it.
+        return EmittedOutcome  # Only its session transcript can confirm it.
 
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
         self.emit(self.sent_text(result, target, body))

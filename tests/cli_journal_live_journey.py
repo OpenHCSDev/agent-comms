@@ -5,13 +5,13 @@ from pathlib import Path
 import sys
 
 import agent_comms
-from agent_comms.cli_bridges.shared import Binding, CoreConnection, DeliveryJournal, DeliveryRow, Outcome
+from agent_comms.cli_bridges.shared import Binding, CoreConnection, DeliveryJournal, DeliveryRow, UnconfirmedOutcome, EmittedOutcome
 
 
 async def main():
     runtime, root, state = map(Path, sys.argv[1:4])
     binding = Binding(str(root), 'codex-drafts', 'source')
-    pending = DeliveryRow('retained-pending', 'opaque original payload', Outcome.UNCONFIRMED)
+    pending = DeliveryRow('retained-pending', 'opaque original payload', UnconfirmedOutcome)
     journal = DeliveryJournal(state)
     with journal.db:
         pending.insert(journal.db)
@@ -76,7 +76,7 @@ async def main():
         rows = DeliveryRow.select(journal.db)
         assert len(rows) == 3, rows
         assert DeliveryRow.one(journal.db, id=pending.id) == pending
-        assert sum(row.outcome is Outcome.EMITTED for row in rows) == 2
+        assert sum(row.outcome is EmittedOutcome for row in rows) == 2
     finally:
         journal.close()
     print(json.dumps({'results': results, 'binding': vars(binding), 'conflict_rejected': True,
