@@ -484,22 +484,17 @@ class HistoryViews:
 
     def who(self) -> Sequence[Mapping]:
         """Presence: who is in the chat, with status and unread counts."""
-        return self._presence(include_pending=True)
+        views = self._presence_views()
+        # One bus snapshot for every thread, not one per thread.
+        pending = self.bus.pending_counts_all(tuple(view.thread.name for view in views))
+        return [{**view.to_wire(), "pending": pending[view.thread.name]} for view in views]
 
     def presence(self) -> Sequence[Mapping]:
         """Presence without viewer-specific unread scans."""
-        return self._presence(include_pending=False)
+        return [view.to_wire() for view in self._presence_views()]
 
-    def _presence(self, *, include_pending: bool) -> Sequence[Mapping[str, object]]:
-        return [
-            {
-                **view.to_wire(),
-                **(
-                    {"pending": self.bus.pending_count(view.thread.name)} if include_pending else {}
-                ),
-            }
-            for view in sorted(self.thread_views(), key=lambda view: view.thread.name)
-        ]
+    def _presence_views(self):
+        return sorted(self.thread_views(), key=lambda view: view.thread.name)
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
