@@ -57,6 +57,13 @@ class CandidateCheckpoint(CandidateTable, TypedTable):
     last_seq: int = field(metadata={"sql": Column(check="last_seq>=0")})
 
 
+    @classmethod
+    def current(cls, db: sqlite3.Connection) -> CandidateCheckpoint | None:
+        try:
+            return cls.one(db, singleton=1)
+        except (ValueError, TypeError) as error:
+            raise ProjectionRebuildRequiredError("candidate index schema is unavailable") from error
+
     @property
     def source_identity(self) -> PrefixSource:
         return PrefixSource(self.root_id, self.device, self.inode)
@@ -335,7 +342,7 @@ class WakeCandidateIndex(TypedStore):
                 with self.writing() as db:
                     # TypedStore installs schema atomically. Capture the stored
                     # row, then release SQL custody before reading or decoding.
-                    recorded = CandidateCheckpoint.one(db, singleton=1)
+                    recorded = CandidateCheckpoint.current(db)
                 checkpoint = self._checkpoint_start(
                     recorded, stream, stat, root_id,
                     rebuild=rebuild, bootstrap_new=bootstrap_new,
@@ -345,7 +352,7 @@ class WakeCandidateIndex(TypedStore):
                     max_rows=max_rows, max_bytes=max_bytes,
                 )
                 with self.writing() as db:
-                    current = CandidateCheckpoint.one(db, singleton=1)
+                    current = CandidateCheckpoint.current(db)
                     if current == recorded:
                         tail = self._source_end(stream, batch.next_offset)
                         self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
@@ -396,7 +403,7 @@ class WakeCandidateIndex(TypedStore):
                 with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
                     checkpoint = self._checkpoint_start(
-                        CandidateCheckpoint.one(db, singleton=1),
+                        CandidateCheckpoint.current(db),
                         stream, stat, root_id, rebuild=False,
                     )
                 return checkpoint
@@ -486,7 +493,7 @@ class WakeCandidateIndex(TypedStore):
                      limit=limit, delivery_only=delivery_only)
         try:
             with self.snapshot() as db:
-                checkpoint = CandidateCheckpoint.one(db, singleton=1)
+                checkpoint = CandidateCheckpoint.current(db)
                 if (
                     checkpoint is None
                     or checkpoint.root_id != request.root_id
