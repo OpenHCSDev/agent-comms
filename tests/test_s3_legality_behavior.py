@@ -135,8 +135,11 @@ def test_replay_bits_revision_and_ambiguity(pending):
 
 @pytest.mark.parametrize("owner", members(ResponseState), ids=lambda c: c.declared_name)
 def test_response_receipt_and_publication_constraints(owner, pending):
+    publication = published_snapshot(pending)
+    intent = publication.publication_intents[0]
+    receipt = publication.publication_receipts[0]
     if owner.published:
-        state = owner.load("receipt", 1)
+        state = owner.load(receipt.message_id, receipt.seq)
         for message_id, seq in (
             (None, 1),
             ("receipt", None),
@@ -160,12 +163,12 @@ def test_response_receipt_and_publication_constraints(owner, pending):
         )
         if permitted:
             state.validate_publication(
-                object() if has_intent else None, object() if has_receipt else None
+                intent if has_intent else None, receipt if has_receipt else None
             )
         else:
             with pytest.raises(IntegrityViolationError):
                 state.validate_publication(
-                    object() if has_intent else None, object() if has_receipt else None
+                    intent if has_intent else None, receipt if has_receipt else None
                 )
     row = pending.obligations[0]
     rejected(row, "revision must be positive", revision=0)
@@ -284,7 +287,9 @@ def test_snapshot_retry_terminal_coupling(active):
     for phase, response in product(failures, responses):
         if response.retryable:
             value = terminal_snapshot(active, DeferredExecution, phase, response, replay_safe=True)
-            assert value.can_retry
+            # A failed terminal state is not automatically a retry predecessor.
+            # Unknown outcomes remain unrunnable even with an otherwise safe ledger.
+            assert value.can_retry is phase().permits_retry()
             rejected(value, "authorized retry", replay=replace(value.replay, replay_safe=False))
             with pytest.raises(
                 IntegrityViolationError, match="authorized retry cannot settle failed"
