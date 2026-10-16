@@ -84,7 +84,9 @@ def test_input_caption_is_bounded_and_never_parses_an_execution_request(monkeypa
     caption = ToolDeclaration.start('opaque', 'read', arguments).title
     assert 'foreign.txt' in caption and len(caption) < 200
     assert arguments['payload'] == 'x' * 1_000_000
-    assert len(ToolDeclaration.start('command', 'Bash', {'command': 'x' * 1_000_000}).title) < 200
+    assert len(ToolDeclaration.start('command', 'Bash', {'command': 'x' * 1_000_000}).title) <= ToolDeclaration.CAPTION_CHARS
+    plain = ToolDeclaration.start('plain', 'Bash', {'command': 'echo "hello"\nnext line'}).title
+    assert plain == 'Run echo "hello" next line'
 
 
 def test_foreign_protocol_owners_supply_their_own_recorded_detail():

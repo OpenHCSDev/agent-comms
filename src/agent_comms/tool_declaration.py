@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import reprlib
 from typing import ClassVar
 
 from .agent_events import ToolStart
@@ -11,6 +10,7 @@ from .declared_family import DeclaredFamily
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
+    CAPTION_CHARS: ClassVar[int] = 80
     acp_kind: ClassVar[str] = "other"
     label: ClassVar[str]
 
@@ -33,9 +33,10 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     def caption(cls, name: str, arguments: object, *, detail: str = "") -> str:
         declaration = cls.for_name(name)
         preview = detail.strip() or declaration.input_preview(arguments)
-        # Bound the declared text, not a dump of opaque arguments.
-        preview = reprlib.repr(preview)[1:-1] if preview else ''
-        return declaration.label + (" " + preview if preview else "")
+        caption = declaration.label + (" " + preview if preview else "")
+        if len(caption) > cls.CAPTION_CHARS:
+            caption = caption[:cls.CAPTION_CHARS - 1] + '…'
+        return ' '.join(caption.split())
 
     @classmethod
     def input_preview(cls, arguments: object) -> str:
