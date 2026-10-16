@@ -175,10 +175,10 @@ class SettledTick:
     through_seq: int = 0
     change_token: tuple[WireWatch, int] | None = None
 
-    def unchanged_native(self, watcher: WireWatch | None, local: tuple) -> bool:
-        if watcher is None or watcher.change_token is None:
+    def unchanged_native(self, token: tuple[WireWatch, int] | None, local: tuple) -> bool:
+        if token is None:
             return False
-        return self.change_token == watcher.change_token and local == self.revision.other[1:]
+        return self.change_token == token and local == self.revision.other[1:]
 
 
 class InputObservation:
@@ -313,7 +313,7 @@ class InputObservation:
                 self._observation_watchers[session_id] = watcher
                 token = watcher.change_token if watcher is not None else None
                 if (settled is not None and self._quiescent(session_id)
-                        and settled.unchanged_native(watcher, self._tick_local(session_id))):
+                        and settled.unchanged_native(token, self._tick_local(session_id))):
                     # Native watcher reports no file change. Process-local work
                     # and configuration are unchanged too; even stat calls are
                     # redundant. Polling and replaced/overflowed watches have
