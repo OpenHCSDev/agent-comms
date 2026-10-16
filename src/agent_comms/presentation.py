@@ -743,7 +743,7 @@ class ThreadView:
                        binding=self.binding)
 
     def _display_presentation(self) -> ThreadPresentation:
-        ordinary = self.status.presentation(self.thread.title or self.thread.name, self.activity)
+        ordinary = self.status.presentation(self.thread.display_title, self.activity)
         if self.status.active:
             return ordinary.status.when_idle(ordinary, self._idle_presentation)
         return ordinary
