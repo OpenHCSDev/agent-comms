@@ -5,7 +5,7 @@ import pytest
 from agent_comms.cli_commands import ConfigureCliCommand
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.native_arguments import NativeArguments
-from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.pi_commands import GetAvailableModels, GetAvailableThinkingLevels
 from agent_comms.pi_payloads import ModelsData, ReportedModel, ThinkingLevelsData
 from agent_comms.pi_vocabulary import HighThinkingLevel, OffThinkingLevel, ServiceTier

@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NoReturn
 
-from .owner_launch import CallingThreadUnavailable, RestartEnvironment
+from .launch_runtime import CallingThreadUnavailable, RestartEnvironment
 
 if TYPE_CHECKING:
     from .comms import Comms

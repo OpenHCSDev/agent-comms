@@ -28,7 +28,7 @@ from agent_comms.coordination_tables.participants import OwnerGenerations
 from .child_process import BoundedRun, ChildRetirementError, ParentLifeline
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
-from .owner_launch import LaunchRuntime
+from .launch_runtime import LaunchRuntime
 from .pi_rpc import unique_fields
 from .private_path import PrivateSocketRole
 from .recovery_projection import RecoveryRequest, RecoverySelection

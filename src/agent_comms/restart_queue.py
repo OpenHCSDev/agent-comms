@@ -26,7 +26,8 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
-from .owner_launch import LaunchRuntime, RestartEnvironment, RetainedOwnerLaunch
+from .owner_launch import RetainedOwnerLaunch
+from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .restart_refusals import RestartRefusal

@@ -11,7 +11,9 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.owner_launch import LaunchRuntime, RestoredRuntime, RestartEnvironment, RetainedOwnerLaunch
+from agent_comms.owner_launch import RetainedOwnerLaunch
+from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime, RestartEnvironment
+from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistrySnapshot
@@ -44,6 +46,22 @@ def test_selected_runtime_stays_pinned_when_current_changes(tmp_path, monkeypatc
     assert projected["AUTHORED_CREDENTIAL"] == "kept"
     assert selected.environment(projected) == projected
     assert RestoredRuntime(Path("/old/bin/python")).environment(original) == original
+    _, native_environment = NativePiRpcLaunch.bootstrap(
+        first / "package/dist/cli.js", (), tmp_path, original,
+        RestartEnvironment.inherit(original), selected,
+    )
+    assert native_environment["VIRTUAL_ENV"] == str(first)
+    assert native_environment["PATH"].split(os.pathsep)[0] == str(first / "bin")
+    assert "PYTHONPATH" not in native_environment
+
+
+@pytest.mark.parametrize("source", [{}, {"PYTHONPATH": ""}, {"PYTHONPATH": "/source"}])
+def test_import_path_preserves_absent_and_empty_then_removes_explicitly(source):
+    configuration = RestartEnvironment.inherit(source)
+    encoded = configuration.encode()
+    assert {key: value for key, value in encoded.items() if key == "PYTHONPATH"} == source
+    assert FieldCodec.decode(RestartEnvironment, encoded) == configuration
+    assert "PYTHONPATH" not in configuration.without_pythonpath().apply_runtime(source)
 
 
 @pytest.mark.parametrize(('inherited', 'expected'), [

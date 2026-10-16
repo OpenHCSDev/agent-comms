@@ -9,6 +9,7 @@ from typing import ClassVar
 
 from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
 from .native_session_reopen import NativeSessionIdentity
+from .launch_runtime import LaunchRuntime
 from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
 
 
@@ -62,7 +63,7 @@ def fork_native_session(file: str, worktree: str, launcher: str) -> NativeSessio
     """
     from .native_pi import NativePiRpcLaunch
 
-    package = NativePiRpcLaunch.package_for_command(launcher)
+    package = NativePiRpcLaunch.package_for_command(launcher, LaunchRuntime.running())
     return asyncio.run(ForkSessionHelper.run(
         ForkSessionRequest(str(package), file, worktree), cwd=Path(worktree),
     ))

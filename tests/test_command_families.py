@@ -15,7 +15,7 @@ from agent_comms.cli_commands import CliCommand, option
 from agent_comms.comms import Comms
 from agent_comms.messages import InfoKind
 from agent_comms.pi_vocabulary import ServiceTier
-from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
+from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,

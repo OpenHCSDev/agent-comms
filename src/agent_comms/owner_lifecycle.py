@@ -19,8 +19,8 @@ from .locked_store import LockedStore
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
-from .owner_launch import LaunchRuntime, RestartEnvironment
-from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
+from .launch_runtime import LaunchRuntime, RestartEnvironment, PACKAGE_ENV, ROOT_ID_ENV
+from .private_nk_entrypoint import PrivateNkLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .restart_refusals import (

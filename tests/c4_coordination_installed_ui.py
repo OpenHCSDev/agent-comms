@@ -18,7 +18,8 @@ sys.path.insert(0, str(args.toad_tests))
 from runtime_fixture import ToadApp, wait_channel_roster
 from agent_comms.comms import Comms
 from agent_comms.presentation import MessageNotification
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch, ROOT_ID_ENV, PACKAGE_ENV
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
+from agent_comms.launch_runtime import ROOT_ID_ENV, PACKAGE_ENV
 from agent_comms.threads import Thread
 from toad.widgets.comms_sidebar import ChannelGroup
 

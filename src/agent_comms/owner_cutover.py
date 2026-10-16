@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
-from .owner_launch import LaunchRuntime
+from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
     from .maintenance_barrier import MaintenanceState
