@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import stat
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal
+from typing import ClassVar, Literal
 
 from .errors import RelationViolationError
 from .message_reference import MessageReference
@@ -227,6 +227,8 @@ class ClaimRelease:
 class ClaimTransition:
     """Claims and releases in ONE future message row, never independent writes."""
 
+    max_resources: ClassVar[int] = 32
+
     owner: str
     incarnation: str
     seq: int
@@ -263,6 +265,45 @@ class ClaimTransition:
             type(self.admission) is not WakeAdmission or not self.claims or self.releases
         ):
             raise ClaimTransitionError("Wake admission requires a claim-only transition.")
+
+    @property
+    def resources(self) -> tuple[str, ...]:
+        return (*self.claims, *(release.resource for release in self.releases))
+
+    def claimed(self, resource: str) -> ClaimOwner:
+        """Derive a current owner from this original acquisition, never another schema."""
+        if resource not in self.claims or self.generation is None:
+            raise ClaimTransitionError("Resource is not part of this claim acquisition.")
+        return ClaimOwner(resource, self.owner, self.incarnation, self.generation,
+                          self.seq, self.message_id, self.admission)
+
+    def apply(self, previous: ClaimProjection) -> ClaimProjection:
+        """Apply atomically to the affected certified resources.
+
+        Unrelated resources do not affect legality. The checkpoint supplies only
+        the touched rows and the original claim high-water, not a replayed bus.
+        """
+        if type(previous) is not ClaimProjection:
+            raise ClaimTransitionError("Only typed claim projections are accepted.")
+        if self.seq <= previous.last_seq:
+            raise ClaimTransitionError("Claim sequence must increase.")
+        next_state = dict(previous)
+        for release in self.releases:
+            current = next_state.get(release.resource)
+            if current is None:
+                raise ClaimTransitionError("Cannot release a resource without a live claim.")
+            # Renaming preserves incarnation; exact generation fences release
+            # after somebody else acquires this same resource.
+            if (current.incarnation, current.generation) != (self.incarnation, release.generation):
+                raise ClaimTransitionError("Only the exact owner incarnation/generation may release.")
+        for resource in self.claims:
+            if existing := next_state.get(resource):
+                raise ClaimConflict(existing)
+        for release in self.releases:
+            del next_state[release.resource]
+        for resource in self.claims:
+            next_state[resource] = self.claimed(resource)
+        return ClaimProjection(self.seq, next_state)
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,64 +353,6 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
 
     def __len__(self) -> int:
         return len(self._claims)
-
-
-def apply_transition(previous: ClaimProjection, transition: ClaimTransition) -> ClaimProjection:
-    """All-or-nothing immutable projection from caller-verified durable envelopes.
-
-    The caller MUST hold the wire→bus locks and verify bus fsync/newline and
-    outer sender/sequence/message identity and unique registered creation
-    incarnations. Neither this method nor a parser can determine whether an
-    observed row was actually durable or whether two names are distinct owners.
-    """
-    if type(previous) is not ClaimProjection or type(transition) is not ClaimTransition:
-        raise ClaimTransitionError("Only typed claim projections/transitions are accepted.")
-    if transition.seq <= previous.last_seq:
-        raise ClaimTransitionError("Claim sequence must increase.")
-    next_state = dict(previous)
-    for release in transition.releases:
-        current = next_state.get(release.resource)
-        if current is None:
-            raise ClaimTransitionError("Cannot release a resource without a live claim.")
-        # The envelope owner is the sender's name at publication time. Renaming
-        # preserves the owner's incarnation, but must not strand an older claim
-        # whose envelope recorded a previous name. The generation still fences
-        # release after another owner has acquired the same resource.
-        if (current.incarnation, current.generation) != (
-            transition.incarnation,
-            release.generation,
-        ):
-            raise ClaimTransitionError("Only the exact owner incarnation/generation may release.")
-    for resource in transition.claims:
-        if existing := next_state.get(resource):
-            raise ClaimConflict(existing)
-    for release in transition.releases:
-        del next_state[release.resource]
-    for resource in transition.claims:
-        assert transition.generation is not None
-        next_state[resource] = ClaimOwner(
-            resource,
-            transition.owner,
-            transition.incarnation,
-            transition.generation,
-            transition.seq,
-            transition.message_id,
-            transition.admission,
-        )
-    return ClaimProjection(transition.seq, next_state)
-
-
-def project_verified_transitions(rows: Iterable[ClaimTransition]) -> ClaimProjection:
-    """Replay ONLY rows whose complete-line durability was verified by the caller.
-
-    Do not pass raw JSONL or accept a claimed `fsynced` boolean as proof.
-    The future guarded bus reader must supply *all* claim rows in increasing
-    sequence, including release-only rows after the last live claim.
-    """
-    projection = ClaimProjection()
-    for transition in rows:
-        projection = apply_transition(projection, transition)
-    return projection
 
 
 def _release_resource(worktree: Path, path: str | Path) -> str:

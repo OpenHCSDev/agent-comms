@@ -20,8 +20,6 @@ from .errors import RelationViolationError
 from .private_path import PrivateFileRole
 
 if TYPE_CHECKING:
-    from .envelope_claim_transitions import ClaimTransition
-    from .messages import Message
     from .private_bus_checkpoint import CertifiedSourceRead
     from .wire_log import WireLog
     from .wire_metadata import WireMetadata
@@ -138,38 +136,26 @@ class StoreLock:
             raise RelationViolationError("Store has no certified original wire source.")
         return self.source
 
-    def claim_transitions(
+    @contextmanager
+    def current_source(
         self, log: WireLog, metadata: WireMetadata
-    ) -> tuple[tuple[ClaimTransition, ...], int]:
-        """Every claim envelope in bus order, and the verified bus high-water.
+    ) -> Iterator[CertifiedSourceRead]:
+        """Lend the current certificate under this retained physical bus lock.
 
-        Taking this bus lock already checked the checkpoint against the bus,
-        so only the message rows are read: context rows carry no claim and
-        are nearly all of a long-lived bus. A claim bus without a checkpoint
-        has nothing but its rows to check, so it is read whole.
+        A prior append may have advanced the immutable source originally lent
+        to this lock. Refresh that view, never reconstruct claim state or scan
+        an uncertified bus.
         """
-        if self.source is None:
-            verified_sequence = 0
-            messages: list[Message] = []
-            for record in log.verified_records_unlocked(metadata):
-                verified_sequence = record.sequence_after(verified_sequence)
-                messages.extend(record.messages())
-        else:
-            if self.source.marker != metadata:
-                # A publisher may append while retaining this physical lock.
-                # Its original certified cut is immutable; borrow the new
-                # verified cut rather than read beyond the original proof.
-                with log.verify_before_read_unlocked() as source:
-                    return StoreLock(self.descriptor, source).claim_transitions(log, metadata)
-            self.source.require_marker(metadata)
-            messages = list(self.source.messages())
-            verified_sequence = self.source.committed_sequence()
-        return (
-            tuple(
-                transition for message in messages for transition in message.claim_transitions
-            ),
-            verified_sequence,
-        )
+        source = self.certified_read()
+        if source.marker == metadata:
+            source.require_open_prefix()
+            yield source
+            return
+        with log.verify_before_read_unlocked() as refreshed:
+            if refreshed is None:
+                raise RelationViolationError("Store has no certified original wire source.")
+            refreshed.require_marker(metadata)
+            yield refreshed
 
 
 def store_lock_path(store_path: Path) -> Path:

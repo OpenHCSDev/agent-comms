@@ -1,7 +1,9 @@
 # Checkpoint-owned resource claims
 
 Owner: core-goal-retry. Base: 46ee4a206a28dfb97ff93ed4d839436cda4b5261.
-Task: Claude11434. This is a source/design checkpoint, not an implemented or installed fix.
+Task: Claude11434. The indexed owner path is implemented and exercised through
+the actual public Comms API. Installed claimed-edit and latency acceptance remain
+unfinished; this is not an installed fix.
 
 ## Existing failure and complete reader family
 
@@ -69,7 +71,9 @@ SQLite atomicity/query plans, native socket execution or OS fsync semantics.
 Before/after evidence lives under the owned persistent scratch directory
 `/home/ts/.cache/agent-scratch/core-goal-retry/checkpoint-resource-claims`.
 
-After the coherent source change: bounded checks of competing acquisition,
+The authored public Comms journey acquires, refuses a competing claim before
+append, releases, reacquires through the other owner and reopens the same current
+state; no provider/native input is created. Remaining confirmation: competing acquisition,
 operation reuse after release, valid multi-resource envelopes, exact release,
 rollback/reopen and crash certification; then the actual installed claimed-edit
 entrypoint and retained history on an isolated root. Measure wire-lock hold time
