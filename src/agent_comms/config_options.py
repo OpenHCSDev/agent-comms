@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Protocol
 
 from acp import RequestError
 from acp.schema import (
@@ -28,11 +28,11 @@ from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_pi import NativePiUnavailable
 from .launch_runtime import RestartEnvironment
-from .runtime import RuntimeServer
-from .session_effects import SessionEffects
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .runtime import RuntimeServer
+    from .session_effects import SessionEffects
     from .pi_commands import SettingCommand
     from .session_lifecycle import SessionLifecycle
 
@@ -41,19 +41,29 @@ class InvalidConfigChoice(ValueError):
     """A configured value is not a member of its discovered catalog."""
 
 
+class CatalogSelection(Protocol):
+    """The model and thinking selection read by both draft and running catalogs."""
+
+    @property
+    def model(self) -> str | None: ...
+
+    @property
+    def thinking_level(self) -> type[ThinkingLevel] | None: ...
+
+
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
     title: ClassVar[str]
     description: ClassVar[str]
     category: ClassVar[str]
 
     @abstractmethod
-    def current_value(self, thread: Thread) -> str | None: ...
+    def current_value(self, thread: CatalogSelection) -> str | None: ...
 
     @abstractmethod
-    async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]: ...
+    async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]: ...
 
     @abstractmethod
-    async def describe(self, thread: Thread) -> SessionConfigOptionSelect: ...
+    async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect: ...
 
     @abstractmethod
     async def change(
@@ -75,10 +85,10 @@ class CatalogConfigOption(ConfigOption):
     def current_auth(self) -> bool:
         return self.auth == self.configuration.auth_revision()
 
-    def cache_key(self, thread: Thread) -> str | None:
+    def cache_key(self, thread: CatalogSelection) -> str | None:
         return thread.model
 
-    async def choices(self, thread: Thread) -> list[SessionConfigSelectOption]:
+    async def choices(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
         async with self.lock:
             if not self.current_auth:
                 self.catalogs.clear()
@@ -91,7 +101,7 @@ class CatalogConfigOption(ConfigOption):
                 self.catalogs[key] = await self.discover(thread)
             return self.catalogs[key]
 
-    async def describe(self, thread: Thread) -> SessionConfigOptionSelect:
+    async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect:
         choices = await self.choices(thread)
         configured = self.current_value(thread)
         selected = configured if configured is not None else ""
@@ -135,7 +145,7 @@ class CatalogConfigOption(ConfigOption):
                 f"{self.title} {value!r} is unavailable; choose one of: {valid}"
             )
 
-    async def validate(self, thread: Thread, value: str) -> None:
+    async def validate(self, thread: CatalogSelection, value: str) -> None:
         self.require_value(value, await self.choices(thread))
 
 
@@ -144,13 +154,13 @@ class ModelConfigOption(CatalogConfigOption):
     description = "Model for this thread; a running turn switches at its next model call"
     category = "model"
 
-    def current_value(self, thread: Thread) -> str | None:
+    def current_value(self, thread: CatalogSelection) -> str | None:
         return thread.model
 
-    def cache_key(self, thread: Thread) -> None:
+    def cache_key(self, thread: CatalogSelection) -> None:
         return None
 
-    async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
+    async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
         values = [
             value.strip()
             for value in os.environ.get("AGENT_COMMS_AGENT_MODELS", "").split(",")
@@ -181,10 +191,10 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     description = "Thinking level for this thread; a running turn switches at its next model call"
     category = "thought_level"
 
-    def current_value(self, thread: Thread) -> str | None:
+    def current_value(self, thread: CatalogSelection) -> str | None:
         return ThinkingLevel.optional_name(thread.thinking_level)
 
-    async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
+    async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
@@ -216,19 +226,25 @@ class ConfigOptions:
         self.configuration = configuration
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
 
+    @classmethod
+    def configured(cls) -> ConfigOptions:
+        """Catalogs of the native binary, arguments and environment this process is configured with."""
+        return cls(NativeArguments.configured_binary(), NativeArguments.configured(),
+                   RestartEnvironment.inherit(os.environ))
+
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
             self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration)
         return self.catalogs[member]
 
-    async def options(self, thread: Thread) -> list[SessionConfigOptionSelect]:
+    async def options(self, thread: CatalogSelection) -> list[SessionConfigOptionSelect]:
         """Describe declared choices and settings from one captured thread."""
         return [
             await self.catalog_for(member).describe(thread)
             for member in ConfigOption.members_with(CatalogConfigOption)
         ]
 
-    async def validate(self, thread: Thread) -> None:
+    async def validate(self, thread: CatalogSelection) -> None:
         """Require every configured value through its owning catalog."""
         for member in ConfigOption.members_with(CatalogConfigOption):
             option = self.catalog_for(member)

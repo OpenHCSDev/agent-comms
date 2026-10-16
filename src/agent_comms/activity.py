@@ -8,7 +8,7 @@ import threading
 import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
@@ -357,8 +357,7 @@ class ActivityLog(ThreadOwnedState):
         if checkpoint is not None:
             # Its prefix is validated by the shared publisher; it may lag an
             # append without claiming those later events or delaying appenders.
-            with suppress(OSError):
-                self.checkpoint.write(checkpoint)
+            self.checkpoint.write(checkpoint)
 
     def emit(self, activity: Activity) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
