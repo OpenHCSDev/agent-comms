@@ -440,7 +440,6 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         # Exercise the actual one-shot publication member at the failure seam
         # before its stopped .originals archive exists. Its inherited failed()
         # must complete the existing RAM/OFD source handoff before unwinding.
-        import fcntl
         from agent_comms.active_route import ActiveRoute, active_route_path
         from agent_comms.field_codec import FieldCodec
         from agent_comms.owner_cutover import PreserveOwnerRuntime
@@ -467,7 +466,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         original.write_text('{}\n')
         reviewed = publisher.ReviewedArtifact(original, publisher.digest(original))
         cohort = publisher.ReviewedRetainedSummaryCohort(
-            prefix, Path(sys.executable), prefix, route, package,
+            prefix, prefix, route, package,
             reviewed, reviewed, (),
         )
 
@@ -486,7 +485,8 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
 
         route_descriptor = os.open(route_file.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
-            fcntl.flock(route_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # This isolated check exercises failed-publication restoration.
+            # Do not exclude the observers whose restored startup we await.
             for name in selected:
                 comms.owners.start(name)
                 ready(comms.registry.require(name))
