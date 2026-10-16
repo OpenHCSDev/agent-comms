@@ -1,16 +1,18 @@
-"""Default-off, wire-root maintenance admission for *new-code* callers only.
+"""Durable, default-off wire-root maintenance admission.
 
-An enabled record does not constrain a process that imported older code. External
-old-client exclusion and a Toad ingress pause are required before live use.
-The enabled witness is written before the state and never removed; a lost or
-corrupt state therefore denies admission instead of silently returning to OFF.
+A one-time upgrade from code lacking this gate must drain those original workers
+before it can rely on phase admission. Subsequent cutovers set Draining before
+fleet drain and clear it only after known-safe publication or abort. The enabled
+witness is never removed: a lost/corrupt state denies instead of returning OFF.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import stat
+from uuid import uuid4
 from collections.abc import Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
@@ -23,7 +25,7 @@ from .lifecycle import LifecycleState
 
 from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
-from .store_files import _async_store_lock, _store_lock
+from .store_files import _async_store_lock, _atomic_write_text, _store_lock, store_lock_path
 
 
 class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
@@ -38,7 +40,9 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
 class DrainingPhase(MaintenancePhase):
     @classmethod
     def successors(cls):
-        return (PausedPhase,)
+        # A wire-compatible cutover clears directly; format migrations may
+        # proceed through Paused and Installing before they become READY.
+        return (PausedPhase, ReadyPhase)
 
 
 class PausedPhase(MaintenancePhase):
@@ -104,12 +108,10 @@ class MaintenanceState(MaintenanceMarker):
 
 
 class MaintenanceBarrier:
-    """One root's read-only admission gate; no in-process operator exists.
+    """One root's phase owner; writer and readers use the same durable witness.
 
-    Ordinary workers, ACP adapters and tools import this package under the
-    same OS identity as the wire owner. A public in-package transition would
-    therefore grant any caller permanent host-wide denial authority. Only a
-    future separately protected control plane may write phase witnesses.
+    A phase transition takes wire then registry custody. This is cooperative
+    same-UID maintenance control, not authority over old code or hostile clients.
     """
 
     def __init__(self, registry_path: Path):
@@ -176,6 +178,79 @@ class MaintenanceBarrier:
     def read(self) -> MaintenanceReceipt | None:
         with _store_lock(self.wire_path, shared=True):
             return self.current_unlocked()
+
+    def _write_unlocked(self, receipt: MaintenanceReceipt) -> None:
+        root = str(self.registry_path.parent.resolve())
+        marker = MaintenanceMarker(version=1, root=root, generation=receipt.generation)
+        state = MaintenanceState(version=1, root=root, generation=receipt.generation,
+                                 operator=receipt.operator, nonce=receipt.nonce,
+                                 phase=receipt.phase)
+        # The marker leads so an interrupted replacement always denies admission.
+        _atomic_write_text(self.marker_path, json.dumps(FieldCodec.encode(marker), sort_keys=True), fsync_parent=True)
+        _atomic_write_text(self.state_path, json.dumps(FieldCodec.encode(state), sort_keys=True), fsync_parent=True)
+
+    def begin(self, operator: str) -> MaintenanceReceipt:
+        """Close turn admission before fleet drain; an uncertain write stays closed."""
+        if type(operator) is not str or not operator or len(operator) > 128:
+            raise ValueError('Maintenance operator must have bounded identity')
+        with _store_lock(self.wire_path), _store_lock(self.registry_path):
+            current = self.current_unlocked()
+            if current is not None and current.phase is not ReadyPhase:
+                raise RelationViolationError('Maintenance already active or uncertain')
+            receipt = MaintenanceReceipt(
+                (current.generation + 1) if current is not None else 1,
+                operator, uuid4().hex, DrainingPhase,
+            )
+            self._write_unlocked(receipt)
+            return receipt
+
+    def _advance_unlocked(self, expected: MaintenanceReceipt,
+                          phase: type[MaintenancePhase]) -> MaintenanceReceipt:
+        if (type(expected) is not MaintenanceReceipt or not isinstance(phase, type)
+                or not issubclass(phase, MaintenancePhase)
+                or not expected.phase().may_become(phase())):
+            raise ValueError('Maintenance transition requires a valid expected successor')
+        if self.current_unlocked() != expected:
+            raise RelationViolationError('Maintenance generation/operator changed')
+        receipt = MaintenanceReceipt(expected.generation + 1, expected.operator,
+                                     uuid4().hex, phase)
+        self._write_unlocked(receipt)
+        return receipt
+
+    def advance(self, expected: MaintenanceReceipt,
+                phase: type[MaintenancePhase]) -> MaintenanceReceipt:
+        with _store_lock(self.wire_path), _store_lock(self.registry_path):
+            return self._advance_unlocked(expected, phase)
+
+    def clear(self, expected: MaintenanceReceipt) -> MaintenanceReceipt:
+        """Finish a known-safe drain or abort; never infer safety from an error."""
+        if type(expected) is not MaintenanceReceipt or expected.phase is not DrainingPhase:
+            raise ValueError('Only an acquired draining phase can be cleared directly')
+        return self.advance(expected, ReadyPhase)
+
+    def clear_stopped(self, expected: MaintenanceReceipt, wire_descriptor: int) -> MaintenanceReceipt:
+        """Clear while the stopped batch holds its original exclusive wire OFD.
+
+        Reacquiring the wire by name would deadlock. An unrelated descriptor
+        cannot publish READY while another cutover retains stopped custody.
+        """
+        if type(expected) is not MaintenanceReceipt or expected.phase is not DrainingPhase:
+            raise ValueError('Only an acquired draining phase can be cleared')
+        if type(wire_descriptor) is not int or wire_descriptor < 0:
+            raise RelationViolationError('Maintenance needs the stopped wire descriptor')
+        opened = os.fstat(wire_descriptor)
+        named = store_lock_path(self.wire_path).stat()
+        if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
+            raise RelationViolationError('Maintenance wire custody changed')
+        fcntl.flock(wire_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with _store_lock(self.registry_path):
+            return self._advance_unlocked(expected, ReadyPhase)
+
+    def require_draining_unlocked(self, expected: MaintenanceReceipt) -> None:
+        """Admit only this cutover's captured phase under wire custody."""
+        if (type(expected) is not MaintenanceReceipt or expected.phase is not DrainingPhase
+                or self.current_unlocked() != expected):
+            raise RelationViolationError('Cutover maintenance phase changed before owner retirement')
 
     def pending_turn(self) -> MaintenanceReceipt | None:
         """Return the cutover-owned typed reason to retain, not launch, a wake.

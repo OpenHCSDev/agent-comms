@@ -30,10 +30,6 @@ from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
 from seed_thread_retirement_fixture import historical_reservation, ready
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tests'))
-from maintenance_control_fixture import FixtureMaintenanceControl
-
-
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -63,7 +59,7 @@ def old_client_write_case(stage, root, original_python, environment):
         log.write_metadata_unlocked(replace(marker, checkpoint_version=None, checkpoint_seal=None))
         (copied/'private_bus_checkpoint.sqlite3').unlink()
         install_private_bus_checkpoint(log)
-    control = FixtureMaintenanceControl(Comms(copied).owners.maintenance)
+    control = Comms(copied).owners.maintenance
     control.advance(control.begin('disposable-old-client-probe'), PausedPhase)
     result = subprocess.run([original_python, str(Path(__file__).with_name('old_thread_client_probe.py')),
                              str(copied)], env=environment, capture_output=True, text=True, timeout=8)

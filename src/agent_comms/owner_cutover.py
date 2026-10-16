@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from .threads import Thread
     from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure
     from .owner_lifecycle import OwnerRestartResult
+    from .maintenance_barrier import MaintenanceReceipt
 
 
 class OwnerCutover(ABC):
@@ -36,6 +37,10 @@ class OwnerCutover(ABC):
     def require_launch(self, lifecycle: OwnerLifecycle) -> None:
         """Installations may supply target launch authority only after stopping."""
         pass
+
+    def require_restart_admission(self, lifecycle: OwnerLifecycle) -> None:
+        """Ordinary restarts require READY; maintained cutovers bind their receipt."""
+        lifecycle.maintenance.assert_open_unlocked()
 
     @abstractmethod
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
@@ -75,6 +80,21 @@ class OwnerCutover(ABC):
             failure.add_note(f'Original-runtime recovery refused or failed: {recovery_error!r}')
             self.leave_stopped(failure)
         raise failure
+
+
+class MaintainedOwnerCutover(OwnerCutover):
+    """Stop an exact fleet while its durable Draining receipt holds new turns.
+
+    The publisher acquires maintenance_receipt before polling idle owners. It
+    clears the exact receipt under wire custody after known-safe publication
+    (or on a known-safe abort), before any replacement launch. UNKNOWN outcomes
+    remain closed for explicit review rather than reopening on exception text.
+    """
+
+    maintenance_receipt: "MaintenanceReceipt"
+
+    def require_restart_admission(self, lifecycle: OwnerLifecycle) -> None:
+        lifecycle.maintenance.require_draining_unlocked(self.maintenance_receipt)
 
 
 class StoppedOwnerInstallation(OwnerCutover):
