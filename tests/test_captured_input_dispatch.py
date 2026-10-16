@@ -3,15 +3,54 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from agent_comms.queued_input import InitialInput
+from agent_comms.queued_input import InitialInput, InputReservation
 import pytest
 
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
 from agent_comms.errors import RelationViolationError
 from agent_comms.queued_input import InputHandoffRefused
-from agent_comms.input_attempt import NotSentInput
+from agent_comms.input_attempt import NotSentInput, ReservedInput
 from test_acp_queue_contract import _owner
 from stored_inputs import stored_inputs
+
+
+async def test_unplaced_reservation_retires_its_captured_original(tmp_path):
+    comms, agent, _, _ = _owner(tmp_path)
+    try:
+        async with InitialInput.reserve(
+            agent.inputs, "beta", "beta", text="Unplaced", prompt="Unplaced",
+            echo=True, images=(), controller=None,
+        ) as reservation:
+            assert isinstance(reservation, InputReservation)
+            assert isinstance(reservation.item, InitialInput)
+            assert reservation.owner == comms.registry.require("beta")
+            assert reservation.source.key == reservation.item.key
+            assert isinstance(reservation.source, ReservedInput)
+            assert stored_inputs(agent.inputs.dispositions.root).lookup(
+                reservation.item.key
+            ) == reservation.source
+        retired = stored_inputs(agent.inputs.dispositions.root).lookup(reservation.item.key)
+        assert isinstance(retired, NotSentInput) and not retired.has_native_binding
+    finally:
+        await agent.shutdown()
+
+
+async def test_released_reservation_transfers_rollback_to_its_adopting_scope(tmp_path):
+    _, agent, _, _ = _owner(tmp_path)
+    try:
+        async with InitialInput.reserve(
+            agent.inputs, "beta", "beta", text="Transferred", prompt="Transferred",
+            echo=True, images=(), controller=None,
+        ) as reservation:
+            rollback = reservation.release()
+        assert stored_inputs(agent.inputs.dispositions.root).lookup(
+            reservation.item.key
+        ) == reservation.source
+        await rollback.aclose()
+        retired = stored_inputs(agent.inputs.dispositions.root).lookup(reservation.item.key)
+        assert isinstance(retired, NotSentInput) and not retired.has_native_binding
+    finally:
+        await agent.shutdown()
 
 
 async def test_initial_capture_rejects_owner_readmission_during_acceptance_notice(
