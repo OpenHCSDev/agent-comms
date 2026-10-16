@@ -7,7 +7,6 @@ import fcntl
 import json
 import os
 import signal
-import sqlite3
 import sys
 from abc import ABC, abstractmethod
 from contextlib import aclosing, suppress
@@ -23,6 +22,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import CORE_ERROR, CoreError, WireModel
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.messages import Message, MessageKind
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
@@ -347,24 +347,32 @@ class DeliveryJournal:
     def __init__(self, state: Path) -> None:
         self.path = state / 'delivery.sqlite3'
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.db = sqlite3.connect(self.path)
-        self.db.execute('PRAGMA synchronous=FULL')
-        for row in (Binding, DeliveryRow):
-            row.create(self.db, if_not_exists=True)
-        self.db.commit()
+        self.db = CoordinationStore.writer(self.path)
+        try:
+            self.db.execute('PRAGMA synchronous=FULL')
+            for row in (Binding, DeliveryRow):
+                row.create(self.db, if_not_exists=True)
+            self.db.commit()
+        except BaseException:
+            self.db.close()
+            raise
 
     def bind(self, requested: Binding | None) -> Binding:
-        rows = Binding.select(self.db)
-        if not rows and requested is not None:
-            with self.db:
+        with self.db:
+            if requested is not None:
+                # Bind before the later watch lock, including non-watch callers.
+                # SQLite must serialize the decision as well as its insertion.
+                self.db.execute('BEGIN IMMEDIATE')
+            rows = Binding.select(self.db)
+            if not rows and requested is not None:
                 requested.insert(self.db)
-            return requested
-        if len(rows) != 1:
-            raise ValueError('Supply one complete Core/CLI binding for this state directory')
-        current = rows[0]
-        if requested is not None and requested != current:
-            raise ValueError('This state directory belongs to another Core/CLI conversation')
-        return current
+                return requested
+            if len(rows) != 1:
+                raise ValueError('Supply one complete Core/CLI binding for this state directory')
+            current = rows[0]
+            if requested is not None and requested != current:
+                raise ValueError('This state directory belongs to another Core/CLI conversation')
+            return current
 
     def begin(self, message: Message, payload: str, outcome: Outcome) -> bool:
         with self.db:
