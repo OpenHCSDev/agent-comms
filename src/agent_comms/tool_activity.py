@@ -14,7 +14,7 @@ class ToolActivity(DeclaredFamily, affix="ToolActivity"):
     @classmethod
     def from_events(cls, events):
         calls = tuple(call for event in events for call in event.tool_calls)
-        return (RecordedToolActivity(max(calls, key=lambda call: call.timestamp or 0))
+        return (RecordedToolActivity(max(calls, key=lambda call: call.selection_order))
                 if calls else NoToolActivity())
 
     @property

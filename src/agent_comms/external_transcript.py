@@ -11,9 +11,10 @@ item finishes is the thread's activity, reported through Core's activity log.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from sqlite3 import Connection
 from dataclasses import dataclass, field
+from itertools import islice
 from pathlib import Path
 from typing import ClassVar
 
@@ -34,8 +35,8 @@ class ExternalToolEvents:
         f"json_extract(events, '$[0].{ToolStartTranscript.family_discriminator}')"
         f" = {sql_literal(ToolStartTranscript)}"
     )
-    tool_at: float = field(init=False, compare=False, repr=False, metadata={"sql": Column(
-        generated="coalesce(json_extract(events, '$[0].timestamp'), 0)"
+    tool_at: float | None = field(init=False, compare=False, repr=False, metadata={"sql": Column(
+        generated="json_extract(events, '$[0].timestamp')"
     )})
 
 
@@ -50,6 +51,20 @@ class ExternalItemRow(ExternalToolEvents, TypedTable):
     events: tuple[TranscriptEvent, ...]
     unique = (("thread", "seq"),)
     indexes = (Index(("thread", "tool_at", "seq"), where=ExternalToolEvents.tool_selector),)
+
+    @classmethod
+    def latest_tool_events(cls, connection: Connection, thread: str) -> tuple[TranscriptEvent, ...]:
+        # Unknown selection time cannot be ordered behind a known one. Keep one
+        # indexed candidate from each partition; never turn unknown into epoch 0.
+        events = []
+        for condition in ("IS NULL", "IS NOT NULL"):
+            with closing(cls.stream(
+                connection, thread=thread,
+                where=f"({cls.tool_selector}) AND tool_at {condition}",
+                order_by=("tool_at", "seq"), descending=True,
+            )) as rows:
+                events.extend(event for row in islice(rows, 1) for event in row.events)
+        return tuple(events)
 
 
 @dataclass(frozen=True)
@@ -122,13 +137,8 @@ class ExternalTranscriptRead:
 
         if self.connection is None:
             return NoToolActivity()
-        rows = ExternalItemRow.select(
-            self.connection, thread=self.lookup,
-            where=ExternalItemRow.tool_selector, order_by=("tool_at", "seq"),
-            descending=True, limit=1,
-        )
+        events = ExternalItemRow.latest_tool_events(self.connection, self.lookup)
         draft = self.current_draft()
-        events = tuple(event for row in rows for event in row.events)
         return ToolActivity.from_events(events + (draft.events if draft is not None else ()))
 
     def cut(self) -> ExternalCut:
