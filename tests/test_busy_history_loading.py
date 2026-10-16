@@ -227,3 +227,16 @@ def test_observer_start_failure_releases_both_real_pipe_endpoints(comms, monkeyp
     assert raised.value is failure
     assert len(closed) == 2 and all(connection.closed for connection in closed)
     assert endpoints and endpoints[0] in closed
+
+
+def test_viewer_reset_with_unread_observations_ends_the_service(comms):
+    import multiprocessing
+    from agent_comms.ui_model.observation import ObservationService, RevisionObserved
+
+    connection, viewer = multiprocessing.get_context("spawn").Pipe()
+    with connection, viewer:
+        service = ObservationService(comms, connection)
+        connection.send(RevisionObserved(comms.views.revision()))
+        viewer.close()  # The unread observation makes the real socketpair reset.
+        service.receive()
+        assert service.closed and service.changed.is_set()

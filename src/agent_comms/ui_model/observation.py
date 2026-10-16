@@ -800,7 +800,7 @@ class ObservationService:
         while self.connection.poll():
             try:
                 request = self.connection.recv()
-            except EOFError:
+            except (EOFError, ConnectionResetError):
                 self.closed = True
                 self.changed.set()
                 return
