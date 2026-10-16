@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.active_route import LocalRoute
 from tools.cutover.publish_runtime import RuntimePublication
 
 
@@ -21,9 +22,10 @@ def test_cli_failure_leaves_links_untouched(tmp_path, monkeypatch, command):
     publication.current.parent.mkdir(parents=True)
     publication.current.symlink_to("previous-runtime")
     before = (link.lstat(), publication.current.lstat())
+    route = LocalRoute(tmp_path / "bus")
 
     with pytest.raises(RuntimeError, match="Runtime CLI refused publication"):
-        publication.publish(tmp_path / "explicit-bus")
+        publication.publish(route.root)
 
     assert link.readlink() == Path("previous-command")
     assert publication.current.readlink() == Path("previous-runtime")

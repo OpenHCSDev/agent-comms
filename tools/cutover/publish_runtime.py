@@ -97,22 +97,19 @@ class RuntimePublication:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--root', type=Path, required=True, help='Explicit live bus root to check before relinking')
     parser.add_argument('--check', action='store_true', help='Inspect publication without changing links or queueing restarts')
     options = parser.parse_args()
     publication = RuntimePublication.installed()
     route = read_active_route()
     if route is None:
         raise ValueError('Runtime publication requires the installed route')
-    if options.root.resolve(strict=True) != route.root.resolve(strict=True):
-        raise ValueError('Publication check root differs from the installed route')
     comms = wire(route)
     owners = tuple(OwnerRestartRequest().threads(comms.registry.snapshot()))
     if options.check:
-        publication.require_cli(options.root)
+        publication.require_cli(route.root)
         print(f'{publication.runtime}: {len(owners)} native workers would be queued for idle reload')
         return
-    publication.publish(options.root)
+    publication.publish(route.root)
     print(f'Published {publication.runtime}', flush=True)
     # Queue requests keep original process identity and session settings. A
     # pending or uncertain previous request is handled by that existing owner.
