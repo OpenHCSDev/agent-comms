@@ -64,7 +64,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
             "type": "tool_execution_start",
             "toolCallId": "edit/1",
             "toolName": "edit",
-            "args": {"path": "src/example.py"},
+            "args": {"path": "src/example.py", "edits": [{"oldText": "old = 1", "newText": "new = 2"}]},
         },
         {
             "type": "tool_execution_end",

@@ -10,7 +10,7 @@ from acp.schema import ToolCallStart
 from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.comms import Comms
-from agent_comms.native_tools import CodingTool
+from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
 from delivery_owner_fixture import canonical_agent
 
@@ -23,7 +23,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         label = "Inspect"
 
         @classmethod
-        def detail(cls, arguments) -> str:
+        def detail_for(cls, arguments) -> str:
             return str(arguments["query"])
 
     event = ToolDeclaration.start("case", "inspect_fixture", {"query": "new declaration"})
@@ -40,10 +40,15 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     )
     with pytest.raises(ValueError):
         CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")
-    for member in CodingTool.members_with(CodingTool):
-        call = member.from_call(member.declared_name, {"path": "file", "command": "pwd"}, call_id="case")
-        event = ToolDeclaration.start("case", member.declared_name, call.tool.arguments)
-        assert event.kind == member.acp_kind and event.args == call.tool.arguments
+    examples = (ReadTool(path="file"), BashTool(command="pwd"),
+        EditTool(path="file", edits=(ReplacementEdit("before", "after"),)),
+        WriteTool(path="file", content="value"))
+    assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
+    for tool in examples:
+        call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
+        event = ToolDeclaration.start("case", tool.declared_name, call.tool.arguments)
+        assert event.kind == tool.acp_kind and event.args == tool.arguments
+        assert call.tool == tool and tool.detail in event.title
     unknown = ToolDeclaration.start("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
         "external_extension",

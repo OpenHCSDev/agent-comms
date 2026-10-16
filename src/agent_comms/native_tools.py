@@ -1,4 +1,4 @@
-"""Native execution capabilities; shared names and display belong to ToolDeclaration."""
+"""Typed Pi argument records, native execution capabilities and cooperative claims."""
 
 from __future__ import annotations
 
@@ -10,9 +10,11 @@ from typing import ClassVar
 from .tool_declaration import ToolDeclaration
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
+from .native_tool_call import SelectedToolDenied
+
 
 class NativeExecutableTool(ToolDeclaration):
-    """A declared tool whose calls participate in the existing native owner check."""
+    """A declared tool participating in the existing native owner check."""
 
     claim: ClassVar[None] = None
 
@@ -32,7 +34,7 @@ class NativeExecutableTool(ToolDeclaration):
 
 
 class NativeRequestTools:
-    """Core requests retain their exact native payload; the existing CLI executes them."""
+    """Core's existing CLI decodes and executes its declared request fields."""
 
     @classmethod
     def create_call(cls, call_id: str, arguments: dict[str, object]):
@@ -45,17 +47,48 @@ class NativeRequestTools:
         return package / "agent-comms-extensions/global-agent-comms/index.mjs"
 
 
-class PathTool:
+class ArgumentTool(ToolDeclaration):
+    """One declared record supplies decoding, display and native argument serialization."""
+
     @classmethod
-    def detail(cls, arguments: dict[str, object]) -> str:
-        return str(arguments.get("path") or arguments.get("file_path") or "")
+    def parse_arguments(cls, arguments: dict[str, object]):
+        if cls.family_discriminator in arguments:
+            raise SelectedToolDenied("Native arguments cannot contain a family selector")
+        try:
+            return FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **arguments})
+        except (TypeError, ValueError, KeyError) as error:
+            raise SelectedToolDenied(f"Invalid {cls.declared_name} arguments: {error}") from error
+
+    @property
+    def arguments(self) -> dict[str, object]:
+        # The native argument object has no family envelope. Its contents come
+        # entirely from the record codec, never a retained raw dictionary.
+        encoded = FieldCodec.encode(self)
+        del encoded[self.family_discriminator]
+        return encoded
+
+    @property
+    @abstractmethod
+    def detail(self) -> str: ...
+
+    @classmethod
+    def detail_for(cls, arguments: dict[str, object]) -> str:
+        return cls.parse_arguments(arguments).detail
 
 
-@dataclass(frozen=True)
-class CodingTool(NativeExecutableTool):
-    """Pi owns argument schemas; this family owns only cooperative claim behavior."""
+@dataclass(frozen=True, kw_only=True)
+class PathTool:
+    path: str
 
-    arguments: dict[str, object]
+    @property
+    def detail(self) -> str:
+        return self.path
+
+
+@dataclass(frozen=True, kw_only=True)
+class CodingTool(ArgumentTool, NativeExecutableTool):
+    """Typed Pi fields own mutation paths; the existing SDK executes the tools."""
+
     claim: FileClaimPath | None = field(init=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -68,68 +101,98 @@ class CodingTool(NativeExecutableTool):
     def create_call(cls, call_id: str, arguments: dict[str, object]):
         from .channel_coding_tools import CodingCall
 
-        return CodingCall(call_id, cls(arguments))
+        return CodingCall(call_id, cls.parse_arguments(arguments))
 
     @classmethod
     def native_extension(cls, package: Path) -> Path:
         return package / "dist/channel_coding_tools.mjs"
 
 
+@dataclass(frozen=True, kw_only=True)
 class ReadTool(PathTool, CodingTool):
     acp_kind = "read"
     label = "Read"
+    offset: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
+    limit: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
 
     def _parse_resource(self) -> None:
         return None
 
 
+@dataclass(frozen=True, kw_only=True)
 class BashTool(CodingTool):
     acp_kind = "execute"
     label = "Run"
+    command: str
+    timeout: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
 
-    @classmethod
-    def detail(cls, arguments: dict[str, object]) -> str:
-        return str(arguments.get("command") or "")
+    @property
+    def detail(self) -> str:
+        return self.command
 
     def _parse_resource(self) -> None:
         return None
 
 
+@dataclass(frozen=True)
+class ReplacementEdit:
+    old_text: str = field(metadata={"wire_name": "oldText"})
+    new_text: str = field(metadata={"wire_name": "newText"})
+
+
+@dataclass(frozen=True, kw_only=True)
 class EditTool(PathTool, CodingTool):
     acp_kind = "edit"
     label = "Edit"
+    edits: tuple[ReplacementEdit, ...]
+
+    def __post_init__(self) -> None:
+        if not self.edits:
+            raise ValueError("Pi edit requires at least one replacement")
+        super().__post_init__()
 
     @classmethod
     def result_diff(cls, result, ok):
         return result.edit_diff(ok)
 
     def _parse_resource(self) -> FileClaimPath:
-        return ExistingFileClaim(Path(self.arguments["path"]))
+        return ExistingFileClaim(Path(self.path))
 
 
+@dataclass(frozen=True, kw_only=True)
 class WriteTool(PathTool, CodingTool):
     acp_kind = "edit"
     label = "Write"
+    content: str
 
     def _parse_resource(self) -> FileClaimPath:
-        return WritableFileClaim(Path(self.arguments["path"]))
+        return WritableFileClaim(Path(self.path))
 
 
-class GrepTool(ToolDeclaration):
+@dataclass(frozen=True, kw_only=True)
+class GrepTool(ArgumentTool):
     acp_kind = "search"
     label = "Search"
+    pattern: str
+    path: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
+    glob: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
+    ignore_case: bool | None = field(default=None, metadata={"wire_name": "ignoreCase", "wire_omit_default": True, "wire_nonnull": True})
+    literal: bool | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
+    context: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
+    limit: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
 
-    @classmethod
-    def detail(cls, arguments: dict[str, object]) -> str:
-        pattern = arguments.get("pattern")
-        path = arguments.get("path")
-        return f"{pattern} in {path}" if pattern and path else str(pattern or path or "")
+    @property
+    def detail(self) -> str:
+        return f"{self.pattern} in {self.path}" if self.path is not None else self.pattern
 
 
-class GlobTool(ToolDeclaration):
+@dataclass(frozen=True, kw_only=True)
+class GlobTool(ArgumentTool):
     acp_kind = "search"
     label = "Find"
+    pattern: str
+    path: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
 
-    @classmethod
-    def detail(cls, arguments: dict[str, object]) -> str:
-        return str(arguments.get("pattern") or arguments.get("path") or "")
+    @property
+    def detail(self) -> str:
+        return self.pattern

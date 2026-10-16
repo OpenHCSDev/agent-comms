@@ -31,12 +31,12 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     @classmethod
     def start(cls, call_id: str, name: str, arguments: dict[str, object]) -> ToolStart:
         declaration = cls.for_name(name)
-        detail = declaration.detail(arguments)
+        detail = declaration.detail_for(arguments)
         title = declaration.label + (" " + detail.strip() if detail else "")
         return ToolStart(call_id, name, title, arguments, declaration.acp_kind)
 
     @classmethod
-    def detail(cls, arguments: dict[str, object]) -> str:
+    def detail_for(cls, arguments: dict[str, object]) -> str:
         return ""
 
     @classmethod
