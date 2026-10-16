@@ -639,14 +639,14 @@ async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
     expected_dir = root / "native-sessions" / RecordedThreadIncarnation("fixture", people[2].created_at).lookup
-    real_fsync = fresh_module._fsync_directory
+    real_fsync = fresh_module.fsync_directory
 
     def unknown_parent(path: Path) -> None:
         if path == expected_dir:
             raise OSError("injected fresh file parent fsync UNKNOWN")
         real_fsync(path)
 
-    monkeypatch.setattr(fresh_module, "_fsync_directory", unknown_parent)
+    monkeypatch.setattr(fresh_module, "fsync_directory", unknown_parent)
     with pytest.raises(NativePiUnavailable, match="durability UNKNOWN"):
         await SelectedExecution(
             root=root,

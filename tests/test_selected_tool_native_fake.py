@@ -90,7 +90,7 @@ send({'type':'agent_settled'})
         if variant == "denied":
             raise ValueError("simulate current owner revocation")
         if variant == "forged_terminal":
-            real_sync = broker._sync_dir
+            real_sync = broker.fsync_directory
 
             def fail_terminal_parent(path: Path) -> None:
                 if path.name == "selected-tool-ledger":
@@ -98,7 +98,7 @@ send({'type':'agent_settled'})
                 real_sync(path)
 
             with monkeypatch.context() as patch:
-                patch.setattr(broker, "_sync_dir", fail_terminal_parent)
+                patch.setattr(broker, "fsync_directory", fail_terminal_parent)
                 record_selected_terminal(tmp_path / "sessions", INPUT_ID, request.call_id)
         else:
             record_selected_terminal(tmp_path / "sessions", INPUT_ID, request.call_id)

@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Callable, ClassVar, TypeVar
 from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, FieldRepresentation, WireValue
+from .field_codec import FieldCodec, WireValue
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
@@ -64,10 +64,6 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     @abstractmethod
     def birth_description(self) -> str:
         """Describe recorded or missing birth evidence without inventing a date."""
-
-    @abstractmethod
-    def provenance_type(self):
-        """The archive declaration carrying this recorded birth state."""
 
     @abstractmethod
     def renamed(self, name: str) -> ThreadIncarnation:
@@ -143,9 +139,6 @@ class RecordedThreadIncarnation(ThreadIncarnation):
     def birth_description(self) -> str:
         return f"created {self.created_at}"
 
-    def provenance_type(self):
-        return ThreadProvenance
-
     def renamed(self, name: str) -> RecordedThreadIncarnation:
         return RecordedThreadIncarnation(name, self.created_at)
 
@@ -185,9 +178,6 @@ class DeletedThreadIncarnation(ThreadIncarnation):
     def birth_description(self) -> str:
         return "deleted declaration"
 
-    def provenance_type(self):
-        return DeletedThreadProvenance
-
     def renamed(self, name: str) -> DeletedThreadIncarnation:
         return DeletedThreadIncarnation(name)
 
@@ -209,9 +199,6 @@ class UnrecordedThreadIncarnation(ThreadIncarnation):
     def birth_description(self) -> str:
         return "birth unrecorded"
 
-    def provenance_type(self):
-        return UnrecordedThreadProvenance
-
     def renamed(self, name: str) -> UnrecordedThreadIncarnation:
         return UnrecordedThreadIncarnation(name)
 
@@ -231,16 +218,8 @@ class ThreadProvenance:
     def display_title(self) -> str:
         return self.name if self.title is None else self.title
 
-    def make_incarnation(self) -> ThreadIncarnation:
-        return RecordedThreadIncarnation(self.name, self.created_at)
-
-    @property
-    def provenance_type(self) -> type[ThreadProvenance]:
-        return ThreadProvenance
-
     def __post_init__(self) -> None:
-        if self.incarnation.wire_birth != self.created_at:
-            raise ValueError("Thread provenance birth differs from its declared state")
+        self.incarnation
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
         if not self.name or not set(self.name) <= allowed:
             raise ValueError(f"Thread name {self.name!r} must be alphanumeric with hyphens/underscores.")
@@ -252,7 +231,7 @@ class ThreadProvenance:
     @staticmethod
     def capture(thread: ThreadProvenance) -> ThreadProvenance:
         """Freeze only determining provenance from the original typed declaration."""
-        return thread.provenance_type(
+        return ThreadProvenance(
             **{
                 item.name: getattr(thread, item.name)
                 for item in fields(ThreadProvenance)
@@ -263,27 +242,7 @@ class ThreadProvenance:
     @cached_property
     def incarnation(self) -> ThreadIncarnation:
         """The declaration's birth member, created once and shared by its readers."""
-        return self.make_incarnation()
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class UnrecordedThreadProvenance(ThreadProvenance):
-    def make_incarnation(self) -> ThreadIncarnation:
-        return UnrecordedThreadIncarnation(self.name)
-
-    @property
-    def provenance_type(self) -> type[ThreadProvenance]:
-        return UnrecordedThreadProvenance
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class DeletedThreadProvenance(ThreadProvenance):
-    def make_incarnation(self) -> ThreadIncarnation:
-        return DeletedThreadIncarnation(self.name)
-
-    @property
-    def provenance_type(self) -> type[ThreadProvenance]:
-        return DeletedThreadProvenance
+        return ThreadIncarnationRecord(self.name, self.created_at).incarnation()
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,25 +262,6 @@ class ThreadIncarnationRecord:
     @classmethod
     def decode(cls, name: str, birth: float) -> ThreadIncarnation:
         return FieldCodec.decode(cls, {"name": name, "created_at": birth}).incarnation()
-
-
-class ThreadProvenanceRecord(FieldRepresentation):
-    """Decode an archived registry row's recorded birth state exactly once."""
-
-    @classmethod
-    def encode(cls, value: ThreadProvenance) -> object:
-        return FieldCodec.encode(value)
-
-    @classmethod
-    def schema(cls) -> dict:
-        return FieldCodec.record_schema(ThreadProvenance)
-
-    @classmethod
-    def decode(cls, value: object) -> ThreadProvenance:
-        if not isinstance(value, dict):
-            raise TypeError("Recorded thread provenance must be an object")
-        identity = ThreadIncarnationRecord.decode(value["name"], value["created_at"])
-        return FieldCodec.decode(identity.provenance_type(), value)
 
 
 @dataclass(frozen=True, slots=True)

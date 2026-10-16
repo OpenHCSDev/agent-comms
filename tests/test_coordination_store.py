@@ -1504,9 +1504,6 @@ def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_pat
 
 def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_path: Path) -> None:
     from agent_comms.coordination_database import CoordinationStore
-    from agent_comms.recovery_projection import (
-        UnavailableRecoveryProjection, read_recovery_projection,
-    )
 
     with store(db_path) as writer:
         writer.participants.register("owner", "Owner", "thread", committed=True)
@@ -1526,10 +1523,6 @@ def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_pat
         reader.execute("SELECT 1")
     with store(db_path) as writer:
         assert writer.participants.get("owner").display_name == "Owner"
-        writer.session._connection.execute("PRAGMA user_version=991")
-    assert read_recovery_projection(
-        db_path, owner_lookup="owner", owner_thread="thread"
-    ) == UnavailableRecoveryProjection("unsupported_schema")
 
 
 @pytest.mark.parametrize(

@@ -166,14 +166,14 @@ def test_consumption_is_once_only_and_terminal_is_separate(tmp_path: Path) -> No
 def test_unknown_reservation_never_retries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tmp_path.chmod(0o700)
     input_id = secrets.token_hex(16)
-    real_sync = broker._sync_dir
+    real_sync = broker.fsync_directory
 
     def fail_ledger_only(path: Path) -> None:
         if path.name == "selected-tool-ledger":
             raise OSError("simulated failed directory fsync")
         real_sync(path)
 
-    monkeypatch.setattr(broker, "_sync_dir", fail_ledger_only)
+    monkeypatch.setattr(broker, "fsync_directory", fail_ledger_only)
     with pytest.raises(SelectedToolDenied, match="UNKNOWN"):
         broker.consume_selected_slot(tmp_path, input_id, "call_1")
     assert (tmp_path / "selected-tool-ledger" / input_id).exists()
