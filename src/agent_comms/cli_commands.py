@@ -466,11 +466,8 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                      for item in fields(self) if not item.metadata['target_bound'])
 
     async def prepare_fields(self) -> tuple[TargetField, ...]:
-        declared = self.editable_fields
-        if not any(item.catalog is not None for item in declared):
-            return declared
         catalogs = ConfigOptions.configured()
-        return tuple([await item.prepare(catalogs, self) for item in declared])
+        return tuple([await item.prepare(catalogs, self) for item in self.editable_fields])
 
     def describe(self, comms: Comms, target: CommandTarget | str, project: str) -> TargetAction:
         target = CommandTarget.named(target)
