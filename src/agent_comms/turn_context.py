@@ -837,7 +837,8 @@ class PeerState:
     @classmethod
     def listed(
         cls, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], slots: int,
-        *, senders: tuple[str, ...] = (), now: float | None = None,
+        *, senders: tuple[str, ...] = (), dependencies: frozenset[ThreadIncarnation] = frozenset(),
+        now: float | None = None,
     ) -> tuple[PeerState, ...]:
         """Senders first, then goal contacts and recent collaborators, all bounded."""
         now = time.time() if now is None else now
@@ -848,12 +849,14 @@ class PeerState:
         relevant = (
             relation for relation in relations
             if relation.peer in viewed
-            and (relation.peer.name in senders or any(
+            and (relation.peer.name in senders or relation.peer in dependencies or any(
                 record.relevance.in_prompt(viewed[relation.peer], now=now)
                 for record in relation.records
             ))
         )
-        selected = sorted(relevant, key=lambda relation: relation.peer.name not in senders)[:slots]
+        selected = sorted(relevant, key=lambda relation: (
+            relation.peer.name not in senders, relation.peer not in dependencies,
+        ))[:slots]
         return tuple(cls.from_view(viewed[relation.peer], relation) for relation in selected)
 
 
@@ -893,7 +896,15 @@ class CoordinationSegment(InstructionSegment):
         *, senders: tuple[str, ...] = (),
     ) -> CoordinationSegment:
         instruction = InstructionFile.read("peers.md")
-        peers = PeerState.listed(views, relations, cls.PEER_SLOTS, senders=senders)
+        dependencies = set()
+        for view in views:
+            targets = view.goal_dependencies()
+            if view.thread.incarnation == owner.incarnation:
+                dependencies.update(targets)
+            elif owner.incarnation in targets:
+                dependencies.add(view.thread.incarnation)
+        peers = PeerState.listed(views, relations, cls.PEER_SLOTS,
+                                senders=senders, dependencies=frozenset(dependencies))
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
         return cls(
             provenance=(OwnerProvenance(owner.incarnation, revision), instruction.source),

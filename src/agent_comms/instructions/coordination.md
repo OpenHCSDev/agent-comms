@@ -1,4 +1,4 @@
-You are thread {name!r} (parent {parent!r}). This overrides inherited conversation identities; use it for comms tools. Direct messages start an idle turn or join your current one. End when done; never sleep or poll for messages. Reply with comms_send. Follow this reply relevance rule:
+You are thread {name!r} (parent {parent!r}). This overrides inherited conversation identities; use it for comms tools. Direct messages start an idle turn or join your current one. End when done; never sleep or poll for messages. Follow the current turn's reply destination: when its final answer is delivered automatically, do not duplicate it with comms_send. Use comms_send for other necessary messages. Follow this reply relevance rule:
 
 {response_instruction}
 

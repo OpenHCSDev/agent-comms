@@ -1,51 +1,43 @@
-"""The maintenance doctrine segment derives from its one declared source file."""
-
-from __future__ import annotations
-
-from pathlib import Path
-
-from agent_comms.turn_context import ContextSegment, CoordinationSegment, InstructionFile, NextContextTurn, TurnContext
+"""Session rules have one source and never accumulate in turn history."""
+from agent_comms.turn_context import (
+    ContextSegment, CoordinationSegment, InstructionFile, NextContextTurn,
+    SessionCoordinationSegment, TurnContext, UserInputSegment,
+)
+from agent_comms.context_segments.doctrine import DoctrineSegment
 from test_private_bus_checkpoint import _root
 
-# The provider measures the real tokens (about four bytes per token); the
-# declared file's byte size is the bound the reviewer controls when appending
-# cases, so the injection stays under 400 tokens.
-FILE_BYTE_BUDGET = 1600
+
+def test_session_rules_derive_from_their_declared_sources(tmp_path):
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require("Alice")
+    doctrine, coordination = TurnContext.session_segments(owner)
+    assert doctrine.instruction == InstructionFile.read("doctrine.md")
+    assert doctrine.provenance == (doctrine.instruction.source,)
+    assert doctrine.text() == doctrine.instruction.content
+    assert isinstance(coordination, SessionCoordinationSegment)
+    assert "thread 'Alice'" in coordination.text()
+    assert repr(owner.worktree) in coordination.text()
+    assert "Confirmed worked cases" not in doctrine.text()
+    assert "delivered automatically" in coordination.text()
 
 
-def _doctrine():
-    from agent_comms.context_segments.doctrine import DoctrineSegment
-
-    return DoctrineSegment
-
-
-def test_the_segment_derives_its_text_from_the_declared_file(tmp_path: Path):
-    captured = _doctrine().capture()
-    instruction = InstructionFile.read("doctrine.md")
-    assert captured.instruction == instruction
-    assert captured.provenance == (instruction.source,)
-    assert captured.text() == instruction.content
-    assert captured.values() == {}
-    # The declared source stays the single owner of the injected bytes.
-    assert len(instruction.content.encode()) <= FILE_BYTE_BUDGET
-
-
-def test_every_owner_context_injects_the_doctrine_before_coordination(tmp_path: Path):
+def test_owner_turns_do_not_repeat_session_rules(tmp_path):
     comms, _ = _root(tmp_path)
     for name in ("Alice", "Bob", "outsider"):
         context = TurnContext.for_owner(
-            comms.registry.require(name), NextContextTurn(), "original task", (), ()
+            comms.registry.require(name), NextContextTurn(), "ping", (), (),
         )
-        kinds = tuple(type(segment) for segment in context.segments)
-        assert kinds[0] is _doctrine()
-        assert kinds[1] is CoordinationSegment
-        assert kinds[2].public_title() == "User Input"
-        assert context.segments[0].text() == InstructionFile.read("doctrine.md").content
-        assert context.render().text.startswith(context.segments[0].text())
+        assert [type(segment) for segment in context.segments] == [
+            CoordinationSegment, UserInputSegment,
+        ]
+        text = context.render().text
+        assert "Maintenance results" not in text
+        assert "overrides inherited" not in text
+        assert "Project:" not in text
+        assert text.endswith("ping")
+        assert len(text.encode()) < 150
 
 
-def test_the_doctrine_is_a_declared_family_member():
-    doctrine = _doctrine()
-    assert doctrine.declared_name == "doctrine"
-    assert doctrine in ContextSegment.members_with(ContextSegment)
-    assert doctrine.public_title() == "Doctrine"
+def test_doctrine_is_a_declared_family_member():
+    assert DoctrineSegment.declared_name == "doctrine"
+    assert DoctrineSegment in ContextSegment.members_with(ContextSegment)
