@@ -13,7 +13,6 @@ from agent_comms.bus_projection import AppendCheckpoint
 from agent_comms.private_path import FileRevision
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.messages import Message
 
@@ -212,11 +211,11 @@ def test_display_index_registers_once_and_only_view_snapshots_capture_indexes(wi
 @pytest.mark.skipif(os.name != "posix", reason="POSIX file-lock observation")
 def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monkeypatch):
     import fcntl
-    from agent_comms.bus_projection import BusAppendIndex
+    from agent_comms.bus_projection import AppendProjectionStore, BusAppendIndex
 
     wired.messaging.send_message("PR111", "#base", "checkpoint lock scope")
     reads, checks = [], []
-    read = BusAppendIndex._read
+    read = AppendProjectionStore._read_unlocked
     accepts = AppendCheckpoint.accepts
 
     def unlocked():
@@ -234,7 +233,7 @@ def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monk
         checks.append(record.offset)
         return accepts(record, revision, stream)
 
-    monkeypatch.setattr(BusAppendIndex, "_read", observed_read)
+    monkeypatch.setattr(AppendProjectionStore, "_read_unlocked", observed_read)
     monkeypatch.setattr(AppendCheckpoint, "accepts", observed_accepts)
     wired.views.viewer_snapshot("/lock-scope-viewer")
     assert reads and checks
@@ -242,7 +241,7 @@ def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monk
     # still reads the saved file, to keep another process's farther prefix.
     prepared = []
     prepare = BusAppendIndex.prepare
-    monkeypatch.setattr(BusAppendIndex, "_read", read)
+    monkeypatch.setattr(AppendProjectionStore, "_read_unlocked", read)
     monkeypatch.setattr(
         BusAppendIndex, "prepare", lambda index: prepared.append(index._held) or prepare(index)
     )
