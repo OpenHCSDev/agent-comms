@@ -71,7 +71,7 @@ class SelectedParticipant(MroDispatch):
             self.comms.registry.attach_native_session, self.owner, identity.session_file
         ))
 
-    def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:
+    async def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:
         """Acquire the strictly newer coordinator owner required by a retry."""
         if snapshot.execution.lifecycle.retry:
             participant = self.store.participants.advance_generation(
@@ -82,12 +82,15 @@ class SelectedParticipant(MroDispatch):
             self.identity = ParticipantOwner(
                 self.owner.thread, participant.participant_generation
             )
-        self.require_current(self.store)
+        await self.require_current()
 
-    def require_current(self, resource: Coordination) -> None:
-        self.owner.require_registry(self.comms.registry)
-        with resource.session.read():
-            self.identity.require(resource, self.lookup)
+    async def require_current(self) -> None:
+        def check(resource: Coordination) -> None:
+            self.owner.require_registry(self.comms.registry)
+            with resource.session.read():
+                self.identity.require(resource, self.lookup)
+
+        await Coordination.run_read_async(self.store.session.path, check)
 
     @property
     def response_owner(self) -> LiveResponseOwner:
@@ -95,9 +98,9 @@ class SelectedParticipant(MroDispatch):
             thread=self.owner.thread, admission_generation=self.owner.admission_generation
         )
 
-    def transition(self, phase: TurnPhase) -> None:
+    async def transition(self, phase: TurnPhase) -> None:
         lease = self.owner.thread.require_turn_lease()
-        self.comms.agents.transition_turn(lease, phase)
+        await Coordination.run_worker(partial(self.comms.agents.transition_turn, lease, phase))
 
     def consume_reply_wait(self) -> None:
         """Consume each original dependency reply included in this completed input."""
@@ -152,10 +155,10 @@ class SelectedParticipant(MroDispatch):
                 model,
                 on_compaction=on_compaction,
             )
-            await Coordination.run_read_async(store.session.path, selected.require_current)
-            await Coordination.run_worker(lambda: selected.transition(
+            await selected.require_current()
+            await selected.transition(
                 PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
-            ))
+            )
             yield selected
         finally:
             # Joined entry can acquire custody without delivering its result.

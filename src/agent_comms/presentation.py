@@ -717,7 +717,7 @@ class ThreadView:
         """One declaration-owned interpretation for every thread view."""
         ordinary = self._display_presentation()
         if self.status.active:
-            ordinary = self.activity.readiness.presentation(ordinary, busy=self.activity.state.busy)
+            ordinary = self.activity.readiness.presentation(ordinary)
         return replace(self.thread.execution.presentation(self.thread, self.status, ordinary, self.binding),
                        binding=self.binding)
 
@@ -801,7 +801,7 @@ class CoordinationSnapshot:
         people = {
             person.thread.name: person
             for person in self.threads
-            if person.status.active and person.presentation.busy
+            if person.status.active and person.presentation.status.busy
         }
         return tuple(people[name] for name in view.members if name in people)
 

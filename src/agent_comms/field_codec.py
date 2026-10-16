@@ -106,7 +106,7 @@ class JsonShapeFamily(WireValue):
 
     @classmethod
     def _value_annotation(cls, member):
-        if tuple(item.name for item, _ in FieldCodec._fields(member)) != ("value",):
+        if tuple(item.name for item, _ in FieldCodec.record_fields(member)) != ("value",):
             raise TypeError("A JSON shape must declare one value field")
         return FieldCodec._types(member)["value"]
 
@@ -239,7 +239,8 @@ class FieldCodec(Sealed):
 
     @staticmethod
     @lru_cache(maxsize=_declaration_cache_capacity)
-    def _fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
+    def record_fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
+        """The codec's record declarations and wire keys, in wire order."""
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
         declared = [
@@ -296,7 +297,7 @@ class FieldCodec(Sealed):
             )
             result.update(
                 (key, cls.encode(getattr(value, field.name), hints[field.name]))
-                for field, key in cls._fields(type(value))
+                for field, key in cls.record_fields(type(value))
                 if not (
                     field.metadata.get("wire_omit_default")
                     and getattr(value, field.name)
@@ -358,7 +359,7 @@ class FieldCodec(Sealed):
     ) -> dict[str, Any]:
         """Build fields once, including an internally supplied family selector."""
         hints = cls._types(target)
-        for declared, key in cls._fields(target):
+        for declared, key in cls.record_fields(target):
             annotation = hints[declared.name]
             metadata = declared.metadata
             if metadata.get("wire_nonnull") and get_origin(annotation) in (Union, types.UnionType):
@@ -438,7 +439,7 @@ class FieldCodec(Sealed):
                 field.metadata.get(f"{view}_name", key): cls.project(
                     getattr(value, field.name), view, hints[field.name]
                 )
-                for field, key in cls._fields(type(value))
+                for field, key in cls.record_fields(type(value))
                 if not field.metadata.get(f"{view}_exclude")
             }
             properties = cls._projections(type(value), view)
@@ -476,7 +477,7 @@ class FieldCodec(Sealed):
     @lru_cache(maxsize=_declaration_cache_capacity)
     def _record_plan(cls, record: type) -> FieldCodec._RecordPlan:
         """Resolve every per-row type decision for one record declaration once."""
-        declared = cls._fields(record)
+        declared = cls.record_fields(record)
         hints = cls._types(record)
         computed = {member.wire_name for member in cls._projections(record, "wire").values()}
         entries = tuple(

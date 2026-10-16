@@ -49,8 +49,12 @@ receipt acknowledgments. Tristan should not have to decode compressed jargon.
   installed affected native/ACP/UI path. Extend the existing continuous saved-state
   user journey; controlled provider replies are allowed, real UI/transport/state
   are required. A fork check includes immediate opening and its first actual reply.
-- Ship substantial useful checkpoints and install the paired pins after checking
-  them. Deferred CI and final latency targets do not hold those checkpoints.
+- Ship substantial useful checkpoints: implementation owners merge and send
+  Codex the Core/Toad SHAs. Codex alone builds and installs the paired runtime,
+  switches its pointer and operates its restart queue. Other agents may verify
+  supplied builds, but must not run `relink.sh`, publication commands or
+  restart-queue writes, including one-off helpers.
+  Deferred CI and final latency targets do not hold those checkpoints.
 - Retain warm rendered bodies across tab returns within the existing resource
   limits. Scroll preparation follows velocity and destination intent, then shrinks
   when idle. Do not introduce a parallel cache to repair ownership or freshness.

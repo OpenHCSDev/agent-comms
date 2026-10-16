@@ -46,7 +46,7 @@ from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import ProjectResumeCheck, WakeScheduleCheck
 from .session_lifecycle import SessionLifecycle
-from .store_files import _async_store_lock, _store_lock
+from .store_files import _store_lock
 from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
@@ -532,6 +532,7 @@ class InputDrain(InputObservation):
         self.drain_tasks: dict[str, asyncio.Task[None]] = {}
         self.backend_inboxes: dict[str, asyncio.Queue[TurnInboxItem]] = {}
         self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
+        self.queue_lock = asyncio.Lock()
         self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.queue_revisions: dict[str, int] = {}
         self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}
@@ -556,7 +557,7 @@ class InputDrain(InputObservation):
         Pi's own queue is cleared, then the local deferred-display list is
         reset. Callers may re-send the prompts they want to keep.
         """
-        async with _async_store_lock(self.comms._wire_lock_path):
+        async with self.queue_lock:
             inbox = self.backend_inboxes.get(session_id)
             if inbox is not None:
                 inbox.put_nowait({"type": "clear_queue"})
@@ -755,7 +756,7 @@ class InputDrain(InputObservation):
         return inbox
 
     async def send_now(self, session_id: str) -> None:
-        async with _async_store_lock(self.comms._wire_lock_path):
+        async with self.queue_lock:
             inbox = self.backend_inboxes.get(session_id)
             queued = self.queued_inputs.get(session_id, {})
             if inbox is not None and queued:

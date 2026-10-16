@@ -22,6 +22,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, ValuesView
 from contextlib import ExitStack, suppress
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Generic, TypeVar
 
@@ -278,12 +279,17 @@ def selected_tool_mode_for_owner(
     except (ValueError, TypeError) as error:
         raise SelectedToolDenied("Selected mode has no typed owner attempt") from error
 
+    path = store.session.path
+
     def owner_action(request: SelectedToolRequest) -> None:
         # The prompt-send boundary commits this epoch to the exact reserved
         # FULL input before Pi can receive it. A socket token, PID, model text,
         # or context journal alone does not establish this source binding.
-        verify_sent_full_input(store, admission, owner_name, input_id)
-        perform_selected_write(comms, store, admission, owner_name, session_dir, input_id, request)
+        with Coordination(path) as worker_store:
+            verify_sent_full_input(worker_store, admission, owner_name, input_id)
+            perform_selected_write(
+                comms, worker_store, admission, owner_name, session_dir, input_id, request
+            )
 
     return SelectedToolMode(owner_action)
 
@@ -527,7 +533,7 @@ class OwnerToolSocket(ABC, Generic[Call]):
     def decode_request(self, raw: bytes) -> Call: ...
 
     @abstractmethod
-    def admit(self, round_number: int, call: Call) -> None: ...
+    async def admit(self, round_number: int, call: Call) -> None: ...
 
     def validate_round(self, round: NativeToolRound[Call]) -> None:
         """Apply policy-specific limits after full decode and before any state transition."""
@@ -693,8 +699,8 @@ class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
             raise SelectedToolDenied("Invalid selected tool request") from error
         return envelope.authenticate(self.token)
 
-    def admit(self, round_number: int, call: SelectedToolRequest) -> None:
-        self.action(call)
+    async def admit(self, round_number: int, call: SelectedToolRequest) -> None:
+        await Coordination.run_worker(partial(self.action, call))
 
     @property
     def selected_call_id(self) -> str | None:
