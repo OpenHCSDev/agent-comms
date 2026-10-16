@@ -33,11 +33,11 @@ def test_display_metrics_encode_one_viewer_read_set_for_all_channels(tmp_path):
     from agent_comms.read_basis import ChannelDisplayScope
 
     scopes = tuple(ChannelDisplayScope(f"#{n}", frozenset({f"#{n}"})) for n in range(48))
-    seen = frozenset(range(10_000))
-    encoded = FieldCodec.encode(DisplayMetricScope(scopes, frozenset({"viewer"}), seen))
-    assert set(encoded) == {"scopes", "viewer_names", "seen_sequences"}
-    assert frozenset(encoded["seen_sequences"]) == seen
-    assert all("seen_sequences" not in scope for scope in encoded["scopes"])
+    from agent_comms.read_basis import Conversation
+    from agent_comms.read_ledger import ReadMask, ReadProgress
+    reads = ReadMask({Conversation(target='#0'): ReadProgress(10_000)})
+    semantics = DisplayMetricScope(scopes, frozenset({'viewer'}), reads)
+    assert FieldCodec.decode(DisplayMetricScope, FieldCodec.encode(semantics)) == semantics
     index = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer")
     assert index.path.name.startswith(f"bus_display_{index.record_type.schema}_")
 
@@ -53,6 +53,7 @@ def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp
     comms.bus.reads.mark_displayed(
         viewer,
         comms.bus.reads.capture(viewer, (first,), comms.registry.snapshot(), comms.bus.log.path),
+        snapshot=comms.registry.snapshot(),
     )
     comms.channels.set_channel_any_mode("#extra", True)
     after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
@@ -77,10 +78,12 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     channel = comms.messaging.send_message("bob", "#team", "channel")
     seen = comms.bus.reads.capture(viewer.name, (direct,), comms.registry.snapshot(),
                                  comms.bus.log.path)
-    comms.bus.reads.mark_displayed(viewer.name, seen)
+    comms.bus.reads.mark_displayed(viewer.name, seen, snapshot=comms.registry.snapshot())
     index_path = BusRouteCounts(comms.bus.log.path).path
     if not indexed:
-        # A refused store is not permission to introduce a full-source reader.
+        # Marking may prepare a derived prefix index. Replace that closed fixture
+        # cache with the actual refusal; a full-source reader is still forbidden.
+        index_path.unlink(missing_ok=True)
         index_path.mkdir()
         with pytest.raises(sqlite3.OperationalError) as unavailable:
             with closing(CoordinationStore.read_snapshot(index_path)):
@@ -95,7 +98,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
                 comms.bus.pending_counts_opened(source, basis)
             assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
         comms.bus.reads.mark_displayed(viewer.name, comms.bus.reads.capture(
-            viewer.name, (channel,), comms.registry.snapshot(), comms.bus.log.path))
+            viewer.name, (channel,), comms.registry.snapshot(), comms.bus.log.path), snapshot=comms.registry.snapshot())
         comms.messaging.send_message("bob", viewer.name, "later direct")
         comms.registry.rename("bob", "renamed-bob")
         if not indexed:
@@ -377,6 +380,7 @@ def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
     comms.bus.reads.mark_displayed(
         viewer, comms.bus.reads.capture(viewer, (messages[1], messages[90]),
                                        comms.registry.snapshot(), comms.bus.log.path),
+        snapshot=comms.registry.snapshot(),
     )
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
@@ -401,6 +405,7 @@ def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
     comms.bus.reads.mark_displayed(
         viewer, comms.bus.reads.capture(viewer, (messages[3],),
                                        comms.registry.snapshot(), comms.bus.log.path),
+        snapshot=comms.registry.snapshot(),
     )
     index_path = comms.bus.log.path.with_name("bus_page_index.sqlite3")
     assert not index_path.exists()
@@ -425,6 +430,7 @@ def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
     comms.bus.reads.mark_displayed(
         viewer.name, comms.bus.reads.capture(viewer.name, (message,),
                                             comms.registry.snapshot(), comms.bus.log.path),
+        snapshot=comms.registry.snapshot(),
     )
     read = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
     assert read.channel_unread["#team"] == 0
@@ -483,6 +489,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         comms.bus.reads.capture(
             viewer, (messages[1], messages[4]), comms.registry.snapshot(), comms.bus.log.path
         ),
+        snapshot=comms.registry.snapshot(),
     )
     assert wire(tmp_path).bus.pending_counts(viewer) == {"bob": 2}
     comms.registry.rename("bob", "renamed-bob")

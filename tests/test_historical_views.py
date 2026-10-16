@@ -95,10 +95,12 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
         "#team", before=HistoryCursor(source.key, 100), worktree=str(live.root), limit=3
     )
     live.views.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
-    assert list(ReadLedger(Path(source.root) / ReadLedger.filename).read().messages.values()) == [
-        (page.messages[1].seq,)
-    ]
-    assert not live.bus.reads.seen_sequences(viewer.name, live.registry.snapshot())
+    ledger = ReadLedger(Path(source.root) / ReadLedger.filename)
+    key, state = next(iter(ledger.read().messages.items()))
+    assert key.viewer == viewer.incarnation
+    assert state.contains(page.messages[1].seq)
+    assert all(not state.contains(message.seq) for message in page.messages if message.seq != page.messages[1].seq)
+    assert not live.bus.reads.membership(viewer.name, live.registry.snapshot()).conversations
     assert live.bus.pending_count("bob", "#team") == 2
     with pytest.raises(ValueError):
         live.views.mark_historical_view_read(

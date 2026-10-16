@@ -1,7 +1,7 @@
 """Human read authority: typed conversation identities and compact exact progress."""
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -53,11 +53,11 @@ class ReadProgress:
     def contains(self, sequence: int) -> bool:
         return 0 < sequence <= self.read_through or sequence in self.sparse
 
-    def merge(self, other):
+    def merge(self, other: ReadProgress) -> ReadProgress:
         through = max(self.read_through, other.read_through)
         return type(self)(through, frozenset(n for n in self.sparse | other.sparse if n > through))
 
-    def mark(self, sequences, prefix):
+    def mark(self, sequences: Iterable[int], prefix: Callable[[ReadProgress], int | None]) -> ReadProgress:
         marked = self.merge(type(self)(sparse=frozenset(n for n in sequences if n > 0)))
         through = prefix(marked)
         if through is None:
@@ -74,23 +74,24 @@ class ReadMask:
     @classmethod
     def capture(cls, conversations, snapshot):
         incarnations = {
-            identity.name: identity
+            identity.name: participant.resolved(snapshot)
             for conversation in conversations
             for participant in conversation.participants
             for identity in participant.recorded_names(snapshot)
         }
         return cls(conversations, incarnations)
 
-    def incarnation(self, name):
-        return self.incarnations.get(name, ThreadIncarnation.deleted(name))
+    def incarnation(self, name: str) -> ThreadIncarnation:
+        identity = self.incarnations.get(name)
+        return identity if identity is not None else ThreadIncarnation.deleted(name)
 
     def conversation(self, sender, target):
         return Conversation.from_names(sender, target, self.incarnation)
 
-    def progress(self, sender, target):
+    def progress(self, sender: str, target: str) -> ReadProgress:
         return self.conversations.get(self.conversation(sender, target), ReadProgress())
 
-    def contains(self, message) -> bool:
+    def contains(self, message: Message) -> bool:
         return self.progress(message.sender, message.target).contains(message.seq)
 
     def contains_route(self, sender, target, sequence):
@@ -123,7 +124,7 @@ class ReadDocument:
             messages[key] = messages.get(key, ReadProgress()).merge(state)
         return replace(self, messages=messages)
 
-    def memberships(self, snapshot, source: FileIdentity | None):
+    def memberships(self, snapshot: RegistryProvenance, source: FileIdentity | None) -> dict[str, ReadMask]:
         recorded = FileIdentity(*self.bus_identity) if self.bus_identity is not None else None
         if recorded != source:
             return {}
@@ -241,7 +242,7 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         return self._displayed_recipient(message, recipient, snapshot, readers)
 
     @staticmethod
-    def _displayed_recipient(message, recipient, snapshot, readers):
+    def _displayed_recipient(message, recipient, snapshot, readers: Mapping[str, ReadMask]):
         from .bus_publication import stable_thread_lookup
         name = snapshot.canonical_name(recipient.canonical_thread)
         thread = snapshot.threads.get(name)

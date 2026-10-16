@@ -64,7 +64,7 @@ def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
     basis = comms.bus.reads.capture(
         "recipient", [messages[0], messages[1]], comms.registry.snapshot(), comms.bus.log.path
     )
-    comms.bus.reads.mark_displayed("recipient", basis)
+    comms.bus.reads.mark_displayed('recipient', basis, snapshot=comms.registry.snapshot())
     consistent(comms, "sender", "recipient")
     assert [row.seq for row in comms.bus.inbox("recipient")] == [messages[2].seq]
     with BusRouteCounts(comms.bus.log.path) as index:
@@ -201,12 +201,10 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_
         ))
         comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
             viewer, (later,), basis.registry, comms.bus.log.path,
-        ))
+        ), snapshot=basis.registry)
         assert comms.bus.pending_counts(viewer) == {"sender": 1}
-        later_reads = comms.bus.reads.read().seen_sequences(
-            viewer, basis.registry, source.revision.identity
-        )
-        assert later_reads == {later.seq}
+        later_reads = comms.bus.reads.read().memberships(basis.registry, source.revision.identity)[viewer]
+        assert later_reads.contains(later) and not later_reads.contains(first)
         delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
         with OpenedRouteCounts(
             comms.bus.log.path, source, basis.registry, {viewer: delivery}
@@ -224,7 +222,7 @@ def test_retained_source_uses_its_ledger_identity_after_path_replacement(tmp_pat
     message = comms.messaging.send_message("sender", viewer, "already read")
     comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
         viewer, (message,), comms.registry.snapshot(), comms.bus.log.path,
-    ))
+    ), snapshot=comms.registry.snapshot())
     assert comms.bus.pending_counts(viewer) == {}
     with comms.bus.snapshot(viewer=viewer) as (basis, source):
         replacement = tmp_path / "replacement.jsonl"

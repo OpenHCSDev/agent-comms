@@ -183,7 +183,8 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
     assert page.messages == (messages["peer"],)
     assert page.display_basis is not None and not page.display_basis.older_unread
     _mark(comms, "peer", tmp_path, page)
-    assert comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot()) == frozenset(
+    from tests.read_membership import displayed_sequences
+    assert displayed_sequences(comms, viewer) == frozenset(
         (messages["peer"].seq, messages[marked_sender].seq)
     )
 

@@ -9,13 +9,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Collection
-from dataclasses import astuple, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channel_targets import is_channel_target
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
 
@@ -60,22 +59,6 @@ class Conversation:
             return lambda sender, target: target == self.target
         names = frozenset(p.resolved(snapshot).name for p in self.participants)
         return lambda sender, target: frozenset((snapshot.canonical_name(sender), snapshot.canonical_name(target))) == names
-
-    def to_wire(self) -> dict:
-        """Encode the persisted participant pair format."""
-        data = FieldCodec.encode(replace(self, participants=()))
-        data["participants"] = FieldCodec.encode(tuple(astuple(p) for p in self.participants))
-        return data
-
-    @classmethod
-    def from_wire(cls, raw: dict) -> Conversation:
-        """Decode participant pairs once at the persisted-key boundary."""
-        data = dict(raw)
-        pairs = FieldCodec.decode(tuple[tuple[str, float], ...], data.pop("participants"))
-        return replace(
-            FieldCodec.decode(cls, data),
-            participants=tuple(ThreadIncarnation(*pair) for pair in pairs),
-        )
 
 
 @dataclass(frozen=True, slots=True)

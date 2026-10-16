@@ -118,10 +118,8 @@ def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
 def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
     registry = registry_with_owner(tmp_path)
     owner = registry.require("owner")
-    old = {"target": "", "participants": [["owner", owner.created_at]]}
-    conversation = Conversation.from_wire(old)
-    assert conversation.participants == (owner.incarnation,)
-    assert Conversation.from_wire(conversation.to_wire()) == conversation
+    conversation = Conversation(participants=(owner.incarnation,))
+    assert FieldCodec.decode(Conversation, FieldCodec.encode(conversation)) == conversation
     registry.lease_local_turn("owner", "new")
     assert conversation.current(registry.snapshot())
     registry.release_turn(registry.require("owner").turn_lease)[0]
@@ -209,14 +207,10 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
         expected_display_basis=page.display_basis,
     )
     path = comms.bus.reads.path
-    document = json.loads(path.read_text())
-    assert all(
-        isinstance(participant, list)
-        for key in document["messages"]
-        for participant in json.loads(key)[2]["participants"]
-    )
+    from agent_comms.read_ledger import ConversationKey
+    assert all(isinstance(key, ConversationKey) for key in comms.bus.reads.read().messages)
     reopened = Comms(tmp_path)
-    assert message.seq in reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot())
+    assert reopened.bus.reads.membership(viewer, reopened.registry.snapshot()).contains(message)
     next_message = reopened.messaging.send_message("owner", viewer, "new paint")
     page = reopened.views.dm_display_page("owner", worktree=str(tmp_path))
     reopened.views.mark_dm_view_read(
@@ -225,9 +219,8 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
         through=next_message.seq,
         expected_display_basis=page.display_basis,
     )
-    assert {message.seq, next_message.seq} <= reopened.bus.reads.seen_sequences(
-        viewer, reopened.registry.snapshot()
-    )
+    mask = reopened.bus.reads.membership(viewer, reopened.registry.snapshot())
+    assert mask.contains(message) and mask.contains(next_message)
 
 
 def test_stopped_status_changes_do_not_invent_another_owner(tmp_path):

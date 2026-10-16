@@ -75,7 +75,7 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     unpainted, = results[messages[2].seq, messages[2].message_id]
     assert painted.displayed_to == (source.provenance.require("reader").incarnation,)
     assert unpainted.displayed_to == ()
-    assert not live.bus.reads.seen_sequences("reader", live.registry.snapshot())
+    assert not live.bus.reads.membership('reader', live.registry.snapshot()).conversations
     ledger = ReadLedger(Path(source.root) / ReadLedger.filename)
     document = ledger.read()
     reused = replace(basis, viewer_created_at=111.0)
@@ -87,7 +87,7 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
         "reader": replace(source.provenance.require("reader"), created_at=111.0),
     })
     assert ledger.historical_displayed_recipient(messages[1], painted.recipient_identity,
-                                                newer_namespace, document=document) == ()
+                                                newer_namespace, readers=ledger.observations(newer_namespace, document=document)) == ()
 
 
 def test_response_evidence_rejects_mixed_sql_columns():

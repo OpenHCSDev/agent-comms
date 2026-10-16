@@ -30,6 +30,7 @@ from .typed_table import Column, ForeignKey, Index, JsonStorage, TypedRow, Typed
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
+    from .read_ledger import ReadMask
     from .wire_log import OpenedWireSnapshot
 
 
@@ -572,7 +573,7 @@ class OpenedRouteCounts(BusRouteCounts):
             target, {direct} if direct in self.deliveries else set()
         )
 
-    def unseen_counts(self, seen: Mapping[str, frozenset[int]]) -> dict[str, dict[str, int]]:
+    def unseen_counts(self, seen: Mapping[str, ReadMask]) -> dict[str, dict[str, int]]:
         counts: dict[str, dict[str, int]] = {actor: {} for actor in self.deliveries}
 
         def add(actor: str, sender: str, target: str, count: int):
@@ -589,7 +590,7 @@ class OpenedRouteCounts(BusRouteCounts):
                     add(actor, message.sender, message.target, 1)
         return counts
 
-    def unseen_deliveries(self, actor: str, seen: frozenset[int]) -> tuple[UnseenDelivery, ...]:
+    def unseen_deliveries(self, actor: str, seen: ReadMask) -> tuple[UnseenDelivery, ...]:
         delivery = self.deliveries[actor]
         return (*self._read_deliveries(actor, seen), *(
             UnseenDelivery(item.message.seq, item.message.target)
@@ -685,7 +686,7 @@ class OpenedRouteCounts(BusRouteCounts):
                 WHERE json_extract(node,'$.minimum')>=since
             )"""
 
-    def _read_counts(self, seen: Mapping[str, frozenset[int]]) -> list[RouteUnread]:
+    def _read_counts(self, seen: Mapping[str, ReadMask]) -> list[RouteUnread]:
         """Seek each original route root, rank timestamps, subtract sparse paint.
 
         Threshold traversal visits at most twice the finite key width plus one
@@ -721,7 +722,7 @@ class OpenedRouteCounts(BusRouteCounts):
             },
         ))
 
-    def _read_deliveries(self, actor: str, seen: frozenset[int]) -> list[UnseenDelivery]:
+    def _read_deliveries(self, actor: str, seen: ReadMask) -> list[UnseenDelivery]:
         """Visit eligible original sequences, never a future timestamp range."""
         self._read_membership({actor: seen})
         return UnseenDelivery.read(self.connection.execute(

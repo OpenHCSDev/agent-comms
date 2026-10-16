@@ -21,12 +21,12 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
         "#team", worktree=str(tmp_path), through=page.newest_seq,
         expected_scope=page.display_scope,
     )
-    assert message.seq in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert comms.bus.reads.membership(viewer, comms.registry.snapshot()).contains(message)
     original = comms.registry.require(viewer)
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
     comms.registry.register(replace(original, created_at=original.created_at + 1))
-    assert message.seq not in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert not comms.bus.reads.membership(viewer, comms.registry.snapshot()).contains(message)
     with pytest.raises(ValueError):
         comms.views.mark_channel_view_read(
             "#team", worktree=str(tmp_path), through=page.newest_seq,
@@ -37,7 +37,7 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
         "#team", worktree=str(tmp_path), through=refreshed.newest_seq,
         expected_scope=refreshed.display_scope,
     )
-    assert message.seq in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert comms.bus.reads.membership(viewer, comms.registry.snapshot()).contains(message)
 
 
 def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_path):
@@ -52,7 +52,7 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     append(source, content="unpainted reply")
     message = comms.messaging.send_message("worker", "#team", "unpainted bus row")
     page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
-    assert message.seq not in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert not comms.bus.reads.membership(viewer, comms.registry.snapshot()).contains(message)
     comms.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=shown)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 1
     document = comms.bus.reads.read()

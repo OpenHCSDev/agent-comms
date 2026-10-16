@@ -125,8 +125,8 @@ def test_golden_nested_family_record_round_trip():
     assert FieldCodec.record_schema(Record)["properties"]["aliases"] == {
         "type": "object", "additionalProperties": {"type": "array", "items": {"type": "integer"}},
     }
-    with pytest.raises(TypeError, match="No declared JSON schema"):
-        FieldCodec.value_schema(dict[int, str])
+    assert FieldCodec.value_schema(dict[int, str])['type'] == 'array'
+    assert FieldCodec.decode(dict[int, str], FieldCodec.encode({1: 'x'})) == {1: 'x'}
     del golden["externalLabel"]
     assert FieldCodec.decode(Record, golden) == record
 
@@ -158,7 +158,7 @@ def test_alias_collision_and_reserved_tag():
         FieldCodec.encode(Bad("a", "b"))
 
 
-@pytest.mark.parametrize("value", [float("nan"), float("inf"), object(), {1: "x"}])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), object()])
 def test_non_json_values_rejected(value):
     with pytest.raises(TypeError):
         FieldCodec.encode(value)
