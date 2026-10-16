@@ -193,7 +193,7 @@ def finish_install(wire_descriptor: int, route_descriptor: int) -> None:
     service.owners.require_launch_authority()
     publication.publish()
     _atomic_write_text(backup / 'installation.json', json.dumps(
-        dict(runtime=str(publication.runtime), migration=result, workers_launched=False), indent=2),
+        dict(runtime=str(publication.runtime), migration=result), indent=2),
         fsync_parent=True)
     service.owners.maintenance.clear_stopped(hold, wire_descriptor)
     # New workers need the route; the original wire descriptor still excludes
@@ -268,7 +268,6 @@ async def install_runtime(target: Path, backup: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bus", type=Path)
-    parser.add_argument("--apply", action="store_true")
     parser.add_argument('--install-runtime', type=Path)
     parser.add_argument('--backup', type=Path)
     parser.add_argument('--finish', nargs=2, type=int)
@@ -276,13 +275,13 @@ def main() -> None:
     if args.finish:
         finish_install(*args.finish)
     elif args.install_runtime:
-        if args.backup is None or args.apply or args.bus is not None:
-            parser.error('--install-runtime requires --backup and excludes --bus/--apply')
+        if args.backup is None or args.bus is not None:
+            parser.error('--install-runtime requires --backup and excludes --bus')
         asyncio.run(install_runtime(args.install_runtime, args.backup))
     else:
-        if args.bus is None:
-            parser.error('--bus is required for plan/apply')
-        print(json.dumps(carry(args.bus, apply=args.apply, backup=args.backup), indent=2))
+        if args.bus is None or args.backup is not None:
+            parser.error('--bus is required for read-only planning; --backup requires --install-runtime')
+        print(json.dumps(carry(args.bus), indent=2))
 
 
 if __name__ == "__main__":
