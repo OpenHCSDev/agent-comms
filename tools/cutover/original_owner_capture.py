@@ -1,10 +1,11 @@
-"""Acquired original-format observation for an owned target-format fixture.
+"""Current-format observation of the selected source owner.
 
-The one-shot outside-src C3 operation is shared with the stopped batch. Its
-original installed process owns original decoding, and current FieldCodec owns
-strict target decoding. Launch credentials are captured by RetainedOwnerLaunch
-from the exact process, remain in RAM, and never cross the JSON pipe.
+Both ends use the current declarations. Old durable records require the separate
+one-shot carry first; there is no source-shape selection or compatibility reader.
+Launch credentials remain in RetainedOwnerLaunch's RAM-only custody.
 """
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 import json
 import os
@@ -18,16 +19,15 @@ from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.historical_views import HistorySource
 from agent_comms.threads import Thread
 from owner_read_projection import (
-    CurrentThreadProjection, LiveOwnerReadProjection, OriginalOwnerRead,
+    CurrentThreadProjection, OriginalOwnerRead,
     RecordedRegistryProjection,
 )
 
 
 @dataclass(frozen=True)
-class OriginalTypedCapture:
+class CurrentTypedCapture:
     root: Path
     original_python: Path
-    projection: type[LiveOwnerReadProjection]
 
     def _acquire(self, projection, name, request):
         environment = dict(os.environ)
@@ -39,9 +39,11 @@ class OriginalTypedCapture:
             env=environment, capture_output=True, text=True, check=True)
         return json.loads(packet.stdout)
 
-    def observe(self, name: str, expected: OwnerRestartSelection | None = None) -> OriginalOwnerRead:
+    def observe(self, name: str,
+                expected: OwnerRestartSelection | None = None) -> OriginalOwnerRead:
         return FieldCodec.decode(OriginalOwnerRead, self._acquire(
-            self.projection, name, FieldCodec.encode(expected) if expected is not None else None,
+            CurrentThreadProjection, name,
+            FieldCodec.encode(expected) if expected is not None else None,
         ))
 
     def recorded(self) -> HistorySource:
@@ -64,15 +66,8 @@ class OriginalTypedCapture:
 
 
 @dataclass(frozen=True)
-class CurrentTypedCapture(OriginalTypedCapture):
-    """Same proof and launch custody for an authenticated current producer."""
-
-    projection: type[LiveOwnerReadProjection] = field(default=CurrentThreadProjection, init=False)
-
-
-@dataclass(frozen=True)
 class CapturedOriginalOwner:
-    reader: OriginalTypedCapture = field(repr=False)
+    reader: CurrentTypedCapture = field(repr=False)
     selection: OwnerRestartSelection
     source: Thread
     retained: RetainedOwnerLaunch = field(repr=False)
