@@ -285,9 +285,9 @@ class AssignedTranscriptSource(TranscriptSource):
         from .wire_log import WireLog
 
         root = Path(identity.root)
-        return identity.recipient.transcript_source(
+        return identity.recipient.recorded_or(
             lambda recorded: cls(root, recorded, WireLog(root / "bus.jsonl")),
-            TranscriptSource(),
+            TranscriptSource,
         )
 
     def resolve_sent(self, messages):
@@ -326,8 +326,8 @@ class AssignedTranscriptSource(TranscriptSource):
     @classmethod
     def for_recorded(cls, root, thread, log, records):
         """Only the original recorded birth can select frozen assignments."""
-        return thread.incarnation.transcript_source(
-            lambda recorded: cls(root, recorded, log), records
+        return thread.incarnation.recorded_or(
+            lambda recorded: cls(root, recorded, log), lambda: records
         )
 
     def rows(

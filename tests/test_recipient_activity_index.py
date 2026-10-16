@@ -99,9 +99,13 @@ def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path):
     assert incarnation.same_publication_birth(incarnation.renamed("alias"))
     assert not incarnation.same_publication_birth(historical)
     missing = []
-    assert deleted.route_lookup(lambda: missing.append("deleted")) == ()
+    assert deleted.recorded_or(
+        lambda recorded: recorded.lookup, lambda: missing.append("deleted")
+    ) is None
     assert missing == ["deleted"]
-    assert incarnation.route_lookup(lambda: missing.append("recorded")) == (incarnation.lookup,)
+    assert incarnation.recorded_or(
+        lambda recorded: recorded.lookup, lambda: missing.append("recorded")
+    ) == incarnation.lookup
     assert missing == ["deleted"]
     target = GoalWaitTarget(incarnation)
     assert not hasattr(target, "name") and not hasattr(target, "created_at")

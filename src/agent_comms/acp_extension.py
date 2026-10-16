@@ -471,7 +471,9 @@ class CoordinationChangedUpdate(AgentCommsUpdate):
     def source_identity(self):
         from .transcript_receipts import AssignedSourceIdentity
 
-        return self.thread.assigned_source_identity(self.wire_root, AssignedSourceIdentity)
+        return self.thread.recorded_or(
+            lambda recorded: AssignedSourceIdentity(self.wire_root, recorded), lambda: None
+        )
 
     @property
     def persistence(self) -> str:

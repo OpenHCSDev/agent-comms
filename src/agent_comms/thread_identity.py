@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, ClassVar
+from typing import TYPE_CHECKING, Callable, ClassVar, TypeVar
 
 from .channel_targets import Tag
 from .errors import RelationViolationError
@@ -20,7 +20,8 @@ from .field_codec import FieldCodec, FieldRepresentation, WireValue
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
-    from .transcript_receipts import AssignedSourceIdentity, TranscriptSource
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,23 +79,13 @@ class ThreadIncarnation(WireValue, ABC):
         thread = snapshot.threads.get(snapshot.canonical_name(self.name))
         return thread is not None and thread.incarnation == self.renamed(thread.name)
 
-    def route_lookup(self, on_missing: Callable[[], None]) -> tuple[str, ...]:
-        on_missing()
-        return ()
+    def recorded_or(
+        self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
+    ) -> T:
+        return otherwise()
 
     def selects_lookup(self, lookup: str) -> bool:
         return False
-
-    def assigned_source_identity(
-        self, root: str, source_type: type[AssignedSourceIdentity]
-    ) -> AssignedSourceIdentity | None:
-        return None
-
-    def transcript_source(
-        self, make: Callable[[RecordedThreadIncarnation], TranscriptSource],
-        missing: TranscriptSource,
-    ) -> TranscriptSource:
-        return missing
 
     def same_publication_birth(self, other: ThreadIncarnation) -> bool:
         return False
@@ -133,22 +124,13 @@ class RecordedThreadIncarnation(ThreadIncarnation):
     def require_recorded(self) -> RecordedThreadIncarnation:
         return self
 
-    def route_lookup(self, on_missing: Callable[[], None]) -> tuple[str, ...]:
-        return (self.lookup,)
+    def recorded_or(
+        self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
+    ) -> T:
+        return make(self)
 
     def selects_lookup(self, lookup: str) -> bool:
         return self.lookup == lookup
-
-    def assigned_source_identity(
-        self, root: str, source_type: type[AssignedSourceIdentity]
-    ) -> AssignedSourceIdentity:
-        return source_type(root, self)
-
-    def transcript_source(
-        self, make: Callable[[RecordedThreadIncarnation], TranscriptSource],
-        missing: TranscriptSource,
-    ) -> TranscriptSource:
-        return make(self)
 
     def same_publication_birth(self, other: ThreadIncarnation) -> bool:
         return self.renamed(other.name) == other

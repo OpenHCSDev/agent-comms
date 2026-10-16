@@ -216,8 +216,12 @@ class DeliveryScope(MessageDisplayScope):
         The unstamped format matches before a birth is required. An index must
         probe for an assigned stamp; admission must refuse that unproven stamp.
         """
+        def missing() -> tuple[str, ...]:
+            on_unrecorded()
+            return ()
+
         yield ""
-        yield from source.route_lookup(on_unrecorded)
+        yield from source.recorded_or(lambda recorded: (recorded.lookup,), missing)
 
     def minimum_timestamp(
         self, sender: str, target: str, sender_lookup: str, snapshot: RegistryProvenance
