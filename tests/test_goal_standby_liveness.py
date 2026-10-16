@@ -178,7 +178,7 @@ def test_mixed_targets_project_idle_without_suppressing_active_alternative(tmp_p
     comms, goal = _waiting(tmp_path, second=True)
     other_fence = _finish(comms, "other", "other-turn")
     execution = comms.goals.goal_execution("owner")
-    assert [target.name for target in execution.inactive_wait_for] == ["other"]
+    assert [target.incarnation.name for target in execution.inactive_wait_for] == ["other"]
     assert "no active turn: @other" in execution.presentation("owner").summary
     assert comms.goals.release_waits_after_terminal_turn(other_fence) == ()
     assert comms.registry.require("owner").goal.state.active
@@ -276,7 +276,7 @@ def test_replaced_target_cannot_report_for_old_incarnation(tmp_path):
     assert replacement.created_at != old.created_at
     assert comms.goals.release_waits_after_terminal_turn(old_fence) == ()
     execution = comms.goals.goal_execution("owner")
-    assert [target.name for target in execution.inactive_wait_for] == ["child"]
+    assert [target.incarnation.name for target in execution.inactive_wait_for] == ["child"]
     assert comms.registry.require("owner").goal.id == goal.id
     # Removal/replacement has no subscribed terminal hook in this prototype.
     assert comms.registry.require("owner").goal.state.active

@@ -10,13 +10,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .native_input_owner import RegistryOwner
+from .notification_progress import AcknowledgedProgress
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .bus_publication import CommittedDelivery
-    from .notification_assignment import AssignmentProgress
+    from .notification_progress import AssignmentProgress
     from .presentation import MessageNotification
 from .activity import (
     Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity,
@@ -82,6 +83,7 @@ class ExternalRecipientActivity(RecipientActivity):
                 notification,
                 state="Acknowledged",
                 detail="",
+                progress=AcknowledgedProgress(),
                 priority=2,
                 busy=False,
                 changed=True,

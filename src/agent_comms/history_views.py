@@ -313,12 +313,9 @@ class HistoryViews:
             catalog.pinned_members(),
             catalog.list_order,
             self.agents.all_activity(
-                (thread for thread in snapshot.threads.values()
-                 if ThreadView.visible(
-                     thread, snapshot, show_stopped=show_stopped,
-                     show_archived=show_archived,
-                 )),
-                snapshot=snapshot,
+                ThreadView.visible_threads(
+                    snapshot, show_stopped=show_stopped, show_archived=show_archived
+                ), snapshot=snapshot,
             ),
             self.last_sent_timestamps(),
             ChannelActivity.for_views(channels, self.bus.channel_activity()),
@@ -557,8 +554,8 @@ class HistoryViews:
                 "is_fork": t.is_fork,
                 "pending": pending[name],
                 "goal_execution": (
-                    GoalWaits.for_goal(t.goal, waits).project(t.goal, snapshot).to_wire()
-                    if t.goal is not None else None
+                    execution.to_wire()
+                    if (execution := GoalWaits.execution(t.goal, waits, snapshot)) else None
                 ),
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",

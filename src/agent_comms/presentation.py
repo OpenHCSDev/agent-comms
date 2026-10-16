@@ -21,6 +21,7 @@ from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
+from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
@@ -81,7 +82,7 @@ class MessageNotification:
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
     answer: MessageReference | None = None
-    read_at_ms: int | None = None
+    progress: DeliveryProgress = field(kw_only=True)
     answered_at_ms: int | None = None
     changed: bool = False
 
@@ -100,11 +101,27 @@ class MessageNotification:
             self.answer,
         )
 
+    @classmethod
+    def ordered(cls, notifications: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
+        return tuple(sorted(notifications, key=lambda item: (item.priority, item.recipient.casefold())))
+
+    @classmethod
+    def summary(cls, notifications: Iterable[MessageNotification]) -> str:
+        """One message's state and totals; clients never classify or count agents."""
+        ordered = cls.ordered(notifications)
+        if not ordered:
+            return "No recorded notification result"
+        delivered = sum(notification.progress.delivered for notification in ordered)
+        read = sum(notification.progress.read for notification in ordered)
+        total = len(ordered)
+        return (f"{ordered[0].state} · Delivered {delivered}/{total}"
+                f" · {ReadDelivery.label} {read}/{total}")
+
     @staticmethod
-    def receipt_state(label: str, timestamp_ms: int | None) -> str:
-        """Format a required durable receipt in the viewer's local time."""
+    def timed_state(label: str, timestamp_ms: int | None) -> str:
+        """Format a recorded event in the viewer's local time."""
         if timestamp_ms is None:
-            raise ValueError(f"{label} notification requires a durable receipt time")
+            raise ValueError(f"{label} notification requires a recorded time")
         recorded = datetime.fromtimestamp(timestamp_ms / 1000).astimezone()
         now = datetime.now().astimezone()
         when = recorded.strftime("%H:%M")
@@ -279,10 +296,11 @@ class MessageNotification:
             return None
         return cls(
             recipient,
-            "Read",
+            HumanReadProgress.label,
             "",
             priority=2,
             displayed_to=displayed_to,
+            progress=HumanReadProgress(),
             changed=True,
         )
 
@@ -664,6 +682,15 @@ class ThreadView:
         )
 
     @classmethod
+    def visible_threads(
+        cls, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
+    ) -> Iterator[Thread]:
+        return (
+            thread for thread in snapshot.threads.values()
+            if cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+        )
+
+    @classmethod
     def capture(
         cls,
         thread: Thread,
@@ -679,8 +706,7 @@ class ThreadView:
             activity,
             runtime,
             snapshot.seen_at(thread.name),
-            (GoalWaits.for_goal(thread.goal, waits).project(thread.goal, snapshot)
-             if thread.goal is not None else None),
+            GoalWaits.execution(thread.goal, waits, snapshot),
             snapshot.owner_binding(thread.name),
         )
 
@@ -698,9 +724,9 @@ class ThreadView:
     ) -> tuple[ThreadView, ...]:
         selected = None if names is None else {snapshot.canonical_name(name) for name in names}
         threads = tuple(
-            thread for name, thread in snapshot.threads.items()
-            if (selected is None or name in selected)
-            and cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+            thread for thread in cls.visible_threads(
+                snapshot, show_stopped=show_stopped, show_archived=show_archived
+            ) if selected is None or thread.name in selected
         )
         if not threads:
             return ()
@@ -783,11 +809,8 @@ class CoordinationSnapshot:
         show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
-        visible = (
-            thread for thread in registry.threads.values()
-            if ThreadView.visible(
-                thread, registry, show_stopped=show_stopped, show_archived=show_archived
-            )
+        visible = ThreadView.visible_threads(
+            registry, show_stopped=show_stopped, show_archived=show_archived
         )
         activities = agents.all_activity(visible, snapshot=registry)
         return cls(

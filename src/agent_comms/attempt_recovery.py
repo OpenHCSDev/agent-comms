@@ -235,9 +235,8 @@ class RecoveryMonitorCapability:
             pointer = CurrentExecutions.one(store.session._connection, owner_lookup=lookup)
             if pointer is None or not pointer.unresolved:
                 return
-            # A frozen response may already exist on the bus. The released
-            # owner proves exclusion; the original keyed dispatch proves this
-            # exact publication. Resolve it before considering UNKNOWN input.
+            # The released owner and exact keyed dispatch prove an existing
+            # frozen reply before any attempt is marked uncertain.
             with VerifiedOwnerLoss.observe_native_release(store, pointer.execution_id) as loss:
                 loss.require_native_exit()
                 PublicationAppendDispatches.resolve_retained(

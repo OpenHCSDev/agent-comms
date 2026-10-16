@@ -8,13 +8,13 @@ import pytest
 from agent_comms.cli_options import JsonFlagRecord
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_settings import NativeThreadDefaults
-from agent_comms.thread_identity import ThreadIncarnation, RecordedThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 @pytest.fixture(params=[
     (NativeThreadDefaults, NativeThreadDefaults(model="selected/model"),
      NativeThreadDefaults(model="default/model")),
-    (ThreadIncarnation, RecordedThreadIncarnation("selected-owner", 1.0),
+    (RecordedThreadIncarnation, RecordedThreadIncarnation("selected-owner", 1.0),
      RecordedThreadIncarnation("default-owner", 2.0)),
 ])
 def selected_record(request):

@@ -52,8 +52,8 @@ class StandbyExecutionPresentation(ExecutionPresentation):
     waiting = True
 
     def render(self, execution: GoalExecution) -> tuple[str, str]:
-        names = ", ".join(f"@{target.name}" for target in execution.wait_for)
-        idle = ", ".join(f"@{target.name}" for target in execution.inactive_wait_for)
+        names = ", ".join(f"@{target.incarnation.name}" for target in execution.wait_for)
+        idle = ", ".join(f"@{target.incarnation.name}" for target in execution.inactive_wait_for)
         suffix = f"; no active turn: {idle}" if idle else ""
         return "◌", f"Standby · waiting for {names}{suffix}"
 
@@ -86,14 +86,6 @@ class GoalExecutionState(StrEnum):
 @dataclass(frozen=True, slots=True)
 class GoalWaitTarget(WireValue):
     incarnation: RecordedThreadIncarnation
-
-    @property
-    def name(self) -> str:
-        return self.incarnation.name
-
-    @property
-    def created_at(self) -> float:
-        return self.incarnation.created_at
 
     def sent(self, original: CommittedDelivery) -> bool:
         """Only this declared incarnation can supply a dependency reply."""
