@@ -9,7 +9,8 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Generator, Mapping
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, closing, contextmanager
+from functools import cached_property
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
@@ -66,53 +67,61 @@ class BusPageRow(PageIndexTable, TypedTable):
 class BusPageIndex:
     batch_bytes = 4 * 1024 * 1024
 
-    def __init__(self, bus_path: Path, *, readonly: bool = False):
+    def __init__(self, bus_path: Path):
         self.bus_path = bus_path
         self.path = bus_path.with_name("bus_page_index.sqlite3")
-        self.connection = (
-            CoordinationStore.read_snapshot(self.path)
-            if readonly
-            else CoordinationStore.writer(self.path)
-        )
-        if not readonly:
-            self.connection.execute("PRAGMA synchronous=FULL")
-        try:
-            with nullcontext() if readonly else self.connection:
-                if not readonly:
-                    self.connection.execute("BEGIN IMMEDIATE")
-                actual = SQLiteSchemaObject.read(
-                    self.connection.execute(
-                        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
-                        "AND name NOT LIKE 'sqlite_%'"
-                    )
-                )
-                schema = {
-                    name: sql
-                    for table in TypedTable.members_with(PageIndexTable)
-                    for name, sql in table.schema_objects().items()
-                }
-                if not actual and not readonly:
-                    for statement in schema.values():
-                        self.connection.execute(statement)
-                elif SQLiteSchemaObject.differences(actual, schema):
-                    raise StaleBusPageIndexError("Bus page index requires the quiet runtime reset")
-        except BaseException:
-            self.connection.close()
-            raise
+        self._resources = ExitStack()
+
+    @cached_property
+    def connection(self):
+        with ExitStack() as resources:
+            db = resources.enter_context(closing(CoordinationStore.read_snapshot(self.path)))
+            self._schema(db)
+            db.execute("ROLLBACK")
+            self._resources.enter_context(resources.pop_all())
+            return db
+
+    @staticmethod
+    def _schema(db):
+        actual = SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
+        ))
+        expected = {name: sql for table in TypedTable.members_with(PageIndexTable)
+                    for name, sql in table.schema_objects().items()}
+        if actual and SQLiteSchemaObject.differences(actual, expected):
+            raise StaleBusPageIndexError("Bus page index requires the quiet runtime reset")
+        return actual, expected
 
     def __enter__(self) -> BusPageIndex:
         return self
 
     def __exit__(self, *_error: object) -> None:
-        self.connection.close()
+        self._resources.close()
+
+    def covers(self, opened: OpenedWireSnapshot) -> bool:
+        if not self.path.exists():
+            return False
+        with self.snapshot():
+            actual, _ = self._schema(self.connection)
+            saved = BusPageSource.one(self.connection, singleton=1) if actual else None
+            return saved is not None and saved.covers(opened.stream, opened.revision)
+
+    @contextmanager
+    def prepared(self, opened: OpenedWireSnapshot):
+        if not self.covers(opened):
+            opened.metadata.access.require_append()
+            self.prepare(opened)
+        with self.snapshot():
+            if not self.covers(opened):
+                raise StaleBusPageIndexError("Page index does not cover its opened source")
+            yield
 
     @contextmanager
     def snapshot(self):
         """Pin coverage and offsets to one SQLite revision.
 
-        Read-only indexes arrive with their snapshot already acquired. A
-        writable index commits preparation first, then borrows this read
-        transaction while consumers validate coverage and select offsets.
+        Queries share one read transaction for coverage and selected offsets.
+        Preparation uses a separate, short-lived writer connection.
         """
         borrowed = self.connection.in_transaction
         try:
@@ -140,24 +149,27 @@ class BusPageIndex:
             saved, source, offset, rows = prepared
             if saved == source:
                 return
-            with self.connection:
-                self.connection.execute("BEGIN IMMEDIATE")
-                if BusPageSource.one(self.connection, singleton=1) != saved:
+            with self._writing() as db:
+                if BusPageSource.one(db, singleton=1) != saved:
                     continue
                 if offset == 0:
-                    self.connection.execute(f"DELETE FROM {BusPageRow.declared_name}")
+                    db.execute(f"DELETE FROM {BusPageRow.declared_name}")
                 for row in rows:
-                    row.insert(self.connection)
-                source.upsert(self.connection)
+                    row.insert(db)
+                source.upsert(db)
 
     def _prepare(self, opened: OpenedWireSnapshot) -> tuple[BusPageSource | None, BusPageSource, int, tuple[BusPageRow, ...]] | None:
         """Read and decode the source before taking the SQLite writer lock."""
-        with self.snapshot():
-            saved = BusPageSource.one(self.connection, singleton=1)
-            last_rows = BusPageRow.read(self.connection.execute(
-                f"SELECT {BusPageRow._column_list(BusPageRow.columns())} "
-                f"FROM {BusPageRow.declared_name} ORDER BY seq DESC LIMIT 1"
-            ))
+        saved, last_rows = None, ()
+        if self.path.exists():
+            with self.snapshot():
+                actual, _ = self._schema(self.connection)
+                if actual:
+                    saved = BusPageSource.one(self.connection, singleton=1)
+                    last_rows = BusPageRow.read(self.connection.execute(
+                        f"SELECT {BusPageRow._column_list(BusPageRow.columns())} "
+                        f"FROM {BusPageRow.declared_name} ORDER BY seq DESC LIMIT 1"
+                    ))
         stream, revision = opened.stream, opened.revision
         if stream is None:
             return None
@@ -206,9 +218,19 @@ class BusPageIndex:
 
     def invalidate(self) -> None:
         """Discard damaged derived coverage; prepare owns the subsequent rebuild."""
-        with self.connection:
-            self.connection.execute("BEGIN IMMEDIATE")
-            BusPageSource.delete(self.connection, singleton=1)
+        with self._writing() as db:
+            BusPageSource.delete(db, singleton=1)
+
+    @contextmanager
+    def _writing(self):
+        with closing(CoordinationStore.writer(self.path)) as db, db:
+            db.execute("PRAGMA synchronous=FULL")
+            db.execute("BEGIN IMMEDIATE")
+            actual, expected = self._schema(db)
+            if not actual:
+                for statement in expected.values():
+                    db.execute(statement)
+            yield db
 
     def offsets(
         self,

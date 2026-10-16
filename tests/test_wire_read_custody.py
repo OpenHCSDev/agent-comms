@@ -98,7 +98,7 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
     finally:
         executor.shutdown(wait=True)
     assert [row.seq for row in rows] == [first.seq]
-    with BusPageIndex(comms.bus.log.path, readonly=True) as current:
+    with BusPageIndex(comms.bus.log.path) as current:
         assert [row.seq for row in current.offsets(
             lower=None, upper=None, descending=False, targets=None
         )] == [first.seq, second.seq]
