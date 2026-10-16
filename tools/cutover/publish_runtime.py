@@ -19,6 +19,7 @@ import sys
 import uuid
 
 from agent_comms.active_route import read_active_route
+from agent_comms.cli_bridges import opencode
 from agent_comms.comms import wire
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.restart_queue import enqueue
@@ -35,8 +36,6 @@ class RuntimePublication:
 
     @classmethod
     def installed(cls) -> RuntimePublication:
-        from agent_comms.cli_bridges import opencode
-
         binary = Path(sys.executable).parent.resolve(strict=True)
         links = {
             Path.home() / '.local/bin' / entry.name: binary / entry.name
@@ -74,14 +73,6 @@ class RuntimePublication:
         try:
             temporary.symlink_to(target)
             os.replace(temporary, link)
-            # The phase is cleared only after this pointer is durable. An fsync
-            # failure after replacement has UNKNOWN outcome and leaves the
-            # maintenance gate closed for review.
-            directory = os.open(link.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -99,22 +90,7 @@ def main() -> None:
     if options.check:
         print(f'{publication.runtime}: {len(owners)} native workers would be queued for idle reload')
         return
-    # The route's existing phase owner closes new turns while the default
-    # command pointers switch. Posts remain on the bus; unchanged idle owners
-    # pick them up when READY. The one-time upgrade from pre-gate workers must
-    # first use the original stop procedure; later installs use this phase.
-    gate = comms.owners.maintenance
-    pending = gate.begin('publish-runtime')
-    try:
-        # Only a pre-publication abort is known unchanged. Never auto-clear an
-        # exception from publish(): links may already point at the new runtime.
-        if read_active_route() != route:
-            raise ValueError('Active route changed before runtime publication')
-    except BaseException:
-        gate.clear(pending)
-        raise
     publication.publish()
-    gate.clear(pending)
     print(f'Published {publication.runtime}', flush=True)
     # Queue requests keep original process identity and session settings. A
     # pending or uncertain previous request is handled by that existing owner.
