@@ -1,0 +1,16 @@
+[refactor/native-settings-family-runtime 63904a95b] Keep fork helper declarations canonical across the selected module entrypoint
+ 24 files changed, 19326 insertions(+), 171 deletions(-)
+ create mode 100644 .artifacts/native-current-private-install.log
+ create mode 100644 .artifacts/native-current-wheel-build.log
+ create mode 100644 .artifacts/native-fork-entry-after-ast.err
+ create mode 100644 .artifacts/native-fork-entry-after-ast.txt
+ create mode 100644 .artifacts/native-fork-entry-before-ast.err
+ create mode 100644 .artifacts/native-fork-entry-before-ast.txt
+ create mode 100644 .artifacts/native-fork-entry-repair.md
+ create mode 100644 .artifacts/native-fork-entry-source-check.log
+ create mode 100644 .artifacts/native-helper-entry-sites.txt
+ create mode 100644 .artifacts/native-installed-cb6ea3-20261016T1831.log
+ create mode 100644 .artifacts/native-installed-cb6ea3-20261016T1837.log
+ create mode 100644 .artifacts/native-installed-cb6ea3-20261016T1843.log
+ create mode 100644 .artifacts/native-p41-installed-review.json
+ create mode 100644 src/agent_comms/native_session_fork.py
