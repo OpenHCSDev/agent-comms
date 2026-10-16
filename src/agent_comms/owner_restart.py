@@ -273,7 +273,7 @@ class AdmittedOwnerBatch:
     def restart(cls, lifecycle: OwnerLifecycle, request: OwnerRestartRequest,
                 cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
         with lifecycle.restart_wire():
-            cutover.require_restart_admission(lifecycle)
+            cutover.require_restart_phase(lifecycle)
             snapshot = lifecycle.registry.snapshot()
             threads = request.threads(snapshot)
             request.require_selection(snapshot, threads)

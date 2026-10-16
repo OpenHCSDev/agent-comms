@@ -1,7 +1,7 @@
-"""Durable, default-off wire-root maintenance admission.
+"""Durable, default-off wire-root maintenance phase.
 
 A one-time upgrade from code lacking this gate must drain those original workers
-before it can rely on phase admission. Subsequent cutovers set Draining before
+before it can rely on the phase. Subsequent cutovers set Draining before
 fleet drain and clear it only after known-safe publication or abort. The enabled
 witness is never removed: a lost/corrupt state denies instead of returning OFF.
 """
@@ -12,19 +12,18 @@ import fcntl
 import json
 import os
 import stat
-from uuid import uuid4
 from collections.abc import Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
-
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
-from .lifecycle import LifecycleState
+from typing import Annotated, Literal
+from uuid import uuid4
 
 from .bus_publication import unique_wire_object
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import FieldCodec, TextRepresentation
+from .lifecycle import LifecycleState
 from .store_files import _async_store_lock, _atomic_write_text, _store_lock, store_lock_path
 
 
@@ -34,7 +33,7 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
     @classmethod
     def require_open(cls) -> None:
         if cls.turn_pending:
-            raise RelationViolationError("Maintenance admission closed")
+            raise RelationViolationError("Maintenance new turns held")
 
 
 class DrainingPhase(MaintenancePhase):
@@ -65,12 +64,41 @@ class ReadyPhase(MaintenancePhase):
         return (DrainingPhase,)
 
 
+class MaintenanceStatus:
+    """Absent witness is READY; stored phases derive from their record."""
+
+    phase = ReadyPhase
+    generation = 0
+
+    @property
+    def turn_pending(self) -> bool:
+        return self.phase.turn_pending
+
+    def require_open(self) -> None:
+        self.phase.require_open()
+
+
 @dataclass(frozen=True)
-class MaintenanceReceipt:
-    generation: int
-    operator: str
-    nonce: str
-    phase: type[MaintenancePhase]
+class MaintenanceOperator:
+    value: str
+
+    def __post_init__(self) -> None:
+        if type(self.value) is not str or not self.value or len(self.value) > 128:
+            raise ValueError('Maintenance operator must have bounded identity')
+
+    @classmethod
+    def from_text(cls, text: object) -> MaintenanceOperator:
+        return cls(FieldCodec.decode(str, text))
+
+
+class MaintenanceOperatorText(TextRepresentation):
+    @classmethod
+    def from_text(cls, value: str) -> MaintenanceOperator:
+        return MaintenanceOperator(value)
+
+    @classmethod
+    def encode(cls, value: MaintenanceOperator) -> str:
+        return value.value
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -85,17 +113,17 @@ class MaintenanceMarker:
 
 
 @dataclass(frozen=True, kw_only=True)
-class MaintenanceState(MaintenanceMarker):
-    operator: str
+class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
+    operator: Annotated[MaintenanceOperator, MaintenanceOperatorText]
     nonce: str
     phase: type[MaintenancePhase]
 
     def __post_init__(self):
         super().__post_init__()
-        if not self.operator or len(self.nonce) != 32:
-            raise ValueError("Maintenance requires operator and nonce")
+        if len(self.nonce) != 32:
+            raise ValueError("Maintenance requires a nonce")
 
-    def require_marker(self, marker: MaintenanceMarker, root: Path):
+    def require_marker(self, marker: MaintenanceMarker, root: Path) -> MaintenanceState:
         if (
             marker
             != MaintenanceMarker(
@@ -103,8 +131,19 @@ class MaintenanceState(MaintenanceMarker):
             )
             or self.root != marker.root
         ):
-            raise RelationViolationError("Maintenance witness inconsistent; admission closed")
-        return MaintenanceReceipt(self.generation, self.operator, self.nonce, self.phase)
+            raise RelationViolationError("Maintenance witness inconsistent; new turns held")
+        return self
+
+    def successor(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
+        if not self.phase().may_become(phase()):
+            raise ValueError('Maintenance transition requires a valid expected successor')
+        return MaintenanceState(version=self.version, root=self.root,
+                                generation=self.generation + 1, operator=self.operator,
+                                nonce=nonce, phase=phase)
+
+    def require_draining(self) -> None:
+        if self.phase is not DrainingPhase:
+            raise ValueError('Only an acquired draining phase can be cleared')
 
 
 class MaintenanceBarrier:
@@ -155,7 +194,7 @@ class MaintenanceBarrier:
                 os.close(descriptor)
         return value
 
-    def current_unlocked(self) -> MaintenanceReceipt | None:
+    def current_unlocked(self) -> MaintenanceStatus:
         """Call while holding the registry lock OR the wire lock.
 
         For a send, the wire lock stays held through stdin.write; for a claim,
@@ -165,78 +204,67 @@ class MaintenanceBarrier:
         marker = self._read(self.marker_path, MaintenanceMarker)
         state = self._read(self.state_path, MaintenanceState)
         if marker is None and state is None:
-            return None  # Only fresh, never-enabled roots are default OFF.
+            return MaintenanceStatus()  # Never-enabled roots have the same READY phase.
         if marker is None or state is None:
-            raise RelationViolationError("Maintenance witness incomplete; admission closed")
+            raise RelationViolationError("Maintenance witness incomplete; new turns held")
         return state.require_marker(marker, self.registry_path.parent)
 
-    def assert_open_unlocked(self) -> MaintenanceReceipt | None:
-        receipt = self.current_unlocked()
-        if receipt is not None:
-            receipt.phase.require_open()
-        return receipt
+    def assert_open_unlocked(self) -> MaintenanceStatus:
+        hold = self.current_unlocked()
+        hold.require_open()
+        return hold
 
-    def read(self) -> MaintenanceReceipt | None:
+    def read(self) -> MaintenanceStatus:
         with _store_lock(self.wire_path, shared=True):
             return self.current_unlocked()
 
-    def _write_unlocked(self, receipt: MaintenanceReceipt) -> None:
-        root = str(self.registry_path.parent.resolve())
-        marker = MaintenanceMarker(version=1, root=root, generation=receipt.generation)
-        state = MaintenanceState(version=1, root=root, generation=receipt.generation,
-                                 operator=receipt.operator, nonce=receipt.nonce,
-                                 phase=receipt.phase)
-        # The marker leads so an interrupted replacement always denies admission.
-        _atomic_write_text(self.marker_path, json.dumps(FieldCodec.encode(marker), sort_keys=True), fsync_parent=True)
-        _atomic_write_text(self.state_path, json.dumps(FieldCodec.encode(state), sort_keys=True), fsync_parent=True)
+    def _write_unlocked(self, hold: MaintenanceState) -> None:
+        marker = MaintenanceMarker(version=hold.version, root=hold.root,
+                                   generation=hold.generation)
+        hold.require_marker(marker, self.registry_path.parent)
+        marker_text = json.dumps(FieldCodec.encode(marker), sort_keys=True)
+        state_text = json.dumps(FieldCodec.encode(hold), sort_keys=True)
+        # The marker leads so an interrupted replacement still holds new turns.
+        _atomic_write_text(self.marker_path, marker_text, fsync_parent=True)
+        _atomic_write_text(self.state_path, state_text, fsync_parent=True)
 
-    def begin(self, operator: str) -> MaintenanceReceipt:
-        """Close turn admission before fleet drain; an uncertain write stays closed."""
-        if type(operator) is not str or not operator or len(operator) > 128:
-            raise ValueError('Maintenance operator must have bounded identity')
+    def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
+        """Hold new turns before fleet drain; an uncertain write stays closed."""
         with _store_lock(self.wire_path), _store_lock(self.registry_path):
             current = self.current_unlocked()
-            if current is not None and current.phase is not ReadyPhase:
+            if current.phase is not ReadyPhase:
                 raise RelationViolationError('Maintenance already active or uncertain')
-            receipt = MaintenanceReceipt(
-                (current.generation + 1) if current is not None else 1,
-                operator, uuid4().hex, DrainingPhase,
-            )
-            self._write_unlocked(receipt)
-            return receipt
+            hold = MaintenanceState(version=1, root=str(self.registry_path.parent.resolve()),
+                                    generation=current.generation + 1, operator=operator,
+                                    nonce=uuid4().hex, phase=DrainingPhase)
+            self._write_unlocked(hold)
+            return hold
 
-    def _advance_unlocked(self, expected: MaintenanceReceipt,
-                          phase: type[MaintenancePhase]) -> MaintenanceReceipt:
-        if (type(expected) is not MaintenanceReceipt or not isinstance(phase, type)
-                or not issubclass(phase, MaintenancePhase)
-                or not expected.phase().may_become(phase())):
-            raise ValueError('Maintenance transition requires a valid expected successor')
+    def _advance_unlocked(self, expected: MaintenanceState,
+                          phase: type[MaintenancePhase]) -> MaintenanceState:
         if self.current_unlocked() != expected:
             raise RelationViolationError('Maintenance generation/operator changed')
-        receipt = MaintenanceReceipt(expected.generation + 1, expected.operator,
-                                     uuid4().hex, phase)
-        self._write_unlocked(receipt)
-        return receipt
+        hold = expected.successor(phase, uuid4().hex)
+        self._write_unlocked(hold)
+        return hold
 
-    def advance(self, expected: MaintenanceReceipt,
-                phase: type[MaintenancePhase]) -> MaintenanceReceipt:
+    def advance(self, expected: MaintenanceState,
+                phase: type[MaintenancePhase]) -> MaintenanceState:
         with _store_lock(self.wire_path), _store_lock(self.registry_path):
             return self._advance_unlocked(expected, phase)
 
-    def clear(self, expected: MaintenanceReceipt) -> MaintenanceReceipt:
+    def clear(self, expected: MaintenanceState) -> MaintenanceState:
         """Finish a known-safe drain or abort; never infer safety from an error."""
-        if type(expected) is not MaintenanceReceipt or expected.phase is not DrainingPhase:
-            raise ValueError('Only an acquired draining phase can be cleared directly')
+        expected.require_draining()
         return self.advance(expected, ReadyPhase)
 
-    def clear_stopped(self, expected: MaintenanceReceipt, wire_descriptor: int) -> MaintenanceReceipt:
+    def clear_stopped(self, expected: MaintenanceState, wire_descriptor: int) -> MaintenanceState:
         """Clear while the stopped batch holds its original exclusive wire OFD.
 
         Reacquiring the wire by name would deadlock. An unrelated descriptor
         cannot publish READY while another cutover holds the stopped workers' wire lock.
         """
-        if type(expected) is not MaintenanceReceipt or expected.phase is not DrainingPhase:
-            raise ValueError('Only an acquired draining phase can be cleared')
+        expected.require_draining()
         if type(wire_descriptor) is not int or wire_descriptor < 0:
             raise RelationViolationError('Maintenance needs the stopped wire descriptor')
         opened = os.fstat(wire_descriptor)
@@ -247,22 +275,16 @@ class MaintenanceBarrier:
         with _store_lock(self.registry_path):
             return self._advance_unlocked(expected, ReadyPhase)
 
-    def require_draining_unlocked(self, expected: MaintenanceReceipt) -> None:
-        """Admit only this cutover's captured phase while holding the wire lock."""
-        if (type(expected) is not MaintenanceReceipt or expected.phase is not DrainingPhase
-                or self.current_unlocked() != expected):
-            raise RelationViolationError('Cutover maintenance phase changed before owner retirement')
-
-    def pending_turn(self) -> MaintenanceReceipt | None:
-        """Return the cutover-owned typed reason to retain, not launch, a wake.
-
-        Missing/corrupt witnesses still fail closed rather than looking like READY.
-        """
-        receipt = self.read()
-        return receipt if receipt is not None and receipt.phase.turn_pending else None
+    def require_draining_unlocked(self, expected: MaintenanceState) -> None:
+        """Require this cutover's captured phase while holding the wire lock."""
+        expected.require_draining()
+        if self.current_unlocked() != expected:
+            raise RelationViolationError(
+                'Cutover maintenance phase changed before owner retirement'
+            )
 
     @contextmanager
-    def admit_ingress(self, *, blocking: bool = True) -> Iterator[MaintenanceReceipt | None]:
+    def admit_ingress(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:
         """Share open-root custody through one synchronous ingress operation.
 
         Do not await while inside this context. A child still needs to perform

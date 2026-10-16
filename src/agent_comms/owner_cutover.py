@@ -8,24 +8,23 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 if TYPE_CHECKING:
-    from .owner_lifecycle import OwnerLifecycle
+    from .maintenance_barrier import MaintenanceState
+    from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult
+    from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure
-    from .owner_lifecycle import OwnerRestartResult
-    from .maintenance_barrier import MaintenanceReceipt
 
 
 class OwnerCutover(ABC):
     """An operation owns its audience and retained maintenance proof.
 
     Selection validation precedes every fence or signal. Installation runs with
-    the existing wire admission lock held, after original process exit and before
+    the existing wire lock held, after original process exit and before
     replacement launch. A member must not reacquire that lock or start owners.
     """
 
     def restart(self, lifecycle: OwnerLifecycle, request: OwnerRestartRequest) -> tuple[OwnerRestartResult, ...]:
-        """The admission member owns which runtime may decode original records."""
+        """The cutover member owns which runtime may decode original records."""
         from .owner_restart import AdmittedOwnerBatch
 
         return AdmittedOwnerBatch.restart(lifecycle, request, self)
@@ -38,12 +37,11 @@ class OwnerCutover(ABC):
         """Installations may supply target launch authority only after stopping."""
         pass
 
-    def require_restart_admission(self, lifecycle: OwnerLifecycle) -> None:
-        """Ordinary restarts require READY; maintained cutovers bind their receipt."""
+    def require_restart_phase(self, lifecycle: OwnerLifecycle) -> None:
+        """Ordinary restarts require READY; maintained cutovers bind their hold."""
         from .restart_refusals import OwnerMaintenancePendingRefusal
 
-        receipt = lifecycle.maintenance.current_unlocked()
-        if receipt is not None and receipt.phase.turn_pending:
+        if lifecycle.maintenance.current_unlocked().turn_pending:
             raise OwnerMaintenancePendingRefusal()
 
     @abstractmethod
@@ -87,18 +85,18 @@ class OwnerCutover(ABC):
 
 
 class MaintainedOwnerCutover(OwnerCutover):
-    """Stop an exact fleet while its durable Draining receipt holds new turns.
+    """Stop an exact fleet while its durable Draining state holds new turns.
 
-    The publisher acquires maintenance_receipt before polling idle owners. It
-    clears the exact receipt under the wire lock after known-safe publication
+    The publisher obtains maintenance_hold before polling idle owners. It
+    clears that exact hold under the wire lock after known-safe publication
     (or on a known-safe abort), before any replacement launch. UNKNOWN outcomes
     remain closed for explicit review rather than reopening on exception text.
     """
 
-    maintenance_receipt: "MaintenanceReceipt"
+    maintenance_hold: MaintenanceState
 
-    def require_restart_admission(self, lifecycle: OwnerLifecycle) -> None:
-        lifecycle.maintenance.require_draining_unlocked(self.maintenance_receipt)
+    def require_restart_phase(self, lifecycle: OwnerLifecycle) -> None:
+        lifecycle.maintenance.require_draining_unlocked(self.maintenance_hold)
 
 
 class StoppedOwnerInstallation(OwnerCutover):

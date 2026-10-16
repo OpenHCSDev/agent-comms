@@ -34,7 +34,7 @@ from .child_process import join_retirement
 from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
 from .input_disposition import InputDispositions, InputDocument
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceReceipt
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceStatus
 from .input_effects import InputEffects
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .errors import RelationViolationError
@@ -214,7 +214,7 @@ class InputObservation:
             # maintenance witness itself wakes the observer on READY; waking
             # again now would spin on the same closed phase.
             if (not completed.cancelled() and completed.exception() is None
-                    and isinstance(completed.result(), MaintenanceReceipt)):
+                    and isinstance(completed.result(), MaintenanceStatus)):
                 return
             self.wake_observer(session_id)
 

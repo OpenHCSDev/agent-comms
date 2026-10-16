@@ -22,7 +22,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerReleaseReceipt
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.maintenance_barrier import PausedPhase
+from agent_comms.maintenance_barrier import MaintenanceOperator, PausedPhase
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.store_files import _store_lock
@@ -60,7 +60,8 @@ def old_client_write_case(stage, root, original_python, environment):
         (copied/'private_bus_checkpoint.sqlite3').unlink()
         install_private_bus_checkpoint(log)
     control = Comms(copied).owners.maintenance
-    control.advance(control.begin('disposable-old-client-probe'), PausedPhase)
+    old_client = MaintenanceOperator.from_text('disposable-old-client-probe')
+    control.advance(control.begin(old_client), PausedPhase)
     result = subprocess.run([original_python, str(Path(__file__).with_name('old_thread_client_probe.py')),
                              str(copied)], env=environment, capture_output=True, text=True, timeout=8)
     (stage/'old-client-stderr.txt').write_text(result.stderr)

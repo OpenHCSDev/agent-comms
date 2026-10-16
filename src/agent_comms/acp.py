@@ -453,7 +453,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # The accepted channel row stays in its durable assignment ledger.
         # During cutover, leave it unselected; the maintenance witness wakes
         # observation again on READY, without replaying this bus input.
-        if await Coordination.run_worker(self._comms.owners.maintenance.pending_turn):
+        if (await Coordination.run_worker(self._comms.owners.maintenance.read)).turn_pending:
             return 0
         SelectedWakeCheck(
             session_id=session_id, inputs=self.inputs, execution=execution,
