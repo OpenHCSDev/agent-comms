@@ -356,6 +356,83 @@ class OwnedCodec:
     assert report["head"][f"CodecSubclass:{repo.root}/boundary.py"] == 1
 
 
+def test_nominal_queries_and_same_owner_arguments_are_not_foreign(repo: Repository) -> None:
+    base = repo.commit({
+        "__init__.py": "",
+        "fields.py": "class DeclaredField:\n    @property\n    def has_default(self) -> bool:\n        return True\n",
+        "view.py": "from .fields import DeclaredField\nclass FieldView(UnknownWidget):\n    def __init__(self, field: DeclaredField):\n        self.field = field\nclass ValueView(FieldView):\n    def query(this):\n        return True\n",
+        "entry.py": "from __future__ import annotations\nclass RelationshipEntry:\n    def revalidates(self, earlier: RelationshipEntry):\n        return True\n",
+    })
+    head = repo.commit({
+        "view.py": "from .fields import DeclaredField\nclass FieldView(UnknownWidget):\n    def __init__(self, field: DeclaredField):\n        self.field = field\nclass ValueView(FieldView):\n    def query(this):\n        return not this.field.has_default\n",
+        "entry.py": "from __future__ import annotations\nclass RelationshipEntry:\n    def revalidates(self, earlier: RelationshipEntry):\n        return earlier.person is None\n",
+    })
+    status, report = repo.compare(base, head)
+    assert status == 0
+    assert report["delta"][f"ForeignAbsenceProbe:{repo.root}/view.py"] == 0
+    assert report["delta"][f"ForeignAbsenceProbe:{repo.root}/entry.py"] == 0
+    assert f"ForeignAbsenceProbe:{repo.root}/fields.py" not in report["head"]
+
+
+def test_nominal_queries_preserve_raw_private_nested_and_unresolved_probes(repo: Repository) -> None:
+    base = repo.commit({})
+    head = repo.commit({"raw.py": """
+class Other:
+    value: bool
+    _value: bool
+class Owner:
+    def inspect(self, other: Other, unknown):
+        raw = other.value is None
+        raw_truth = not other.value
+        private = not other._value
+        nested = self.other.value is None
+        unresolved = not unknown.has_default
+        return raw, raw_truth, private, nested, unresolved
+"""})
+    status, report = repo.compare(base, head)
+    assert status == 1
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/raw.py"] == 5
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_comms.debt_ratchet", "--root", repo.root,
+         "--base", base, "--head", head], cwd=repo.path, capture_output=True, text=True,
+        timeout=10, check=False)
+    assert result.returncode == 1
+    assert "unresolved nominal binding; kept ForeignAbsenceProbe" in result.stderr
+
+
+def test_declared_boolean_class_parameter_uses_immutable_external_declarations(repo: Repository) -> None:
+    dependency_path = repo.path.with_name(repo.path.name + "-declarations")
+    dependency_path.mkdir()
+    dependency = Repository(dependency_path, "src/ui_theme")
+    declared = dependency.commit({
+        "__init__.py": "raise RuntimeError('Inspected source must not execute')\n",
+        "scheme.py": "from typing import ClassVar\nclass ThemeColour(metaclass=UnknownRegistry):\n    background: ClassVar[bool] = False\n",
+    })
+    dependency.commit({"scheme.py": "class ThemeColour:\n    background = None\n"})
+    base = repo.commit({"__init__.py": ""})
+    head = repo.commit({"colours.py": """
+from ui_theme.scheme import ThemeColour
+class Frame:
+    stops: tuple[type[ThemeColour], ...]
+class Colours:
+    def changed(self):
+        def read(member: type[ThemeColour]):
+            return not member.background
+        return read
+    def paint(self, frame: Frame):
+        return {role: not role.background for role in dict.fromkeys(frame.stops)}
+"""})
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_comms.debt_ratchet", "--root", repo.root,
+         "--base", base, "--head", head, "--declarations", str(dependency.path),
+         declared, dependency.root], cwd=repo.path, capture_output=True, text=True,
+        timeout=10, check=False)
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/colours.py"] == 0
+    assert not any("scheme.py" in key for key in report["head"])
+
+
 def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Repository) -> None:
     source = '\n'.join([
         'import typing as t',
