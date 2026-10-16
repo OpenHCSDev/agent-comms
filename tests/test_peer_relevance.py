@@ -159,8 +159,8 @@ def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(t
     from test_private_bus_checkpoint import _root
 
     comms, _ = _root(tmp_path)
-    earlier = comms.messaging.send_initial_cohort("Bob", "Alice", "From a partner")
-    later = comms.messaging.send_initial_cohort("outsider", "Alice", "From a stranger")
+    earlier = comms.messaging.send_initial_cohort("outsider", "Alice", "From a stranger")
+    later = comms.messaging.send_initial_cohort("Bob", "Alice", "From a partner")
     owner = comms.registry.require("Alice")
 
     def shown():
@@ -168,13 +168,13 @@ def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(t
         (segment,) = comms.bus.awareness_segments(owner, relations)
         return [row.seq for row in segment.sources]
 
-    assert set(shown()) == {earlier.seq, later.seq}
-    comms.relationships.edit("Alice", RelationshipEdit.decode("add"), "Bob", "Shared review")
     assert shown() == [earlier.seq, later.seq]
+    comms.relationships.edit("Alice", RelationshipEdit.decode("add"), "Bob", "Shared review")
+    assert shown() == [later.seq, earlier.seq]
     selected = tuple(relation for relation in comms.relationships.peer_relations('Alice')
                      if relation.peer.name == 'Bob')
     (segment,) = comms.bus.awareness_segments(owner, selected)
-    assert [row.seq for row in segment.sources] == [earlier.seq]
+    assert [row.seq for row in segment.sources] == [later.seq]
 
 
 def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_path):
