@@ -34,7 +34,6 @@ from .shared import (
     AppendDraftItem,
     CompletedItem,
     DraftAccumulator,
-    FinishedItem,
     FinishedTurn,
     NonTextDraft,
     ParagraphDraft,

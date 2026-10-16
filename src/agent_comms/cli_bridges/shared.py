@@ -11,6 +11,7 @@ import sqlite3
 import sys
 from abc import ABC, abstractmethod
 from contextlib import aclosing, suppress
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
@@ -101,7 +102,7 @@ class TextDraft(DraftAccumulator):
         return cls.from_parts(event, (event.text,))
 
     @classmethod
-    def from_parts(cls, template: TextTranscript, parts) -> TextDraft:
+    def from_parts(cls, template: TextTranscript, parts: Iterable[str]) -> TextDraft:
         return cls(replace(template, text=''), {index: [text] for index, text in enumerate(parts)})
 
     def started_at(self) -> float | None:
