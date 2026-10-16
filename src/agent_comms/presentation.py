@@ -24,7 +24,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
-from .read_ledger import (ReadDocument, ReadLedger, ReadMask, ReadSource, AbsentReadSource,
+from .read_ledger import (ReadDocument, ReadLedger, ReadMask, ReadMasks, ReadSource, AbsentReadSource,
                           ReadRevision, SelectedViewers, ReadNotice, NoReadNotice,
                           ReadObservations)
 from .runtime_info import AgentRuntimeInfo
@@ -408,12 +408,12 @@ class DisplaySelection:
     registry: RegistrySnapshot
     catalog: CatalogDocument
     viewer: str | None
-    readers: dict[str, ReadMask]
+    readers: ReadMasks
     document: ReadDocument
 
     @property
     def seen(self) -> ReadMask:
-        return self.readers.get(self.viewer, ReadMask())
+        return self.readers[self.viewer]
 
     @classmethod
     def capture(

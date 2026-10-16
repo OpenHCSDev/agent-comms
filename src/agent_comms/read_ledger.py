@@ -1,7 +1,7 @@
 """Human read authority: typed conversation identities and compact exact progress."""
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -91,11 +91,16 @@ class ReadProgress:
         return prefix(marked).apply(marked)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class ReadMask:
     """One viewer's original, namespace-resolved read membership; never a history set."""
     conversations: dict[Conversation, ReadProgress] = field(default_factory=dict)
     incarnations: dict[str, ThreadIncarnation] = field(default_factory=dict)
+
+    def __eq__(self, other):
+        if not isinstance(other, ReadMask):
+            return NotImplemented
+        return (self.conversations, self.incarnations) == (other.conversations, other.incarnations)
 
     def incarnation(self, name: str) -> ThreadIncarnation:
         return self.incarnations[name]
@@ -131,13 +136,31 @@ class ReadMask:
         return frozenset(n for state in self.conversations.values() for n in state.sparse)
 
 
+class NothingRead(ReadMask):
+    """An absent reader record owns empty membership, not a consumer's None check."""
+    __slots__ = ()
+
+    def __init__(self):
+        super().__init__()
+
+    def progress(self, sender: str, target: str) -> ReadProgress:
+        return ReadProgress()
+
+
+class ReadMasks(dict[str, ReadMask]):
+    """One prepared membership map; missing records never escape as None."""
+
+    def __missing__(self, viewer: str) -> ReadMask:
+        return NothingRead()
+
+
 @dataclass(frozen=True, slots=True)
 class ReadObservations:
     """One prepared namespace cut; its source guards every consuming window."""
     source: ReadSource
-    readers: dict[str, ReadMask]
+    readers: ReadMasks
 
-    def for_source(self, source: ReadSource) -> dict[str, ReadMask]:
+    def for_source(self, source: ReadSource) -> ReadMasks:
         return source.memberships(self)
 
 
@@ -205,10 +228,10 @@ class ReadDocument:
         names = {}
         for name, participant in snapshot.named_members():
             names.setdefault(participant.incarnation, []).append(name)
-        return ReadObservations(self.source, {viewer: ReadMask(conversations, {
+        return ReadObservations(self.source, ReadMasks({viewer: ReadMask(conversations, {
                     name: participant for conversation in conversations
                     for participant in conversation.participants for name in names[participant]
-                }) for viewer, conversations in viewers.items()})
+                }) for viewer, conversations in viewers.items()}))
 
 
 class ReadSource(DeclaredFamily, affix='ReadSource'):
@@ -216,7 +239,7 @@ class ReadSource(DeclaredFamily, affix='ReadSource'):
     def from_revision(cls, revision):
         return AbsentReadSource() if revision is None else PresentReadSource(revision.identity)
 
-    def memberships(self, captured: ReadObservations) -> dict[str, ReadMask]:
+    def memberships(self, captured: ReadObservations) -> ReadMasks:
         raise NotImplementedError
 
 
@@ -224,14 +247,14 @@ class ReadSource(DeclaredFamily, affix='ReadSource'):
 class PresentReadSource(ReadSource):
     identity: FileIdentity
 
-    def memberships(self, captured: ReadObservations) -> dict[str, ReadMask]:
-        return captured.readers if captured.source == self else {}
+    def memberships(self, captured: ReadObservations) -> ReadMasks:
+        return captured.readers if captured.source == self else ReadMasks()
 
 
 @dataclass(frozen=True, slots=True)
 class AbsentReadSource(ReadSource):
-    def memberships(self, captured: ReadObservations) -> dict[str, ReadMask]:
-        return {}
+    def memberships(self, captured: ReadObservations) -> ReadMasks:
+        return ReadMasks()
 
 
 class ReadTable:
@@ -477,7 +500,7 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
     def membership(self, viewer, snapshot, source: ReadSource):
         participant = snapshot.participant(viewer)
         with self.reading(OneViewer(participant.incarnation)) as document:
-            return document.observations(snapshot).for_source(source).get(participant.incarnation.name, ReadMask())
+            return document.observations(snapshot).for_source(source)[participant.incarnation.name]
 
     def displayed_recipient(self, message, recipient, snapshot, *, readers):
         name = snapshot.canonical_name(recipient.canonical_thread)
@@ -490,12 +513,12 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
         return self._displayed_recipient(message, recipient, snapshot, readers)
 
     @staticmethod
-    def _displayed_recipient(message, recipient, snapshot, readers: Mapping[str, ReadMask]):
+    def _displayed_recipient(message, recipient, snapshot, readers: ReadMasks):
         from .bus_publication import stable_thread_lookup
         name = snapshot.canonical_name(recipient.canonical_thread)
         thread = snapshot.threads.get(name)
         if (thread is not None and stable_thread_lookup(thread.created_at) == recipient.recipient_lookup
-                and readers.get(name, ReadMask()).contains(message)):
+                and readers[name].contains(message)):
             return (thread.incarnation,)
         return ()
 

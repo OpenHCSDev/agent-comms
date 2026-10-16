@@ -103,3 +103,49 @@ def test_required_authority_and_header_cannot_look_like_empty_state(tmp_path):
         ReadHeaderRow.delete(connection)
     with pytest.raises(ValueError):
         ledger.read(SelectedViewers(()))
+
+
+def test_missing_reader_is_typed_and_does_not_insert_a_second_record():
+    from agent_comms.read_ledger import NothingRead, ReadMasks
+
+    masks = ReadMasks()
+    absent = masks['viewer']
+    assert isinstance(absent, NothingRead)
+    assert absent.progress('sender', '#team') == ReadProgress()
+    assert not absent.sparse
+    assert not absent.contains_route('sender', '#team', 1)
+    assert masks == {}
+    # Disposable display checkpoints decode the declared base value. Missing
+    # membership must not invalidate an otherwise warm projection every time.
+    restored = FieldCodec.decode(ReadMask, FieldCodec.encode(absent))
+    assert restored == absent == ReadMask()
+    assert absent == restored
+    with pytest.raises(TypeError):
+        NothingRead({'not': 'a recorded mask'})
+
+
+def test_source_absence_and_mismatch_return_the_same_typed_empty_membership():
+    from agent_comms.private_path import FileIdentity
+    from agent_comms.read_ledger import (
+        AbsentReadSource, NothingRead, PresentReadSource, ReadMasks, ReadObservations,
+    )
+
+    source = PresentReadSource(FileIdentity(1, 2))
+    mask = ReadMask({Conversation(target='#team'): ReadProgress(3)})
+    captured = ReadObservations(source, ReadMasks({'viewer': mask}))
+    assert captured.for_source(source)['viewer'] is mask
+    for other in (AbsentReadSource(), PresentReadSource(FileIdentity(1, 3))):
+        assert isinstance(captured.for_source(other)['viewer'], NothingRead)
+
+
+def test_ledger_returns_nothing_read_for_a_known_viewer_without_a_record(tmp_path):
+    from agent_comms.read_ledger import AbsentReadSource, NoReadNotice, NothingRead
+
+    comms = wire(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path))
+    snapshot = comms.registry.snapshot()
+    source = AbsentReadSource()
+    # No message source exists yet. The fixture explicitly creates authority;
+    # a missing authority/header is not the same as a missing reader record.
+    comms.bus.reads.create(source, NoReadNotice())
+    assert isinstance(comms.bus.reads.membership(viewer.name, snapshot, source), NothingRead)

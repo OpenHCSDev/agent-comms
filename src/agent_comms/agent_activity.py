@@ -74,8 +74,8 @@ class ExternalRecipientActivity(RecipientActivity):
     incarnation: ThreadIncarnation
 
     def after_inbox_read(self, notification, source, reads, document, snapshot):
-        mask = document.get(self.incarnation.resolved(snapshot).name)
-        if self.incarnation.current(snapshot) and mask is not None and mask.contains(source.message):
+        if (self.incarnation.current(snapshot)
+                and document[self.incarnation.resolved(snapshot).name].contains(source.message)):
             return replace(
                 notification,
                 state="Acknowledged",

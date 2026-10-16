@@ -205,9 +205,8 @@ class MessageBus:
             actor: DeliveryScope.capture(actor, basis.registry, basis.catalog)
             for actor in set(actors.values())
         }
-        from .read_ledger import ReadMask
         readers = basis.readers
-        seen = {actor: readers.get(actor, ReadMask()) for actor in deliveries}
+        seen = {actor: readers[actor] for actor in deliveries}
         with OpenedRouteCounts(self.log.path, source, basis.registry, deliveries) as index:
             counts = index.unseen_counts(seen)
         return {name: counts[actor] for name, actor in actors.items()}
