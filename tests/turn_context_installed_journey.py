@@ -14,12 +14,11 @@ import agent_comms
 from stored_inputs import stored_inputs
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.active_route import LocalRoute
-from agent_comms.native_settings import NativeThreadDefaults
-import dataclasses
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.tool_caller import NoThreadCaller
 
 
-async def configured_terminal(owner, thread, output, receipt, marker):
+async def configured_terminal(owner, thread, output, result, marker):
     """One installed stdio ACP attachment on the existing configured SDK fork."""
     from acp import spawn_agent_process
     from acp.schema import TextContentBlock
@@ -37,11 +36,11 @@ async def configured_terminal(owner, thread, output, receipt, marker):
     async with spawn_agent_process(subscriber, sys.executable, '-m', 'agent_comms.acp',
         *service.settings.cli_arguments,
         cwd=thread.worktree, env=dict(os.environ)) as (connection, process):
-        receipt['acp_pid'] = process.pid
+        result['acp_pid'] = process.pid
         await connection.initialize(protocol_version=1)
         await connection.load_session(cwd=thread.worktree, session_id=thread.name, mcp_servers=[])
-        receipt['state'] = 'ONE_DISTINCT_CONFIGURED_ACP_PROMPT_NO_RETRY'
-        (output.parent / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
+        result['state'] = 'ONE_DISTINCT_CONFIGURED_ACP_PROMPT_NO_RETRY'
+        (output.parent / 'terminal-receipt.json').write_text(json.dumps(result, indent=2))
         pending = asyncio.create_task(connection.prompt(thread.name,
             [TextContentBlock(type='text', text=text)]))
         async with asyncio.timeout(300):
@@ -68,18 +67,18 @@ async def configured_terminal(owner, thread, output, receipt, marker):
         assert response.stop_reason == 'end_turn'
         assert any(marker in str(update) for update in subscriber.updates)
         child = owner.turns.persistent_backends[thread.name].custody.idle().child
-        receipt.update(original_lease=FieldCodec.encode(lease), terminal_state=FieldCodec.encode(state),
+        result.update(original_lease=FieldCodec.encode(lease), terminal_state=FieldCodec.encode(state),
             original_waiter_goal=waiter_goal, waiter_released=True,
             acp_response=response.model_dump(by_alias=True, exclude_none=True),
             native_process=FieldCodec.encode(child.proc.identity),
             prompt_through_return_seconds=time.monotonic() - started)
         (output / 'original-acp-updates.json').write_text(json.dumps(subscriber.updates, indent=2))
     assert process.returncode is not None
-    receipt['acp_exited'] = True
+    result['acp_exited'] = True
     return marker, child
 
 
-async def read_actual_context_publication(owner, thread, child, original_input, output, receipt):
+async def read_actual_context_publication(owner, thread, child, original_input, output, result):
     """Read the manifest emitted by the one actual model turn, never publish it."""
     import hashlib
     from agent_comms.field_codec import FieldCodec
@@ -130,7 +129,7 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
     usage = [value for value in updates if value.get('update', value).get('sessionUpdate') == 'usage_update']
     # Manifest values are the existing public renderer's captured strings; source
     # message content is recovered and filtered by the same PiMessage renderer.
-    receipt.update(model_onContextReady_publication=True, request_id=request_id,
+    result.update(model_onContextReady_publication=True, request_id=request_id,
         native_request_generation=proof.request_generation, actual_manifest_lease=True,
         captured_system_text_read=True, transcript_original_root_and_child_read=True,
         public_renderer_only=True, same_native_child=True, source_query_bytes_unchanged=True,
@@ -151,29 +150,29 @@ async def run(root, receiving_only=False):
     monkey = MonkeyPatch()
     fixture = native_backend.__wrapped__(root, monkey)
     original = None
-    receipt = {"python": sys.executable, "core": agent_comms.__file__, "fixture": str(root),
+    result = {"python": sys.executable, "core": agent_comms.__file__, "fixture": str(root),
                "public_inputs": 0, "paid_provider_calls": 0}
     try:
         original = await anext(fixture)
         async with asyncio.timeout(90):
             await test_context_manifest_native_acp_and_cli_continuous(
                 original, receiving_only=receiving_only)
-        receipt["state"] = "SCOPED_PASS"
+        result["state"] = "SCOPED_PASS"
     except BaseException as error:
-        receipt["state"] = "FAILED_NO_REPLAY"
-        receipt["error"] = repr(error)
+        result["state"] = "FAILED_NO_REPLAY"
+        result["error"] = repr(error)
         raise
     finally:
         await fixture.aclose()
         monkey.undo()
         if original is not None:
-            receipt["local_provider_posts"] = original.provider.posts
+            result["local_provider_posts"] = original.provider.posts
             requests = root / 'original-provider-requests.json'
             requests.write_text(json.dumps(original.provider.requests))
-            receipt['original_provider_requests'] = str(requests)
-        receipt["elapsed_seconds"] = time.monotonic() - started
-        (root / "terminal-receipt.json").write_text(json.dumps(receipt, indent=2))
-        print(json.dumps(receipt), flush=True)
+            result['original_provider_requests'] = str(requests)
+        result["elapsed_seconds"] = time.monotonic() - started
+        (root / "terminal-receipt.json").write_text(json.dumps(result, indent=2))
+        print(json.dumps(result), flush=True)
 
 
 async def run_configured(options):
@@ -194,7 +193,7 @@ async def run_configured(options):
     root.mkdir(mode=0o700)
     output = root / 'configured-context-journey'
     output.mkdir(mode=0o700)
-    receipt = {'state': 'PREPARING_ORIGINAL_CONFIGURED_SOURCE',
+    result = {'state': 'PREPARING_ORIGINAL_CONFIGURED_SOURCE',
         'python': sys.executable, 'core': agent_comms.__file__,
         'fixture': str(root), 'public_inputs': 0, 'original_inputs_retried': 0}
     owner = None
@@ -204,7 +203,7 @@ async def run_configured(options):
         source = captured.require_current()
         original_file = Path(source.require_saved_session())
         original_digest = hashlib.sha256(original_file.read_bytes()).hexdigest()
-        receipt.update(model=source.model, thinking=source.thinking_level.declared_name,
+        result.update(model=source.model, thinking=source.thinking_level.declared_name,
             original_name=source.name, original_worktree=source.worktree,
             source_file=str(original_file), source_bytes=original_file.stat().st_size,
             original_process=FieldCodec.encode(source.require_process()),
@@ -214,7 +213,8 @@ async def run_configured(options):
         project = root / 'project'
         project.mkdir(mode=0o700)
         environment = dict(captured.retained.environment)
-        service = Comms(LocalRoute(root / 'wire'), runtime=LaunchRuntime.current())
+        service = Comms(LocalRoute(root / 'wire'), runtime=LaunchRuntime.running(),
+                        settings=captured.retained.native)
         identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
             str(original_file), str(project), str(root / 'native-forks')), cwd=project, env=environment)
         assert Path(identity.session_file).is_relative_to(root)
@@ -235,7 +235,6 @@ async def run_configured(options):
         # explicit fork path owns all native writes; original accounts stay intact.
         os.environ.clear()
         os.environ.update(environment)
-        service.settings = dataclasses.replace(service.settings,  arguments=tuple(list(captured.retained.native.arguments)))
         owner = canonical_agent(service,  auto_wake=False, runtime_enabled=True)
         thread = Thread('configured-source', frozenset(), str(project),
             process_identity=ProcessIdentity.capture(os.getpid()),
@@ -253,7 +252,7 @@ async def run_configured(options):
         assert thread.name not in owner.turns.persistent_backends
 
         if options.terminal_only or options.recorded_publication:
-            token, child = await configured_terminal(owner, thread, output, receipt,
+            token, child = await configured_terminal(owner, thread, output, result,
                                                      options.terminal_marker)
             stored = stored_inputs(service.root)
             original, = stored.rows.values()
@@ -264,13 +263,13 @@ async def run_configured(options):
             replies = tuple(entry for entry in entries[entries.index(user) + 1:] if entry.final_reply)
             assert replies[-1].message.authoritative_text.strip() == token
             assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
-            receipt.update(state='SCOPED_CONFIGURED_SDK_ACP_NATIVE_TERMINAL_PASS',
+            result.update(state='SCOPED_CONFIGURED_SDK_ACP_NATIVE_TERMINAL_PASS',
                 original_input=FieldCodec.encode(original), original_native_user=user.id,
                 original_native_reply=replies[-1].id, source_unchanged=True,
                 private_root=str(service.root), fork_file=identity.session_file)
             if options.recorded_publication:
-                await read_actual_context_publication(owner, service.registry.require(thread.name), child, original, output, receipt)
-                receipt['state'] = 'CONFIGURED_MODEL_ON_CONTEXT_READY_PUBLISHED_AND_READ_PASS'
+                await read_actual_context_publication(owner, service.registry.require(thread.name), child, original, output, result)
+                result['state'] = 'CONFIGURED_MODEL_ON_CONTEXT_READY_PUBLISHED_AND_READ_PASS'
             return
 
         async def query(*arguments):
@@ -297,7 +296,7 @@ async def run_configured(options):
             assert not stored_inputs(service.root).rows
             assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
             captured.require_current()
-            receipt.update(state='SCOPED_COLD_CONFIGURED_SAVED_CONTEXT_PASS',
+            result.update(state='SCOPED_COLD_CONFIGURED_SAVED_CONTEXT_PASS',
                 priming_calls=0, native_prompts=0, provider_requests=0,
                 private_root=str(service.root), fork_file=str(selected),
                 fork_sha256=hashlib.sha256(before).hexdigest(), source_unchanged=True,
@@ -307,8 +306,8 @@ async def run_configured(options):
             return
         from retained_input_origin_observer import actual_s2_ingress
         baseline = service.bus.log.latest_sequence()
-        receipt['state'] = 'ONE_CONFIGURED_INPUT_ABOUT_TO_BE_SUBMITTED_NO_RETRY'
-        (root / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
+        result['state'] = 'ONE_CONFIGURED_INPUT_ABOUT_TO_BE_SUBMITTED_NO_RETRY'
+        (root / 'terminal-receipt.json').write_text(json.dumps(result, indent=2))
         token = 'S5_CONFIGURED_RETAINED_ONCE_473'
         async with actual_s2_ingress(owner, thread, output) as observer:
             original = await observer.submit('Bounded acceptance only. Do not resume '
@@ -332,25 +331,25 @@ async def run_configured(options):
         assert selected.read_bytes().startswith(before)
         assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
         captured.require_current()
-        receipt.update(state='SCOPED_CONFIGURED_SAVED_FORK_TOAD_ACP_NATIVE_CONTEXT_PASS',
+        result.update(state='SCOPED_CONFIGURED_SAVED_FORK_TOAD_ACP_NATIVE_CONTEXT_PASS',
             original_inputs=FieldCodec.encode(tuple(stored.rows.values())),
             manifests=len(manifests), source_unchanged=True, query_preserved_journal=True,
             original_native_user=user.id, original_native_reply=terminal_replies[-1].id)
     except BaseException as error:
-        receipt.update(state='FAILED_NO_REPLAY', error=repr(error))
+        result.update(state='FAILED_NO_REPLAY', error=repr(error))
         raise
     finally:
         if owner is not None:
-            receipt['original_dispositions'] = FieldCodec.encode(
+            result['original_dispositions'] = FieldCodec.encode(
                 stored_inputs(owner._comms.root))
             await owner.shutdown()
             if (options.context_only or options.terminal_only or options.recorded_publication) and 'child' in locals():
-                receipt['native_child_retired'] = child.proc.retired
-                receipt['native_child_exited'] = not child.proc.alive()
+                result['native_child_retired'] = child.proc.retired
+                result['native_child_exited'] = not child.proc.alive()
                 assert child.proc.retired and not child.proc.alive()
-        receipt['elapsed_seconds'] = time.monotonic() - started
-        (root / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
-        print(json.dumps(receipt), flush=True)
+        result['elapsed_seconds'] = time.monotonic() - started
+        (root / 'terminal-receipt.json').write_text(json.dumps(result, indent=2))
+        print(json.dumps(result), flush=True)
 
 
 def complete_goal_controls(root):
@@ -365,7 +364,7 @@ def complete_goal_controls(root):
     from agent_comms.cli_commands import ContextCliCommand
 
     started = time.monotonic()
-    service = Comms(LocalRoute(root / 'wire'), runtime=LaunchRuntime.current())
+    service = Comms(LocalRoute(root / 'wire'), runtime=LaunchRuntime.running())
     originals = FieldCodec.decode(tuple[InputAttempt, ...], json.loads(
         (root / 'context-journey' / 'original-inputs.json').read_text()))
     dispositions = InputDispositions(service.root)
@@ -381,7 +380,7 @@ def complete_goal_controls(root):
     else:
         assert isinstance(source.goal_checkpoint, AbsentGoalCheckpoint)
         assert not original_origin.applies(source, service.registry.snapshot())
-    receipt = {'scope': 'authorized post-terminal goal controls and recorded CLI; continuous49 remains FAILED',
+    result = {'scope': 'authorized post-terminal goal controls and recorded CLI; continuous49 remains FAILED',
                'python': sys.executable, 'core': agent_comms.__file__, 'root': str(root),
                'native_prompts': 0, 'provider_calls': 0, 'input_replays': 0, 'owner_restarts': 0,
                'original_goal': FieldCodec.encode(source.goal_checkpoint)}
@@ -409,34 +408,34 @@ def complete_goal_controls(root):
                 actor=RuntimeInvocable)
         except ValueError as error:
             assert 'No declared dependency has an active turn' in str(error)
-            receipt['standby_refused_without_active_dependency'] = str(error)
+            result['standby_refused_without_active_dependency'] = str(error)
         else:
             raise AssertionError('Standby accepted a completed, non-active dependency')
         durable = stored_inputs(dispositions.root)
         assert all(durable.lookup(item.key) == item for item in originals)
         compare = ContextCliCommand(thread=source.name, diff=True)
-        difference = compare.encode_result(compare.apply(service))
+        difference = compare.encode_result(compare.apply(service, caller=NoThreadCaller()))
         manifests = service.bus.log.context_manifests(source.name, service.registry)
         assert difference['turn'] != difference['previous_turn']
         command = ContextCliCommand(thread=source.name,
             turn=manifests[-1].turn.occurrence.generation)
-        recorded = command.encode_result(command.apply(service))
+        recorded = command.encode_result(command.apply(service, caller=NoThreadCaller()))
         assert recorded['text_recorded'] is False
         assert recorded['manifests'] == FieldCodec.encode(tuple(item for item in manifests
             if item.turn.matches_generation(manifests[-1].turn.occurrence.generation)))
         after = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in retained}
         assert before == after
-        receipt.update(state='SCOPED_POST_TERMINAL_CONTROLS_PASS',
+        result.update(state='SCOPED_POST_TERMINAL_CONTROLS_PASS',
             absent=FieldCodec.encode(absent), replacement=FieldCodec.encode(current),
             old_scope_inapplicable=True, original_inputs_durably_unchanged=True,
             retained_hashes=after, recorded_cli=recorded, context_diff=difference)
     except BaseException as error:
-        receipt.update(state='FAILED_NO_REPLAY', error=repr(error))
+        result.update(state='FAILED_NO_REPLAY', error=repr(error))
         raise
     finally:
-        receipt['elapsed_seconds'] = time.monotonic() - started
-        (root / 'goal-completion-receipt51.json').write_text(json.dumps(receipt, indent=2))
-        print(json.dumps(receipt), flush=True)
+        result['elapsed_seconds'] = time.monotonic() - started
+        (root / 'goal-completion-receipt51.json').write_text(json.dumps(result, indent=2))
+        print(json.dumps(result), flush=True)
 
 
 def complete_history_controls(root):
@@ -454,7 +453,7 @@ def complete_history_controls(root):
     root.mkdir(mode=0o700)
     wire = root / 'wire'
     wire.mkdir(mode=0o700)
-    service = Comms(LocalRoute(wire), runtime=LaunchRuntime.current())
+    service = Comms(LocalRoute(wire), runtime=LaunchRuntime.running())
     owner = Thread('history-original', frozenset(), str(root),
                    process_identity=ProcessIdentity.capture(os.getpid()), created_at=18002.0)
     service.registry.register(owner)
@@ -502,7 +501,7 @@ def complete_history_controls(root):
     assert difference == continuation.changed_since(originals[0])
     assert query('history-original', '--diff') == future.changed_since(continuation)
     assert 'No preceding recorded turn' in query('history-renamed', '--turn', '1', '--diff', accepted=False)['error']
-    reopened = Comms(LocalRoute(wire), runtime=LaunchRuntime.current())
+    reopened = Comms(LocalRoute(wire), runtime=LaunchRuntime.running())
     assert reopened.bus.log.context_manifests('history-original', reopened.registry) == expected
     service.registry.unregister('history-renamed')
     service.registry.remove('history-renamed')
@@ -510,12 +509,12 @@ def complete_history_controls(root):
     assert 'No original context manifest' in query('history-renamed', '--turn', '1', accepted=False)['error']
     after = hashlib.sha256(service.bus.log.path.read_bytes()).hexdigest()
     assert before == after
-    receipt = dict(state='INSTALLED_HISTORICAL_CLI_PASS', python=sys.executable,
+    result = dict(state='INSTALLED_HISTORICAL_CLI_PASS', python=sys.executable,
         core=agent_comms.__file__, original_records=FieldCodec.encode(expected),
         queries=outputs, wire_sha256=after, original_wire_unchanged=True,
         native_prompts=0, provider_calls=0, public_mutations=0, original_input_replays=0)
-    (root / 'context-history-receipt.json').write_text(json.dumps(receipt, indent=2))
-    print(json.dumps({key: value for key, value in receipt.items()
+    (root / 'context-history-receipt.json').write_text(json.dumps(result, indent=2))
+    print(json.dumps({key: value for key, value in result.items()
                       if key not in ('original_records', 'queries')}), flush=True)
 
 

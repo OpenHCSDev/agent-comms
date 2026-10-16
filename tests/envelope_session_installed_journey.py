@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 from agent_comms.runtime_socket import RuntimeSocket
+from agent_comms.pi_vocabulary import OffThinkingLevel
+from agent_comms.read_basis import ExplicitWatchAcknowledgment
+from agent_comms.tool_caller import NoThreadCaller
 
 import argparse
 import asyncio
@@ -21,14 +24,18 @@ from native_backend_fixture import native_backend_fixture
 from explicit_private_owner_installed_journey import Subscriber
 
 
-def user_text(request):
-    message = next(row for row in reversed(request['messages']) if row['role'] == 'user')
+def message_text(message):
+    """Decode captured provider text at this measurement boundary only."""
     content = message['content']
     return content if isinstance(content, str) else ''.join(row.get('text', '') for row in content)
 
 
+def user_text(request):
+    return message_text(next(row for row in reversed(request['messages']) if row['role'] == 'user'))
+
+
 def system_text(request):
-    return '\n'.join(row['content'] for row in request['messages'] if row['role'] == 'system')
+    return '\n'.join(message_text(row) for row in request['messages'] if row['role'] == 'system')
 
 
 async def run(root: Path, *, after: bool):
@@ -143,24 +150,21 @@ async def detached(root: Path):
             data['compaction']['keepRecentTokens'] = 16
             settings.write_text(json.dumps(data))
             await fixture.author_history()
-            comms = Comms(fixture.root)
+            comms = Comms(fixture.comms.route, runtime=fixture.comms.runtime,
+                          settings=fixture.comms.settings)
             comms.registry.declare(Thread('worker895', frozenset(), str(fixture.project),
-                session_file=str(fixture.session), model='response-local/fixture', thinking_level='off'))
-            env = {key: value for key, value in os.environ.items()
-                   if not key.startswith(('AGENT_COMMS_', 'PI_')) and key != 'PYTHONPATH'}
+                session_file=str(fixture.session), model='response-local/fixture', thinking_level=OffThinkingLevel))
+            env = comms.runtime.environment(os.environ)
             with comms.bus.log.locked():
                 root_id = comms.bus.log.read_metadata_unlocked().root_id
             env.update(AGENT_COMMS_ROOT=str(fixture.root),
                 AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
                 AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=os.environ['PI_COMPACTION_TEST_PACKAGE'],
                 AGENT_COMMS_NATIVE_CONFIG_DIR=str(fixture.config),
-                PI_CODING_AGENT_DIR=str(fixture.config), AGENT_COMMS_AGENT_BIN='pi',
-                AGENT_COMMS_AGENT_MODELS='response-local/fixture',
-                AGENT_COMMS_AGENT_ARGS='--offline --no-extensions --no-skills --no-context-files --no-tools',
-                PATH=str(Path(sys.executable).parent) + os.pathsep + env.get('PATH', os.defpath))
+                PI_CODING_AGENT_DIR=str(fixture.config))
             for phase in ('compaction', 'resume'):
                 try:
-                    status, reply, stderr = await cli(env, root, ['--root', str(fixture.root)],
+                    status, reply, stderr = await cli(env, root, ['--root', str(fixture.root), *comms.settings.cli_arguments],
                                                       {'name': 'worker895'})
                     assert status == 0 and reply['launched'], (reply, stderr)
                     owner = comms.registry.require('worker895')
@@ -171,7 +175,8 @@ async def detached(root: Path):
                             assert owner.process_alive
                             await asyncio.sleep(.05)
                     subscriber = Subscriber()
-                    async with spawn_agent_process(subscriber, sys.executable, '-m', 'agent_comms.acp',
+                    async with spawn_agent_process(subscriber,
+                            *comms.runtime.command('-m', 'agent_comms.acp', *comms.settings.cli_arguments),
                             env=env, cwd=fixture.project) as (connection, process):
                         async with asyncio.timeout(40):
                             await connection.initialize(protocol_version=1)
@@ -200,7 +205,8 @@ async def detached(root: Path):
                         # An agent-peer wake, not the separate human-input operation.
                         comms.registry.declare(Thread('peer895', frozenset(), str(fixture.project)))
                         sent = comms.messaging.send_message('peer895', 'worker895', 'peer-wake895')
-                        async with asyncio.timeout(30), aclosing(comms.bus.watch('peer895')) as replies:
+                        async with asyncio.timeout(30), aclosing(comms.bus.watch(
+                                'peer895', acknowledgment=ExplicitWatchAcknowledgment)) as replies:
                             reply = await anext(replies)
                         assert reply.sender == 'worker895' and reply.target == 'peer895'
                         assert reply.body == fixture.provider.text
@@ -212,7 +218,7 @@ async def detached(root: Path):
                         (root / 'selected-request.json').write_text(json.dumps(request, indent=2))
                         result['selected_addressed_reply'] = True
                 finally:
-                    await asyncio.to_thread(comms.owners.stop, 'worker895')
+                    await asyncio.to_thread(comms.owners.stop, 'worker895', caller=NoThreadCaller())
             assert len(set(result['worker_pids'])) == 2
             result['state'] = 'PASS'
     except BaseException as error:
