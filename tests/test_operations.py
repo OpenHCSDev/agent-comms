@@ -276,6 +276,27 @@ class TestThreadOps:
         assert attached.session_file == str(session_file.resolve())
         assert wired.registry.status("fixer").declared_name == "running"
 
+    def test_attached_session_model_is_registered_once_not_rescanned_for_answers(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from agent_comms.native_transcript import NativeTranscript
+
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "model_change", "provider": "test", "modelId": "saved"}) + "\n"
+        )
+        attached = wired.threads.attach_session(wired.registry.require("fixer"), str(session_file))
+        assert attached.model == "test/saved"
+        assert wired.registry.require("fixer").model == "test/saved"
+
+        def no_tail(*_args, **_kwargs):
+            raise AssertionError("A configuration answer must not scan saved history")
+
+        monkeypatch.setattr(NativeTranscript, "tail", no_tail)
+        wired.agents.observe_runtime_info("fixer", AgentInfo(model="runtime/model"))
+        assert wired.configuration.answer("fixer").model == "test/saved"
+        assert wired.threads.resolve_thread_model("PR111", "default/model") == "default/model"
+
     def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
 

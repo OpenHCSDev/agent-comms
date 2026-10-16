@@ -194,13 +194,17 @@ class Thread(ThreadProvenance):
             service_tier=self.service_tier if service_tier is None else service_tier,
         )
 
+    def needs_model_observation(self) -> bool:
+        """Only an unset declaration needs a saved or live model observation."""
+        return self.model is None
+
     def initialized_native_configuration(
         self, *, model: str | None, thinking_level: str | None,
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
             self,
-            model=self.model if self.model is not None else model,
+            model=model if self.needs_model_observation() else self.model,
             thinking_level=(
                 self.thinking_level if self.thinking_level is not None else thinking_level
             ),
