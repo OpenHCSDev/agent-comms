@@ -117,6 +117,37 @@ def test_foreign_protocol_owners_supply_their_own_recorded_detail():
     assert scalar.title == "external_custom" and scalar.raw_input == ["not", "Pi"]
 
 
+def test_each_boundary_decodes_its_file_input_without_guessing_another_format():
+    from agent_comms.cli_bridges.claude_protocol import ClaudeSession, TimedRecord, ToolUse
+    from agent_comms.cli_bridges.opencode_parts import ToolPart
+
+    record = TimedRecord(uuid='record', timestamp='2026-10-16T20:00:00Z')
+    call = ToolUse(id='claude', name='Read', input={'file_path': 'claude.py'})
+    update, = call.updates(record, ClaudeSession(turn='turn'))
+    assert update.accumulator.path == 'claude.py'
+    assert update.accumulator.title == 'Read claude.py'
+    with pytest.raises(ValueError):
+        ToolUse(id='wrong', name='Read', input={'path': 'not-Claude'}).updates(
+            record, ClaudeSession(turn='turn'))
+    pi, = ToolCallContent('pi', 'read', {'path': 'pi.py'}).assistant_transcript()
+    assert pi.path == 'pi.py' and pi.title == 'Read pi.py'
+    with pytest.raises((TypeError, ValueError)):
+        ToolCallContent('wrong', 'read', {'file_path': 'not-Pi'}).assistant_transcript()
+    part = ToolPart.model_validate({'type': 'tool', 'id': 'part', 'sessionID': 's',
+        'messageID': 'm', 'callID': 'oc', 'tool': 'read',
+        'state': {'status': 'pending', 'input': {'filePath': 'oc.py'}}})
+    assert part.state.call(part).path == 'oc.py'
+    bad = part.model_copy(update={'state': part.state.model_copy(update={'input': {'path': 'not-OpenCode'}})})
+    with pytest.raises(ValueError):
+        bad.state.call(bad)
+    # An extension's opaque argument with a familiar name is not our schema.
+    opaque = {'file_path': {'not': 'a filename'}, 'command': ['not', 'a shell command']}
+    unknown = ToolUse(id='opaque', name='external_custom', input=opaque)
+    update, = unknown.updates(record, ClaudeSession(turn='turn'))
+    assert update.accumulator.title == 'external_custom'
+    assert update.accumulator.arguments == opaque and update.accumulator.path is None
+
+
 def test_core_commands_share_native_identity_without_changing_external_decode():
     from agent_comms.channel_coding_tools import CodingCall
     from agent_comms.native_tools import NativeExecutableTool

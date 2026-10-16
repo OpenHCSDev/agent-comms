@@ -361,7 +361,8 @@ class TaskEnvelope(WireModel, ABC):
             return ForeignTaskNotification(text=text)
         closing = '</task-notification>'
         # Claude Code appends sibling blocks (system-reminder) after the envelope in the same record.
-        root = ElementTree.fromstring(text[:text.index(closing) + len(closing)])  # Malformed envelope fails at ingress.
+        envelope, terminator, _ = text.partition(closing)
+        root = ElementTree.fromstring(envelope + terminator)  # Incomplete XML still raises ParseError.
         event = root.find('event')
         if event is None:
             return ForeignTaskNotification(text='\n'.join(root.itertext()).strip())

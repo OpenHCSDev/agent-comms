@@ -34,9 +34,11 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         declaration = cls.for_name(name)
         preview = path if path is not None else detail.strip()
         caption = declaration.label + (" " + preview if preview else "")
-        if len(caption) > cls.CAPTION_CHARS:
-            caption = caption[:cls.CAPTION_CHARS - 1] + '…'
-        return ' '.join(caption.split())
+        return ' '.join(declaration.bounded_caption(caption, cls.CAPTION_CHARS).split())
+
+    @classmethod
+    def bounded_caption(cls, caption: str, limit: int) -> str:
+        return caption if len(caption) <= limit else caption[:limit - 1] + '…'
 
     @classmethod
     def file_location(cls, decode: Callable[[], str]) -> str | None:
@@ -68,6 +70,14 @@ class PathTool:
     @property
     def detail(self) -> str:
         return self.path
+
+    @classmethod
+    def bounded_caption(cls, caption: str, limit: int) -> str:
+        if len(caption) <= limit:
+            return caption
+        # File identity is at the end; clipping the prefix must not hide it.
+        tail = limit - len(cls.label) - 2
+        return cls.label + ' …' + caption[-tail:]
 
     @classmethod
     def file_location(cls, decode: Callable[[], str]) -> str:
