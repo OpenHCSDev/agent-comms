@@ -24,7 +24,7 @@ test('both stores preserve branch context, settings and archived input',()=>{
         entry('c','compact'),
     ];
     const f=fixture(rows);
-    const disk = new DiskEntryStore(f.file,{indexDirectory:f.dir});
+    const disk = new DiskEntryStore(f.file);
     const memory=new MemoryEntryStore(header,rows);
     try {
         for (const store of [disk,memory]) {
@@ -53,9 +53,12 @@ test('strict disk scan refuses malformed UTF8, incomplete tail, duplicated IDs a
         Buffer.from([header,entry('a',null),entry('a',null)].map(JSON.stringify).join('\n')+'\n'),
         Buffer.from([header,entry('a','later'),entry('later',null)].map(JSON.stringify).join('\n')+'\n'),
         Buffer.from([header,entry(header.id,null)].map(JSON.stringify).join('\n')+'\n'),
+        ...[{}, ['not-a-native-block']].map(content=>Buffer.from([
+            header,{...entry('a',null),message:{role:'assistant',content}},
+        ].map(JSON.stringify).join('\n')+'\n')),
     ]) {
         const f=fixture([]);writeFileSync(f.file,invalid);
-        try {assert.throws(()=>new DiskEntryStore(f.file,{indexDirectory:f.dir}));assert.deepEqual(readFileSync(f.file),invalid);}
+        try {assert.throws(()=>new DiskEntryStore(f.file));assert.deepEqual(readFileSync(f.file),invalid);}
         finally {f.close();}
     }
 });

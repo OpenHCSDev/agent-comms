@@ -17,7 +17,7 @@ from .transcript_receipts import TranscriptSource
 
 def _reverse_records(
     stream, before: int, *, floor: int = 0
-) -> Generator[tuple[int, int, bytes], None, None]:
+) -> Generator[tuple[int, int, bytes]]:
     """Scan offsets in fixed chunks, then read each complete record exactly once.
 
     Record size is independent of scan-buffer size. In particular, images/tool
@@ -328,6 +328,18 @@ class NativeTranscript(TranscriptSource):
                 reader.require_publication_context(user)
                 return record, user
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
+
+    def latest_tool(self):
+        """Select by original persisted order, never a lifetime tail or clock max."""
+        from .native_index import NativeIndexHelper
+        from .native_pi import NativePiUnavailable
+        from .tool_activity import NativeToolSelectorUnavailable
+
+        try:
+            with self.reading() as reader, reader._open() as stream:
+                return NativeIndexHelper.observe(reader.path).tool_activity(reader.path, stream)
+        except (OSError, TypeError, ValueError, NativePiUnavailable):
+            return NativeToolSelectorUnavailable()
 
     def tail(self, *, max_bytes: int | None = None):
         with self._open() as stream:

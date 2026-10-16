@@ -107,3 +107,67 @@ The old verification UI on:215 was closed normally at codex's request:
 st411658/toad411665/observer411741 gone. No native worker was signalled; original
 sessions/auth/UNKNOWN remain untouched. Receipt:old-ui-retired.json in the
 owned scratch root. Xvfb106063 is retained for the isolated acceptance display.
+
+## Exact latest-tool checkpoint (source only, not completion of #908)
+
+The original EntryStore now retains its SQLite selectors beside the original
+JSONL (`.entry-index.v2.sqlite3`). NativeSessionFiles includes that database and
+its journal/WAL/SHM in its existing membership, borrower and retirement behavior.
+The old per-open/unlinked index and alternate global index-directory option are
+removed, including their repository callers. Original JSONL remains authority;
+no message bodies or tool arguments are stored in the index.
+
+DiskEntryStore prepares missing/stale selectors only for the existing native
+SessionManager loading/writing path. Its ReadOnlyEntryStore capability cannot
+create, rebuild or append: a fleet query with no matching indexed cut fails
+unavailable without reading lifetime history. A partial sequence index selects
+one original entry with toolCallCount > 0, in physical persisted order across all
+branches. The predicate is declared once in DiskEntryStore and used by both DDL
+and selection. EntryMetadata owns the count and only projects native message
+fields from actual message entries; opaque extensions cannot impersonate calls,
+tracked inputs or model selection merely by containing a `message` property.
+
+Preparation decodes JSONL outside shared SQL transactions. Unpublished staging
+rows become visible with their exact source cut in one publication transaction.
+Normal native append commits its selectors and source revision together. Dead
+preparer tables can be retired; live/reused/inaccessible process owners are not
+stolen. Query readers are read-only and do not wait on a writer. Each successful
+query checks both original descriptor and pathname revisions, plus the stored
+source revision. Missing/incomplete/changed evidence never proves absence.
+
+NativeTranscript.latest_tool() returns #973's existing ToolActivity declarations.
+The packaged helper returns original coordinates and exact integer filesystem
+revisions, not a JavaScript-decoded message body. Python reads the original entry
+through its held descriptor and existing NativeEntry codec, preserving large
+integer arguments. NativeIndexObservation owns selection projection; the final
+original tool block wins, not the maximum timestamp. Recorded zero and unrecorded
+None stay distinct. There is no alternate Core index, scheduler or retained cache.
+
+Bounded source confirmation reuses the installed SDK with a resolve hook for
+only the owned EntryStore module. The real native saved-session loader, native
+append, fresh-process production helper, exact source-position protocol and
+query plan are exercised on 1,000 private synthetic entries. Warm saved-session
+startup and selection read zero original JSONL bytes; missing/stale query indexes
+also read zero and create no index. An older real call survives 996 subsequent
+non-tool entries and an opaque extension's fake call. No-tool proof, partial
+source refusal, native writer reopen, private index mode and dead/live preparer
+custody pass. Existing native store checks: 2 passed. Python projection/shared
+ToolActivity checks: 23 passed. This is not installed native-pin acceptance or a
+physical-paint/latency result. No original saved session or uncertain input ran.
+
+Evidence owner: core-retry. Small disposable source fixtures and receipts live
+under `/home/ts/.cache/agent-scratch/core-native-ancestry-8302/latest-*`; accepted
+source run is `latest-source-f`, with `latest-store-tests-a.log` and
+`latest-pytest-final.log`. Earlier generated fixture runs are superseded, not
+borrower-verified for retirement. No large saved-session rebuild, dependency
+clone, parallel agent or provider operation was started under critical headroom.
+
+Still unfinished: NativeTranscript.inputs_for still uses the old coordinate
+walk. Its complete migration to the same persistent EntryStore ancestry/offset
+selectors remains core-retry-owned; no bounded-page completion is claimed.
+Native package pins/build/default installation are unchanged. Paired native/Core
+packaging and the real saved/off-page application journey remain with the existing
+integration owner, codex, and implementation/verification stays with core-retry.
+#950's independent three-root carry/install hold and all BLOCKED/UNKNOWN work
+remain intact. Do not install this source over an unrelated native pin or replay
+retained input to obtain acceptance.

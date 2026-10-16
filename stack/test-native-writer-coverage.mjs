@@ -14,7 +14,6 @@ const moduleURL = pathToFileURL(join(packageDir, 'dist/core/session-manager.js')
 const { SessionManager, sessionEntryToContextMessages } = await import(moduleURL);
 const { DiskEntryStore } = await import(pathToFileURL(join(packageDir,"dist/core/session-entry-store.js")));
 const root = fs.mkdtempSync(join(tmpdir(), 'pr48-writer-coverage-'));
-process.env.AGENT_COMMS_SESSION_INDEX_DIR = join(root, 'indexes');
 const managers = new Set();
 function opened(file) {
     const manager = SessionManager.open(file);

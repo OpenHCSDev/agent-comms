@@ -39,6 +39,7 @@ export declare abstract class EntryStore {
     abstract get lastId(): string | null;
     abstract metadata(id: string | null): EntryMetadata | undefined;
     abstract get(id: string): SessionEntry | undefined;
+    abstract latestToolMetadata(): EntryMetadata | undefined;
     abstract metadataEntries(): IterableIterator<EntryMetadata>;
     abstract branchMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
     abstract append(entry: SessionEntry): void;
@@ -73,6 +74,7 @@ export declare abstract class EntryStore {
 
 export declare class MemoryEntryStore extends EntryStore {
     constructor(header: SessionHeader, entries?: Iterable<SessionEntry>);
+    latestToolMetadata(): EntryMetadata | undefined;
     get header(): SessionHeader;
     get lastId(): string | null;
     metadata(id: string | null): EntryMetadata | undefined;
@@ -86,7 +88,9 @@ export declare class MemoryEntryStore extends EntryStore {
 }
 
 export declare class DiskEntryStore extends EntryStore {
-    constructor(file: string, options?: {indexDirectory?: string});
+    static indexFile(file: string): string;
+    constructor(file: string);
+    latestToolMetadata(): EntryMetadata | undefined;
     get header(): SessionHeader;
     get lastId(): string | null;
     get revision(): string;
@@ -98,6 +102,11 @@ export declare class DiskEntryStore extends EntryStore {
     committedAppend(entry: SessionEntry, file?: string): EntryStore;
     storedAt(file: string): EntryStore;
     close(): void;
+}
+
+/** Existing selectors only: never builds history or writes the index. */
+export declare class ReadOnlyEntryStore extends DiskEntryStore {
+    append(): never;
 }
 
 export declare class EntryBranchRange implements Iterable<SessionEntry> {

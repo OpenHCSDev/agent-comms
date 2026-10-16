@@ -22,7 +22,7 @@ const entries = [
 ];
 const file = join(root, 'session.jsonl');
 writeFileSync(file, [header,...entries].map(row => JSON.stringify(row)).join('\n')+'\n', {mode:0o600});
-const stores = [new MemoryEntryStore(header, entries), new DiskEntryStore(file, {indexDirectory:root})];
+const stores = [new MemoryEntryStore(header, entries), new DiskEntryStore(file)];
 try {
     for (const store of stores) {
         assert.equal(store.contextMessageCount('g'), 4, 'compacted kept suffix excludes earlier source');

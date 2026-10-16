@@ -1,7 +1,7 @@
 /** Native session history storage. JSONL is authority; SQLite contains rebuildable selectors only. */
-import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, statSync, unlinkSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { closeSync, fstatSync, lstatSync, openSync, readSync, statSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { getHeapStatistics } from 'node:v8';
 import { sessionEntryToContextMessages } from './session-manager.js';
@@ -19,20 +19,27 @@ export class EntryMetadata {
         this.sequence = sequence;
         this.offset = offset;
         this.length = length;
-        this.role = entry.message?.role ?? null;
-        this.inputId = entry.message?.inputId ?? null;
-        this.inputDigest = entry.message?.inputDigest ?? null;
+        const message = entry.type === 'message' ? entry.message : undefined;
+        this.role = message?.role ?? null;
+        this.inputId = message?.inputId ?? null;
+        this.inputDigest = message?.inputDigest ?? null;
         this.firstKeptEntryId = entry.firstKeptEntryId ?? null;
         this.contextMessageCount = sessionEntryToContextMessages(entry).length;
         // Statistics consume facts from the same strict scan/append that owns
         // selectors. Reading lifetime totals must not decode history again.
-        this.usage = entry.type === 'message' ? entry.message.usage : entry.usage;
-        this.toolCallCount = this.role === 'assistant' && Array.isArray(entry.message.content)
-            ? entry.message.content.reduce((count, block) => count + (block.type === 'toolCall' ? 1 : 0), 0)
+        this.usage = message ? message.usage : entry.usage;
+        if (this.role === 'assistant' && !Array.isArray(message.content))
+            throw new Error('Native assistant content must be an original block array');
+        this.toolCallCount = this.role === 'assistant'
+            ? message.content.reduce((count, block) => {
+                if (!block || typeof block !== 'object' || Array.isArray(block) || typeof block.type !== 'string')
+                    throw new Error('Invalid native assistant content block');
+                return count + (block.type === 'toolCall' ? 1 : 0);
+            }, 0)
             : 0;
         this.model = entry.type === 'model_change'
             ? { provider: entry.provider, modelId: entry.modelId }
-            : this.role === 'assistant' ? { provider: entry.message.provider, modelId: entry.message.model } : null;
+            : this.role === 'assistant' ? { provider: message.provider, modelId: message.model } : null;
         this.thinkingLevel = entry.type === 'thinking_level_change' ? entry.thinkingLevel : null;
         this.label = entry.type === 'label' ? { targetId: entry.targetId, label: entry.label ?? null, timestamp: entry.timestamp } : null;
     }
@@ -66,6 +73,7 @@ export class EntryStore {
     get lastId() { throw new Error('EntryStore.lastId must be implemented'); }
     metadata(id) { throw new Error('EntryStore.metadata must be implemented'); }
     get(id) { throw new Error('EntryStore.get must be implemented'); }
+    latestToolMetadata() { throw new Error('EntryStore.latestToolMetadata must be implemented'); }
     *metadataEntries() { throw new Error('EntryStore.metadataEntries must be implemented'); }
     *branchMetadata(leafId) { throw new Error('EntryStore.branchMetadata must be implemented'); }
     append(entry) { throw new Error('EntryStore.append must be implemented'); }
@@ -213,6 +221,7 @@ export class MemoryEntryStore extends EntryStore {
     #entries = new Map();
     #metadata = new Map();
     #last = null;
+    #latestTool = null;
     constructor(header, entries = []) {
         super();
         this.#header = EntryStore.validateHeader(header);
@@ -225,9 +234,12 @@ export class MemoryEntryStore extends EntryStore {
     assertCurrent() { this.assertUsable(); }
     *metadataEntries() { this.assertUsable(); yield* this.#metadata.values(); }
     *branchMetadata(leafId = this.lastId) { yield* [...this.ancestors(leafId)].reverse(); }
+    latestToolMetadata() { return this.metadata(this.#latestTool); }
     append(entry) {
         this.validate(entry);
-        this.#metadata.set(entry.id, new EntryMetadata(entry, this.#entries.size + 1));
+        const meta = new EntryMetadata(entry, this.#entries.size + 1);
+        this.#metadata.set(entry.id, meta);
+        if (meta.toolCallCount > 0) this.#latestTool = meta.id;
         this.#entries.set(entry.id, entry);
         this.#last = entry.id;
     }
@@ -245,6 +257,7 @@ export class MemoryEntryStore extends EntryStore {
 
 /** Disk-backed, bounded-page selector index; payloads remain exclusively in the native JSONL. */
 export class DiskEntryStore extends EntryStore {
+    static #toolSelection = "json_extract(selectors,'$.toolCallCount')>0";
     #fd;
     #db;
     #header;
@@ -254,38 +267,61 @@ export class DiskEntryStore extends EntryStore {
     #sequence = 0;
     #metadata;
     #insert;
-    constructor(file, { indexDirectory = process.env.AGENT_COMMS_SESSION_INDEX_DIR ?? join(homedir(), '.cache', 'agent-comms', 'session-indexes') } = {}) {
+    static indexFile(file) { return `${resolve(file)}.entry-index.v2.sqlite3`; }
+    constructor(file) {
         super();
         this.file = resolve(file);
-        mkdirSync(indexDirectory, { recursive: true, mode: 0o700 });
-        const directory = mkdtempSync(join(indexDirectory, 'open-'));
-        const index = join(directory, 'entries.sqlite');
         try {
             this.#fd = openSync(this.file, 'r');
-            this.#db = new DatabaseSync(index);
-            this.#db.exec('PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA mmap_size=0; PRAGMA locking_mode=EXCLUSIVE;');
-            this.#db.exec(`CREATE TABLE entries(sequence INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL,
-                parent TEXT, type TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
-                input_id TEXT, selectors TEXT NOT NULL);
-                CREATE INDEX entry_parent ON entries(parent);
-                CREATE INDEX entry_input ON entries(input_id);
-                CREATE INDEX entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence);`);
-            // SQLite has initialized and owns an exclusive open inode. Derived pages
-            // live on persistent disk, but no pathname survives reader exit or SIGKILL.
-            unlinkSync(index);
-            rmSync(directory, {recursive:true});
-            this.#metadata = this.#db.prepare('SELECT selectors FROM entries WHERE id=?');
-            this.#insert = this.#db.prepare('INSERT INTO entries VALUES(?,?,?,?,?,?,?,?)');
+            this.#db = this.openIndex(DiskEntryStore.indexFile(this.file));
+            this.#db.exec('PRAGMA mmap_size=0');
             this.refresh();
         } catch (error) {
             this.close();
-            rmSync(directory, { recursive: true, force: true });
             throw error;
         }
+    }
+    static requirePrivateIndex(index) {
+        const info = lstatSync(index);
+        if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid() || (info.mode & 0o077))
+            throw new Error('Native entry index must be a private owner file');
+    }
+    openIndex(index) {
+        try { closeSync(openSync(index, 'wx', 0o600)); }
+        catch (error) { if (error.code !== 'EEXIST') throw error; }
+        DiskEntryStore.requirePrivateIndex(index);
+        const database = new DatabaseSync(index);
+        try {
+            // Native append has already persisted JSONL: wait out short selector
+            // commits rather than fail that write on transient contention. Query
+            // readers use the read-only capability with timeout=0 and never wait.
+            database.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;');
+            database.exec('CREATE TABLE IF NOT EXISTS source(id INTEGER PRIMARY KEY CHECK(id=1), revision TEXT NOT NULL, header TEXT NOT NULL)');
+            return database;
+        } catch (error) { database.close(); throw error; }
     }
     get header() { this.assertUsable(); return this.#header; }
     get lastId() { this.assertUsable(); return this.#last; }
     get revision() { this.assertUsable(); return this.#revision; }
+    #prepare(table = 'entries') {
+        this.#metadata = this.#db.prepare(`SELECT selectors FROM ${table} WHERE id=?`);
+        this.#insert = this.#db.prepare(`INSERT INTO ${table} VALUES(?,?,?,?,?,?,?,?)`);
+    }
+    #saveSource(observed) {
+        this.#db.prepare('INSERT INTO source VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,header=excluded.header')
+            .run(revision(observed), JSON.stringify(this.#header));
+    }
+    #requireRevision(observed) {
+        if (revision(fstatSync(this.#fd, { bigint: true })) !== revision(observed) ||
+            revision(statSync(this.file, { bigint: true })) !== revision(observed))
+            throw new Error('Native session changed during index preparation');
+    }
+    latestToolMetadata() {
+        this.assertCurrent();
+        const row = this.#db.prepare(`SELECT selectors FROM entries WHERE ${DiskEntryStore.#toolSelection} ORDER BY sequence DESC LIMIT 1`).get();
+        this.assertCurrent();
+        return EntryMetadata.fromIndex(row);
+    }
     metadata(id) { this.assertUsable(); return EntryMetadata.fromIndex(this.#metadata.get(id)); }
     *metadataEntries() {
         this.assertUsable();
@@ -326,7 +362,8 @@ export class DiskEntryStore extends EntryStore {
     assertCurrent() {
         this.assertUsable();
         if (revision(fstatSync(this.#fd, { bigint: true })) !== this.#revision ||
-            revision(statSync(this.file, { bigint: true })) !== this.#revision)
+            revision(statSync(this.file, { bigint: true })) !== this.#revision ||
+            this.#db.prepare('SELECT revision FROM source WHERE id=1').get()?.revision !== this.#revision)
             throw new Error('Native session revision changed; reopen validated history, never replay');
     }
     #decode(raw) {
@@ -366,10 +403,45 @@ export class DiskEntryStore extends EntryStore {
             Number(before.size) < this.#extent) throw new Error('Native session replaced or truncated');
         if (this.#revision && revision(before) === this.#revision) return;
         if (this.#revision) throw new Error('Unrecognized native revision; open a fresh store');
+        const saved = this.#db.prepare('SELECT revision,header FROM source WHERE id=1').get();
+        if (saved?.revision === revision(before)) {
+            this.#header = EntryStore.validateHeader(JSON.parse(saved.header));
+            const last = this.#db.prepare('SELECT id,sequence FROM entries ORDER BY sequence DESC LIMIT 1').get();
+            this.#last = last?.id ?? null;
+            this.#sequence = last?.sequence ?? 0;
+            this.#extent = Number(before.size);
+            this.#revision = saved.revision;
+            this.#prepare();
+            this.assertCurrent();
+            return;
+        }
+        this.prepareIndex(before);
+    }
+    prepareIndex(before) {
+        // Prepare in an unpublished table. Every insertion is a short autocommit;
+        // no shared transaction or source lock spans decoding or history-sized I/O.
+        // A killed builder cannot run finally. Retire only our unpublished tables
+        // whose kernel process is gone; permission errors and reused PIDs preserve them.
+        for (const {name} of this.#db.prepare("SELECT name FROM sqlite_schema WHERE type='table'").all()) {
+            const owner = /^building_(\d+)_[a-f0-9]{32}$/.exec(name);
+            if (!owner) continue;
+            try { process.kill(Number(owner[1]), 0); }
+            catch (error) {
+                if (error.code === 'ESRCH') this.#db.exec(`DROP TABLE ${name}`);
+            }
+        }
+        const table = `building_${process.pid}_` + randomUUID().replaceAll('-', '');
         const buffer = Buffer.allocUnsafe(64 * 1024);
         let position = this.#extent, lineStart = position, parts = [], size = 0;
-        this.#db.exec('BEGIN');
         try {
+            this.#db.exec(`CREATE TABLE ${table}(sequence INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL,
+                parent TEXT, type TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
+                input_id TEXT, selectors TEXT NOT NULL);
+                CREATE INDEX ${table}_parent ON ${table}(parent);
+                CREATE INDEX ${table}_input ON ${table}(input_id);
+                CREATE INDEX ${table}_label ON ${table}(json_extract(selectors,'$.label.targetId'),sequence);
+                CREATE INDEX ${table}_tool ON ${table}(sequence DESC) WHERE ${DiskEntryStore.#toolSelection};`);
+            this.#prepare(table);
             while (position < Number(before.size)) {
                 const n = readSync(this.#fd, buffer, 0, Math.min(buffer.length, Number(before.size) - position), position);
                 if (!n) throw new Error('Native session truncated during scan');
@@ -390,13 +462,19 @@ export class DiskEntryStore extends EntryStore {
                 position += n;
             }
             if (size || !this.#header) throw new Error('Incomplete native session newline/header');
-            if (revision(fstatSync(this.#fd, { bigint: true })) !== revision(before) ||
-                revision(statSync(this.file, { bigint: true })) !== revision(before))
-                throw new Error('Native session changed during strict scan');
-            this.#db.exec('COMMIT');
+            this.#requireRevision(before);
+            this.#db.exec('BEGIN IMMEDIATE');
+            try {
+                this.#requireRevision(before);
+                this.#db.exec(`DROP TABLE IF EXISTS entries; ALTER TABLE ${table} RENAME TO entries`);
+                this.#saveSource(before);
+                this.#db.exec('COMMIT');
+            } catch (error) { this.#db.exec('ROLLBACK'); throw error; }
             this.#extent = position;
             this.#revision = revision(before);
-        } catch (error) { this.#db.exec('ROLLBACK'); throw error; }
+            this.#prepare();
+            this.assertCurrent();
+        } finally { this.#db.exec(`DROP TABLE IF EXISTS ${table}`); }
     }
     /** Extend only after SessionManager's existing writer fence appended these exact bytes. */
     append(entry) {
@@ -410,7 +488,19 @@ export class DiskEntryStore extends EntryStore {
         const saved = Buffer.allocUnsafe(encoded.length);
         if (readSync(this.#fd, saved, 0, saved.length, before) !== saved.length || !saved.equals(encoded))
             throw new Error('Native appended entry differs');
-        this.#index(entry, before, encoded.length - 1);
+        const meta = new EntryMetadata(entry, this.#sequence + 1, before, encoded.length - 1);
+        this.#db.exec('BEGIN IMMEDIATE');
+        try {
+            if (this.#db.prepare('SELECT revision FROM source WHERE id=1').get()?.revision !== this.#revision)
+                throw new Error('Native selector cut changed before append; reopen, never replay');
+            this.#requireRevision(current);
+            this.#insert.run(meta.sequence, meta.id, meta.parentId, meta.type,
+                meta.offset, meta.length, meta.inputId, JSON.stringify(meta));
+            this.#saveSource(current);
+            this.#db.exec('COMMIT');
+        } catch (error) { this.#db.exec('ROLLBACK'); throw error; }
+        this.#sequence = meta.sequence;
+        this.#last = meta.id;
         this.#extent = Number(current.size);
         this.#revision = revision(current);
     }
@@ -425,5 +515,19 @@ export class DiskEntryStore extends EntryStore {
         this.#db = undefined; this.#fd = undefined;
         try { database?.close(); }
         finally { if (descriptor !== undefined) closeSync(descriptor); }
+    }
+}
+
+/** Query capability: an absent/stale index is unavailable, never a cold history scan. */
+export class ReadOnlyEntryStore extends DiskEntryStore {
+    openIndex(index) {
+        DiskEntryStore.requirePrivateIndex(index);
+        return new DatabaseSync(index, {readOnly:true, timeout:0});
+    }
+    prepareIndex() {
+        throw new Error('Exact native index unavailable; native SessionManager must prepare history');
+    }
+    append() {
+        throw new Error('Read-only native selectors cannot append');
     }
 }
