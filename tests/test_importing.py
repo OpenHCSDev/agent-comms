@@ -162,6 +162,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path):
     thread = comms.registry.require("imported")
     assert thread.pid == 0 and comms.registry.status(thread.name) == StoppedThreadStatus()
     assert receipt.source_id == "ses_test" and receipt.imported_messages == 4
+    assert thread.title == "Current task"
     assert source.read_bytes() == before
     if os.name == "posix":
         assert stat.S_IMODE(directory.stat().st_mode) == 0o700
@@ -193,6 +194,29 @@ def test_import_refuses_redirected_session_directory(tmp_path):
     assert stat.S_IMODE(outside.stat().st_mode) == 0o755
     assert not list(outside.iterdir())
     assert not comms.registry.name_reserved("imported")
+
+
+def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path):
+    source = tmp_path / "rollout-2026-10-16T15-00-00-codex-id.jsonl"
+    records = [
+        {"type": "session_meta", "payload": {"id": "codex-id", "cwd": str(tmp_path)}},
+        {"type": "response_item", "payload": {
+            "type": "message", "role": "user",
+            "content": [{"type": "input_text", "text": "Continue editing the paper"}],
+        }},
+    ]
+    source.write_text("".join(json.dumps(record) + "\n" for record in records))
+    original = source.read_bytes()
+    comms = wire(tmp_path / "wire")
+    receipt = comms.threads.import_thread(
+        source, ImportFormat.CODEX, name="paper4_jair", tags=frozenset({"papers"})
+    )
+    thread = comms.registry.require("paper4_jair")
+    assert thread.name == thread.title == "paper4_jair"
+    assert thread.tags == frozenset({"papers"})
+    assert comms.registry.status(thread.name) == StoppedThreadStatus()
+    assert receipt.source_id == "codex-id"
+    assert source.read_bytes() == original
 
 
 def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(tmp_path):
