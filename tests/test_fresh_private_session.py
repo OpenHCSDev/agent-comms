@@ -298,14 +298,14 @@ def test_uncertain_parent_fsync_does_not_return_enrollment(
 ) -> None:
     from agent_comms import fresh_private_session as module
 
-    actual_fsync = module._fsync_directory
+    actual_fsync = module.fsync_directory
 
     def failed_session_fsync(path: Path) -> None:
         if path == tmp_path / "native-sessions" / "a":
             raise OSError("injected parent fsync uncertainty")
         actual_fsync(path)
 
-    monkeypatch.setattr(module, "_fsync_directory", failed_session_fsync)
+    monkeypatch.setattr(module, "fsync_directory", failed_session_fsync)
     with pytest.raises(NativePiUnavailable, match="durability UNKNOWN"):
         create_fresh_private_session(
             tmp_path / "native-sessions" / "a",

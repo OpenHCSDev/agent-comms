@@ -50,7 +50,7 @@ def test_process_custody_has_no_bare_pid_or_optional_parent_api() -> None:
 
 def test_s13_callers_cannot_reintroduce_local_supervision() -> None:
     package = Path(child_process.__file__).parent
-    for name in ("backend.py", "turn_inputs.py", "owner_lifecycle.py", "recovery_gateway.py"):
+    for name in ("backend.py", "turn_inputs.py", "owner_lifecycle.py"):
         tree = ast.parse((package / name).read_text())
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

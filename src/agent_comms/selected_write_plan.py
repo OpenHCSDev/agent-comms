@@ -32,7 +32,7 @@ from .store_files import _store_lock
 from .threads import Thread
 from .field_codec import FieldCodec
 from .declared_family import DeclaredFamily
-from .private_path import PrivateDirectoryRole, PrivateFileRole
+from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
 from .pi_rpc import unique_fields
 from .message_reference import MessageReference
 from .thread_identity import AdmissionIdentity, RecordedThreadIncarnation
@@ -120,14 +120,6 @@ class SelectedWritePlans:
             raise IdentityConflict("Selected write requires a positive source sequence")
         return self.directory / f"{source_seq}-{lookup}.json"
 
-    @staticmethod
-    def _fsync_dir(path: Path) -> None:
-        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-
     def _prepare_dir(self) -> None:
         with suppress(FileExistsError):
             self.directory.mkdir(mode=0o700)
@@ -135,7 +127,7 @@ class SelectedWritePlans:
         # Also on an existing directory: a previous mkdir may have survived
         # while its parent fsync failed. Do not acknowledge a later intent
         # until the directory entry itself is known durable.
-        self._fsync_dir(self.comms.root)
+        fsync_directory(self.comms.root)
 
     def _validate_dir(self) -> bool:
         try:
@@ -238,7 +230,7 @@ class SelectedWritePlans:
                     stream.write(data)
                     stream.flush()
                     os.fsync(stream.fileno())
-                self._fsync_dir(self.directory)
+                fsync_directory(self.directory)
             except BaseException:
                 # The visible file may have committed despite the error. Keep
                 # it as an UNKNOWN barrier; never unlink/retry the operation.
@@ -281,7 +273,7 @@ class SelectedWritePlans:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, path)
-            self._fsync_dir(self.directory)
+            fsync_directory(self.directory)
         except BaseException:
             # A post-write failure is UNKNOWN. The bus claim and attempt
             # remain visible; no path automatically reissues the write.
