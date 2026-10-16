@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
     from .bus_page_index import BusPageIndex
     from .private_bus_checkpoint import PrefixWitness
-    from .wire_log import WireLog
+    from .wire_log import OpenedWireSnapshot, WireLog
 
 
 class WireRootIdText(TextRepresentation):
@@ -53,8 +53,18 @@ class WireAccess(DeclaredFamily, affix="Access"):
     @abstractmethod
     def open_page_index(self, path: Path) -> BusPageIndex: ...
 
+    @contextmanager
+    def prepare_page_index(self, index: BusPageIndex, source: OpenedWireSnapshot) -> Iterator[None]:
+        self._prepare_index(index, source)
+        with index.snapshot():
+            index.require_coverage(source)
+            yield
+
     @abstractmethod
-    def prepare_page_index(self, index: BusPageIndex) -> Iterator[bool]: ...
+    def _prepare_index(self, index: BusPageIndex, source: OpenedWireSnapshot) -> None: ...
+
+    @abstractmethod
+    def repair_page_index(self, index: BusPageIndex) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -82,11 +92,11 @@ class WritableAccess(WireAccess):
 
         return BusPageIndex(path)
 
-    @contextmanager
-    def prepare_page_index(self, index):
-        ready = index.sync()
-        with index.snapshot():
-            yield ready
+    def _prepare_index(self, index, source):
+        index.prepare(source)
+
+    def repair_page_index(self, index):
+        index.invalidate()
 
 
 @dataclass(frozen=True)
@@ -116,10 +126,12 @@ class ArchivedAccess(WireAccess):
 
         return BusPageIndex(path, readonly=True)
 
-    @contextmanager
-    def prepare_page_index(self, index):
-        with index.snapshot():
-            yield index.current()
+    def _prepare_index(self, index, source):
+        # Published archive indexes are immutable; the parent checks coverage.
+        return None
+
+    def repair_page_index(self, index):
+        raise RelationViolationError("Published archive page index requires offline preparation")
 
 
 @dataclass

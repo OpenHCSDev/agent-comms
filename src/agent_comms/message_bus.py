@@ -141,10 +141,7 @@ class MessageBus:
                 frozenset(row.seq for row in unread),
                 frozenset(row.target for row in unread),
             )
-            page = MessagePageRequest.every(listed, after=min(listed.sequences) - 1).read_opened(
-                self.log, source.metadata, source.revision, source.stream,
-                source.public_records(),
-            )
+            page = MessagePageRequest.every(listed, after=min(listed.sequences) - 1).read_opened(source)
             return list(page.messages)
 
     async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment]) -> AsyncIterator[Message]:

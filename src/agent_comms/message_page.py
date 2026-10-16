@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import sys
 from abc import ABC, abstractmethod
 from collections import deque
@@ -11,7 +10,7 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
+from .bus_page_index import BusPageIndex
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayBasis, DMDisplayScope, MessageDisplayScope
@@ -219,39 +218,22 @@ class MessageReadRequest[T](ABC):
         return self.scope.includes(message)
 
     @abstractmethod
-    def collect(self, records: Iterator[tuple[Message, int]]) -> T: ...
+    def empty(self) -> T: ...
 
     @abstractmethod
-    def indexed(self, index, marker, source, stream) -> T: ...
+    def indexed(self, index, source: OpenedWireSnapshot) -> T: ...
 
     def read(self, log) -> T:
-        with log.page_snapshot() as (marker, _, source, stream, records):
-            return self.read_opened(log, marker, source, stream, records)
+        with log._opened_wire_snapshot(need_sequence=False) as source:
+            return self.read_opened(source)
 
-    def read_opened(self, log, marker, source, stream, records) -> T:
-        """Consume the supplied opened cut, never a later source stream."""
-        if stream is not None:
-            access = marker.access
-            try:
-                with (
-                    access.open_page_index(log.path) as index,
-                    access.prepare_page_index(index) as ready,
-                ):
-                    if ready:
-                        saved = BusPageSource.one(index.connection, singleton=1)
-                        if saved is not None and saved.covers(stream, source):
-                            return self.indexed(index, marker, source, stream)
-            except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
-                # A disposable index cannot replace the original wire cut.
-                pass
-            stream.seek(0)
-        return self.collect(records)
+    def read_opened(self, source: OpenedWireSnapshot) -> T:
+        if source.stream is None:
+            return self.empty()
+        return source.query_page_index(lambda index: self.indexed(index, source))
 
-    def indexed_records(self, index, marker, source, stream, rows):
-        for row in rows:
-            (message, size), = OpenedWireSnapshot.public_page_records(
-                *index.record(stream, row, max_bytes=source.size - row.offset), marker
-            )
+    def indexed_records(self, index, source, rows):
+        for message, size in source.indexed_records(index, rows, before_offset=source.boundary):
             if self.includes(message):
                 yield message, size
 
@@ -286,13 +268,16 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
     def collect(self, records: Iterator[tuple[Message, int]]) -> MessagePage:
         return self.traversal.collect(self, records)
 
-    def indexed(self, index, marker, source, stream) -> MessagePage:
+    def empty(self) -> MessagePage:
+        return self.collect(iter(()))
+
+    def indexed(self, index, source: OpenedWireSnapshot) -> MessagePage:
         window = PageWindow(self.limit, self.max_bytes)
         opposite = more = False
-        with closing(self.traversal.opposite_offsets(index, self.scope, source.size)) as rows:
-            opposite = any(True for _ in self.indexed_records(index, marker, source, stream, rows))
-        with closing(self.traversal.offsets(index, self.scope, source.size)) as rows:
-            for message, size in self.indexed_records(index, marker, source, stream, rows):
+        with closing(self.traversal.opposite_offsets(index, self.scope, source.boundary)) as rows:
+            opposite = any(True for _ in self.indexed_records(index, source, rows))
+        with closing(self.traversal.offsets(index, self.scope, source.boundary)) as rows:
+            for message, size in self.indexed_records(index, source, rows):
                 if window.full_with(size):
                     more = True
                     break
@@ -311,15 +296,15 @@ class UnreadBeforeRequest(MessageReadRequest[bool]):
     def includes(self, message: Message | BusPageRow) -> bool:
         return self.scope.unread_before(message, self.before, self.seen)
 
-    def collect(self, records: Iterator[tuple[Message, int]]) -> bool:
-        return any(self.includes(message) for message, _ in records)
+    def empty(self) -> bool:
+        return False
 
-    def indexed(self, index, marker, source, stream) -> bool:
+    def indexed(self, index, source: OpenedWireSnapshot) -> bool:
         with closing(self.scope.offsets(
-            index, lower=None, upper=self.before, descending=True, before_offset=source.size
+            index, lower=None, upper=self.before, descending=True, before_offset=source.boundary
         )) as rows:
             candidates = (row for row in rows if self.includes(row))
-            return any(True for _ in self.indexed_records(index, marker, source, stream, candidates))
+            return any(True for _ in self.indexed_records(index, source, candidates))
 
 
 class ConversationMessagePageRequest(MessagePageRequest):
