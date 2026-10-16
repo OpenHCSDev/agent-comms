@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -13,6 +12,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from .field_codec import FieldCodec
+from .child_process import Platform
 from .pi_vocabulary import HighThinkingLevel, ThinkingLevel
 
 
@@ -37,12 +37,6 @@ class NativeThreadDefaults:
         """Bind the launcher to this exact installed interpreter, not a moving link."""
         return str(Path(sys.executable).with_name("pi-comms-native").resolve())
 
-    @staticmethod
-    def descriptor_seals() -> int:
-        import fcntl
-
-        return fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL
-
     def __post_init__(self) -> None:
         if not isinstance(self.binary, str) or not self.binary:
             raise ValueError("A native binary is required")
@@ -59,13 +53,7 @@ class NativeThreadDefaults:
     @contextmanager
     def inherited(self) -> Iterator[tuple[tuple[str, ...], tuple[int, ...]]]:
         """Lend the existing process launcher an immutable private descriptor."""
-        import fcntl
-
-        descriptor = os.memfd_create("native-settings", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(self.to_json().encode("utf-8"))
-            stream.flush()
-            fcntl.fcntl(descriptor, fcntl.F_ADD_SEALS, self.descriptor_seals())
+        with Platform.current().inherited_payload(self.to_json().encode("utf-8")) as descriptor:
             yield (self.descriptor_flag, str(descriptor)), (descriptor,)
 
     @classmethod
@@ -75,13 +63,7 @@ class NativeThreadDefaults:
 
     @classmethod
     def from_descriptor(cls, descriptor: int) -> NativeThreadDefaults:
-        import fcntl
-
-        if fcntl.fcntl(descriptor, fcntl.F_GET_SEALS) != cls.descriptor_seals():
-            raise ValueError("Native launch settings are not sealed")
-        encoded = os.pread(descriptor, os.fstat(descriptor).st_size, 0)
-        os.set_inheritable(descriptor, False)
-        return cls.from_json(encoded)
+        return cls.from_json(Platform.current().read_inherited_payload(descriptor))
 
     def to_json(self) -> str:
         return json.dumps(FieldCodec.encode(self))

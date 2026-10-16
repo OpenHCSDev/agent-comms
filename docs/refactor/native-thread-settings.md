@@ -50,7 +50,12 @@ Platform.launch mechanism. NativeThreadDefaults lends a sealed anonymous memory
 descriptor encoded by FieldCodec. Only the descriptor number is in the managed
 worker command; arbitrary argument values must not become newly public argv.
 Parent closes its handle after launch. The owner keeps its inherited handle,
-marked close-on-exec after decoding, for its lifetime. There is no persistent
+marked close-on-exec after decoding, for its lifetime. Platform owns creation,
+validation and reading: Linux uses libc memfd plus kernel seals; POSIX closes all
+writers and unlinks a private read-only payload before passing its descriptor.
+POSIX temporary resources belong to Platform under
+`~/.cache/agent-scratch/agent-comms-launch/payload-*` and its context removes each
+run directory. Linux uses no filesystem payload. There is no persistent
 configuration file, second store, global configuration cache or env override.
 
 The public CLI accepts an explicitly supplied settings value through the same
@@ -64,8 +69,9 @@ takes the typed value, not an environment mapping. Both worker entrypoints now
 share parsing, accepting their own exact pre-registered process identity while
 refusing another live owner.
 
-The descriptor path requires Linux memfd support. Old env-only workers refuse
-capture; there is no legacy reader or guessed value. The existing explicit
+Retained `/proc` capture remains Linux-specific, as before this change. The
+private descriptor transport preserves the existing POSIX platform family. Old
+env-only workers refuse capture; there is no legacy reader or guessed value. The existing explicit
 old-source projection/stopped carry therefore needs review before default fleet
 installation. Change-report owns that independent producer-boundary adjustment
 or a precise required retirement; core-goal-retry retains this implementation
@@ -91,6 +97,15 @@ static constructor census has zero missing typed compositions. The exact request
 `git diff origin/main -- src tools | rg '^\\+.*(\\| None|NativeThreadDefaults\\(\\))'`
 check has no output.
 
-Focused checks, receiving, private wheel installation and fresh native worker start
-remain unfinished. No merge, default installation,
+The private wheel was built and installed with unchanged dependencies from the
+then-current physical runtime. Imports and the public typed codec roundtrip work.
+The first actual CLI worker start failed before ParentedProcess.launch: portable
+Python omits os.memfd_create, its flags and fcntl seal constants. Its fresh root
+`/home/ts/wt/native-settings-start-c6b801c3` and receipt are preserved, with zero
+submitted inputs and no live owner. Platform now owns that OS operation, using
+Linux libc/kernel ABI declarations rather than assuming optional Python exports.
+A new isolated phase will confirm the repair; the failed root is not replayed.
+
+Focused checks, receiving and successful fresh native worker start remain
+unfinished. No merge, default installation,
 provider-answer or physical UI acceptance is claimed.
