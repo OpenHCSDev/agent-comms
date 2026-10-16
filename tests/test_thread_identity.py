@@ -12,7 +12,8 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.read_basis import Conversation
 from agent_comms.registration import Registration
-from agent_comms.thread_identity import AdmissionIdentity, GenerationCounter, ThreadIncarnation, TurnIdentity
+from agent_comms.thread_identity import AdmissionIdentity, GenerationCounter, TurnIdentity
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_status import IdleThreadStatus
 from agent_comms.threads import Thread
 
@@ -134,7 +135,7 @@ def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
 
 
 def test_identity_codec_and_counter_domain_are_not_parallel_registries():
-    identity = TurnIdentity(ThreadIncarnation("owner", 1.0), 3)
+    identity = TurnIdentity(RecordedThreadIncarnation("owner", 1.0), 3)
     assert FieldCodec.decode(TurnIdentity, FieldCodec.encode(identity)) == identity
     counter = GenerationCounter()
     assert counter.advance("old") == 1

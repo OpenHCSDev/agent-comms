@@ -16,6 +16,7 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms import cohort_foreground, coordinated_runtime
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
@@ -24,7 +25,6 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_request,
 )
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.cohort_schema import install_private_cohort_schema
@@ -96,7 +96,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             install_prompt_binding_schema(store)
             for name in ("alpha", "beta"):
                 store.participants.register(
-                    stable_thread_lookup(comms.registry.require(name).created_at),
+                    RecordedThreadIncarnation("fixture", comms.registry.require(name).created_at).lookup,
                     name,
                     name,
                     committed=True,
@@ -129,12 +129,12 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         if prior_seq:
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 await _accept_visible_deliveries(
-                    bus, root_id, store.session.path, stable_thread_lookup(51003.0), 0, owner_name="beta"
+                    bus, root_id, store.session.path, RecordedThreadIncarnation("fixture", 51003.0).lookup, 0, owner_name="beta"
                 )
         message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
         with Coordination(str(root / "coordination.sqlite3")) as store:
             await _accept_visible_deliveries(
-                bus, root_id, store.session.path, stable_thread_lookup(51003.0), prior_seq, owner_name="beta"
+                bus, root_id, store.session.path, RecordedThreadIncarnation("fixture", 51003.0).lookup, prior_seq, owner_name="beta"
             )
         request = SelectedWriteRequest(
             message.seq, message.message_id, str(resource), "after selected\n"
@@ -289,7 +289,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             install_native_runtime_schema(store)
             install_prompt_binding_schema(store)
             store.participants.register(
-                stable_thread_lookup(61002.0), "alpha", "alpha", committed=True
+                RecordedThreadIncarnation("fixture", 61002.0).lookup, "alpha", "alpha", committed=True
             )
         env = dict(os.environ)
         source_root = Path(__file__).resolve().parents[1]
@@ -327,7 +327,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             )
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 store.participants.register(
-                    stable_thread_lookup(61003.0), "beta", "beta", committed=True
+                    RecordedThreadIncarnation("fixture", 61003.0).lookup, "beta", "beta", committed=True
                 )
             (base / "registered").touch()
 
@@ -362,7 +362,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 await _accept_visible_deliveries(
-                    bus, root_id, store.session.path, stable_thread_lookup(61003.0), 0, owner_name="beta"
+                    bus, root_id, store.session.path, RecordedThreadIncarnation("fixture", 61003.0).lookup, 0, owner_name="beta"
                 )
             options = encode_request(
                 SelectedWriteRequest(
@@ -390,7 +390,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                     ).fetchone()[0]
                     == 1
                 )
-                assert sealed_cohort_assignments(store, stable_thread_lookup(61002.0)) == ()
+                assert sealed_cohort_assignments(store, RecordedThreadIncarnation("fixture", 61002.0).lookup) == ()
         finally:
             if attached is not None:
                 await attached.shutdown()

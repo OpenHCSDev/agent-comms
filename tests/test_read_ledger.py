@@ -7,7 +7,10 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
+from agent_comms.read_ledger import NoReadMarkerNotice, ReadDocument, RecordedReadMarkerNotice
+from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 def prepared(root):
@@ -20,11 +23,9 @@ def prepared(root):
 def test_conversation_persisted_pairs_decode_once_without_an_encode_round_trip():
     from unittest.mock import patch
 
-    from agent_comms.field_codec import FieldCodec
     from agent_comms.read_basis import Conversation
-    from agent_comms.thread_identity import ThreadIncarnation
 
-    conversation = Conversation(participants=(ThreadIncarnation("alice", 1.0),))
+    conversation = Conversation(participants=(RecordedThreadIncarnation("alice", 1.0),))
     encoded = conversation.to_wire()
     assert encoded == {"target": "", "participants": [["alice", 1.0]]}
     with patch.object(FieldCodec, "encode", side_effect=AssertionError("Already decoded")):
@@ -50,17 +51,36 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     comms = Comms(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    notice = "Read positions were reset; reopen conversations to review them."
+    notice = RecordedReadMarkerNotice("Read positions were reset; reopen conversations to review them.")
     comms.bus.reads.replace(replace(comms.bus.reads.read(), notice=notice))
-    assert comms.bus.reads.take_notice(None) is None
+    assert comms.bus.reads.take_notice(NoReadMarkerNotice()) == NoReadMarkerNotice()
     assert comms.bus.reads.read().notice == notice
 
     first = comms.views.presentation.roster(viewer)
     assert first.read_marker_notice == notice
-    assert comms.bus.reads.read().notice is None
+    assert comms.bus.reads.read().notice == NoReadMarkerNotice()
 
     second = Comms(tmp_path).views.presentation.roster(viewer)
-    assert second.read_marker_notice is None
+    assert second.read_marker_notice == NoReadMarkerNotice()
+
+
+@pytest.mark.parametrize('raw,expected', [
+    (None, NoReadMarkerNotice()),
+    ('Read positions changed', RecordedReadMarkerNotice('Read positions changed')),
+])
+def test_read_notice_is_chosen_once_at_the_native_boundary(raw, expected):
+    document = FieldCodec.decode(ReadDocument, {'notice': raw})
+    assert document.notice == expected
+    assert FieldCodec.decode(ReadDocument, FieldCodec.encode(document)) == document
+    assert document.notice.messages_since(document.notice) == ()
+    with pytest.raises(ValueError, match='declared member'):
+        FieldCodec.decode(NoReadMarkerNotice, 'This is a notice')
+    with pytest.raises(ValueError, match='declared member'):
+        FieldCodec.decode(RecordedReadMarkerNotice, None)
+    with pytest.raises(ValueError, match='requires text'):
+        FieldCodec.decode(ReadDocument, {'notice': ''})
+    with pytest.raises(ValueError, match='requires text'):
+        RecordedReadMarkerNotice('')
 
 
 def test_bounded_page_marks_only_shown_messages(tmp_path):

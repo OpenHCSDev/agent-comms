@@ -8,19 +8,23 @@ represent that fact. Delivery cursors remain a separate executor contract.
 from __future__ import annotations
 
 import json
+from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, WireValue
 from .locked_store import LockedStore
 from .private_path import FileIdentity, FileRevision
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
 from .sealed import Sealed
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
+    from .bus_publication import CommittedDelivery
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
@@ -28,12 +32,89 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
+class ReadMarkerNotice(DeclaredFamily, WireValue, affix="ReadMarkerNotice"):
+    """The ledger's native text/null value, decoded once as a notice state."""
+
+    accepts_null = True
+    external_json_shape = True
+
+    @classmethod
+    def from_wire(cls, raw):
+        match raw:
+            case None:
+                notice = NoReadMarkerNotice()
+            case str():
+                notice = RecordedReadMarkerNotice(raw)
+            case _:
+                raise ValueError("A read-marker notice requires text or null")
+        if not isinstance(notice, cls):
+            raise ValueError("Read-marker notice differs from its declared member")
+        return notice
+
+    @classmethod
+    def schema(cls):
+        return {'anyOf': [member.schema() for member in cls.members_with(cls)]}
+
+    @property
+    @abstractmethod
+    def messages(self) -> tuple[str, ...]: ...
+
+    def messages_since(self, previous: ReadMarkerNotice) -> tuple[str, ...]:
+        return () if self == previous else self.messages
+
+    @abstractmethod
+    def take_from(self, document: ReadDocument) -> tuple[ReadDocument, ReadMarkerNotice]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NoReadMarkerNotice(ReadMarkerNotice):
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(type(None))
+
+    def to_wire(self):
+        return None
+
+    @property
+    def messages(self) -> tuple[str, ...]:
+        return ()
+
+    def take_from(self, document):
+        return document, self
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedReadMarkerNotice(ReadMarkerNotice):
+    value: str
+    minimum_length: ClassVar[int] = 1
+
+    @classmethod
+    def schema(cls):
+        return {**FieldCodec.value_schema(str), 'minLength': cls.minimum_length}
+
+    def __post_init__(self) -> None:
+        if len(self.value) < self.minimum_length:
+            raise ValueError("A recorded read-marker notice requires text")
+
+    def to_wire(self):
+        return self.value
+
+    @property
+    def messages(self) -> tuple[str, ...]:
+        return (self.value,)
+
+    def take_from(self, document):
+        if document.notice != self:
+            return document, NoReadMarkerNotice()
+        return replace(document, notice=NoReadMarkerNotice()), self
+
+
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
     messages: dict[str, tuple[int, ...]] = field(default_factory=dict)
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[str, int] = field(default_factory=dict)
-    notice: str | None = None
+    notice: ReadMarkerNotice = NoReadMarkerNotice()
 
     def seen_sequences(
         self, viewer: str, snapshot: RegistryProvenance, source: FileIdentity | None
@@ -139,16 +220,14 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
         self.update(advance)
 
-    def take_notice(self, shown: str | None) -> str | None:
-        """Clear the stored notice once it has been shown; return it when this call cleared it."""
-        taken = None
+    def take_notice(self, shown: ReadMarkerNotice) -> ReadMarkerNotice:
+        """Clear exactly the shown notice, returning the state this call cleared."""
+        taken: ReadMarkerNotice = NoReadMarkerNotice()
 
         def take(document: ReadDocument) -> ReadDocument:
             nonlocal taken
-            if shown is None or document.notice != shown:
-                return document
-            taken = shown
-            return replace(document, notice=None)
+            updated, taken = shown.take_from(document)
+            return updated
 
         self.update(take)
         return taken
@@ -160,19 +239,21 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         revision = FileRevision.capture(self.path.with_name("bus.jsonl"))
         return document.seen_sequences(viewer, snapshot, revision.identity if revision else None)
 
-    def displayed_recipient(self, message, recipient, snapshot, *, document=None):
+    def displayed_recipient(
+        self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None
+    ):
         """Return recorded human display evidence for this exact frozen recipient.
 
         Processing, assignment acceptance and a reply cannot grant this fact.
         A reused name with a different creation identity cannot inherit it.
         """
-        return self._displayed_recipient(
-            message, recipient, snapshot,
-            (thread for thread in snapshot.threads.values() if self.human(thread.role)),
-            document=document,
+        return snapshot.recipient(recipient, original).read_effect(
+            self, original.message, snapshot, document=document
         )
 
-    def historical_displayed_recipient(self, message, recipient, snapshot, *, document=None):
+    def historical_displayed_recipient(
+        self, message, recipient, snapshot: RegistryProvenance, *, document=None
+    ):
         """Read this archive's human paint ledger, never an original CLI ACK.
 
         HistoryArchive does not copy the source's read ledger. Its new ledger
@@ -180,20 +261,15 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         viewer's incarnation. A same-name destination reader cannot attest a
         different frozen recipient or replace the recorded namespace.
         """
-        return self._displayed_recipient(
-            message, recipient, snapshot, snapshot.threads.values(), document=document
+        # Archive selection binds both the original name and birth. A live
+        # lookup index would conflate different names with the same birth.
+        return snapshot.historical_recipient(recipient).read_effect(
+            self, message, snapshot, document=document
         )
 
-    def _displayed_recipient(self, message, recipient, snapshot, threads, *, document):
-        from .bus_publication import stable_thread_lookup
-
-        for thread in threads:
-            if (
-                stable_thread_lookup(thread.created_at) == recipient.recipient_lookup
-                and snapshot.canonical_name(recipient.canonical_thread) == thread.name
-                and message.seq in self.seen_sequences(thread.name, snapshot, document=document)
-            ):
-                return (thread.incarnation,)
+    def _displayed_recipient(self, message, thread, snapshot, *, document):
+        if message.seq in self.seen_sequences(thread.name, snapshot, document=document):
+            return (thread.incarnation,)
         return ()
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
@@ -210,7 +286,7 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
         def retained_message(key: str) -> bool:
             name, created, _ = json.loads(key)
-            return ThreadIncarnation(name, created) not in viewers
+            return RecordedThreadIncarnation(name, created) not in viewers
 
         def retained_transcript(key: str) -> bool:
             name, source, _ = json.loads(key)

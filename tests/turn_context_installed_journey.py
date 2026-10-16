@@ -10,6 +10,7 @@ from pathlib import Path
 
 import agent_comms
 from stored_inputs import stored_inputs
+from agent_comms.goal_waits import NoGoalWait
 
 
 async def configured_terminal(owner, thread, output, receipt, marker):
@@ -55,7 +56,7 @@ async def configured_terminal(owner, thread, output, receipt, marker):
             response = await pending
         state = service.registry.require(thread.name).turn_state
         assert not state.busy and state.finished_turn_id == lease.turn_id
-        assert service.goals.goal_wait('terminal-waiter') is None
+        assert isinstance(service.goals.goal_wait('terminal-waiter'), NoGoalWait)
         assert service.registry.require('terminal-waiter').goal.state.active
         assert response.stop_reason == 'end_turn'
         assert any(marker in str(update) for update in subscriber.updates)

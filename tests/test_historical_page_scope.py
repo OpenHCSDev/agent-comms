@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.channel_targets import AllHistoryTargets
 from agent_comms.comms import Comms
 from agent_comms.historical_views import ChannelDisplayHistory, HistoryCursor
 from agent_comms.mentions import ThreadMention
@@ -111,7 +112,7 @@ def test_cold_and_warm_historical_pages_equal_full_scan(
     live, source, rows = history
     read = reader(live, kind)
     class SelectedScope(MessageDisplayScope):
-        index_targets = None
+        index_targets = AllHistoryTargets()
 
         def includes(self, message):
             return selected(kind, message)
@@ -179,7 +180,7 @@ def test_sparse_page_decodes_only_index_candidates_after_cold_validation(history
     narrowed_decodes = decoded
     decoded = 0
     with monkeypatch.context() as patch:
-        patch.setattr(ChannelDisplayScope, "index_targets", property(lambda _scope: None))
+        patch.setattr(ChannelDisplayScope, "index_targets", property(lambda _scope: AllHistoryTargets()))
         unfiltered = live.bus.history.page(view, limit=2)
     assert unfiltered == warm
     assert decoded == 141  # same predicate/page without the target prefilter

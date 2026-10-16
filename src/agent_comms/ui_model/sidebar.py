@@ -7,13 +7,14 @@ meaning (unread kinds, activity, labels) itself.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Container
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
-from agent_comms.presentation import CoordinationSnapshot, ThreadView
+from agent_comms.presentation import CoordinationSnapshot, ListingFilter, ThreadView
+from agent_comms.read_ledger import NoReadMarkerNotice, ReadMarkerNotice
 from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_presentation import ThreadPresentationStatus
@@ -55,13 +56,12 @@ class ThreadRowModel:
         return self.incarnation.name
 
     @classmethod
-    def of(cls, person: ThreadView, snapshot: CoordinationSnapshot | None) -> ThreadRowModel:
+    def of(cls, person: ThreadView, unread: UnreadPresentation) -> ThreadRowModel:
         presentation = person.presentation
         return cls(
             person.thread.incarnation, presentation.title, presentation.label, presentation.summary,
             presentation.status, person.thread.model,
-            (UnobservedUnread() if snapshot is None else
-             person.thread.execution.prepare_conversation(PersonUnread(person, snapshot))),
+            unread,
             person.status.active, person.thread.execution,
         )
 
@@ -78,29 +78,44 @@ class ChannelRowModel:
     order: type[ThreadSort]
 
     @classmethod
-    def of(cls, view, snapshot: CoordinationSnapshot, working: frozenset[str]) -> ChannelRowModel:
+    def of(cls, view, snapshot: CoordinationSnapshot, working: frozenset[str],
+           names: Container[str]) -> ChannelRowModel:
         channel = view.channel
         return cls(
             channel.name,
             f"{'* ' if channel.pinned else ''}{channel.name} {view.active_agents}/{view.registered_agents}",
             f"{view.active_agents} running or idle / {view.registered_agents} registered agents"
-            f" · tags: {', '.join(sorted(channel.tags)) or 'all'}",
+            f" · tags: {channel.tag_description}",
             UnreadPresentation.for_channel(snapshot, channel.name),
             any(name in working for name in view.members),
-            tuple(name for name in view.members if name in {person.thread.name for person in snapshot.threads}),
+            tuple(name for name in view.members if name in names),
             frozenset(view.pinned_members),
             channel.order,
         )
 
 
 class SidebarObservation(ABC):
-    snapshot: CoordinationSnapshot | None = None
+    channel_order: type[ChannelSort] = NameChannelSort
+
+    @property
+    def read_marker_notice(self) -> ReadMarkerNotice:
+        return NoReadMarkerNotice()
+
+    @property
+    def filters(self) -> ListingFilter:
+        self.unavailable()
 
     def require_snapshot(self) -> CoordinationSnapshot:
-        snapshot = self.snapshot
-        if snapshot is None:
-            self.unavailable()
-        return snapshot
+        self.unavailable()
+
+    def channel_unread(self, target: str) -> UnreadPresentation:
+        return UnobservedUnread()
+
+    def bus_unread(self, target: str) -> UnreadPresentation:
+        return UnobservedUnread()
+
+    def thread_row(self, person: ThreadView) -> ThreadRowModel:
+        return ThreadRowModel.of(person, UnobservedUnread())
 
     def unavailable(self) -> NoReturn:
         raise RuntimeError("Sidebar source has not been observed")
@@ -132,6 +147,31 @@ class FailedSidebar(SidebarObservation):
 class ObservedSidebar(SidebarObservation):
     snapshot: CoordinationSnapshot = field()
 
+    def require_snapshot(self) -> CoordinationSnapshot:
+        return self.snapshot
+
+    @property
+    def channel_order(self):
+        return self.snapshot.channel_order
+
+    @property
+    def read_marker_notice(self):
+        return self.snapshot.read_marker_notice
+
+    @property
+    def filters(self):
+        return self.snapshot.filters
+
+    def channel_unread(self, target):
+        return UnreadPresentation.for_channel(self.snapshot, target)
+
+    def bus_unread(self, target):
+        return UnreadPresentation.for_bus(self.snapshot, target)
+
+    def thread_row(self, person):
+        unread = person.thread.execution.prepare_conversation(PersonUnread(person, self.snapshot))
+        return ThreadRowModel.of(person, unread)
+
     def references_for(self, root):
         from ..display_references import ForeignReferences
         references = self.snapshot.references
@@ -153,34 +193,30 @@ class SidebarModel:
         self.threads: KeyedModel[str, ThreadRowModel] = KeyedModel(schedule)
         self.observation: SidebarObservation = WaitingSidebar()
 
-    @property
-    def snapshot(self) -> CoordinationSnapshot | None:
-        return self.observation.snapshot
-
     def references_for(self, root):
         return self.observation.references_for(root)
 
     @property
     def channel_order(self) -> type[ChannelSort]:
-        return self.snapshot.channel_order if self.snapshot is not None else NameChannelSort
+        return self.observation.channel_order
 
     @property
-    def read_marker_notice(self) -> str | None:
-        return self.snapshot.read_marker_notice if self.snapshot is not None else None
+    def read_marker_notice(self):
+        return self.observation.read_marker_notice
 
     @property
-    def filters(self) -> tuple[bool, bool] | None:
-        """The stopped/archived filters the published rows were read with."""
-        if self.snapshot is None:
-            return None
-        return self.snapshot.show_stopped, self.snapshot.show_archived
+    def filters(self) -> ListingFilter:
+        """The stopped/archived selection that produced the published rows."""
+        return self.observation.filters
 
     @staticmethod
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
-        threads = {person.thread.name: ThreadRowModel.of(person, snapshot) for person in snapshot.threads}
+        observation = ObservedSidebar(snapshot)
+        threads = {person.thread.name: observation.thread_row(person) for person in snapshot.threads}
+        names = threads.keys()
         working = frozenset(member for name, row in threads.items()
                             for member in row.status.working_members(name))
-        channels = {view.channel.name: ChannelRowModel.of(view, snapshot, working)
+        channels = {view.channel.name: ChannelRowModel.of(view, snapshot, working, names)
                     for view in snapshot.channels}
         return channels, threads
 

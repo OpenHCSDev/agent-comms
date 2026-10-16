@@ -296,11 +296,15 @@ class TurnRunner:
 
     def peer_progress(self, thread_name: str, sent_seq: int) -> bool:
         """True when a peer is active on, or has read, our message."""
-        for name, activity in self.comms.agents.all_activity().items():
-            if name != thread_name and activity.state.busy:
+        snapshot = self.comms.registry.snapshot()
+        running = (
+            thread for name, thread in snapshot.threads.items()
+            if name != thread_name and snapshot.statuses[name].active
+        )
+        for activity in self.comms.agents.all_activity(running, snapshot=snapshot).values():
+            if activity.state.busy:
                 return True
         if sent_seq:
-            snapshot = self.comms.registry.snapshot()
             document = self.comms.bus.reads.read()
             for name in snapshot.threads:
                 if name != thread_name and sent_seq in self.comms.bus.reads.seen_sequences(

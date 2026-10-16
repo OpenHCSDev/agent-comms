@@ -232,7 +232,7 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     assert all(row["history"]["source"] == str(old.root) for row in historical)
     assert all(row["history"]["wire_root_id"] == source.wire_root_id for row in historical)
     assert all(
-        row["history"]["sender_created_at"] == old.registry.require("alice").created_at
+        row["history"]["sender_incarnation"] == old.registry.require("alice").incarnation.to_wire()
         for row in historical
     )
     assert (live.root / "bus.jsonl").read_bytes() == live_bus

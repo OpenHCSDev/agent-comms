@@ -22,6 +22,7 @@ from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
+from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 @pytest.fixture
@@ -49,14 +50,14 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
         decode_updates,
         encode_updates,
     )
-    from agent_comms.thread_identity import AdmissionIdentity, ThreadIncarnation
+    from agent_comms.thread_identity import AdmissionIdentity
 
     fact = CursorAdvancedUpdate(
         CursorEnvelope(
             CursorScope(
                 "canonical",
                 "a" * 32,
-                AdmissionIdentity(ThreadIncarnation("canonical", 1000.0), 3),
+                AdmissionIdentity(RecordedThreadIncarnation("canonical", 1000.0), 3),
                 1234,
             ),
             7,

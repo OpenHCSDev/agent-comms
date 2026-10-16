@@ -99,10 +99,10 @@ class OwnedSendAdmission:
         ).require_valid()
 
     def _require_context(
-        self, source: TurnInputSource, current: Thread, wait: GoalWait | None,
+        self, source: TurnInputSource, current: Thread, wait: GoalWait,
     ) -> None:
         OrdinaryContextCheck(
-            source=source, goal=current.goal, wait=wait, comms=self.comms
+            source=source, owner=current, goal=current.goal, wait=wait, comms=self.comms
         ).require_valid()
         if not source.bypasses_goal_permit and self.goal_permit is not None:
             OrdinaryGoalGrantCheck(permit=self.goal_permit, store=self.goal_store).require_valid()
@@ -123,13 +123,13 @@ class OwnedSendAdmission:
         snapshot = self.comms.registry.snapshot()
         canonical = snapshot.canonical_name(self.thread.name)
         current = snapshot.threads.get(canonical)
-        wait = self.comms.goals.goal_wait(canonical) if current is not None else None
         source = self.source(public_id)
         try:
             self._check_owner(current, snapshot, canonical, source, sent_text)
         except ReservationViolationError as error:
             yield self._refusal(error.rule, False)
             return
+        wait = self.comms.goals.goal_wait(canonical)
         defer = source.defers_for_goal(self.thread.goal, current.goal)
         try:
             self._require_context(source, current, wait)

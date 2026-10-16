@@ -1,5 +1,6 @@
 """A new history declaration crosses real current and retained-source boundaries."""
 
+from agent_comms.channel_targets import NamedHistoryTargets
 from agent_comms.comms import Comms
 from agent_comms.historical_views import HistoryView
 from agent_comms.message_page import MessagePageRequest
@@ -9,7 +10,7 @@ from agent_comms.threads import Thread
 
 class ReviewHistory(HistoryView):
     def capture(self, snapshot):
-        return ChannelDisplayScope("#review", frozenset({"#review"}))
+        return ChannelDisplayScope("#review", NamedHistoryTargets(frozenset({"#review"})))
 
     def live_page(self, presentation, **paging):
         return MessagePageRequest.capture(

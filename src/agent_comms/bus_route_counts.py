@@ -29,7 +29,7 @@ from .store_files import _store_lock
 from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, TypedRow, TypedTable
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
+    from .registry_provenance import RegistryProvenance
     from .wire_log import OpenedWireSnapshot
 
 
@@ -452,7 +452,7 @@ class OpenedRouteCounts(BusRouteCounts):
 
     def __init__(
         self, bus_path: Path, source: OpenedWireSnapshot,
-        registry: RegistrySnapshot, deliveries: Mapping[str, DeliveryScope],
+        registry: RegistryProvenance, deliveries: Mapping[str, DeliveryScope],
     ):
         super().__init__(bus_path)
         self.source = source
@@ -582,7 +582,7 @@ class OpenedRouteCounts(BusRouteCounts):
             ))
         return {
             "targets": json.dumps({
-                actor: sorted(self.deliveries[actor].index_targets) for actor in actors
+                actor: sorted(self.deliveries[actor].index_targets.names) for actor in actors
             }),
             "senders": json.dumps(senders), "unrecorded": json.dumps(unrecorded),
             "through": self.source.through,

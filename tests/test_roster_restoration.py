@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.display_order import LastActivityThreadSort
@@ -131,7 +132,6 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
 def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     tmp_path, repair_existing
 ):
-    from agent_comms.bus_publication import stable_thread_lookup
     from agent_comms.cohort_schema import install_private_cohort_schema
     from agent_comms.coordination_cohort import accept_delivery_cohort
     from agent_comms.coordinator import Coordination
@@ -156,7 +156,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         live_before = store.participants.register(
-            stable_thread_lookup(live.created_at), live.name, live.name, committed=True
+            RecordedThreadIncarnation("fixture", live.created_at).lookup, live.name, live.name, committed=True
         ).value
         if repair_existing:
             current.registry.restore_stopped(source, (missing.name,))
@@ -173,9 +173,9 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         assert snapshot.statuses[missing.name] == StoppedThreadStatus()
         assert snapshot.threads[missing.name].pid == 0
         assert snapshot.threads[live.name] == live
-        assert store.participants.get(stable_thread_lookup(live.created_at)) == live_before
+        assert store.participants.get(RecordedThreadIncarnation("fixture", live.created_at).lookup) == live_before
         assert (
-            store.participants.get(stable_thread_lookup(missing.created_at)).pointer.execution_id is None
+            store.participants.get(RecordedThreadIncarnation("fixture", missing.created_at).lookup).pointer.execution_id is None
         )
         if bus_before is not None:
             assert current.bus.log.path.read_bytes() == bus_before

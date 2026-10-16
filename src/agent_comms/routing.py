@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .channel_targets import BuiltinChannel, is_channel_target
+from .channel_targets import AllHistoryTargets, BuiltinChannel, NamedHistoryTargets, is_channel_target
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .messages import Message
@@ -14,7 +14,7 @@ from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
-    from .registry_document import RegistrySnapshot
+    from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
 
 
@@ -173,23 +173,23 @@ class DeliveryScope(MessageDisplayScope):
 
     @classmethod
     def capture(
-        cls, name: str, snapshot: RegistrySnapshot, catalog: CatalogDocument
+        cls, name: str, snapshot: RegistryProvenance, catalog: CatalogDocument
     ) -> DeliveryScope:
         thread = snapshot.require(name)
         return cls(thread.name, snapshot.aliases, catalog.targets_for(thread.tags))
 
     @property
-    def index_targets(self) -> frozenset[str]:
-        return self.channels | frozenset(
+    def index_targets(self) -> NamedHistoryTargets:
+        return NamedHistoryTargets(self.channels | frozenset(
             name for name in (self.actor, *self.aliases) if self.canonical(name) == self.actor
-        )
+        ))
 
     def includes(self, message: Message) -> bool:
         return self.delivers(message.sender, message.target)
 
     def selection(self, target, snapshot, catalog) -> MessageDisplayScope:
         if target is None:
-            return ChannelDisplayScope(BuiltinChannel.ANY.value, None)
+            return ChannelDisplayScope(BuiltinChannel.ANY.value, AllHistoryTargets())
         if is_channel_target(target):
             return ChannelDisplayScope(target, catalog.history_targets(target))
         peer = snapshot.canonical_name(target)
@@ -216,16 +216,14 @@ class DeliveryScope(MessageDisplayScope):
         The unstamped format matches before a birth is required. An index must
         probe for an assigned stamp; admission must refuse that unproven stamp.
         """
-        from .bus_publication import stable_thread_lookup
-
         yield ""
         if source.has_recorded_birth:
-            yield stable_thread_lookup(source.created_at)
+            yield source.lookup
         else:
             on_unrecorded()
 
     def minimum_timestamp(
-        self, sender: str, target: str, sender_lookup: str, snapshot: RegistrySnapshot
+        self, sender: str, target: str, sender_lookup: str, snapshot: RegistryProvenance
     ) -> float | None:
         """Require current identities while preserving aliases of one incarnation."""
 
@@ -240,7 +238,7 @@ class DeliveryScope(MessageDisplayScope):
         return max(source.created_at, snapshot.threads[self.actor].created_at)
 
     def unread(
-        self, delivery: DeliveryMessage, snapshot: RegistrySnapshot, seen: frozenset[int]
+        self, delivery: DeliveryMessage, snapshot: RegistryProvenance, seen: frozenset[int]
     ) -> bool:
         message = delivery.message
         if message.seq in seen:

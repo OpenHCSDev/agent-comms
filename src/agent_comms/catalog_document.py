@@ -6,10 +6,10 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
-from .channel_targets import BuiltinChannel, Tag
+from .channel_targets import BuiltinChannel, HistoryTargets, Tag
 from .channels import Channel, SavedView, ViewPredicate
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
-from .thread_provenance import ThreadProvenance
+from .thread_identity import ThreadProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +101,7 @@ class CatalogDocument:
             f"#{tag}" for tag in tags
         )
 
-    def history_targets(self, target: str) -> frozenset[str] | None:
+    def history_targets(self, target: str) -> HistoryTargets:
         return self.resolve(target).history_targets
 
     def is_view_target(self, target: str) -> bool:

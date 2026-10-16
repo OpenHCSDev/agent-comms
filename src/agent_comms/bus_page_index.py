@@ -14,6 +14,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
+from .channel_targets import HistoryTargets
 from .coordination_database import CoordinationStore
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
@@ -224,7 +225,7 @@ class BusPageIndex:
         lower: int | None,
         upper: int | None,
         descending: bool,
-        targets: frozenset[str] | None,
+        targets: HistoryTargets,
         before_offset: int | None = None,
     ) -> Generator[BusPageRow, None, None]:
         clauses: list[str] = []
@@ -238,11 +239,7 @@ class BusPageIndex:
         if before_offset is not None:
             clauses.append("offset < ?")
             params.append(before_offset)
-        if targets is not None:
-            if not targets:
-                return
-            clauses.append("target IN (" + ",".join("?" for _ in targets) + ")")
-            params.extend(sorted(targets))
+        targets.constrain_offsets(clauses, params)
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         direction = "DESC" if descending else "ASC"
         query = (

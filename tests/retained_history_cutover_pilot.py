@@ -54,7 +54,8 @@ def test_current_saved_history_has_no_live_admission_or_delivery(tmp_path):
     reference_actual_history(comms.root, Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
     source=max(comms.bus.history.sources(),key=lambda source:source.size)
     live_before=(comms.root/'bus.jsonl').read_bytes()
-    historical=comms.bus.history.page(ChannelHistory('#comms',frozenset({'#comms'})))
+    from agent_comms.channel_targets import NamedHistoryTargets
+    historical=comms.bus.history.page(ChannelHistory('#comms',NamedHistoryTargets(frozenset({'#comms'}))))
     assert historical.messages,'Real supplied history must contain #comms messages'
     assert all(not message.starts_turn for message in historical.messages)
     assert all(message.source==source for message in historical.messages)

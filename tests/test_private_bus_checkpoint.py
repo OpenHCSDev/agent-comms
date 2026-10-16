@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
@@ -127,8 +127,8 @@ def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
     one = comms.messaging.send_initial_cohort("sender", "#team", "@Alice selected; Bob no-wake")
     two = comms.messaging.send_initial_cohort("sender", "outsider", "not their audience")
     three = comms.messaging.send_initial_cohort("sender", "#team", "@Bob selected; Alice no-wake")
-    alice = stable_thread_lookup(17002.0)
-    bob = stable_thread_lookup(17003.0)
+    alice = RecordedThreadIncarnation("fixture", 17002.0).lookup
+    bob = RecordedThreadIncarnation("fixture", 17003.0).lookup
     witness, rows, more = _page(comms, alice, limit=1)
     assert (witness.root_id, witness.through_seq, [r.message.seq for r in rows], more) == (
         root_id,
@@ -138,7 +138,7 @@ def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
     )
     assert [r.message.seq for r in _page(comms, alice, after=one.seq)[1]] == [three.seq]
     assert [r.message.seq for r in _page(comms, bob)[1]] == [one.seq, three.seq]
-    assert _page(comms, stable_thread_lookup(17004.0))[1][0].message.seq == two.seq
+    assert _page(comms, RecordedThreadIncarnation("fixture", 17004.0).lookup)[1][0].message.seq == two.seq
     assert witness.offset == comms.bus.log.path.stat().st_size
     assert witness.latest_source_seq == three.seq
     assert witness.offset > 0
@@ -186,7 +186,7 @@ def test_crash_after_bus_fsync_before_checkpoint_cold_recovers(tmp_path: Path, m
 
     comms, _ = _root(tmp_path)
     first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
-    saved = _page(comms, stable_thread_lookup(17002.0))[0]
+    saved = _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)[0]
     with monkeypatch.context() as patch:
         patch.setattr(
             checkpoint,
@@ -197,7 +197,7 @@ def test_crash_after_bus_fsync_before_checkpoint_cold_recovers(tmp_path: Path, m
             comms.messaging.send_initial_cohort("sender", "Alice", "second")
     bus = comms.bus.log.path
     assert bus.stat().st_size > saved.offset
-    witness, rows, more = _page(comms, stable_thread_lookup(17002.0))
+    witness, rows, more = _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
     assert [row.message.seq for row in rows] == [first.seq, first.seq + 1]
     assert witness.offset == bus.stat().st_size and not more
     assert witness.digest != saved.digest
@@ -270,7 +270,7 @@ def test_early_prefix_edit_plus_complete_lagged_suffix_denied(tmp_path: Path, mo
         stream.flush()
         os.fsync(stream.fileno())
     with pytest.raises(RelationViolationError, match="certified prefix changed"):
-        _page(comms, stable_thread_lookup(17002.0))
+        _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
     assert bus.read_bytes().endswith(b"\n")
 
 
@@ -328,7 +328,7 @@ def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> N
             else:
                 db.execute("UPDATE prefix_certificate SET tail=?", ("0" * 64,))
     with pytest.raises(RelationViolationError):
-        _page(comms, stable_thread_lookup(17002.0))
+        _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
     if fault not in {"schema", "ahead", "root", "tail", "corrupt", "missing"}:
         assert db_path.read_bytes() == original
 
@@ -342,13 +342,13 @@ def test_unknown_public_writer_cannot_make_initial_absent_audience(tmp_path: Pat
         stream.flush()
         os.fsync(stream.fileno())
     with pytest.raises(RelationViolationError, match="Unattested public initial"):
-        _page(comms, stable_thread_lookup(17002.0))
+        _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
 
 
 def test_deleted_sql_index_cannot_certify_absent_selected_source(tmp_path: Path) -> None:
     comms, _ = _root(tmp_path)
     source = comms.messaging.send_initial_cohort("sender", "Alice", "mandatory selected")
-    lookup = stable_thread_lookup(17002.0)
+    lookup = RecordedThreadIncarnation("fixture", 17002.0).lookup
     assert [item.message.seq for item in _page(comms, lookup)[1]] == [source.seq]
     with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
         db.execute("DELETE FROM addressed WHERE lookup=? AND seq=?", (lookup, source.seq))
@@ -374,7 +374,7 @@ def test_sql_index_change_plus_complete_bus_suffix_still_denies(
     with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
         db.execute("DELETE FROM addressed")
     with pytest.raises(RelationViolationError, match="index seal changed"):
-        _page(comms, stable_thread_lookup(17002.0))
+        _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
 
 
 def test_sql_index_change_during_page_is_not_exhaustiveness(tmp_path: Path, monkeypatch) -> None:
@@ -398,7 +398,7 @@ def test_sql_index_change_during_page_is_not_exhaustiveness(tmp_path: Path, monk
     # Mutate after original row resolution, without assuming a second connection.
     monkeypatch.setattr(checkpoint.DeliverySources, "read", mutate_after_original_read)
     with pytest.raises(RelationViolationError, match="index seal changed"):
-        _page(comms, stable_thread_lookup(17002.0))
+        _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
 
 
 @pytest.mark.parametrize("phase", ["before_db_commit", "after_db_commit"])
@@ -424,7 +424,7 @@ def test_pending_marker_recovers_only_after_canonical_cold_parse(
     with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
         comms.messaging.send_initial_cohort("sender", "Alice", "second")
     monkeypatch.undo()
-    witness, rows, more = _page(comms, stable_thread_lookup(17002.0))
+    witness, rows, more = _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
     assert [item.message.seq for item in rows] == [1, 2]
     assert witness.through_seq == 2 and not more
     assert isinstance(comms.bus.log._private_marker_unlocked().seal, checkpoint.FinalSeal)
@@ -445,7 +445,7 @@ def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, m
     with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
         db.execute("DROP TABLE addressed")
     with pytest.raises(RelationViolationError, match="schema is unavailable"):
-        _page(comms, stable_thread_lookup(17002.0))
+        _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
 
 
 def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch) -> None:
@@ -457,13 +457,13 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
             Message("sender", "#team", f"@Alice item-{index} " + "x" * 7900, InfoKind)
         )
     assert comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
-    lookup = stable_thread_lookup(17002.0)
+    lookup = RecordedThreadIncarnation("fixture", 17002.0).lookup
     warm_start = time.monotonic()
     witness, page, more = _page(comms, lookup, after=900, limit=100)
     warm_ms = (time.monotonic() - warm_start) * 1000
     assert (witness.through_seq, len(page), page[0].message.seq, more) == (1002, 100, 901, True)
     assert [row.message.seq for row in _page(comms, lookup, after=1000)[1]] == [1001, 1002]
-    assert _page(comms, stable_thread_lookup(17004.0))[1] == ()
+    assert _page(comms, RecordedThreadIncarnation("fixture", 17004.0).lookup)[1] == ()
     # Existing capped readers still fail closed; only the explicit certified
     # source API supplies a complete-prefix+bounded-page alternative.
     with (
@@ -501,7 +501,7 @@ def test_reopened_root_preserves_certified_source_and_supports_append(
     original = comms.bus.log.path.read_bytes()
     inode = comms.bus.log.path.stat().st_ino
     reopened = Comms(comms.root)
-    witness = _page(reopened, stable_thread_lookup(17002.0))[0]
+    witness = _page(reopened, RecordedThreadIncarnation("fixture", 17002.0).lookup)[0]
     assert (witness.root_id, witness.through_seq, witness.offset) == (
         root_id,
         two.seq,
@@ -509,10 +509,10 @@ def test_reopened_root_preserves_certified_source_and_supports_append(
     )
     assert comms.bus.log.path.read_bytes() == original
     assert comms.bus.log.path.stat().st_ino == inode
-    assert [r.message.seq for r in _page(reopened, stable_thread_lookup(17002.0))[1]] == [one.seq]
+    assert [r.message.seq for r in _page(reopened, RecordedThreadIncarnation("fixture", 17002.0).lookup)[1]] == [one.seq]
     three = reopened.messaging.send_initial_cohort("sender", "Alice", "after installation")
     assert three.seq == two.seq + 1
-    assert [r.message.seq for r in _page(reopened, stable_thread_lookup(17002.0))[1]] == [
+    assert [r.message.seq for r in _page(reopened, RecordedThreadIncarnation("fixture", 17002.0).lookup)[1]] == [
         one.seq,
         three.seq,
     ]
@@ -528,7 +528,7 @@ def test_warm_witness_rejects_changed_revision_even_with_complete_row(tmp_path: 
         stream.flush()
         os.fsync(stream.fileno())
     with pytest.raises(RelationViolationError, match="prefix tail changed"):
-        _page(comms, stable_thread_lookup(17002.0))
+        _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
 
 
 def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, monkeypatch) -> None:

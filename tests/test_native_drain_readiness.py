@@ -10,12 +10,13 @@ from agent_comms.activity import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.thread_identity import OwnerIdentity, ThreadIncarnation
+from agent_comms.thread_identity import OwnerIdentity
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_presentation import AttentionThreadPresentationStatus
 
 
 def test_native_warning_keeps_fresh_notifications_and_active_paint_available():
-    owner = OwnerIdentity(ThreadIncarnation('receiver', 1.0), 2)
+    owner = OwnerIdentity(RecordedThreadIncarnation('receiver', 1.0), 2)
     diagnostic = NativeInputDrainDiagnostic(
         owner, 'NativePiTerminalFailure', 'known provider failure', recorded_at=1.0
     )
@@ -39,7 +40,7 @@ def test_native_warning_keeps_fresh_notifications_and_active_paint_available():
 
 @pytest.mark.parametrize('kind', [UnavailableDrainDiagnostic, StoppedDrainDiagnostic])
 def test_real_inbox_failures_refuse_without_owning_message_labels(kind):
-    owner = OwnerIdentity(ThreadIncarnation('receiver', 1.0), 2)
+    owner = OwnerIdentity(RecordedThreadIncarnation('receiver', 1.0), 2)
     ready = DrainReadiness.acquire(
         kind(owner, 'OSError', 'real read failure', recorded_at=1.0), owner
     )

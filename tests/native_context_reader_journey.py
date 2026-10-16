@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import Comms
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
@@ -56,13 +57,12 @@ async def read_original_context(
             process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(fixture.session), model="response-local/fixture")
         owner._comms.registry.declare(thread)
-        from agent_comms.bus_publication import stable_thread_lookup
         from agent_comms.coordinator import Coordination
 
         # An in-process fixture registration has the same private participant
         # relation as the original owner launcher; a registry row alone does not.
         with Coordination(str(owner._comms.root / 'coordination.sqlite3')) as store:
-            store.participants.register(stable_thread_lookup(thread.created_at),
+            store.participants.register(RecordedThreadIncarnation("fixture", thread.created_at).lookup,
                                         thread.name, thread.name, committed=True)
         await owner.load_session(str(fixture.project), thread.name)
         connection = RuntimeConnection(owner._comms, thread.name,

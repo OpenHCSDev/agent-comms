@@ -21,6 +21,7 @@ from agent_comms.input_attempt import (
 from agent_comms.input_disposition import InputDispositionRow, InputDispositions, InputDocument
 from agent_comms.errors import RelationViolationError
 from agent_comms.thread_identity import TurnId
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import insert_inputs, stored_inputs
 
 
@@ -132,7 +133,6 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
 
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.registration import Registration
-    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.threads import Thread
 
     registry = Registration(tmp_path / "registry.json")
@@ -187,12 +187,12 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     )
     assert not document.started_for_native(
         replace(lease, identity=replace(
-            lease.identity, incarnation=ThreadIncarnation("foreign", 123.0)
+            lease.identity, incarnation=RecordedThreadIncarnation("foreign", 123.0)
         )), "a" * 32, "Actual grouped native user", snapshot=snapshot
     )
     assert not document.started_for_native(
         replace(lease, identity=replace(
-            lease.identity, incarnation=ThreadIncarnation("worker", 124.0)
+            lease.identity, incarnation=RecordedThreadIncarnation("worker", 124.0)
         )), "a" * 32, "Actual grouped native user", snapshot=snapshot
     )
     registry.release_turn(lease)
@@ -210,7 +210,6 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
 def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_path):
     from dataclasses import fields
 
-    from agent_comms.thread_identity import ThreadIncarnation
 
     store = InputDispositions(tmp_path)
     missing = stored_inputs(store.root).lookup("acp:missing")
@@ -223,10 +222,10 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
     )
     reserved = stored_inputs(store.root).lookup("acp:input")
     assert isinstance(reserved, ReservedInput) and reserved.exists and reserved.accepts_reservation
-    assert reserved.matches_owner(ThreadIncarnation("owner", 10.0))
+    assert reserved.matches_owner(RecordedThreadIncarnation("owner", 10.0))
     # Existing input rows attest name/admission only, never a historical birth.
-    assert reserved.matches_owner(ThreadIncarnation("owner", 20.0))
-    assert not reserved.matches_owner(ThreadIncarnation("other", 10.0))
+    assert reserved.matches_owner(RecordedThreadIncarnation("owner", 20.0))
+    assert not reserved.matches_owner(RecordedThreadIncarnation("other", 10.0))
     assert reserved.matches_admission(4) and not reserved.matches_admission(5)
     for name in ("native_id", "turn_id", "sent_digest"):
         assert name not in {item.name for item in fields(reserved)}
@@ -304,11 +303,10 @@ def test_invalid_bind_keeps_durable_reservation_intact(tmp_path, native_id):
 
 def test_reserved_input_is_queued_only_for_its_own_owner_admission_and_text():
     from agent_comms.text_digest import TextDigest
-    from agent_comms.thread_identity import ThreadIncarnation
 
     reserved = ReservedInput("acp:x", None, "owner", 1, "owner", "original")
     bound = reserved.bind(admission=1, turn_id="turn", native_id="a" * 32, text="wrapped input")
-    owner = ThreadIncarnation("owner", 1.0)
+    owner = RecordedThreadIncarnation("owner", 1.0)
     assert reserved.digest == TextDigest.of("original")
     assert reserved.queued_for(owner, 1, "original")
     assert not reserved.queued_for(owner, 1, "different")

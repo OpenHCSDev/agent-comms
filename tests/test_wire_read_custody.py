@@ -5,6 +5,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from agent_comms.bus_page_index import BusPageIndex, BusPageSource
+from agent_comms.channel_targets import AllHistoryTargets
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.wire_record import WireRecord
@@ -91,7 +92,7 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
             rows = tuple(
                 reader.offsets(
                     lower=None, upper=None, descending=False,
-                    targets=None, before_offset=saved.revision.size,
+                    targets=AllHistoryTargets(), before_offset=saved.revision.size,
                 )
             )
         assert update.result(timeout=5)
@@ -100,7 +101,7 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
     assert [row.seq for row in rows] == [first.seq]
     with BusPageIndex(comms.bus.log.path, readonly=True) as current:
         assert [row.seq for row in current.offsets(
-            lower=None, upper=None, descending=False, targets=None
+            lower=None, upper=None, descending=False, targets=AllHistoryTargets()
         )] == [first.seq, second.seq]
 
 

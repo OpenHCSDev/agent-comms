@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .channel_targets import HistoryTargets
 from .channels import Channel
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_page import (
     ConversationMessagePageRequest,
@@ -27,7 +29,7 @@ from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy, ResponsePolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
-from .thread_provenance import ThreadProvenance
+from .thread_identity import ThreadIncarnation, ThreadProvenance, UnrecordedThreadIncarnation
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
@@ -35,10 +37,48 @@ if TYPE_CHECKING:
     from .presentation import BusPresentation
 
 
+class HistoryViewer(DeclaredFamily, affix="HistoryViewer"):
+    """A viewer owns whether a display can establish a human read position."""
+
+    def display_evidence(self, page: MessagePage, presentation: BusPresentation):
+        return None
+
+    @abstractmethod
+    def channel_page(self, presentation: BusPresentation, target: str, **paging) -> MessagePage: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveHistoryViewer(HistoryViewer):
+    def channel_page(self, presentation, target, **paging):
+        return presentation.channel_page(target, **paging)
+
+
+@dataclass(frozen=True, slots=True)
+class SpecificHistoryViewer(HistoryViewer):
+    name: str
+
+    def channel_page(self, presentation, target, **paging):
+        return presentation.channel_page(target, viewer=self.name, **paging)
+
+    def display_evidence(self, page, presentation):
+        source = page.messages[0].source
+        source.validate()
+        return HistoricalDisplay(
+            source,
+            presentation.bus.reads.capture(
+                self.name,
+                page.messages,
+                presentation.registry.snapshot(),
+                Path(source.root) / "bus.jsonl",
+                conversation_snapshot=source.provenance,
+            ),
+        )
+
+
 class HistoryView(ABC):
     """A requested view binds its predicate once to each original registry."""
 
-    viewer: str | None = None
+    viewer: HistoryViewer = ArchiveHistoryViewer()
 
     @abstractmethod
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
@@ -46,23 +86,6 @@ class HistoryView(ABC):
 
     def page(self, presentation: BusPresentation, **paging) -> MessagePage:
         return presentation.bus.history.integrated_page(self, presentation, **paging)
-
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation):
-        """Paint evidence belongs to the selected view, never executor delivery."""
-        if self.viewer is None:
-            return None
-        source = page.messages[0].source
-        source.validate()
-        return HistoricalDisplay(
-            source,
-            presentation.bus.reads.capture(
-                self.viewer,
-                page.messages,
-                presentation.registry.snapshot(),
-                Path(source.root) / "bus.jsonl",
-                conversation_snapshot=source.provenance,
-            ),
-        )
 
     def full_history(self, presentation: BusPresentation) -> list[Message]:
         page = self.page(presentation, limit=1000)
@@ -90,7 +113,7 @@ class ConversationHistoryView:
 @dataclass(frozen=True, slots=True)
 class ChannelHistory(HistoryView):
     target: str
-    targets: frozenset[str] | None
+    targets: HistoryTargets
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
         return presentation.bus.channel_history_page(self.target, **paging)
@@ -102,10 +125,10 @@ class ChannelHistory(HistoryView):
 @dataclass(frozen=True, slots=True)
 class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     channel: Channel
-    viewer: str | None = None
+    viewer: HistoryViewer = ArchiveHistoryViewer()
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
-        return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
+        return self.viewer.channel_page(presentation, self.channel.name, **paging)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return ChannelDisplayScope.capture(self.channel, snapshot)
@@ -128,14 +151,14 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
     worktree: str
 
     @property
-    def viewer(self) -> str:
-        return self.first
+    def viewer(self) -> HistoryViewer:
+        return SpecificHistoryViewer(self.first)
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
         from .read_basis import DMDisplayBasis
 
         bus = presentation.bus
-        if self.second not in presentation.registry and bus.history.threads(self.second):
+        if self.second not in presentation.registry and bus.history.thread(self.second):
             return MessagePage((), False, False)
         return DMDisplayBasis.fetch_page(
             bus,
@@ -199,6 +222,13 @@ class HistorySource:
         source.validate()
         return source
 
+    @contextmanager
+    def acquire_original(self, root: Path) -> Iterator[RegistryProvenance]:
+        """Lend this original projection only while its source proof holds."""
+        self.require_original(root)
+        yield self.provenance
+        self.require_original(root)
+
     def notification_references(self, sources: tuple[HistorySource, ...], references):
         """Read this namespace within its archive's current catalogue read."""
         from functools import partial
@@ -220,29 +250,27 @@ class HistorySource:
 class HistoricalMessage(Message):
     source: HistorySource
     source_order: int
-    sender_created_at: float | None
-    target_created_at: float | None
+    sender_incarnation: ThreadIncarnation
+    target_incarnation: ThreadIncarnation
 
     @classmethod
     def project(
         cls, message: Message, source: HistorySource, order: int, snapshot: RegistryProvenance
     ) -> HistoricalMessage:
-        def creation(name: str) -> float | None:
+        def incarnation(name: str) -> ThreadIncarnation:
             declaration = snapshot.threads.get(snapshot.canonical_name(name))
-            # A later source declaration cannot certify a row from an earlier
-            # incarnation. The original registry remains available for inspection.
-            return (
-                declaration.created_at
-                if declaration is not None and declaration.created_at <= message.timestamp
-                else None
-            )
+            # A later source declaration cannot certify an earlier message.
+            # Preserve the named unknown state; never manufacture a birth.
+            if declaration is None or declaration.created_at > message.timestamp:
+                return UnrecordedThreadIncarnation(name)
+            return declaration.incarnation.renamed(name)
 
         return cls(
             **{f.name: getattr(message, f.name) for f in fields(Message)},
             source=source,
             source_order=order,
-            sender_created_at=creation(message.sender),
-            target_created_at=creation(message.target),
+            sender_incarnation=incarnation(message.sender),
+            target_incarnation=incarnation(message.target),
         )
 
     def notification_references(self) -> tuple[MessageReference, ...]:
@@ -272,8 +300,8 @@ class HistoricalMessage(Message):
                 "source": self.source.original_root,
                 "wire_root_id": self.source.wire_root_id,
                 "bus_identity": self.source.bus_identity,
-                "sender_created_at": self.sender_created_at,
-                "target_created_at": self.target_created_at,
+                "sender_incarnation": FieldCodec.encode(self.sender_incarnation),
+                "target_incarnation": FieldCodec.encode(self.target_incarnation),
             },
         }
 
@@ -354,7 +382,23 @@ class HistoryArchive:
         if FileRevision.capture(self.path) != revision:
             raise ValueError("Historical source catalogue changed; refresh history")
 
-    def attach(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
+    def attach(self, source_root: Path) -> HistorySource:
+        return self._attach(source_root, self.acquire_current)
+
+    def attach_original(self, source: HistorySource) -> HistorySource:
+        return self._attach(Path(source.root), source.acquire_original)
+
+    @staticmethod
+    @contextmanager
+    def acquire_current(root: Path) -> Iterator[RegistryProvenance]:
+        with Registration(root / "registry.json").store.reading() as original:
+            provenance = RegistryProvenance.capture(original)
+        yield provenance
+
+    def _attach(
+        self, source_root: Path,
+        acquire: Callable[[Path], AbstractContextManager[RegistryProvenance]],
+    ) -> HistorySource:
         """Snapshot a preserved source, then publish it for ordinary display.
 
         Only destination files are written. No Comms constructor, source locks,
@@ -366,7 +410,6 @@ class HistoryArchive:
 
         from .catalog_store import ChannelCatalog
         from .private_bus_checkpoint import install_private_bus_checkpoint
-        from .historical_views import HistorySource
         from .transcript_routes import TranscriptRoutes
 
         source_root = source_root.resolve()
@@ -391,25 +434,16 @@ class HistoryArchive:
                     )
                 ]
                 revisions = tuple(FileRevision.capture(path) for path in paths)
-                if source_read is None:
-                    provenance = RegistryProvenance.capture(
-                        Registration(source_root / "registry.json").snapshot()
-                    )
-                else:
-                    source_read.require_original(source_root)
-                    provenance = source_read.provenance
                 archived = WireLog(stage / "bus.jsonl")
                 # Lock the empty stage before copying its marker. Once marked,
                 # ordinary reads correctly require the not-yet-built index.
-                with archived.locked():
+                with acquire(source_root) as provenance, archived.locked():
                     for path in paths:
                         if path.exists():
                             shutil.copy2(path, stage / path.name)
                     TranscriptRoutes(source_root).snapshot(stage)
                     if revisions != tuple(FileRevision.capture(path) for path in paths):
                         raise ValueError("Historical source changed during snapshot; retry")
-                    if source_read is not None:
-                        source_read.require_original(source_root)
                     bus_info = paths[0].stat() if paths[0].exists() else None
                     if bus_info is None:
                         archived.path.touch()
@@ -537,7 +571,7 @@ class HistoryArchive:
             max_bytes=max_bytes,
         )
         if history.messages:
-            display = view.display_evidence(history, presentation)
+            display = view.viewer.display_evidence(history, presentation)
             latest = view.live_page(presentation, limit=1)
             return replace(
                 history,
@@ -552,11 +586,20 @@ class HistoryArchive:
             )
         return replace(history if historical else page, history_revision=history_revision)
 
-    def threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
+    def threads(self) -> tuple[HistoricalThread, ...]:
         result = []
         for source in self.sources():
             source.validate()
             result.extend(HistoricalThread(source, thread)
-                          for thread in source.provenance.threads.values()
-                          if name is None or thread.incarnation.matches_recorded_name(name, source.provenance))
+                          for thread in source.provenance.threads.values())
+        return tuple(result)
+
+    def thread(self, name: str) -> tuple[HistoricalThread, ...]:
+        result = []
+        for source in self.sources():
+            source.validate()
+            declarations = source.provenance.threads
+            canonical = source.provenance.canonical_name(name)
+            if canonical in declarations:
+                result.append(HistoricalThread(source, declarations[canonical]))
         return tuple(result)

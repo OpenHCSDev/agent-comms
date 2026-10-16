@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -18,6 +18,7 @@ from .goal_states import (
     UnrecordedBlockGoal,
 )
 from .goals import Goal
+from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
@@ -86,12 +87,16 @@ class GoalExecutionState(StrEnum):
 class GoalWaitTarget:
     name: str
     created_at: float
+    _incarnation: RecordedThreadIncarnation = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "_incarnation", RecordedThreadIncarnation(self.name, self.created_at)
+        )
 
     def sent(self, original: CommittedDelivery) -> bool:
         """Only this declared incarnation can supply a dependency reply."""
-        from .bus_publication import stable_thread_lookup
-
-        return original.audience.sender_lookup == stable_thread_lookup(self.created_at)
+        return original.audience.sender_lookup == self._incarnation.lookup
 
 
 @dataclass(frozen=True, slots=True)

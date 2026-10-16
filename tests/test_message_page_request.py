@@ -5,6 +5,7 @@ import sqlite3
 
 import pytest
 
+from agent_comms.channel_targets import AllHistoryTargets
 from agent_comms.comms import wire
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import MessageDisplayScope
@@ -15,7 +16,7 @@ from agent_comms.store_files import _store_lock
 @dataclass(frozen=True)
 class ReviewScope(MessageDisplayScope):
     prefix: str
-    index_targets = None
+    index_targets = AllHistoryTargets()
 
     def includes(self, message):
         return message.body.startswith(self.prefix)

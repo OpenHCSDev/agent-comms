@@ -149,7 +149,6 @@ from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
 class OwnerLifecycle:
     def require_restart_idle(self, thread: Thread) -> None:
         """Both the process and its durable execution must have finished."""
-        from .bus_publication import stable_thread_lookup
         from .coordination_errors import StaleFence
         from .coordination_session import ReadNativeCoordinationSession
         from .coordination_tables.executions import CurrentExecutions
@@ -163,7 +162,7 @@ class OwnerLifecycle:
                 with Coordination(str(path), session_type=ReadNativeCoordinationSession) as store:
                     pointer = CurrentExecutions.one(
                         store.session._connection,
-                        owner_lookup=stable_thread_lookup(thread.created_at),
+                        owner_lookup=thread.incarnation.lookup,
                     )
                     if pointer is not None:
                         pointer.require_idle()
@@ -404,13 +403,12 @@ class OwnerLifecycle:
                 agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
             # Explicit launch installs the current runtime before registering
             # this owner. Readers never create or repair runtime schemas.
-            from .bus_publication import stable_thread_lookup
             from .coordinator import Coordination
 
             with Coordination(str(self.root / "coordination.sqlite3")) as store:
                 store.install_private_runtime()
                 store.participants.register(
-                    stable_thread_lookup(thread.created_at),
+                    thread.incarnation.lookup,
                     thread.name,
                     thread.name,
                     committed=True,

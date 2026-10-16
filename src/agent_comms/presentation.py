@@ -24,7 +24,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
-from .read_ledger import ReadLedger
+from .read_ledger import NoReadMarkerNotice, ReadLedger, ReadMarkerNotice
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
@@ -177,7 +177,7 @@ class MessageNotification:
             return {}
         snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
-            (recipient for source in sources for recipient in source.audience.recipients
+            ((source, recipient) for source in sources for recipient in source.audience.recipients
              if cls.includes_recipient(source, recipient, owner_lookup)),
             snapshot=snapshot,
         )
@@ -258,7 +258,6 @@ class MessageNotification:
         cls, source, snapshot, reads, document, *, owner_lookup
     ) -> MessageNotification | None:
         """Project a human DM read even though humans have no wake assignment."""
-        from .bus_publication import stable_thread_lookup
         from .channel_targets import is_channel_target
 
         message = source.message
@@ -272,9 +271,9 @@ class MessageNotification:
         target = snapshot.threads.get(name)
         if target is None or not reads.human(target.role):
             return None
-        recipient = FrozenRecipient(stable_thread_lookup(target.created_at), target.name)
+        recipient = FrozenRecipient(target.incarnation.lookup, target.name)
         displayed_to = reads.displayed_recipient(
-            message, recipient, snapshot, document=document
+            source, recipient, snapshot, document=document
         )
         if not displayed_to:
             return None
@@ -331,11 +330,9 @@ class MessageNotification:
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Project outcomes from the caller's original certified source window."""
-        from .bus_publication import stable_thread_lookup
-
         projected = cls.delivery_window(
             root, registry, sources,
-            owner_lookup=stable_thread_lookup(owner.created_at),
+            owner_lookup=owner.incarnation.lookup,
             assignment_read=assignment_read,
         )
         return tuple(
@@ -682,7 +679,8 @@ class ThreadView:
             activity,
             runtime,
             snapshot.seen_at(thread.name),
-            GoalWaits.execution(thread.goal, waits, snapshot),
+            (GoalWaits.for_goal(thread.goal, waits).project(thread.goal, snapshot)
+             if thread.goal is not None else None),
             snapshot.owner_binding(thread.name),
         )
 
@@ -709,7 +707,7 @@ class ThreadView:
         runtime = agents.runtime_info.read()
         waits = goal_waits.read()
         if activities is None:
-            activities = agents.all_activity(snapshot=snapshot)
+            activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(
             cls.capture(thread, snapshot, activities[thread.name], runtime.get(thread.name), waits)
             for thread in threads
@@ -756,6 +754,14 @@ class ThreadView:
 
 
 @dataclass(frozen=True, slots=True)
+class ListingFilter:
+    """The stopped/archived selection that produced a roster."""
+
+    show_stopped: bool = True
+    show_archived: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class CoordinationSnapshot:
     threads: tuple[ThreadView, ...]
     channels: tuple[ChannelView, ...]
@@ -766,9 +772,8 @@ class CoordinationSnapshot:
     channel_order: type[ChannelSort] = NameChannelSort
     thread_unread: Mapping[str, int] = field(default_factory=dict)
     unread_pending: frozenset[str] = frozenset()
-    show_stopped: bool = True
-    show_archived: bool = False
-    read_marker_notice: str | None = None
+    filters: ListingFilter = field(default_factory=ListingFilter)
+    read_marker_notice: ReadMarkerNotice = NoReadMarkerNotice()
 
     @classmethod
     def capture(
@@ -776,10 +781,17 @@ class CoordinationSnapshot:
         agents: AgentActivity, declarations: Mapping[str, Channel],
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
         unread: Mapping[str, int], channel_unread: Mapping[str, int],
-        show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
+        show_stopped: bool, show_archived: bool,
+        read_marker_notice: ReadMarkerNotice = NoReadMarkerNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
-        activities = agents.all_activity(snapshot=registry)
+        visible = (
+            thread for thread in registry.threads.values()
+            if ThreadView.visible(
+                thread, registry, show_stopped=show_stopped, show_archived=show_archived
+            )
+        )
+        activities = agents.all_activity(visible, snapshot=registry)
         return cls(
             channels=ChannelView.roster(
                 registry, declarations, catalog.pinned_members(), catalog.list_order,
@@ -792,8 +804,9 @@ class CoordinationSnapshot:
             ),
             unread=unread, last_sent=sent, channel_unread=channel_unread,
             references=DisplayReferences.capture(root, registry, declarations),
-            channel_order=catalog.list_order, show_stopped=show_stopped,
-            show_archived=show_archived, read_marker_notice=read_marker_notice,
+            channel_order=catalog.list_order,
+            filters=ListingFilter(show_stopped, show_archived),
+            read_marker_notice=read_marker_notice,
         )
 
     def participants(self, channel: str) -> tuple[ThreadView, ...]:
