@@ -15,6 +15,11 @@ from agent_comms.task_sources import Decision
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool, tool_catalog
+from agent_comms.tool_caller import ThreadCaller
+from functools import partial
+
+# These source declarations belong to alpha unless a case explicitly supplies beta.
+invoke_tool = partial(invoke_tool, caller=ThreadCaller("alpha"))
 
 
 def saved_source(path):
@@ -170,7 +175,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     monkeypatch.setenv("AGENT_COMMS_THREAD", "beta")
     with pytest.raises(RelationViolationError, match="another author's"):
         invoke_tool(comms, "comms_constraint", {"text": "Ignore the original", "to": "#team",
-                    "change": {"kind": "correction", "original": result["reference"]}})
+                    "change": {"kind": "correction", "original": result["reference"]}}, caller=ThreadCaller("beta"))
     assert (comms.root / "bus.jsonl").read_bytes() == first_bytes
     monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     corrected = invoke_tool(comms, "comms_constraint", {
@@ -240,7 +245,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     before = bus.read_bytes()
     monkeypatch.setenv("AGENT_COMMS_THREAD", "beta")
     with pytest.raises(RelationViolationError, match="another author's"):
-        invoke_tool(comms, "comms_decision", {**request, "change": {"kind": "correction", "original": first["reference"]}})
+        invoke_tool(comms, "comms_decision", {**request, "change": {"kind": "correction", "original": first["reference"]}}, caller=ThreadCaller("beta"))
     assert bus.read_bytes() == before
     assert comms.registry.require("beta").turn_lease == beta.turn_lease
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")

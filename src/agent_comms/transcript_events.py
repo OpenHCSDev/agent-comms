@@ -177,10 +177,29 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
     tool_call_id: str
     tool_name: str
 
+    @property
+    def title(self) -> str:
+        from .tool_declaration import ToolDeclaration
+
+        return ToolDeclaration.caption(self.tool_name)
+
+    @property
+    def kind(self) -> str:
+        from .tool_declaration import ToolDeclaration
+
+        return ToolDeclaration.for_name(self.tool_name).acp_kind
+
 
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
     raw_input: Any = None
+    detail: str = field(default="", metadata={"wire_omit_default": True})
+
+    @property
+    def title(self) -> str:
+        from .tool_declaration import ToolDeclaration
+
+        return ToolDeclaration.caption(self.tool_name, self.detail)
 
 
 @dataclass(frozen=True, kw_only=True)

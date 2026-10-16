@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
 from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
-from .restart_refusals import OwnerBusyRefusal, OwnerSelectionChangedRefusal
+from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
 from .owner_lifecycle import OwnerRestartSelection
 from .thread_identity import AdmissionIdentity, OwnerIdentity
@@ -282,10 +282,7 @@ class AdmittedOwnerBatch:
             for thread in threads:
                 thread.require_restart_owner(snapshot.statuses[thread.name])
                 generation = snapshot.admission_generations[thread.name]
-                try:
-                    thread.require_idle()
-                except RelationViolationError as error:
-                    raise OwnerBusyRefusal() from error
+                lifecycle.require_restart_idle(thread)
                 captured.append((thread, generation))
             runtime = request.environment(lifecycle)
             launches = tuple(RetainedOwnerLaunch.capture(

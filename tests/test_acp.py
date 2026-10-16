@@ -585,7 +585,9 @@ class TestAgentTurn:
         async def events(*args, **kwargs):
             yield fake_input_started(args, kwargs)
             monkeypatch.setenv("AGENT_COMMS_THREAD", "proj")
-            wired.threads.rename_self("renamed-proj")
+            from agent_comms.tool_caller import ThreadCaller
+
+            wired.threads.rename_self("renamed-proj", caller=ThreadCaller("proj"))
             yield ae.ToolEnd(id="rename", ok=True, output="renamed", name="tool")
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="renamed")

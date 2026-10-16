@@ -7,6 +7,7 @@ from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import ThreadCaller
 
 
 def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeypatch):
@@ -34,7 +35,7 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     assert people["beta"]["last_activity"] == 0
     assert comms.agents.activity_of("alpha").timestamp == 300
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
-    comms.threads.rename_self("renamed")
+    comms.threads.rename_self("renamed", caller=ThreadCaller("alpha"))
     assert comms.registry.require("renamed").created_at == 100
     assert comms.views.last_sent_timestamps() == {"renamed": 400, "beta": 500}
     assert wire(tmp_path).registry.require("alpha").created_at == 100

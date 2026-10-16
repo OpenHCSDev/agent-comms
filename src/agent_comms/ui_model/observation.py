@@ -25,7 +25,7 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Self, TypeVar, final
@@ -574,14 +574,22 @@ class ThreadReading(Observation[ObserveThreads]):
         if previous is not None and previous.current_at(revision):
             return
         presentations, unavailable, busy = {}, {}, set()
-        for name in self.request.names:
+        if self.request.names:
             try:
-                presentations[name] = comms.views.thread_presentation(name)
+                batch = comms.views.thread_presentations(self.request.names)
             except UnreadableHistory.DEFERRED_READS:
-                busy.add(name)
+                busy.update(self.request.names)
             except StoredHistoryUnreadable as error:
-                unavailable[name] = UnreadableHistory.capture(error)
-            yield None
+                unavailable.update(dict.fromkeys(self.request.names, UnreadableHistory.capture(error)))
+            else:
+                for name in self.request.names:
+                    try:
+                        presentations[name] = batch.read(name)
+                    except UnreadableHistory.DEFERRED_READS:
+                        busy.add(name)
+                    except StoredHistoryUnreadable as error:
+                        unavailable[name] = UnreadableHistory.capture(error)
+                    yield None
         observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset())
         self.observed = replace(observed, changed=observed.changed_since(previous))
         if previous is None or self.observed.changed:
@@ -817,7 +825,7 @@ class ObservationService:
         while self.connection.poll():
             try:
                 request = self.connection.recv()
-            except EOFError:
+            except (EOFError, ConnectionResetError):
                 self.closed = True
                 self.changed.set()
                 return
@@ -926,34 +934,46 @@ def serve(route: CommsRoute, connection: Connection) -> None:
         connection.close()
 
 
-class ObservationProcess:
-    """The UI side: start the service for a root, send requests, await reads, drain results."""
+class ObservationProcess(AbstractContextManager):
+    """Own reader retirement, awaited reads, the pipe and the joined service, in that order."""
 
     @classmethod
-    @contextmanager
-    def awaited(cls, route: CommsRoute):
-        """Own pipe readiness and retirement for an attached asynchronous reader."""
-        process = cls(route)
+    def awaited(cls, route: CommsRoute) -> Self:
+        """Attach readiness to the process lifetime, not a suspended generator's finalizer."""
         loop = asyncio.get_running_loop()
+        process = cls(route)
         descriptor = process.fileno()
-        loop.add_reader(descriptor, process.results)
         try:
-            yield process
-        finally:
-            loop.remove_reader(descriptor)
+            loop.add_reader(descriptor, process.results)
+        except BaseException:
             process.close()
+            raise
+        process._resources.callback(loop.remove_reader, descriptor)
+        return process
 
     def __init__(self, route: CommsRoute):
-        context = multiprocessing.get_context("spawn")
-        self.connection, child = context.Pipe()
-        self.process = context.Process(target=serve, args=(route, child), daemon=False,
-                                       name="agent-comms-observation")
-        self.process.start()
-        child.close()
+        self._resources = ExitStack()
         self.request_ids = itertools.count(1)
         self.reads: dict[int, asyncio.Future] = {}
         # Set by ``results`` when it reads that the service ended.
         self.died: ObserverDied | None = None
+        context = multiprocessing.get_context("spawn")
+        with ExitStack() as acquisition:
+            self.connection, child = context.Pipe()
+            acquisition.enter_context(self.connection)
+            with child:
+                self.process = context.Process(target=serve, args=(route, child), daemon=False,
+                                               name="agent-comms-observation")
+                self.process.start()
+            self._resources.callback(self.process.join)
+            self._resources.enter_context(acquisition.pop_all())
+        self._resources.callback(
+            self.abandon_reads,
+            StaleRevision("The Comms observation retired before the read was answered"),
+        )
+
+    def __exit__(self, *exc) -> None:
+        self.close()
 
     def fileno(self) -> int:
         return self.connection.fileno()
@@ -965,7 +985,7 @@ class ObservationProcess:
         belongs to a service ``results`` has not read the end of yet: the
         same closed pipe is readable there.
         """
-        if self.died is None:
+        if self.died is None and not self.connection.closed:
             try:
                 self.connection.send(request)
             except BrokenPipeError:
@@ -985,6 +1005,8 @@ class ObservationProcess:
         """
         if self.died is not None:
             raise self.died
+        if self.connection.closed:
+            raise StaleRevision("Cannot read a retired Comms observation process")
         request = replace(request, request_id=next(self.request_ids))
         waiter = asyncio.get_running_loop().create_future()
         self.reads[request.request_id] = waiter
@@ -992,14 +1014,14 @@ class ObservationProcess:
             self.request(request)
             return await waiter
         except asyncio.CancelledError:
-            if self.reads.pop(request.request_id, None) is not None and not self.connection.closed:
+            if self.reads.pop(request.request_id, None) is not None:
                 self.request(CancelRead(request.request_id))
             raise
         finally:
             self.reads.pop(request.request_id, None)
 
     def abandon_reads(self, error: Exception) -> None:
-        """The UI stopped using this service: its awaited reads fail with ``error``."""
+        """The reader's retirement settles its waiters with the original cause."""
         reads, self.reads = self.reads, {}
         for waiter in reads.values():
             if not waiter.done():
@@ -1011,8 +1033,10 @@ class ObservationProcess:
         The service's end (its failure, or its pipe closing) is raised here
         as ``ObserverDied``; the UI stops reading this pipe then.
         """
+        if self.died is not None:
+            raise self.died
         observed: list[Observed] = []
-        while self.connection.poll():
+        while not self.connection.closed and self.connection.poll():
             try:
                 result = self.connection.recv()
             except (EOFError, ConnectionResetError):
@@ -1021,5 +1045,4 @@ class ObservationProcess:
         return observed
 
     def close(self) -> None:
-        self.connection.close()
-        self.process.join()
+        self._resources.close()

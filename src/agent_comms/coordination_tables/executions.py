@@ -36,10 +36,14 @@ class ExecutionOrigin(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class CurrentExecutions(CoordinatorTable, TypedTable):
+    @property
+    def unresolved(self) -> bool:
+        return self.execution_id is not None
+
     def require_idle(self) -> None:
         from agent_comms.coordination_errors import StaleFence
 
-        if self.execution_id is not None:
+        if self.unresolved:
             raise StaleFence(
                 "selected owner has an unresolved execution; new claims remain pending"
             )

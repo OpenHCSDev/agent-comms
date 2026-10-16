@@ -312,7 +312,10 @@ async def second(value):
     if value == "three": return 3
 '''} )
     status, report = repo.compare(before, head)
-    assert status == 0
+    # This checks the three-arm dispatch measure's scope. The separate
+    # family measure also reports these literal comparisons.
+    assert status == 1
+    assert report["head"][f"FamilyFlattened:{repo.root}/scope.py"] > 0
     assert report["head"][f"StringDispatch:{repo.root}/scope.py"] == 0
     assert report["head"][f"StringDispatchArms:{repo.root}/scope.py"] == 0
 
@@ -352,8 +355,38 @@ class OwnedCodec:
 """})
     status, report = repo.compare(base, head)
     assert status == 1
-    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/boundary.py"] == 3
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/boundary.py"] == 2
     assert report["head"][f"CodecSubclass:{repo.root}/boundary.py"] == 1
+
+
+def test_connection_boolean_is_not_an_absence_probe(repo: Repository) -> None:
+    base = repo.commit({})
+    boolean = repo.commit({"connection.py": """
+from multiprocessing.connection import Connection
+
+class Reader:
+    connection: Connection
+
+    def readable(self):
+        return not self.connection.closed
+"""})
+    status, report = repo.compare(base, boolean)
+    assert status == 0
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/connection.py"] == 0
+
+    missing = repo.commit({"missing.py": """
+class State:
+    value: str | None
+
+def missing(state: State):
+    return state.value is None
+
+def present(state: State):
+    return state.value is not None
+"""})
+    status, report = repo.compare(boolean, missing)
+    assert status == 1
+    assert report["delta"][f"ForeignAbsenceProbe:{repo.root}/missing.py"] == 2
 
 
 def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Repository) -> None:
