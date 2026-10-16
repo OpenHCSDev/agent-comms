@@ -22,11 +22,11 @@ from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, projected
+from .field_codec import projected
 from .private_path import FileIdentity, FileRevision
 from .routing import DeliveryMessage, DeliveryScope
 from .store_files import _store_lock
-from .typed_table import Column, ForeignKey, Index, JsonStorage, TypedRow, TypedTable
+from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, TypedRow, TypedTable
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -163,11 +163,8 @@ class RouteTimeRow(RouteTable, TypedTable):
 
     @classmethod
     def store(cls, db, node: RouteTimeNode):
-        # SQLite owns the fresh row identity; JsonStorage is the existing codec.
-        cursor = db.execute(
-            f'INSERT INTO "{cls.declared_name}" (node) VALUES (?)',
-            (JsonStorage.to_sql(FieldCodec.encode(node)),),
-        )
+        # SQLite owns the fresh row identity; the declaration owns its encoding.
+        cursor = cls.insert_values(db, node=node)
         return cls(cursor.lastrowid, node)
 
     @classmethod
@@ -400,20 +397,14 @@ class BusRouteCounts:
         """The writer alone creates the WAL store; no source bytes are decoded here."""
         if self.path.exists():
             with closing(CoordinationStore.read_snapshot(self.path)) as current:
-                table = current.execute(
-                    f"SELECT 1 FROM sqlite_master WHERE type='table' "
-                    f"AND name='{RouteSourceRow.declared_name}'"
-                ).fetchone()
-                if table and current.execute("PRAGMA journal_mode").fetchone()[0] == "wal":
+                if (RouteSourceRow.present(current)
+                        and SQLiteJournalMode.read(current.execute("PRAGMA journal_mode"))[0].journal_mode == "wal"):
                     return
         with _store_lock(self.path), closing(CoordinationStore.writer(self.path)) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
             connection.execute("BEGIN IMMEDIATE")
-            if not connection.execute(
-                f"SELECT 1 FROM sqlite_master WHERE type='table' "
-                f"AND name='{RouteSourceRow.declared_name}'"
-            ).fetchone():
+            if not RouteSourceRow.present(connection):
                 for owner in TypedTable.members_with(RouteTable):
                     owner.create(connection)
             connection.commit()

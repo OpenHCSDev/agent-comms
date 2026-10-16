@@ -255,10 +255,10 @@ class Column:
         return ''
 
     def compile(self, item: Field, annotation: object) -> _Field:
-        return _Field(item.name, item.init, annotation,
-                      _base_type(annotation)[1] or self.nullable,
-                      self.storage or SqlStorage.for_type(annotation), self,
-                      compile_decoder(annotation))
+        return _Field(name=item.name, init=item.init, annotation=annotation,
+                      nullable=_base_type(annotation)[1] or self.nullable,
+                      storage=self.storage or SqlStorage.for_type(annotation), column=self,
+                      value=compile_decoder(annotation))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -284,6 +284,15 @@ class Index:
     unique: bool = False
     where: str | None = None
 
+    def sql(self, owner: type[TypedTable], name: str, *, if_not_exists: bool = False) -> str:
+        existence = "IF NOT EXISTS " if if_not_exists else ""
+        return (
+            f"CREATE {'UNIQUE ' if self.unique else ''}INDEX "
+            f"{existence}{_identifier(name)} ON {_identifier(owner.declared_name)} "
+            f"({owner._column_list(self.columns)})"
+            + (f" WHERE {self.where}" if self.where else "")
+        )
+
 
 @dataclass(frozen=True)
 class ForeignKey:
@@ -308,15 +317,25 @@ class ForeignKey:
 
 
 @dataclass(frozen=True)
-class _Field:
-    name: str
-    init: bool
+class SqlValue:
+    """A compiled SQLite value; named record fields add their column declaration."""
+
     annotation: object
-    nullable: bool
     storage: type[SqlStorage]
-    column: Column
-    # The annotation's compiled decoder, resolved with the column.
     value: ValueDecoder
+
+    @classmethod
+    def for_annotation(cls, annotation: object) -> SqlValue:
+        return cls(annotation, SqlStorage.for_type(annotation), compile_decoder(annotation))
+
+    def read(self, cursor: sqlite3.Cursor) -> list:
+        """Read a single-column projection without losing empty or nullable results."""
+        try:
+            if cursor.description is None or len(cursor.description) != 1:
+                raise ValueError("Scalar projection requires exactly one SQLite column")
+            return [self.decode(row[0]) for row in cursor]
+        finally:
+            cursor.close()
 
     def encode(self, value: object) -> object:
         # Validate before SQLite can coerce a wrong Python value into its affinity.
@@ -326,6 +345,14 @@ class _Field:
 
     def decode(self, value: object) -> object:
         return self.value.decode(None if value is None else self.storage.from_sql(value))
+
+
+@dataclass(frozen=True)
+class _Field(SqlValue):
+    name: str
+    init: bool
+    nullable: bool
+    column: Column
 
 
 class Predicate:
@@ -352,6 +379,7 @@ class In(Predicate):
     def clause(self, item: _Field) -> tuple[str, tuple]:
         values = tuple(item.encode(value) for value in self.values)
         return (f'{_identifier(item.name)} IN ({", ".join("?" for _ in values)})', values)
+
 
 
 def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
@@ -514,7 +542,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return ", ".join(map(_identifier, names))
 
     @classmethod
-    def schema_objects(cls) -> dict[str, str]:
+    def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        existence = "IF NOT EXISTS " if if_not_exists else ""
         definitions = []
         keys = tuple(item.name for item in cls._fields() if item.column.primary_key)
         auto_keys = tuple(item.name for item in cls._fields() if item.column.auto_increment)
@@ -548,7 +577,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         definitions.extend(reference.sql(cls) for reference in cls.references())
         table = _identifier(cls.declared_name)
         statements = {
-            cls.declared_name: f"CREATE TABLE {table} ({', '.join(definitions)}) STRICT"
+            cls.declared_name: f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
             + (", WITHOUT ROWID" if cls.without_rowid else "")
         }
         indexes = cls.indexes + tuple(
@@ -556,30 +585,34 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
         for ordinal, index in enumerate(indexes):
             index_name = f"{cls.declared_name}_{ordinal}_idx"
-            statements[index_name] = (
-                f"CREATE {'UNIQUE ' if index.unique else ''}INDEX "
-                f"{_identifier(index_name)} ON {table} "
-                f"({cls._column_list(index.columns)})"
-                + (f" WHERE {index.where}" if index.where else "")
-            )
-        statements.update(cls.triggers())
+            statements[index_name] = index.sql(cls, index_name, if_not_exists=if_not_exists)
+        statements.update(cls.triggers(if_not_exists=if_not_exists))
         return statements
 
     @classmethod
-    def triggers(cls) -> dict[str, str]:
+    def trigger_bodies(cls) -> dict[str, str]:
+        """Named trigger suffixes, including their leading SQL whitespace."""
         return {}
 
     @classmethod
-    def ddl(cls) -> tuple[str, ...]:
-        return tuple(cls.schema_objects().values())
+    def triggers(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        existence = "IF NOT EXISTS " if if_not_exists else ""
+        return {name: f"CREATE TRIGGER {existence}{name}{body}"
+                for name, body in cls.trigger_bodies().items()}
 
     @classmethod
-    def create(cls, db: sqlite3.Connection) -> None:
-        for statement in cls.ddl():
+    def ddl(cls, *, if_not_exists: bool = False) -> tuple[str, ...]:
+        return tuple(cls.schema_objects(if_not_exists=if_not_exists).values())
+
+    @classmethod
+    def create(cls, db: sqlite3.Connection, *, if_not_exists: bool = False) -> None:
+        """Create the declared schema; SQLite owns concurrent existence checks."""
+        for statement in cls.ddl(if_not_exists=if_not_exists):
             db.execute(statement)
 
     @classmethod
-    def _where(cls, where: str, parameters: tuple, key: dict[str, object]) -> tuple[str, tuple]:
+    def _condition(cls, where: str, parameters: tuple, key: dict[str, object]) -> tuple[str, tuple]:
+        """Compile declared equality/IN values once for reads and keyed removals."""
         clauses = tuple(Predicate.capture(key[item.name]).clause(item)
                         for item in cls._fields_named(tuple(key)))
         if clauses:
@@ -592,7 +625,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         cls, db: sqlite3.Connection, where: str, parameters: tuple,
         order_by: tuple[str, ...], descending: bool, key: dict[str, object]
     ) -> sqlite3.Cursor:
-        where, parameters = cls._where(where, parameters, key)
+        where, parameters = cls._condition(where, parameters, key)
         cls._fields_named(order_by)
         direction = " DESC" if descending else ""
         return db.execute(
@@ -631,29 +664,73 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return cls.iterate(cls._query(db, where, parameters, order_by, descending, key))
 
     @classmethod
-    def delete(cls, db: sqlite3.Connection, *, where: str = '1', parameters: tuple = (),
-               **key: object) -> sqlite3.Cursor:
-        where, parameters = cls._where(where, parameters, key)
-        return db.execute(f'DELETE FROM {_identifier(cls.declared_name)} WHERE {where}', parameters)
-
-    @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
         rows = cls.select(db, **key)
         if len(rows) > 1:
             raise ValueError(f"Expected one {cls.declared_name} for {tuple(key)}")
         return next(iter(rows), None)
 
+    @classmethod
+    def present(cls, db: sqlite3.Connection) -> bool:
+        return SqlValue.for_annotation(bool).read(db.execute(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)",
+            (cls.declared_name,)))[0]
+
+    @classmethod
+    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = ()) -> bool:
+        return SqlValue.for_annotation(bool).read(db.execute(
+            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {where})",
+            parameters))[0]
+
+    @classmethod
+    def column_values(cls, db: sqlite3.Connection, name: str, *,
+                      where: str = "1", parameters: tuple = ()) -> list:
+        selected, = cls._fields_named((name,))
+        return selected.read(db.execute(
+            f"SELECT {_identifier(selected.name)} FROM {_identifier(cls.declared_name)} WHERE {where}",
+            parameters))
+
+    @classmethod
+    def _writable_fields(cls, columns: tuple[str, ...] = ()) -> tuple[_Field, ...]:
+        if not columns:
+            return tuple(item for item in cls._fields() if item.column.writable)
+        selected = cls._fields_named(columns)
+        if any(not item.column.writable for item in selected):
+            raise ValueError("Generated columns cannot be written")
+        return selected
+
+    @classmethod
+    def insertion_statement(cls, columns: tuple[str, ...] = ()) -> str:
+        writable = cls._writable_fields(columns)
+        return (f"INSERT INTO {_identifier(cls.declared_name)} "
+                f"({cls._column_list(tuple(item.name for item in writable))}) "
+                f"VALUES ({', '.join('?' for _ in writable)})")
+
+    @classmethod
+    def insert_values(cls, db: sqlite3.Connection, **values: object) -> sqlite3.Cursor:
+        writable = cls._writable_fields(tuple(values))
+        return db.execute(cls.insertion_statement(tuple(item.name for item in writable)),
+                          tuple(item.encode(values[item.name]) for item in writable))
+
+    @classmethod
+    def delete(
+        cls, db: sqlite3.Connection, *, where: str = "1",
+        parameters: tuple = (), **key: object,
+    ) -> sqlite3.Cursor:
+        where, parameters = cls._condition(where, parameters, key)
+        return db.execute(f"DELETE FROM {_identifier(cls.declared_name)} WHERE {where}", parameters)
+
     def _insertion(self) -> tuple[str, tuple]:
-        writable = tuple(item for item in self._fields() if item.column.writable)
-        return (
-            f"INSERT INTO {_identifier(self.declared_name)} "
-            f"({self._column_list(tuple(item.name for item in writable))}) "
-            f"VALUES ({', '.join('?' for _ in writable)})",
-            tuple(item.encode(getattr(self, item.name)) for item in writable),
-        )
+        writable = self._writable_fields()
+        return (self.insertion_statement(),
+                tuple(item.encode(getattr(self, item.name)) for item in writable))
 
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         return db.execute(*self._insertion())
+
+    def insert_if_absent(self, db: sqlite3.Connection) -> sqlite3.Cursor:
+        statement, values = self._insertion()
+        return db.execute(statement + " ON CONFLICT DO NOTHING", values)
 
     def upsert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         """Replace writable values on a declared primary-key conflict."""
@@ -661,8 +738,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         keys = tuple(item.name for item in self._fields() if item.column.primary_key)
         updates = tuple(
             item.name
-            for item in self._fields()
-            if not item.column.primary_key and item.column.writable
+            for item in self._writable_fields()
+            if not item.column.primary_key
         )
         statement += f" ON CONFLICT ({self._column_list(keys)}) DO "
         statement += (
@@ -682,11 +759,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (),
         **changes: object,
     ) -> sqlite3.Cursor:
-        selected = cls._fields_named(tuple(changes))
+        selected = cls._writable_fields(tuple(changes))
         if not selected:
             raise ValueError(f"Update requires fields for {cls.declared_name}")
-        if any(not item.column.writable for item in selected):
-            raise ValueError("Generated columns cannot be updated")
         return db.execute(
             f"UPDATE {_identifier(cls.declared_name)} SET "
             + ", ".join(f"{_identifier(item.name)}=?" for item in selected)

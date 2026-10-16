@@ -92,22 +92,22 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "current_pointer_insert_owner": (
-                """CREATE TRIGGER current_pointer_insert_owner BEFORE INSERT ON current_executions
+                """ BEFORE INSERT ON current_executions
 WHEN NOT EXISTS (SELECT 1 FROM owner_generations
  WHERE owner_lookup = NEW.owner_lookup)
 BEGIN SELECT RAISE(ABORT, 'current pointer owner is not registered'); END"""
             ),
             "current_pointer_update_owner": (
-                """CREATE TRIGGER current_pointer_update_owner BEFORE UPDATE ON current_executions
+                """ BEFORE UPDATE ON current_executions
 WHEN NEW.owner_lookup IS NOT OLD.owner_lookup
  OR NEW.pointer_revision != OLD.pointer_revision + 1
 BEGIN SELECT RAISE(ABORT, 'current pointer owner/revision mismatch'); END"""
             ),
             "current_pointer_delete_frozen": (
-                """CREATE TRIGGER current_pointer_delete_frozen BEFORE DELETE ON
+                """ BEFORE DELETE ON
 current_executions BEGIN
     SELECT RAISE(ABORT, 'current pointer cannot be deleted' );
 END"""
@@ -266,15 +266,15 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "execution_status_edge": (
-                """CREATE TRIGGER execution_status_edge BEFORE UPDATE OF lifecycle ON executions
+                """ BEFORE UPDATE OF lifecycle ON executions
 WHEN json_extract(NEW.lifecycle, '$.kind') != json_extract(OLD.lifecycle, '$.kind') AND NOT ({execution_edges})
 BEGIN SELECT RAISE(ABORT, 'execution status transition is not declared'); END"""
             ),
             "execution_failed_attempt": (
-                """CREATE TRIGGER execution_failed_attempt BEFORE UPDATE OF lifecycle ON executions
+                """ BEFORE UPDATE OF lifecycle ON executions
 WHEN json_extract(NEW.lifecycle, '$.kind') IN ({optional_attempt_execution_names})
  AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
  AND NOT EXISTS (
@@ -287,7 +287,7 @@ WHEN json_extract(NEW.lifecycle, '$.kind') IN ({optional_attempt_execution_names
 BEGIN SELECT RAISE(ABORT, 'failed execution requires a failed attempt'); END"""
             ),
             "execution_frozen_facts": (
-                """CREATE TRIGGER execution_frozen_facts BEFORE UPDATE ON executions
+                """ BEFORE UPDATE ON executions
 WHEN NEW.execution_id IS NOT OLD.execution_id OR NEW.origin IS NOT OLD.origin
  OR NEW.owner_lookup IS NOT OLD.owner_lookup
  OR NEW.owner_thread IS NOT OLD.owner_thread OR NEW.max_attempts != OLD.max_attempts
@@ -300,7 +300,7 @@ WHEN NEW.execution_id IS NOT OLD.execution_id OR NEW.origin IS NOT OLD.origin
   json_extract(NEW.lifecycle, '$.ordinal') IS NOT json_extract(OLD.lifecycle, '$.ordinal'))
 BEGIN SELECT RAISE(ABORT, 'execution transition rewrites frozen authority'); END"""
             ),
-            "execution_response_finality": """CREATE TRIGGER execution_response_finality
+            "execution_response_finality": """
 BEFORE UPDATE OF lifecycle ON executions
 WHEN NEW.origin = 'wire'
 BEGIN
@@ -315,7 +315,7 @@ BEGIN
       SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id AND retryable != 1);
 END""",
             "execution_failure_receipt_guard": (
-                """CREATE TRIGGER execution_failure_receipt_guard BEFORE UPDATE OF lifecycle
+                """ BEFORE UPDATE OF lifecycle
 ON executions
 WHEN json_extract(NEW.lifecycle, '$.kind') = 'failed' AND EXISTS (
   SELECT 1 FROM publication_receipts WHERE execution_id =
@@ -324,12 +324,12 @@ BEGIN SELECT RAISE(ABORT,
 'failed execution cannot erase publication receipt' ); END"""
             ),
             "execution_delete_frozen": (
-                """CREATE TRIGGER execution_delete_frozen BEFORE DELETE ON executions BEGIN
+                """ BEFORE DELETE ON executions BEGIN
     SELECT RAISE(ABORT, 'execution cannot be deleted');
 END"""
             ),
             "failed_retry_partition_update": (
-                """CREATE TRIGGER failed_retry_partition_update BEFORE UPDATE OF lifecycle
+                """ BEFORE UPDATE OF lifecycle
 ON executions
 WHEN json_extract(NEW.lifecycle, '$.kind') = 'failed' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
  AND EXISTS (SELECT 1 FROM retry_disposition_basis b

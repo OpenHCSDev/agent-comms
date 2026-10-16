@@ -111,13 +111,13 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         )
 
     @classmethod
-    def triggers(cls):
-        return {**cls._retry_triggers(), **cls._lifecycle_triggers(), **cls._publication_triggers()}
+    def trigger_bodies(cls):
+        return {**cls._retry_trigger_bodies(), **cls._lifecycle_trigger_bodies(), **cls._publication_trigger_bodies()}
 
     @classmethod
-    def _retry_triggers(cls):
+    def _retry_trigger_bodies(cls):
         return {
-            "failed_retry_partition_obligation_insert": """CREATE TRIGGER failed_retry_partition_obligation_insert AFTER INSERT
+            "failed_retry_partition_obligation_insert": """ AFTER INSERT
 ON obligations
 WHEN EXISTS (SELECT 1 FROM retry_disposition_basis b JOIN executions e
              ON e.execution_id = b.execution_id
@@ -127,7 +127,7 @@ WHEN EXISTS (SELECT 1 FROM retry_disposition_basis b JOIN executions e
                IS NOT NULL)
 BEGIN SELECT RAISE(ABORT, 'authorized retry cannot settle failed' );
 END""",
-            "failed_retry_partition_obligation_update": """CREATE TRIGGER failed_retry_partition_obligation_update AFTER UPDATE
+            "failed_retry_partition_obligation_update": """ AFTER UPDATE
 ON obligations
 WHEN EXISTS (SELECT 1 FROM retry_disposition_basis b JOIN executions e
              ON e.execution_id = b.execution_id
@@ -140,19 +140,19 @@ END""",
         }
 
     @classmethod
-    def _lifecycle_triggers(cls):
+    def _lifecycle_trigger_bodies(cls):
         return {
-            "obligation_same_state_frozen": """CREATE TRIGGER obligation_same_state_frozen BEFORE UPDATE ON obligations
+            "obligation_same_state_frozen": """ BEFORE UPDATE ON obligations
 WHEN json_extract(NEW.lifecycle, '$.kind') = json_extract(OLD.lifecycle, '$.kind')
 BEGIN SELECT RAISE(ABORT, 'obligation disposition must change'); END""",
-            "obligation_declared_edge": """CREATE TRIGGER obligation_declared_edge
+            "obligation_declared_edge": """
 BEFORE UPDATE OF lifecycle ON obligations
 WHEN json_extract(OLD.lifecycle, '$.kind') != json_extract(NEW.lifecycle, '$.kind') AND NOT ({obligation_edges}
 )
 BEGIN
     SELECT RAISE(ABORT, 'obligation state transition is not declared');
 END""",
-            "obligation_frozen_facts": """CREATE TRIGGER obligation_frozen_facts
+            "obligation_frozen_facts": """
 BEFORE UPDATE ON obligations
 WHEN NEW.execution_id IS NOT OLD.execution_id
  OR NEW.exact_target IS NOT OLD.exact_target
@@ -162,7 +162,7 @@ WHEN NEW.execution_id IS NOT OLD.execution_id
 BEGIN
     SELECT RAISE(ABORT, 'obligation transition rewrites frozen facts');
 END""",
-            "obligation_target_matches_execution_insert": """CREATE TRIGGER obligation_target_matches_execution_insert
+            "obligation_target_matches_execution_insert": """
 BEFORE INSERT ON obligations
 WHEN NOT EXISTS (
     SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id
@@ -171,7 +171,7 @@ WHEN NOT EXISTS (
 BEGIN
     SELECT RAISE(ABORT, 'obligation target does not match wire execution');
 END""",
-            "obligation_target_matches_execution_update": """CREATE TRIGGER obligation_target_matches_execution_update
+            "obligation_target_matches_execution_update": """
 BEFORE UPDATE OF exact_target ON obligations
 WHEN NOT EXISTS (
     SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id=e.execution_id
@@ -180,15 +180,15 @@ WHEN NOT EXISTS (
 BEGIN
     SELECT RAISE(ABORT, 'obligation target does not match wire execution');
 END""",
-            "obligation_delete_frozen": """CREATE TRIGGER obligation_delete_frozen BEFORE DELETE ON obligations BEGIN
+            "obligation_delete_frozen": """ BEFORE DELETE ON obligations BEGIN
     SELECT RAISE(ABORT, 'obligation cannot be deleted');
 END""",
         }
 
     @classmethod
-    def _publication_triggers(cls):
+    def _publication_trigger_bodies(cls):
         return {
-            "published_obligation_receipt_is_frozen": """CREATE TRIGGER published_obligation_receipt_is_frozen
+            "published_obligation_receipt_is_frozen": """
 BEFORE UPDATE OF lifecycle ON obligations
 WHEN json_extract(OLD.lifecycle, '$.kind') = 'published' AND (
     json_extract(NEW.lifecycle, '$.message_id') IS NOT json_extract(OLD.lifecycle, '$.message_id')
@@ -197,7 +197,7 @@ WHEN json_extract(OLD.lifecycle, '$.kind') = 'published' AND (
 BEGIN
     SELECT RAISE(ABORT, 'published obligation receipt is frozen');
 END""",
-            "obligation_publication_transition": """CREATE TRIGGER obligation_publication_transition
+            "obligation_publication_transition": """
 BEFORE UPDATE ON obligations
 WHEN json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names})
 BEGIN
@@ -213,27 +213,27 @@ BEGIN
           AND message_id = json_extract(NEW.lifecycle, '$.message_id') AND seq = json_extract(NEW.lifecycle, '$.seq')
     );
 END""",
-            "obligation_publication_insert": """CREATE TRIGGER obligation_publication_insert
+            "obligation_publication_insert": """
 BEFORE INSERT ON obligations
 WHEN json_extract(NEW.lifecycle, '$.kind') IN ({required_intent_response_names})
 BEGIN
     SELECT RAISE(ABORT, 'publication obligation starts pending');
 END""",
-            "obligation_receipt_requires_published": """CREATE TRIGGER obligation_receipt_requires_published
+            "obligation_receipt_requires_published": """
 BEFORE UPDATE OF lifecycle ON obligations
 WHEN EXISTS (SELECT 1 FROM publication_receipts WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
  AND json_extract(NEW.lifecycle, '$.kind') != 'published'
 BEGIN
     SELECT RAISE(ABORT, 'frozen receipt requires published obligation');
 END""",
-            "obligation_state_with_intent": """CREATE TRIGGER obligation_state_with_intent
+            "obligation_state_with_intent": """
 BEFORE UPDATE OF lifecycle ON obligations
 WHEN EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
   AND json_extract(NEW.lifecycle, '$.kind') NOT IN ({intent_response_names})
 BEGIN
     SELECT RAISE(ABORT, 'frozen intent cannot return to pending obligation');
 END""",
-            "obligation_target_frozen": """CREATE TRIGGER obligation_target_frozen
+            "obligation_target_frozen": """
 BEFORE UPDATE OF exact_target ON obligations
 WHEN EXISTS (SELECT 1 FROM publication_intents WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
 BEGIN

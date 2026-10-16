@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 
 import pytest
 from pydantic import ValidationError
@@ -12,6 +13,7 @@ from agent_comms.cli import _fail, main
 from agent_comms.cli_bridges.shared import (
     Binding,
     DeliveryJournal,
+    DeliveryRow,
     Inbox,
     LineMonitorBridge,
     Options,
@@ -63,6 +65,75 @@ def test_argument_errors_use_the_same_single_line(arguments, capsys):
     output = capsys.readouterr().out
     assert len(output.splitlines()) == 1
     assert isinstance(CORE_ERROR.validate_json(output), FailedCoreError)
+
+
+@pytest.mark.asyncio
+async def test_journal_concurrent_initialization_and_reopen_preserve_rows(tmp_path):
+    # Pause both real processes immediately before their first table CREATE.
+    # The old present()/create() implementation then deterministically races:
+    # both have observed absence before either is allowed to create the table.
+    worker = r'''
+import sqlite3
+import sys
+from pathlib import Path
+from unittest.mock import patch
+from agent_comms.cli_bridges.shared import DeliveryJournal
+
+connect = sqlite3.connect
+class PausedConnection(sqlite3.Connection):
+    first_create = True
+    def execute(self, statement, *args, **kwargs):
+        if self.first_create and statement.startswith('CREATE TABLE '):
+            self.first_create = False
+            print('ready', flush=True)
+            assert sys.stdin.readline() == 'go\n'
+        return super().execute(statement, *args, **kwargs)
+
+with patch('sqlite3.connect', side_effect=lambda *a, **k: connect(*a, factory=PausedConnection, **k)):
+    journal = DeliveryJournal(Path(sys.argv[1]))
+    journal.close()
+print('opened', flush=True)
+'''
+
+    async def open_together():
+        children = []
+        try:
+            for _ in range(2):
+                children.append(await asyncio.create_subprocess_exec(
+                    sys.executable, '-c', worker, str(tmp_path),
+                    stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE))
+            ready = await asyncio.wait_for(asyncio.gather(
+                *(child.stdout.readline() for child in children)), 20)
+            assert ready == [b'ready\n', b'ready\n']
+            results = await asyncio.wait_for(asyncio.gather(
+                *(child.communicate(b'go\n') for child in children)), 20)
+            assert [(child.returncode, out, err) for child, (out, err)
+                    in zip(children, results)] == [(0, b'opened\n', b'')] * 2
+        finally:
+            for child in children:
+                if child.returncode is None:
+                    child.kill()
+                await child.wait()
+
+    await open_together()
+    binding = Binding(str(tmp_path), 'viewer', 'external-session')
+    message = Message(sender='peer', target='viewer', type=InfoKind,
+                      body='retained delivery', timestamp=1.0, seq=1)
+    journal = DeliveryJournal(tmp_path)
+    try:
+        assert journal.bind(binding) == binding
+        assert journal.begin(message, 'original payload', Outcome.UNCONFIRMED)
+    finally:
+        journal.close()
+    await open_together()
+    journal = DeliveryJournal(tmp_path)
+    try:
+        assert journal.bind(None) == binding
+        assert DeliveryRow.select(journal.db) == [
+            DeliveryRow(message.message_id, 'original payload', Outcome.UNCONFIRMED)]
+    finally:
+        journal.close()
 
 
 @pytest.mark.asyncio

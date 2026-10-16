@@ -225,10 +225,10 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "claim_transition_frozen_facts": (
-                """CREATE TRIGGER claim_transition_frozen_facts
+                """
 BEFORE UPDATE ON wake_claims
 BEGIN
     SELECT RAISE(ABORT, 'claim disposition must change')
@@ -267,7 +267,7 @@ BEGIN
 END"""
             ),
             "wake_claim_delete_frozen": (
-                """CREATE TRIGGER wake_claim_delete_frozen BEFORE DELETE ON wake_claims BEGIN
+                """ BEFORE DELETE ON wake_claims BEGIN
     SELECT RAISE(ABORT, 'wake claim cannot be deleted');
 END"""
             ),
@@ -302,10 +302,10 @@ class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execu
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "execution_claim_membership_insert": (
-                """CREATE TRIGGER execution_claim_membership_insert BEFORE INSERT ON
+                """ BEFORE INSERT ON
     execution_claims
     WHEN NOT EXISTS (SELECT 1 FROM executions e WHERE e.execution_id =
     NEW.execution_id
@@ -316,7 +316,7 @@ class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execu
     'execution claims require initial contiguous membership' ); END"""
             ),
             "execution_claim_target_insert": (
-                """CREATE TRIGGER execution_claim_target_insert
+                """
     BEFORE INSERT ON execution_claims
     WHEN NOT EXISTS (
         SELECT 1 FROM executions e JOIN wake_claims c
@@ -330,14 +330,14 @@ class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execu
     END"""
             ),
             "execution_claim_target_update": (
-                """CREATE TRIGGER execution_claim_target_update
+                """
     BEFORE UPDATE ON execution_claims
     BEGIN
         SELECT RAISE(ABORT, 'execution claim relation is immutable');
     END"""
             ),
             "execution_claim_delete_frozen": (
-                """CREATE TRIGGER execution_claim_delete_frozen BEFORE DELETE ON
+                """ BEFORE DELETE ON
     execution_claims BEGIN
         SELECT RAISE(ABORT, 'execution claim relation cannot be deleted'
         );
