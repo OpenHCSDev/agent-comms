@@ -10,6 +10,7 @@ import subprocess
 import typing
 from abc import abstractmethod
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
 from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
@@ -42,11 +43,48 @@ class GitMeasure(Measure):
     def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
         return base, head
 
+    @staticmethod
+    def sources(repo: Path, ref: str, selected: set[str]) -> list[tuple[str, bytes]]:
+        """Capture exact blobs once at the Git boundary, not one child per file.
+
+        NUL-delimited tree paths never enter the line-framed object protocol;
+        only immutable object IDs do. Unlike archive export, these bytes are
+        unaffected by export-ignore/export-subst attributes.
+        """
+        if not selected:
+            return []
+        tree = git(repo, '--literal-pathspecs', 'ls-tree', '-rz', ref, '--', *sorted(selected))
+        identities = {}
+        for entry in tree.split(b'\0'):
+            if entry:
+                metadata, path = entry.split(b'\t', 1)
+                _, kind, identity = metadata.split()
+                if kind != b'blob':
+                    raise ValueError(f'Expected a source blob at {path!r}')
+                identities[path.decode()] = identity
+        if identities.keys() != selected:
+            raise ValueError('Git source capture omitted a selected path')
+        objects = dict.fromkeys(identities.values())
+        stream = BytesIO(git(repo, 'cat-file', '--batch', input=b'\n'.join(objects) + b'\n'))
+        blobs = {}
+        for identity in objects:
+            recorded, kind, size = stream.readline().split()
+            if recorded != identity or kind != b'blob':
+                raise ValueError('Git returned an unrelated source object')
+            length = int(size)
+            content = stream.read(length)
+            if len(content) != length or stream.read(1) != b'\n':
+                raise ValueError('Git returned an incomplete source object')
+            blobs[identity] = content
+        if stream.read(1):
+            raise ValueError('Git returned unrequested source objects')
+        return [(path, blobs[identities[path]]) for path in sorted(selected)]
+
     @classmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         def snapshot(ref: str) -> dict[str, int]:
             selected = cls.scope(changed, python_paths(repo, ref, root))
-            return cls.snapshot([(path, git(repo, "show", f"{ref}:{path}")) for path in sorted(selected)])
+            return cls.snapshot(cls.sources(repo, ref, selected))
         return cls.align(snapshot(base), snapshot(head))
 
 
@@ -667,8 +705,8 @@ class AnyAnnotation(PerFileMeasure):
         return len(cls.uses(source, filename))
 
 
-def git(repo: Path, *args: str) -> bytes:
-    return subprocess.check_output(["git", "-C", str(repo), *args], timeout=20)
+def git(repo: Path, *args: str, input: bytes = b'') -> bytes:
+    return subprocess.check_output(["git", "-C", str(repo), *args], input=input, timeout=20)
 
 
 def revision(repo: Path, ref: str) -> str:

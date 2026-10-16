@@ -55,6 +55,23 @@ def repo(tmp_path: Path, request) -> Repository:
     return Repository(tmp_path, request.param)
 
 
+def test_batch_sources_are_exact_commit_blobs_not_archive_or_worktree(repo: Repository) -> None:
+    from agent_comms.debt_ratchet import GitMeasure
+
+    source = '# $Format:%H$\nvalue = 1\n'
+    files = {'ignored.py': source, 'substituted.py': source, 'duplicate.py': source,
+             'bracket[one]\nα.py': '# α\nvalue = 2\n'}
+    base = repo.commit({**files, '.gitattributes':
+                        'ignored.py export-ignore\nsubstituted.py export-subst\n'})
+    selected = {f'{repo.root}/{name}' for name in files}
+    (repo.path / repo.root / 'substituted.py').write_text('not the committed source\n')
+    expected = [(path, subprocess.check_output(
+        ['git', '-C', str(repo.path), 'show', f'{base}:{path}'], timeout=10,
+    )) for path in sorted(selected)]
+    assert GitMeasure.sources(repo.path, base, selected) == expected
+    assert GitMeasure.sources(repo.path, base, set()) == []
+
+
 def test_added_type_check_fails(repo: Repository) -> None:
     base = repo.commit({"check.py": 'value = row["a"]\n'})
     head = repo.commit({"check.py": "value = type(x) is int\n"})
