@@ -179,9 +179,9 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(tm
     assert status == 1
     assert report["delta"][f"FamilyFlattened:{repo.root}/first.py"] == -2
     assert report["delta"][f"FamilyFlattened:{repo.root}/second.py"] == 1
-    assert FamilyFlattened.occurrences(ast.parse(original).body[0].body[0]) == (
-        AuditFamilyFlattened.count(ast.parse(original).body[0].body[0])
-    )
+    assert FamilyFlattened.occurrences(ast.parse(original)) == (
+        AuditFamilyFlattened.count(ast.parse(original))
+    ) == 2
     original_modules = tuple(module for module in FamilyFlattened.mechanism_modules
                              if module.parent == Path(repo.root))
     facades = {f"{directory}/{module.parent.name}/{module.name}"
@@ -330,7 +330,10 @@ async def second(value):
     if value == "three": return 3
 '''} )
     status, report = repo.compare(before, head)
-    assert status == 0
+    # No three-arm dispatch group; the separate identity-use measure still
+    # reports the individual string choices instead of silently losing them.
+    assert status == 1
+    assert report["head"][f"FamilyFlattened:{repo.root}/scope.py"] > 0
     assert report["head"][f"StringDispatch:{repo.root}/scope.py"] == 0
     assert report["head"][f"StringDispatchArms:{repo.root}/scope.py"] == 0
 
