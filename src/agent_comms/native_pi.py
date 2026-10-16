@@ -27,6 +27,9 @@ from .native_package import OWNER_INSTRUCTIONS
 from .owner_launch import RestartEnvironment
 from .field_codec import FieldCodec
 from .pi_rpc import unique_fields
+from .registry_store import RegistryStore
+from .private_nk_entrypoint import PrivateNkLaunch
+from .turn_context import ContextSegment, TurnContext
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
@@ -38,7 +41,6 @@ if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
     from .selected_session import SelectedSession
     from .turn_failure import TurnFailure
-    from .turn_context import ContextSegment
 
 CAPABILITY = "pi-native-input-v1-live-only"
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -96,16 +98,13 @@ class NativePiPromptRejected(NativePiUnavailable):
 
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
-    from .private_nk_entrypoint import PrivateNkLaunch
-
     launch = PrivateNkLaunch.current()
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = launch.validate()
-    from .comms import Comms
-    from .turn_context import TurnContext
-
-    owner = Comms(launch.validated_root).registry.require(RestartEnvironment.calling_thread())
+    owner = RegistryStore(launch.validated_root / "registry.json").read_entry(
+        RestartEnvironment.calling_thread()
+    ).entry.thread
     session_context = TurnContext.session_segments(owner)
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(
@@ -407,8 +406,6 @@ class NativePiRpcLaunch:
     def bootstrap(cls, cli, arguments, cwd, environment, configuration: RestartEnvironment,
                   *, session_context: tuple[ContextSegment, ...]):
         """Render required typed session context at its native process boundary."""
-        from .turn_context import TurnContext
-
         context_text = TurnContext.render_segments(session_context).text
         if not context_text.strip():
             raise NativePiUnavailable("Native launch requires nonempty session context")
@@ -450,7 +447,6 @@ class NativePiRpcLaunch:
         import hashlib
 
         from .native_package import MANIFEST
-        from .private_nk_entrypoint import PrivateNkLaunch
 
         stack_launcher = MANIFEST.parent / "bin" / "pi-native"
         executable = (
