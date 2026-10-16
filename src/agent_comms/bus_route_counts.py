@@ -280,7 +280,7 @@ class RouteIndexBehind(RouteIndexState):
 
 @dataclass(frozen=True)
 class RouteIndexBlocked(RouteIndexState):
-    """Another writer owns preparation; no runnable unit was admitted."""
+    """Another writer holds the lock; this call could not make progress."""
 
     complete: ClassVar[bool] = False
 

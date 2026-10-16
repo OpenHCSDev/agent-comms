@@ -469,7 +469,7 @@ class SidebarReading(Observation[ObserveSidebar]):
             try:
                 result = stage.read(self.request, comms, revision)
             except RouteIndexRebuilding:
-                # Continue admitted preparation, letting the service accept and
+                # Continue bounded preparation, letting the service accept and
                 # serve foreground requests between every bounded unit.
                 yield None
                 continue
