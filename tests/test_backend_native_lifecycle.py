@@ -95,6 +95,7 @@ async def test_actual_native_failure_after_tool_keeps_terminal_and_effect_once(
         yield from chunks()
         owner.provider.status = 400
         owner.provider.error_message = "controlled failure after actual tool effect"
+        owner.provider.error_type = "invalid_request_error"
 
     monkeypatch.setattr(owner.provider, "response_chunks", fail_after_tool)
     async with owner.open_owner(native_options=("--tools", "bash")) as (agent, session):
@@ -106,7 +107,8 @@ async def test_actual_native_failure_after_tool_keeps_terminal_and_effect_once(
         journal = [json.loads(line) for line in owner.session.read_text().splitlines()]
         messages = [row["message"] for row in journal if row.get("type") == "message"]
         errors = [message for message in messages if message.get("stopReason") == "error"]
-        assert errors and "controlled failure" in errors[-1]["errorMessage"]
+        assert len(errors) == 1 and "controlled failure" in errors[0]["errorMessage"]
+        assert owner.provider.posts == 2  # One tool request, one terminal refusal; no retries.
         tools = [message for message in messages if message.get("role") == "toolResult"]
         assert len(tools) == 1
         assert len([message for message in messages if message.get("role") == "user"]) == 2
