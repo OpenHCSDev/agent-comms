@@ -448,7 +448,7 @@ def _require_final_owner(
     return snapshot
 
 
-def _answered_by(bus, metadata, owner: LiveResponseOwner, registry, response, obligation, target: str):
+def _answered_by(bus, metadata, owner: LiveResponseOwner, registry, snapshot, obligation):
     """Selected originals and started following inputs share one published response.
 
     The caller holds the bus lock, so the source is opened under that lock.
@@ -460,8 +460,8 @@ def _answered_by(bus, metadata, owner: LiveResponseOwner, registry, response, ob
     lease = owner.thread.require_turn_lease()
     inputs = InputDispositions(bus.log.path.parent).in_turn(lease.turn_id)
     with opened_private_checkpoint_unlocked(bus.log, metadata) as source:
-        following = inputs.answered_by(lease, source, registry, target)
-    return ResponseConversation.answer_references(response, obligation, following)
+        following = inputs.answered_by(lease, source, registry, obligation.exact_target)
+    return ResponseConversation.answer_references(snapshot, obligation, following)
 
 
 def prepare_fenced_response(
@@ -504,7 +504,7 @@ def prepare_fenced_response(
             target = obligation.exact_target
             existing = ResponseObligation.response_record(snapshot.publication_intents, target)
             answers = _answered_by(
-                bus, metadata, owner_witness, registry_snapshot, snapshot, obligation, target
+                bus, metadata, owner_witness, registry_snapshot, snapshot, obligation
             )
             if existing is not None:
                 snapshot.require_existing_preparation(
