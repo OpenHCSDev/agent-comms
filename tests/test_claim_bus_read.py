@@ -169,7 +169,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         # The strict whole-bus reader agrees with what the claim path left.
         assert dict(log.claim_projection()) == {}
         claims = [m for m in comms.views.full_history() if m.claim_transition is not None]
-        assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
+        assert [(m.claim_transition.acquired_resources(), len(m.claim_transition.releases)) for m in claims] == [
             ((str(resource),), 0), ((), 1),
         ]
         assert all(message.type is ClaimNoticeKind for message in claims)

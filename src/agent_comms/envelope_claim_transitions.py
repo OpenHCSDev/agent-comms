@@ -15,13 +15,19 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, Self
+from uuid import uuid4
 
-from .coordination_errors import IdentityConflict
+from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .errors import RelationViolationError
 from .message_reference import MessageReference
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireValue, required_projection
 from .thread_identity import GenerationCounter, ThreadIncarnation, TurnId
+
+if TYPE_CHECKING:
+    from .coordination_tables.attempts import AttemptRecord
+    from .messages import Message
+    from .private_bus_checkpoint import CertifiedSourceRead
 
 
 class ClaimTransitionError(ValueError):
@@ -213,6 +219,21 @@ class WakeAdmission:
         ):
             raise ClaimTransitionError("Wake claim ID is invalid.")
 
+    def matches_attempt(self, attempt: AttemptRecord) -> bool:
+        return (self.execution_id, self.attempt_ordinal, self.recipient_lookup,
+                self.participant_generation) == (
+                    attempt.execution_id, attempt.attempt_ordinal,
+                    attempt.owner_lookup, attempt.owner_generation)
+
+    def require_target(self, targets: Mapping[str, str]) -> str:
+        try:
+            target = targets[self.wake_assignment_id]
+        except KeyError as error:
+            raise IntegrityViolationError('terminal claim has no original wake assignment route') from error
+        if not target:
+            raise IntegrityViolationError('terminal claim has no original wake assignment route')
+        return target
+
 
 @dataclass(frozen=True, slots=True)
 class ClaimRelease:
@@ -223,86 +244,215 @@ class ClaimRelease:
         _resource(self.resource)
         _generation(self.generation)
 
+    @classmethod
+    def capture(cls, worktree: Path, path: str | Path, source: CertifiedSourceRead) -> ClaimRelease:
+        return source.claim(_release_resource(worktree, path)).release()
 
-@dataclass(frozen=True, slots=True)
-class ClaimTransition:
-    """Claims and releases in ONE future message row, never independent writes."""
+
+class ClaimBinding(WireValue, ABC):
+    """A manual acquisition or an acquisition bound to one native operation."""
+
+    @classmethod
+    def from_wire(cls, data: object) -> ClaimBinding:
+        bound = AdmittedClaimBinding(FieldCodec.decode(WakeAdmission, data))
+        if not isinstance(bound, cls):
+            raise ClaimTransitionError('Claim binding does not match its declared member')
+        return bound
+
+    @classmethod
+    def schema(cls) -> dict:
+        return FieldCodec.record_schema(WakeAdmission)
+
+    @abstractmethod
+    def require_transition(self, releases: tuple[ClaimRelease, ...]) -> None: ...
+
+    @abstractmethod
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None: ...
+
+    @abstractmethod
+    def owner_for(self, acquisition: AcquiringTransition, resource: str) -> ClaimOwner: ...
+
+    @abstractmethod
+    def releasing(self, message: Message, incarnation: str,
+                  releases: tuple[ClaimRelease, ...]) -> ReleasingTransition: ...
+
+
+@dataclass(frozen=True)
+class UnboundClaimBinding(ClaimBinding):
+    def to_wire(self):
+        return None  # Omitted by the containing record's declared default.
+
+    def require_transition(self, releases: tuple[ClaimRelease, ...]) -> None:
+        pass
+
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        pass
+
+    def owner_for(self, acquisition: AcquiringTransition, resource: str) -> ClaimOwner:
+        return ClaimOwner.acquired(acquisition, resource)
+
+    def releasing(self, message: Message, incarnation: str,
+                  releases: tuple[ClaimRelease, ...]) -> ReleasingTransition:
+        return ReleasingTransition(owner=message.sender, incarnation=incarnation,
+                                   seq=message.seq, message_id=message.message_id, releases=releases)
+
+
+@dataclass(frozen=True)
+class AdmittedClaimBinding(ClaimBinding):
+    admission: WakeAdmission
+
+    def to_wire(self):
+        return FieldCodec.encode(self.admission)
+
+    def require_transition(self, releases: tuple[ClaimRelease, ...]) -> None:
+        if releases:
+            raise ClaimTransitionError('Wake admission requires a claim-only transition.')
+
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        if is_used(self.admission.operation_id):
+            raise IdentityConflict('Wake claim operation was already consumed')
+
+    def owner_for(self, acquisition: AcquiringTransition, resource: str) -> ClaimOwner:
+        return AdmittedClaimOwner.acquired(acquisition, resource, admission=self.admission)
+
+    def releasing(self, message: Message, incarnation: str,
+                  releases: tuple[ClaimRelease, ...]) -> ReleasingTransition:
+        raise ClaimTransitionError('Wake admission requires a claim-only transition.')
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClaimTransition(WireValue, ABC):
+    """One atomic claim change; the concrete operation owns its possible data."""
 
     max_resources: ClassVar[int] = 32
-
     owner: str
     incarnation: str
     seq: int
     message_id: str
-    claims: tuple[str, ...] = field(default=(), metadata={"wire_required": True})
-    releases: tuple[ClaimRelease, ...] = field(default=(), metadata={"wire_required": True})
-    generation: str | None = field(default=None, metadata={"wire_required": True})
-    admission: WakeAdmission | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_nonnull": True}
-    )
+    releases: tuple[ClaimRelease, ...] = field(default=(), metadata={'wire_required': True})
+
+    def to_wire(self):
+        return FieldCodec.record_encode(self)
+
+    @classmethod
+    def from_wire(cls, data: object) -> ClaimTransition:
+        if not isinstance(data, dict):
+            raise ClaimTransitionError('Claim transition requires an object')
+        member = ReleasingTransition if data.get('generation') is None else AcquiringTransition
+        transition = FieldCodec.record_decode(member, data)
+        if not isinstance(transition, cls):
+            raise ClaimTransitionError('Claim transition does not match its declared member')
+        return transition
+
+    @classmethod
+    def schema(cls) -> dict:
+        members = cls.__subclasses__()
+        return ({'oneOf': [FieldCodec.record_schema(member) for member in members]}
+                if members else FieldCodec.record_schema(cls))
+
+    @classmethod
+    def prepare(cls, message: Message, incarnation: str, claims: tuple[str, ...],
+                releases: tuple[ClaimRelease, ...], binding: ClaimBinding) -> ClaimTransition:
+        if claims:
+            return AcquiringTransition(owner=message.sender, incarnation=incarnation,
+                seq=message.seq, message_id=message.message_id, claims=claims,
+                releases=releases, generation=uuid4().hex, binding=binding)
+        return binding.releasing(message, incarnation, releases)
 
     def __post_init__(self) -> None:
-        _text(self.owner, "Owner")
-        _text(self.incarnation, "Incarnation")
-        _text(self.message_id, "Message ID")
-        if type(self.seq) is not int or self.seq <= 0:
-            raise ClaimTransitionError("Sequence must be a positive exact integer.")
-        if type(self.claims) is not tuple or type(self.releases) is not tuple:
-            raise ClaimTransitionError("Claims and releases must be tuples.")
-        if not self.claims and not self.releases:
-            raise ClaimTransitionError("Empty claim transitions are not meaningful.")
-        if any(type(release) is not ClaimRelease for release in self.releases):
-            raise ClaimTransitionError("Releases must carry exact generation records.")
-        resources = [*self.claims, *(release.resource for release in self.releases)]
+        _text(self.owner, 'Owner')
+        _text(self.incarnation, 'Incarnation')
+        _text(self.message_id, 'Message ID')
+        if self.seq <= 0:
+            raise ClaimTransitionError('Sequence must be a positive exact integer.')
+        resources = self.resources
+        if not resources or len(resources) > self.max_resources:
+            raise ClaimTransitionError('Claim transition requires a bounded nonempty resource set.')
         for resource in resources:
             _resource(resource)
         if len(set(resources)) != len(resources):
-            raise ClaimTransitionError("Duplicate or overlapping resources are not supported.")
-        if self.claims:
-            _generation(self.generation)
-        elif self.generation is not None:
-            raise ClaimTransitionError("A release-only envelope cannot mint a generation.")
-        if self.admission is not None and (
-            type(self.admission) is not WakeAdmission or not self.claims or self.releases
-        ):
-            raise ClaimTransitionError("Wake admission requires a claim-only transition.")
+            raise ClaimTransitionError('Duplicate or overlapping resources are not supported.')
 
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        """A selected operation stays consumed even after its resources release."""
-        if self.admission is not None and is_used(self.admission.operation_id):
-            raise IdentityConflict("Wake claim operation was already consumed")
+    def require_message(self, message: Message) -> None:
+        if (self.owner, self.seq, self.message_id) != (message.sender, message.seq, message.message_id):
+            raise ClaimTransitionError('Claim transition does not bind its message.')
 
     @property
     def resources(self) -> tuple[str, ...]:
-        return (*self.claims, *(release.resource for release in self.releases))
+        return (*self.acquired_resources(), *(release.resource for release in self.releases))
 
-    def claimed(self, resource: str) -> ClaimOwner:
-        """Derive a current owner from this original acquisition, never another schema."""
-        if resource not in self.claims or self.generation is None:
-            raise ClaimTransitionError("Resource is not part of this claim acquisition.")
-        return ClaimOwner(resource, self.owner, self.incarnation, self.generation,
-                          self.seq, self.message_id, self.admission)
+    @abstractmethod
+    def acquired_resources(self) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def acquired_owners(self) -> tuple[ClaimOwner, ...]: ...
+
+    @abstractmethod
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None: ...
 
     def apply(self, previous: ClaimProjection) -> ClaimProjection:
-        """Apply atomically to the affected certified resources.
-
-        Unrelated resources do not affect legality. The checkpoint supplies only
-        the touched rows and the original claim high-water, not a replayed bus.
-        """
-        if type(previous) is not ClaimProjection:
-            raise ClaimTransitionError("Only typed claim projections are accepted.")
         if self.seq <= previous.last_seq:
-            raise ClaimTransitionError("Claim sequence must increase.")
-        next_state = dict(previous)
+            raise ClaimTransitionError('Claim sequence must increase.')
+        acquired = self.acquired_owners()
         for release in self.releases:
             previous.claim(release.resource).validate_release(self.incarnation, release)
-        for resource in self.claims:
-            previous.claim(resource).require_free()
+        for owner in acquired:
+            previous.claim(owner.resource).require_free()
+        next_state = dict(previous)
         for release in self.releases:
             del next_state[release.resource]
-        for resource in self.claims:
-            next_state[resource] = self.claimed(resource)
+        for owner in acquired:
+            next_state[owner.resource] = owner
         return ClaimProjection(self.seq, next_state)
+
+
+@dataclass(frozen=True, kw_only=True)
+class AcquiringTransition(ClaimTransition):
+    claims: tuple[str, ...]
+    generation: str
+    binding: ClaimBinding = field(default_factory=UnboundClaimBinding,
+        metadata={'wire_name': 'admission', 'wire_omit_default': True, 'wire_nonnull': True})
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not self.claims:
+            raise ClaimTransitionError('Acquiring transitions require resources.')
+        _generation(self.generation)
+        self.binding.require_transition(self.releases)
+
+    def acquired_resources(self) -> tuple[str, ...]:
+        return self.claims
+
+    def acquired_owners(self) -> tuple[ClaimOwner, ...]:
+        return tuple(self.claimed(resource) for resource in self.claims)
+
+    def claimed(self, resource: str) -> ClaimOwner:
+        if resource not in self.claims:
+            raise ClaimTransitionError('Resource is not part of this claim acquisition.')
+        return self.binding.owner_for(self, resource)
+
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        self.binding.require_new_operation(is_used)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReleasingTransition(ClaimTransition):
+    @required_projection(view='wire', name='claims')
+    def _wire_claims(self) -> tuple[()]:
+        return ()
+
+    @required_projection(view='wire', name='generation')
+    def _wire_generation(self) -> None:
+        return None
+
+    def acquired_resources(self) -> tuple[str, ...]:
+        return ()
+
+    def acquired_owners(self) -> tuple[ClaimOwner, ...]:
+        return ()
+
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        pass
 
 
 class Claim(ABC):
@@ -345,7 +495,7 @@ class FreeClaim(Claim):
 
 
 @dataclass(frozen=True, slots=True)
-class ClaimOwner(Claim):
+class ClaimOwner(Claim, WireValue):
     """The existing owner record is the held member, not a second wrapper."""
     resource: str
     owner: str
@@ -353,7 +503,29 @@ class ClaimOwner(Claim):
     generation: str
     seq: int
     message_id: str
-    admission: WakeAdmission | None = None
+
+    def to_wire(self):
+        return FieldCodec.record_encode(self)
+
+    @classmethod
+    def from_wire(cls, data: object) -> ClaimOwner:
+        if not isinstance(data, dict):
+            raise ClaimTransitionError('Claim owner requires an object')
+        member = AdmittedClaimOwner if 'admission' in data else ClaimOwner
+        owner = FieldCodec.record_decode(member, data)
+        if not isinstance(owner, cls):
+            raise ClaimTransitionError('Claim owner does not match its declared member')
+        return owner
+
+    @classmethod
+    def schema(cls) -> dict:
+        return {'oneOf': [FieldCodec.record_schema(member)
+                          for member in (cls, *cls.__subclasses__())]}
+
+    @classmethod
+    def acquired(cls, transition: AcquiringTransition, resource: str, **context: object) -> Self:
+        return cls(resource, transition.owner, transition.incarnation, transition.generation,
+                   transition.seq, transition.message_id, **context)
 
     def __post_init__(self) -> None:
         _resource(self.resource)
@@ -363,8 +535,6 @@ class ClaimOwner(Claim):
         _text(self.message_id, "Message ID")
         if type(self.seq) is not int or self.seq <= 0:
             raise ClaimTransitionError("Claim sequence must be a positive exact integer.")
-        if self.admission is not None and type(self.admission) is not WakeAdmission:
-            raise ClaimTransitionError("Claim owner requires a typed wake admission.")
 
     def require_free(self) -> None:
         raise ClaimConflict(self)
@@ -378,13 +548,33 @@ class ClaimOwner(Claim):
 
     def admit(self, owner: ThreadIncarnation, admission: WakeAdmission,
               acquire: Callable[[], ClaimOwner]) -> ClaimOwner:
-        if (self.admission == admission and self.incarnation == str(owner.created_at)
-                and self.owner == owner.name):
-            return self
         raise ClaimConflict(self)
+
+    def belongs_to(self, admission: WakeAdmission) -> bool:
+        return False
+
+    def for_attempt(self, attempt: AttemptRecord) -> tuple[AdmittedClaimOwner, ...]:
+        return ()
 
     def matches(self, owner: ClaimOwner) -> bool:
         return self == owner
+
+
+@dataclass(frozen=True)
+class AdmittedClaimOwner(ClaimOwner):
+    admission: WakeAdmission
+
+    def admit(self, owner: ThreadIncarnation, admission: WakeAdmission,
+              acquire: Callable[[], ClaimOwner]) -> ClaimOwner:
+        if (self.admission, self.incarnation, self.owner) == (admission, str(owner.created_at), owner.name):
+            return self
+        raise ClaimConflict(self)
+
+    def belongs_to(self, admission: WakeAdmission) -> bool:
+        return self.admission == admission
+
+    def for_attempt(self, attempt: AttemptRecord) -> tuple[AdmittedClaimOwner, ...]:
+        return (self,) if self.admission.matches_attempt(attempt) else ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -397,10 +587,8 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
     def __post_init__(self) -> None:
         if type(self.last_seq) is not int or self.last_seq < 0:
             raise ClaimTransitionError("Projection sequence must be a nonnegative exact integer.")
-        if not isinstance(self._claims, Mapping) or any(
-            type(value) is not ClaimOwner or value.resource != key or value.seq > self.last_seq
-            for key, value in self._claims.items()
-        ):
+        if any(value.resource != key or value.seq > self.last_seq
+               for key, value in self._claims.items()):
             raise ClaimTransitionError("Previous projection is malformed.")
         object.__setattr__(self, "_claims", MappingProxyType(dict(sorted(self._claims.items()))))
 

@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.envelope_claim_transitions import ClaimConflict, ClaimOwner, ExistingFileClaim, FreeClaim, WakeAdmission
+from agent_comms.envelope_claim_transitions import AdmittedClaimBinding, ClaimConflict, ClaimOwner, ExistingFileClaim, FreeClaim, WakeAdmission
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import CertifiedSourceRead, ClaimCommits, ResourceClaims
 from agent_comms.store_files import _store_lock
@@ -37,7 +37,7 @@ def admitted(comms, admission, paths):
             Message('owner', 'peer', 'admitted claim', InfoKind),
             worktree=Path(owner.worktree), incarnation=str(owner.created_at),
             claims=tuple(ExistingFileClaim(path) for path in paths),
-            _locked_registry_snapshot=snapshot, _bus_lock=lock, _admission=admission,
+            _locked_registry_snapshot=snapshot, _bus_lock=lock, binding=AdmittedClaimBinding(admission),
         )
 
 
@@ -45,8 +45,8 @@ def test_multi_resource_admission_consumes_one_operation_even_after_release(tmp_
     comms, paths, admission = authored(tmp_path)
     claimed = admitted(comms, admission, paths[:2])
     with comms.bus.log.certified_read() as source:
-        commits = ClaimCommits.select(source.connection)
-        assert len(commits) == 1 and commits[0].transition.admission == admission
+        commits = ClaimCommits.acquisitions(source.connection)
+        assert len(commits) == 1 and commits[0].transition.binding == AdmittedClaimBinding(admission)
         assert ClaimCommits.column_values(source.connection, 'operation_id') == [admission.operation_id]
         assert source.claim_operation_used(admission.operation_id)
         for path in paths[:2]:

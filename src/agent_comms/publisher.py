@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from collections.abc import Sequence
 from contextlib import ExitStack, nullcontext
 from dataclasses import replace
 from pathlib import Path
@@ -24,11 +23,11 @@ from .bus_publication import (
 )
 from .channel_targets import BuiltinChannel, is_channel_target
 from .envelope_claim_transitions import (
+    ClaimBinding,
     ClaimRelease,
     ClaimTransition,
     FileClaimPath,
-    WakeAdmission,
-    _release_resource,
+    UnboundClaimBinding,
 )
 from .errors import (
     ClaimEnvelopeUnknownError,
@@ -219,16 +218,16 @@ class Publisher:
         *,
         worktree: Path,
         incarnation: str,
-        claims: Sequence[FileClaimPath] = (),
-        releases: Sequence[str | Path | ClaimRelease] = (),
-        _locked_registry_snapshot: RegistrySnapshot | None = None,
-        _bus_lock: StoreLock | None = None,
-        _admission: WakeAdmission | None = None,
+        claims: tuple[FileClaimPath, ...] = (),
+        releases: tuple[ClaimRelease, ...] = (),
+        _locked_registry_snapshot: RegistrySnapshot,
+        _bus_lock: StoreLock,
+        binding: ClaimBinding = UnboundClaimBinding(),
     ) -> Message:
         """One guarded message and whole-set claim transition in ONE bus row.
 
-        Caller must hold the global Comms wire lock; the bus lock serializes all
-        cooperating claim decisions. Failed durability returns UNKNOWN: a later
+        Caller holds the global Comms wire lock and supplies its locked bus and
+        registry view. Release paths have already become exact ClaimRelease records. Failed durability returns UNKNOWN: a later
         guarded reader may re-fsync/adopt a complete visible row, but the caller
         MUST NOT replay its message or provider/tool work automatically.
         """
@@ -238,66 +237,37 @@ class Publisher:
             raise RelationViolationError("Claim envelope publication is disabled.")
         if message.claim_transition is not None or (not claims and not releases):
             raise RelationViolationError("A claim send needs exactly one fresh transition.")
-        if (
-            isinstance(claims, (str, bytes))
-            or isinstance(releases, (str, bytes))
-            or not isinstance(claims, Sequence)
-            or not isinstance(releases, Sequence)
-        ):
-            raise RelationViolationError("Claim and release sets must be finite sequences.")
         if len(claims) + len(releases) > ClaimTransition.max_resources:
             raise RelationViolationError("Claim envelope exceeds the bounded resource set.")
-        if _admission is not None and (
-            not claims or releases or _bus_lock is None or _locked_registry_snapshot is None
-        ):
-            raise RelationViolationError("Bound claims require the selected wake boundary.")
-        with nullcontext(_bus_lock) if _bus_lock is not None else self.log.locked() as bus_lock:
-            metadata = self.log._private_marker_unlocked()
-            if not metadata.claims:
-                raise RelationViolationError("Claim read barrier is unavailable.")
-            snapshot = (
-                self._registry.snapshot()
-                if _locked_registry_snapshot is None
-                else _locked_registry_snapshot
+        metadata = self.log._private_marker_unlocked()
+        if not metadata.claims:
+            raise RelationViolationError("Claim read barrier is unavailable.")
+        snapshot = _locked_registry_snapshot
+        snapshot.require_unambiguous_ownership()
+        sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
+        with _bus_lock.current_source(self.log, metadata) as source:
+            # This checkpoint also covers any prior visible append; never replay it.
+            last_sequence = max(metadata.last_seq, source.committed_sequence())
+            if last_sequence >= MAX_WIRE_SEQ:
+                raise RelationViolationError("Claim bus sequence is exhausted.")
+            stored = self._prepare_message_unlocked(
+                message, sender=sender, target=target,
+                sequence=last_sequence + 1, snapshot=snapshot,
             )
-            snapshot.require_unambiguous_ownership()
-            sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
-            with bus_lock.current_source(self.log, metadata) as source:
-                # The checkpoint high-water also covers a prior visible append;
-                # no historical message or claim replay participates in admission.
-                last_sequence = max(metadata.last_seq, source.committed_sequence())
-                if last_sequence >= MAX_WIRE_SEQ:
-                    raise RelationViolationError("Claim bus sequence is exhausted.")
-                stored = self._prepare_message_unlocked(
-                    message, sender=sender, target=target,
-                    sequence=last_sequence + 1, snapshot=snapshot,
-                )
-                owner_incarnation = str(incarnation)
-                requested = tuple(sorted(path.normalized(worktree) for path in claims))
-                release_records: list[ClaimRelease] = []
-                for release in releases:
-                    if isinstance(release, ClaimRelease):
-                        # Recorded incarnation/generation, not current project,
-                        # determines whether this exact resource may be released.
-                        release_records.append(release)
-                    else:
-                        resource = _release_resource(worktree, release)
-                        release_records.append(source.claim(resource).release())
-                release_records.sort(key=lambda release: release.resource)
-                transition = ClaimTransition(
-                    stored.sender, owner_incarnation, stored.seq, stored.message_id,
-                    requested, tuple(release_records),
-                    uuid.uuid4().hex if requested else None, _admission,
-                )
-                source.prepare_claim(transition)  # pre-append conflict is synchronous
-            stored = replace(stored, claim_transition=transition)
-            try:
-                self.log._append_private_unlocked(metadata, stored.to_wire())
-            except (OSError, RelationViolationError) as error:
-                raise ClaimEnvelopeUnknownError(
-                    "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
-                ) from error
-            return stored
+            requested = tuple(sorted(path.normalized(worktree) for path in claims))
+            transition = ClaimTransition.prepare(
+                stored, incarnation, requested,
+                tuple(sorted(releases, key=lambda release: release.resource)), binding,
+            )
+            source.prepare_claim(transition)
+        stored = replace(stored, claim_transition=transition)
+        try:
+            self.log._append_private_unlocked(metadata, stored.to_wire())
+        except (OSError, RelationViolationError) as error:
+            raise ClaimEnvelopeUnknownError(
+                "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
+            ) from error
+        return stored
 
     def publish_initial_cohort(
         self,

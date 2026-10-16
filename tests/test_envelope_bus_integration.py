@@ -146,9 +146,8 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
         claims=[ExistingFileClaim(Path("a.py")), ExistingFileClaim(Path("b.py"))],
     )
     assert sent.claim_transition is not None
-    assert sent.claim_transition.claims == tuple(
-        sorted((str(worktree / "a.py"), str(worktree / "b.py")))
-    )
+    acquired = sent.require_claim_acquisition()
+    assert acquired.claims == tuple(sorted((str(worktree / 'a.py'), str(worktree / 'b.py'))))
     assert sent.claim_transition.message_id == sent.message_id
     assert sent.claim_transition.seq == sent.seq
     assert comms.bus.log.latest_sequence() == sent.seq
@@ -156,12 +155,12 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     stored = json.loads(comms.bus.log.path.read_text().splitlines()[0])
     assert stored["claim_transition"] == {
         "owner": "alice",
-        "incarnation": sent.claim_transition.incarnation,
+        "incarnation": acquired.incarnation,
         "seq": sent.seq,
         "message_id": sent.message_id,
-        "claims": list(sent.claim_transition.claims),
+        "claims": list(acquired.claims),
         "releases": [],
-        "generation": sent.claim_transition.generation,
+        "generation": acquired.generation,
     }
     from agent_comms.field_codec import FieldCodec
     from agent_comms.routing import TurnRouting
@@ -177,7 +176,7 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     assert comms.views.full_history() == [sent]
     projection = comms.bus.log.claim_projection()
     assert projection.get(str(worktree / "a.py")).owner == "alice"
-    assert projection.get(str(worktree / "b.py")).generation == (sent.claim_transition.generation)
+    assert projection[str(worktree / 'b.py')].generation == acquired.generation
     with pytest.raises(ClaimConflict) as loss:
         comms.messaging.send_message(
             "bob",
@@ -202,7 +201,7 @@ def test_absolute_claim_outside_worktree_uses_one_global_key(tmp_path: Path) -> 
         "alice", "bob", "Claim shared file", claims=[ExistingFileClaim(outside)]
     )
     assert claimed.claim_transition is not None
-    assert claimed.claim_transition.claims == (str(outside),)
+    assert claimed.require_claim_acquisition().claims == (str(outside),)
     projection = Comms(comms.root).bus.log.claim_projection()
     assert list(projection) == [str(outside)]
     assert projection[str(outside)].owner == "alice"
@@ -295,14 +294,14 @@ def test_release_requires_exact_owner_and_preserves_generation(
     assert comms.bus.log.claim_projection().get(str(worktree / "a.py")) is None
     assert released.claim_transition is not None
     assert claimed.claim_transition is not None
-    assert released.claim_transition.releases[0].generation == (claimed.claim_transition.generation)
+    assert released.require_claim_transition().releases[0].generation == claimed.require_claim_acquisition().generation
     taken = comms.messaging.send_message(
         "bob", "alice", "Next owner", claims=[ExistingFileClaim(Path("a.py"))]
     )
     assert len(comms.views.full_history()) == 3
     assert taken.claim_transition is not None
-    assert taken.claim_transition.owner == "bob"
-    assert taken.claim_transition.generation != claimed.claim_transition.generation
+    assert taken.require_claim_acquisition().owner == 'bob'
+    assert taken.require_claim_acquisition().generation != claimed.require_claim_acquisition().generation
 
 
 def test_public_rename_preserves_claim_release_then_new_owner_wins(
@@ -350,15 +349,14 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
     assert claimed.claim_transition is not None
     assert released.claim_transition.owner == "alice-final"
     assert released.claim_transition.incarnation == claimed.claim_transition.incarnation
-    assert released.claim_transition.releases[0].generation == claimed.claim_transition.generation
+    assert released.require_claim_transition().releases[0].generation == claimed.require_claim_acquisition().generation
     assert path not in reopened.bus.log.claim_projection()
 
     taken = reopened.messaging.send_message(
         "bob", "alice-final", "New owner", claims=[ExistingFileClaim(Path("a.py"))]
     )
-    assert reopened.bus.log.claim_projection()[path].owner == "bob"
-    assert taken.claim_transition is not None
-    assert taken.claim_transition.generation != claimed.claim_transition.generation
+    assert reopened.bus.log.claim_projection()[path].owner == 'bob'
+    assert taken.require_claim_acquisition().generation != claimed.require_claim_acquisition().generation
     with pytest.raises(ClaimTransitionError, match="exact owner"):
         reopened.messaging.send_message(
             "alice", "bob", "Old alias cannot release Bob", releases=["a.py"]

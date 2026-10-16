@@ -24,6 +24,7 @@ from .coordination_cohort import _receipt_matches
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
+    AdmittedClaimBinding,
     ClaimOwner,
     ExistingFileClaim,
     FileClaimPath,
@@ -199,9 +200,9 @@ def publish_selected_resource_claim(
                 claims=[resource_path],
                 _locked_registry_snapshot=registry,
                 _bus_lock=bus_lock,
-                _admission=admission,
+                binding=AdmittedClaimBinding(admission),
             )
-            return committed.require_claim_transition().claimed(resource)
+            return committed.require_claim_acquisition().claimed(resource)
 
         return existing.admit(owner.incarnation, admission, acquire)
 
@@ -325,7 +326,7 @@ def write_selected_claimed_file(
             _verify_selected_wake_state(initial, owner, generation, scoped, admission)
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
             with bus_lock.current_source(bus.log, marker) as source:
-                if claimed.admission != admission or not source.claim(normalized).matches(claimed):
+                if not claimed.belongs_to(admission) or not source.claim(normalized).matches(claimed):
                     raise IdentityConflict("Selected write has no current exact resource claim")
             with _opened_selected_file(Path(owner.worktree), normalized) as (fd, stable):
                 os.ftruncate(fd, 0)

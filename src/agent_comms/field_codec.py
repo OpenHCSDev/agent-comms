@@ -190,6 +190,8 @@ class TimestampText(TextRepresentation):
 class Projected(property):
     """A computed field declared by its owner for a named read-only view."""
 
+    required: ClassVar[bool] = False
+
     def __init__(self, getter, *, view: str, name: str | None = None):
         super().__init__(getter)
         self.view = view
@@ -202,6 +204,14 @@ class Projected(property):
 
 def projected(*, view: str, name: str | None = None):
     return lambda getter: Projected(getter, view=view, name=name)
+
+
+class RequiredProjection(Projected):
+    required = True
+
+
+def required_projection(*, view: str, name: str):
+    return lambda getter: RequiredProjection(getter, view=view, name=name)
 
 
 class FieldCodec(Sealed):
@@ -313,34 +323,7 @@ class FieldCodec(Sealed):
         if kind is float and math.isfinite(value):
             return value
         if is_dataclass(value) and not isinstance(value, type):
-            hints = cls._types(type(value))
-            result = (
-                {value.family_discriminator: value.declared_name}
-                if isinstance(value, DeclaredFamily)
-                else {}
-            )
-            result.update(
-                (key, cls.encode(getattr(value, field.name), hints[field.name]))
-                for field, key in cls.record_fields(type(value))
-                if not (
-                    field.metadata.get("wire_omit_default")
-                    and getattr(value, field.name)
-                    == (
-                        field.default
-                        if field.default is not MISSING
-                        else (
-                            field.default_factory()
-                            if field.default_factory is not MISSING
-                            else MISSING
-                        )
-                    )
-                )
-            )
-            result.update(
-                (member.wire_name, cls.encode(getattr(value, name), member.annotation))
-                for name, member in cls._projections(type(value), "wire").items()
-            )
-            return result
+            return cls.record_encode(value)
         if isinstance(value, type) and issubclass(value, DeclaredFamily):
             return value.declared_name
         if isinstance(value, Enum):
@@ -354,6 +337,34 @@ class FieldCodec(Sealed):
     @classmethod
     def decode(cls, target: type[T], data: object) -> T:
         return cast(T, compile_decoder(target).decode(data))
+
+    @classmethod
+    def record_encode(cls, value: object) -> dict:
+        """Use the one record grammar inside a value's declared external form."""
+        hints = cls._types(type(value))
+        result = (
+            {value.family_discriminator: value.declared_name}
+            if isinstance(value, DeclaredFamily) else {}
+        )
+        result.update(
+            (key, cls.encode(getattr(value, item.name), hints[item.name]))
+            for item, key in cls.record_fields(type(value))
+            if not (item.metadata.get('wire_omit_default') and getattr(value, item.name) == (
+                item.default if item.default is not MISSING else (
+                    item.default_factory() if item.default_factory is not MISSING else MISSING
+                )
+            ))
+        )
+        result.update(
+            (member.wire_name, cls.encode(getattr(value, name), member.annotation))
+            for name, member in cls._projections(type(value), 'wire').items()
+        )
+        return result
+
+    @classmethod
+    def record_decode(cls, target: type[T], data: object) -> T:
+        """A custom external selector still decodes through the same record plan."""
+        return cast(T, _RecordDecoder(target).decode(data))
 
     @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
@@ -393,6 +404,10 @@ class FieldCodec(Sealed):
             elif declared.default is not MISSING and declared.default is not None:
                 schema["default"] = cls.encode(declared.default, annotation)
             properties[key] = schema
+        for member in cls._projections(target, 'wire').values():
+            properties[member.wire_name] = cls.value_schema(member.annotation or Any)
+            if member.required:
+                required.append(member.wire_name)
         return {
             "type": "object",
             "properties": properties,
@@ -492,6 +507,7 @@ class FieldCodec(Sealed):
         """A record's whole decode plan, derived once from its declaration."""
 
         fields: tuple[FieldCodec._FieldPlan, ...]
+        projections: tuple[FieldCodec._FieldPlan, ...]
         required_keys: tuple[str, ...]
         init_required_keys: tuple[str, ...]
         reject_null_keys: frozenset[str]
@@ -503,7 +519,13 @@ class FieldCodec(Sealed):
         """Resolve every per-row type decision for one record declaration once."""
         declared = cls.record_fields(record)
         hints = cls._types(record)
-        computed = {member.wire_name for member in cls._projections(record, "wire").values()}
+        computed = cls._projections(record, 'wire')
+        projections = tuple(
+            cls._FieldPlan(name=name, key=member.wire_name, required=True,
+                           reject_null=False, choices=None,
+                           value=compile_decoder(member.annotation or Any))
+            for name, member in computed.items() if member.required
+        )
         entries = tuple(
             cls._FieldPlan(
                 name=field.name,
@@ -517,13 +539,15 @@ class FieldCodec(Sealed):
         )
         return cls._RecordPlan(
             fields=entries,
-            required_keys=tuple(entry.key for entry in entries if entry.required),
+            projections=projections,
+            required_keys=tuple(entry.key for entry in (*entries, *projections) if entry.required),
             init_required_keys=tuple(
                 entry.key for entry, (field, _) in zip(entries, declared)
                 if field.default is MISSING and field.default_factory is MISSING
             ),
             reject_null_keys=frozenset(entry.key for entry in entries if entry.reject_null),
-            accepted_keys=frozenset(entry.key for entry in entries) | computed,
+            accepted_keys=frozenset(entry.key for entry in entries)
+            | frozenset(member.wire_name for member in computed.values()),
         )
 
     @staticmethod
@@ -920,7 +944,13 @@ class _RecordDecoder(ValueDecoder):
                     f"Field {entry.key} must be one of: {', '.join(entry.choices())}"
                 )
             values[entry.name] = entry.value.decode(value)
-        return target(**values)
+        instance = target(**values)
+        for entry in plan.projections:
+            if entry.key in data:
+                supplied = entry.value.decode(data[entry.key])
+                if FieldCodec.encode(supplied) != FieldCodec.encode(getattr(instance, entry.name)):
+                    raise ValueError(f'Projected field differs from its owner: {entry.key}')
+        return instance
 
 @dataclass(frozen=True, slots=True)
 class _EnumDecoder(ValueDecoder):

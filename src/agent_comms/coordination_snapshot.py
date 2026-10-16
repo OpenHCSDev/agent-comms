@@ -345,14 +345,7 @@ class RecoverySnapshot:
         metadata = bus.log._private_marker_unlocked()
         with bus_lock.current_source(bus.log, metadata) as source:
             current = source.claim_projection()
-        owned = tuple(
-            claim for claim in current.values()
-            if claim.admission is not None
-            and claim.admission.execution_id == attempt.execution_id
-            and claim.admission.attempt_ordinal == attempt.attempt_ordinal
-            and claim.admission.recipient_lookup == attempt.owner_lookup
-            and claim.admission.participant_generation == attempt.owner_generation
-        )
+        owned = tuple(held for claim in current.values() for held in claim.for_attempt(attempt))
         if not owned:
             return
         owner = registry.threads[registry.canonical_name(attempt.owner_thread)]
@@ -360,15 +353,8 @@ class RecoverySnapshot:
             assignment.assignment_id: assignment.lifecycle.exact_target
             for assignment in self.assignments
         }
-        def target_of(claim) -> str:
-            admission = claim.admission
-            assert admission is not None
-            target = assignment_targets.get(admission.wake_assignment_id)
-            if not isinstance(target, str) or not target:
-                raise IntegrityViolationError(
-                    "terminal claim has no original wake assignment route"
-                )
-            return target
+        def release_group(claim) -> tuple[str, str]:
+            return claim.incarnation, claim.admission.require_target(assignment_targets)
 
         from pathlib import Path
 
@@ -378,12 +364,7 @@ class RecoverySnapshot:
             resource = Path(claim.resource)
             return str(resource.relative_to(worktree) if resource.is_relative_to(worktree) else resource)
 
-        ordered = sorted(
-            owned, key=lambda claim: (claim.incarnation, target_of(claim))
-        )
-        for (incarnation, target), records in groupby(
-            ordered, key=lambda claim: (claim.incarnation, target_of(claim))
-        ):
+        for (incarnation, target), records in groupby(sorted(owned, key=release_group), key=release_group):
             recorded = tuple(records)
             for offset in range(0, len(recorded), ClaimTransition.max_resources):
                 released = recorded[offset:offset + ClaimTransition.max_resources]

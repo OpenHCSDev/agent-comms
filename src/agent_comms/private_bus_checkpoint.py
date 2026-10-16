@@ -29,7 +29,7 @@ from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import (
-    Claim, ClaimProjection, ClaimTransition, ClaimTransitionError, FreeClaim,
+    AcquiringTransition, Claim, ClaimProjection, ClaimTransition, ClaimTransitionError, FreeClaim,
 )
 from .coordination_tables.publications import PublicationIntents
 from .errors import HumanAdmissionBlockedError, RelationViolationError
@@ -595,17 +595,30 @@ class ResponseKeys(CheckpointTable, TypedTable):
 
 
 @dataclass(frozen=True)
-class ClaimCommits(CheckpointTable, TypedTable):
-    """Original claim facts, including operation IDs consumed before release.
-
-    Sequence and operation identity are already owned by the typed transition.
-    Their SQL projections index it; they are never late-filled Python fields.
-    One admitted envelope may acquire several normalized resources.
-    """
+class ClaimCommitRecord(TypedRow):
+    """Original transition and its SQL-only indexes, shared by typed read projections."""
 
     transition: ClaimTransition
     seq = GeneratedColumn(value_type=int, nullable=True, unique=True, expression="json_extract(transition,'$.seq')")
     operation_id = GeneratedColumn(value_type=str, nullable=True, unique=True, expression="json_extract(transition,'$.admission.operation_id')")
+
+
+@dataclass(frozen=True)
+class ClaimAcquisition(ClaimCommitRecord):
+    """A held-resource reference must decode to an original acquisition."""
+
+    transition: AcquiringTransition
+
+
+@dataclass(frozen=True)
+class ClaimCommits(ClaimCommitRecord, CheckpointTable, TypedTable):
+    """One source table; consumed native operations survive resource release."""
+
+    @classmethod
+    def acquisitions(cls, db: sqlite3.Connection, *, where: str = '1',
+                     parameters: tuple = (), **key: object) -> list[ClaimAcquisition]:
+        return ClaimAcquisition.read(cls._query(db, where=where, parameters=parameters,
+                                              order_by=(), descending=False, key=key))
 
     @classmethod
     def latest_sequence(cls, db: sqlite3.Connection) -> int:
@@ -648,11 +661,11 @@ class ResourceClaims(CheckpointTable, TypedTable):
 
     @classmethod
     def owner_for(cls, db: sqlite3.Connection, resource: str) -> Claim:
-        original = ClaimCommits.one(
+        originals = ClaimCommits.acquisitions(
             db, where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
             parameters=(resource,),
         )
-        return original.transition.claimed(resource) if original is not None else FreeClaim()
+        return originals[0].transition.claimed(resource) if originals else FreeClaim()
 
     @classmethod
     def projection(cls, db: sqlite3.Connection) -> ClaimProjection:
@@ -667,7 +680,7 @@ class ResourceClaims(CheckpointTable, TypedTable):
         owners = {}
         if current:
             sequences = tuple(sorted({row.claim_seq for row in current}))
-            originals = ClaimCommits.select(db, seq=In(sequences))
+            originals = ClaimCommits.acquisitions(db, seq=In(sequences))
             transitions = {row.transition.seq: row.transition for row in originals}
             owners = {row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current}
         return ClaimProjection(ClaimCommits.latest_sequence(db), owners)

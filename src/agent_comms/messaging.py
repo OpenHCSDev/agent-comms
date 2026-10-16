@@ -11,7 +11,7 @@ from .registration import Registration
 
 if TYPE_CHECKING:
     pass
-from .envelope_claim_transitions import FileClaimPath
+from .envelope_claim_transitions import ClaimRelease, FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
 from .messages import InfoKind, Message, MessageKind
@@ -85,13 +85,20 @@ class Messaging:
                 answers=self._answered_by(owner, target),
             )
             if claims or releases:
-                committed = self.bus.publisher.publish_claim_envelope(
-                    message,
-                    worktree=Path(owner.worktree),
-                    incarnation=str(owner.created_at),
-                    claims=claims,
-                    releases=releases,
-                )
+                worktree = Path(owner.worktree)
+                with self.bus.log.locked() as bus_lock:
+                    snapshot = self.registry.snapshot()
+                    release_records = ()
+                    if releases:
+                        metadata = self.bus.log._private_marker_unlocked()
+                        with bus_lock.current_source(self.bus.log, metadata) as source:
+                            release_records = tuple(
+                                ClaimRelease.capture(worktree, path, source) for path in releases)
+                    committed = self.bus.publisher.publish_claim_envelope(
+                        message, worktree=worktree, incarnation=str(owner.created_at),
+                        claims=tuple(claims), releases=release_records,
+                        _locked_registry_snapshot=snapshot, _bus_lock=bus_lock,
+                    )
             else:
                 committed = self.bus.publisher.publish_ordinary(message)
         return committed

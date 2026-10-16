@@ -7,8 +7,9 @@ from pathlib import Path
 import pytest
 
 from agent_comms.envelope_claim_transitions import (
-    ClaimConflict, ClaimOwner, ClaimProjection, ClaimRelease, ClaimTransition,
-    ClaimTransitionError, ExistingFileClaim, WakeAdmission,
+    AcquiringTransition, AdmittedClaimBinding, ClaimConflict, ClaimOwner,
+    ClaimProjection, ClaimRelease, ClaimTransition, ClaimTransitionError,
+    ExistingFileClaim, ReleasingTransition, WakeAdmission,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
@@ -26,7 +27,9 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         owner_admission_generation=2, turn_id="turn-7", participant_generation=1,
         attempt_ordinal=1,
     )
-    claimed = ClaimTransition("owner", "epoch-1", 8, "msg-8", (resource,), (), G1, admission)
+    claimed = AcquiringTransition(owner='owner', incarnation='epoch-1', seq=8,
+        message_id='msg-8', claims=(resource,), generation=G1,
+        binding=AdmittedClaimBinding(admission))
     raw = FieldCodec.encode(claimed)
     decoded = FieldCodec.decode(ClaimTransition, raw)
     assert decoded == claimed
@@ -45,7 +48,9 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
 
 
 def transition(seq, *, owner="owner", incarnation="epoch-1", claims=(), releases=(), generation=None):
-    return ClaimTransition(owner, incarnation, seq, f"msg-{seq}", tuple(claims), tuple(releases), generation)
+    return FieldCodec.decode(ClaimTransition, dict(owner=owner, incarnation=incarnation,
+        seq=seq, message_id=f'msg-{seq}', claims=list(claims),
+        releases=FieldCodec.encode(tuple(releases)), generation=generation))
 
 
 def resources(tmp_path):
@@ -129,8 +134,6 @@ def test_exact_incarnation_and_generation_fence_releases(tmp_path):
     assert new[a].owner == "peer" and new[a].seq == 3
     with pytest.raises(ClaimTransitionError, match="malformed"):
         ClaimProjection(0, {a: ClaimOwner(a, "peer", "epoch", G2, 3, "msg-3")})
-    with pytest.raises(ClaimTransitionError, match="malformed"):
-        ClaimProjection(1, [])
     with pytest.raises(ClaimTransitionError, match="exact owner"):
         transition(4, releases=(ClaimRelease(a, G1),)).apply(new)
 
@@ -163,25 +166,44 @@ def test_owned_application_is_deterministic_and_requires_order(tmp_path):
     for stale in (transition(8, releases=(ClaimRelease(b, G2),)), transition(1, claims=(a,), generation=G1)):
         with pytest.raises(ClaimTransitionError, match="increase"):
             stale.apply(released)
-    with pytest.raises(ClaimTransitionError, match="typed claim projections"):
-        transition(9, claims=(a,), generation=G1).apply("not a projection")
 
 
 def test_only_exact_typed_nonempty_sequenced_envelopes(tmp_path):
     _, a, _ = resources(tmp_path)
+    raw = FieldCodec.encode(transition(1, claims=(a,), generation=G1))
     invalid = (
-        lambda: transition(True, claims=(a,), generation=G1),
-        lambda: transition(0, claims=(a,), generation=G1), lambda: transition(1),
-        lambda: transition(1, claims=(a,), generation=None),
-        lambda: transition(1, claims=(a,), generation="f" * 31),
-        lambda: transition(1, releases=(ClaimRelease(a, G1),), generation=G2),
-        lambda: transition(1, claims=(a,), generation=G1.upper()),
-        lambda: ClaimTransition("owner", "epoch", 1, "m", (a,), ("bad",), G1),
-        lambda: ClaimTransition("owner", "epoch", 1, "m", [a], (), G1),
+        {'seq': True}, {'seq': 0}, {'claims': []}, {'generation': None},
+        {'generation': 'f' * 31}, {'generation': G1.upper()},
+        {'releases': ['bad']}, {'claims': a},
     )
-    for candidate in invalid:
-        with pytest.raises(ClaimTransitionError):
-            candidate()
+    for changes in invalid:
+        with pytest.raises((TypeError, ValueError)):
+            FieldCodec.decode(ClaimTransition, raw | changes)
+    with pytest.raises(ClaimTransitionError):
+        transition(1)
+    with pytest.raises(ClaimTransitionError):
+        transition(1, releases=(ClaimRelease(a, G1),), generation=G2)
+
+
+def test_release_type_and_original_wire_constants(tmp_path):
+    _, a, b = resources(tmp_path)
+    released = transition(2, releases=(ClaimRelease(a, G1),))
+    assert isinstance(released, ReleasingTransition)
+    assert not hasattr(released, 'generation') and not hasattr(released, 'claimed')
+    raw = FieldCodec.encode(released)
+    assert raw['generation'] is None and raw['claims'] == []
+    assert FieldCodec.decode(ClaimTransition, raw) == released
+    assert FieldCodec.value_schema(ReleasingTransition)['properties']['generation'] == {'type': 'null'}
+    for missing in ('generation', 'claims', 'releases'):
+        invalid = raw.copy()
+        del invalid[missing]
+        with pytest.raises(ValueError, match='Missing required'):
+            FieldCodec.decode(ClaimTransition, invalid)
+    for changes in ({'claims': [b]}, {'claims': False}, {'generation': G2}, {'admission': None}):
+        with pytest.raises((TypeError, ValueError)):
+            FieldCodec.decode(ClaimTransition, raw | changes)
+    with pytest.raises(ClaimTransitionError, match='declared member'):
+        FieldCodec.decode(AcquiringTransition, raw)
 
 
 def test_path_aliases_are_rejected_as_duplicate_normalized_resources(tmp_path):

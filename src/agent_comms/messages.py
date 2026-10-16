@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, ClassVar, Type
 from .channel_targets import _TAG_CHARS, BuiltinChannel, is_channel_target
 from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
-from .envelope_claim_transitions import ClaimTransition
+from .envelope_claim_transitions import AcquiringTransition, ClaimTransition, ClaimTransitionError
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .mentions import ThreadMention
@@ -215,6 +215,12 @@ class Message:
             raise RelationViolationError("Original wire message has no claim transition")
         return self.claim_transition
 
+    def require_claim_acquisition(self) -> AcquiringTransition:
+        transition = self.require_claim_transition()
+        if not isinstance(transition, AcquiringTransition):
+            raise RelationViolationError('Original wire message is not a claim acquisition')
+        return transition
+
     def retained_task_facts(self):
         from .retained_task_facts import (
             ClaimTaskFact,
@@ -234,17 +240,11 @@ class Message:
         if not self.body:
             raise ValueError("Message body cannot be empty.")
         self.task.require_sender(self.sender)
-        if self.claim_transition is not None:
-            transition = self.claim_transition
-            if type(transition) is not ClaimTransition or (
-                self.seq > 0
-                and (
-                    transition.owner != self.sender
-                    or transition.seq != self.seq
-                    or transition.message_id != self.message_id
-                )
-            ):
-                raise RelationViolationError("Claim transition does not bind this message.")
+        if self.claim_transition is not None and self.seq > 0:
+            try:
+                self.claim_transition.require_message(self)
+            except ClaimTransitionError as error:
+                raise RelationViolationError('Claim transition does not bind this message.') from error
         if any(
             not (0 <= mention.start < mention.end <= len(self.body))
             or self.body[mention.start] != "@"
