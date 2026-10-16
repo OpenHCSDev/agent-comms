@@ -7,7 +7,7 @@ import pytest
 from typing import Type
 
 from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
-from agent_comms.comms import wire
+
 from agent_comms.coordination_tables.assignments import MessageAudience
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import AckKind, HandoffKind, InfoKind, MembershipChange, Message, MessageKind
@@ -24,6 +24,10 @@ from agent_comms.wake import (
     resolve_wake_cohort,
 )
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 MEMBERS = (FrozenRecipient("lookup-alpha", "alpha"), FrozenRecipient("lookup-beta", "beta"))
 
@@ -371,7 +375,7 @@ def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None
 def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
     tmp_path: Path,
 ) -> None:
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for name in ("sender", "alpha", "beta"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     channel = comms.messaging.send_message("sender", "#team", "channel note")
@@ -391,7 +395,7 @@ def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
 
 
 def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Path) -> None:
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for name in ("sender", "alpha"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     message = comms.messaging.send_message("sender", "#team", "status update")

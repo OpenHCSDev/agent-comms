@@ -11,6 +11,8 @@ provider until a separate reviewed enforced cap exists; tests use a fake model.
 
 from __future__ import annotations
 
+from .native_session_files import NativeSessionFiles
+
 import argparse
 import asyncio
 import json
@@ -30,10 +32,12 @@ from .comms import Comms
 from .coordinated_runtime import SelectedExecution
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .native_pi import _private_session_dir, _trusted_package
+from .native_pi import _trusted_package
 from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
 from .threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.launch_runtime import LaunchRuntime
 
 _MAX_GO_WAIT_SECONDS = 120
 _GO = re.compile(r"GO (0|[1-9][0-9]{0,17})\Z")
@@ -43,11 +47,15 @@ _GO = re.compile(r"GO (0|[1-9][0-9]{0,17})\Z")
 class ForegroundOwner:
     """The registration belongs to this process and authorizes at most one GO."""
 
-    root: Path
+    comms: Comms
     wire_root_id: str
     name: str
     native_package: Path
     _started: bool = field(default=False, init=False, repr=False)
+
+    @property
+    def root(self) -> Path:
+        return self.comms.root
 
     async def run_go(self, line: str) -> CoordinatedTurn | None:
         match = _GO.fullmatch(line)
@@ -57,7 +65,7 @@ class ForegroundOwner:
             raise PublicationActivationBlocked("Foreground owner accepts exactly one GO")
         self._started = True  # Before the first await: even an uncertain attempt is spent.
         return await SelectedExecution(
-            root=self.root,
+            comms=self.comms,
             wire_root_id=self.wire_root_id,
             owner_name=self.name,
             native_package=self.native_package,
@@ -89,14 +97,14 @@ def reserve_foreground_owner(
         or not root.is_relative_to("/var/tmp")
     ):
         raise PublicationActivationBlocked("Foreground N/K requires a private /var/tmp root")
-    _private_session_dir(root)
+    NativeSessionFiles.require_private_directory(root)
     if type(wire_root_id) is not str or not wire_root_id:
         raise ValueError("A private wire-root ID is required")
     package = Path(native_package).absolute()
     _trusted_package(package)  # Reject before touching the recipient registry.
     worktree = root / "work"
-    _private_session_dir(worktree)
-    comms = Comms(root)
+    NativeSessionFiles.require_private_directory(worktree)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     with comms.bus.log.certified_read() as source:
         marker = source.marker
     if marker.root_id != wire_root_id:
@@ -116,7 +124,7 @@ def reserve_foreground_owner(
         comms.registry.register(owner)
         with comms.channels.catalog.editing() as document:
             document.remember_tags(owner.tags, owner.created_at)
-    return ForegroundOwner(root, wire_root_id, owner.name, package)
+    return ForegroundOwner(comms, wire_root_id, owner.name, package)
 
 
 def _emit(payload: dict[str, object]) -> None:

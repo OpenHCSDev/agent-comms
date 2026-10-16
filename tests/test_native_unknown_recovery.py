@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.tool_caller import NoThreadCaller
+
 import asyncio
 import json
 import multiprocessing
@@ -23,10 +25,14 @@ from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
-from agent_comms.native_pi import NativePiInputNotSent, NativePiUnavailable
+from agent_comms.native_pi import NativePiInputNotSent
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def unknown_owner(directory, admitted, output, exit_allowed):
@@ -38,19 +44,19 @@ def unknown_owner(directory, admitted, output, exit_allowed):
 
     native_pi._trusted_package = lambda path: path
     fake, _calls = _fake_model()
+    caller = comms.registry.require("beta").incarnation
 
     async def fail(*args, **kwargs):
         if admitted:
             await fake(*args, **kwargs)
-        os.environ["AGENT_COMMS_THREAD"] = "beta"
-        comms.owners.release("beta")
+        comms.owners.release("beta", caller=caller)
         raise NativePiUnavailable("UNKNOWN before admission receipt")
 
     TrackedTurnSession.execute = fail
     try:
         asyncio.run(
             runtime.SelectedExecution(
-                root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+                comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
             ).run()
         )
     except NativePiUnavailable:
@@ -128,7 +134,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
 
     # Real registry, private bus/cohort, slot acquisition and publication; only
     # the native model is fake. A different input must run, never the old one.
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True)
     comms.registry.register(
         replace(
             comms.registry.require("beta"), process_identity=ProcessIdentity.capture(os.getpid())
@@ -142,7 +148,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda path: path)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+        comms=comms, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
     ).run()
     assert result.disposition is CompletedAssignment
     assert len(calls) == 1 and calls[0][0] != input_id
@@ -167,7 +173,7 @@ def test_stop_of_previously_released_dead_owner_settles_without_replay(released_
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before_input = input_evidence(store)
         assert store.snapshots.get(execution_id).is_current
-    comms.owners.stop("beta")
+    comms.owners.stop("beta", caller=NoThreadCaller())
     with Coordination(str(root / "coordination.sqlite3")) as store:
         snapshot = store.snapshots.get(execution_id)
         assert not snapshot.is_current
@@ -242,7 +248,7 @@ def test_missing_admission_cannot_borrow_a_live_successor_release(released_unkno
             is not None
         ):
             return  # Recorded admission already binds to the earlier attested release.
-        comms = Comms(root)
+        comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
         comms.registry.register(
             replace(
                 comms.registry.require("beta"),
@@ -305,7 +311,7 @@ print(json.dumps({"type":"response", "id":request["id"],
     monkeypatch.setattr(DurableTurn, "fail_unknown", after_reap)
     with pytest.raises(NativePiInputNotSent, match="capability preflight failed") as failure:
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
     assert failure.value.diagnostic_evidence["input_disposition"] == "not_sent"
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -328,7 +334,7 @@ print(json.dumps({"type":"response", "id":request["id"],
     fake, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
     assert result.disposition is CompletedAssignment
     assert len(calls) == 1 and calls[0][0] != old_id
@@ -346,7 +352,7 @@ async def test_revoked_live_failure_keeps_slot_for_recovery(tmp_path, monkeypatc
     monkeypatch.setattr(TrackedTurnSession, "execute", revoke_then_fail)
     with pytest.raises(NativePiUnavailable, match="original uncertain failure"):
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(

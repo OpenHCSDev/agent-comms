@@ -1,5 +1,8 @@
 """Evidence preserves opaque content without granting plain-text or launch authority."""
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import json
 from pathlib import Path
 
@@ -7,7 +10,8 @@ import pytest
 
 from agent_comms.fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from agent_comms.native_entries import NativeEntry
-from agent_comms.native_pi import NativeContextProof, NativePiRpcLaunch, NativePiUnavailable
+from agent_comms.native_pi import NativeContextProof, NativePiRpcLaunch
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.pi_payloads import TextContent, UnknownContent
 
 
@@ -108,7 +112,8 @@ def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypat
             session_dir=fresh.path.parent,
             session_file=fresh.path,
             selected_thinking_level="high",
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
     assert not (fresh.path.parent / ".native-pi-agent").exists()
 
 
@@ -127,7 +132,8 @@ def test_launch_uses_fresh_owner_and_preserves_exact_saved_marker(tmp_path, monk
         session_dir=fresh.path.parent,
         session_file=fresh.path,
         selected_thinking_level=level,
-    )
+        session_context=(DoctrineSegment.capture(),),
+     project=UnmanagedNativeProject())
     assert launch.session_file == fresh.path
     assert fresh.path.read_bytes() == before
     fresh.verify_prewrite()

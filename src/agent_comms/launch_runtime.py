@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -26,6 +26,7 @@ class LaunchRuntime:
     """One selected installation for a worker and its native executable."""
 
     interpreter: Annotated[Path, PathText]
+    interpreter_arguments: ClassVar[tuple[str, ...]] = ("-I",)
 
     @classmethod
     def current(cls) -> LaunchRuntime:
@@ -41,11 +42,11 @@ class LaunchRuntime:
     @classmethod
     def running(cls) -> LaunchRuntime:
         """Identify the decoder already running, for watcher checks and restoration."""
-        return cls(Path(sys.executable))
+        return cls(Path(sys.prefix) / "bin/python")
 
-    @property
-    def native_entrypoint(self) -> str:
-        return str(self.interpreter.with_name("pi-comms-native"))
+    def command(self, *arguments: str) -> tuple[str, ...]:
+        """Execute this installation without importing a task directory or PYTHONPATH."""
+        return (str(self.interpreter), *self.interpreter_arguments, *arguments)
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
         configuration = replace(
@@ -61,6 +62,8 @@ class LaunchRuntime:
 
 class RestoredRuntime(LaunchRuntime):
     """Original-process recovery preserves its original import environment too."""
+
+    interpreter_arguments = ()
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
         return dict(source)
@@ -126,28 +129,6 @@ class RestartEnvironment:
         default=default_agent_directory,
         metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True},
     )
-    owner_key: ClassVar[str] = "AGENT_COMMS_THREAD"
-
-    @classmethod
-    def calling_thread(cls, environment: Mapping[str, str] = os.environ) -> str:
-        caller = environment.get(cls.owner_key)
-        if not caller:
-            raise CallingThreadUnavailable(
-                f"Calling thread requires {cls.owner_key}."
-            )
-        return caller
-
-    @classmethod
-    def called_by(
-        cls,
-        name: str,
-        canonicalize: Callable[[str], str],
-        *,
-        environment: Mapping[str, str] = os.environ,
-    ) -> bool:
-        caller = environment.get(cls.owner_key)
-        return caller is not None and canonicalize(caller) == name
-
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.absolute(self.native_config))
         object.__setattr__(self, "agent_directory", self.absolute(self.agent_directory))

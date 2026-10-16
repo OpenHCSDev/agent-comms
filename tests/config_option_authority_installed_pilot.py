@@ -6,6 +6,11 @@ root, setting, native journal or historical input is changed.
 """
 from __future__ import annotations
 
+from agent_comms.runtime_socket import RuntimeSocket
+
+from agent_comms.tool_caller import NoThreadCaller
+
+
 import argparse
 import asyncio
 from contextlib import AsyncExitStack
@@ -19,8 +24,11 @@ from acp.exceptions import RequestError
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def thinking(options):
@@ -101,7 +109,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = stage / 'project'
     project.mkdir()
-    service = Comms(stage / 'wire')
+    service = Comms(LocalRoute(stage / 'wire'), runtime=LaunchRuntime.current())
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     environment = dict(os.environ)
@@ -130,7 +138,7 @@ async def run(stage, package, models, ui, menu_contention=False):
             async with AsyncExitStack() as lifetime:
                 client = CommsAgent(service, auto_wake=False)
                 lifetime.push_async_callback(client.shutdown)
-                path = socket_path(service.root, owner.pid)
+                path = RuntimeSocket.path_for(service.root, owner.pid)
                 proxy = RuntimeProxy(client, name, path)
                 lifetime.push_async_callback(proxy.close)
                 async with asyncio.timeout(15):
@@ -186,7 +194,7 @@ async def run(stage, package, models, ui, menu_contention=False):
                     **visible,
                 })
         finally:
-            service.owners.stop(name)
+            service.owners.stop(name, caller=NoThreadCaller())
         assert not owner.process_alive
     receipt = {'models': rows, 'real_worker_socket_catalog': True,
                'prompt_commands': 0, 'provider_calls': 0,

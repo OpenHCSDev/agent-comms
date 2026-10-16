@@ -9,11 +9,15 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _peer(root: Path, name: str) -> Thread:
@@ -31,7 +35,7 @@ def _mark(comms, peer, root, page):
 
 
 def test_dm_preparation_releases_native_admission_lock(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for index in range(3):
@@ -57,7 +61,7 @@ def test_dm_preparation_releases_native_admission_lock(tmp_path, monkeypatch):
 
 
 def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "before rename")
@@ -81,7 +85,7 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
 
 
 def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "old peer painted")
@@ -105,7 +109,7 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
 
 
 def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "old viewer painted")
@@ -130,7 +134,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
 
 
 def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(_peer(tmp_path, "peer"))
     old_viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", old_viewer, "old viewer painted")
@@ -157,7 +161,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
 def test_read_progress_during_fetch_does_not_invalidate_page(
     tmp_path: Path, monkeypatch, marked_sender,
 ):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     for name in ("peer", "other"):
         comms.registry.declare(_peer(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -187,7 +191,7 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
 
 
 def test_read_progress_after_older_check_keeps_conservative_page(tmp_path: Path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     older = comms.messaging.send_message("peer", viewer, "older")
@@ -215,7 +219,7 @@ def test_read_progress_after_older_check_keeps_conservative_page(tmp_path: Path,
 
 
 def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     for name in ("peer", "other"):
         comms.registry.declare(_peer(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name

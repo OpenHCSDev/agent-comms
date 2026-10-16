@@ -2,6 +2,7 @@
 from abc import abstractmethod
 from functools import partial
 from .coordinator import Coordination
+from .native_settings import NativeThreadDefaults
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -43,7 +44,6 @@ class EnsuringSessionLoadAdmission(SessionLoadAdmission):
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
         return await Coordination.run_worker(partial(
             lifecycle.comms.owners.ensure_owner, thread.name,
-            agent_bin=lifecycle.agent_bin, agent_args=list(lifecycle.agent_args.argv),
         ))
 
 

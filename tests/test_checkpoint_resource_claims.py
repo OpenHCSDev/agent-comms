@@ -12,10 +12,13 @@ from agent_comms.private_bus_checkpoint import CertifiedSourceRead, ClaimCommits
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def authored(tmp_path):
-    comms = Comms(tmp_path / 'wire')
+    comms = Comms(LocalRoute(tmp_path / 'wire'), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     for name in ('owner', 'peer'):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
@@ -55,7 +58,7 @@ def test_multi_resource_admission_consumes_one_operation_even_after_release(tmp_
     with pytest.raises(IdentityConflict, match='already consumed'):
         admitted(comms, admission, paths[2:])
     assert comms.bus.log.path.read_bytes() == before
-    reopened = Comms(comms.root)
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     with reopened.bus.log.certified_read() as source:
         assert source.claim_operation_used(admission.operation_id)
         assert source.claim(str(paths[0])) is None

@@ -13,11 +13,15 @@ import pytest
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.input_attempt import StartedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.active_route import LocalRoute
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -44,13 +48,10 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
     marker = "RETAINED_FORK_LOOPBACK_" + uuid4().hex[:12]
     fixture.provider.text = marker
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    monkeypatch.setenv(
-        "AGENT_COMMS_AGENT_ARGS",
-        "--offline --no-extensions --no-skills --no-context-files --no-prompt-templates --no-tools",
-    )
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"])
-    launcher = str(Path(sys.executable).with_name("pi-comms-native"))
-    comms = Comms(fixture.root)
+    runtime = LaunchRuntime.current()
+    native = NativeThreadDefaults.offline(runtime, arguments=('--no-prompt-templates', '--no-tools'))
+    comms = Comms(LocalRoute(fixture.root), runtime=runtime)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
     comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
@@ -64,13 +65,7 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
             thinking_level="off",
         )
     )
-    attachment = CommsClient(
-        comms,
-        agent_bin=launcher,
-        runtime_enabled=True,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
-    )
+    attachment = CommsClient(comms, native=native, runtime_enabled=True, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     failures = []
     answered = asyncio.Event()
 
@@ -95,7 +90,7 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
                 name="retained-child", parent="retained-parent", project=str(fixture.project),
                 model="response-local/fixture", thinking_level="off", task="One new isolated fork diagnostic " + marker
             ),
-            launcher,
+            native=native, runtime=runtime,
         )
         assert Path(child.session_file).is_relative_to(fixture.config)
         # The real fork's startup input races the first real owner attachment.

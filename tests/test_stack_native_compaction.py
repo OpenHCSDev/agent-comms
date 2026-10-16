@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 from agent_comms.queued_input import InitialInput
 import asyncio
 import json
@@ -21,11 +24,16 @@ from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.activity import ActivityState
-from agent_comms.comms import wire
+
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
@@ -184,11 +192,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                 "throw new Error('BLOCKED_NONLOCAL_NETWORK');"
                 "return original(url,...rest);};"
             )
-            native_args = [
-                "--offline", "--no-extensions", "--no-skills", "--no-prompt-templates",
-                "--no-context-files", "--no-tools", "--provider", "openrouter",
-                "--model", "z-ai/glm-5.3-flash", "--thinking", "high",
-            ]
+            native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'high']
             if case == "post_compaction_tool_rounds":
                 native_args.remove("--no-tools")
                 native_args.extend(["--tools", "read"])
@@ -213,7 +217,8 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                         env_extra=child_env, session_file=str(session),
                         require_input_id=True, native_start=lambda *_: True,
                         persistent_session=pi_session,
-                    ):
+                        session_context=(DoctrineSegment.capture(),),
+                     project=UnmanagedNativeProject()):
                         events.append(event)
             finally:
                 await pi_session.close()
@@ -291,7 +296,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     """The owner's turn shows 'Compacting context' while Pi summarizes, then replies."""
     for key, value in child_env.items():
         monkeypatch.setenv(key, value)
-    comms = wire(root / "wire")
+    comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     package_path = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     assert package_path, "Set PI_COMPACTION_TEST_PACKAGE to the verified native package"
@@ -299,10 +304,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
-    owner = CommsAgent(
-        comms, agent_bin=native_bin, agent_args=native_args, runtime_enabled=True,
-        auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id,
-    )
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native_bin, arguments=tuple(native_args)), runtime_enabled=True, auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     updates = []
     resumed_activity = []
 

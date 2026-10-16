@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_session_files import NativeSessionFiles
+
 from collections import defaultdict
 from abc import abstractmethod
 from collections.abc import Generator
@@ -225,9 +227,9 @@ class NativeTranscript(TranscriptSource):
         journal owns context inclusion for the actual header/input/entry identity;
         this bounded indexed lookup does not guess a request kind or options.
         """
-        from .native_pi import NativeContextJournal, _private_session_dir
+        from .native_pi import NativeContextJournal
 
-        _private_session_dir(self.path.parent)
+        NativeSessionFiles.require_private_directory(self.path.parent)
         with self.path.open("rb") as stream:
             header = NativeEntry.read(stream.readline())
         if not isinstance(header, SessionEntry):

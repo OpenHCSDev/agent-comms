@@ -200,7 +200,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
         "wait_for": ["a"],
     }
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
-        invoke_tool(comms, "comms_goal", report, caller=ThreadCaller("b"))
+        invoke_tool(comms, "comms_goal", report, caller=ThreadCaller(comms.registry.require('b').incarnation))
     assert stored_inputs(dispositions.root) == before
     full_review = json.loads(Path(result["result_file"]).read_text())["standby_review"]
     assert full_review == review
@@ -209,7 +209,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
         replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.agents.begin_turn("a", "next-a-result-in-flight")
-    invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]}, caller=ThreadCaller("b"))
+    invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]}, caller=ThreadCaller(comms.registry.require('b').incarnation))
     assert isinstance(comms.goals.goal_wait("b"), RecordedGoalWait)
     assert all(
         stored_inputs(dispositions.root).rows[f"bus:{message.seq}"].declared_name == "reserved"
@@ -314,7 +314,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
         "reviewed_inputs": review["reviewed_inputs"],
     }
     with pytest.raises(ValueError, match="recipient"):
-        invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": ["acp:owner-0"]}, caller=ThreadCaller("b"))
+        invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": ["acp:owner-0"]}, caller=ThreadCaller(comms.registry.require('b').incarnation))
     assert stored_inputs(dispositions.root) == before
     # A reply arriving after this snapshot still blocks standby atomically.
     late = comms.messaging.send_message("a", "b", "New evidence after inbox inspection")
@@ -323,13 +323,13 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     )
     after_arrival = stored_inputs(dispositions.root)
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
-        invoke_tool(comms, "comms_goal", report, caller=ThreadCaller("b"))
+        invoke_tool(comms, "comms_goal", report, caller=ThreadCaller(comms.registry.require('b').incarnation))
     assert stored_inputs(dispositions.root) == after_arrival
     fresh = invoke_tool(
         comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}
     )["standby_review"]
     assert fresh["reviewed_inputs"] == [f"bus:{messages[1].seq}", f"bus:{late.seq}"]
-    invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]}, caller=ThreadCaller("b"))
+    invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]}, caller=ThreadCaller(comms.registry.require('b').incarnation))
     assert isinstance(comms.goals.goal_wait("b"), RecordedGoalWait)
     assert stored_inputs(dispositions.root).rows[f"bus:{messages[1].seq}"].declared_name == "reserved"
     assert not stored_inputs(dispositions.root).rows.get("acp:owner-0").goal_reviews

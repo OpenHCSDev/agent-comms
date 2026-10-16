@@ -6,6 +6,9 @@ This observes initialization only; it grants no input retry authority.
 
 from __future__ import annotations
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import argparse
 import asyncio
 import json
@@ -16,7 +19,8 @@ from uuid import uuid4
 
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.native_custody import PiSessionChild
-from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
+from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_startup import NativeStartupAdmission
 from agent_comms.selected_session import SelectedSession
 
@@ -33,7 +37,8 @@ async def run(root: Path, package: Path) -> dict:
         provider="openrouter",
         model="z-ai/glm-5.3-flash",
         thinking_level="off",
-    )
+        session_context=(DoctrineSegment.capture(),),
+     project=UnmanagedNativeProject())
     admission = NativeStartupAdmission(root)
     started = time.monotonic()
     await admission.acquire()

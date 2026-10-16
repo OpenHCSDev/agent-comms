@@ -91,10 +91,8 @@ class SelectedNativeStartupAdmission(NativeStartupAdmission):
         *, measurements: PublicationMeasurements | None = None,
     ):
         from .fresh_private_session import FreshPrivateSession
-        from .native_pi import (
-            NativePiUnavailable, _fresh_selected_revision,
-            _require_reviewed_selected_source_cli,
-        )
+        from .native_pi import _fresh_selected_revision, _require_reviewed_selected_source_cli
+        from .native_errors import NativePiUnavailable
         from .pi_vocabulary import ThinkingLevel
 
         if type(fresh) is not FreshPrivateSession:
@@ -110,7 +108,8 @@ class SelectedNativeStartupAdmission(NativeStartupAdmission):
         self.revision = revision
 
     def attest(self, state: StateData) -> None:
-        from .native_pi import NativePiUnavailable, _fresh_selected_revision
+        from .native_pi import _fresh_selected_revision
+        from .native_errors import NativePiUnavailable
 
         self.fresh.require_runtime(state)
         revision = _fresh_selected_revision(self.fresh, started=True)

@@ -24,19 +24,24 @@ from .read_basis import (
 )
 from .routing import DeliveryScope
 from .store_files import _store_lock
+from .peer_relevance import Prioritized
 
 if TYPE_CHECKING:
     from .presentation import DisplaySelection
-    from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .relationships import PeerRelation
     from .threads import Thread
 
+from .registration import Registration
 from .publisher import Publisher
 from .wire_log import OpenedWireSnapshot, WireLog
 
 
 class MessageBus:
+    @classmethod
+    def for_root(cls, root: Path, **options) -> MessageBus:
+        return cls(root / "bus.jsonl", Registration(root / "registry.json"), **options)
+
     def __init__(
         self,
         bus_path: Path,
@@ -52,7 +57,7 @@ class MessageBus:
         self.reads = ReadLedger(bus_path.parent / ReadLedger.filename)
         self.log = WireLog(bus_path)
         self.history = HistoryArchive(bus_path)
-        self._registry = registry
+        self.registry = registry
         self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
         self._activity = self.log.register_append_index(BusActivityIndex(bus_path))
         self.publisher = Publisher(
@@ -109,7 +114,7 @@ class MessageBus:
                     prepared_indexes=prepared,
                 ))
                 with DisplaySelection.reading(
-                    self._registry, self._channels, self.reads, viewer
+                    self.registry, self._channels, self.reads, viewer
                 ) as basis:
                     pass
             yield basis, source
@@ -124,7 +129,7 @@ class MessageBus:
         pending counts, and the page index reads only those rows.
         """
         if snapshot is None:
-            snapshot = self._registry.snapshot()
+            snapshot = self.registry.snapshot()
         catalog = self._channels.read()
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
@@ -156,12 +161,12 @@ class MessageBus:
         from contextlib import aclosing
         from .wire_watch import WatchSource, WireWatch
 
-        reader = self._registry.require(name).incarnation
+        reader = self.registry.require(name).incarnation
         async with aclosing(
             WireWatch.observations(WatchSource.wire(self.log.path.parent))
         ) as changes:
             async for _ in changes:
-                snapshot = self._registry.snapshot()
+                snapshot = self.registry.snapshot()
                 if not reader.current(snapshot):
                     raise UnregisteredThreadError("Watched thread was removed or replaced")
                 for message in self.inbox(name, snapshot=snapshot):
@@ -228,7 +233,7 @@ class MessageBus:
     ) -> int:
         """Mark only the named unread messages delivered and return their count."""
         requested = frozenset(references)
-        snapshot = self._registry.snapshot()
+        snapshot = self.registry.snapshot()
         messages = tuple(
             message
             for message in self.inbox(name, snapshot=snapshot)
@@ -240,7 +245,7 @@ class MessageBus:
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
         """Advance a thread's global inbox cursor without loading messages."""
-        snapshot = self._registry.snapshot()
+        snapshot = self.registry.snapshot()
         canonical = snapshot.require(name).name
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
@@ -252,7 +257,7 @@ class MessageBus:
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
         """Full conversation between two threads, either possibly deleted, in seq order."""
-        snapshot = self._registry.snapshot()
+        snapshot = self.registry.snapshot()
         scope = DMDisplayScope.capture(
             snapshot.participant(a).name, snapshot.participant(b).name, snapshot
         )
@@ -270,18 +275,15 @@ class MessageBus:
     ):
         """Bounded pointers to addressed sources, independent of UI read state.
 
-        Pointers from peers whose relevance grants ``Prioritized`` come first;
-        which messages are in the window does not depend on relevance.
-
-        Current canonical checkpoint rows own the pointers. Repeated reminders
-        are intentional: neither displaying nor composing them proves model read.
+        Only this turn's selected peers contribute optional pointers. The
+        canonical checkpoint still owns the bounded source window; selection
+        neither advances a cursor nor claims model read or delivery.
         Input preparation may omit this optional supplement on contention;
         inspection waits in its existing resource worker for the actual read.
         """
         from .errors import RelationViolationError
         from .private_bus_checkpoint import addressed_source_pointers_unlocked
         from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
-        from .peer_relevance import Prioritized
 
         try:
             with self.log.certified_read(blocking=blocking) as source:
@@ -295,17 +297,17 @@ class MessageBus:
             return (UnavailableAwarenessSegment.capture(),)
         if not rows:
             return ()
-        first = {
-            relation.peer.incarnation.lookup
+        selected = {
+            relation.peer.require_recorded().lookup: relation.relevance.grants(Prioritized)
             for relation in relations
-            if relation.relevance.grants(Prioritized)
         }
-        rows = tuple(sorted(rows, key=lambda row: row.sender_lookup not in first))
-        return (AwarenessSegment.capture(self.log.path, marker.root_id, rows),)
+        rows = tuple(sorted((row for row in rows if row.sender_lookup in selected),
+                            key=lambda row: not selected[row.sender_lookup]))
+        return (AwarenessSegment.capture(self.log.path, marker.root_id, rows),) if rows else ()
 
     def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
         """A bounded delivery stream independent of UI read acknowledgments."""
-        snapshot = self._registry.snapshot()
+        snapshot = self.registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
         return self.display_page(delivery, after=after, limit=limit)
 
@@ -320,7 +322,7 @@ class MessageBus:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Return one bounded page between two threads, either possibly deleted."""
-        snapshot = self._registry.snapshot()
+        snapshot = self.registry.snapshot()
         scope = DMDisplayScope.capture(
             snapshot.participant(a).name, snapshot.participant(b).name, snapshot
         )
@@ -406,4 +408,4 @@ class MessageBus:
         )
 
     def channels(self) -> Sequence[str]:
-        return list(self._channels.read().views(self._registry.all_threads()))
+        return list(self._channels.read().views(self.registry.all_threads()))

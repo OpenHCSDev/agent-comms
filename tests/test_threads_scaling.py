@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.tool_caller import NoThreadCaller
+
 import json
 import os
 import threading
@@ -11,11 +13,14 @@ import pytest
 from agent_comms.bus_activity_index import ActivityCheckpoint, BusActivityIndex
 from agent_comms.bus_projection import AppendCheckpoint
 from agent_comms.private_path import FileRevision
-from agent_comms.comms import wire
+
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.messages import Message
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _expected(wired, *, active_only: bool = False) -> dict[str, int]:
@@ -41,11 +46,11 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     messages = wired.bus.inbox("PR111")
     wired.messaging.acknowledge("PR111", tuple(message.reference for message in messages))
     assert _listed(wired) == _expected(wired)
-    wired.owners.stop("third")
+    wired.owners.stop("third", caller=NoThreadCaller())
     assert _listed(wired, active_only=True) == _expected(wired, active_only=True)
 
     # A fresh CLI process uses the durable projection without parsing history.
-    fresh = wire(wired.root)
+    fresh = Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current())
     calls = []
     original = Message.from_wire
 
@@ -63,7 +68,7 @@ def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatc
         wired.messaging.send("PR111", "fixer", f"message {index}")
     assert _listed(wired)["fixer"] == 100
 
-    fresh = wire(wired.root)
+    fresh = Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current())
     parsed = []
     original = Message.from_wire
 
@@ -104,7 +109,7 @@ def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monke
     wired.messaging.send("PR111", "#base", "channel activity")
     wired.messaging.send("PR111", "fixer", "direct activity")
     expected = wired.views.coordination_snapshot()
-    fresh = wire(wired.root)
+    fresh = Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current())
 
     def forbidden_scan():
         raise AssertionError("mounted snapshot reparsed historical bus rows")
@@ -115,7 +120,7 @@ def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monke
     wired.messaging.send("PR111", "#base", "new channel activity")
     updated = fresh.views.coordination_snapshot()
     assert updated.last_sent["PR111"] >= expected.last_sent["PR111"]
-    assert updated == wire(wired.root).views.coordination_snapshot()
+    assert updated == Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current()).views.coordination_snapshot()
 
 
 def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired, monkeypatch):
@@ -124,7 +129,7 @@ def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired,
     expected = wired.bus.channel_activity()
     sent = wired.bus.last_sent_timestamps()
     assert expected["#base"].last_message == first.timestamp
-    fresh = wire(wired.root)
+    fresh = Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current())
     parsed = []
     original = Message.from_wire
 
@@ -149,7 +154,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
     viewer = wired.messaging.user_identity("/isolated-checkpoint-viewer").name
     # Prepare both actual index owners before taking a cold observer's cut.
     wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
-    captured = wired if same_owner else wire(wired.root)
+    captured = wired if same_owner else Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current())
     with captured.views.presentation.snapshot(viewer=viewer) as (basis, source):
         appended = wired.messaging.send_message("fixer", "#base", "later activity")
         # B advances both index owners; A keeps the prefix read with its source.
@@ -170,7 +175,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
         assert parsed == []
     # The historical reader did not overwrite the newer published checkpoint.
     parsed.clear()
-    fresh = wire(wired.root)
+    fresh = Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current())
     assert fresh.bus.last_sent_timestamps()["fixer"] == appended.timestamp
     assert parsed == []
 
@@ -284,7 +289,7 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
 
     checkpoint = wired.root / "bus_activity_latest.json"
     checkpoint.write_text("{damaged")
-    assert set(wire(wired.root).views.coordination_snapshot().last_sent) == {"PR111", "fixer"}
+    assert set(Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current()).views.coordination_snapshot().last_sent) == {"PR111", "fixer"}
 
     # A valid JSON file can also lose projection values after local damage.
     # The bus is still authoritative when the checkpoint shape survives.
@@ -292,7 +297,7 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
     cached["channels"]["#base"] = [0.0, 0.0]
     cached["sent"]["fixer"] = 0.0
     checkpoint.write_text(json.dumps(cached))
-    reopened = wire(wired.root)
+    reopened = Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current())
     assert reopened.views.coordination_snapshot().last_sent["fixer"] > 0.0
     assert reopened.bus.channel_activity()["#base"].last_message > 0.0
 
@@ -302,7 +307,7 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
     os.chmod(replacement, 0o600)
     os.replace(replacement, bus_path)
     with pytest.raises(RelationViolationError, match="Private bus"):
-        wire(wired.root).views.coordination_snapshot()
+        Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current()).views.coordination_snapshot()
 
 
 def test_route_projection_refuses_atomic_bus_replacement(wired):
@@ -316,7 +321,7 @@ def test_route_projection_refuses_atomic_bus_replacement(wired):
     os.chmod(replacement, 0o600)
     os.replace(replacement, bus_path)
     with pytest.raises(RelationViolationError, match="Private bus"):
-        _listed(wire(wired.root))
+        _listed(Comms(resolve_comms_route(wired.root), runtime=LaunchRuntime.current()))
 
 
 def test_route_projection_refuses_rewrite_before_append(wired):

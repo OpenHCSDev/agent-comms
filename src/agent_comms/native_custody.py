@@ -7,18 +7,19 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .native_attestation import NativeAttestation, PendingAttestation
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_pi import NativePiRpcLaunch
+from .native_errors import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
-from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from .session_revision import SessionRevision
+    from .turn_context import ContextSegment
+    from .native_project import NativeProject
 
 
 @dataclass
@@ -41,13 +42,8 @@ class PiSessionChild:
     async def start(cls, key, attestation):
         launch, _ = key
         with ExitStack() as resources:
-            environment = dict(launch.env)
-            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
-                address = resources.enter_context(PrivateSocketRole.address(
-                    Path(environment["AGENT_COMMS_PROJECT_SOCKET"])
-                ))
-                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
-            proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=environment)
+            argv = resources.enter_context(launch.bound_arguments())
+            proc = await AttachedChild.start(argv, cwd=str(launch.cwd), env=launch.env)
             assert proc.stdout is not None and proc.stderr is not None
             return cls(
                 proc,
@@ -160,9 +156,12 @@ class NativeCustody(ABC):
 
     retained = False
 
-    def managed_launch(self, command, arguments, *, worktree, environment, session_file):
-        return NativePiRpcLaunch.managed(command, arguments, worktree=worktree,
-            environment=environment, session_file=session_file)
+    def managed_launch(self, comms, arguments, *, worktree, environment, session_file,
+                       session_context: tuple[ContextSegment, ...], project: NativeProject):
+        return NativePiRpcLaunch.managed(comms.runtime, arguments,
+            package=comms.owners.native_package, worktree=worktree,
+            environment=environment, session_file=session_file, session_context=session_context,
+            project=project)
 
     def reuse(self, key) -> PiSessionChild | None:
         return None
@@ -289,17 +288,20 @@ class RetainedNative(ChildNative):
             return self.child
         return None
 
-    def managed_launch(self, command, arguments, *, worktree, environment, session_file):
+    def managed_launch(self, comms, arguments, *, worktree, environment, session_file,
+                       session_context: tuple[ContextSegment, ...], project: NativeProject):
         if self.current:
             original, authentication = self.child.key
-            candidate = original.retained_managed(command, arguments,
-                worktree=worktree, environment=environment, session_file=session_file)
+            candidate = original.retained_managed(comms.runtime, arguments,
+                package=comms.owners.native_package, worktree=worktree, environment=environment, session_file=session_file,
+                session_context=session_context, project=project)
             if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
                 original, authentication
             ):
                 return original
-        return super().managed_launch(command, arguments, worktree=worktree,
-            environment=environment, session_file=session_file)
+        return super().managed_launch(comms, arguments, worktree=worktree,
+            environment=environment, session_file=session_file, session_context=session_context,
+            project=project)
 
     def _shutdown_successor(self) -> NativeCustody:
         return EmptyNative()

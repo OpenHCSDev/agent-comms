@@ -7,12 +7,16 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms.comms import wire
+
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("sender", frozenset({"ci"}), str(tmp_path)))
     comms.registry.declare(Thread("receiver", frozenset({"ci", "docs"}), str(tmp_path)))
     comms.messaging.send("sender", "#ci", "first")
@@ -20,7 +24,7 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
     comms.messaging.acknowledge("receiver", tuple(message.reference for message in messages))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 1
     comms.views.mark_channel_view_read("#ci", worktree=str(tmp_path))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
     comms.messaging.send("sender", "#ci", "second")
     comms.messaging.send("sender", "#docs", "docs")
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
@@ -40,7 +44,7 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
 
 
 def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path)))
     comms.messaging.send("alice", "bob", "hidden until any-mode")
@@ -48,11 +52,11 @@ def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
     comms.views.mark_channel_view_read("#team", worktree=str(tmp_path))
     comms.channels.set_channel_any_mode("#team", True)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
 
 
 def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("carol", frozenset(), str(tmp_path)))
@@ -67,11 +71,11 @@ def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
     # Carol's old DM becomes visible only after joining the channel. The
     # previous painted basis cannot acknowledge this newly included history.
     comms.channels.update_tags("carol", add=frozenset({"team"}))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
 
 
 def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("carol", frozenset(), str(tmp_path)))
@@ -83,7 +87,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
     assert [message.seq for message in painted.messages] == [2]
 
     comms.channels.update_tags("carol", add=frozenset({"team"}))
-    unread_after_join = wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"]
+    unread_after_join = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"]
     with pytest.raises(ValueError, match="display.*changed"):
         comms.views.mark_channel_view_read(
             "#team",
@@ -92,7 +96,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
             expected_scope=painted.display_scope,
         )
     assert (
-        wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == unread_after_join
+        Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == unread_after_join
     )
 
 
@@ -101,7 +105,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
 def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
     with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
         root = Path(directory)
-        comms = wire(root)
+        comms = Comms(resolve_comms_route(root), runtime=LaunchRuntime.current())
         comms.registry.declare(Thread("alice", frozenset({"team"}), str(root)))
         comms.registry.declare(Thread("bob", frozenset({"team"}), str(root)))
         comms.messaging.send_message("alice", "bob", "hidden before crash")
@@ -116,7 +120,7 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
             check=False,
         )
         assert child.returncode == 9
-        reopened = wire(root)
+        reopened = Comms(resolve_comms_route(root), runtime=LaunchRuntime.current())
         reopened.channels.set_channel_any_mode("#team", True)
         assert [message.seq for message in reopened.views.full_history()] == [1, 2]
         assert reopened.views.viewer_snapshot(str(root)).channel_unread["#team"] == 2

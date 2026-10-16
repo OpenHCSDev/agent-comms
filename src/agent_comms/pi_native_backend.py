@@ -18,6 +18,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
+from .native_project import ManagedNativeProject
+from .native_fork import fork_native_session
 from .agent_backend import (
     AgentBackend,
     Compacts,
@@ -172,19 +174,17 @@ class PiNativeBackend(
 
     def __init__(
         self,
-        agent_bin: str,
-        agent_args: NativeArguments,
         comms: Comms,
         observe: Callable[[Thread, StateData, AgentInfo], Awaitable[None]],
     ) -> None:
         super().__init__()
-        self.agent_bin, self.agent_args, self.comms = agent_bin, agent_args, comms
+        self.comms = comms
         self.observe = observe
 
     @classmethod
     def for_worker(cls, runner: Any, session_id: str) -> Self:
         return cls(
-            runner.agent_bin, runner.agent_args, runner.comms,
+            runner.comms,
             partial(runner.observe_selected_preparation, session_id),
         )
 
@@ -192,7 +192,7 @@ class PiNativeBackend(
         """Pi's command-line arguments for this thread's model and thinking level."""
         from .pi_vocabulary import ThinkingLevel
 
-        return self.agent_args.with_model(thread.model).with_thinking(
+        return self.comms.settings.parsed_arguments.with_model(thread.model).with_thinking(
             ThinkingLevel.optional_name(thread.thinking_level)
         ).argv
 
@@ -202,21 +202,25 @@ class PiNativeBackend(
         """Launch (or reuse) and attest the idle child for ``thread``'s saved session."""
         from .coordinator import Coordination
         from .native_session_prepare import NativeSessionPreparation
+        from .turn_context import TurnContext
 
         if thread.session_file is None:
             raise ValueError("Native preparation requires a saved session")
         if open_native is None:
             open_native = NativeSessionPreparation.open
-        environment = await Coordination.run_worker(lambda: thread.native_environment(
-            self.comms.root, self.comms.registry.snapshot(), thread.worktree,
+        project, session_context = await Coordination.run_worker(lambda: (
+            ManagedNativeProject.capture(self.comms.root, self.comms.registry.snapshot(), thread),
+            TurnContext.session_segments(thread),
         ))
         return await open_native(
             self,
-            self.agent_bin,
+            self.comms,
             self.arguments(thread),
             worktree=thread.worktree,
-            environment=environment,
+            environment={"AGENT_COMMS_ROOT": str(self.comms.root)},
             session_file=thread.session_file,
+            project=project,
+            session_context=session_context,
             observe=partial(self.observe, thread),
         )
 
@@ -230,10 +234,16 @@ class PiNativeBackend(
         self, thread: Thread, content: InputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
         from . import backend
+        from .coordinator import Coordination
+        from .turn_context import TurnContext
 
+        project, session_context = await Coordination.run_worker(lambda: (
+            ManagedNativeProject.capture(self.comms.root, self.comms.registry.snapshot(), thread),
+            TurnContext.session_segments(thread),
+        ))
         images = {"images": content.images} if content.images else {}
         async for event in backend.stream_agent_events(
-            self.agent_bin,
+            self.comms,
             self.arguments(thread),
             content.text,
             delivery.worktree,
@@ -248,6 +258,8 @@ class PiNativeBackend(
             native_start=delivery.input_started,
             request_observer=delivery.request_progress,
             persistent_session=self,
+            session_context=session_context,
+            project=project,
             ui_request=delivery.ui_request,
         ):
             yield event
@@ -272,7 +284,7 @@ class PiNativeBackend(
 
     async def compact(self, thread: Thread, instructions: str | None) -> CompactionOutcome:
         """Ask Pi's own engine to compact through its ``compact`` RPC."""
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
         from .pi_commands import Compact
 
         try:
@@ -323,14 +335,9 @@ class PiNativeBackend(
     # -- Forks ------------------------------------------------------------
 
     @classmethod
-    async def fork(cls, parent: Thread, launcher: str, runtime: LaunchRuntime) -> PiSessionFile:
-        """Copy the parent's whole saved history with Pi's own session manager."""
-        from .coordinator import Coordination
-        from .native_fork import fork_native_session
-
-        identity = await Coordination.run_worker(partial(
-            fork_native_session, parent.require_saved_session(), parent.worktree, launcher, runtime,
-        ))
+    async def fork(cls, parent: Thread, comms: Comms) -> PiSessionFile:
+        """The selected child installation copies the saved session with its SDK."""
+        identity = await fork_native_session(parent.require_saved_session(), parent.worktree, comms)
         return PiSessionFile(identity.session_file)
 
     # -- RecoversAfterCrash -----------------------------------------------
@@ -350,13 +357,13 @@ class PiNativeBackend(
     async def models(self, thread: Thread) -> tuple[str, ...]:
         from .pi_commands import GetAvailableModels
 
-        data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+        data = await GetAvailableModels().discover(self.comms, self.comms.settings.arguments)
         return tuple(dict.fromkeys(
             model.display_name for model in data.models if model.provider and model.id
         ))
 
     async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
         from .pi_commands import SetModel, SetThinkingLevel
         from .pi_vocabulary import ThinkingLevel
 
@@ -370,8 +377,8 @@ class PiNativeBackend(
             raise ValueError("A configuration change names a model or a thinking level")
         arguments = self.arguments(thread)
         for command in commands:
-            state = await command.configure(self.agent_bin, arguments, worktree=Path(thread.worktree))
-            arguments = self.agent_args.with_model(state.model.display_name).with_thinking(
+            state = await command.configure(self.comms, arguments, worktree=Path(thread.worktree))
+            arguments = self.comms.settings.parsed_arguments.with_model(state.model.display_name).with_thinking(
                 ThinkingLevel.optional_name(state.thinking_level)
             ).argv
         selected, level = state.model.display_name, ThinkingLevel.optional_name(state.thinking_level)

@@ -1,3 +1,5 @@
+
+from agent_comms.tool_caller import NoThreadCaller
 import json
 import os
 import subprocess
@@ -8,23 +10,26 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo
-from agent_comms.comms import wire
+
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.messages import QuestionKind
-from agent_comms.launch_runtime import CallingThreadUnavailable, RestartEnvironment
+from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
-def test_calling_thread_is_declared_by_owner_launch_environment():
-    assert RestartEnvironment.calling_thread(
-        {"AGENT_COMMS_THREAD": "owner"}
-    ) == "owner"
-    with pytest.raises(CallingThreadUnavailable, match="AGENT_COMMS_THREAD"):
-        RestartEnvironment.calling_thread({})
-    assert not RestartEnvironment.called_by("owner", lambda caller: caller, environment={})
+def test_caller_is_decoded_from_original_record_not_environment(wired, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "wrong-owner")
+    original = wired.registry.require("fixer").incarnation
+    assert ThreadCaller.from_json(original.to_json()).require_thread() == original
+    with pytest.raises(CallingThreadUnavailable, match="explicit recorded"):
+        NoThreadCaller().require_thread()
 
 
 class TestMessaging:
@@ -242,7 +247,7 @@ class TestThreadOps:
         assert rows["fixer"]["pending"] == 0
 
     def test_list_active_only(self, wired):
-        wired.owners.stop("fixer")
+        wired.owners.stop("fixer", caller=NoThreadCaller())
         names = {row["name"] for row in wired.views.list_threads(active_only=True)}
         assert names == {"PR111"}
 
@@ -257,12 +262,12 @@ class TestThreadOps:
             wired.views.thread_detail("ghost")
 
     def test_heartbeat_marks_running(self, wired):
-        wired.owners.stop("fixer")
+        wired.owners.stop("fixer", caller=NoThreadCaller())
         wired.threads.heartbeat("fixer")
         assert wired.registry.status("fixer").declared_name == "running"
 
     def test_attach_session_preserves_declaration_and_updates_runtime(self, wired, tmp_path):
-        wired.owners.stop("fixer")
+        wired.owners.stop("fixer", caller=NoThreadCaller())
         session_file = tmp_path / "session.jsonl"
 
         attached = wired.threads.attach_session(
@@ -276,13 +281,12 @@ class TestThreadOps:
         assert attached.session_file == str(session_file.resolve())
         assert wired.registry.status("fixer").declared_name == "running"
 
-    def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
-
+    def test_release_only_allows_the_original_calling_thread(self, wired):
+        caller = wired.registry.require("fixer").incarnation
         with pytest.raises(RelationViolationError, match="cannot release"):
-            wired.owners.release("PR111")
+            wired.owners.release("PR111", caller=caller)
 
-        wired.owners.release("fixer")
+        wired.owners.release("fixer", caller=caller)
         assert wired.registry.status("fixer").declared_name == "stopped"
 
     def test_stop_current_calling_thread_uses_voluntary_release(self, wired, monkeypatch):
@@ -291,9 +295,7 @@ class TestThreadOps:
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid()))
         )
         before = wired.registry.snapshot().admission_generations[owner.name]
-        monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
-
-        wired.owners.stop(owner.name)
+        wired.owners.stop(owner.name, caller=ThreadCaller(owner.incarnation))
 
         snapshot = wired.registry.snapshot()
         assert snapshot.statuses[owner.name].declared_name == "stopped"
@@ -303,7 +305,7 @@ class TestThreadOps:
         wired.messaging.send("PR111", "fixer", "kept after archive")
         with pytest.raises(RelationViolationError, match="no longer stopped"):
             wired.threads.archive("fixer")
-        wired.owners.stop("fixer")
+        wired.owners.stop("fixer", caller=NoThreadCaller())
         wired.threads.archive("fixer")
         assert wired.registry.status("fixer").declared_name == "archived"
         assert not any(row["name"] == "fixer" for row in wired.views.who())
@@ -321,7 +323,7 @@ class TestThreadOps:
         wired.ledger.merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
 
-        result = wired.threads.rename_self("planner", caller=ThreadCaller("PR111"))
+        result = wired.threads.rename_self("planner", caller=wired.registry.require('PR111').incarnation)
 
         assert result.previous == "PR111"
         assert result.current == "planner"
@@ -353,21 +355,21 @@ class TestThreadOps:
     def test_rename_self_rejects_collisions_and_stopped_threads(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         with pytest.raises(RelationViolationError, match="already in use"):
-            wired.threads.rename_self("PR111", caller=ThreadCaller("fixer"))
-        wired.owners.stop("fixer")
+            wired.threads.rename_self("PR111", caller=wired.registry.require('fixer').incarnation)
+        wired.owners.stop("fixer", caller=NoThreadCaller())
         with pytest.raises(RelationViolationError, match="running"):
-            wired.threads.rename_self("renamed", caller=ThreadCaller("fixer"))
+            wired.threads.rename_self("renamed", caller=wired.registry.require('fixer').incarnation)
 
     def test_rename_self_reclaims_own_alias_but_not_another_owners(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
-        assert wired.threads.rename_self("pr17", caller=ThreadCaller("PR111")).current == "pr17"
-        assert wired.threads.rename_self("PR111", caller=ThreadCaller("PR111")).current == "PR111"
+        assert wired.threads.rename_self("pr17", caller=wired.registry.require('PR111').incarnation).current == "pr17"
+        assert wired.threads.rename_self("PR111", caller=wired.registry.require('PR111').incarnation).current == "PR111"
         assert wired.registry.snapshot().aliases == {"pr17": "PR111"}
         assert wired.registry.require("fixer").parent == "PR111"
 
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         with pytest.raises(RelationViolationError, match="already in use"):
-            wired.threads.rename_self("pr17", caller=ThreadCaller("fixer"))
+            wired.threads.rename_self("pr17", caller=wired.registry.require('fixer').incarnation)
 
     def test_managed_rename_normalizes_title_and_proves_owner(self, wired):
         wired.registry.declare(
@@ -425,7 +427,7 @@ class TestThreadOps:
 
     def test_old_alias_cannot_be_reused(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
-        wired.threads.rename_self("reviewer", caller=ThreadCaller("fixer"))
+        wired.threads.rename_self("reviewer", caller=wired.registry.require('fixer').incarnation)
         with pytest.raises(RelationViolationError, match="permanent alias"):
             wired.registry.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/other"))
 
@@ -450,7 +452,7 @@ class TestThreadOps:
             )
         )
         try:
-            wired.owners.stop("live-process")
+            wired.owners.stop("live-process", caller=NoThreadCaller())
             assert process.wait(timeout=5) == -__import__("signal").SIGTERM
             assert wired.registry.status("live-process").declared_name == "stopped"
         finally:
@@ -537,42 +539,43 @@ class TestPollAndWire:
         assert snap["peers"][0]["activity"] == "idle"
         assert "ledger" in snap
 
-    def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+    def test_poll_requires_subject_despite_environment(self, wired, monkeypatch, tmp_path):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        snap = wired.views.poll()
-        assert snap["thread"]["name"] == "fixer"
+        with pytest.raises(TypeError):
+            wired.views.poll()
+        assert wired.views.poll("fixer")["thread"]["name"] == "fixer"
 
-    def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
-        monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        thread = comms.threads.adopt_current()
+    def test_acquire_uses_original_record_not_environment(self, comms, monkeypatch, tmp_path):
+        original = comms.registry.declare(Thread(name="me", tags=frozenset(), worktree=str(tmp_path)))
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "wrong-owner")
+        thread = comms.owners.acquire_thread(original.incarnation, owner_pid=os.getpid())
         assert thread.name == "me"
         assert comms.registry.status("me").declared_name == "running"
 
     def test_wire_defaults_to_agent_comms_dir(self, monkeypatch, tmp_path):
         monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
-        from agent_comms.comms import wire as wire_fn
+
 
         monkeypatch.setattr("os.path.expanduser", lambda p: str(tmp_path / str(p).lstrip("~")))
-        comms = wire_fn(None)
+        comms = Comms(resolve_comms_route(None), runtime=LaunchRuntime.current())
         assert comms.root == tmp_path / ".agent-comms"
 
     def test_wire_env_root(self, monkeypatch, tmp_path):
         monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path / "custom"))
-        comms = wire(None)
+        comms = Comms(resolve_comms_route(None), runtime=LaunchRuntime.current())
         assert comms.root == tmp_path / "custom"
 
     def test_runtime_files_created_on_demand(self, tmp_path):
-        comms = wire(tmp_path / "fresh")
+        comms = Comms(resolve_comms_route(tmp_path / "fresh"), runtime=LaunchRuntime.current())
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         assert (tmp_path / "fresh" / "registry.json").exists()
 
 
 class TestCrossWireIsolation:
     def test_two_wires_do_not_leak(self, tmp_path):
-        a = wire(tmp_path / "a")
-        b = wire(tmp_path / "b")
+        a = Comms(resolve_comms_route(tmp_path / "a"), runtime=LaunchRuntime.current())
+        b = Comms(resolve_comms_route(tmp_path / "b"), runtime=LaunchRuntime.current())
         a.registry.declare(Thread(name="only-in-a", tags=frozenset(), worktree="/wt"))
         assert "only-in-a" in a.registry
         with pytest.raises(UnregisteredThreadError):
@@ -612,10 +615,11 @@ class TestReDeclarationPreservesProvenance:
         wired.messaging.send("PR111", "#auth", "only tagged fixer sees this")
         assert wired.bus.pending_count("fixer") == 1
 
-    def test_current_thread_reads_agent_comms_tags(self, monkeypatch, tmp_path):
-        from agent_comms.threads import current_thread
+    def test_recorded_subject_keeps_registry_tags(self, comms, monkeypatch, tmp_path):
+        from agent_comms.tool_caller import ThreadCaller
 
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-        monkeypatch.setenv("AGENT_COMMS_TAGS", "ci, docs")
-        monkeypatch.chdir(tmp_path)
-        assert current_thread().tags == frozenset({"ci", "docs"})
+        original = comms.registry.declare(Thread(name="worker", tags=frozenset({"ci", "docs"}), worktree=str(tmp_path)))
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "wrong-owner")
+        monkeypatch.setenv("AGENT_COMMS_TAGS", "wrong-tags")
+        caller = ThreadCaller(original.incarnation)
+        assert comms.registry.require(caller.subject("")).tags == frozenset({"ci", "docs"})

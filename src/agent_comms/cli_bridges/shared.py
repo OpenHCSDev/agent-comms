@@ -28,6 +28,7 @@ from agent_comms.cli_protocol import CORE_ERROR, CoreError, TaggedWire, WireMode
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.comms import Comms
+from agent_comms.active_route import LocalRoute
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageKind
@@ -39,6 +40,9 @@ from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent
 from agent_comms.typed_table import Column, TypedTable
+from agent_comms.message_bus import MessageBus
+from agent_comms.messaging import Messaging
+from agent_comms.transcripts import Transcripts
 
 
 class SendResult(WireModel):
@@ -577,7 +581,7 @@ class CoreConnection:
 
     @cached_property
     def comms(self) -> Comms:
-        return Comms(Path(self.binding.root))
+        return Comms(LocalRoute(Path(self.binding.root)), runtime=LaunchRuntime.current())
 
     async def send(self, target: str, body: str, kind: str) -> SendResult:
         child = await asyncio.create_subprocess_exec(
@@ -757,7 +761,7 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         self.binding = binding
         self.journal = journal
         # The CLI of the runtime this bridge runs from.
-        self.core = CoreConnection(str(LaunchRuntime.running().interpreter.with_name('agent-comms')), binding)
+        self.core = CoreConnection(str(LaunchRuntime.current().interpreter.with_name('agent-comms')), binding)
 
     @abstractmethod
     async def deliver(self, message: Message) -> type[Outcome]:

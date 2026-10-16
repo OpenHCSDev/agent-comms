@@ -1,5 +1,7 @@
 """Actual Pi event effects publish their observer phase, never infer it from text."""
 
+from agent_comms.native_project import UnmanagedNativeProject
+
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
 import asyncio
@@ -26,7 +28,7 @@ from agent_comms.pi_native_backend import PersistentPiSession
 ])
 async def test_native_tool_lifecycle_publishes_actual_phase_after_effects(first, second):
     root = Path.cwd()
-    session = TurnSession(NativePiRpcLaunch(("unused",), root, {}, SelectedSession(root), root, runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
+    session = TurnSession(NativePiRpcLaunch(("unused",), root, {}, SelectedSession(root), root, runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({}), project=UnmanagedNativeProject()), "unused",
                           native_session=PersistentPiSession())
     session.native = SimpleNamespace(proc=SimpleNamespace(identity=ProcessIdentity.capture(os.getpid())))
     session.active_tools = set()

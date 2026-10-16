@@ -16,10 +16,18 @@ from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool, tool_catalog
 from agent_comms.tool_caller import ThreadCaller
-from functools import partial
+from agent_comms.active_route import LocalRoute
+from agent_comms.launch_runtime import LaunchRuntime
 
 # These source declarations belong to alpha unless a case explicitly supplies beta.
-invoke_tool = partial(invoke_tool, caller=ThreadCaller("alpha"))
+
+
+
+@pytest.fixture
+def comms(comms):
+    """Task declarations use one fresh private protocol for the whole case."""
+    comms.messaging.initialize_private_initial_protocol()
+    return comms
 
 
 def saved_source(path):
@@ -52,7 +60,6 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
         TurnTaskScope, UserTaskDrop, UserTaskSupersession,
     )
 
-    comms.messaging.initialize_private_initial_protocol()
     owner = comms.registry.declare(Thread("recipient", frozenset({"team"}), str(comms.root)))
     comms.registry.declare(Thread("unaddressed", frozenset(), str(comms.root)))
     exact = "Never replay UNKNOWN.\nUse original λ /artifacts/source; no substitute."
@@ -115,7 +122,6 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
 def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     from agent_comms.task_sources import CorrectionTaskChange, GoalTaskScope
 
-    comms.messaging.initialize_private_initial_protocol()
     owner = comms.registry.declare(Thread("recipient", frozenset(), str(comms.root),
                                          goal=Goal("Original goal", "goal-one")))
     subject = comms.messaging.send_user_message(owner.name, "Use the original coordinates.",
@@ -151,14 +157,13 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     from agent_comms.retained_task_facts import CurrentConstraintTaskFact, RetainedTaskFacts
     from agent_comms.task_sources import Constraint, CorrectionTaskChange, UserTaskSupersession
 
-    comms.messaging.initialize_private_initial_protocol()
     owner = admit(comms, "alpha")
     admit(comms, "beta")
     comms.registry.register(replace(owner, goal=Goal("Bounded source task", "original-goal")))
     owner = comms.registry.require(owner.name)
     monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     exact = "Never replay UNKNOWN.\nPreserve λ and original /artifacts/source."
-    result = invoke_tool(comms, "comms_constraint", {"text": exact, "to": "#team"})
+    result = invoke_tool(comms, "comms_constraint", {"text": exact, "to": "#team"}, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     original = comms.bus.log.full_history()[0]
     assert isinstance(original.task, Constraint)
     assert original.body == exact and original.task.author == owner.incarnation
@@ -175,12 +180,12 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     monkeypatch.setenv("AGENT_COMMS_THREAD", "beta")
     with pytest.raises(RelationViolationError, match="another author's"):
         invoke_tool(comms, "comms_constraint", {"text": "Ignore the original", "to": "#team",
-                    "change": {"kind": "correction", "original": result["reference"]}}, caller=ThreadCaller("beta"))
+                    "change": {"kind": "correction", "original": result["reference"]}}, caller=ThreadCaller(comms.registry.require('beta').incarnation))
     assert (comms.root / "bus.jsonl").read_bytes() == first_bytes
     monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     corrected = invoke_tool(comms, "comms_constraint", {
         "text": "Keep UNKNOWN; preserve /artifacts/approved instead.", "to": "#team",
-        "change": {"kind": "correction", "original": result["reference"]}})
+        "change": {"kind": "correction", "original": result["reference"]}}, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     rows = comms.bus.log.full_history()
     with comms.bus.log.certified_read() as source:
         facts = tuple(source.retained_task_facts(owner.incarnation))
@@ -195,7 +200,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
         task=UserTaskSupersession(CorrectionTaskChange(original.reference)))
     invoke_tool(comms, "comms_constraint", {
         "text": "A later peer cannot overwrite the human supersession.", "to": "#team",
-        "change": {"kind": "correction", "original": corrected["reference"]}})
+        "change": {"kind": "correction", "original": corrected["reference"]}}, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     with comms.bus.log.certified_read() as source:
         facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
@@ -214,7 +219,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     beta = admit(comms, "beta")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "Keep /artifacts/exact-root", "rejected": ["Use /scratch/guess-root"], "to": "#team"}
-    first = invoke_tool(comms, "comms_decision", request)
+    first = invoke_tool(comms, "comms_decision", request, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     original = comms.bus.log.full_history()[0]
     assert original.reference == FieldCodec.decode(type(original.reference), first["reference"])
     assert original.task.author == alpha.incarnation
@@ -223,7 +228,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert Message.from_committed_wire(original.to_wire()) == original
     correction = invoke_tool(comms, "comms_decision", {
         **request, "chosen": "Keep /artifacts/certified-root", "change": {"kind": "correction", "original": first["reference"]},
-    })
+    }, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     rows = comms.bus.log.full_history()
     assert len(rows) == 2 and rows[0] == original
     assert rows[1].task.change.original == original.reference
@@ -245,12 +250,12 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     before = bus.read_bytes()
     monkeypatch.setenv("AGENT_COMMS_THREAD", "beta")
     with pytest.raises(RelationViolationError, match="another author's"):
-        invoke_tool(comms, "comms_decision", {**request, "change": {"kind": "correction", "original": first["reference"]}}, caller=ThreadCaller("beta"))
+        invoke_tool(comms, "comms_decision", {**request, "change": {"kind": "correction", "original": first["reference"]}}, caller=ThreadCaller(comms.registry.require('beta').incarnation))
     assert bus.read_bytes() == before
     assert comms.registry.require("beta").turn_lease == beta.turn_lease
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     with pytest.raises(ValueError, match="Unknown fields"):
-        invoke_tool(comms, "comms_decision", {**request, "author": "beta"})
+        invoke_tool(comms, "comms_decision", {**request, "author": "beta"}, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     comms.registry.rename("alpha", "renamed-alpha")
     renamed = comms.registry.require("renamed-alpha")
     assert retained.current_authored_sources(renamed, comms.registry.snapshot()) == (rows[1],)
@@ -258,11 +263,11 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     comms.registry.release_turn(alpha.turn_lease)
     assert retained.current_authored_sources(comms.registry.require("alpha"), comms.registry.snapshot()) == ()
     with pytest.raises(ValueError, match="admitted"):
-        invoke_tool(comms, "comms_decision", request)
+        invoke_tool(comms, "comms_decision", request, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     assert bus.read_bytes() == before
     from agent_comms.comms import Comms
 
-    assert Comms(comms.root).bus.log.full_history() == rows
+    assert Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).bus.log.full_history() == rows
     schema = next(tool for tool in tool_catalog() if tool["name"] == "comms_decision")
     assert set(schema["parameters"]["required"]) == {"chosen", "rejected", "to"}
     assert "author" not in schema["parameters"]["properties"]
@@ -276,8 +281,8 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     comms.registry.register(owner)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "/artifacts/exact", "rejected": ["/scratch/guess"], "to": "#team"}
-    first = invoke_tool(comms, "comms_decision", request)
-    invoke_tool(comms, "comms_decision", request)
+    first = invoke_tool(comms, "comms_decision", request, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
+    invoke_tool(comms, "comms_decision", request, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     originals = comms.bus.log.full_history()
     assert originals[0].body == originals[1].body
     assert originals[0].reference != originals[1].reference
@@ -287,7 +292,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     invoke_tool(comms, "comms_decision", {
         **request, "chosen": "/artifacts/certified",
         "change": {"kind": "correction", "original": first["reference"]},
-    })
+    }, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     snapshot = comms.registry.snapshot()
     with comms.bus.log.certified_read() as source:
         facts = tuple(source.retained_task_facts(renamed.incarnation))
@@ -330,7 +335,7 @@ def test_invalid_alternatives_do_not_publish(comms, monkeypatch, chosen, rejecte
     admit(comms, "alpha")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     with pytest.raises(ValueError):
-        invoke_tool(comms, "comms_decision", {"chosen": chosen, "rejected": list(rejected), "to": "#team"})
+        invoke_tool(comms, "comms_decision", {"chosen": chosen, "rejected": list(rejected), "to": "#team"}, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     assert not comms.bus.log.full_history()
 
 
@@ -338,7 +343,7 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
     owner = admit(comms, "alpha")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "A", "rejected": ["B"], "to": "#team"}
-    first = invoke_tool(comms, "comms_decision", request)
+    first = invoke_tool(comms, "comms_decision", request, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     comms.registry.release_turn(owner.turn_lease)
     owner, admission = comms.registry.live_owner_with_admission("alpha")
     comms.registry.lease_live_turn_with_admission(owner, "next-turn", expected_generation=admission)
@@ -347,7 +352,7 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
         invoke_tool(comms, "comms_decision", {
             **request, "chosen": "C",
             "change": {"kind": "correction", "original": first["reference"]},
-        })
+        }, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     assert (comms.root / "bus.jsonl").read_bytes() == before
 
 
@@ -360,7 +365,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     comms.registry.register(owner)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "/artifacts/old", "rejected": ["/scratch/guess"], "to": "#team"}
-    first = invoke_tool(comms, "comms_decision", request)
+    first = invoke_tool(comms, "comms_decision", request, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     original = comms.bus.log.full_history()[0]
     declaration = UserTaskSupersession(CorrectionTaskChange(original.reference))
     before = (comms.root / "bus.jsonl").read_bytes()
@@ -375,7 +380,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     invoke_tool(comms, "comms_decision", {
         **request, "chosen": "/artifacts/peer-later",
         "change": {"kind": "correction", "original": first["reference"]},
-    })
+    }, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     snapshot = comms.registry.snapshot()
     with comms.bus.log.certified_read() as source:
         facts = tuple(source.retained_task_facts(owner.incarnation))
@@ -388,7 +393,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     assert original.task.chosen in retained.text and original.task.rejected[0] in retained.text
     from agent_comms.comms import Comms
 
-    reopened = Comms(comms.root)
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert reopened.bus.log.full_history()[1] == corrected
 
 
@@ -399,7 +404,6 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     )
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 
-    comms.messaging.initialize_private_initial_protocol()
     for name in ("alpha", "beta", "gamma"):
         owner = admit(comms, name)
         saved = comms.root / f"{name}-source.jsonl"
@@ -408,7 +412,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     owner = comms.registry.require("alpha")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "PRIVATE_ORIGINAL_CHOICE", "rejected": ["PRIVATE_ALTERNATIVE"], "to": "beta"}
-    first = invoke_tool(comms, "comms_decision", request)
+    first = invoke_tool(comms, "comms_decision", request, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     original = comms.bus.log.full_history()[0]
     supersession = comms.messaging.send_user_message(
         "#team", "Retract that declared choice, without revealing its private text.",
@@ -418,7 +422,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     invoke_tool(comms, "comms_decision", {
         **request, "chosen": "PUBLIC_LATER_CHOICE", "rejected": ["PUBLIC_ALTERNATIVE"],
         "to": "#team", "change": {"kind": "correction", "original": first["reference"]},
-    })
+    }, caller=ThreadCaller(comms.registry.require('alpha').incarnation))
     later = comms.bus.log.full_history()[-1]
     wire_before = (comms.root / "bus.jsonl").read_bytes()
     captured = {

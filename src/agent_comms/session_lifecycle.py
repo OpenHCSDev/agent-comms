@@ -40,6 +40,7 @@ from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread
 from .registry_document import RegistrySnapshot
+from .thread_identity import RecordedThreadIncarnation
 from .transcript_updates import TranscriptReplay
 from .session_load import SessionLoadAdmission, ExistingSessionLoadAdmission, FailedSessionLoadAdmission
 
@@ -48,18 +49,16 @@ class SessionLifecycle:
     def __init__(
         self,
         comms: Comms,
-        agent_bin: str,
-        agent_args: NativeArguments,
         runtime: RuntimeServer,
         runtime_enabled: bool,
         effects: SessionEffects,
     ):
-        self.comms, self.agent_bin, self.agent_args = comms, agent_bin, agent_args
+        self.comms = comms
         self.runtime, self.runtime_enabled, self.effects = runtime, runtime_enabled, effects
         self.bindings: dict[str, str] = {}
         # A launcher registers this process as the owner before it starts, so
         # this process owns that registration even if it never binds a session.
-        self.launched_owners: set[str] = set()
+        self.owned_incarnations: set[RecordedThreadIncarnation] = set()
         self.client: Any = None
         self.titles: dict[str, str] = {}
         self.display_titles: dict[str, str | None] = {}
@@ -68,7 +67,7 @@ class SessionLifecycle:
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()
         self.transcript = TranscriptReplay(comms, runtime)
-        self.config = SessionConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
+        self.config = SessionConfigOptions(comms, runtime, self, effects)
 
     async def initialize(
         self,
@@ -154,8 +153,8 @@ class SessionLifecycle:
             self.thread_name_for(cwd),
             tags=frozenset({"acp"}),
             worktree=cwd,
-            model=self.agent_args.model,
-            thinking_level=self.agent_args.thinking,
+            model=self.comms.settings.parsed_arguments.model,
+            thinking_level=self.comms.settings.parsed_arguments.thinking,
             auto_title_pending=True,
         )
         self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))
@@ -163,7 +162,13 @@ class SessionLifecycle:
 
     def acquire_declared_thread(self, thread: Thread) -> Thread:
         """An owning ACP lifecycle acquires its calling process after publication."""
-        return self.comms.owners.acquire_thread(thread.name, owner_pid=os.getpid())
+        return self.acquire_original(thread.incarnation)
+
+    def acquire_original(self, incarnation: RecordedThreadIncarnation) -> Thread:
+        thread = self.comms.owners.acquire_thread(incarnation, owner_pid=os.getpid())
+        if thread.pid == os.getpid():
+            self.owned_incarnations.add(thread.incarnation)
+        return thread
 
     def validated_thread(self, cwd: str, session_id: str) -> Thread:
         thread = self.comms.registry.require(session_id)
@@ -213,15 +218,20 @@ class SessionLifecycle:
                 field_meta=await self.metadata(thread.name, session_id=session_id),
             )
 
-    async def start_owner(self, cwd: str, session_id: str) -> None:
+    async def start_owner(self, cwd: str, incarnation: RecordedThreadIncarnation) -> None:
         """Take a headless owner's session; no ACP consumer awaits a load response.
 
         Configuration choices and metadata belong to a consumer's load or
         subscription, which discovers them on demand. The owner process does
         not launch catalog children only to discard their answer.
         """
-        self.launched_owners.add(session_id)
-        thread = await self._acquire_loaded(cwd, session_id)
+        self.owned_incarnations.add(incarnation)
+        session_id = incarnation.name
+        await Coordination.run_worker(self.effects._private_nk_marker)
+        await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
+        thread = await Coordination.run_worker(partial(
+            self.acquire_original, incarnation,
+        ))
         if thread.pid != os.getpid():
             raise RelationViolationError(
                 f"Headless owner {os.getpid()} did not acquire {thread.name!r}; it belongs to {thread.pid}"
@@ -243,7 +253,7 @@ class SessionLifecycle:
             and (await Coordination.run_worker(partial(self.comms.registry.status, thread.name))).active
         ):
             thread = await Coordination.run_worker(partial(
-                self.comms.owners.acquire_thread, thread.name, owner_pid=os.getpid(),
+                self.acquire_original, thread.incarnation,
             ))
         return thread
 
@@ -351,11 +361,8 @@ class SessionLifecycle:
             for session_id in tuple(self.proxies):
                 await self.retire_proxy(session_id)
 
-    def release_registered_owner(self, name: str) -> None:
-        snapshot = self.comms.registry.snapshot()
-        thread = snapshot.require(name)
-        if thread.pid == os.getpid() and snapshot.status(thread.name).running:
-            self.comms.owners.stop(thread.name)
+    def release_registered_owner(self, incarnation: RecordedThreadIncarnation) -> None:
+        self.comms.owners.release(incarnation.name, caller=incarnation)
 
     async def release_owned(self) -> None:
         """Release every owned thread, then report each release that failed.
@@ -367,9 +374,9 @@ class SessionLifecycle:
         together after the runtime has closed.
         """
         failures: list[Exception] = []
-        for name in set(self.bindings.values()) | self.launched_owners:
+        for incarnation in tuple(self.owned_incarnations):
             try:
-                await Coordination.run_worker(partial(self.release_registered_owner, name))
+                await Coordination.run_worker(partial(self.release_registered_owner, incarnation))
             except Exception as error:
                 failures.append(error)
         await self.runtime.close()

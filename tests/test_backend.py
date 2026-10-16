@@ -1,5 +1,8 @@
 """Native streaming: external RPC parsing and failure handling."""
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import asyncio
 import json
 import os
@@ -2604,7 +2607,8 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject())
             ]
             first_proc = persistent.custody.child.proc
             second = [
@@ -2616,7 +2620,8 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject())
             ]
             assert first[-1].ok is True and second[-1].ok is True, second
             assert persistent.custody.child.proc is first_proc and first_proc is not None
@@ -2637,7 +2642,8 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject())
             ]
             assert third[-1].ok is True
             assert persistent.custody.child.proc is not first_proc
@@ -2653,7 +2659,8 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject())
             ]
             assert proof_changed[-1].ok is True
             assert persistent.custody.child.proc is not third_proc
@@ -2670,7 +2677,8 @@ for line in sys.stdin:
                         str(tmp_path),
                         session_file=str(session_file),
                         persistent_session=persistent,
-                    )
+                        session_context=(DoctrineSegment.capture(),),
+                     project=UnmanagedNativeProject())
                 ]
 
             cancelled_task = asyncio.create_task(cancelled_turn())
@@ -2690,7 +2698,8 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject())
             ]
             assert after[-1].ok is True
             assert len(ids_file.read_text().splitlines()) == 6
@@ -2710,7 +2719,8 @@ for line in sys.stdin:
                     session_file=str(session_file),
                     persistent_session=persistent,
                     send_boundary=revoked_goal,
-                )
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject())
             ]
             assert denied[-1].ok is False
             assert len(ids_file.read_text().splitlines()) == 6
@@ -2723,7 +2733,8 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject())
             ]
             assert revived[-1].ok is True
             before_image_proc = persistent.custody.child.proc
@@ -2738,7 +2749,8 @@ for line in sys.stdin:
                     session_file=str(session_file),
                     persistent_session=persistent,
                     images=(image,),
-                )
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject())
             ]
             assert image_turn[-1].ok is True
             assert persistent.custody.child.proc is before_image_proc and before_image_proc is not None
@@ -2751,7 +2763,8 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject())
             ]
             assert failed[-1].ok is False
             assert "diagnostics withheld" in failed[-1].text
@@ -2765,7 +2778,8 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject())
             ]
             assert revived[-1].ok is True
             borrowed_proc = persistent.custody.child.proc
@@ -2780,7 +2794,8 @@ for line in sys.stdin:
                         str(tmp_path),
                         session_file=str(session_file),
                         persistent_session=persistent,
-                    )
+                        session_context=(DoctrineSegment.capture(),),
+                     project=UnmanagedNativeProject())
                 ]
 
             active = asyncio.create_task(delayed_turn())

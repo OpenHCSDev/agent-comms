@@ -6,14 +6,18 @@ from contextlib import closing
 
 import pytest
 
-from agent_comms.comms import wire
+
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
 def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, journal_mode):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     path = tmp_path / "native.jsonl"
     native_id = "a" * 32
     path.write_text(json.dumps({
@@ -37,7 +41,7 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, jo
 
 
 def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     parent = tmp_path / "parent.jsonl"
     parent.write_text(json.dumps({"type": "message", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "parent answer"}],
@@ -69,7 +73,7 @@ def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(
 
 
 def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     path = tmp_path / "native.jsonl"
     original = json.dumps({"type": "message", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "first answer"}],
@@ -88,7 +92,7 @@ def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
 
 
 def test_native_growth_during_page_preparation_keeps_the_captured_cut(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     path = tmp_path / "native.jsonl"
     path.write_text(json.dumps({"type": "message", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "captured answer"}],
@@ -118,7 +122,7 @@ def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
     from dataclasses import replace
     from agent_comms.acp_extension import TranscriptSnapshotUpdate
 
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     path = tmp_path / "native.jsonl"
     path.write_text(json.dumps({"type": "message", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "Original retained answer"}],

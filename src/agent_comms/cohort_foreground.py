@@ -13,6 +13,8 @@ monitor, production migration, or recovery decision is made here.
 
 from __future__ import annotations
 
+from .native_session_files import NativeSessionFiles
+
 import argparse
 import asyncio
 from contextlib import AsyncExitStack
@@ -38,12 +40,14 @@ from .envelope_claim_transitions import ExistingFileClaim
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .message_bus import MessageBus
-from .native_pi import _private_session_dir, _trusted_package
+from .native_pi import _trusted_package
 from .private_registry_guard import _require_no_private_owner_rename
 from .selected_actions import SelectedAction, SelectedExistingFileWrite
 from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
 from .threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,10 +62,9 @@ def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool
     # when the owner-only directory or reviewed copied Pi is absent.
     if not opt_in:
         raise PublicationActivationBlocked("foreground cohort requires explicit activation")
-    _private_session_dir(root)
+    NativeSessionFiles.require_private_directory(root)
     cli = _trusted_package(native_package)
-    comms = Comms(root)
-    bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+    bus = MessageBus.for_root(root, private_response_writes=True)
     with bus.log.certified_read() as source:
         marker = source.marker
     if marker.root_id != wire_root_id:
@@ -163,7 +166,7 @@ async def run_foreground_once(
     await Coordination.run_worker(partial(
         _preflight, root, wire_root_id, native_package, opt_in,
     ))
-    comms = Comms(root)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     def retire(thread):
         with _store_lock(comms._wire_lock_path):
             try:
@@ -216,7 +219,7 @@ async def run_foreground_once(
             # Even an empty scan checks this PID against the live registry.
             # A terminal claim cannot be replayed by this foreground owner.
             result = await SelectedExecution(
-                root=root,
+                comms=comms,
                 wire_root_id=wire_root_id,
                 owner_name=name,
                 native_package=native_package,

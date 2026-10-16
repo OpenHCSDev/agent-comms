@@ -1,4 +1,6 @@
 """Installed snapshot values, original notification receipts and real sidebar rows."""
+
+from agent_comms.tool_caller import NoThreadCaller
 import argparse
 import asyncio
 from importlib.resources import files
@@ -8,6 +10,9 @@ from pathlib import Path
 import sqlite3
 import sys
 from time import perf_counter
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--toad-tests', type=Path, required=True)
@@ -34,7 +39,7 @@ async def main():
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.environ.update(XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
                       XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_ROOT=str(root / 'wire'))
-    comms = Comms(root / 'wire', private_initial_writes=True)
+    comms = Comms(LocalRoute(root / 'wire'), runtime=LaunchRuntime.current(), private_initial_writes=True)
     root_id = comms.messaging.initialize_private_initial_protocol()
     launch = PrivateNkLaunch.from_environment(comms.root, {
         ROOT_ID_ENV: root_id, PACKAGE_ENV: os.environ['AC_NATIVE_COPIED_PACKAGE']})
@@ -45,8 +50,8 @@ async def main():
         source = root / (name + '.jsonl')
         source.touch()
         comms.registry.declare(Thread(name, frozenset({'team'}), str(root), session_file=str(source)))
-    comms.owners.stop('stopped')
-    comms.owners.stop('archived')
+    comms.owners.stop('stopped', caller=NoThreadCaller())
+    comms.owners.stop('archived', caller=NoThreadCaller())
     comms.threads.archive('archived')
     message = comms.messaging.send_initial_cohort(owner, '#team', 'Original metadata receipt')
     original_wire = comms.bus.log.path.read_bytes()

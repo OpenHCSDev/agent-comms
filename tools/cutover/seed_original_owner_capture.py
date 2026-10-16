@@ -1,4 +1,9 @@
 """Report-authoring helper and current-runtime replacement fixture."""
+
+from agent_comms.runtime_socket import RuntimeSocket
+
+from agent_comms.tool_caller import NoThreadCaller
+
 import asyncio
 from contextlib import AsyncExitStack
 from dataclasses import replace
@@ -10,9 +15,12 @@ import sys
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import BlockedGoalAction, ModelInvocable, SetGoalAction
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.turn_lease import ActiveTurn
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def author_model_report(service, name, turn):
@@ -30,7 +38,7 @@ async def ready(service, owner):
     async with asyncio.timeout(12), AsyncExitStack() as lifetime:
         client = CommsAgent(service, auto_wake=False)
         lifetime.push_async_callback(client.shutdown)
-        proxy = RuntimeProxy(client, owner.name, socket_path(service.root, owner.pid))
+        proxy = RuntimeProxy(client, owner.name, RuntimeSocket.path_for(service.root, owner.pid))
         lifetime.push_async_callback(proxy.close)
         await proxy.subscribe()
 
@@ -43,7 +51,7 @@ def runtime_owners(root, package):
     from native_backend_fixture import NativeBackendFixture
 
     root.mkdir(mode=0o700)
-    service = Comms(root, private_initial_writes=True)
+    service = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(root, root_id, package)
     os.environ.update(AGENT_COMMS_ROOT=str(root),
@@ -72,7 +80,7 @@ def runtime_owners(root, package):
     finally:
         for name in names:
             if name in service.registry.snapshot().threads:
-                service.owners.stop(name)
+                service.owners.stop(name, caller=NoThreadCaller())
 
 
 if __name__ == '__main__':

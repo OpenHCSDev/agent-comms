@@ -1,5 +1,8 @@
 """One tool declaration controls presentation without granting coding authority."""
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import asyncio
 import json
 
@@ -13,6 +16,9 @@ from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
 from delivery_owner_fixture import canonical_agent
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -188,27 +194,14 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
             event
             async for event in backend.stream_agent_events(
                 "pi",
-                [
-                    "--provider",
-                    "response-local",
-                    "--model",
-                    "fixture",
-                    "--thinking",
-                    "off",
-                    "--offline",
-                    "--no-extensions",
-                    "--no-skills",
-                    "--no-context-files",
-                    "--no-prompt-templates",
-                    "--tools",
-                    "read",
-                ],
+                ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--tools', 'read'],
                 "Read owned.txt once and answer",
                 str(native.project),
                 session_file=str(native.session),
                 persistent_session=native.persistent,
                 native_start=native.started,
-            )
+                session_context=(DoctrineSegment.capture(),),
+             project=UnmanagedNativeProject())
         ]
     assert records[-1].ok, records[-1]
     starts = [event for event in records if isinstance(event, events.ToolStart)]
@@ -237,7 +230,8 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
 
 @pytest.fixture
 async def acp_tools(tmp_path):
-    owner = canonical_agent(Comms(tmp_path / "sdk-wire"), auto_wake=False)
+    selected_comms = Comms(LocalRoute(tmp_path / "sdk-wire"), runtime=LaunchRuntime.current())
+    owner = canonical_agent(selected_comms, native=selected_comms.owners.native_defaults, auto_wake=False)
     received = asyncio.Queue()
 
     class Client(acp.Client):

@@ -1,4 +1,8 @@
 """Real Pi: old settlement cannot terminate an identified late follow-up."""
+from agent_comms.native_settings import NativeThreadDefaults
+
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
 import json
@@ -93,20 +97,7 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
             f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
             "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
         )
-        args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-            "--provider",
-            "openrouter",
-            "--model",
-            "z-ai/glm-5.3-flash",
-            "--thinking",
-            "off",
-        ]
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
         if delayed_settlement:
             from native_event_host import install_event_host
 
@@ -156,7 +147,8 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
                     persistent_session=persistent,
                     finish_event=finish_event,
                     native_start=lambda *_: True,
-                ):
+                    session_context=(DoctrineSegment.capture(),),
+                 project=UnmanagedNativeProject()):
                     events.append(event)
                     if isinstance(event, ae.StreamSettled):
                         finish_event.set()

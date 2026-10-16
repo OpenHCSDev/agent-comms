@@ -1,8 +1,13 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import asyncio
 import json
 import os
+import shlex
+import sys
 from pathlib import Path
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
@@ -12,6 +17,7 @@ from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.coordinator import Coordination
@@ -22,6 +28,14 @@ from agent_comms.queued_input import InitialInput
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
+from agent_comms.active_route import LocalRoute
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
+
+
+def native_run_command(native: NativeThreadDefaults) -> str:
+    """One real ACP command declaration for explicit native fixture settings."""
+    return shlex.join((sys.executable, "-m", "agent_comms.acp", *native.cli_arguments))
 
 
 class NativeBackendFixture:
@@ -80,18 +94,14 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
     @staticmethod
     def native_arguments(options=("--no-tools",)):
         """One external native argument declaration for saved/ACP consumers."""
-        return ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
-                "--offline", "--no-extensions", "--no-skills", "--no-context-files",
-                "--no-prompt-templates", *options)
+        return ('--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', *options)
 
     @asynccontextmanager
     async def open_owner(self, *, runtime_enabled=False, auto_wake=False,
                          native_options=("--no-tools",), client=None):
         """Acquire the real saved ACP owner and attested idle native child."""
-        agent = canonical_agent(
-            Comms(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin="pi",
-            agent_args=self.native_arguments(native_options),
-        )
+        selected_comms = Comms(LocalRoute(self.root), runtime=LaunchRuntime.current())
+        agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(self.native_arguments(native_options))), auto_wake=auto_wake, runtime_enabled=runtime_enabled)
         agent.on_connect(client)
         try:
             await agent._runtime.start()
@@ -152,7 +162,8 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 steering_queue=queue,
                 native_start=self.started,
                 **options,
-            ):
+                session_context=(DoctrineSegment.capture(),),
+             project=UnmanagedNativeProject()):
                 result.append(event)
                 self.observed.append(event)
                 if followup is not None and isinstance(event, events.InputStarted):
@@ -233,7 +244,7 @@ async def native_backend_fixture(tmp_path):
             }
         )
     )
-    root_id = Comms(root).messaging.initialize_private_initial_protocol()
+    root_id = Comms(LocalRoute(root), runtime=LaunchRuntime.current()).messaging.initialize_private_initial_protocol()
     environment = {
         "AGENT_COMMS_ROOT": str(root),
         "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID": root_id,

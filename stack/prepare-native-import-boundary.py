@@ -36,7 +36,7 @@ def patch_loader(path: Path) -> None:
         "import { CONFIG_DIR_NAME, getAgentDir, isBunBinary, isBundledNode } "
         'from "../../config.js";',
         'import { CONFIG_DIR_NAME, getAgentDir } from "../../config.js";\n'
-        'import { loadApprovedExtension } from "../../agent-comms-import-fence.mjs";',
+        'import { loadApprovedExtension, resolveApprovedExtension } from "../../agent-comms-import-fence.mjs";',
     )
     start = text.index("/** Modules available to extensions via virtualModules")
     end = text.index("let extensionCacheCwd;", start)
@@ -48,6 +48,21 @@ def patch_loader(path: Path) -> None:
         + "    const module = await loadApprovedExtension(extensionPath);\n"
         + text[end:]
     )
+    old = "async function loadExtension(extensionPath, cwd, eventBus, runtime, cacheToken) {"
+    assert text.count(old) == 1
+    text = text.replace(old, old.replace("cacheToken)", "cacheToken, extensions)"))
+    old = '''    const resolvedPath = resolvePath(extensionPath, cwd, { normalizeUnicodeSpaces: true });
+    try {
+        const factory = await loadExtensionModule(resolvedPath, cacheToken);'''
+    assert text.count(old) == 1
+    text = text.replace(old, '''    try {
+        const resolvedPath = resolveApprovedExtension(resolvePath(extensionPath, cwd, { normalizeUnicodeSpaces: true }));
+        if (extensions.some(extension => extension.resolvedPath === resolvedPath))
+            return { extension: null, error: null };
+        const factory = await loadExtensionModule(resolvedPath, cacheToken);''')
+    old = "await loadExtension(extPath, resolvedCwd, resolvedEventBus, resolvedRuntime, cacheToken);"
+    assert text.count(old) == 1
+    text = text.replace(old, old.replace("cacheToken)", "cacheToken, extensions)"))
     # Keep static host imports: removing their provider-registration side effects
     # would be a separate runtime behavior change, not an import boundary fix.
     path.write_text(text)

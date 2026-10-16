@@ -15,6 +15,8 @@ rows, and no longer competes with that work for its interpreter lock.
 
 from __future__ import annotations
 
+from .runtime_socket import RuntimeSocket
+
 import asyncio
 import itertools
 import multiprocessing
@@ -40,6 +42,8 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.presentation import WireRevision
+from agent_comms.comms import Comms
+from agent_comms.launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -206,12 +210,12 @@ class OwnerRead(AwaitedRead):
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
-        from agent_comms.runtime import OwnerReplyConnection, socket_path
+        from agent_comms.runtime import OwnerReplyConnection
 
         owner = comms.registry.require(self.owner.name)
         if owner.incarnation != self.owner:
             raise ValueError("The owner incarnation changed while preparing the request.")
-        return OwnerReplyConnection(comms, owner.name, socket_path(comms.root, owner.pid))
+        return OwnerReplyConnection(comms, owner.name, RuntimeSocket.path_for(comms.root, owner.pid))
 
     async def ask(self, comms: Comms) -> object:
         connection = await asyncio.to_thread(self.connect, comms)
@@ -917,11 +921,11 @@ class ObservationService:
 
 def serve(route: CommsRoute, connection: Connection) -> None:
     """Observe the caller's selected route, including its reviewed native package."""
-    from agent_comms.comms import wire
+
 
     try:
         with route.admit_client():
-            asyncio.run(ObservationService(wire(route), connection).run())
+            asyncio.run(ObservationService(Comms(route, runtime=LaunchRuntime.current()), connection).run())
     except BaseException:
         try:
             connection.send(ObservationFailed(traceback.format_exc()))

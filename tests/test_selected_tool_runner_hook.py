@@ -17,7 +17,7 @@ from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_input_record import FullNativeExecution
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_admission_epoch import UnrecordedNativeAdmission
@@ -29,6 +29,9 @@ from agent_comms.selected_tool_broker import (
 )
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
@@ -82,22 +85,12 @@ def test_owner_configuration_requires_nominal_intent_and_private_binding(
     intent_type, _mode_type, _bound = nominal_broker_stub
     wire = private_root / "wire"
     wire.mkdir(mode=0o700)
-    comms = Comms(wire)
+    comms = Comms(LocalRoute(wire), runtime=LaunchRuntime.current())
     with pytest.raises(ValueError, match="exact N/K root"):
-        CommsAgent(comms, private_selected_tool_intent=intent_type())
+        CommsAgent(comms, native=comms.owners.native_defaults, private_selected_tool_intent=intent_type())
     with pytest.raises(TypeError, match="nominal owner intent"):
-        CommsAgent(
-            comms,
-            private_nk_native_package=private_root,
-            private_nk_wire_root_id="private-id",
-            private_selected_tool_intent=object(),
-        )
-    agent = CommsAgent(
-        comms,
-        private_nk_native_package=private_root,
-        private_nk_wire_root_id="private-id",
-        private_selected_tool_intent=intent_type(),
-    )
+        CommsAgent(comms, native=comms.owners.native_defaults, private_nk_native_package=private_root, private_nk_wire_root_id="private-id", private_selected_tool_intent=object())
+    agent = CommsAgent(comms, native=comms.owners.native_defaults, private_nk_native_package=private_root, private_nk_wire_root_id="private-id", private_selected_tool_intent=intent_type())
     assert type(agent._private_selected_tool_intent) is intent_type
 
 
@@ -112,7 +105,7 @@ async def test_operator_plan_and_tool_intent_are_exclusive(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     with pytest.raises(IdentityConflict, match="cannot share an operator file plan"):
         await runtime.SelectedExecution(
-            root=root,
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
             wire_root_id=root_id,
             owner_name="beta",
             native_package=private_root,
@@ -140,7 +133,7 @@ async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instru
     monkeypatch.setattr(TrackedTurnSession, "execute", observed)
     assert (
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=private_root
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="beta", native_package=private_root
         ).run()
     ).publications
     assert len(calls) == 1
@@ -167,7 +160,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
 
     monkeypatch.setattr(TrackedTurnSession, "execute", selected_model)
     result = await runtime.SelectedExecution(
-        root=root,
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
         wire_root_id=root_id,
         owner_name="beta",
         native_package=private_root,
@@ -202,7 +195,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
 
     monkeypatch.setattr(TrackedTurnSession, "execute", observed)
     result = await runtime.SelectedExecution(
-        root=root,
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
         wire_root_id=root_id,
         owner_name="beta",
         native_package=private_root,
@@ -230,7 +223,7 @@ async def test_wrong_intent_or_observer_cannot_create_tool_mode(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     with pytest.raises(TypeError, match="nominal owner intent"):
         await runtime.SelectedExecution(
-            root=root,
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
             wire_root_id=root_id,
             owner_name="beta",
             native_package=private_root,
@@ -238,7 +231,7 @@ async def test_wrong_intent_or_observer_cannot_create_tool_mode(
         ).run()
     assert (
         await runtime.SelectedExecution(
-            root=root,
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
             wire_root_id=root_id,
             owner_name="alpha",
             native_package=private_root,
@@ -263,7 +256,7 @@ async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nomin
 
     monkeypatch.setattr(TrackedTurnSession, "execute", observed)
     await runtime.SelectedExecution(
-        root=root,
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
         wire_root_id=root_id,
         owner_name="alpha",
         native_package=private_root,
@@ -302,7 +295,7 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
     monkeypatch.setattr(TrackedTurnSession, "execute", failed)
     with pytest.raises((NativePiUnavailable, StaleFence, IdentityConflict, RelationViolationError)):
         await runtime.SelectedExecution(
-            root=root,
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
             wire_root_id=root_id,
             owner_name="beta",
             native_package=private_root,
@@ -310,7 +303,7 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
         ).run()
     assert (
         await runtime.SelectedExecution(
-            root=root,
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
             wire_root_id=root_id,
             owner_name="beta",
             native_package=private_root,

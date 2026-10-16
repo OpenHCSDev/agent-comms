@@ -16,6 +16,9 @@ from agent_comms.thread_identity import AdmissionIdentity, GenerationCounter, Tu
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_status import IdleThreadStatus
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def registry_with_owner(tmp_path):
@@ -91,7 +94,7 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
 
 
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     first = comms.agents.begin_turn("owner", "reused").turn_lease
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
@@ -198,7 +201,7 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
 
 
 def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send_message("owner", viewer, "already painted")
@@ -216,7 +219,7 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
         for key in document["messages"]
         for participant in json.loads(key)[2]["participants"]
     )
-    reopened = Comms(tmp_path)
+    reopened = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     assert message.seq in reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot())
     next_message = reopened.messaging.send_message("owner", viewer, "new paint")
     page = reopened.views.dm_display_page("owner", worktree=str(tmp_path))

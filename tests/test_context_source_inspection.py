@@ -1,5 +1,8 @@
 """Source membership, public-only capture, and selected recorded values."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+import time
+
 from dataclasses import replace
 import hashlib
 import json
@@ -9,14 +12,13 @@ import pytest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
-from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegmentRuntimeRequest,
-    ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
+from agent_comms.runtime_request import RuntimeRequest
+from agent_comms.runtime_requests import ContextRecordedSegmentRuntimeRequest, ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.turn_context import (
     ContextManifest, ContextSourceText, FileProvenance, JournalProvenance,
-    NativeProvenance, PreviewProvenance, RecordedContextTurn, SegmentManifest,
-    SystemLayerSegment, TranscriptSegment, TurnContext,
+    NativeProvenance, PreviewProvenance, RecordedContextTurn, SystemLayerSegment, TranscriptSegment, TurnContext,
 )
 from test_private_bus_checkpoint import _root
 
@@ -67,7 +69,7 @@ def test_current_native89_shape_and_authenticated_file_read(tmp_path):
 def test_current_core_context_is_independent_and_source_selection_is_current(tmp_path):
     comms, _ = _root(tmp_path)
     owner = comms.registry.require("Alice")
-    context = TurnContext.for_inspection(comms, owner)
+    context = TurnContext.for_inspection(comms, owner, now=time.time())
     assert FieldCodec.decode(TurnContext, FieldCodec.encode(context)) == context
     request = ContextCoreRuntimeRequest(thread=owner.name)
     assert RuntimeRequest.from_wire(request.to_wire()) == request
@@ -94,17 +96,17 @@ def test_current_core_context_is_independent_and_source_selection_is_current(tmp
 @pytest.mark.asyncio
 async def test_core_context_socket_reads_without_native_session_or_preview(tmp_path):
     from delivery_owner_fixture import canonical_delivery_owner
-    from agent_comms.runtime import RuntimeConnection, socket_path
+    from agent_comms.runtime import RuntimeConnection
 
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
         owner = comms.registry.require("alpha")
         assert owner.session_file is None
         connection = RuntimeConnection(comms, owner.name,
-                                       socket_path(comms.root, owner.require_process().pid))
+                                       RuntimeSocket.path_for(comms.root, owner.require_process().pid))
         try:
             context = FieldCodec.decode(TurnContext, await connection.request("context_core"))
             assert context.thread == owner.incarnation
-            assert context.segments == TurnContext.for_inspection(comms, owner).segments
+            assert context.segments == TurnContext.for_inspection(comms, owner, now=time.time()).segments
             position, segment = next((i, s) for i, s in enumerate(context.segments)
                                      if any(isinstance(p, FileProvenance) for p in s.provenance))
             source = next(p for p in segment.provenance if isinstance(p, FileProvenance))

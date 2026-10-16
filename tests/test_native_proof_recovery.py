@@ -1,4 +1,5 @@
 """Saved, actual pinned native sessions with indexed proof; loopback provider only."""
+from agent_comms.native_settings import NativeThreadDefaults
 
 import asyncio
 import json
@@ -12,7 +13,8 @@ from typing import get_args, get_type_hints
 
 import pytest
 
-from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativePiUnavailable
+from agent_comms.native_pi import NativeContextJournal, NativeContextProof
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_commands import GetState, Prompt
 from agent_comms.pi_events import ContextCommitted, InputCommitted, Response
@@ -216,23 +218,11 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
     await NativeSessionPreparation.open(
         owner.persistent,
         "pi",
-        [
-            "--provider",
-            "response-local",
-            "--model",
-            "fixture",
-            "--thinking",
-            "off",
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-        ],
+        ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'],
         worktree=str(owner.project),
         environment=dict(os.environ),
         session_file=str(owner.session),
+        session_context=(DoctrineSegment.capture(),),
     )
     await owner.force_reopen()
     assert len(owner.saved_inputs()) == 2 and owner.provider.posts == 1
@@ -243,23 +233,11 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
     await NativeSessionPreparation.open(
         owner.persistent,
         "pi",
-        [
-            "--provider",
-            "response-local",
-            "--model",
-            "fixture",
-            "--thinking",
-            "off",
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-        ],
+        ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'],
         worktree=str(owner.project),
         environment=dict(os.environ),
         session_file=str(owner.session),
+        session_context=(DoctrineSegment.capture(),),
     )
     child = owner.persistent.custody.child
 
@@ -333,23 +311,11 @@ async def test_actual_native_bad_proof_refuses_before_any_input(native_backend, 
             await NativeSessionPreparation.open(
                 owner.persistent,
                 "pi",
-                [
-                    "--provider",
-                    "response-local",
-                    "--model",
-                    "fixture",
-                    "--thinking",
-                    "off",
-                    "--offline",
-                    "--no-extensions",
-                    "--no-skills",
-                    "--no-context-files",
-                    "--no-prompt-templates",
-                    "--no-tools",
-                ],
+                ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'],
                 worktree=str(owner.project),
                 environment=dict(os.environ),
                 session_file=str(owner.session),
+                session_context=(DoctrineSegment.capture(),),
             )
         assert owner.session.read_bytes() == history
         assert proof.read_bytes() == damaged

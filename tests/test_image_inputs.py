@@ -1,5 +1,7 @@
 """Image prompts survive ACP decoding, fresh Pi input and queued steering."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import base64
 import json
@@ -21,13 +23,18 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_request,
 )
-from agent_comms.comms import wire
+
 from agent_comms.image_inputs import MAX_IMAGE_BYTES, ImageInput, prompt_images
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDqkAAAAASUVORK5CYII="
@@ -70,9 +77,8 @@ def test_combined_image_budget():
 
 async def make_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    agent = canonical_agent(
-        wire(tmp_path / "wire"), agent_bin="pi-image-stub", agent_args=["--model", "test/model"]
-    )
+    selected_comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi-image-stub", arguments=tuple(["--model", "test/model"])))
     await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     return agent
 
@@ -143,11 +149,9 @@ async def test_image_steering_and_queue_restoration_keep_attachment_reference(
 @pytest.mark.skipif(os.name == "nt", reason="Unix socket owner attachment")
 async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(
-        comms, agent_bin="pi-image-stub", agent_args=["--model", "test/model"], runtime_enabled=True
-    )
-    client = canonical_agent(comms)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi-image-stub", arguments=tuple(["--model", "test/model"])), runtime_enabled=True)
+    client = canonical_agent(comms, native=comms.owners.native_defaults)
     await owner.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     started = asyncio.Event()
 
@@ -157,7 +161,7 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
         yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr(backend, "stream_agent_events", stream)
-    proxy = RuntimeProxy(client, "project", socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(client, "project", RuntimeSocket.path_for(comms.root, os.getpid()))
     try:
         await proxy.subscribe()
         client.sessions.proxies["project"] = proxy
@@ -260,9 +264,8 @@ async def test_failed_queued_image_child_never_exposes_encoded_attachment(tmp_pa
     assert events[-1].diagnostic["exit_code"] == 7
     assert PNG not in repr(events)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    agent = canonical_agent(
-        wire(tmp_path / "acp-wire"), agent_bin=str(stub), agent_args=["--model", "test/model"]
-    )
+    selected_comms_2 = Comms(resolve_comms_route(tmp_path / "acp-wire"), runtime=LaunchRuntime.current())
+    agent = canonical_agent(selected_comms_2, native=dataclasses.replace(selected_comms_2.owners.native_defaults, binary=str(stub), arguments=tuple(["--model", "test/model"])))
     await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     started = asyncio.Event()
     updates = []

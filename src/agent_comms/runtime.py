@@ -6,6 +6,8 @@ or changes the registry PID. The socket is scoped to the wire and owner PID.
 
 from __future__ import annotations
 
+from .runtime_socket import RuntimeSocket
+
 from functools import partial
 from .coordinator import Coordination
 
@@ -25,16 +27,13 @@ from acp.exceptions import RequestError
 from acp.schema import RequestPermissionResponse
 
 from .jsonl_stream import JsonlStreamReader
-from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
+from .runtime_request import RuntimeRequest
+from .runtime_requests import SubscribeRuntimeRequest
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .thread_identity import OwnerIdentity
 from .errors import RelationViolationError
 from .private_path import PrivateSocketRole
-
-
-def socket_path(root: Path, pid: int) -> Path:
-    return root / "runtime" / f"{pid}.sock"
 
 
 UNBOUND_CONTROLLER = object()
@@ -152,7 +151,7 @@ class RuntimeServer:
         self.controller: ContextVar[SocketClient | None | object] = ContextVar(
             "runtime_permission_controller", default=UNBOUND_CONTROLLER
         )
-        self.path = socket_path(agent._comms.root, os.getpid())
+        self.path = RuntimeSocket.path_for(agent._comms.root, os.getpid())
         self._resources = ExitStack()
 
     def background(self, work: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
@@ -336,7 +335,7 @@ class RuntimeConnection:
         except RelationViolationError as error:
             raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
         owner = snapshot.owner_identity(self.session_id)
-        path = socket_path(self._comms.root, process.pid)
+        path = RuntimeSocket.path_for(self._comms.root, process.pid)
 
         while True:
             await Coordination.run_worker(partial(self._require_connect_owner, owner, process))

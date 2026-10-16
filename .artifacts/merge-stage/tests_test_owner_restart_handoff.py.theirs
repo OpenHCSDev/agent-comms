@@ -1,0 +1,169 @@
+"""Authored declaration controls: stopped witnesses are not live admission.
+
+No root, writer, child, native package or process launch is acquired here.
+"""
+
+from dataclasses import replace
+import os
+from pathlib import Path
+import pytest
+
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
+from agent_comms.owner_launch import RetainedOwnerLaunch
+from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime, RestartEnvironment
+from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
+from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
+
+
+def test_selected_runtime_stays_pinned_when_current_changes(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True)
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    for prefix in (first, second):
+        (prefix / "bin").mkdir()
+        (prefix / "bin/python").symlink_to(LaunchRuntime.running().interpreter)
+    pointer.symlink_to(first)
+    selected = LaunchRuntime.current()
+    pointer.unlink()
+    pointer.symlink_to(second)
+    assert selected.interpreter == first / "bin/python"
+    assert LaunchRuntime.current().interpreter == second / "bin/python"
+    original = {"PATH": "/old/bin:/usr/bin", "VIRTUAL_ENV": "/old",
+                "PYTHONPATH": "/old/source", "AUTHORED_CREDENTIAL": "kept"}
+    projected = selected.environment(original)
+    assert projected["PATH"].split(os.pathsep)[0] == str(first / "bin")
+    assert projected["VIRTUAL_ENV"] == str(first)
+    assert "PYTHONPATH" not in projected
+    assert projected["AUTHORED_CREDENTIAL"] == "kept"
+    assert selected.environment(projected) == projected
+    assert RestoredRuntime(Path("/old/bin/python")).environment(original) == original
+    _, native_environment = NativePiRpcLaunch.bootstrap(
+        first / "package/dist/cli.js", (), tmp_path, original,
+        RestartEnvironment.inherit(original), selected,
+    )
+    assert native_environment["VIRTUAL_ENV"] == str(first)
+    assert native_environment["PATH"].split(os.pathsep)[0] == str(first / "bin")
+    assert "PYTHONPATH" not in native_environment
+
+
+@pytest.mark.parametrize("source", [{}, {"PYTHONPATH": ""}, {"PYTHONPATH": "/source"}])
+def test_import_path_preserves_absent_and_empty_then_removes_explicitly(source):
+    configuration = RestartEnvironment.inherit(source)
+    encoded = configuration.encode()
+    assert {key: value for key, value in encoded.items() if key == "PYTHONPATH"} == source
+    assert FieldCodec.decode(RestartEnvironment, encoded) == configuration
+    assert "PYTHONPATH" not in configuration.without_pythonpath().apply_runtime(source)
+
+
+@pytest.mark.parametrize(('inherited', 'expected'), [
+    (None, '/runtime/bin' + os.pathsep + os.defpath),
+    ('', '/runtime/bin:'),
+    ('/usr/bin', '/runtime/bin:/usr/bin'),
+    ('/runtime/bin:/usr/bin:/runtime/bin', '/runtime/bin:/usr/bin'),
+])
+def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, expected):
+    interpreter = Path('/runtime/bin/python')
+    original = RestartEnvironment(path=inherited)
+    configured = original.for_interpreter(interpreter)
+    path = configured.path
+    entries = path.split(os.pathsep)
+    assert entries[0] == '/runtime/bin'
+    assert entries.count('/runtime/bin') == 1
+    assert path == expected
+    assert configured.for_interpreter(interpreter) == configured
+    applied = configured.apply_runtime({'PATH': inherited or '', 'AUTHORED_CREDENTIAL': 'kept'})
+    assert applied['PATH'] == expected
+    assert applied['AUTHORED_CREDENTIAL'] == 'kept'
+
+
+def stopped():
+    # A declared absent synthetic process, never a borrowed original identity.
+    thread = Thread("authored", frozenset(), "/authored",
+                    process_identity=ProcessIdentity(2147483647, 1), created_at=1.0)
+    snapshot = RegistrySnapshot(
+        threads={thread.name: thread}, statuses={thread.name: StoppedThreadStatus()},
+        last_seen={thread.name: 1.0}, aliases={},
+        owner_generations={thread.name: 4}, admission_generations={thread.name: 5},
+        by_lookup={thread.incarnation.lookup: thread},
+    )
+    return thread, snapshot
+
+
+def test_retired_witness_cannot_borrow_live_or_replaced_admission():
+    thread, snapshot = stopped()
+    launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
+                                 {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
+    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
+    assert owner.require_current(snapshot) is thread
+    selection = OwnerRestartSelection(owner.owner, launch.process, owner.admission.admission_generation)
+    with pytest.raises(RelationViolationError):
+        selection.require_current(snapshot)
+    changed = (
+        replace(snapshot, owner_generations={thread.name: 6}),
+        replace(snapshot, admission_generations={thread.name: 6}),
+        replace(snapshot, statuses={thread.name: RunningThreadStatus()}),
+        replace(snapshot, threads={thread.name: replace(thread, created_at=2.0)}),
+        replace(snapshot, threads={thread.name: replace(
+            thread, process_identity=ProcessIdentity(2147483646, 1))}),
+    )
+    for substituted in changed:
+        with pytest.raises(RelationViolationError):
+            owner.require_current(substituted)
+
+
+def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
+    thread, snapshot = stopped()
+    environment = {
+        "AGENT_COMMS_THREAD": thread.name, "AGENT_COMMS_AGENT_BIN": "/authored/pi",
+        "AGENT_COMMS_AGENT_ARGS": "--no-tools 'authored value'",
+        "PI_CODING_AGENT_DIR": "/authored/config",
+        "AGENT_COMMS_NATIVE_CONFIG_DIR": "/authored/config",
+        "AUTHORED_CREDENTIAL": "in-memory-only",
+    }
+    launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", environment)
+    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
+    runtime = RestartEnvironment.inherit(environment)
+    original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None, LaunchRuntime(Path("/target/bin/python")))
+    encoded = FieldCodec.encode(original)
+    assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
+    decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)
+    assert decoded == original
+    assert decoded.owners[0].require_current(snapshot) is thread
+    assert decoded.owners[0].launch.arguments == ("--no-tools", "authored value")
+    assert decoded.owners[0].launch.environment["AUTHORED_CREDENTIAL"] == "in-memory-only"
+    assert "execution" not in FieldCodec.encode(thread)
+    unrelated = replace(launch, process=ProcessIdentity(2147483646, 1))
+    with pytest.raises(RelationViolationError):
+        replace(owner, launch=unrelated).require_current(snapshot)
+
+
+def test_retirement_capture_refuses_changed_original_incarnation():
+    thread, snapshot = stopped()
+    launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
+                                 {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
+    with pytest.raises(RelationViolationError):
+        RetiredOwnerLaunch.capture_retired(snapshot, replace(thread, created_at=2.0), launch)
+
+
+def test_handoff_restore_requires_each_authentic_interpreter_before_read_or_launch():
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    thread, snapshot = stopped()
+    launch = RetainedOwnerLaunch(thread.require_process(), "/authored/other-python",
+                                 {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
+    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
+    handoff = OwnerRestartHandoff("/authored", (owner,), RestartEnvironment.inherit({}), None, None, LaunchRuntime(Path("/target/bin/python")))
+    lifecycle = SimpleNamespace(root=Path("/authored"))
+    # No registry/launch member supplied: refusal must precede either access.
+    with pytest.raises(RelationViolationError, match="acquired source interpreter"):
+        handoff.restore(lifecycle)

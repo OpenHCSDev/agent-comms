@@ -15,10 +15,14 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 from pathlib import Path
 
+from .active_route import resolve_comms_route
+from .native_settings import NativeThreadDefaults
 from .cli_commands import CliCommand
+from .tool_caller import ToolCaller, ThreadCaller
 from .cli_protocol import CoreError
-from .comms import wire
+from .comms import Comms
 from .owner_restart import StoppedOwnerFailure
+from .launch_runtime import LaunchRuntime
 
 
 def _fail(error: BaseException) -> int:
@@ -34,30 +38,38 @@ class CliArgumentParser(argparse.ArgumentParser):
         raise ValueError(message)
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(settings: NativeThreadDefaults) -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
+    ThreadCaller.add_cli_arguments(parser, required=False, dest="caller")
     parser.add_argument(
         "--root",
         default=None,
         help="Comms root directory (default $AGENT_COMMS_ROOT, active route, or ~/.agent-comms)",
     )
+    NativeThreadDefaults.add_cli_arguments(parser, required=False, dest="native_settings")
+    parser.set_defaults(native_settings=settings)
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
-        declaration.add_parser(subparsers)
+        declaration.add_parser(subparsers, settings)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         with ExitStack() as route_guard:
-            args = build_parser().parse_args(argv)
+            runtime = LaunchRuntime.current()
+            settings = NativeThreadDefaults()
+            parser = build_parser(settings)
+            args = argparse.Namespace()
+            remaining = list(sys.argv[1:] if argv is None else argv)
+            caller = ToolCaller.from_arguments(parser, remaining, args)
+            if remaining:
+                parser.error(f"unrecognized arguments: {' '.join(remaining)}")
             command = CliCommand.from_namespace(args)
-            from .active_route import resolve_comms_route
-
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.admit_client())
-            comms = wire(route)
-            return command.run(comms, sys.stdout)
+            comms = Comms(route, runtime=runtime, settings=args.native_settings)
+            return command.run(comms, sys.stdout, caller=caller)
     except KeyboardInterrupt:
         return 130
     except StoppedOwnerFailure as exc:

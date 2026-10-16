@@ -1,5 +1,7 @@
 """PID registration is not an original loaded-session resource."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -13,9 +15,12 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.runtime_requests import GoalHistoryRuntimeRequest
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.skipif(os.name == "nt", reason="original Unix owner socket")
@@ -23,9 +28,9 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
     root = tmp_path / "wire"
     project = tmp_path / "project"
     project.mkdir()
-    comms = Comms(root)
-    owner = CommsAgent(comms, runtime_enabled=True, auto_wake=False)
-    client = CommsAgent(comms, auto_wake=False)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
+    owner = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, auto_wake=False)
+    client = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
     registered = await asyncio.to_thread(
         subprocess.run,
         [sys.executable, "-m", "agent_comms.cli", "--root", str(root),
@@ -36,7 +41,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
     assert json.loads(registered.stdout) == {"registered": "registered"}
     thread = comms.registry.require("registered")
     await owner._runtime.start()
-    proxy = RuntimeProxy(client, "registered", socket_path(root, os.getpid()))
+    proxy = RuntimeProxy(client, "registered", RuntimeSocket.path_for(root, os.getpid()))
     try:
         for action, parameters in (
             ("prompt", {"prompt": [{"type": "text", "text": "Unbound input must never execute"}]}),
@@ -81,4 +86,4 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         await proxy.close()
         await client.shutdown()
         await owner.shutdown()
-    assert not socket_path(root, os.getpid()).exists()
+    assert not RuntimeSocket.path_for(root, os.getpid()).exists()

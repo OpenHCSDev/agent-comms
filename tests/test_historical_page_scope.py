@@ -12,11 +12,14 @@ from agent_comms.message_page import MessagePageRequest
 from agent_comms.messages import Message, InfoKind
 from agent_comms.read_basis import ChannelDisplayScope, MessageDisplayScope
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
 def history(tmp_path):
-    old = Comms(tmp_path / "old")
+    old = Comms(LocalRoute(tmp_path / "old"), runtime=LaunchRuntime.current())
     old.registry.declare(Thread("alice-old", frozenset({"api"}), str(old.root), created_at=10))
     for created, name in enumerate(("bob", "carol"), start=11):
         old.registry.declare(Thread(name, frozenset({"ops"}), str(old.root), created_at=created))
@@ -50,7 +53,7 @@ def history(tmp_path):
     marker = old.bus.log.read_metadata_unlocked(required=True)
     marker.last_seq = marker.admission_after_seq = rows[-1][0].seq
     old.bus.log.write_metadata_unlocked(marker)
-    live = Comms(tmp_path / "live")
+    live = Comms(LocalRoute(tmp_path / "live"), runtime=LaunchRuntime.current())
     # Deliberately different membership: source scope must not use live tags.
     live.registry.declare(Thread("alice", frozenset({"ops"}), str(live.root), created_at=500))
     live.registry.declare(Thread("alice-old", frozenset({"api"}), str(live.root), created_at=501))

@@ -12,6 +12,9 @@ from agent_comms.comms import Comms
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import Message
 from agent_comms.routing import MessageRoute, TurnRouting
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def main():
@@ -19,7 +22,7 @@ def main():
     seeded = subprocess.run([sys.executable, str(Path(__file__).with_name('seed_retained_index_fixture.py')),
                              str(root)], check=True, capture_output=True, text=True)
     seed = json.loads(seeded.stdout)
-    service = Comms(root)
+    service = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     original = Message.from_committed_wire(seed['original'])
     prompt = 'Original exact native request'
     script = """

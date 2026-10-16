@@ -11,6 +11,8 @@ reconstructed into an enrollment from disk.
 
 from __future__ import annotations
 
+from .native_session_files import NativeSessionFiles
+
 import hashlib
 import json
 import os
@@ -31,12 +33,8 @@ from .native_entries import (
     SessionEntry,
     ThinkingLevelChangeEntry,
 )
-from .native_pi import (
-    NativePiUnavailable,
-    _durable_private_session_dir,
-    _fsync_directory,
-    _read_private_header,
-)
+
+from .native_errors import NativePiUnavailable
 
 if TYPE_CHECKING:
     from .pi_payloads import StateData
@@ -306,7 +304,7 @@ class FreshPrivateSession:
     def require_launch_header(path: Path, selected_thinking_level: str | None) -> None:
         """A saved marker can deny reopen; it cannot recreate first-start authority."""
         try:
-            header = NativeEntry.from_evidence(_read_private_header(path))
+            header = NativeEntry.from_evidence(NativeSessionFiles(path).header())
             if not isinstance(header, SessionEntry):
                 raise ValueError("Native source lacks a session header")
             header.require_header()
@@ -456,7 +454,7 @@ def create_fresh_private_session(
     worktree = Path(worktree).absolute()
     if not worktree.is_dir():
         raise NativePiUnavailable("Fresh-session worktree is unavailable")
-    _durable_private_session_dir(session_dir)
+    NativeSessionFiles.prepare_directory(session_dir)
     session_id = uuid4().hex
     path = session_dir / f"enrolled-{session_id}.jsonl"
     header_row = {
@@ -520,7 +518,7 @@ def create_fresh_private_session(
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        _fsync_directory(session_dir)
+        NativeSessionFiles.sync_directory(session_dir)
         result = FreshPrivateSession(
             _MINT,
             path,

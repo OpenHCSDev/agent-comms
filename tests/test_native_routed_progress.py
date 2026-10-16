@@ -12,9 +12,14 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
+
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch):
@@ -23,7 +28,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
         pytest.skip("Requires the prepared native Pi stack")
     with TemporaryDirectory(prefix="ac-native-routed-progress-", dir="/var/tmp") as directory:
         root = Path(directory)
-        comms = wire(root / "wire")
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
         requests: list[dict] = []
         observed: list[tuple[str, bool]] = []
         failures: list[str] = []
@@ -113,22 +118,8 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
         }.items():
             monkeypatch.setenv(key, value)
-        args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--provider",
-            "openrouter",
-            "--model",
-            "z-ai/glm-5.3-flash",
-            "--thinking",
-            "off",
-            "--extension",
-            str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
-        ]
-        agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '--extension', str(Path(__file__).resolve().parents[1] / 'extensions/pi-agent-comms/index.ts')]
+        agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
             project = root / "worker"

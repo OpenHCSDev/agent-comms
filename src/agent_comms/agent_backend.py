@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .launch_runtime import LaunchRuntime
+    from .comms import Comms
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
     from .threads import Thread
@@ -423,7 +423,7 @@ class Forks(ABC):
 
     @classmethod
     @abstractmethod
-    async def fork(cls, parent: Thread, launcher: str, runtime: LaunchRuntime) -> RuntimeLocation:
+    async def fork(cls, parent: Thread, comms: Comms) -> RuntimeLocation:
         """Copy ``parent``'s history into a new location for a child thread.
 
         ``runtime`` is the same selected installation that will start the child.

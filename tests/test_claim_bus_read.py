@@ -45,6 +45,9 @@ from agent_comms.turn_context import (
     SegmentManifest,
     TranscriptSegment,
 )
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
@@ -78,7 +81,7 @@ def selected_turn():
         worktree.mkdir(mode=0o700)
         resource = worktree / "module.py"
         resource.write_text("value = 1\n")
-        comms = Comms(root)
+        comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
             comms.registry.declare(Thread(
                 name, frozenset({"team"}), str(worktree),

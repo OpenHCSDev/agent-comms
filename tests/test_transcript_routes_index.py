@@ -3,10 +3,14 @@
 import json
 from pathlib import Path
 
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _session(path: Path, count: int) -> None:
@@ -30,7 +34,7 @@ def _session(path: Path, count: int) -> None:
 def test_tail_page_decodes_only_its_routing_entries(tmp_path, monkeypatch) -> None:
     session = tmp_path / "session.jsonl"
     _session(session, 10_000)
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
     routing = TurnRouting(reply=MessageRoute("worker", ("#team",)))
     comms.transcripts.routes.record(
@@ -46,7 +50,7 @@ def test_tail_page_decodes_only_its_routing_entries(tmp_path, monkeypatch) -> No
         return real_decode(target, payload)
 
     monkeypatch.setattr(FieldCodec, "decode", staticmethod(counted_decode))
-    page = wire(tmp_path / "wire").transcripts.thread_transcript_page("worker")
+    page = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current()).transcripts.thread_transcript_page("worker")
     assert [event.text for event in page.events] == [
         f"answer {index}" for index in range(9980, 10_000)
     ]

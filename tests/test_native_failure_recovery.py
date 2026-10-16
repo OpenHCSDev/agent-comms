@@ -22,10 +22,14 @@ from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.comms import Comms
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def failed_owner(directory, output, exit_allowed):
@@ -33,6 +37,7 @@ def failed_owner(directory, output, exit_allowed):
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
     native_pi._trusted_package = lambda path: path
     fake, _calls = _fake_model()
+    caller = comms.registry.require("beta").incarnation
 
     async def old_failure(*args, **kwargs):
         result = await fake(*args, **kwargs)
@@ -57,15 +62,14 @@ def failed_owner(directory, output, exit_allowed):
         # Revoke the real owner before the failure consumer can settle. This
         # leaves the original admitted input unresolved without an obsolete
         # failure hook or a fabricated owner-loss grant.
-        os.environ["AGENT_COMMS_THREAD"] = "beta"
-        comms.owners.release("beta")
+        comms.owners.release("beta", caller=caller)
         raise NativePiUnavailable("released native provider failure")
 
     TrackedTurnSession.execute = old_failure
     try:
         asyncio.run(
             runtime.SelectedExecution(
-                root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+                comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
             ).run()
         )
     except NativePiUnavailable:
@@ -158,7 +162,7 @@ def test_restart_recovery_preserves_native_outcome_without_replaying(released_fa
     rows = [json.loads(line) for line in session_file.read_text().splitlines()]
     rows[-1]["message"]["stopReason"] = stop
     session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    comms = Comms(root)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     owner = comms.registry.require("beta")
     with pytest.raises(OwnerBusyRefusal):
         comms.owners.require_restart_idle(owner)
@@ -249,13 +253,12 @@ def replacement_release(root):
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
 
-    comms = Comms(root)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     owner = comms.registry.require("beta")
     comms.registry.register(
         replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), new_owner=True
     )
-    os.environ["AGENT_COMMS_THREAD"] = "beta"
-    comms.owners.release("beta")
+    comms.owners.release("beta", caller=owner.incarnation)
 
 
 def test_later_attested_release_still_fences_original_admission(released_failure):

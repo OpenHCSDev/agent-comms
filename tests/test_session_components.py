@@ -23,6 +23,10 @@ from agent_comms.session_lifecycle import AttachedSessionLifecycle, SessionLifec
 from agent_comms import agent_events as events
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
 from delivery_owner_fixture import canonical_agent
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
@@ -41,12 +45,8 @@ async def owner(tmp_path, monkeypatch):
     monkeypatch.setattr(ModelConfigOption, "discover", models)
     monkeypatch.setattr(ThinkingLevelConfigOption, "discover", levels)
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
-    agent = canonical_agent(
-        Comms(tmp_path / "wire"),
-        agent_bin="pi",
-        agent_args=["--model", "test/one"],
-        auto_wake=False,
-    )
+    selected_comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "test/one"])), auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     try:
         yield agent
@@ -55,7 +55,8 @@ async def owner(tmp_path, monkeypatch):
 
 
 async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owner, tmp_path):
-    other = CommsClient(Comms(tmp_path / "other"), agent_bin="pi")
+    selected_comms_2 = Comms(LocalRoute(tmp_path / "other"), runtime=LaunchRuntime.current())
+    other = CommsClient(selected_comms_2, native=dataclasses.replace(selected_comms_2.owners.native_defaults, binary="pi"))
     assert type(owner.sessions) is SessionLifecycle
     assert type(other.sessions) is AttachedSessionLifecycle
     await owner.initialize(1, {})
@@ -82,7 +83,7 @@ async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owne
 
 
 async def test_attached_declaration_publishes_membership_without_acquiring_executor(owner, tmp_path):
-    attachment = CommsClient(owner._comms, agent_bin="pi", auto_wake=False)
+    attachment = CommsClient(owner._comms, native=dataclasses.replace(owner._comms.owners.native_defaults, binary="pi"), auto_wake=False)
     try:
         thread = await Coordination.run_worker(
             lambda: attachment.sessions.declare_thread(str(tmp_path / "attached"))
@@ -180,7 +181,7 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
         False,
     )
     assert changed["configOptions"][-1]["currentValue"] == "high"
-    assert Comms(owner._comms.root).registry.require(response.session_id).task == "high"
+    assert Comms(LocalRoute(owner._comms.root), runtime=LaunchRuntime.current()).registry.require(response.session_id).task == "high"
 
     # Polling must use the same declaration catalog as parser/set dispatch.
     # A newly declared option backed by another Thread field is not invisible.

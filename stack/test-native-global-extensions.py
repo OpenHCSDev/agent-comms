@@ -47,7 +47,7 @@ def main():
     environment["AGENT_COMMS_THREAD"] = "native-startup-fixture"
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
-    from agent_comms.runtime_requests import ProjectRuntimeRequest
+    from agent_comms.project_runtime import ProjectRuntimeRequest
     from agent_comms.threads import Thread
 
     comms = Comms(root / "wire")

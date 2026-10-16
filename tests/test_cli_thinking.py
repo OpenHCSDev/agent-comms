@@ -1,5 +1,7 @@
 """Stopped-thread configuration uses the session's model-specific catalog."""
 
+from agent_comms.tool_caller import NoThreadCaller
+
 import pytest
 
 from agent_comms.cli_commands import ConfigureCliCommand
@@ -10,6 +12,7 @@ from agent_comms.pi_commands import GetAvailableModels, GetAvailableThinkingLeve
 from agent_comms.pi_payloads import ModelsData, ReportedModel, ThinkingLevelsData
 from agent_comms.pi_vocabulary import HighThinkingLevel, OffThinkingLevel, ServiceTier
 from agent_comms.threads import Thread
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize("change", ["thinking", "model"])
@@ -43,7 +46,7 @@ def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, m
         name="worker", **({"thinking": "high"} if change == "thinking" else {"model": "fixture/plain"})
     )
     with pytest.raises(ValueError, match="unavailable; choose one of: off"):
-        command.apply(comms)
+        command.apply(comms, caller=NoThreadCaller())
     assert comms.registry.require("worker") == original
     assert queried == ["fixture/reasoning" if change == "thinking" else "fixture/plain"]
 
@@ -58,7 +61,7 @@ def test_configure_refuses_model_outside_catalog_without_writing(comms, tmp_path
     original = comms.registry.require("worker")
 
     with pytest.raises(ValueError, match="Model 'fixture/plain' is unavailable"):
-        ConfigureCliCommand(name="worker", model="fixture/plain").apply(comms)
+        ConfigureCliCommand(name="worker", model="fixture/plain").apply(comms, caller=NoThreadCaller())
     assert comms.registry.require("worker") == original
 
 
@@ -77,7 +80,7 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     monkeypatch.setattr(GetAvailableThinkingLevels, "discover", discover_levels)
     result = ConfigureCliCommand(
         name="worker", thinking="high", service_tier=ServiceTier.STANDARD
-    ).apply(comms)
+    ).apply(comms, caller=NoThreadCaller())
     assert result["thinking_level"] == "high"
     assert result["service_tier"] == "standard"
     configured = comms.registry.require("worker")
@@ -85,24 +88,25 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     assert configured.service_tier.value == "standard"
 
 
-def test_native_arguments_configured_has_one_default(monkeypatch):
-    monkeypatch.delenv(NativeArguments.arguments_key, raising=False)
-    monkeypatch.delenv(NativeArguments.binary_key, raising=False)
-    assert NativeArguments.configured_binary() == NativeArguments.default_binary
-    assert NativeArguments.configured().argv == NativeArguments.default
-    monkeypatch.setenv(NativeArguments.binary_key, "/fixture/pi")
-    monkeypatch.setenv(NativeArguments.arguments_key, '--model "fixture/model" --thinking off')
-    assert NativeArguments.configured_binary() == "/fixture/pi"
-    assert NativeArguments.configured().model == "fixture/model"
-    assert NativeArguments.configured().thinking == "off"
-    assert NativeArguments.configured([]).argv == ()
+def test_native_arguments_configured_uses_typed_selection():
+    defaults = NativeThreadDefaults.from_runtime(LaunchRuntime.current())
+    assert NativeArguments.parse(defaults.arguments) == NativeArguments(entries=())
+    selected = NativeThreadDefaults(
+        binary="/fixture/pi", arguments=("--model", "fixture/model", "--thinking", "off"),
+    )
+    assert selected.binary == "/fixture/pi"
+    parsed = NativeArguments.parse(selected.arguments)
+    assert parsed.model == "fixture/model"
+    assert parsed.thinking == "off"
+    cleared = NativeThreadDefaults(binary=selected.binary, arguments=())
+    assert NativeArguments.parse(cleared.arguments).argv == ()
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("overridden", [False, True])
 async def test_session_description_and_change_share_refusal(tmp_path, monkeypatch, overridden):
     import os
-    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.native_errors import NativePiUnavailable
     from acp import RequestError
 
     if overridden:

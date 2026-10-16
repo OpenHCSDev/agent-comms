@@ -7,12 +7,11 @@ from agent_comms.tool_caller import ThreadCaller, NoThreadCaller, ToolCaller
 from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
 
-def test_tool_entry_decodes_caller_states_once():
-    assert ToolCaller.from_environment({}) == NoThreadCaller()
-    assert ToolCaller.from_environment({"AGENT_COMMS_THREAD": ""}) == NoThreadCaller()
-    assert ToolCaller.from_environment({"AGENT_COMMS_THREAD": "owner"}) == ThreadCaller("owner")
-    assert ToolCaller.from_actor(None) == NoThreadCaller()
-    assert ToolCaller.from_actor("owner") == ThreadCaller("owner")
+def test_tool_entry_decodes_caller_states_once(comms):
+    owner = comms.registry.declare(Thread(name="owner", tags=frozenset(), worktree="/wt"))
+    assert ToolCaller.from_actor(comms, None) == NoThreadCaller()
+    assert ToolCaller.from_actor(comms, "owner") == ThreadCaller(owner.incarnation)
+    assert ThreadCaller.from_json(owner.incarnation.cli_arguments[1]) == ThreadCaller(owner.incarnation)
 
 
 class TestToolCatalog:
@@ -21,31 +20,31 @@ class TestToolCatalog:
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
         before = comms.registry.snapshot()
-        result = invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b"}, caller=ThreadCaller("a"))
+        result = invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b"}, caller=ThreadCaller(comms.registry.require('a').incarnation))
         assert result["collaboration"]["owner"] == "a"
         assert result["collaboration"]["note"] == ""
-        assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"] == [
+        assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller(comms.registry.require('a').incarnation))["collaborations"] == [
             result["collaboration"]
         ]
         monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
-        mirrored = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("b"))["collaborations"]
+        mirrored = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller(comms.registry.require('b').incarnation))["collaborations"]
         assert len(mirrored) == 1
         assert (mirrored[0]["owner"], mirrored[0]["peer"]) == ("b", "a")
         invoke_tool(
-            comms, "comms_collaboration", {"action": "update", "peer": "a", "note": "Shared work"}, caller=ThreadCaller("b")
+            comms, "comms_collaboration", {"action": "update", "peer": "a", "note": "Shared work"}, caller=ThreadCaller(comms.registry.require('b').incarnation)
         )
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        collaborations = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"]
+        collaborations = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller(comms.registry.require('a').incarnation))["collaborations"]
         assert collaborations[0]["note"] == "Shared work"
         monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
-        invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "a"}, caller=ThreadCaller("b"))
+        invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "a"}, caller=ThreadCaller(comms.registry.require('b').incarnation))
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a")) == {"collaborations": []}
+        assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller(comms.registry.require('a').incarnation)) == {"collaborations": []}
         monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
-        invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "a"}, caller=ThreadCaller("b"))
+        invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "a"}, caller=ThreadCaller(comms.registry.require('b').incarnation))
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"][0]["peer"] == "b"
-        invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "b"}, caller=ThreadCaller("a"))
+        assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller(comms.registry.require('a').incarnation))["collaborations"][0]["peer"] == "b"
+        invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "b"}, caller=ThreadCaller(comms.registry.require('a').incarnation))
         assert comms.registry.snapshot() == before
         assert not comms.views.full_history()
 
@@ -135,7 +134,7 @@ class TestToolCatalog:
         assert all(row.message.reference != sent.reference for row in presentation.notifications)
         assert [row.message.reference for row in presentation.sent_notifications] == [sent.reference]
 
-        result = invoke_tool(comms, "comms_threads", {}, caller=ThreadCaller("sender"))
+        result = invoke_tool(comms, "comms_threads", {}, caller=ThreadCaller(comms.registry.require('sender').incarnation))
         assert [
             (
                 row["message"]["seq"],

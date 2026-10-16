@@ -20,6 +20,9 @@ from agent_comms.comms import Comms
 from agent_comms.goal_management import Goals
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration
 from native_backend_fixture import native_backend_fixture
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def run(stage: Path, extension: Path):
@@ -47,7 +50,7 @@ async def run(stage: Path, extension: Path):
                     if number == 1:
                         native.provider.tool_call = ('comms_set_goal', {'text': 'Model-authored retry objective'})
                     elif number in (2, 4):
-                        goal = Comms(native.root).registry.require(session).require_goal()
+                        goal = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current()).registry.require(session).require_goal()
                         native.provider.tool_call = ('comms_goal', {
                             'goal_id': goal.id,
                             'status': 'blocked' if number == 2 else 'completed',
