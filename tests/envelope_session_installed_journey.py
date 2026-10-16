@@ -54,6 +54,7 @@ async def run(root: Path, *, after: bool):
                     assert response.stop_reason == 'end_turn', response
                     request = fixture.provider.requests[-1]
                     body = user_text(request)
+                    assert 'One fact. One owner. Derive the rest.' in system_text(request)
                     (root / f'{label}-request.json').write_text(json.dumps(request, indent=2))
                     assert text in body, body[-100:]
                     assert 'Write the answer as your reply text' in body
@@ -184,6 +185,7 @@ async def detached(root: Path):
                             assert response.stop_reason == 'end_turn'
                         assert any(fixture.provider.text in str(update) for update in subscriber.updates)
                     request = fixture.provider.requests[-1]
+                    assert 'One fact. One owner. Derive the rest.' in system_text(request)
                     assert "thread 'worker895'" in system_text(request)
                     assert repr(str(fixture.project)) in system_text(request)
                     assert 'Write the answer as your reply text' in user_text(request)
