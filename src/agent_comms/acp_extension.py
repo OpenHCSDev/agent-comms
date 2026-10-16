@@ -24,6 +24,7 @@ from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .field_codec import FieldCodec
 from .goal_presentation import GoalSnapshot
 from .native_runtime_input import CurrentNativeCursor
+from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
 from .thread_identity import AdmissionIdentity, ThreadIncarnation
@@ -379,6 +380,16 @@ class UnavailableQueueProjection(QueueProjection):
 
     def feedback(self, supported: bool) -> str:
         return "Remote queue unavailable (input status unchanged)"
+
+
+@dataclass(frozen=True)
+class HistoryOnlyQueueProjection(UnavailableQueueProjection):
+    """The owner runs another Core, so this client cannot queue its input."""
+
+    owner: IncompatibleOwner
+
+    def feedback(self, supported: bool) -> str:
+        return self.owner.line()
 
 
 @dataclass(frozen=True)
