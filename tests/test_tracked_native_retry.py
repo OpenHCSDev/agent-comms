@@ -78,7 +78,7 @@ def following(kind):
 def test_delivered_notice_preserves_original_but_real_steering_can_revise(text):
     notice = following(DeliveredFollowingInput)
     steering = following(AcceptedFollowingInput)
-    assert notice.when_busy is WhenBusy.FOLLOW_UP
+    assert notice.when_busy is WhenBusy.STEER
     assert steering.when_busy is WhenBusy.STEER
     response = notice.continue_response(CompletedTrackedTerminal("Requested answer"), ["Requested answer"])
     response = response.tool_round().append(text)

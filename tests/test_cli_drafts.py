@@ -35,8 +35,11 @@ def test_batched_deltas_materialize_only_the_surviving_view(tmp_path):
 
 def test_prefix_required_and_completion_rejects_overlapping_start_and_suffix(tmp_path):
     output = _output(tmp_path)
+    activity = ActiveItem('t', 'a', ActivityState.WORKING, 'Replying')
+    assert activity.accumulate(output) == (activity,)
     output.publish_batch([AppendDraftItem('t', 'a', 'suffix')])
     assert output.transcript.current_draft() is None
+    assert not output.drafts
     output.publish_batch([start('t', 'a'), AppendDraftItem('t', 'a', 'Hello')])
     output.publish_batch([
         CompletedItem('t', 'a', (AssistantTranscript('Hello!', timestamp=9.0),)),
@@ -52,10 +55,13 @@ def test_prefix_required_and_completion_rejects_overlapping_start_and_suffix(tmp
 def test_saved_completion_survives_initial_idle_snapshot_until_ordered_end(tmp_path):
     output = _output(tmp_path)
     output.publish_batch([
-        CompletedItem('old', 'a', (AssistantTranscript('saved'),)), TurnEnded(),
+        CompletedItem('old', 'a', (AssistantTranscript('saved', timestamp=9.0),)), TurnEnded(),
         start('old', 'a', 'overlapping snapshot'), AppendDraftItem('old', 'a', 'late'),
     ])
     assert output.transcript.current_draft() is None
+    with output.transcript.reading() as snapshot:
+        row, = snapshot.forward(0, snapshot.cut().offset)
+        assert row.events == (AssistantTranscript('saved', timestamp=9.0),)
     output.publish_batch([AllTurnsEnded(), start('new', 'a', 'new identity')])
     assert output.transcript.current_draft().turn_id == 'new'
 

@@ -7,6 +7,29 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, TimestampText, TextRepresentation, WireValue
 
 
+def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
+    from pydantic import JsonValue
+
+    payload = {'postimage': [None, True, 0, 0.0, 'text', {'nested': [9007199254740993]}]}
+    for annotation in (JsonValue, Annotated[JsonValue, 'documented postimage']):
+        assert FieldCodec.encode(payload, annotation) == payload
+        assert FieldCodec.decode(annotation, payload) == payload
+        assert FieldCodec.project(payload, 'report', annotation) == payload
+        assert FieldCodec.value_schema(annotation) == {}
+        for invalid in ({1: 'non-text key'}, {'nested': float('nan')}, {'nested': object()}):
+            for operation in (
+                lambda: FieldCodec.encode(invalid, annotation),
+                lambda: FieldCodec.decode(annotation, invalid),
+                lambda: FieldCodec.project(invalid, 'report', annotation),
+            ):
+                with pytest.raises(TypeError, match='JSON value'):
+                    operation()
+    assert FieldCodec.decode(dict[str, JsonValue], payload) == payload
+    assert FieldCodec.value_schema(dict[str, JsonValue]) == {
+        'type': 'object', 'additionalProperties': {},
+    }
+
+
 @dataclass(frozen=True)
 class OwnedWireText(WireValue):
     value: str
@@ -227,6 +250,35 @@ def test_alias_collision_and_reserved_tag():
 def test_non_json_values_rejected(value):
     with pytest.raises(TypeError):
         FieldCodec.encode(value)
+
+
+@pytest.mark.parametrize('values', [(), (1,), (1, 2, 3)])
+def test_fixed_tuple_has_one_arity_contract_for_every_boundary(values):
+    for action in (lambda: FieldCodec.encode(values, tuple[int, int]),
+                   lambda: FieldCodec.project(values, 'public', tuple[int, int]),
+                   lambda: FieldCodec.decode(tuple[int, int], list(values))):
+        with pytest.raises(ValueError, match='Tuple length does not match declaration'):
+            action()
+
+
+def test_empty_and_variadic_tuple_schema_uses_the_same_member_grammar():
+    assert FieldCodec.encode((), tuple[()]) == []
+    assert FieldCodec.decode(tuple[()], []) == ()
+    assert FieldCodec.value_schema(tuple[()]) == {
+        'type': 'array', 'prefixItems': [], 'minItems': 0, 'maxItems': 0,
+    }
+    for action in (lambda: FieldCodec.encode((1,), tuple[()]),
+                   lambda: FieldCodec.project((1,), 'public', tuple[()]),
+                   lambda: FieldCodec.decode(tuple[()], [1])):
+        with pytest.raises(ValueError, match='Tuple length'):
+            action()
+    assert FieldCodec.value_schema(tuple[int, str]) == {
+        'type': 'array', 'prefixItems': [{'type': 'integer'}, {'type': 'string'}],
+        'minItems': 2, 'maxItems': 2,
+    }
+    assert FieldCodec.value_schema(tuple[int, ...]) == {'type': 'array', 'items': {'type': 'integer'}}
+    assert FieldCodec.encode((1, 2, 3), tuple[int, ...]) == [1, 2, 3]
+    assert FieldCodec.decode(tuple[int, ...], [1, 2, 3]) == (1, 2, 3)
 
 
 def test_tuple_shape_and_strict_bool():

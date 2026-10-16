@@ -10,9 +10,11 @@ from datetime import datetime
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
+import typing_extensions
 from typing import (
     Annotated,
     Any,
+    ClassVar,
     Literal,
     Self,
     TypeAliasType,
@@ -221,8 +223,6 @@ class FieldCodec(Sealed):
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
         if annotation is None:
             return None, None
-        if isinstance(annotation, TypeAliasType):
-            return FieldCodec._representation(annotation.__value__)
         if isinstance(annotation, type):
             # A class has no Annotated metadata. Its live capability still
             # determines representation, including inherited/virtual members.
@@ -237,6 +237,13 @@ class FieldCodec(Sealed):
         ]
         if len(representations) > 1:
             raise TypeError("A field must have one representation")
+        if isinstance(target, (TypeAliasType, typing_extensions.TypeAliasType)):
+            from pydantic import JsonValue
+
+            if target is JsonValue:
+                return Any, representations[0] if representations else _AnyDecoder
+            inner, representation = FieldCodec._representation(target.__value__)
+            return inner, representations[0] if representations else representation
         if representations:
             return target, representations[0]
         if isinstance(target, type) and issubclass(target, WireValue):
@@ -282,26 +289,6 @@ class FieldCodec(Sealed):
     @lru_cache(maxsize=_declaration_cache_capacity)
     def _types(declaration: type) -> dict[str, Any]:
         return get_type_hints(declaration, include_extras=True)
-
-    @classmethod
-    def _container_types(cls, annotation, container):
-        target, _ = cls._representation(annotation)
-        members = get_args(target) if get_origin(target) in (Union, types.UnionType) else (target,)
-        declarations = [get_args(member) for member in members if get_origin(member) is container]
-        if len(declarations) > 1:
-            raise TypeError('Container encoding requires one declared element/key type')
-        return declarations[0] if declarations else ()
-
-    @classmethod
-    def _sequence_items(cls, values, annotation):
-        """One declared element grammar for persistence and redacted views."""
-        container = (frozenset if isinstance(values, frozenset)
-                     else list if isinstance(values, list) else tuple)
-        args = cls._container_types(annotation, container)
-        uniform = bool(args) and (container is not tuple or len(args) == 2 and args[1] is Ellipsis)
-        items = sorted(values) if container is frozenset else values
-        for index, item in enumerate(items):
-            yield item, (args[0] if uniform else args[index] if index < len(args) else None)
 
     @overload
     @classmethod
@@ -358,8 +345,8 @@ class FieldCodec(Sealed):
             return value.declared_name
         if isinstance(value, Enum):
             return cls.encode(value.value)
-        if isinstance(value, (list, tuple, frozenset)):
-            return [cls.encode(item, item_type) for item, item_type in cls._sequence_items(value, annotation)]
+        if _SequenceDecoder.accepts(value):
+            return _SequenceDecoder.encode_declared(value, annotation, cls.encode)
         if isinstance(value, dict):
             return _DictDecoder.encode_declared(value, annotation, cls.encode)
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
@@ -430,8 +417,8 @@ class FieldCodec(Sealed):
             return {"anyOf": [cls.value_schema(item) for item in members]}
         if origin is Literal:
             return {**cls.value_schema(type(args[0])), "enum": list(args)}
-        if origin in (list, tuple, frozenset):
-            return {"type": "array", "items": cls.value_schema(args[0])}
+        if origin in _SequenceDecoder.containers:
+            return _SequenceDecoder.for_arguments(origin, args).schema()
         if origin is dict:
             return _DictDecoder.for_key(args[0]).schema(*args)
         if origin is type and args and issubclass(args[0], DeclaredFamily):
@@ -479,9 +466,10 @@ class FieldCodec(Sealed):
                 for name, member in properties.items()
             )
             return result
-        if isinstance(value, (tuple, list, frozenset)):
-            return [cls.project(item, view, item_type)
-                    for item, item_type in cls._sequence_items(value, annotation)]
+        if _SequenceDecoder.accepts(value):
+            return _SequenceDecoder.encode_declared(
+                value, annotation, lambda item, item_type: cls.project(item, view, item_type)
+            )
         if isinstance(value, dict):
             return _DictDecoder.encode_declared(
                 value, annotation, lambda item, item_type: cls.project(item, view, item_type)
@@ -605,17 +593,29 @@ class _RepresentedDecoder(ValueDecoder):
             return representation.from_wire(data)
         return representation.decode(data)
 
-class _AnyDecoder(ValueDecoder):
-    """A declared opaque JSON value, not permission to infer a dictionary key type."""
-    def __init__(self):
+@dataclass(frozen=True, slots=True)
+class _AnyDecoder(ValueDecoder, FieldRepresentation):
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def validator():
         from pydantic import ConfigDict, JsonValue, TypeAdapter
-        self.json = TypeAdapter(JsonValue, config=ConfigDict(allow_inf_nan=False))
 
-    def decode(self, data):
+        return TypeAdapter(JsonValue, config=ConfigDict(allow_inf_nan=False))
+
+    @classmethod
+    def decode(cls, data):
         try:
-            return self.json.validate_python(data, strict=True)
+            return cls.validator().validate_python(data, strict=True)
         except ValueError as error:
-            raise TypeError('Expected a JSON value with string keys and finite numbers') from error
+            raise TypeError("Expected a JSON value with string keys and finite numbers") from error
+
+    @classmethod
+    def encode(cls, value):
+        return cls.decode(value)
+
+    @classmethod
+    def schema(cls):
+        return {}
 
 @dataclass(frozen=True, slots=True)
 class _FamilyNameDecoder(ValueDecoder):
@@ -660,46 +660,148 @@ class _UnionDecoder(ValueDecoder):
             # graph for a later UI-thread garbage collection.
             first_error = None
 
+class _ContainerDecoder(ValueDecoder):
+    """Select a container declaration once without dropping empty-tuple arity."""
+
+    @staticmethod
+    def declarations(annotation, container):
+        target, _ = FieldCodec._representation(annotation)
+        members = get_args(target) if get_origin(target) in (Union, types.UnionType) else (target,)
+        declarations = tuple(member for member in members if get_origin(member) is container)
+        if len(declarations) > 1:
+            raise TypeError('Container encoding requires one declared element/key type')
+        return declarations
+
+
 @dataclass(frozen=True, slots=True)
-class _FrozenSetDecoder(ValueDecoder):
-    item: ValueDecoder
+class _SequenceDecoder(_ContainerDecoder):
+    """One element/arity grammar drives encoding, projection, decode and schema.
+
+    Members retain declarations, not eagerly compiled children: recursive output
+    aliases are expanded only as actual values are traversed.
+    """
+
+    items: tuple[object, ...]
+    containers: ClassVar[dict[type, type[_SequenceDecoder]]] = {}
+
+    def __init_subclass__(cls, **kwargs):
+        super(_SequenceDecoder, cls).__init_subclass__(**kwargs)
+        if 'container' in vars(cls):
+            cls.containers[cls.container] = cls
+
+    @classmethod
+    def accepts(cls, value):
+        return isinstance(value, tuple(cls.containers))
+
+    @classmethod
+    def for_arguments(cls, container, arguments):
+        return cls.containers[container].build(arguments)
+
+    @classmethod
+    def build(cls, arguments):
+        return cls(arguments)
+
+    @classmethod
+    def undeclared(cls):
+        return cls((None,))
+
+    @classmethod
+    def encode_declared(cls, values, annotation, encode_value):
+        container = next(base for base in type(values).__mro__ if base in cls.containers)
+        owner = cls.containers[container]
+        declarations = cls.declarations(annotation, container)
+        decoder = owner.build(get_args(declarations[0])) if declarations else owner.undeclared()
+        return [encode_value(value, item) for value, item in decoder.pairs(
+            decoder.ordered(values), decoder.items,
+        )]
+
+    @staticmethod
+    def ordered(values):
+        return values
+
+    @staticmethod
+    @abstractmethod
+    def pairs(values, members): ...
+
+    @classmethod
+    def decode_items(cls, data, members):
+        if not isinstance(data, list):
+            raise ValueError('Expected a JSON array.')
+        return cls.container(item.decode(value) for value, item in cls.pairs(data, members))
 
     def decode(self, data):
-        if not isinstance(data, list):
-            raise ValueError("Expected a JSON array.")
-        return frozenset(self.item.decode(value) for value in data)
+        return self.decode_items(data, tuple(compile_decoder(item) for item in self.items))
+
+    @abstractmethod
+    def schema(self): ...
+
+
+class _UniformSequenceDecoder(_SequenceDecoder):
+    __slots__ = ()
+
+    @staticmethod
+    def member(members):
+        if len(members) != 1:
+            raise TypeError('Sequence requires one declared element type')
+        return members[0]
+
+    @classmethod
+    def pairs(cls, values, members):
+        item = cls.member(members)
+        return ((value, item) for value in values)
+
+    def schema(self):
+        return {'type': 'array', 'items': FieldCodec.value_schema(self.member(self.items))}
+
+
+class _FrozenSetDecoder(_UniformSequenceDecoder):
+    __slots__ = ()
+    container = frozenset
+
+    @staticmethod
+    def ordered(values):
+        return sorted(values)
+
+
+class _ListDecoder(_UniformSequenceDecoder):
+    __slots__ = ()
+    container = list
+
+
+class _FixedTupleDecoder(_SequenceDecoder):
+    __slots__ = ()
+    container = tuple
+
+    @classmethod
+    def build(cls, arguments):
+        if len(arguments) == 2 and arguments[1] is Ellipsis:
+            return _VariadicTupleDecoder(arguments[:1])
+        return cls(arguments)
+
+    @classmethod
+    def undeclared(cls):
+        return _VariadicTupleDecoder((None,))
+
+    @staticmethod
+    def pairs(values, members):
+        if len(values) != len(members):
+            raise ValueError('Tuple length does not match declaration.')
+        return zip(values, members, strict=True)
+
+    def schema(self):
+        length = len(self.items)
+        return {'type': 'array', 'prefixItems': [FieldCodec.value_schema(item) for item in self.items],
+                'minItems': length, 'maxItems': length}
+
+
+class _VariadicTupleDecoder(_UniformSequenceDecoder, _FixedTupleDecoder):
+    """Uniform element behavior with the tuple owner's result construction."""
+
+    __slots__ = ()
+
 
 @dataclass(frozen=True, slots=True)
-class _ListDecoder(ValueDecoder):
-    item: ValueDecoder
-
-    def decode(self, data):
-        if not isinstance(data, list):
-            raise ValueError("Expected a JSON array.")
-        return [self.item.decode(value) for value in data]
-
-@dataclass(frozen=True, slots=True)
-class _VariadicTupleDecoder(ValueDecoder):
-    item: ValueDecoder
-
-    def decode(self, data):
-        if not isinstance(data, list):
-            raise ValueError("Expected a JSON array.")
-        return tuple(self.item.decode(value) for value in data)
-
-@dataclass(frozen=True, slots=True)
-class _FixedTupleDecoder(ValueDecoder):
-    items: tuple[ValueDecoder, ...]
-
-    def decode(self, data):
-        if not isinstance(data, list):
-            raise ValueError("Expected a JSON array.")
-        if len(data) != len(self.items):
-            raise ValueError("Tuple length does not match declaration.")
-        return tuple(item.decode(value) for item, value in zip(self.items, data, strict=True))
-
-@dataclass(frozen=True, slots=True)
-class _DictDecoder(ValueDecoder):
+class _DictDecoder(_ContainerDecoder):
     key: ValueDecoder
     value: ValueDecoder
 
@@ -709,8 +811,8 @@ class _DictDecoder(ValueDecoder):
 
     @classmethod
     def encode_declared(cls, values, annotation, encode_value):
-        args = FieldCodec._container_types(annotation, dict)
-        if len(args) != 2:
+        declarations = cls.declarations(annotation, dict)
+        if not declarations or len(args := get_args(declarations[0])) != 2:
             raise TypeError('Dictionary encoding requires a declared dict[K, V] annotation')
         key_type, value_type = args
         return cls.for_key(key_type).encode(values, key_type, value_type, encode_value)
@@ -746,8 +848,8 @@ class _EntriesDictDecoder(_DictDecoder):
     def decode(self, data):
         if not isinstance(data, list):
             raise ValueError("Expected an array of typed dictionary entries.")
-        pair = _FixedTupleDecoder((self.key, self.value))
-        return self.collect(pair.decode(value) for value in data)
+        return self.collect(_FixedTupleDecoder.decode_items(value, (self.key, self.value))
+                            for value in data)
 
     @staticmethod
     def encode(values, key_type, value_type, encode_value):
@@ -855,14 +957,8 @@ def _structural_decoder(target: object) -> ValueDecoder:
         return _LiteralDecoder(target, args)
     if origin in (Union, types.UnionType):
         return _UnionDecoder(target, tuple(compile_decoder(item) for item in args))
-    if origin is frozenset:
-        return _FrozenSetDecoder(compile_decoder(args[0]))
-    if origin is list:
-        return _ListDecoder(compile_decoder(args[0]))
-    if origin is tuple:
-        if len(args) == 2 and args[1] is Ellipsis:
-            return _VariadicTupleDecoder(compile_decoder(args[0]))
-        return _FixedTupleDecoder(tuple(compile_decoder(item) for item in args))
+    if origin in _SequenceDecoder.containers:
+        return _SequenceDecoder.for_arguments(origin, args)
     if origin is dict:
         return _DictDecoder.for_key(args[0])(
             compile_decoder(args[0]), compile_decoder(args[1])
