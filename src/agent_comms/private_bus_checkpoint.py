@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
@@ -377,6 +377,18 @@ class CertifiedSourceRead:
             )
         except sqlite3.Error as error:
             raise RelationViolationError("Certified addressed index is unavailable.") from error
+
+    def addressed_between(self, lookups: Iterable[str], after_seq: int, through_seq: int) -> tuple[Addressed, ...]:
+        """Read the original recipients by their existing lookup/sequence index."""
+        self.require_current()
+        lookups = tuple(dict.fromkeys(lookups))
+        if not lookups:
+            return ()
+        return tuple(Addressed.select(
+            self.connection,
+            where=f"lookup IN ({','.join('?' for _ in lookups)}) AND seq>? AND seq<=?",
+            parameters=(*lookups, after_seq, through_seq),
+        ))
 
     def addressed_sequences(self, bus: WireLog, lookup: str, after_seq: int) -> tuple[int, ...]:
         """Every committed addressed sequence in this certificate, without bytes.

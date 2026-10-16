@@ -12,13 +12,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .activity import ActivityState, ObservedActivity
-from .agent_activity import AgentActivity
 from .coordination_errors import StaleRevision
-from .registration import Registration
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_route_counts import OpenedRouteCounts
-from .catalog_store import ChannelCatalog
 from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import is_channel_target
 from .channels import Channel
@@ -35,11 +32,10 @@ from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDeli
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
-from .routing import DeliveryScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock, _store_read_lock
-from .wire_log import WireLog
+from .wire_log import OpenedWireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
 from .display_references import DisplayReferences
 from .thread_presentation import (
@@ -51,18 +47,19 @@ from .thread_status import ThreadStatus
 from .threads import Thread
 
 if TYPE_CHECKING:
-    from .agent_activity import RecipientActivity
+    from .agent_activity import AgentActivity, RecipientActivity
     from .bus_publication import CommittedDelivery
     from .catalog_document import CatalogDocument
+    from .catalog_store import ChannelCatalog
     from .goal_waits import GoalWait
     from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .messages import Message
     from .notification_assignment import NotificationAssignmentRead
     from .read_ledger import ReadDocument, ReadLedger
+    from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
-    from .wire_log import OpenedWireSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -904,15 +901,15 @@ class WireRevision:
     })
     expiry_tick: int
     through_seq: int
-    paths: Mapping[str, tuple[Path, ...]] = field(compare=False, repr=False)
+    _views: HistoryViews | None = field(default=None, compare=False, repr=False)
 
     expiry_seconds: ClassVar[int] = 30
 
     @classmethod
     def source_paths(cls, views: HistoryViews) -> dict[str, tuple[Path, ...]]:
         """Stat and watch the sources declared by the revision fields themselves."""
-        return {source.name: source.metadata["paths"](views)
-                for source in fields(cls) if "paths" in source.metadata}
+        return {source.name: paths(views) for source in fields(cls)
+                if (paths := source.metadata.get("paths")) is not None}
 
     @classmethod
     def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
@@ -925,66 +922,70 @@ class WireRevision:
                             if (revision := FileRevision.capture(path)) is not None)
                 for name, group in paths.items()
             }
-        return cls(**captured, expiry_tick=expiry_tick, through_seq=through_seq, paths=paths)
+        return cls(**captured, expiry_tick=expiry_tick, through_seq=through_seq, _views=views)
 
     def __reduce__(self):
         # Backend metadata snapshots stay with this revision, not on the UI pipe.
-        return type(self), tuple(getattr(self, source.name) for source in fields(self))
+        return type(self), tuple(getattr(self, source.name) for source in fields(self) if source.compare)
 
-    def require_source(self, name: str) -> None:
-        current = tuple(revision for path in self.paths[name]
+    @property
+    def resources(self) -> HistoryViews:
+        if self._views is None:
+            raise RuntimeError("Wire source resources belong to the observing process")
+        return self._views
+
+    def require_source(self, paths: tuple[Path, ...], expected: tuple[FileRevision, ...]) -> None:
+        current = tuple(revision for path in paths
                         if (revision := FileRevision.capture(path)) is not None)
-        if current != getattr(self, name):
-            raise StaleRevision(f"Observed {name} source changed during preparation")
+        if current != expected:
+            raise StaleRevision(f"Observed source changed during preparation: {paths}")
 
     @cached_property
     def registration(self):
-        self.require_source("registry")
-        path, = self.paths["registry"]
-        revision = Registration(path).store.revision()
-        self.require_source("registry")
+        store = self.resources.registry.store
+        self.require_source((store.path,), self.registry)
+        revision = store.revision()
+        self.require_source((store.path,), self.registry)
         return revision
 
     @cached_property
     def thread_sources(self) -> ThreadViewSources:
-        for name in ("registry", "activity", "runtime_info", "goal_waits"):
-            self.require_source(name)
-        path, = self.paths["registry"]
-        waits, = self.paths["goal_waits"]
-        sources = ThreadViewSources.capture(
-            self.registration.snapshot, AgentActivity(path.parent, Registration(path)),
-            None, GoalWaits(waits),
+        views = self.resources
+        waits = GoalWaits(views.root / GoalWaits.filename)
+        checks = (
+            ((views.registry.store.path,), self.registry),
+            ((views.agents.activity._path,), self.activity),
+            ((views.agents.runtime_info.path,), self.runtime_info),
+            ((waits.path,), self.goal_waits),
         )
-        for name in ("registry", "activity", "runtime_info", "goal_waits"):
-            self.require_source(name)
+        for paths, expected in checks:
+            self.require_source(paths, expected)
+        sources = ThreadViewSources.capture(self.registration.snapshot, views.agents, None, waits)
+        for paths, expected in checks:
+            self.require_source(paths, expected)
         return sources
 
     def changed_threads(self, earlier: WireRevision) -> frozenset[str]:
         changed = set(self.registration.changed_names(earlier.registration))
         changed.update(self.thread_sources.changed_names(earlier.thread_sources))
-        if (self.catalog, self.history) != (earlier.catalog, earlier.history):
-            # These replace the source namespace used by every conversation.
-            changed.update(self.registration.document.threads)
-            changed.update(earlier.registration.document.threads)
         if self.through_seq < earlier.through_seq or (
             earlier.through_seq and self.bus_source_changed_since(earlier)
         ):
             changed.update(self.registration.document.threads)
             changed.update(earlier.registration.document.threads)
         elif self.through_seq > earlier.through_seq:
-            self.require_source("catalog")
-            catalog_path, = self.paths["catalog"]
-            catalog = ChannelCatalog(catalog_path).read()
             snapshot = self.registration.snapshot
-            deliveries = {name: DeliveryScope.capture(name, snapshot, catalog)
-                          for name in snapshot.threads}
-            bus_path, = self.paths["bus_log"]
-            with WireLog(bus_path)._opened_wire_snapshot() as source:
-                if (source.revision,) != self.bus_log:
+            log = self.resources.bus.log
+            with log.certified_read() as source:
+                if (source.witness.revision,) != self.bus_log:
                     raise StaleRevision("Wire source changed before route attribution")
-                with OpenedRouteCounts(bus_path, source, snapshot, deliveries) as routes:
-                    changed.update(routes.changed_participants(earlier.through_seq, self.through_seq))
-            self.require_source("catalog")
+                changed.update(snapshot.by_lookup[row.lookup].name for row in source.addressed_between(
+                    snapshot.by_lookup, earlier.through_seq, self.through_seq,
+                ))
+                opened = OpenedWireSnapshot(source.marker, source.committed_sequence(),
+                                            source.stream, source.witness.revision)
+                with OpenedRouteCounts(log.path, opened, snapshot, {}) as routes:
+                    changed.update(routes.senders_between(earlier.through_seq, self.through_seq))
         for document in (self.registration.document, earlier.registration.document):
             changed.update(alias for alias, target in document.aliases.items() if target in changed)
         return frozenset(changed)

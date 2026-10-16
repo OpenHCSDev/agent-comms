@@ -40,8 +40,6 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.presentation import MessageNotification, WireRevision
-from agent_comms.registration import Registration
-from agent_comms.wire_log import WireLog
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -748,11 +746,8 @@ class ThreadsObserved(Observed):
                 for reference in (*view.incoming_references, *view.sent_references)
             ))
             if references:
-                registry_path, = revision.paths["registry"]
-                bus_path, = revision.paths["bus_log"]
-                outcomes = MessageNotification.references(
-                    bus_path.parent, Registration(registry_path), WireLog(bus_path), references,
-                )
+                views = revision.resources
+                outcomes = MessageNotification.references(views.root, views.registry, views.bus.log, references)
                 for name, view in remaining.items():
                     lookup = view.read_identity.thread.incarnation.lookup
                     current = tuple(
