@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import aclosing
 
 from agent_comms import backend
+from agent_comms.context_segments.doctrine import DoctrineSegment
 from agent_comms.pi_native_backend import PersistentPiSession
 
 
@@ -13,7 +14,8 @@ async def one_turn_events(*args, **kwargs):
     session = PersistentPiSession()
     try:
         async with aclosing(
-            backend.stream_agent_events(*args, persistent_session=session, **kwargs)
+            backend.stream_agent_events(*args, persistent_session=session,
+                session_context=(DoctrineSegment.capture(),), **kwargs)
         ) as stream:
             async for event in stream:
                 yield event

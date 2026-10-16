@@ -1,4 +1,5 @@
 """Native Pi + streaming localhost provider: Send now interrupts, never replays."""
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 from agent_comms.queued_input import InitialInput
 import asyncio
@@ -346,6 +347,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 native_start=lambda *_: True,
                 interrupt_boundary=lambda *_: nullcontext(surface != "revoked"),
                 persistent_session=pi_session,
+                session_context=(DoctrineSegment.capture(),),
             ):
                 events.append(event)
                 if isinstance(event, ae.Chunk) and "OLD_PARTIAL" in event.text:

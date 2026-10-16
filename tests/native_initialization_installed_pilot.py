@@ -5,6 +5,7 @@ This observes initialization only; it grants no input retry authority.
 """
 
 from __future__ import annotations
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import argparse
 import asyncio
@@ -33,6 +34,7 @@ async def run(root: Path, package: Path) -> dict:
         provider="openrouter",
         model="z-ai/glm-5.3-flash",
         thinking_level="off",
+        session_context=(DoctrineSegment.capture(),),
     )
     admission = NativeStartupAdmission(root)
     started = time.monotonic()

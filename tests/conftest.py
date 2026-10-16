@@ -149,7 +149,7 @@ def native_rpc_fixture(monkeypatch):
     original_retained = NativePiRpcLaunch.retained_managed
 
     def prepare(
-        command, arguments, *, worktree, environment=None, session_file=None
+        command, arguments, *, worktree, session_context, environment=None, session_file=None
     ):
         script = Path(command)
         if not script.is_file():
@@ -157,6 +157,7 @@ def native_rpc_fixture(monkeypatch):
                 command,
                 arguments,
                 worktree=worktree,
+                session_context=session_context,
                 environment=environment,
                 session_file=session_file,
             )
@@ -180,7 +181,7 @@ def native_rpc_fixture(monkeypatch):
         )
 
     def retained(
-        launch, command, arguments, *, worktree, environment=None, session_file=None
+        launch, command, arguments, *, worktree, session_context, environment=None, session_file=None
     ):
         if (
             Path(command).is_file()
@@ -196,6 +197,7 @@ def native_rpc_fixture(monkeypatch):
             command,
             arguments,
             worktree=worktree,
+            session_context=session_context,
             environment=environment,
             session_file=session_file,
         )

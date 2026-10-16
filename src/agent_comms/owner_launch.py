@@ -73,7 +73,6 @@ class RestartEnvironment:
         metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True},
     )
     owner_key: ClassVar[str] = "AGENT_COMMS_THREAD"
-    session_context_key: ClassVar[str] = "AGENT_COMMS_SESSION_CONTEXT"
 
     @classmethod
     def calling_thread(cls, environment: Mapping[str, str] = os.environ) -> str:

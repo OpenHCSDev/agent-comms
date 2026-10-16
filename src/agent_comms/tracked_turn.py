@@ -43,7 +43,7 @@ from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .selected_session import SelectedSession
-from .turn_context import InputContributionCoordinates
+from .turn_context import ContextSegment, InputContributionCoordinates
 
 
 if TYPE_CHECKING:
@@ -235,6 +235,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         session: SelectedSession,
         provider: str,
         model: str,
+        session_context: tuple[ContextSegment, ...],
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
@@ -269,6 +270,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 session=session,
                 provider=provider,
                 model=model,
+                session_context=session_context,
                 thinking_level=thinking_level,
                 environment=environment,
                 selected_tool_mode=selected_tool_mode,

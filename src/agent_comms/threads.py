@@ -122,7 +122,6 @@ class Thread(ThreadProvenance):
     def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
         """Project this captured owner through the original native binding."""
         from .runtime_requests import ProjectRuntimeRequest
-        from .turn_context import TurnContext
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
         from .owner_launch import RestartEnvironment
@@ -132,9 +131,6 @@ class Thread(ThreadProvenance):
             "AGENT_COMMS_ROOT": str(root),
             "PI_PARENT_ID": self.parent or "",
             "AGENT_COMMS_MANAGED": "1",
-            RestartEnvironment.session_context_key: TurnContext.render_segments(
-                TurnContext.session_segments(self)
-            ).text,
             SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
             "PI_WORKTREE": worktree,
             **project.environment(root),

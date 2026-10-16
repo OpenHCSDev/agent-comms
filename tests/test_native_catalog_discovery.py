@@ -1,4 +1,5 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
 import json
@@ -106,7 +107,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     # Independent new acquisition still verifies the real artifact.
     await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
         package, worktree=native.project, session=session,
-        provider="response-local", model="fixture"))
+        provider="response-local", model="fixture", session_context=(DoctrineSegment.capture(),)))
     assert len(verifications) == 2 and native.provider.posts == 0
 
     # The same installed worker joins a borrowed, actual SDK-source descriptor.
@@ -302,6 +303,7 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
             "--no-context-files",
         ),
         worktree=native_backend.project,
+        session_context=(DoctrineSegment.capture(),),
     )
     # The command result owner needs a session; this probe never opens its child.
     session = backend.TurnSession(launch, "", native_session=PersistentPiSession())
@@ -374,6 +376,7 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
                "--offline", "--no-extensions",
                "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
         worktree=native.project, session_file=created.session_file,
+        session_context=(DoctrineSegment.capture(),),
     ))
 
     def observed():

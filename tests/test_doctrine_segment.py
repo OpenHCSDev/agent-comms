@@ -1,4 +1,8 @@
 """Session rules have one source and never accumulate in turn history."""
+import pytest
+
+from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
+from agent_comms.owner_launch import RestartEnvironment
 from agent_comms.turn_context import (
     ContextSegment, CoordinationSegment, InstructionFile, NextContextTurn,
     SessionCoordinationSegment, TurnContext, UserInputSegment,
@@ -36,6 +40,23 @@ def test_owner_turns_do_not_repeat_session_rules(tmp_path):
         assert "Project:" not in text
         assert text.endswith("ping")
         assert len(text.encode()) < 150
+
+
+def test_native_launch_takes_required_typed_context_not_environment(tmp_path):
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require("Alice")
+    segments = TurnContext.session_segments(owner)
+    configuration = RestartEnvironment.inherit({})
+    arguments = (tmp_path / "cli.js", (), tmp_path, {}, configuration)
+    with pytest.raises(TypeError, match="session_context"):
+        NativePiRpcLaunch.bootstrap(*arguments)
+    with pytest.raises(NativePiUnavailable, match="nonempty session context"):
+        NativePiRpcLaunch.bootstrap(*arguments, session_context=())
+    argv, environment = NativePiRpcLaunch.bootstrap(*arguments, session_context=segments)
+    assert argv.count("--append-system-prompt") == 2
+    assert argv[-1] == TurnContext.render_segments(segments).text
+    assert "thread 'Alice'" in argv[-1]
+    assert "AGENT_COMMS_SESSION_CONTEXT" not in environment
 
 
 def test_doctrine_is_a_declared_family_member():

@@ -1,4 +1,5 @@
 """Saved, actual pinned native sessions with indexed proof; loopback provider only."""
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
 import json
@@ -233,6 +234,7 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
         worktree=str(owner.project),
         environment=dict(os.environ),
         session_file=str(owner.session),
+        session_context=(DoctrineSegment.capture(),),
     )
     await owner.force_reopen()
     assert len(owner.saved_inputs()) == 2 and owner.provider.posts == 1
@@ -260,6 +262,7 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
         worktree=str(owner.project),
         environment=dict(os.environ),
         session_file=str(owner.session),
+        session_context=(DoctrineSegment.capture(),),
     )
     child = owner.persistent.custody.child
 
@@ -350,6 +353,7 @@ async def test_actual_native_bad_proof_refuses_before_any_input(native_backend, 
                 worktree=str(owner.project),
                 environment=dict(os.environ),
                 session_file=str(owner.session),
+                session_context=(DoctrineSegment.capture(),),
             )
         assert owner.session.read_bytes() == history
         assert proof.read_bytes() == damaged

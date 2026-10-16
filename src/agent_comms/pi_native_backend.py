@@ -201,13 +201,17 @@ class PiNativeBackend(
         """Launch (or reuse) and attest the idle child for ``thread``'s saved session."""
         from .coordinator import Coordination
         from .native_session_prepare import NativeSessionPreparation
+        from .turn_context import TurnContext
 
         if thread.session_file is None:
             raise ValueError("Native preparation requires a saved session")
         if open_native is None:
             open_native = NativeSessionPreparation.open
-        environment = await Coordination.run_worker(lambda: thread.native_environment(
-            self.comms.root, self.comms.registry.snapshot(), thread.worktree,
+        environment, session_context = await Coordination.run_worker(lambda: (
+            thread.native_environment(
+                self.comms.root, self.comms.registry.snapshot(), thread.worktree,
+            ),
+            TurnContext.session_segments(thread),
         ))
         return await open_native(
             self,
@@ -216,6 +220,7 @@ class PiNativeBackend(
             worktree=thread.worktree,
             environment=environment,
             session_file=thread.session_file,
+            session_context=session_context,
             observe=partial(self.observe, thread),
         )
 
@@ -229,7 +234,10 @@ class PiNativeBackend(
         self, thread: Thread, content: InputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
         from . import backend
+        from .coordinator import Coordination
+        from .turn_context import TurnContext
 
+        session_context = await Coordination.run_worker(partial(TurnContext.session_segments, thread))
         images = {"images": content.images} if content.images else {}
         async for event in backend.stream_agent_events(
             self.agent_bin,
@@ -247,6 +255,7 @@ class PiNativeBackend(
             native_start=delivery.input_started,
             request_observer=delivery.request_progress,
             persistent_session=self,
+            session_context=session_context,
             ui_request=delivery.ui_request,
         ):
             yield event

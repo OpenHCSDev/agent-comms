@@ -1,4 +1,5 @@
 """Actual Pi output ownership, including tool recovery and retained image privacy."""
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
 import json
@@ -55,6 +56,7 @@ async def test_actual_native_cold_preparation_retains_without_admitting_input(na
         environment=dict(os.environ),
         session_file=str(owner.session),
         observe=observe,
+        session_context=(DoctrineSegment.capture(),),
     )
     assert observed == [(state, observed[0][1])]
     assert state.session_file == str(owner.session) and state.session_id

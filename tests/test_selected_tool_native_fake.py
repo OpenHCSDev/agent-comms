@@ -1,6 +1,7 @@
 """Fake-RPC provider-free handshake; no pinned Pi CLI or external model."""
 
 from __future__ import annotations
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import sys
 from pathlib import Path
@@ -111,6 +112,7 @@ send({'type':'agent_settled'})
         session_dir=tmp_path / "sessions",
         selected_tool_mode=SelectedToolMode(owner_action),
         model_wait_timeout=15,
+        session_context=(DoctrineSegment.capture(),),
     )
     if variant == "success":
         result = await operation

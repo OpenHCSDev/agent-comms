@@ -3,6 +3,7 @@
 Only local provider replies are controlled. The native run, refusal backoff,
 Core event parsing and original session journal are real. No silence timeout.
 """
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
 import json
@@ -79,6 +80,7 @@ async def test_actual_native_refusal_after_tool_preserves_saved_history(tmp_path
         return [event async for event in backend.stream_agent_events(
             launcher, arguments, text, str(tmp_path), session_file=saved,
             persistent_session=session, require_input_id=True, model_wait_timeout=240,
+            session_context=(DoctrineSegment.capture(),),
         )]
 
     try:

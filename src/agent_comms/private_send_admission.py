@@ -150,7 +150,11 @@ class PrivateSendAdmission:
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer retains the sole one-use send token after durable admission.
         """
-        registry = await Coordination.run_worker(self.bus._registry.snapshot)
+        from .turn_context import TurnContext
+
+        registry, session_context = await Coordination.run_worker(lambda: (
+            self.bus._registry.snapshot(), TurnContext.session_segments(self.owner.thread),
+        ))
         try:
             result = await TrackedTurnSession.execute(
                 execution.native_package,
@@ -162,6 +166,7 @@ class PrivateSendAdmission:
                 provider=provider,
                 model=model,
                 thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level),
+                session_context=session_context,
                 environment=self.owner.thread.native_environment(
                     self.bus.log.path.parent, registry,
                     self.owner.thread.worktree,

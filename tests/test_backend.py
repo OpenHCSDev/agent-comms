@@ -1,4 +1,5 @@
 """Native streaming: external RPC parsing and failure handling."""
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
 import json
@@ -2604,6 +2605,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
+                    session_context=(DoctrineSegment.capture(),),
                 )
             ]
             first_proc = persistent.custody.child.proc
@@ -2616,6 +2618,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
+                    session_context=(DoctrineSegment.capture(),),
                 )
             ]
             assert first[-1].ok is True and second[-1].ok is True, second
@@ -2637,6 +2640,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
+                    session_context=(DoctrineSegment.capture(),),
                 )
             ]
             assert third[-1].ok is True
@@ -2653,6 +2657,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
+                    session_context=(DoctrineSegment.capture(),),
                 )
             ]
             assert proof_changed[-1].ok is True
@@ -2670,6 +2675,7 @@ for line in sys.stdin:
                         str(tmp_path),
                         session_file=str(session_file),
                         persistent_session=persistent,
+                        session_context=(DoctrineSegment.capture(),),
                     )
                 ]
 
@@ -2690,6 +2696,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
+                    session_context=(DoctrineSegment.capture(),),
                 )
             ]
             assert after[-1].ok is True
@@ -2710,6 +2717,7 @@ for line in sys.stdin:
                     session_file=str(session_file),
                     persistent_session=persistent,
                     send_boundary=revoked_goal,
+                    session_context=(DoctrineSegment.capture(),),
                 )
             ]
             assert denied[-1].ok is False
@@ -2723,6 +2731,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
+                    session_context=(DoctrineSegment.capture(),),
                 )
             ]
             assert revived[-1].ok is True
@@ -2738,6 +2747,7 @@ for line in sys.stdin:
                     session_file=str(session_file),
                     persistent_session=persistent,
                     images=(image,),
+                    session_context=(DoctrineSegment.capture(),),
                 )
             ]
             assert image_turn[-1].ok is True
@@ -2751,6 +2761,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
+                    session_context=(DoctrineSegment.capture(),),
                 )
             ]
             assert failed[-1].ok is False
@@ -2765,6 +2776,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     session_file=str(session_file),
                     persistent_session=persistent,
+                    session_context=(DoctrineSegment.capture(),),
                 )
             ]
             assert revived[-1].ok is True
@@ -2780,6 +2792,7 @@ for line in sys.stdin:
                         str(tmp_path),
                         session_file=str(session_file),
                         persistent_session=persistent,
+                        session_context=(DoctrineSegment.capture(),),
                     )
                 ]
 

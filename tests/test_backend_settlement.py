@@ -1,4 +1,5 @@
 """A late native settlement cannot terminate a started dependency reply."""
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
 import sys
@@ -90,6 +91,7 @@ for line in sys.stdin:
             finish_event=finish_event,
             persistent_session=persistent,
             native_start=lambda public_id, native_id, text: starts.append(text) or True,
+            session_context=(DoctrineSegment.capture(),),
         ):
             events.append(event)
             inject = (

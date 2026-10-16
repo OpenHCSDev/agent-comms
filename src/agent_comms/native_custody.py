@@ -19,6 +19,7 @@ from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from .session_revision import SessionRevision
+    from .turn_context import ContextSegment
 
 
 @dataclass
@@ -160,9 +161,10 @@ class NativeCustody(ABC):
 
     retained = False
 
-    def managed_launch(self, command, arguments, *, worktree, environment, session_file):
+    def managed_launch(self, command, arguments, *, worktree, environment, session_file,
+                       session_context: tuple[ContextSegment, ...]):
         return NativePiRpcLaunch.managed(command, arguments, worktree=worktree,
-            environment=environment, session_file=session_file)
+            environment=environment, session_file=session_file, session_context=session_context)
 
     def reuse(self, key) -> PiSessionChild | None:
         return None
@@ -289,17 +291,19 @@ class RetainedNative(ChildNative):
             return self.child
         return None
 
-    def managed_launch(self, command, arguments, *, worktree, environment, session_file):
+    def managed_launch(self, command, arguments, *, worktree, environment, session_file,
+                       session_context: tuple[ContextSegment, ...]):
         if self.current:
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
-                worktree=worktree, environment=environment, session_file=session_file)
+                worktree=worktree, environment=environment, session_file=session_file,
+                session_context=session_context)
             if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
                 original, authentication
             ):
                 return original
         return super().managed_launch(command, arguments, worktree=worktree,
-            environment=environment, session_file=session_file)
+            environment=environment, session_file=session_file, session_context=session_context)
 
     def _shutdown_successor(self) -> NativeCustody:
         return EmptyNative()

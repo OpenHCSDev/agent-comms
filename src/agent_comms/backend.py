@@ -56,6 +56,7 @@ from .turn_watchdog import ProgressWatchdog, TurnWaitExpired
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
+    from .turn_context import ContextSegment
 
 
 def compaction_summary(value: Any) -> str:
@@ -128,6 +129,7 @@ async def stream_agent_events(
     native_start: Callable[[str | None, str, str], bool] | None = None,
     *,
     persistent_session: PersistentPiSession,
+    session_context: tuple[ContextSegment, ...],
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
     request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
@@ -151,6 +153,7 @@ async def stream_agent_events(
                     worktree=Path(cwd),
                     environment=env_extra,
                     session_file=session_file,
+                    session_context=session_context,
                 ))
             except (OSError, ValueError, NativePiUnavailable) as error:
                 yield events.Error(text=str(error), reason_code="native_launch_invalid")

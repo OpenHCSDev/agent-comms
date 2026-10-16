@@ -1,4 +1,5 @@
 """Saved native preflight with actual pipes; no provider or protocol stand-ins."""
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
 import json
@@ -136,6 +137,7 @@ async def test_actual_tracked_ready_pipe_survives_busy_owner(native_backend, mon
         model="fixture",
         thinking_level="off",
         maintenance_root=owner.root,
+        session_context=(DoctrineSegment.capture(),),
     )
     assert ready == [True]
     assert result.text == owner.provider.text

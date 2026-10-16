@@ -3,6 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 admission, native process, source proof and response publication remain real.
 """
+from agent_comms.context_segments.doctrine import DoctrineSegment
 import argparse
 import hashlib
 import shutil
@@ -62,7 +63,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     # The original owner owns auth/settings/extension selection. Bootstrap is
     # its existing OS-environment decoder, not a second fixture configuration.
     _, environment = NativePiRpcLaunch.bootstrap(
-        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment, retained.configuration)
+        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment, retained.configuration, session_context=(DoctrineSegment.capture(),))
     source_profile = retained.configuration.native_config
     source_hashes = {}
     for filename in ('auth.json', 'models.json', 'settings.json'):
