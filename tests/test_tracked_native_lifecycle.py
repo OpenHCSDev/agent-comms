@@ -190,8 +190,10 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
         with Coordination(root / "coordination.sqlite3") as store, store.session.read():
             rows = NativeRuntimeInput.select(store.session._connection)
             assert len(rows) == 1
+            assert rows[0].require_session_identity().path == sessions[0]
             if outcome != "complete":
-                assert rows[0].session_id is None
+                assert not rows[0].reference.recorded
+                assert rows[0].context_anchor is None
         before = provider.posts
         try:
             replay = await SelectedExecution(
@@ -221,8 +223,6 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
         if not task.done():
             task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-        for child in children:
-            await child.stop()
         await agent.shutdown()
         server.close()
         await server.wait_closed()
