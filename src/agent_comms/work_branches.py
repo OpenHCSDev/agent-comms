@@ -15,7 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from pydantic import ConfigDict
+from pydantic.alias_generators import to_camel
+
 from .declared_family import DeclaredFamily
+from .cli_protocol import WireModel
 from .field_codec import projected
 
 if TYPE_CHECKING:
@@ -86,6 +90,91 @@ class WorkBranch:
         return ", ".join(checkout.summary for checkout in self.checkouts) or "not checked out"
 
 
+class ForgeAnswer(WireModel):
+    """GitHub GraphQL answers keep GitHub's camelCase field names."""
+
+    model_config = ConfigDict(strict=True, alias_generator=to_camel, extra="forbid")
+
+
+class PageInfo(ForgeAnswer):
+    has_next_page: bool
+    end_cursor: str | None
+
+
+class Connection[Node](ForgeAnswer):
+    nodes: tuple[Node, ...]
+    page_info: PageInfo | None = None
+
+
+class ForgeCommit(ForgeAnswer):
+    committed_date: str
+
+
+class ForgeComparison(ForgeAnswer):
+    behind_by: int
+
+
+class ForgePullRequest(ForgeAnswer):
+    number: int
+    head_ref_name: str
+
+
+class ForgeRef(ForgeAnswer):
+    name: str
+    target: ForgeCommit
+    compare: ForgeComparison | None
+    associated_pull_requests: Connection[ForgePullRequest]
+
+    @property
+    def unmerged_commits(self) -> int:
+        # ref.compare(main).behindBy counts the branch's commits that main lacks.
+        return 0 if self.compare is None else self.compare.behind_by
+
+    @property
+    def own_pull_requests(self) -> tuple[PullRequestBranchLink, ...]:
+        # A ref's associated PRs include those that only use it as their base.
+        return tuple(PullRequestBranchLink(pull.number)
+                     for pull in self.associated_pull_requests.nodes
+                     if pull.head_ref_name == self.name)
+
+
+class ForgeRefName(ForgeAnswer):
+    name: str
+
+
+class ForgeLinkedBranch(ForgeAnswer):
+    ref: ForgeRefName
+
+
+class ForgeIssue(ForgeAnswer):
+    number: int
+    linked_branches: Connection[ForgeLinkedBranch]
+
+
+class RefsRepository(ForgeAnswer):
+    refs: Connection[ForgeRef]
+
+    @property
+    def connection(self) -> Connection[ForgeRef]:
+        return self.refs
+
+
+class IssuesRepository(ForgeAnswer):
+    issues: Connection[ForgeIssue]
+
+    @property
+    def connection(self) -> Connection[ForgeIssue]:
+        return self.issues
+
+
+class ForgeData[Repository](ForgeAnswer):
+    repository: Repository
+
+
+class ForgeQuery[Repository](ForgeAnswer):
+    data: ForgeData[Repository]
+
+
 @dataclass(frozen=True)
 class WorkBranches:
     """One repository's branches with commits that main does not have."""
@@ -131,17 +220,17 @@ query($owner: String!, $name: String!, $after: String) {
                                 ".nameWithOwner").strip().split("/")
         return owner, name
 
-    def _pages(self, query: str, field: str, **variables: str):
+    def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
         after: str | None = None
         while True:
             arguments = ["gh", "api", "graphql", "-f", f"query={query}"]
             for key, value in {**variables, **({"after": after} if after else {})}.items():
                 arguments += ["-F", f"{key}={value}"]
-            connection = json.loads(self._run(*arguments))["data"]["repository"][field]
-            yield from connection["nodes"]
-            if not connection["pageInfo"]["hasNextPage"]:
+            connection = answer.model_validate_json(self._run(*arguments)).data.repository.connection
+            yield from connection.nodes
+            if not connection.page_info.has_next_page:
                 return
-            after = connection["pageInfo"]["endCursor"]
+            after = connection.page_info.end_cursor
 
     def _worktrees(self) -> dict[str, tuple[str, ...]]:
         """Branch name -> worktree paths that have it checked out."""
@@ -167,26 +256,20 @@ query($owner: String!, $name: String!, $after: String) {
         """Every branch with commits not on main, most recently committed first."""
         owner, name = self.repository
         issue_links: dict[str, list[BranchLink]] = {}
-        for issue in self._pages(self._ISSUES, "issues", owner=owner, name=name):
-            for linked in issue["linkedBranches"]["nodes"]:
-                issue_links.setdefault(linked["ref"]["name"], []).append(
-                    IssueBranchLink(issue["number"]))
+        for issue in self._pages(self._ISSUES, ForgeQuery[IssuesRepository], owner=owner, name=name):
+            for linked in issue.linked_branches.nodes:
+                issue_links.setdefault(linked.ref.name, []).append(IssueBranchLink(issue.number))
         worktrees = self._worktrees()
-        branches = []
-        for ref in self._pages(self._REFS, "refs", owner=owner, name=name, main=self.main):
-            # ref.compare(main).behindBy counts the branch's commits that main lacks.
-            if ref["name"] == self.main or ref["compare"] is None or not ref["compare"]["behindBy"]:
-                continue
-            branches.append(WorkBranch(
-                name=ref["name"],
-                unmerged_commits=ref["compare"]["behindBy"],
-                committed_at=ref["target"]["committedDate"],
-                # A ref's associated PRs include those that only use it as their base.
-                links=(*(PullRequestBranchLink(pull["number"])
-                         for pull in ref["associatedPullRequests"]["nodes"]
-                         if pull["headRefName"] == ref["name"]),
-                       *issue_links.get(ref["name"], ())),
-                checkouts=tuple(self._checkout(snapshot, path)
-                                for path in worktrees.get(ref["name"], ())),
-            ))
+        branches = tuple(
+            WorkBranch(
+                name=ref.name,
+                unmerged_commits=ref.unmerged_commits,
+                committed_at=ref.target.committed_date,
+                links=(*ref.own_pull_requests, *issue_links.get(ref.name, ())),
+                checkouts=tuple(self._checkout(snapshot, path) for path in worktrees.get(ref.name, ())),
+            )
+            for ref in self._pages(self._REFS, ForgeQuery[RefsRepository],
+                                   owner=owner, name=name, main=self.main)
+            if ref.name != self.main and ref.unmerged_commits
+        )
         return tuple(sorted(branches, key=lambda branch: branch.committed_at, reverse=True))
