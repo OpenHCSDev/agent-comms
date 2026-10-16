@@ -120,7 +120,7 @@ def test_foreign_protocol_owners_supply_their_own_recorded_detail():
     assert FieldCodec.decode(TranscriptEvent, FieldCodec.encode(start)) == start
     part = ToolPart.model_validate({"type": "tool", "id": "part", "sessionID": "session",
         "messageID": "message", "callID": "open-code", "tool": "read",
-        "state": {"status": "pending", "input": {"filePath": "open-code.txt"}}})
+        "state": {"status": "running", "input": {"filePath": "open-code.txt"}}})
     call = part.state.call(part)
     assert call.title == "Read open-code.txt"
     recorded, _ = call.finished("saved", True)
@@ -148,7 +148,7 @@ def test_each_boundary_decodes_its_file_input_without_guessing_another_format():
         ToolCallContent('wrong', 'read', {'file_path': 'not-Pi'}).assistant_transcript()
     part = ToolPart.model_validate({'type': 'tool', 'id': 'part', 'sessionID': 's',
         'messageID': 'm', 'callID': 'oc', 'tool': 'read',
-        'state': {'status': 'pending', 'input': {'filePath': 'oc.py'}}})
+        'state': {'status': 'running', 'input': {'filePath': 'oc.py'}}})
     assert part.state.call(part).path == 'oc.py'
     bad = part.model_copy(update={'state': part.state.model_copy(update={'input': {'path': 'not-OpenCode'}})})
     with pytest.raises(ValueError):

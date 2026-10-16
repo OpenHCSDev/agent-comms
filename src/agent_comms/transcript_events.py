@@ -187,6 +187,10 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
         return ToolDeclaration.for_name(self.tool_name).acp_kind
 
 
+class ToolPendingTranscript(ToolTranscript):
+    """A named tool waiting for arguments; no invocation data exists yet."""
+
+
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
     raw_input: Any = None

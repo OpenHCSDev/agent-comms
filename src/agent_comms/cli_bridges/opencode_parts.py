@@ -18,7 +18,9 @@ from .shared import (
     CompletedItem,
     StartedItem,
     TextDraft,
+    PendingToolCall,
     ToolCall,
+    ToolCallDraft,
     TranscriptUpdate,
 )
 
@@ -132,7 +134,7 @@ class ToolArguments(RecordedToolArguments):
 
 class ToolState(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+        registry_dict={}, key_attribute='__name__', skip_if_no_key=True)
     header = StatusHeader
     finished: ClassVar[bool] = False
 
@@ -140,7 +142,7 @@ class ToolState(TaggedWire, ABC):
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
 
 
-class InvokedTool(ToolState, ABC):
+class InvokedTool(WireModel):
     """Arguments have arrived; running and ended states share their decoding."""
     input: dict[str, JsonValue]
 
@@ -153,11 +155,11 @@ class PendingTool(ToolState):
     wire_tag = 'pending'
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
-        call = ToolCall(UnrecordedEventTime(), part.callID, part.tool, {})
+        call = PendingToolCall(UnrecordedEventTime(), part.callID, part.tool)
         return (StartedItem(message.id, part.id, ActivityState.WORKING, call.title, call),)
 
 
-class RunningTool(InvokedTool):
+class RunningTool(InvokedTool, ToolState):
     wire_tag = 'running'
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
@@ -165,10 +167,13 @@ class RunningTool(InvokedTool):
         return (StartedItem(message.id, part.id, ActivityState.WORKING, call.title, call),)
 
 
-class EndedTool(InvokedTool, ABC):
+class EndedTool(ToolState, ABC):
     time: PartTime
     ok: ClassVar[bool]
     finished = True
+
+    @abstractmethod
+    def call(self, part: ToolPart) -> ToolCallDraft: ...
 
     @property
     @abstractmethod
@@ -180,7 +185,7 @@ class EndedTool(InvokedTool, ABC):
         return (CompletedItem(message.id, part.id, events),)
 
 
-class CompletedTool(EndedTool):
+class CompletedTool(InvokedTool, EndedTool):
     wire_tag = 'completed'
     output: str
     ok = True
@@ -190,7 +195,7 @@ class CompletedTool(EndedTool):
         return self.output
 
 
-class FailedTool(EndedTool):
+class FailedTool(EndedTool, ABC):
     wire_tag = 'error'
     error: str
     ok = False
@@ -198,6 +203,24 @@ class FailedTool(EndedTool):
     @property
     def result(self) -> str:
         return self.error
+
+
+class InvokedFailedTool(InvokedTool, FailedTool):
+    pass
+
+
+class InterruptedToolMetadata(WireModel):
+    interrupted: Literal[True]
+
+
+class AbortedPendingTool(FailedTool):
+    """Native abort before arguments: preserve its exact error and marker."""
+    input: dict[str, JsonValue] = Field(max_length=0)
+    metadata: InterruptedToolMetadata
+    error: Literal['Tool execution aborted']
+
+    def call(self, part: ToolPart) -> PendingToolCall:
+        return PendingToolCall(UnrecordedEventTime(), part.callID, part.tool)
 
 
 class ToolPart(Part):

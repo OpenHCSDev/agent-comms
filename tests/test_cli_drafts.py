@@ -7,7 +7,8 @@ from agent_comms.cli_bridges.shared import (
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolStartTranscript, ToolEndTranscript, UserTranscript, ContextTranscript
+from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolStartTranscript, ToolEndTranscript, ToolPendingTranscript, TranscriptEvent, UserTranscript, ContextTranscript
+from agent_comms.field_codec import FieldCodec
 from agent_comms.cli_bridges.claude_protocol import CLAUDE_RECORD, ClaudeSession
 from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
 from agent_comms.cli_bridges.opencode_parts import AssistantMessage, ToolPart
@@ -182,10 +183,60 @@ def opencode_tool_updates():
                                parentID='input', time={'created': 1000})
     wire = dict(type='tool', id='tool', sessionID='session', messageID='t', callID='tool', tool='bash')
     start = ToolPart.model_validate(wire | dict(state=dict(
-        status='pending', input={'command': 'printf prefix'})))
+        status='running', input={'command': 'printf prefix'})))
     finish = ToolPart.model_validate(wire | dict(state=dict(status='completed',
         input={'command': 'printf prefix'}, output='done', time={'start': 1000, 'end': 2000})))
     return start.present(message), finish.present(message)
+
+
+@pytest.mark.parametrize('tool', ['read', 'edit', 'write'])
+def test_opencode_pending_file_tools_wait_for_arguments(tmp_path, tool):
+    output = _output(tmp_path)
+    message = AssistantMessage(id='t', sessionID='session', role='assistant',
+                               parentID='input', time={'created': 1000})
+    wire = dict(type='tool', id='tool', sessionID='session', messageID='t', callID='tool', tool=tool)
+    pending = ToolPart.model_validate(wire | dict(state=dict(status='pending', input={}, raw='')))
+    output.publish_batch(list(pending.present(message)))
+    event, = output.transcript.current_draft().events
+    assert event.title == tool.title()
+    assert isinstance(event, ToolPendingTranscript)
+    encoded = FieldCodec.encode(event)
+    assert not {'raw_input', 'detail', 'path'} & encoded.keys()
+    assert FieldCodec.decode(TranscriptEvent, encoded) == event
+    running = ToolPart.model_validate(wire | dict(state=dict(status='running',
+        input={'filePath': '/actual/path.py'}, time={'start': 1000})))
+    output.publish_batch(list(running.present(message)))
+    event, = output.transcript.current_draft().events
+    assert event.path == '/actual/path.py'
+    assert event.raw_input == {'filePath': '/actual/path.py'}
+    assert event.title == tool.title() + ' /actual/path.py'
+
+
+@pytest.mark.parametrize('tool', ['read', 'edit', 'write'])
+def test_opencode_aborted_pending_tool_preserves_its_title_and_error(tool):
+    message = AssistantMessage(id='t', sessionID='session', role='assistant',
+                               parentID='input', time={'created': 1000})
+    part = ToolPart.model_validate(dict(type='tool', id='tool', sessionID='session',
+        messageID='t', callID='tool', tool=tool, state=dict(status='error', input={},
+            metadata={'interrupted': True}, error='Tool execution aborted',
+            time={'start': 1000, 'end': 2000})))
+    update, = part.present(message)
+    opening, ending = update.events
+    assert isinstance(opening, ToolPendingTranscript) and opening.title == tool.title()
+    assert ending.text == 'Tool execution aborted' and not ending.ok
+    assert 'raw_input' not in FieldCodec.encode(opening)
+
+
+@pytest.mark.parametrize('tool', ['read', 'edit', 'write'])
+@pytest.mark.parametrize('status', ['running', 'completed', 'error'])
+def test_opencode_invoked_file_tools_still_require_their_path(tool, status):
+    message = AssistantMessage(id='t', sessionID='session', role='assistant',
+                               parentID='input', time={'created': 1000})
+    part = ToolPart.model_validate(dict(type='tool', id='tool', sessionID='session',
+        messageID='t', callID='tool', tool=tool, state=dict(status=status, input={},
+            time={'start': 1000, 'end': 2000}, output='done', error='failed')))
+    with pytest.raises(ValueError, match='File tool input has no declared path'):
+        part.present(message)
 
 
 @pytest.mark.parametrize('updates', [claude_tool_updates, codex_tool_updates, opencode_tool_updates])

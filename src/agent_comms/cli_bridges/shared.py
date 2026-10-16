@@ -37,7 +37,7 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.thread_identity import ThreadRole
 from agent_comms import tool_declaration
 from agent_comms.tool_results import ToolDiff
-from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent, NoticeTranscript
+from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolPendingTranscript, ToolStartTranscript, TranscriptEvent, NoticeTranscript
 from agent_comms.typed_table import Column, TypedTable
 
 
@@ -103,8 +103,32 @@ class SnapshotDraft(DraftAccumulator, ABC):
         return (DraftItem(turn_id, item_id, self),)
 
 
+class ToolCallDraft(SnapshotDraft, ABC):
+    """Tool snapshots close the same way, whether input arrived or not."""
+
+    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
+        return (*self.events, ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
+                                               text=text, ok=ok, diff=diff))
+
+
 @dataclass(frozen=True)
-class ToolCall(tool_declaration.ToolCall, SnapshotDraft):
+class PendingToolCall(ToolCallDraft):
+    """A named tool whose arguments have not arrived, not an empty invocation."""
+    id: str
+    name: str
+
+    @property
+    def title(self) -> str:
+        return tool_declaration.ToolDeclaration.caption(self.name)
+
+    @property
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return (self.started_at.stamp(ToolPendingTranscript(
+            tool_call_id=self.id, tool_name=self.name)),)
+
+
+@dataclass(frozen=True)
+class ToolCall(tool_declaration.ToolCall, ToolCallDraft):
     """Compose CLI snapshot lifetime onto the shared decoded invocation."""
 
     @property
@@ -112,11 +136,6 @@ class ToolCall(tool_declaration.ToolCall, SnapshotDraft):
         return (self.started_at.stamp(ToolStartTranscript(
             tool_call_id=self.id, tool_name=self.name,
             raw_input=self.arguments, detail=self.detail, path=self.path)),)
-
-    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
-        return (*self.events, ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
-                                               text=text, ok=ok, diff=diff))
-
 
 @dataclass(frozen=True)
 class TextDraft(SnapshotDraft):
