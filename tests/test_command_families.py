@@ -56,8 +56,9 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     assert send.type is InfoKind
     configured = parse(["configure", "--name", "a", "--service-tier", "standard"])
     assert configured.service_tier is ServiceTier.STANDARD
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError) as invalid:
         parser.parse_args(["configure", "--name", "a", "--service-tier", "fast"])
+    assert str(invalid.value) == "argument --service-tier: invalid choice: 'fast' (choose from standard, priority)"
     restart = parse(["restart", "--all"])
     assert restart.all_ is True
     assert restart.agent_bin is None
