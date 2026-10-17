@@ -52,7 +52,8 @@ if TYPE_CHECKING:
     from agent_comms.runtime import RuntimeConnection
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
-    from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
+    from agent_comms.transcript_receipts import TranscriptCursor
+    from agent_comms.transcripts import TranscriptRead, TranscriptReadIdentity
     from agent_comms.ui_model.delivery import InputDelivery
     from agent_comms.ui_model.goal import OwnerGoalSnapshot
     from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel

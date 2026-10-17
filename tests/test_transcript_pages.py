@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
-from agent_comms.transcripts import NativeTranscriptCursor, WireTranscriptCursor
+from agent_comms.transcript_receipts import NativeTranscriptCursor, WireTranscriptCursor
 
 
 def transcript(path, count):
