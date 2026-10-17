@@ -10,6 +10,7 @@ from acp.schema import SessionInfoUpdate
 
 from .acp_extension import ContextAnnotatedUpdate, encode_updates
 from .coordinator import Coordination
+from .runtime import PublicationBinding
 from .working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations
 from .working_memory_disclosure import DisclosureState, DisclosureWithheld
 from .working_memory_labels import QuestionVersion
@@ -31,8 +32,8 @@ class AnnotationWorker:
     def start(self, policy, session_id, manifest, values):
         sessions = self.runtime.agent.sessions
         publish = partial(self.runtime.session_update, session_id=session_id,
-            _expected_client=sessions.client, _expected_thread=sessions.require(session_id),
-            _expected_sockets=frozenset(self.runtime.clients.get(session_id, ())))
+            binding=PublicationBinding(sessions.client, sessions.require(session_id),
+                                       frozenset(self.runtime.clients.get(session_id, ()))))
         task = self.runtime.background(self.run(policy, publish, manifest, values))
         self.tasks.add(task)
         task.add_done_callback(self.retired)
@@ -74,8 +75,8 @@ class AnnotationWorker:
         try:
             response, label = await grant.classifier.classifier.classify(request, api_key)
         except Exception as error:
-            await self.store(lambda owner: owner.fail(
-                original, FailedAnnotationOutcome(type(error).__name__)))
+            await self.store(lambda owner, failure=FailedAnnotationOutcome(type(error).__name__):
+                             owner.fail(original, failure))
             raise
         await self.store(lambda owner: owner.complete(original, response, label))
         return label
