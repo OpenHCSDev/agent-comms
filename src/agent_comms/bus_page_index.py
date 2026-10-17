@@ -21,7 +21,7 @@ from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
 from .read_ledger import ReadLedger
 from .store_files import _store_lock
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
 from .wire_record import WireRecord
 
 if TYPE_CHECKING:
@@ -86,6 +86,13 @@ class BusPageRow(PageIndexTable, TypedTable):
         ):
             raise StaleBusPageIndexError("Indexed bus row changed.")
         return record, len(raw)
+
+
+@dataclass(frozen=True)
+class BusPageMetrics(TypedRow):
+    last: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX({timestamp}),0))")})
+    human: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")})
+    count: int = field(metadata={"sql": Column(generated="COALESCE(SUM({seq} > ? AND {seq} NOT IN (SELECT value FROM json_each(?)) AND {sender} NOT IN (SELECT value FROM json_each(?))),0)")})
 
 
 class BusPageIndex:
@@ -176,7 +183,7 @@ class BusPageIndex:
                 return
             with self._writing() as db:
                 if offset == 0:
-                    db.execute(f"DELETE FROM {BusPageRow.declared_name}")
+                    BusPageRow.delete(db)
                 for row in rows:
                     row.insert(db)
                 source.upsert(db)
@@ -189,10 +196,8 @@ class BusPageIndex:
                 actual, _ = self._schema(self.connection)
                 if actual:
                     saved = BusPageSource.one(self.connection, singleton=1)
-                    last_rows = BusPageRow.read(self.connection.execute(
-                        f"SELECT {BusPageRow._column_list(tuple(BusPageRow.column_projection()))} "
-                        f"FROM {BusPageRow.declared_name} ORDER BY seq DESC LIMIT 1"
-                    ))
+                    last_rows = BusPageRow.select(self.connection, order_by=("seq",),
+                                                  descending=True, limit=1)
         stream, revision = opened.stream, opened.revision
         if stream is None:
             return None
@@ -302,35 +307,20 @@ class BusPageIndex:
         if before_offset is not None:
             clauses.append("offset < ?")
             params.append(before_offset)
-        where = " WHERE " + " AND ".join(clauses) if clauses else ""
-        direction = "DESC" if descending else "ASC"
-        query = (
-            f"SELECT {BusPageRow._column_list(tuple(BusPageRow.column_projection()))} "
-            f"FROM {BusPageRow.declared_name}"
-            + where
-            + f" ORDER BY seq {direction}"
-        )
-        rows = iter(BusPageRow.iterate(self.connection.execute(query, params)))
-        while True:
+        with closing(BusPageRow.stream(self.connection, where=" AND ".join(clauses) or "1",
+                     parameters=tuple(params), order_by=("seq",), descending=descending)) as rows:
             try:
-                row = next(rows)
-            except StopIteration:
-                return
+                yield from rows
             except (ValueError, TypeError) as error:
                 raise StaleBusPageIndexError("Indexed row has invalid fields") from error
-            yield row
 
     def display_metrics(self, semantics: DisplayMetricScope, before_offset: int) -> DisplayMetrics:
         clocks, counts = semantics.empty_metrics
         seen, names = semantics.seen, tuple(semantics.viewer_names)
-        unread = "seq > ? AND seq NOT IN (SELECT value FROM json_each(?)) AND sender NOT IN (SELECT value FROM json_each(?))"
         for scope in semantics.scopes:
             predicate, parameters = scope.index_predicate
-            last, human, count = self.connection.execute(
-                f"SELECT MAX(0,COALESCE(MAX(timestamp),0)), MAX(0,COALESCE(MAX(CASE WHEN human THEN timestamp END),0)), "
-                f"COALESCE(SUM({unread}),0) FROM {BusPageRow.declared_name} "
-                f"WHERE offset < ? AND ({predicate})",
-                (seen.high_water, json.dumps(seen.exceptions), json.dumps(names), before_offset, *parameters),
-            ).fetchone()
-            clocks[scope.channel], counts[scope.channel] = (last, human), count
+            row, = BusPageRow.select(self.connection, row_type=BusPageMetrics,
+                where=f"offset < ? AND ({predicate})",
+                parameters=(seen.high_water, json.dumps(seen.exceptions), json.dumps(names), before_offset, *parameters))
+            clocks[scope.channel], counts[scope.channel] = (row.last, row.human), row.count
         return clocks, counts
