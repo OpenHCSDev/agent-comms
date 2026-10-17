@@ -49,8 +49,8 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
 
     for kwargs in (
         {},
-        {"progress": " \n "},
-        {"block_reason": "  ", "progress": "old progress must not become a reason"},
+        {"progress": TextGoalProgress(" \n ")},
+        {"block_reason": "  ", "progress": TextGoalProgress("old progress must not become a reason")},
         {"block_reason": "x" * 1025},
     ):
         with pytest.raises(ValueError, match="reason"):
