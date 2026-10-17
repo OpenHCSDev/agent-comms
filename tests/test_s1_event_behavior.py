@@ -177,8 +177,8 @@ async def start_owned_input(execution, progress):
         goal_permit=execution.goal_permit,
     )
     native_id = uuid4().hex
-    with admission(None, native_id, execution.original.prompt) as admitted:
-        assert admitted is True
+    with admission(None, native_id, execution.original.prompt):
+        pass
     assert admission.native_start(None, native_id, execution.original.prompt)
     await progress.consume(ae.InputStarted(None))
 

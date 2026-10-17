@@ -27,7 +27,7 @@ from agent_comms.maintenance_barrier import (
 from agent_comms.registration import Registration
 from agent_comms.store_files import _async_store_lock, _store_lock
 from agent_comms.threads import Thread
-from pi_session_turn import one_turn_events
+from test_backend_native_lifecycle import native_backend
 
 
 async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, monkeypatch) -> None:
@@ -423,37 +423,31 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("native_rpc_fixture")
-async def test_real_backend_fake_rpc_never_writes_prompt_after_pause(tmp_path: Path) -> None:
-    import sys
+async def test_actual_native_held_input_resumes_from_existing_observer(native_backend):
+    from agent_comms.backend import TurnSession
+    from native_backend_fixture import wait_for
 
-    root = tmp_path / "wire"
-    MaintenanceBarrier(root / "registry.json").begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
-    marker = tmp_path / "sent"
-    ready = tmp_path / "ready"
-    stub = tmp_path / "pi-fake"
-    stub.write_text(
-        f"#!{sys.executable}\n"
-        "import json, select, sys\n"
-        "request = json.loads(sys.stdin.readline())\n"
-        "cap = {'nativeInputProofCapability':'pi-native-input-v1-live-only'}\n"
-        "reply = {'type':'response', 'command':'get_state', 'id':request['id'], "
-        "'success':True, 'data':cap}\n"
-        "print(json.dumps(reply), flush=True)\n"
-        f"open({str(ready)!r}, 'w').write('RPC_READY')\n"
-        "if select.select([sys.stdin], [], [], 1)[0] and sys.stdin.readline():\n"
-        f"    open({str(marker)!r}, 'w').write('PROMPT')\n"
-    )
-    stub.chmod(0o700)
-    with pytest.raises(RelationViolationError, match='Maintenance new turns held'):
-        _ = [
-            row
-            async for row in one_turn_events(
-                str(stub), [], "fake-only", str(tmp_path), env_extra={"AGENT_COMMS_ROOT": str(root)}
-            )
-        ]
-    assert ready.read_text() == "RPC_READY"  # Real RPC capability preflight ran.
-    assert not marker.exists()
+    owner = native_backend
+    async with owner.open_owner(runtime_enabled=True) as (agent, session_id):
+        async with owner.original_input(agent, session_id, "Held original input") as turn:
+            gate = agent._comms.owners.maintenance
+            hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
+            sending = asyncio.create_task(turn.run_native())
+            try:
+                await wait_for(lambda: sending in TurnSession.active and
+                    not TurnSession.active[sending].inputs.queue.ready.is_set())
+                running = TurnSession.active[sending]
+                assert running.native.proc.alive() and not sending.done()
+                assert not running.inputs.pending and owner.provider.posts == 0
+                gate.clear(hold)
+                await asyncio.wait_for(sending, 20)
+                assert owner.provider.posts == 1
+                assert len(owner.saved_inputs()) == 1
+                assert running.inputs.queue.empty() and not running.inputs.pending
+                assert turn.progress.result.ok
+            finally:
+                sending.cancel()
+                await asyncio.gather(sending, return_exceptions=True)
 
 
 async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: Path) -> None:
