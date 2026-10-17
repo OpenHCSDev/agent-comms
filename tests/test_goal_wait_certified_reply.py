@@ -27,6 +27,42 @@ def register(comms, name):
     return comms.registry.require(name)
 
 
+def test_first_wait_ignores_unreserved_reply_before_goal_publication(tmp_path):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.goals import Goal
+    from agent_comms.input_disposition import InputDispositions
+
+    comms = canonical_goal_wire(tmp_path / "wire")
+    register(comms, "owner")
+    register(comms, "peer")
+    old = comms.messaging.send_message("peer", "owner", "Before this goal")
+    goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for later work"))
+    assert goal.published_seq == old.seq
+    assert FieldCodec.decode(Goal, goal.to_wire()) == goal
+    assert comms.goals.goal_input_review("owner", goal.id, ["peer"])["reviewed_inputs"] == []
+    # A recorded UNKNOWN remains reviewable even before the goal boundary.
+    inputs = InputDispositions(comms.root)
+    inputs.record(
+        f"bus:{old.seq}", seq=old.seq, owner="owner", target="owner", text=old.body,
+        claim_scope=comms.registry.snapshot().claimed_generations["owner"],
+    )
+    assert comms.goals.goal_input_review("owner", goal.id, ["peer"])["reviewed_inputs"] == [
+        f"bus:{old.seq}"
+    ]
+
+
+def test_first_wait_reviews_reply_after_goal_publication(tmp_path):
+    comms = canonical_goal_wire(tmp_path / "wire")
+    register(comms, "owner")
+    register(comms, "peer")
+    goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for later work"))
+    reply = comms.messaging.send_message("peer", "owner", "After this goal")
+    assert reply.seq > goal.published_seq
+    assert comms.goals.goal_input_review("owner", goal.id, ["peer"])["reviewed_inputs"] == [
+        f"bus:{reply.seq}"
+    ]
+
+
 def test_thread_without_goal_has_no_wait(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     register(comms, "owner")
