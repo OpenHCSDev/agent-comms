@@ -9,9 +9,8 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
-from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText
+from .field_codec import FieldCodec, PathText
 
 ROOT_ID_ENV = "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"
 PACKAGE_ENV = "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE"
@@ -66,20 +65,6 @@ class RestoredRuntime(LaunchRuntime):
         return dict(source)
 
 
-class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
-    """An inherited Python search path or its explicit removal."""
-
-
-@dataclass(frozen=True)
-class NoImportPath(ImportPath, JsonShapeMember):
-    value: None = None
-
-
-@dataclass(frozen=True)
-class SpecifiedImportPath(ImportPath, JsonShapeMember):
-    value: str
-
-
 @dataclass(frozen=True)
 class RestartEnvironment:
     """Declared inheritance policy for the credential-free resident watcher.
@@ -94,8 +79,8 @@ class RestartEnvironment:
     path: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True}
     )
-    pythonpath: ImportPath = field(
-        default_factory=NoImportPath,
+    pythonpath: str | None = field(
+        default=None,
         metadata={"wire_omit_default": True, "wire_name": "PYTHONPATH", "runtime": True},
     )
     virtual_env: str | None = field(
@@ -171,7 +156,7 @@ class RestartEnvironment:
         return replace(self, agent_directory=directory)
 
     def without_pythonpath(self) -> RestartEnvironment:
-        return replace(self, pythonpath=NoImportPath())
+        return replace(self, pythonpath=None)
 
     def for_interpreter(self, interpreter: Path) -> RestartEnvironment:
         """Put this process's runtime first, exactly once; preserve other search paths."""
