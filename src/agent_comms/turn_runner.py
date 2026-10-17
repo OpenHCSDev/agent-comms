@@ -307,7 +307,7 @@ class TurnRunner:
         if sent_seq:
             document = self.comms.bus.reads.read()
             for name in snapshot.threads:
-                if name != thread_name and sent_seq in self.comms.bus.reads.seen_sequences(
+                if name != thread_name and sent_seq in self.comms.bus.reads.cursor(
                     name, snapshot, document=document
                 ):
                     return True

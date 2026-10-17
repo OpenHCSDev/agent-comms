@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Collection
+from bisect import bisect_left
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field, replace
 from functools import partial
+from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
@@ -125,6 +127,37 @@ if TYPE_CHECKING:
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
+
+
+@dataclass(frozen=True, slots=True)
+class ReadCursor:
+    high_water: int = 0
+    exceptions: tuple[int, ...] = ()
+
+    @classmethod
+    def union(cls, cursors: Iterable[ReadCursor]) -> ReadCursor:
+        cursors = tuple(cursors)
+        through = max((cursor.high_water for cursor in cursors), default=0)
+        exceptions = sorted({seq for cursor in cursors for seq in cursor.exceptions if seq > through})
+        consumed = 0
+        while consumed < len(exceptions) and exceptions[consumed] == through + 1:
+            through += 1
+            consumed += 1
+        return cls(through, tuple(exceptions[consumed:]))
+
+    def add(self, sequences: tuple[int, ...]) -> ReadCursor:
+        return self.union((self, type(self)(exceptions=sequences)))
+
+    def __contains__(self, sequence: int) -> bool:
+        index = bisect_left(self.exceptions, sequence)
+        return 0 < sequence <= self.high_water or (index < len(self.exceptions) and self.exceptions[index] == sequence)
+
+    def changed(self, other: ReadCursor) -> Iterable[int]:
+        lower, upper = sorted((self.high_water, other.high_water))
+        for sequence in chain(range(lower + 1, upper + 1),
+                              (seq for seq in sorted(set(self.exceptions) | set(other.exceptions)) if seq > upper)):
+            if (sequence in self) != (sequence in other):
+                yield sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,7 +311,7 @@ class DMDisplayBasis:
         )
         older_unread = False
         if page.has_older and page.messages:
-            seen = bus.reads.seen_sequences(viewer_name, snapshot)
+            seen = bus.reads.cursor(viewer_name, snapshot)
             older_unread = bus.conversation_older_unread(
                 scope, before=page.messages[0].seq, seen=seen
             )
@@ -454,7 +487,7 @@ class DMDisplayScope(MessageDisplayScope):
     def inbound(self, message: Message | BusPageRow) -> bool:
         return message.sender in self.second_names and message.target in self.first_names
 
-    def unread_before(self, message: Message | BusPageRow, before: int, seen: frozenset[int]) -> bool:
+    def unread_before(self, message: Message | BusPageRow, before: int, seen: ReadCursor) -> bool:
         return message.seq < before and message.seq not in seen and self.inbound(message)
 
     def offsets(self, index, *, lower, upper, descending, before_offset):

@@ -1,8 +1,8 @@
 """The sole human read authority, keyed by viewer and stable conversation.
 
-Sparse message membership is intentional: a bounded or filtered display can
-skip older messages even within one conversation. A maximum sequence cannot
-represent that fact. Delivery cursors remain a separate executor contract.
+Sparse paint remains exact: the cursor compresses only a proved contiguous
+prefix and retains out-of-order reads as exceptions. Conversation and source
+identity still determine whether those reads apply.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from .locked_store import LockedStore
 from .private_path import FileIdentity, FileRevision
-from .read_basis import Conversation, DisplayBasis, DisplayedConversation
+from .read_basis import Conversation, DisplayBasis, DisplayedConversation, ReadCursor
 from .sealed import Sealed
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
@@ -31,28 +31,28 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
-    messages: dict[str, tuple[int, ...]] = field(default_factory=dict)
+    messages: dict[str, ReadCursor] = field(default_factory=dict)
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[str, int] = field(default_factory=dict)
     notice: str | None = None
 
-    def seen_sequences(
+    def cursor(
         self, viewer: str, snapshot: RegistryProvenance, source: FileIdentity | None
-    ) -> frozenset[int]:
+    ) -> ReadCursor:
         """Project this document against the reader's actual source identity."""
         viewer = snapshot.canonical_name(viewer)
         thread = snapshot.threads[viewer]
         recorded = FileIdentity(*self.bus_identity) if self.bus_identity is not None else None
         if recorded != source:
-            return frozenset()
-        seen: set[int] = set()
-        for key, sequences in self.messages.items():
+            return ReadCursor()
+        cursors = []
+        for key, cursor in self.messages.items():
             name, created, raw = json.loads(key)
             if snapshot.canonical_name(name) == viewer and created == thread.created_at:
                 conversation = Conversation.from_wire(raw)
                 if conversation.current(snapshot):
-                    seen.update(sequences)
-        return frozenset(seen)
+                    cursors.append(cursor)
+        return ReadCursor.union(cursors)
 
 
 class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
@@ -131,7 +131,7 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
             )
             for item in displayed.conversations:
                 key = self._key(viewer, displayed.viewer_created_at, item.conversation)
-                messages[key] = tuple(sorted(set(messages.get(key, ())) | set(item.sequences)))
+                messages[key] = messages.get(key, ReadCursor()).add(item.sequences)
             return (
                 replace(document, messages=messages, bus_identity=displayed.bus_identity)
                 if messages != document.messages or document.bus_identity != displayed.bus_identity
@@ -154,12 +154,12 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         self.update(take)
         return taken
 
-    def seen_sequences(
+    def cursor(
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
-    ) -> frozenset[int]:
+    ) -> ReadCursor:
         document = self.read() if document is None else document
         revision = FileRevision.capture(self.path.with_name("bus.jsonl"))
-        return document.seen_sequences(viewer, snapshot, revision.identity if revision else None)
+        return document.cursor(viewer, snapshot, revision.identity if revision else None)
 
     def displayed_recipient(
         self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None
@@ -190,7 +190,7 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         )
 
     def _displayed_recipient(self, message, thread, snapshot, *, document):
-        if message.seq in self.seen_sequences(thread.name, snapshot, document=document):
+        if message.seq in self.cursor(thread.name, snapshot, document=document):
             return (thread.incarnation,)
         return ()
 
