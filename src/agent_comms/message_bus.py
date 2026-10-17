@@ -262,21 +262,6 @@ class MessageBus:
         self.reads.mark_displayed(canonical, displayed)
         return
 
-    def dm_history(self, a: str, b: str) -> Sequence[Message]:
-        """Full conversation between two threads, either possibly deleted, in seq order."""
-        snapshot = self._registry.snapshot()
-        scope = DMDisplayScope.capture(
-            snapshot.participant(a).name, snapshot.participant(b).name, snapshot
-        )
-        return [message for message in self.log.full_history() if scope.includes(message)]
-
-    def channel_history(self, target: str) -> Sequence[Message]:
-        """Full target-owned channel history, independent of delivery membership."""
-        if not is_channel_target(target):
-            raise ValueError(f"{target!r} is not a channel target.")
-        scope = ChannelDisplayScope(target, self._channels.read().history_targets(target))
-        return [message for message in self.log.full_history() if scope.includes(message)]
-
     def awareness_segments(
         self, owner: Thread, relations: Sequence[PeerRelation], *, blocking: bool = False
     ):

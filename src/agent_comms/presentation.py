@@ -52,7 +52,6 @@ if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
-    from .goal_waits import GoalWait
     from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .messages import Message
@@ -137,29 +136,6 @@ class MessageNotification:
         if recorded.date() != now.date():
             when = recorded.strftime("%b %d %H:%M").replace(" 0", " ")
         return f"{label} {when}"
-
-    @classmethod
-    def window(
-        cls, root: Path, registry: Registration, log: WireLog, messages: Sequence[Message]
-    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
-        """Read one visible window's actual recipient outcomes; never schedule work.
-
-        Display uses the coordinator's existing assignment decoder and lifecycle.
-        A missing coordination store or absent row supplies no receipt. Errors remain
-        visible to the caller instead of becoming false successful delivery.
-        """
-        if len(messages) > cls.window_limit:
-            raise ValueError("Notification reads require a bounded visible message window")
-        references = tuple(reference for message in messages
-                           for reference in message.notification_references())
-        sources = log.deliveries_for_references(references)
-        from .notification_assignment import NotificationAssignment
-
-        projected = cls.delivery_window(
-            root, registry, sources, NotificationAssignment.read(root, sources)
-        )
-        return {(message.seq,message.message_id):projected.get((message.seq,message.message_id), ())
-                for message in messages}
 
     @classmethod
     def references(
@@ -311,28 +287,6 @@ class MessageNotification:
             displayed_to=displayed_to,
             progress=HumanReadProgress(),
             changed=True,
-        )
-
-    @classmethod
-    def recent(
-        cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
-    ) -> tuple[MessageNotification, ...]:
-        """Recent assigned messages, including channel work, for one agent view.
-
-        Reads the original assignments and source messages. This is not a DM
-        delivery or a read acknowledgement, and never schedules another turn.
-        """
-        if not 1 <= limit <= 20:
-            raise ValueError("Recent notification limit must be between 1 and 20")
-        owner = registry.require(name)
-        from .transcript_receipts import AssignedTranscriptSource
-
-        sources = tuple(AssignedTranscriptSource.for_thread(root, owner, log).rows(limit=limit))
-        from .notification_assignment import NotificationAssignment
-
-        return cls.for_sources(
-            root, registry, owner, sources,
-            assignment_read=NotificationAssignment.read(root, sources),
         )
 
     @classmethod
@@ -669,62 +623,26 @@ class ThreadView:
     goal_execution: GoalExecution | None = None
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
 
-    @staticmethod
-    def visible(
-        thread: Thread, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
-    ) -> bool:
-        return thread.role.executable and snapshot.statuses[thread.name].in_view(
-            show_stopped=show_stopped, show_archived=show_archived
-        )
-
-    @classmethod
-    def visible_threads(
-        cls, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool,
-        names: Iterable[str] | None = None,
-    ) -> Iterator[Thread]:
-        selected = None if names is None else {snapshot.canonical_name(name) for name in names}
-        return (
-            thread for thread in snapshot.threads.values()
-            if (selected is None or thread.name in selected)
-            and cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
-        )
-
     @classmethod
     def roster(
         cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-        activities: Mapping[str, ObservedActivity] | None, goal_waits: GoalWaits,
+        goal_waits: GoalWaits,
         *, show_stopped: bool, show_archived: bool, names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
-        threads = tuple(cls.visible_threads(
-            snapshot, names=names, show_stopped=show_stopped, show_archived=show_archived,
-        ))
+        selected = (snapshot.threads.values() if names is None else
+                    (snapshot.threads.get(name) for name in {snapshot.canonical_name(name) for name in names}))
+        threads = tuple(thread for thread in selected if thread is not None and thread.role.executable
+                        and snapshot.statuses[thread.name].in_view(
+                            show_stopped=show_stopped, show_archived=show_archived))
         if not threads:
             return ()
         runtime, waits = agents.runtime_info.read(), goal_waits.read()
-        if activities is None:
-            activities = agents.all_activity(threads, snapshot=snapshot)
-        return tuple(cls.capture(thread, snapshot, activities[thread.name], runtime.get(thread.name), waits)
-                     for thread in threads)
-
-    @classmethod
-    def capture(
-        cls,
-        thread: Thread,
-        snapshot: RegistrySnapshot,
-        activity: ObservedActivity,
-        runtime: AgentRuntimeInfo | None,
-        waits: dict[str, GoalWait],
-    ) -> ThreadView:
-        """Roster and individual readers join the same captured authorities."""
-        return cls(
-            thread,
-            snapshot.statuses[thread.name],
-            activity,
-            runtime,
-            snapshot.seen_at(thread.name),
-            GoalWaits.execution(thread.goal, waits, snapshot),
+        activities = agents.all_activity(threads, snapshot=snapshot)
+        return tuple(cls(
+            thread, snapshot.statuses[thread.name], activities[thread.name], runtime.get(thread.name),
+            snapshot.seen_at(thread.name), GoalWaits.execution(thread.goal, waits, snapshot),
             snapshot.owner_binding(thread.name),
-        )
+        ) for thread in threads)
 
     @property
     def presentation(self) -> ThreadPresentation:
@@ -790,20 +708,18 @@ class CoordinationSnapshot:
         show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
-        visible = tuple(ThreadView.visible_threads(
-            registry, show_stopped=show_stopped, show_archived=show_archived
-        ))
-        activities = agents.all_activity(visible, snapshot=registry)
+        threads = ThreadView.roster(
+            registry, agents, GoalWaits(root / GoalWaits.filename),
+            show_stopped=show_stopped, show_archived=show_archived,
+        )
+        activities = {view.thread.name: view.activity for view in threads}
         return cls(
             channels=ChannelView.roster(
                 registry, declarations, catalog.pinned_members(), catalog.list_order,
                 activities, sent, messages,
                 show_stopped=show_stopped, show_archived=show_archived,
             ),
-            threads=ThreadView.roster(
-                registry, agents, activities, GoalWaits(root / GoalWaits.filename),
-                show_stopped=show_stopped, show_archived=show_archived,
-            ),
+            threads=threads,
             unread=unread, last_sent=sent, channel_unread=channel_unread,
             references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, show_stopped=show_stopped,
@@ -835,46 +751,26 @@ class CoordinationSnapshot:
         )
 
 
+def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]]):
+    return field(metadata={"paths": paths})
+
+
 @dataclass(frozen=True, slots=True)
 class WireRevision:
     """One observation of every Comms store a view derives from, by name."""
 
-    registry: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: (views.registry.store.path,),
-    })
-    catalog: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: (views.channels.catalog.path,),
-    })
-    bus_log: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: (views.bus.log.path,),
-    })
-    history: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: (views.bus.history.path,),
-    })
-    activity: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: (views.agents.activity._path,),
-    })
-    runtime_info: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: (views.agents.runtime_info.path,),
-    })
-    reads: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: (views.bus.reads.path,),
-    })
-    native_unread: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: (views.transcript_reads.index_path,),
-    })
-    goal_waits: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: (views.root / GoalWaits.filename,),
-    })
-    relationships: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: (views.root / RelationshipStore.filename,),
-    })
-    notifications: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: NotificationAssignment.handling_paths(views.root),
-    })
-    external_transcripts: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: ExternalTranscript.source_paths(views.root),
-    })
+    registry: tuple[FileRevision, ...] = revision_source(lambda views: (views.registry.store.path,))
+    catalog: tuple[FileRevision, ...] = revision_source(lambda views: (views.channels.catalog.path,))
+    bus_log: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.log.path,))
+    history: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.history.path,))
+    activity: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.activity._path,))
+    runtime_info: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.runtime_info.path,))
+    reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,))
+    native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,))
+    goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: (views.root / GoalWaits.filename,))
+    relationships: tuple[FileRevision, ...] = revision_source(lambda views: (views.root / RelationshipStore.filename,))
+    notifications: tuple[FileRevision, ...] = revision_source(lambda views: NotificationAssignment.handling_paths(views.root))
+    external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root))
     expiry_tick: int
     through_seq: int
 

@@ -119,14 +119,8 @@ class HistoryViews:
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
         self.transcript_reads = transcript_read_state(bus.reads.path)
 
-    def message_notifications(self, messages: Sequence[Message]):
-        return MessageNotification.window(self.root, self.registry, self.bus.log, messages)
-
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.log, references)
-
-    def recent_notifications(self, name: str, *, limit: int = 5):
-        return MessageNotification.recent(self.root, self.registry, self.bus.log, name, limit=limit)
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
         return DMHistory(a, b).full_history(self.presentation)
@@ -328,7 +322,7 @@ class HistoryViews:
     ) -> tuple[ThreadView, ...]:
         snapshot = self.registry.snapshot()
         return ThreadView.roster(
-            snapshot, self.agents, None, GoalWaits(self.root / GoalWaits.filename),
+            snapshot, self.agents, GoalWaits(self.root / GoalWaits.filename),
             show_stopped=show_stopped, show_archived=show_archived,
         )
 
@@ -357,7 +351,7 @@ class HistoryViews:
         """Read status once for only the requested rows, before their original sources."""
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
-            snapshot, self.agents, None, GoalWaits(self.root / GoalWaits.filename),
+            snapshot, self.agents, GoalWaits(self.root / GoalWaits.filename),
             names=names, show_stopped=True, show_archived=False,
         )
         return ThreadPresentations(
