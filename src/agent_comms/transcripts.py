@@ -71,12 +71,12 @@ class TranscriptCursor:
         return replace(self, receipts=self.receipts.at(sequence))
 
     def contains(self, other: TranscriptCursor) -> bool:
-        return other.native_within(self) and other.receipts_within(self)
+        return other.native_within(self) and other.wire_within(self)
 
     def native_within(self, parent: TranscriptCursor) -> bool:
         return self.session_file == parent.session_file and self.offset <= parent.offset
 
-    def receipts_within(self, parent: TranscriptCursor) -> bool:
+    def wire_within(self, parent: TranscriptCursor) -> bool:
         return self.receipts is None or parent.includes_receipts(self.receipts)
 
     def includes_receipts(self, receipts: AssignedSourceCursor) -> bool:
@@ -95,16 +95,16 @@ class TranscriptCursor:
         return self.receipts is not None and self.receipts.covers(sequence)
 
     def over_native(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
-        """These receipts over the furthest committed native prefix they include.
+        """This wire position over the furthest committed native prefix within it.
 
         Wire assignment can advance without transferring anonymous native output,
         so the native position comes from what is already committed.
         """
-        within = tuple(prefix for prefix in prefixes if prefix.receipts_within(self))
+        within = tuple(prefix for prefix in prefixes if prefix.wire_within(self))
         prefix = max((prefix for prefix in within if prefix.session_file == self.session_file),
                      key=lambda prefix: prefix.offset,
                      default=next(iter(within), TranscriptCursor(self.session_file, 0)))
-        return replace(prefix, receipts=self.receipts)
+        return replace(self, session_file=prefix.session_file, offset=prefix.offset)
 
 
 @dataclass(frozen=True, slots=True)
