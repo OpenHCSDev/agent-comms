@@ -392,7 +392,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             ) from error
         if event is None:
             await self.native.shutdown(graceful=True)
-            stderr = await self.native.stderr_task
+            stderr = await self.native.proc.stderr_tail()
             raise NativePiUnavailable(
                 f"Native Pi RPC record is incomplete; native exit={self.native.proc.returncode}; "
                 f"stderr={stderr or '(empty)'}"

@@ -154,7 +154,7 @@ def test_new_row_declaration_needs_no_other_edit():
         stored = AddedTableRow.one(db, label="new")
         assert stored.ordinal == 1 and stored.label_size == 3
         assert stored.representation is IntegerStorage and stored.event is InfoKind
-        assert AddedTableRow.column_values(db, "exact") == [7]
+        assert AddedTableRow.count(db, exact=7) == 1
         with pytest.raises(ValueError, match="Generated columns"):
             AddedTableRow.insertion_statement(("label_size",))
         with pytest.raises(ValueError, match="Generated columns"):

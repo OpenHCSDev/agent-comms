@@ -49,19 +49,18 @@ class ToolCall:
     """A CLI invocation uses the same preview and history as a native tool."""
     id: str
     name: str
-    arguments: JsonValue
-    detail: str = ""
+    arguments: dict[str, JsonValue]
     diff: ToolDiff | None = None
 
     @property
     def title(self) -> str:
-        return ToolDeclaration.caption(self.name, self.detail)
+        return ToolDeclaration.caption(self.name, self.arguments)
 
-    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
+    def finished(self, text: str, ok: bool) -> tuple[TranscriptEvent, ...]:
         return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=self.arguments, detail=self.detail),
+                                    raw_input=self.arguments),
                 ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
-                                  text=text, ok=ok, diff=diff if diff is not None else self.diff))
+                                  text=text, ok=ok, diff=self.diff))
 
 
 @dataclass(frozen=True)
@@ -435,8 +434,7 @@ class ReceivingMonitor(MonitorEvidence):
         with bridge.db:
             part.insert_if_absent(bridge.db)
         await bridge.part_observed(delivery.id, notification.number)
-        numbers = ObservedPart.column_values(bridge.db, 'number', where='id=?', parameters=(delivery.id,))
-        if len(numbers) != self.total:
+        if ObservedPart.count(bridge.db, id=delivery.id) != self.total:
             return
         parts = ObservedPart.select(bridge.db, id=delivery.id, order_by=('number',))
         message = delivery.message
@@ -627,10 +625,8 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         await self.prepare_delivery()
         pending = tuple(outcome.declared_name for outcome in Outcome.members_with(UnconfirmedOutcome))
         placeholders = ','.join('?' for _ in pending)
-        rows = DeliveryRow.column_values(self.db, 'id', where=f'outcome IN ({placeholders})', parameters=pending)
-        if rows:
-            print(f'Unconfirmed messages retained without replay: {rows}', file=sys.stderr, flush=True)
-        print(f'Watching {self.binding.bus} → {self.binding.thread}', file=sys.stderr, flush=True)
+        count = DeliveryRow.count(self.db, where=f'outcome IN ({placeholders})', parameters=pending)
+        print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed deliveries retained without replay: {count}', file=sys.stderr, flush=True)
         while True:
             with (self.options.state / 'watch.stderr.log').open('a') as errors:
                 child = await AttachedChild.start((

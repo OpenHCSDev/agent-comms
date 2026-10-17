@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.typed_table import Column, Index, SqlValue, TypedTable, sql_literal
+from agent_comms.typed_table import Column, Index, TypedTable, sql_literal
 from agent_comms.working_memory_questions import SpanQuestion
 from agent_comms.message_reference import MessageReference
 from agent_comms.working_memory_labels import Classifier, ModelLabel, SpanLabel
@@ -87,8 +87,4 @@ class AnnotationRequestsRow(CoordinatorTable, TypedTable):
 
     @classmethod
     def requests_since(cls, db, reference: MessageReference, since: int) -> int:
-        # The row declaration owns SQLite binding, including the reference DTO.
-        grant_field = next(item for item in cls._fields() if item.name == "grant_reference")
-        return SqlValue.for_annotation(int).read(db.execute(
-            f'SELECT COUNT(*) FROM "{cls.declared_name}" WHERE created_at_ms>? AND grant_reference=?',
-            (since, grant_field.encode(reference))))[0]
+        return cls.count(db, where='created_at_ms>?', parameters=(since,), grant_reference=reference)

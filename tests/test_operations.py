@@ -480,19 +480,19 @@ class TestThreadOps:
 
 class TestFork:
     def test_fork_requires_parent_session(self, wired):
-        with pytest.raises(RelationViolationError, match="session file"):
-            wired.threads.create(ForkSpec(name="child", parent="PR111", project="/project", model="test/model", thinking_level="high", task="t"))
+        with pytest.raises(ValueError, match="Canonical saved session required"):
+            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model="test/model", thinking_level="high", task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.threads.create(ForkSpec(name="child", parent="ghost", project="/project", model="test/model", thinking_level="high", task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project="/project", model="test/model", thinking_level="high", task="t"))
 
 
 class TestLedgerOps:
     def test_recent_transcript_is_bounded_and_ordered(self, wired, tmp_path):
         import json
 
-        from agent_comms.thread_management import _session_model
+        from agent_comms.pi_native_backend import PiSessionFile
 
         path = tmp_path / "large-session.jsonl"
         with path.open("w") as stream:
@@ -532,7 +532,7 @@ class TestLedgerOps:
         page = wired.transcripts.thread_transcript_page("large")
         assert page.has_older
         assert [event.text for event in page.events] == [str(index) for index in range(80, 100)]
-        assert _session_model(path) == ("test", "one")
+        assert PiSessionFile(str(path)).model_choice == ("test", "one")
 
     def test_merge_requires_registered_author(self, wired):
         with pytest.raises(UnregisteredThreadError, match="Author"):

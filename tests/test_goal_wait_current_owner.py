@@ -38,7 +38,7 @@ def test_graph_uses_only_wait_for_original_owner_goal(tmp_path, change):
     # must not become the current goal's dependency graph merely through lookup.
     group = GoalWaits.closed_wait_group(
         "owner", (GoalWaitTarget(peer.incarnation.require_recorded()),),
-        {goal.id: wait}, comms.registry.snapshot(),
+        {goal.id: wait}, comms.registry.snapshot(), comms.agents,
     )
     # The graph reports waiting owners, not terminal leaves without a wait.
     assert group == (("owner", "peer") if change in {"same", "later_goal"}

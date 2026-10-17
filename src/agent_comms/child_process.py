@@ -730,6 +730,10 @@ class PosixLaunch(ChildLaunch):
 class ChildOutcome(DeclaredFamily, affix="Outcome"):
     @property
     @abstractmethod
+    def summary(self) -> str: ...
+
+    @property
+    @abstractmethod
     def successful(self) -> bool: ...
 
     @classmethod
@@ -742,6 +746,10 @@ class ExitedOutcome(ChildOutcome):
     code: int
 
     @property
+    def summary(self) -> str:
+        return f"exited with code {self.code}"
+
+    @property
     def successful(self) -> bool:
         return self.code == 0
 
@@ -749,6 +757,10 @@ class ExitedOutcome(ChildOutcome):
 @dataclass(frozen=True)
 class SignaledOutcome(ChildOutcome):
     signal_number: int
+
+    @property
+    def summary(self) -> str:
+        return f"stopped by {signal.Signals(self.signal_number).name}"
 
     @property
     def successful(self) -> bool:
@@ -760,6 +772,10 @@ class TimedOutOutcome(ChildOutcome):
     termination: ChildOutcome
 
     @property
+    def summary(self) -> str:
+        return f"timed out; {self.termination.summary}"
+
+    @property
     def successful(self) -> bool:
         return False
 
@@ -767,6 +783,10 @@ class TimedOutOutcome(ChildOutcome):
 @dataclass(frozen=True)
 class GracefulStopOutcome(ChildOutcome):
     termination: ChildOutcome
+
+    @property
+    def summary(self) -> str:
+        return self.termination.summary
 
     @property
     def successful(self) -> bool:
@@ -781,6 +801,10 @@ class ForcedStopOutcome(GracefulStopOutcome):
 @dataclass(frozen=True)
 class FailedToStartOutcome(ChildOutcome):
     error: str
+
+    @property
+    def summary(self) -> str:
+        return f"failed to start: {self.error}"
 
     @property
     def successful(self) -> bool:
@@ -977,6 +1001,7 @@ class AttachedChild(ChildProcess):
         self.stdin = process.stdin
         self.stdout = process.stdout
         self.stderr = process.stderr
+        self._stderr_task: asyncio.Task[bytes]
 
     @classmethod
     async def start(
@@ -1001,6 +1026,7 @@ class AttachedChild(ChildProcess):
             )
             identity = platform.identity(process.pid)
             child = cls(process, identity)
+            child._stderr_task = asyncio.create_task(child._drain_stderr())
             try:
                 launch.release(identity)
                 await launch.verify_async()
@@ -1021,7 +1047,9 @@ class AttachedChild(ChildProcess):
         return self.process.returncode
 
     async def wait(self) -> ChildOutcome:
-        return ChildOutcome.from_returncode(await self.process.wait())
+        outcome = ChildOutcome.from_returncode(await self.process.wait())
+        await asyncio.shield(self._stderr_task)
+        return outcome
 
     def _release_retired_io(self) -> None:
         # asyncio's wait also waits for pipe disconnects. A cancelled reader
@@ -1030,15 +1058,40 @@ class AttachedChild(ChildProcess):
         # don't decode, accumulate, or replay abandoned output to unblock wait.
         self.process._transport.close()
 
-    async def discard_stderr(self) -> None:
-        """Drain unwanted output through EOF without retaining the child's output.
-
-        Chunk size controls read allocation only, never total accepted output.
-        The caller owns cancellation together with the child session lifetime.
-        """
+    async def _drain_stderr(self) -> bytes:
+        """The one pipe reader, started before releasing the child's exec gate."""
+        tail = b""
         if self.stderr is not None:
-            while await self.stderr.read(io.DEFAULT_BUFFER_SIZE):
-                pass
+            while chunk := await self.stderr.read(4096):
+                tail = (tail + chunk)[-16000:]
+        return tail
+
+    async def stderr_tail(self) -> str:
+        return (await asyncio.shield(self._stderr_task)).decode(errors="replace").strip()
+
+    async def _collect_stdout(self) -> bytes:
+        output = bytearray()
+        if self.stdout is not None:
+            while chunk := await self.stdout.read(65536):
+                output.extend(chunk)
+        return bytes(output)
+
+    async def communicate(self, data: bytes | None) -> tuple[bytes, bytes]:
+        """Collect stdout without competing with the owned bounded stderr reader."""
+        output = asyncio.create_task(self._collect_stdout())
+        try:
+            try:
+                if data:
+                    await self.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # A command may finish before consuming all supplied input.
+            finally:
+                self.close_input()
+            return await output, await asyncio.shield(self._stderr_task)
+        finally:
+            if not output.done():
+                output.cancel()
+            await asyncio.gather(output, return_exceptions=True)
 
     def close_input(self) -> None:
         if self.stdin is not None:
@@ -1144,7 +1197,7 @@ class BoundedRun:
         except OSError as error:
             yield ChildResult(FailedToStartOutcome(str(error)))
             return
-        exchange = asyncio.create_task(child.process.communicate(input))
+        exchange = asyncio.create_task(child.communicate(input))
         try:
             try:
                 async with asyncio.timeout_at(deadline):
@@ -1268,11 +1321,15 @@ class DetachedExitOutcome(ChildOutcome):
     """Exit observed; a non-parent cannot claim an exit code."""
 
     @property
+    def summary(self) -> str:
+        return "exited; status unavailable"
+
+    @property
     def successful(self) -> bool:
         return False
 
 
-class NamespacedChild(AttachedChild):
+class NamespacedChild(ChildProcess):
     """Attached shape with kernel containment and an independent hard deadline.
 
     Lifted from the selected-Pi guardian: namespace PID1 attests readiness before
@@ -1282,7 +1339,8 @@ class NamespacedChild(AttachedChild):
     """
 
     def __init__(self, child: AttachedChild, watchdog: AttachedChild, namespace: str):
-        super().__init__(child.process, child.identity)
+        super().__init__(child.identity)
+        self.child = child
         self.watchdog = watchdog
         self.namespace = namespace
 
@@ -1363,8 +1421,11 @@ class NamespacedChild(AttachedChild):
             if descriptor is not None:
                 os.close(descriptor)
 
+    async def wait(self) -> ChildOutcome:
+        return await self.child.wait()
+
     async def _stop(self) -> ChildOutcome:
-        result = await super()._stop()
+        result = await self.child.stop()
         await self.watchdog.stop()
         deadline = time.monotonic() + STOP_GRACE_SECONDS
         while NamespaceContainment.namespace_alive(self.namespace):

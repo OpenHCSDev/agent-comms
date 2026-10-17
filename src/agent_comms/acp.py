@@ -87,7 +87,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     """ACP agent bound to one Comms wire.
 
     Session -> thread. Coding prompts run the configured backend; targeted
-    prompts relay through the shared wire and drain replies back to the client.
+    prompts publish to the shared wire. Replies belong to the thread's bus view.
     """
 
     session_lifecycle_class = SessionLifecycle
@@ -97,9 +97,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         comms: Comms,
         agent_bin: str | None = None,
         agent_args: list[str] | None = None,
-        reply_window: float | None = None,
-        no_reply_window: float | None = None,
-        reply_quiet: float | None = None,
         runtime_enabled: bool = False,
         use_unstable_protocol: bool = False,
         auto_wake: bool = True,
@@ -144,9 +141,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             self,
             agent_bin=agent_bin,
             agent_args=agent_args,
-            reply_timing=comms.configuration.reply_timing.overridden(
-                reply_window=reply_window, no_reply_window=no_reply_window, reply_quiet=reply_quiet,
-            ),
         )
         self.sessions = self.session_lifecycle_class(
             comms, self.turns.agent_bin, self.turns.agent_args, self._runtime, runtime_enabled, self

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import Any
+from pydantic import JsonValue
 from urllib.parse import quote
 
 from . import tool_declaration
@@ -194,7 +194,7 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
 
     @property
     def title(self) -> str:
-        return tool_declaration.ToolDeclaration.caption(self.tool_name)
+        return tool_declaration.ToolDeclaration.caption(self.tool_name, {})
 
     @property
     def kind(self) -> str:
@@ -203,12 +203,11 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
-    raw_input: Any = None
-    detail: str = field(default="", metadata={"wire_omit_default": True})
+    raw_input: dict[str, JsonValue] = field(default_factory=dict)
 
     @property
     def title(self) -> str:
-        return tool_declaration.ToolDeclaration.caption(self.tool_name, self.detail)
+        return tool_declaration.ToolDeclaration.caption(self.tool_name, self.raw_input)
 
 
 @dataclass(frozen=True, kw_only=True)

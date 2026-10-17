@@ -44,7 +44,7 @@ async def run() -> None:
     initial: asyncio.Task | None = None
     try:
         await agent.sessions.start_owner(thread.worktree, name)
-        if key := os.environ.pop("AGENT_COMMS_STARTUP_INPUT_KEY", None):
+        if key := os.environ.pop(RestartEnvironment.initial_input_key, None):
             initial = asyncio.create_task(run_startup_input(agent, name, key))
         await stopped.wait()
     finally:

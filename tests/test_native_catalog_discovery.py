@@ -86,7 +86,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
                 pending.accept(response).require_identity().require_same_session(session.identity)
         finally:
             await child.shutdown()
-        assert child.proc.retired and await child.stderr_task == ""
+        assert child.proc.retired and await child.proc.stderr_tail() == ""
     assert len(verifications) == 1  # both stages consume the pre-claim acquisition
     assert launches[0][1] != launches[1][1]
     assert children[0].proc.identity != children[1].proc.identity
@@ -340,7 +340,6 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
     from uuid import uuid4
 
     from agent_comms.coordinator import Coordination
-    from agent_comms.native_custody import PiSessionChild
     import hashlib
     import os
     from pathlib import Path
@@ -381,7 +380,7 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
 
     async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=30) as child:
         channel = PiRpcChannel(child.stdout)
-        errors = asyncio.create_task(PiSessionChild.stderr_tail(child.stderr))
+        errors = asyncio.create_task(child.stderr_tail())
 
         async def state():
             request = GetState(id=uuid4().hex)

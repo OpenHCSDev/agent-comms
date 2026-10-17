@@ -1,11 +1,12 @@
 """Claude Code notifications and completed transcript blocks for Core."""
 from __future__ import annotations
 
-import asyncio
+from contextlib import aclosing
 from pathlib import Path
 from typing import AsyncIterator
 
 from agent_comms.private_path import FileRevision
+from agent_comms.wire_watch import WatchSource, WireWatch
 from .claude_protocol import CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame
 from .shared import (
     LineMonitorBridge, Options, TranscriptUpdate,
@@ -41,36 +42,35 @@ class ClaudeBridge(LineMonitorBridge):
                     # None means this prefix began outside our captured window.
                     # Discard through its newline, even if it is still being written.
                     pending = None
-            available = original.size - stream.tell()
-            while True:
-                chunk = stream.read(available)
-                if pending is None:
-                    boundary = chunk.find(b'\n')
-                    if boundary >= 0:
-                        pending = chunk[boundary + 1:]
-                else:
-                    pending += chunk
-                if pending is not None:
-                    lines = pending.split(b'\n')
-                    pending = lines.pop()
-                    for line in lines:
-                        record = CLAUDE_RECORD.validate_json(line)
-                        for update in record.updates(session):
-                            if session.catching_up and update.is_status:
-                                last_status = update
-                            else:
-                                yield update
-                if session.catching_up:
-                    session.catching_up = False
-                    if last_status is not None:
-                        yield last_status
-                await asyncio.sleep(0.2)
-                opened = FileRevision.from_file(stream)
-                current = FileRevision.capture(path)
-                if (current is None or current.identity != original.identity
-                        or min(opened.size, current.size) < stream.tell()):
-                    raise ValueError('Claude transcript was replaced or truncated')
-                available = opened.size - stream.tell()
+            async with aclosing(WireWatch.observations(WatchSource.modified_file(path))) as changes:
+                async for _ in changes:
+                    opened = FileRevision.from_file(stream)
+                    current = FileRevision.capture(path)
+                    if (current is None or current.identity != original.identity
+                            or min(opened.size, current.size) < stream.tell()):
+                        raise ValueError('Claude transcript was replaced or truncated')
+                    available = opened.size - stream.tell()
+                    chunk = stream.read(available)
+                    if pending is None:
+                        boundary = chunk.find(b'\n')
+                        if boundary >= 0:
+                            pending = chunk[boundary + 1:]
+                    else:
+                        pending += chunk
+                    if pending is not None:
+                        lines = pending.split(b'\n')
+                        pending = lines.pop()
+                        for line in lines:
+                            record = CLAUDE_RECORD.validate_json(line)
+                            for update in record.updates(session):
+                                if session.catching_up and update.is_status:
+                                    last_status = update
+                                else:
+                                    yield update
+                    if session.catching_up:
+                        session.catching_up = False
+                        if last_status is not None:
+                            yield last_status
 
 
 def main() -> None:

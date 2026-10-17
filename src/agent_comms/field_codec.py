@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import math
+import json
 import types
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -412,7 +414,7 @@ class FieldCodec(Sealed):
                 return cls.value_schema(members[0])
             return {"anyOf": [cls.value_schema(item) for item in members]}
         if origin is Literal:
-            return {**cls.value_schema(type(args[0])), "enum": list(args)}
+            return {**cls.value_schema(type(args[0])), "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
         if origin in (list, tuple, frozenset):
             return {"type": "array", "items": cls.value_schema(args[0])}
         if origin is dict:
@@ -420,9 +422,9 @@ class FieldCodec(Sealed):
                 return {"type": "object", "additionalProperties": cls.value_schema(args[1])}
             return {"type": "array", "items": {"type": "array", "prefixItems": [cls.value_schema(arg) for arg in args], "minItems": 2, "maxItems": 2}}
         if origin is type and args and issubclass(args[0], DeclaredFamily):
-            return {"type": "string", "enum": list(args[0].names())}
+            return {"type": "string", "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
         if isinstance(annotation, type) and issubclass(annotation, Enum):
-            values = [item.value for item in annotation]
+            values = [value for _, value in compile_decoder(annotation).editor_choices()]
             return {**cls.value_schema(type(values[0])), "enum": values}
         primitive = {
             str: "string",
@@ -530,40 +532,46 @@ class FieldCodec(Sealed):
             if isinstance(member, Projected) and member.view == view
         })
 
-    @staticmethod
-    def _decode_scalar(target: Any, data: Any) -> Any:
-        """The original strict scalar boundary, after representation selection.
-
-        Exact primitive declarations skip structural dispatch. Unknown targets
-        reach this only after that dispatch, preserving custom annotation
-        equality and record/enum construction precedence.
-        """
-        if target in (str, int, bool, type(None)) and type(data) is target:
-            return data
-        if target is float and type(data) in (int, float) and math.isfinite(data):
-            return data
-        raise ValueError(f"Expected {target}, received {type(data).__name__}")
-
-
 class ValueDecoder(ABC):
-    """One annotation's decode decisions, resolved once from its declaration.
-
-    Each way a value decodes is one subclass. ``compile_decoder`` picks the class
-    from the annotation once; decoding a value is that object's own
-    ``decode``, with no per-value re-classification.
-    """
+    """One annotation owns its wire decoding, draft projection and choice domain."""
 
     __slots__ = ()
 
     @abstractmethod
     def decode(self, data: object) -> object: ...
 
+    editor_annotation = str
+
+    def encode_editor(self, value):
+        encoded = FieldCodec.encode(value)
+        return None if encoded is None else json.dumps(encoded)
+
+    def decode_editor(self, value):
+        return None if value is None else json.loads(value)
+
+    def editor_choices(self) -> tuple[tuple[str, object], ...]:
+        raise TypeError("The declared decoder does not offer finite choices")
+
 @dataclass(frozen=True, slots=True)
 class _ScalarDecoder(ValueDecoder):
     target: object
 
     def decode(self, data):
-        return FieldCodec._decode_scalar(self.target, data)
+        target = self.target
+        if target in (str, int, bool, type(None)) and type(data) is target:
+            return data
+        if target is float and type(data) in (int, float) and math.isfinite(data):
+            return data
+        raise ValueError(f"Expected {target}, received {type(data).__name__}")
+
+    def encode_editor(self, value):
+        return value if self.target is str else super(_ScalarDecoder, self).encode_editor(value)
+
+    def decode_editor(self, value):
+        return value if self.target is str else super(_ScalarDecoder, self).decode_editor(value)
+
+class _NullDecoder(_ScalarDecoder):
+    editor_annotation = type(None)
 
 @dataclass(frozen=True, slots=True)
 class _RepresentedDecoder(ValueDecoder):
@@ -613,6 +621,9 @@ class _AnyDecoder(ValueDecoder, FieldRepresentation):
 class _FamilyNameDecoder(ValueDecoder):
     family: type[DeclaredFamily]
 
+    def editor_choices(self):
+        return tuple((name, name) for name in self.family.names())
+
     def decode(self, data):
         if type(data) is not str:
             raise ValueError("Expected a declared family name.")
@@ -623,6 +634,9 @@ class _LiteralDecoder(ValueDecoder):
     target: object
     values: tuple[object, ...]
 
+    def editor_choices(self):
+        return tuple((str(value), value) for value in self.values)
+
     def decode(self, data):
         if any(type(data) is type(value) and data == value for value in self.values):
             return data
@@ -632,6 +646,10 @@ class _LiteralDecoder(ValueDecoder):
 class _UnionDecoder(ValueDecoder):
     target: object
     alternatives: tuple[ValueDecoder, ...]
+
+    @property
+    def editor_annotation(self):
+        return Union[tuple(item.editor_annotation for item in self.alternatives)]
 
     def decode(self, data):
         first_error = None
@@ -694,17 +712,20 @@ class _FixedTupleDecoder(ValueDecoder):
 class _DictDecoder(ValueDecoder):
     key: ValueDecoder
     value: ValueDecoder
+    entries: Callable[[object], Iterable[tuple[object, object]]]
 
     def decode(self, data):
-        if isinstance(data, dict):
-            return {self.key.decode(key): self.value.decode(value) for key, value in data.items()}
-        return dict(_ListDecoder(_FixedTupleDecoder((self.key, self.value))).decode(data))
+        return {self.key.decode(key): self.value.decode(value) for key, value in self.entries(data)}
 
 @dataclass(frozen=True, slots=True)
 class _FamilyRecordDecoder(ValueDecoder):
     """The encoded object carries its member's name under the family tag."""
 
     family: type[DeclaredFamily]
+
+    def editor_choices(self):
+        return tuple((member.label, {self.family.family_discriminator: member.declared_name})
+                     for member in self.family.members_with(self.family))
 
     def decode(self, data):
         if not isinstance(data, dict):
@@ -762,6 +783,9 @@ class _RecordDecoder(ValueDecoder):
 class _EnumDecoder(ValueDecoder):
     target: object
 
+    def editor_choices(self):
+        return tuple((str(member.value), member.value) for member in self.target)
+
     def decode(self, data):
         return self.target(data)
 
@@ -779,11 +803,8 @@ def compile_decoder(annotation: object) -> ValueDecoder:
     )
 
 def _structural_decoder(target: object) -> ValueDecoder:
-    if (
-        target is str or target is int or target is bool
-        or target is type(None) or target is float
-    ):
-        return _ScalarDecoder(target)
+    if target is type(None):
+        return _NullDecoder(target)
     if target is Any:
         return _AnyDecoder()
     origin, args = get_origin(target), get_args(target)
@@ -802,7 +823,8 @@ def _structural_decoder(target: object) -> ValueDecoder:
             return _VariadicTupleDecoder(compile_decoder(args[0]))
         return _FixedTupleDecoder(tuple(compile_decoder(item) for item in args))
     if origin is dict:
-        return _DictDecoder(compile_decoder(args[0]), compile_decoder(args[1]))
+        entries = dict.items if args[0] is str else lambda data: data.items() if isinstance(data, dict) else data
+        return _DictDecoder(compile_decoder(args[0]), compile_decoder(args[1]), entries)
     if isinstance(target, type) and issubclass(target, DeclaredFamily):
         return _FamilyRecordDecoder(target)
     return _member_decoder(target)

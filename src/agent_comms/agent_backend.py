@@ -21,7 +21,6 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
@@ -41,17 +40,55 @@ class BackendDeclarationError(TypeError):
     """A backend declaration is incomplete; the message names every missing piece."""
 
 
-class RuntimeLocation(ABC):
-    """Where one thread's runtime state lives, as its backend understands it.
+class RuntimeLocation(DeclaredFamily, affix="Runtime"):
+    """Runtime behavior derived once by the owning thread record."""
 
-    Each backend declares exactly one location type. A location is derived from
-    the thread record that owns the fact; it never stores a second copy of it.
-    """
+    path: str
 
-    @classmethod
+    def require_forkable(self):
+        pass
+
+    async def compact(self, operation):
+        return await operation()
+
+    def new_location(self, root, worktree):
+        return self
+
+    def arguments(self):
+        return {"session_file": self.read_key}
+
+    def read_keys(self):
+        return (self.read_key,)
+
+    def presentation(self):
+        return {"resumable": True}
+
+    def history_locations(self, thread, registry, visited):
+        yield self, False
+        yield from thread.inherited_history(registry, visited)
+
+    def external_records(self, root, incarnation):
+        raise ValueError("A native session cannot publish an external transcript")
+
     @abstractmethod
-    def of(cls, thread: Thread) -> Self:
-        """The location of this thread's runtime state."""
+    def select_session(self, directory, execution): ...
+
+    @abstractmethod
+    def history_source(self, root, incarnation): ...
+
+    def imported_sources(self):
+        return ()
+
+    @property
+    @abstractmethod
+    def read_key(self) -> str: ...
+
+    @abstractmethod
+    def storage_files(self): ...
+
+    @property
+    def model_choice(self):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -194,60 +231,6 @@ class ClearQueue(TurnInboxItem):
 
 
 @dataclass(frozen=True)
-class EntryRef:
-    """A position in a backend's transcript: an order key plus the backend's own ID."""
-
-    order: int
-    backend_id: str
-
-
-class TranscriptKind(DeclaredFamily, affix="Entry"):
-    """The kind of one transcript entry."""
-
-
-class UserEntry(TranscriptKind):
-    """A user input."""
-
-
-class AssistantEntry(TranscriptKind):
-    """A model reply."""
-
-
-class ToolResultEntry(TranscriptKind):
-    """The result of one tool call."""
-
-
-class CompactionEntry(TranscriptKind):
-    """A compaction summary that replaces the entries before its first kept entry."""
-
-
-class ResetEntry(TranscriptKind):
-    """A boundary after which earlier entries no longer reach the model."""
-
-
-class SystemEntry(TranscriptKind):
-    """Runtime bookkeeping: session header, model or setting changes, labels."""
-
-
-@dataclass(frozen=True)
-class TranscriptEntry:
-    """One transcript entry in the backend-neutral form readers page through."""
-
-    ref: EntryRef
-    kind: type[TranscriptKind]
-    text: str
-    at: datetime | None
-
-
-@dataclass(frozen=True)
-class EntryPage:
-    """Entries newest first, and the cursor for the next older page (None at the start)."""
-
-    entries: tuple[TranscriptEntry, ...]
-    older: EntryRef | None
-
-
-@dataclass(frozen=True)
 class ContextUsage:
     """Context size measured by the backend's own estimator."""
 
@@ -358,14 +341,6 @@ class ReportsContext(ABC):
         """The thread's current context size."""
 
 
-class ReadsHistory(ABC):
-    """Pages of the transcript, newest first, for lazy history."""
-
-    @abstractmethod
-    async def entries(self, thread: Thread, before: EntryRef | None, limit: int) -> EntryPage:
-        """Up to ``limit`` entries older than ``before`` (or the newest when None)."""
-
-
 class Forks(ABC):
     """Creates a child runtime location from a parent thread's history."""
 
@@ -390,20 +365,10 @@ class ConfiguresModel(ABC):
         """Apply the choice and return the ``(model, thinking level)`` now in effect."""
 
 
-class ImportsHistory(ABC):
-    """Writes another backend's transcript into a new location of this backend."""
-
-    @classmethod
-    @abstractmethod
-    async def import_from(cls, source: ReadsHistory, thread: Thread) -> RuntimeLocation:
-        """Import ``source``'s history for ``thread`` into a new location."""
-
-
 THREAD_CAPABILITIES: tuple[type, ...] = (
     Steers,
     Compacts,
     ReportsContext,
-    ReadsHistory,
     ConfiguresModel,
 )
 
@@ -422,6 +387,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     """
 
     location_type: ClassVar[type[RuntimeLocation]]
+    unstarted_type: ClassVar[type[RuntimeLocation]]
     serves_threads: ClassVar[bool] = True
     serves_new_threads: ClassVar[bool] = False
     event_kinds: ClassVar[frozenset[str]]
@@ -439,6 +405,10 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     @abstractmethod
     def for_worker(cls, runner: Any, session_id: str) -> Self:
         """An instance holding this runtime for one thread session in this worker."""
+
+    @classmethod
+    @abstractmethod
+    def new_location(cls, root, worktree) -> RuntimeLocation: ...
 
     @classmethod
     def for_new_threads(cls) -> type[AgentBackend]:
@@ -502,8 +472,3 @@ def validate_backends(members: Iterable[type]) -> None:
     if problems:
         raise BackendDeclarationError("; ".join(problems))
 
-
-# Every backend module is declared before the registry seals.
-from . import pi_native_backend  # noqa: E402,F401
-
-AgentBackend.seal()

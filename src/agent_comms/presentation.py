@@ -613,7 +613,7 @@ class ThreadView:
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.statuses[thread.name], activities[thread.name], runtime.get(thread.name),
-            snapshot.seen_at(thread.name), GoalWaits.execution(thread.goal, waits, snapshot),
+            snapshot.seen_at(thread.name), GoalWaits.execution(thread.goal, waits, snapshot, agents),
             snapshot.owner_binding(thread.name),
         ) for thread in threads)
 
@@ -644,7 +644,7 @@ class ThreadView:
             **self.thread.to_wire(),
             "status": self.status.declared_name,
             "is_fork": self.thread.is_fork,
-            "resumable": bool(self.thread.session_file),
+            **self.thread.runtime.presentation(),
             "last_seen": self.last_seen,
             "last_activity": self.activity.timestamp,
             "activity": self.activity.state.value,
