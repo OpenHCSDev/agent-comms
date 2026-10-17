@@ -9,14 +9,14 @@ from dataclasses import dataclass
 
 from .message_reference import MessageReference
 from .transcript_events import SentTranscript
-from .transcript_wire import AssignedSourceIdentity
+from . import transcript_wire
 
 
 @dataclass(frozen=True, eq=False)
 class OutgoingMessageReference:
     """The original wire, sender birth and exact message; rename is not reuse."""
 
-    scope: AssignedSourceIdentity
+    scope: transcript_wire.AssignedSourceIdentity
     message: MessageReference
 
     def __post_init__(self):
@@ -37,7 +37,7 @@ class PublishedSentMessage:
     """A full reported message proved by its original sender's wire assignment."""
 
     message: SentTranscript
-    scope: AssignedSourceIdentity
+    scope: transcript_wire.AssignedSourceIdentity
 
     def __post_init__(self):
         self.scope.recipient.require_recorded()

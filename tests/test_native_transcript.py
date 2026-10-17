@@ -160,7 +160,7 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     from agent_comms.coordination_response import install_private_response_schema
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
     from agent_comms.coordinator import Coordination
-    from agent_comms.transcript_wire import AssignedTranscriptSource
+    from agent_comms.transcript_wire import LiveAssignedTranscriptSource
 
     root = tmp_path / "wire"
     comms = wire(root)
@@ -212,7 +212,7 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     monkeypatch.setattr(CoordinationStore, "observing", traced_read)
     monkeypatch.setattr(NativeTranscript, "inputs_for", traced_ancestry)
     monkeypatch.setattr(NativeTranscript, "session_id", property(traced_header))
-    source = AssignedTranscriptSource.for_thread(root, thread, comms.bus.log)
+    source = LiveAssignedTranscriptSource.for_thread(root, thread, comms.bus.log)
     with comms.transcripts.routes.for_session(str(path)) as routes:
         projected = tuple(source.native_records((records,), routes, reader))
     # One parent walk serves the whole fragment.

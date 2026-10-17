@@ -12,12 +12,15 @@ from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 
+from . import sent_message
 from .declared_family import DeclaredFamily
+from .native_entries import TranscriptProjection
+from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 
 from .bus_publication import CommittedDelivery
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, TranscriptEvent, UserTranscript
+from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, TranscriptEvent, UserTranscript, ToolEndTranscript, ToolStartTranscript
 from .wire_log import ConversationSourceWindowRequest, WireLog
 
 
@@ -206,8 +209,6 @@ class TranscriptTraversal(ABC):
         A saved tool round is its call record together with its result record;
         a page window never stops between them.
         """
-        from .transcript_events import ToolEndTranscript, ToolStartTranscript
-
         opening = ToolEndTranscript if self.descending_rounds else ToolStartTranscript
         closing = ToolStartTranscript if self.descending_rounds else ToolEndTranscript
         return (
@@ -343,8 +344,6 @@ class TranscriptRecords:
         cursor.require_native()
 
     def reply_revision(self, records):
-        from .native_runtime_input import PublishedReplyRevision
-
         return PublishedReplyRevision(0, 0)
 
     def native_records(self, fragments, routes, reader):
@@ -355,8 +354,6 @@ class TranscriptRecords:
                 ))
 
     def native_events(self, record, routes, project_events, references):
-        from .native_entries import TranscriptProjection
-
         entry = record.entry
         return tuple(project_events(TranscriptProjection(
             routes.get(entry.id), routes.input_display(entry.input_id),
@@ -380,8 +377,6 @@ class AssignedTranscriptSource(TranscriptRecords):
         sender's frozen assignments supply its reference, body, time and route.
         Missing births cannot select an assignment, even if a name matches.
         """
-        from .sent_message import PublishedSentMessage
-
         messages = tuple(messages)
         if not messages:
             return messages
@@ -397,7 +392,7 @@ class AssignedTranscriptSource(TranscriptRecords):
         }
         scope = AssignedSourceIdentity(str(self.root), self.recipient)
         return tuple(
-            PublishedSentMessage(message, scope)
+            sent_message.PublishedSentMessage(message, scope)
             if (original := originals.get(message.source)) is not None
             and SentTranscript.from_message(original) == message else message
             for message in messages
@@ -528,20 +523,17 @@ class LiveAssignedTranscriptSource(AssignedTranscriptSource):
 
     def native_records(self, fragments, routes, reader):
         """Native ancestry precedes one atomic SQL read per bounded fragment."""
-        from .native_runtime_input import NativeRuntimeInput
-        from .transcripts import TranscriptRead
-
         lookup = self.recipient.lookup
         for fragment in fragments:
             fragment = tuple(fragment)
             selected = tuple(zip(fragment, reader.inputs_for(fragment)))
-            with TranscriptRead.publication_source(self.root) as db:
+            with NativeRuntimeInput.publication_source(self.root) as db:
                 # Missing coordination remains detached native history. Do not
                 # introduce header failures where no SQL source was selected.
                 session_id = (reader.session_id
                               if db is not None and any(
-                                  user is not None and user.input_id is not None
-                                  for _, user in selected) else None)
+                                  user.tracked_user
+                                  for _, user in selected if user is not None) else None)
                 capture = partial(
                     NativeRuntimeInput.transcript_projection,
                     db, reader, owner_lookup=lookup, session_id=session_id,

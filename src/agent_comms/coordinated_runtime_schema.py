@@ -9,7 +9,7 @@ import sqlite3
 from agent_comms.coordination_errors import PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
 
-from .native_runtime_input import NativeRuntimeSchemaMeta, NativeRuntimeTable
+from . import native_runtime_input
 from .typed_table import SQLiteForeignKeys, SQLiteSchemaObject, TypedTable
 
 
@@ -18,7 +18,7 @@ def _schema() -> dict[str, str]:
 
     return {
         name: sql
-        for table in TypedTable.members_with(NativeRuntimeTable)
+        for table in TypedTable.members_with(native_runtime_input.NativeRuntimeTable)
         for name, sql in table.schema_objects().items()
     }
 
@@ -30,7 +30,7 @@ def _digest(schema: dict[str, str]) -> str:
 def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
     schema = _schema()
     try:
-        meta = NativeRuntimeSchemaMeta.one(db, singleton=1)
+        meta = native_runtime_input.NativeRuntimeSchemaMeta.one(db, singleton=1)
         actual = SQLiteSchemaObject.read(
             db.execute(
                 "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
@@ -39,7 +39,7 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
         )
     except (sqlite3.Error, ValueError, TypeError) as error:
         raise PublicationActivationBlocked("native runtime schema is not installed") from error
-    if meta != NativeRuntimeSchemaMeta(singleton=1, ddl_digest=_digest(schema)):
+    if meta != native_runtime_input.NativeRuntimeSchemaMeta(singleton=1, ddl_digest=_digest(schema)):
         raise PublicationActivationBlocked("native runtime schema version differs")
     if SQLiteSchemaObject.differences(actual, schema) or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
@@ -55,9 +55,9 @@ def install_native_runtime_schema(store: Coordination) -> None:
         present = SQLiteSchemaObject.read(
             db.execute(
                 "SELECT name,sql FROM sqlite_master WHERE name=?",
-                (NativeRuntimeSchemaMeta.declared_name,),
+                (native_runtime_input.NativeRuntimeSchemaMeta.declared_name,),
             )
         )
         if not present:
-            NativeRuntimeSchemaMeta.create_schema(db)
+            native_runtime_input.NativeRuntimeSchemaMeta.create_schema(db)
         assert_native_runtime_schema(db)

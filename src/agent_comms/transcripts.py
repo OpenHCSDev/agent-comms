@@ -6,13 +6,11 @@ import json
 import logging
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields
-from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 from typing import Callable, ClassVar
 
 from .channel_targets import is_channel_target
-from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .declared_family import DeclaredFamily
 from .historical_views import HistorySource
@@ -38,9 +36,6 @@ from .transcript_wire import (
     TranscriptCursor, TranscriptRecords, TranscriptSource,
 )
 from .coordination_errors import StaleRevision, TranscriptChanged
-from .coordination_database import CoordinationStore
-from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_response import _assert_response_schema
 from .presentation import MessageNotification
 from .wire_log import WireLog
 
@@ -260,21 +255,6 @@ class TranscriptRead:
     # Required viewer reads stay pending in the read lifecycle. Their SQL
     # attempt must not consume that wait by blocking a presentation worker.
     source_wait: ClassVar[float] = 0
-
-    @classmethod
-    @contextmanager
-    def publication_source(cls, root):
-        database = root / "coordination.sqlite3"
-        failure = CoordinationStore.observation_failure(database)
-        if failure == "missing":
-            yield None
-            return
-        if failure:
-            raise RelationViolationError("Native reply source has an invalid coordinator")
-        with CoordinationStore.observing(database) as db:
-            assert_native_runtime_schema(db)
-            _assert_response_schema(db)
-            yield db
 
     def current(self) -> bool:
         return self.identity == self.current_identity()

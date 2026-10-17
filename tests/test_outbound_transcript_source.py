@@ -14,7 +14,7 @@ from agent_comms.presentation import MessageNotification
 from agent_comms.wire_log import WireLog
 from agent_comms.threads import Thread
 from agent_comms.transcript_wire import TranscriptCursor
-from agent_comms.transcripts import TranscriptRead
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 import pytest
@@ -37,10 +37,10 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
                 sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED,
             )
             with pytest.raises(CoordinationReadUnavailable):
-                with TranscriptRead.publication_source(root):
+                with NativeRuntimeInput.publication_source(root):
                     pytest.fail("Busy acquisition reached the native schema decoder")
     assert NotificationAssignment.read(root, (initial,)).resolve(root) == original
-    with TranscriptRead.publication_source(root) as native_read:
+    with NativeRuntimeInput.publication_source(root) as native_read:
         assert native_read is not None
     assert comms.bus.log.path.read_bytes() == wire_before
 

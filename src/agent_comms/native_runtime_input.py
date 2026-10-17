@@ -7,6 +7,7 @@ send-admission and live-context authority. Installation never resets them.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Literal
@@ -15,7 +16,10 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
+from . import coordinated_runtime_schema, coordination_response
+from .coordination_database import CoordinationStore
 from .coordination_errors import StaleFence, IdentityConflict
+from .errors import RelationViolationError
 from .native_admission_epoch import NativeAdmissionEpoch, UnrecordedNativeAdmission
 from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution
 from .selected_triage import SelectedTriage, RecordedTriageText
@@ -27,7 +31,22 @@ if TYPE_CHECKING:
 
 
 class NativeRuntimeTable:
-    """Capability identifying the native-runtime schema's declared tables."""
+    """Native schema membership and the validated lifetime of its read source."""
+
+    @classmethod
+    @contextmanager
+    def publication_source(cls, root):
+        database = root / "coordination.sqlite3"
+        failure = CoordinationStore.observation_failure(database)
+        if failure == "missing":
+            yield None
+            return
+        if failure:
+            raise RelationViolationError("Native reply source has an invalid coordinator")
+        with CoordinationStore.observing(database) as db:
+            coordinated_runtime_schema.assert_native_runtime_schema(db)
+            coordination_response._assert_response_schema(db)
+            yield db
 
 
 @dataclass(frozen=True)
@@ -174,9 +193,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         from .coordination_tables.executions import ExecutionRecord
         from .coordination_tables.responses import ResponseObligation
 
-        from .transcripts import TranscriptRead
-
-        with TranscriptRead.publication_source(root) as db:
+        with cls.publication_source(root) as db:
             if db is None:
                 return PublishedReplyRevision(0, 0)
             return PublishedReplyRevision.read(
