@@ -40,7 +40,8 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     comms.messaging.send("outsider", "bob", "explicit @alice mention")
     comms.messaging.send("outsider", "#ui", "unrelated channel")
     comms.messaging.send("outsider", "bob", "ordinary outsider DM")
-    before_delivery = comms.bus.pending_counts("alice")
+    with comms.bus.snapshot(viewer="alice") as (basis, source):
+        before_delivery = comms.bus.pending_counts_opened(source, basis)
     before_wire = tmp_path.joinpath("bus.jsonl").read_bytes()
     assert bodies(comms.views.channel_history_page("#api")) == ["exact target"]
     assert bodies(comms.views.channel_display_page("#api")) == ["exact target"]
@@ -61,7 +62,8 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     assert [message.body for message in list(comms.views.channel_history_page("#api").messages)] == ["exact target"]
     assert bodies(comms.views.channel_display_page("#ui")) == ["unrelated channel"]
     assert tmp_path.joinpath("bus.jsonl").read_bytes() == before_wire
-    assert comms.bus.pending_counts("alice") == before_delivery
+    with comms.bus.snapshot(viewer="alice") as (basis, source):
+        assert comms.bus.pending_counts_opened(source, basis) == before_delivery
     assert not comms.channels.set_channel_any_mode("api", False).any_mode
     assert bodies(comms.views.channel_display_page("#api")) == ["exact target"]
 

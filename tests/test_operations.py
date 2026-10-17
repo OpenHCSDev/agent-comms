@@ -75,15 +75,17 @@ class TestMessaging:
         bodies = [m.body for m in wired.bus.inbox("fixer")]
         assert bodies == [f"m{i}" for i in range(5)]
 
-    def test_pending_counts_groups_all_conversations_in_one_result(self, wired):
+    def test_opened_pending_counts_groups_all_conversations_in_one_result(self, wired):
         wired.messaging.send("PR111", "fixer", "direct one")
         wired.messaging.send("PR111", "fixer", "direct two")
         wired.messaging.send("PR111", "#all", "global")
 
-        assert wired.bus.pending_counts("fixer") == {"PR111": 2, "#all": 1}
+        with wired.bus.snapshot(viewer="fixer") as (basis, source):
+            assert wired.bus.pending_counts_opened(source, basis) == {"PR111": 2, "#all": 1}
         references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
         wired.messaging.acknowledge("fixer", references)
-        assert wired.bus.pending_counts("fixer") == {"#all": 1}
+        with wired.bus.snapshot(viewer="fixer") as (basis, source):
+            assert wired.bus.pending_counts_opened(source, basis) == {"#all": 1}
 
     def test_shared_history_page_contract(self, wired):
         for index in range(5):
