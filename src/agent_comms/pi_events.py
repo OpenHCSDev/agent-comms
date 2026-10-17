@@ -188,7 +188,7 @@ class AgentSettled(PiEvent):
         if session.persistent_session is not None and session.inputs.pending:
             session.skip = True
             return
-        session.admission = session.admission.settle(self)
+        session.prompt_state = session.prompt_state.settle(self)
         if not session.stats.requested:
             session.watchdog.tick()
             session.watchdog.progress()
@@ -348,7 +348,7 @@ class CompactionEnd(ReasonedCompaction):
             for event in self.result.charge(session):
                 yield event
         if completed:
-            session.watchdog.compacted(session.admission.started)
+            session.watchdog.compacted(session.prompt_state.started)
         session.usage.invalidate()
         yield session.context_info()
         yield events.CompactionEnd(

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
 
-from .agent_backend import InputId, SendNow, TurnInboxItem
+from .agent_backend import InputId, SendNow, TurnInbox
 from .acp_failure import (
     ACPFailure, BackendDeliveryFailure, DeliveryFailure, FailureSource, UnrecordedFailureSource,
 )
@@ -559,19 +559,19 @@ class PromptRequest(CommsRequest):
         return self.user_text
 
     @abstractmethod
-    def enqueue_control(self, inbox: asyncio.Queue[TurnInboxItem], input_id: str) -> None: ...
+    def enqueue_control(self, inbox: TurnInbox, input_id: str) -> None: ...
 
     async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
         await inputs.emit_queue_state(session_id)
 
 
 class QueuePromptRequest(PromptRequest):
-    def enqueue_control(self, inbox: asyncio.Queue[TurnInboxItem], input_id: str) -> None:
+    def enqueue_control(self, inbox: TurnInbox, input_id: str) -> None:
         pass
 
 
 class SteerPromptRequest(PromptRequest):
-    def enqueue_control(self, inbox: asyncio.Queue[TurnInboxItem], input_id: str) -> None:
+    def enqueue_control(self, inbox: TurnInbox, input_id: str) -> None:
         inbox.put_nowait(SendNow((InputId(input_id),)))
 
 
