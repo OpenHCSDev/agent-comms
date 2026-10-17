@@ -165,7 +165,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, notice=True)
     notice = list(comms.views.channel_history_page("#team").messages)[-1]
     assert notice.notice is True and not notice.starts_turn
-    assert "sender" not in comms.views.last_sent_timestamps()
+    assert "sender" not in comms.views.last_sent_timestamps(comms.bus.activity_clocks()[1])
     assert Message.from_wire(notice.to_wire()) == notice
 
 

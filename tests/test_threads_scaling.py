@@ -120,9 +120,8 @@ def test_mounted_viewer_snapshot_reopens_without_scanning_bus(wired, monkeypatch
 def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired, monkeypatch):
     first = wired.messaging.send_message("PR111", "#base", "channel clock")
     wired.messaging.send_message("fixer", "PR111", "direct clock")
-    expected = wired.bus.channel_activity()
-    sent = wired.bus.last_sent_timestamps()
-    assert expected["#base"].last_message == first.timestamp
+    expected, sent = wired.bus.activity_clocks()
+    assert expected["#base"][0] == first.timestamp
     fresh = wire(wired.root)
     parsed = []
     original = Message.from_wire
@@ -132,13 +131,13 @@ def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired,
         return original(record)
 
     monkeypatch.setattr(Message, "from_wire", measured)
-    assert fresh.bus.channel_activity() == expected
-    assert fresh.bus.last_sent_timestamps() == sent
+    assert fresh.bus.activity_clocks() == (expected, sent)
     assert parsed == []
     appended = wired.messaging.send_message("PR111", "#base", "appended clock")
     parsed.clear()  # Publisher validation belongs to a different lifetime.
-    assert fresh.bus.channel_activity()["#base"].last_message == appended.timestamp
-    assert fresh.bus.last_sent_timestamps()["PR111"] == appended.timestamp
+    activity, sent = fresh.bus.activity_clocks()
+    assert activity["#base"][0] == appended.timestamp
+    assert sent["PR111"] == appended.timestamp
     assert parsed == [appended.seq]
 
 
@@ -162,7 +161,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
 
         monkeypatch.setattr(Message, "from_wire", measured)
         activity, unread = captured.views.presentation.display_view_metrics(source, basis)
-        clocks = captured.bus.last_sent_timestamps(source=source)
+        _, clocks = captured.bus.activity_clocks(source)
         assert clocks["PR111"] == first.timestamp
         assert clocks.get("fixer", 0) < appended.timestamp
         assert activity["#base"].last_message == first.timestamp
@@ -170,7 +169,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
     # The historical reader did not overwrite the newer published checkpoint.
     parsed.clear()
     fresh = wire(wired.root)
-    assert fresh.bus.last_sent_timestamps()["fixer"] == appended.timestamp
+    assert fresh.bus.activity_clocks()[1]["fixer"] == appended.timestamp
     assert parsed == []
 
 
@@ -187,11 +186,11 @@ def test_computed_checkpoint_stays_with_the_same_opened_cut(wired, monkeypatch):
 
         monkeypatch.setattr(Message, "from_wire", measured)
         first_metrics = wired.views.presentation.display_view_metrics(source, basis)
-        first_clocks = wired.bus.last_sent_timestamps(source=source)
+        _, first_clocks = wired.bus.activity_clocks(source)
         assert first.seq in parsed
         parsed.clear()
         assert wired.views.presentation.display_view_metrics(source, basis) == first_metrics
-        assert wired.bus.last_sent_timestamps(source=source) == first_clocks
+        assert wired.bus.activity_clocks(source)[1] == first_clocks
         assert parsed == []
 
 
@@ -293,7 +292,7 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
     checkpoint.write_text(json.dumps(cached))
     reopened = wire(wired.root)
     assert reopened.views.viewer_snapshot(str(wired.root)).last_sent["fixer"] > 0.0
-    assert reopened.bus.channel_activity()["#base"].last_message > 0.0
+    assert reopened.bus.activity_clocks()[0]["#base"][0] > 0.0
 
     bus_path = wired.bus.log.path
     replacement = bus_path.with_name("replacement.jsonl")

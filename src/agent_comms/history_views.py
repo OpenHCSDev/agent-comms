@@ -224,13 +224,12 @@ class HistoryViews:
         )
 
     def last_sent_timestamps(
-        self, *, source: OpenedWireSnapshot | None = None,
-        registry: RegistrySnapshot | None = None,
+        self, sent: Mapping[str, float], *, registry: RegistrySnapshot | None = None,
     ) -> Mapping[str, float]:
-        """Canonical projection of the existing target/sender clock authority."""
+        """Map captured sender clocks through the selected registry names."""
         snapshot = self.registry.snapshot() if registry is None else registry
         canonical: dict[str, float] = {}
-        for sender, timestamp in self.bus.last_sent_timestamps(source=source).items():
+        for sender, timestamp in sent.items():
             name = snapshot.canonical_name(sender)
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
@@ -283,6 +282,7 @@ class HistoryViews:
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
         channels = catalog.views(snapshot.threads)
+        channels_clock, sent = self.bus.activity_clocks()
         return ChannelView.roster(
             snapshot,
             channels,
@@ -293,8 +293,10 @@ class HistoryViews:
                     show_stopped=show_stopped, show_archived=show_archived
                 ), snapshot=snapshot,
             ),
-            self.last_sent_timestamps(),
-            ChannelActivity.for_views(channels, self.bus.channel_activity()),
+            self.last_sent_timestamps(sent, registry=snapshot),
+            ChannelActivity.for_views(channels, {
+                name: ChannelActivity(*clocks) for name, clocks in channels_clock.items()
+            }),
             show_stopped=show_stopped,
             show_archived=show_archived,
         )
@@ -366,9 +368,10 @@ class HistoryViews:
         with self.presentation.snapshot(viewer=viewer) as (basis, source):
             captured_viewer = basis.require_viewer()
             display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
+            _, sent = self.bus.activity_clocks(source)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
-                self.last_sent_timestamps(source=source, registry=basis.registry), display_activity,
+                self.last_sent_timestamps(sent, registry=basis.registry), display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
                 show_stopped=show_stopped, show_archived=show_archived,
                 read_marker_notice=basis.document.notice,
