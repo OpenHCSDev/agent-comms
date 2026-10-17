@@ -105,24 +105,11 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
     @classmethod
     def release(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
-        return replace(
-            current,
-            assignment=None,
-            revision=current.revision + 1,
-            last_transition=type(command),
-            last_previous=command.previous,
-        )
+        return command.remember(replace(current, assignment=None, revision=current.revision + 1))
 
     @classmethod
     def released(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
-        current.require_result(
-            replace(
-                current,
-                assignment=None,
-                last_transition=type(command),
-                last_previous=command.previous,
-            )
-        )
+        current.require_result(command.remember(replace(current, assignment=None)))
         return current
 
     @classmethod
@@ -142,31 +129,16 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 class OpenTodoState(TodoState):
     @classmethod
     def assign(cls, current, proposed):
-        if current.assignment is not None:
-            current.assignment.require_successor(proposed, current)
-        return replace(current, assignment=proposed, revision=current.revision + 1)
+        return current.assigned(proposed)
 
     @classmethod
     def transfer(cls, current, command):
         current.require_assignment(command.previous)
-        return replace(
-            current,
-            assignment=command.proposed,
-            revision=current.revision + 1,
-            last_transition=type(command),
-            last_previous=command.previous,
-        )
+        return command.remember(current.assigned(command.proposed))
 
     @classmethod
     def transferred(cls, current, command):
-        current.require_result(
-            replace(
-                current,
-                assignment=command.proposed,
-                last_transition=type(command),
-                last_previous=command.previous,
-            )
-        )
+        current.require_result(command.remember(replace(current, assignment=command.proposed)))
         return current
 
 
@@ -226,6 +198,9 @@ class AssignmentChange(TodoOperation):
     """The durable row retains the operation kind and exact previous assignment."""
 
     previous: Assignment
+
+    def remember(self, current):
+        return replace(current, last_transition=type(self), last_previous=self.previous)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -322,6 +297,11 @@ class Todo(TypedTable):
     def require_assignee(self, actor: ThreadIncarnation, generation: str | None) -> None:
         if self.assignment is None or not self.assignment.owned_by(actor, generation):
             raise TodoConflict(self)
+
+    def assigned(self, proposed: Assignment) -> Todo:
+        if self.assignment is not None:
+            self.assignment.require_successor(proposed, self)
+        return replace(self, assignment=proposed, revision=self.revision + 1)
 
     def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
         if self.assignment is not None and self.assignment.owned_by(owner, goal_id):

@@ -327,8 +327,9 @@ class Thread(ThreadProvenance):
 
     def require_order_slot(self, goal_id: str, problem: str) -> None:
         if self.goal is not None and (self.goal.id, self.goal.problem) != (goal_id, problem):
-            if self.goal.id == goal_id or not self.goal.state.terminal:
-                raise ValueError("Finish or release the current Goal before assigning an order.")
+            if self.goal.id == goal_id:
+                raise ValueError("Goal ID belongs to another problem.")
+            self.goal.state.require_order_slot()
 
     def require_goal(self, goal_id: str | None = None) -> Goal:
         if goal_id is None:

@@ -30,6 +30,7 @@ from .message_bus import MessageBus
 from .store_files import _store_lock
 from .threads import Thread
 from .turn_lease import FinishedTurnFence
+from .todos import TodoStore
 
 _LOG = logging.getLogger(__name__)
 
@@ -46,7 +47,6 @@ class Goals:
 
     @cached_property
     def todos(self):
-        from .todos import TodoStore
         return TodoStore(self.root)
 
     def open_goal_store(self) -> GoalAttemptStore:
