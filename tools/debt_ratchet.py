@@ -97,24 +97,24 @@ class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
     """A per-node count, kept separately for each file."""
 
 
-class SourceLines(GitMeasure):
-    """Net production lines may not exceed the budget the merged range declares (default 0)."""
+class SourceLines(Measure):
+    """Budget edited lines, retaining moves across the source boundary (50% similarity)."""
 
     trailer: typing.ClassVar[str] = "Src-Budget"
 
     @classmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
-        return {cls.__name__: sum(source.count(b"\n") for _, source in sources)}
-
-    @classmethod
-    def budget(cls, repo: Path, base: str, head: str) -> int:
-        declared = git(repo, "log", f"--format=%(trailers:key={cls.trailer},valueonly)", f"{base}..{head}")
-        return max((int(value) for value in declared.split()), default=0)
-
-    @classmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        before, after = super().compare(repo, base, head, changed, root)
-        return {cls.__name__: before[cls.__name__] + cls.budget(repo, base, head)}, after
+        added = removed = 0
+        records = iter(git(repo, "diff", "--no-ext-diff", "--no-textconv", "--find-renames=50%",
+                           "--numstat", "-z", base, head, "--").split(b"\0")[:-1])
+        for record in records:
+            increase, decrease, path = record.split(b"\t", 2)
+            paths = (path,) if path else (next(records), next(records))
+            if any(path.startswith(root.encode()) and path.endswith(b".py") for path in paths):
+                added += int(increase)
+                removed += int(decrease)
+        declared = git(repo, "log", f"--format=%(trailers:key={cls.trailer},valueonly)", f"{base}..{head}")
+        return {cls.__name__: removed + max((int(value) for value in declared.split()), default=0)}, {cls.__name__: added}
 
 
 @dataclass(frozen=True)
