@@ -97,6 +97,11 @@ def require_no_clients(audience, root):
 
     commands_for_runtime = {path.name for path in RuntimePublication.installed().links} | {'toad-comms'}
     platform = Platform.current()
+    # The existing launch/retirement owner binds each exact process group.
+    # Observation and native helper children belong to that same owned family;
+    # argv spellings (notably multiprocessing's python -c) do not decide it.
+    owned_family = {member for owner in audience
+                    for member in platform.group_members(owner.process)}
     for entry in Path('/proc').iterdir():
         if not entry.name.isdecimal() or int(entry.name) == os.getpid():
             continue
@@ -119,8 +124,8 @@ def require_no_clients(audience, root):
             platform.require(identity)
             if selected_root is not None and os.fsdecode(selected_root) != str(root):
                 continue
-            if module == 'agent_comms.worker' and identity in {item.process for item in audience}:
-                continue  # Only these exact workers belong to the canonical retained batch.
+            if identity in owned_family:
+                continue  # Exact incarnations in the original owned process groups only.
             if client or selected_root == os.fsencode(root):
                 raise RuntimeError(f'Unretired or unclassified client: exact process {identity}')
         except ProcessLookupError:
