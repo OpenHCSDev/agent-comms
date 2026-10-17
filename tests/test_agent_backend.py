@@ -50,19 +50,34 @@ def test_pi_native_serves_threads_with_every_thread_capability():
     assert PiNativeBackend.location_type is PiSessionFile
 
 
+@pytest.mark.parametrize("location", [
+    PiSessionFile("/home/ts/wt/test/session.jsonl"), ab.UnstartedRuntime(PiNativeBackend),
+])
+def test_runtime_location_round_trip_uses_declared_backend(location):
+    restored = FieldCodec.decode(ab.RuntimeLocation, FieldCodec.encode(location))
+    assert restored == location
+    assert restored.backend is PiNativeBackend
+    assert restored.available == location.available
+
+
+def test_input_id_is_stable_for_reserved_source_order():
+    assert ab.InputId.for_sources(("a", "bc")) == ab.InputId.for_sources(("a", "bc"))
+    assert ab.InputId.for_sources(("a", "bc")) != ab.InputId.for_sources(("ab", "c"))
+    with pytest.raises(ValueError, match="reserved sources"):
+        ab.InputId.for_sources(())
+
+
 # -- declaration checks -------------------------------------------------------
 
 
 class _Location(ab.RuntimeLocation):
-    @classmethod
-    def of(cls, thread):
-        return cls()
+    def location_payload(self):
+        return None
 
 
 class _OtherLocation(ab.RuntimeLocation):
-    @classmethod
-    def of(cls, thread):
-        return cls()
+    def location_payload(self):
+        return None
 
 
 def _declared(name, *roles, location=_Location, new_threads=False, serves=True, kinds=frozenset()):
@@ -336,7 +351,8 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
     starts = []
     finish = asyncio.Event()
     delivery = ab.TurnDelivery(
-        worktree=str(project), environment={}, inbox=asyncio.Queue(), finish_event=finish,
+        input_id=ab.InputId.for_sources(("original",)),
+        worktree=str(project), environment={}, inbox=ab.TurnInbox(), finish_event=finish,
         send_boundary=None, interrupt_boundary=None,
         input_started=lambda public_id, native_id, text: starts.append(text) or True,
         request_progress=lambda progress, process: None,

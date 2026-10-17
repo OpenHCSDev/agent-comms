@@ -18,6 +18,8 @@ import any runtime implementation at module level.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass
@@ -27,6 +29,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, WireValue
 from .send_outcome import SendBoundary
 
 if TYPE_CHECKING:
@@ -41,17 +44,45 @@ class BackendDeclarationError(TypeError):
     """A backend declaration is incomplete; the message names every missing piece."""
 
 
-class RuntimeLocation(ABC):
-    """Where one thread's runtime state lives, as its backend understands it.
+class RuntimeLocation(WireValue):
+    """Backend-owned storage, decoded once at the thread boundary."""
 
-    Each backend declares exactly one location type. A location is derived from
-    the thread record that owns the fact; it never stores a second copy of it.
-    """
+    available = True
+
+    @property
+    def backend(self) -> type[AgentBackend]:
+        (owner,) = (backend for backend in AgentBackend.members_with(AgentBackend)
+                    if backend.location_type is type(self))
+        return owner
+
+    def to_wire(self) -> dict[str, object]:
+        return {"backend": self.backend.declared_name, "location": self.location_payload()}
 
     @classmethod
+    def from_wire(cls, data) -> RuntimeLocation:
+        owner = FieldCodec.decode(type[AgentBackend], data["backend"])
+        payload = data["location"]
+        return UnstartedRuntime(owner) if payload is None else owner.location_type.from_wire(payload)
+
     @abstractmethod
-    def of(cls, thread: Thread) -> Self:
-        """The location of this thread's runtime state."""
+    def location_payload(self) -> object: ...
+
+
+@dataclass(frozen=True)
+class UnstartedRuntime(RuntimeLocation):
+    owner: type[AgentBackend]
+    available = False
+
+    @property
+    def backend(self) -> type[AgentBackend]:
+        return self.owner
+
+    def location_payload(self) -> None:
+        return None
+
+    @classmethod
+    def default(cls) -> UnstartedRuntime:
+        return cls(AgentBackend.for_new_threads())
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +99,12 @@ class InputId:
     def __post_init__(self) -> None:
         if type(self.value) is not str or not self.value:
             raise ValueError("An input ID must be a nonempty string")
+
+    @classmethod
+    def for_sources(cls, keys: tuple[str, ...]) -> InputId:
+        if not keys:
+            raise ValueError("An input ID requires reserved sources")
+        return cls(hashlib.sha256(json.dumps(keys).encode()).hexdigest())
 
 
 class WhenBusy(Enum):
@@ -302,6 +339,7 @@ class TurnDelivery:
     provider progress and answer runtime dialogs.
     """
 
+    input_id: InputId
     worktree: str
     environment: dict[str, str]
     inbox: TurnInbox
@@ -311,6 +349,27 @@ class TurnDelivery:
     input_started: Callable[..., bool]
     request_progress: Callable[..., None]
     ui_request: Callable[..., Awaitable[Any]]
+
+
+class Disposition(Enum):
+    ABANDON = "abandon"
+
+
+@dataclass(frozen=True)
+class InterruptedWork:
+    task_id: str
+    kind: str
+
+
+class RecoversAfterCrash(ABC):
+    @abstractmethod
+    async def interrupted(self, thread: Thread) -> tuple[InterruptedWork, ...]: ...
+
+    @abstractmethod
+    async def settle(self, thread: Thread, work: InterruptedWork, disposition: Disposition) -> None: ...
+
+    @abstractmethod
+    async def resume(self, thread: Thread) -> None: ...
 
 
 class RunsTurns(ABC):

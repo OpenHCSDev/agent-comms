@@ -77,9 +77,18 @@ PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
 
 @dataclass(frozen=True)
 class PiSessionFile(RuntimeLocation):
-    """A Pi session JSONL file; derived from ``Thread.session_file``, never stored apart."""
+    """The native backend's stored Pi transcript."""
 
     path: str
+
+    @classmethod
+    def from_wire(cls, data) -> Self:
+        from .field_codec import FieldCodec
+
+        return cls(FieldCodec.decode(str, data["path"]))
+
+    def location_payload(self) -> dict[str, str]:
+        return {"path": self.path}
 
     @classmethod
     def of(cls, thread: Thread) -> Self:
