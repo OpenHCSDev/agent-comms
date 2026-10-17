@@ -356,20 +356,6 @@ class RecoverySnapshot:
         if not owned:
             return
         owner = registry.threads[registry.canonical_name(attempt.owner_thread)]
-        assignment_targets = {
-            assignment.assignment_id: assignment.lifecycle.exact_target
-            for assignment in self.assignments
-        }
-        def target_of(claim) -> str:
-            admission = claim.admission
-            assert admission is not None
-            target = assignment_targets.get(admission.wake_assignment_id)
-            if not isinstance(target, str) or not target:
-                raise IntegrityViolationError(
-                    "terminal claim has no original wake assignment route"
-                )
-            return target
-
         from pathlib import Path
 
         worktree = Path(owner.worktree).absolute()
@@ -378,19 +364,15 @@ class RecoverySnapshot:
             resource = Path(claim.resource)
             return str(resource.relative_to(worktree) if resource.is_relative_to(worktree) else resource)
 
-        ordered = sorted(
-            owned, key=lambda claim: (claim.incarnation, target_of(claim))
-        )
-        for (incarnation, target), records in groupby(
-            ordered, key=lambda claim: (claim.incarnation, target_of(claim))
-        ):
+        ordered = sorted(owned, key=lambda claim: claim.incarnation)
+        for incarnation, records in groupby(ordered, key=lambda claim: claim.incarnation):
             recorded = tuple(records)
             for offset in range(0, len(recorded), ClaimTransition.max_resources):
                 released = recorded[offset:offset + ClaimTransition.max_resources]
                 names = ", ".join(display_resource(claim) for claim in released)
                 bus.publisher.publish_claim_envelope(
-                    Message(owner.name, target,
-                            f"{outcome.release_wording}: {names}", ClaimNoticeKind, notice=True),
+                    Message(owner.name, owner.name,
+                            f"{outcome.release_wording}: {names}", ClaimNoticeKind),
                     worktree=worktree, incarnation=incarnation,
                     releases=tuple(ClaimRelease(claim.resource, claim.generation)
                                    for claim in released),
