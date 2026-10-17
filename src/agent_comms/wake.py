@@ -33,28 +33,6 @@ class ControlClassification(StrEnum):
         return self is self.ORDINARY
 
 
-class NoWakeReason(StrEnum):
-    UNMENTIONED_OBSERVER = "unmentioned_observer"
-
-
-@dataclass(frozen=True, slots=True)
-class NoWakeDecision:
-    """A frozen delivered member with no recipient-specific wake or claim."""
-
-    recipient: str  # Stable recipient_lookup, never the mutable canonical name.
-    reason: NoWakeReason = NoWakeReason.UNMENTIONED_OBSERVER
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.recipient, str) or not self.recipient:
-            raise ValueError("no-wake recipient requires a stable lookup.")
-        if type(self.reason) is not NoWakeReason:
-            raise TypeError("no-wake reason must be a NoWakeReason.")
-
-    def initial_notification(self, recipient, *, observation):
-        return PassiveWake.initial_state()().notification(
-            recipient, observation=observation)
-
-
 @dataclass(frozen=True, slots=True)
 class WakeDecision:
     recipient: str  # Stable recipient_lookup, never the mutable canonical name.
@@ -64,11 +42,19 @@ class WakeDecision:
     def __post_init__(self) -> None:
         if not isinstance(self.recipient, str) or not self.recipient:
             raise ValueError("decision recipient requires a stable lookup.")
-        if type(self.audience) is not MessageAudience or not isinstance(self.wake_mode, WakePolicy):
-            raise TypeError("wake decision requires MessageAudience and a nominal WakePolicy.")
+        if type(self.audience) is not MessageAudience:
+            raise TypeError("wake decision requires MessageAudience.")
+        if self.audience.observer and self.wake_mode.active:
+            raise ValueError("observer decisions must be passive")
+
+    def to_wire(self) -> dict[str, str]:
+        if self.audience.observer:
+            return {"recipient_lookup": self.recipient, "no_wake": "unmentioned_observer"}
+        return {"recipient_lookup": self.recipient, "audience": self.audience.value,
+                "wake_mode": self.wake_mode.declared_name}
 
     def initial_notification(self, recipient, *, observation):
-        return self.wake_mode.initial_state()().notification(
+        return self.wake_mode.initial_state().notification(
             recipient, observation=observation)
 
 
@@ -124,7 +110,7 @@ def _member_decision(
     control: ControlClassification,
     channel: bool,
     effective_mentions: frozenset[str],
-) -> WakeDecision | NoWakeDecision:
+) -> WakeDecision:
     if not channel:
         audience = MessageAudience.DIRECT
     elif effective_mentions:
@@ -137,7 +123,7 @@ def _member_decision(
         mode = FullWake()
     elif effective_mentions:
         if recipient.canonical_thread not in effective_mentions:
-            return NoWakeDecision(recipient.recipient_lookup)
+            return WakeDecision(recipient.recipient_lookup, MessageAudience.OBSERVER, PassiveWake())
         mode = FullWake()
     else:
         mode = BoundedTriageWake()
@@ -150,10 +136,10 @@ def resolve_wake(
     recipient: FrozenRecipient,
     frozen_audience: FrozenAudience,
     control: ControlClassification,
-) -> WakeDecision | NoWakeDecision | None:
+) -> WakeDecision | None:
     """Resolve one member; prefer resolve_wake_cohort for the full frozen N.
 
-    ``None`` means the lookup/name pair is absent; NoWakeDecision is a frozen
+    ``None`` means the lookup/name pair is absent; OBSERVER is a frozen
     unmentioned observer, never a claim. Neither pure API proves bus commit.
     """
     if type(recipient) is not FrozenRecipient:
@@ -166,7 +152,7 @@ def resolve_wake(
 
 def resolve_wake_cohort(
     message: Message, *, frozen_audience: FrozenAudience, control: ControlClassification
-) -> tuple[WakeDecision | NoWakeDecision, ...]:
+) -> tuple[WakeDecision, ...]:
     """Resolve ordered full N with one pure full-envelope check and no live lookup.
 
     Stage3 must separately attest the committed row, recipient capture, and

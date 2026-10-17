@@ -1,6 +1,7 @@
 """Sealed optional awareness omits incomplete work without changing delivery."""
 
 from __future__ import annotations
+from agent_comms.assignment_states import EngagedAssignment
 
 import os
 import tempfile
@@ -628,7 +629,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         )
         passive = accept_delivery_cohort(comms.bus, root_id, notice.seq, store).value.assignments[0]
         assert isinstance(passive.lifecycle, PassiveAssignment)
-        assert not passive.lifecycle.engageable and not passive.lifecycle.mode.active
+        assert EngagedAssignment not in passive.lifecycle.successors() and not passive.lifecycle.mode.active
         observer = RecordedThreadIncarnation("fixture", comms.registry.require("member001").created_at).lookup
         assert not WakeAssignment.select(
             store.session._connection,

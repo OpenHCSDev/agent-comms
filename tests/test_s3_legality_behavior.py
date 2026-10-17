@@ -69,7 +69,7 @@ def test_assignment_positive_numbers_and_timestamps(pending, field):
 @pytest.mark.parametrize("policy", members(WakePolicy), ids=lambda c: c.declared_name)
 def test_assignment_decision_and_binding_owned_by_policy(policy):
     mode = policy()
-    initial = policy.initial_state()
+    initial = policy.initial_state
     state = initial.load(mode, None, None, None)
     assert state.mode == mode and state.exact_target is None
     with pytest.raises(IntegrityViolationError, match="decision relation"):

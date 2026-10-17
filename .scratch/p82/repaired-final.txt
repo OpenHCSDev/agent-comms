@@ -1,0 +1,11 @@
+........................................F............................... [ 66%]
+.....................................                                    [100%]
+=================================== FAILURES ===================================
+________________ test_new_response_state_roundtrips_real_store _________________
+tests/test_coordination_nominal.py:242: in test_new_response_state_roundtrips_real_store
+    obligation = store.snapshots.get("e").obligation
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: 'RecoverySnapshot' object has no attribute 'obligation'. Did you mean: 'obligations'?
+=========================== short test summary info ============================
+FAILED tests/test_coordination_nominal.py::test_new_response_state_roundtrips_real_store
+1 failed, 108 passed in 24.75s

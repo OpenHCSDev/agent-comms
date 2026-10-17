@@ -1,5 +1,6 @@
 """Stored lifecycle names, graph/data ownership, and current codec paths."""
 
+from agent_comms.assignment_states import FailedAssignment
 from dataclasses import fields, replace
 
 import pytest
@@ -126,7 +127,9 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path, mo
         yield from original_selection(self, event)
 
     monkeypatch.setattr(DurableTurn, "handlers_for", observed_selection)
+    from agent_comms.comms import Comms
 
+    Comms(tmp_path).messaging.initialize_private_initial_protocol()
     with Coordination(tmp_path / "coordination.sqlite3") as store:
         store.participants.register("owner", "owner", "owner", committed=True)
         created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
@@ -219,15 +222,9 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
             store.participants.register("p", "owner", "owner", committed=True)
             with store.session.transaction() as db:
                 db.execute(
-                    "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
-                    "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
-                    "ms) VALUES ('e','wire',json_object('kind','queued'),'requester','owner','p',"
-                    "1,2,NULL,0,0)"
-                )
-                db.execute(
-                    "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
-                    "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
-                    "','reviewed'),NULL,0,0,1)"
+                    "INSERT INTO executions (execution_id,origin,lifecycle,owner_thread,"
+                    "owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) "
+                    "VALUES ('e','wire',json_object('kind','queued'),'owner','p',1,2,NULL,0,0)"
                 )
                 db.execute(
                     "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
@@ -237,14 +234,20 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                     "ution_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
                 )
                 db.execute("INSERT INTO execution_claims VALUES ('e','c',0)")
-            obligation = store.snapshots.get("e").obligation
+                db.execute(
+                    "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
+                    "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
+                    "','reviewed'),NULL,0,0,1)"
+                )
+            (obligation,) = store.snapshots.get("e").obligations
             assert isinstance(obligation.lifecycle, ReviewedResponse)
             assert FieldCodec.decode(type(obligation), FieldCodec.encode(obligation)) == obligation
             store.session._connection.execute(
                 "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
                 "RE execution_id='e'"
             )
-            assert isinstance(store.snapshots.get("e").obligation.lifecycle, SilentResponse)
+            (obligation,) = store.snapshots.get("e").obligations
+            assert isinstance(obligation.lifecycle, SilentResponse)
     finally:
         ResponseState.__registry__.pop("reviewed")
 
@@ -279,7 +282,7 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
                 FailedAssignment,
                 expected_revision=1,
             ).value
-            assert settled.lifecycle.failed and settled.lifecycle.mode == assignment.lifecycle.mode
+            assert isinstance(settled.lifecycle, FailedAssignment) and settled.lifecycle.mode == assignment.lifecycle.mode
             assert store.assignments.get("assignment") == settled
     finally:
         AssignmentState.__registry__.pop("awaiting")

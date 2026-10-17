@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from contextlib import ExitStack, closing
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 import hashlib
 import json
 import os
@@ -26,7 +26,12 @@ from routing_recovery import write_original
 
 
 @dataclass(frozen=True)
-class NativeSchemaDeclaration:
+class CoordinationSchemaDeclaration:
+    # Frozen P82 external DDL contract: installed Core c8f85149f → reviewed P82.
+    # Future declaration changes require their own review, not broader matching.
+    assignment_original_ddl: ClassVar[str] = '44755a42be6417e3e9020d024d326970ed6553716d7737d52b00c4d8a73dd712'
+    assignment_target_ddl: ClassVar[str] = 'b13e6675be939ea9d21245d14c9baf7d4de28af5e7e086488e13af105359d9ce'
+
     version: int
     runtime: dict[str, str]
     runtime_digest: str
@@ -36,12 +41,8 @@ class NativeSchemaDeclaration:
     snapshot_version: int
     response_version: int
     coordination: dict[str, str]
-    goal: dict[str, str]
     writable_columns: dict[str, tuple[str, ...]]
     metadata_rows: dict[str, tuple[tuple[Any, ...], ...]]
-    compaction: dict[str, str]
-    compaction_columns: dict[str, tuple[str, ...]]
-
     @classmethod
     def observe(cls):
         from agent_comms.coordinated_runtime_schema import _schema, _digest
@@ -54,10 +55,6 @@ class NativeSchemaDeclaration:
         from agent_comms.coordination_response import ResponseTable, ResponseSchemaMeta, _response_schema, _response_digest
         from agent_comms.native_runtime_input import NativeRuntimeTable
         from agent_comms.typed_table import TypedTable
-        from agent_comms.compaction_records import JournalTable
-        # The original interpreter need not expose a target-only schema helper.
-        # Both authentic producers declare membership through this capability.
-        goal = cls.observe_goal()
         coordination_meta = SchemaMeta.current()
         response_version = get_args(get_type_hints(ResponseSchemaMeta)['version'])[0]
         native_version = get_args(get_type_hints(NativeRuntimeSchemaMeta)['version'])[0]
@@ -84,15 +81,80 @@ class NativeSchemaDeclaration:
                     if item.column.generated is None)
                     for family in (CoordinatorTable, ResponseTable, NativeRuntimeTable)
                     for table in TypedTable.members_with(family)}
+        return cls(native_version, runtime, _digest(runtime), binding_schema(PromptBinding), binding_digest(PromptBinding),
+                   coordination_meta.schema_version, coordination_meta.snapshot_version, response_version,
+                   coordination, writable, metadata)
+
+    @property
+    def release_versions(self):
+        return self.coordination_version, self.snapshot_version, self.response_version, self.version
+
+    @property
+    def runtime_objects(self):
+        return {**self.coordination, **self.runtime}
+
+    def require_coordination(self, db):
+        actual = objects(db)
+        if {name: actual.get(name) for name in self.runtime_objects} != self.runtime_objects:
+            raise ValueError('Original complete coordinator declaration preimage differs')
+        if db.execute('PRAGMA user_version').fetchone()[0] != self.coordination_version:
+            raise ValueError('Original coordinator user_version differs')
+        for name, expected in self.metadata_rows.items():
+            if tuple(rows(db, name)) != expected:
+                raise ValueError('Original complete release metadata differs: ' + name)
+        self.require_runtime(db)
+
+    def require_runtime(self, db):
+        actual = objects(db)
+        owned = {name: sql for name, sql in actual.items()
+                 if name.startswith(('native_runtime_', 'current_native_cursor'))}
+        if owned != self.runtime:
+            raise ValueError('Original native declaration preimage differs')
+        if rows(db, 'native_runtime_schema_meta') != [(1, self.version, self.runtime_digest)]:
+            raise ValueError('Original native schema metadata differs')
+
+    def require_carry_target(self, target):
+        metadata = dict(self.metadata_rows)
+        if self.release_versions == (9, 3, 3, 6) and target.release_versions == (10, 3, 3, 6):
+            from agent_comms.coordination_tables.metadata import SchemaMeta
+            if (not self.coordination.items() <= target.coordination.items()
+                    or not self.writable_columns.items() <= target.writable_columns.items()):
+                raise ValueError('Coordination carry cannot reinterpret original declarations')
+            metadata[SchemaMeta.declared_name] = target.metadata_rows[SchemaMeta.declared_name]
+        elif (self.release_versions != target.release_versions
+              or target.release_versions not in ((9, 3, 3, 6), (10, 3, 3, 6), (11, 3, 3, 6))):
+            raise ValueError('Unreviewed native or coordination release conversion')
+        elif (self.writable_columns != target.writable_columns
+              or (self.coordination != target.coordination
+                  and (row_digest(self.coordination) != self.assignment_original_ddl
+                       or row_digest(target.coordination) != self.assignment_target_ddl))):
+            raise ValueError('Same-release carry is not the reviewed assignment storage conversion')
+        if (self.runtime != target.runtime or self.runtime_digest != target.runtime_digest
+                or self.binding != target.binding or self.binding_digest != target.binding_digest
+                or metadata != target.metadata_rows):
+            raise ValueError('Carry cannot reinterpret original native or response declarations')
+
+
+@dataclass(frozen=True)
+class NativeSchemaDeclaration(CoordinationSchemaDeclaration):
+    goal: dict[str, str]
+    compaction: dict[str, str]
+    compaction_columns: dict[str, tuple[str, ...]]
+
+    @classmethod
+    def observe(cls):
+        from agent_comms.compaction_records import JournalTable
+        from agent_comms.typed_table import TypedTable
+        coordinator = CoordinationSchemaDeclaration.observe()
         journals = tuple(TypedTable.members_with(JournalTable))
         with closing(sqlite3.connect(':memory:')) as shape:
             for table in journals:
                 table.create(shape)
             compaction = objects(shape)
-        return cls(native_version, runtime, _digest(runtime), binding_schema(PromptBinding), binding_digest(PromptBinding),
-                   coordination_meta.schema_version, coordination_meta.snapshot_version, response_version,
-                   coordination, goal, writable, metadata, compaction,
-                   {table.declared_name: table.columns() for table in journals})
+        return cls(**{field.name: getattr(coordinator, field.name)
+                      for field in fields(CoordinationSchemaDeclaration)},
+                   goal=cls.observe_goal(), compaction=compaction,
+                   compaction_columns={table.declared_name: table.columns() for table in journals})
 
     @staticmethod
     def observe_goal():
@@ -149,10 +211,6 @@ class NativeSchemaDeclaration:
             self.require_goal(db)
         return result
 
-    @property
-    def release_versions(self):
-        return self.coordination_version, self.snapshot_version, self.response_version, self.version
-
     def require_carry_target(self, target):
         """Authenticate the reviewed conversion from original declarations.
 
@@ -162,26 +220,7 @@ class NativeSchemaDeclaration:
         """
         if self.release_versions == (9, 3, 3, 5) and target.release_versions == (9, 3, 3, 6):
             return
-        metadata = dict(self.metadata_rows)
-        if self.release_versions == (9, 3, 3, 6) and target.release_versions == (10, 3, 3, 6):
-            from agent_comms.coordination_tables.metadata import SchemaMeta
-
-            if (not self.coordination.items() <= target.coordination.items()
-                    or not self.writable_columns.items() <= target.writable_columns.items()):
-                raise ValueError('Coordination carry cannot reinterpret original declarations')
-            # The existing metadata declaration owns the release marker. No
-            # fact row, native proof or response schema gets a new meaning.
-            metadata[SchemaMeta.declared_name] = target.metadata_rows[SchemaMeta.declared_name]
-        elif (self.release_versions != target.release_versions
-              or target.release_versions not in ((9, 3, 3, 6), (10, 3, 3, 6))):
-            raise ValueError('Unreviewed native or coordination release conversion')
-        elif (self.coordination != target.coordination
-              or self.writable_columns != target.writable_columns):
-            raise ValueError('Same-release carry cannot change original coordination declarations')
-        if (self.runtime != target.runtime or self.runtime_digest != target.runtime_digest
-                or self.binding != target.binding or self.binding_digest != target.binding_digest
-                or metadata != target.metadata_rows):
-            raise ValueError('Carry cannot reinterpret original native or response declarations')
+        super().require_carry_target(target)
         if (not self.compaction_columns.items() <= target.compaction_columns.items()
                 or not self.compaction.items() <= target.compaction.items()):
             raise ValueError('Additive journal carry cannot reinterpret original declarations')
@@ -228,30 +267,6 @@ class NativeSchemaDeclaration:
                 'original_rows': {name: len(values) for name, values in identities.items()},
                 'original_source_bytes_preserved': True,
                 'admission_receipts_minted': 0, 'input_replays': 0}
-
-    @property
-    def runtime_objects(self):
-        return {**self.coordination, **self.runtime}
-
-    def require_coordination(self, db):
-        actual = objects(db)
-        if {name: actual.get(name) for name in self.runtime_objects} != self.runtime_objects:
-            raise ValueError('Original complete coordinator declaration preimage differs')
-        if db.execute('PRAGMA user_version').fetchone()[0] != self.coordination_version:
-            raise ValueError('Original coordinator user_version differs')
-        for name, expected in self.metadata_rows.items():
-            if tuple(rows(db, name)) != expected:
-                raise ValueError('Original complete release metadata differs: ' + name)
-        self.require_runtime(db)
-
-    def require_runtime(self, db):
-        actual = objects(db)
-        owned = {name: sql for name, sql in actual.items()
-                 if name.startswith(('native_runtime_', 'current_native_cursor'))}
-        if owned != self.runtime:
-            raise ValueError('Original native declaration preimage differs')
-        if rows(db, 'native_runtime_schema_meta') != [(1, self.version, self.runtime_digest)]:
-            raise ValueError('Original native schema metadata differs')
 
     def require_binding(self, db):
         if objects(db) != self.binding or rows(db, 'snapshot_meta') != [(1, self.binding_digest)]:
@@ -395,7 +410,7 @@ def carry_goal(db, target):
             'metadata_owner': GoalAttemptSchema.declared_name}
 
 
-def carry_coordination(db, original, target):
+def carry_coordination(db, original: CoordinationSchemaDeclaration, target: CoordinationSchemaDeclaration):
     """Carry declaration members; existing facts keep their original identities."""
     from agent_comms.coordination_schema import CoordinatorTable
     from agent_comms.coordination_response import ResponseTable

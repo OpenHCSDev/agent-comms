@@ -130,6 +130,9 @@ class AssignmentProgress(DeliveryProgress):
 class SentProgress(PendingDelivery, AssignmentProgress):
     sent_at_ms: int
 
+    def notification_label(self, notification: MessageNotification) -> str:
+        return self.label
+
     @property
     def at_ms(self):
         return self.sent_at_ms

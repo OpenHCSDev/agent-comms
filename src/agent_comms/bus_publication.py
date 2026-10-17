@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
@@ -16,10 +16,11 @@ from .errors import RelationViolationError
 from .pi_rpc import unique_fields
 
 if TYPE_CHECKING:
-    from .audience_manifest import FrozenAudience
+    from .assignment_states import AssignmentState
+    from .audience_manifest import FrozenAudience, FrozenRecipient
     from .delivery_policy import DeliveryManifest, KeyedResponseReceipt
     from .messages import Message
-    from .wake import NoWakeDecision, WakeDecision
+    from .wake import WakeDecision
 
 
 PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
@@ -87,22 +88,8 @@ def reject_private_wire_fields(record: Mapping[str, object]) -> None:
         raise ValueError("Bus-private wire fields cannot be exported.")
 
 
-def _decision_wire(decision: WakeDecision | NoWakeDecision) -> dict[str, str]:
-    from .wake import NoWakeDecision, WakeDecision
-
-    if type(decision) is NoWakeDecision:
-        return {"recipient_lookup": decision.recipient, "no_wake": decision.reason.value}
-    if type(decision) is WakeDecision:
-        return {
-            "recipient_lookup": decision.recipient,
-            "audience": decision.audience.value,
-            "wake_mode": decision.wake_mode.declared_name,
-        }
-    raise TypeError("Only typed, pure full-cohort decisions may be committed.")
-
-
-def decisions_wire(decisions: tuple[WakeDecision | NoWakeDecision, ...]) -> list[dict[str, str]]:
-    return [_decision_wire(decision) for decision in decisions]
+def decisions_wire(decisions: tuple[WakeDecision, ...]) -> list[dict[str, str]]:
+    return [decision.to_wire() for decision in decisions]
 
 
 def decisions_digest(decisions: list[dict[str, str]]) -> str:
@@ -121,13 +108,22 @@ class CommittedDelivery(MessageWireRecord):
     wire_root_id: str
     message: Message
     audience: FrozenAudience
-    decisions: tuple[WakeDecision | NoWakeDecision, ...]
+    decisions: tuple[WakeDecision, ...]
     decisions_digest: str
     control: str
     resolver_version: str
     policy_version: str
     manifest_codec: str = INITIAL_CODEC
     receipt: KeyedResponseReceipt | None = None
+
+    def assignment_decisions(self) -> Iterator[tuple[FrozenRecipient, WakeDecision, AssignmentState]]:
+        """Selected frozen members with their declared initial lifecycle, never observers."""
+        from .coordination_errors import IntegrityViolationError
+
+        for recipient, decision in zip(self.audience.recipients, self.decisions, strict=True):
+            if recipient.recipient_lookup != decision.recipient:
+                raise IntegrityViolationError("bus decision does not match frozen N")
+            yield from decision.audience.assignments(recipient, decision)
 
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and its original addressed incarnation agree."""
@@ -241,7 +237,7 @@ def initial_sideband(
     wire_root_id: str,
     message: Message,
     audience: FrozenAudience,
-    decisions: tuple[WakeDecision | NoWakeDecision, ...],
+    decisions: tuple[WakeDecision, ...],
     *,
     control: str,
 ) -> DeliveryManifest:

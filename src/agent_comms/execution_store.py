@@ -144,7 +144,7 @@ class ExecutionStore:
             if (
                 assignment.recipient_lookup != owner_lookup
                 or assignment.lifecycle.execution_id is not None
-                or not assignment.lifecycle.engageable
+                or EngagedAssignment not in assignment.lifecycle.successors()
             ):
                 raise IdentityConflict("claim cannot engage this execution")
             decision = EngagedAssignment.build(

@@ -271,8 +271,9 @@ class TriageNativeSend(NativeSendStage):
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         for captured in self.assignments:
             current = store.assignments.get(captured.assignment_id)
-            if current != captured or not current.lifecycle.triage_pending:
+            if current != captured:
                 raise IdentityConflict("triage claim changed before native batch reservation")
+            reserved = current.lifecycle.reserve_triage()
             if SqlValue.for_annotation(int).read(db.execute(
                 f"SELECT 1 FROM ({self.execution.source_membership_sql()}) members "
                 "WHERE members.assignment_id=? LIMIT 1", (captured.assignment_id,),
@@ -281,9 +282,9 @@ class TriageNativeSend(NativeSendStage):
             # All original CASes and the one reserved input commit before Pi.
             update = WakeAssignment.update(
                 db,
-                where="assignment_id=? AND revision=? AND disposition='triage_pending'",
+                where="assignment_id=? AND revision=?",
                 parameters=(current.assignment_id, current.revision),
-                lifecycle=DeferredAssignment.build(current.lifecycle.mode, None, None),
+                lifecycle=reserved,
                 revision=current.revision + 1,
                 updated_at_ms=store.session.now(current.updated_at_ms),
             )
@@ -390,9 +391,9 @@ class FullNativeSend(NativeSendStage):
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
         snapshot, attempt = store.attempts.require_fence(self.fence)
+        current.lifecycle.require_engagement()
         if (
-            not current.lifecycle.engaged
-            or not snapshot.execution.lifecycle.active
+            not snapshot.execution.lifecycle.active
             or not attempt.lifecycle.starting
             or attempt.lifecycle.backend_done
             or attempt.lifecycle.process_dead

@@ -1,0 +1,441 @@
+....................F..................FF..F..FFFF.F...........F........ [ 68%]
+.........EE...EEEEEEEEEEEEEEEEEEE                                        [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_assignment_positive_numbers_and_timestamps[wire_seq] __
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+_ ERROR at setup of test_assignment_positive_numbers_and_timestamps[revision] __
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+____ ERROR at setup of test_execution_attempt_reference_and_budget[queued] _____
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+____ ERROR at setup of test_execution_attempt_reference_and_budget[pending] ____
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+____ ERROR at setup of test_execution_attempt_reference_and_budget[active] _____
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+___ ERROR at setup of test_execution_attempt_reference_and_budget[completed] ___
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+___ ERROR at setup of test_execution_attempt_reference_and_budget[deferred] ____
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+____ ERROR at setup of test_execution_attempt_reference_and_budget[failed] _____
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+______ ERROR at setup of test_execution_numeric_time_and_route_boundaries ______
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+__________ ERROR at setup of test_replay_bits_revision_and_ambiguity ___________
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+_ ERROR at setup of test_response_receipt_and_publication_constraints[pending] _
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+_ ERROR at setup of test_response_receipt_and_publication_constraints[publishing] _
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+_ ERROR at setup of test_response_receipt_and_publication_constraints[deferred] _
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+_ ERROR at setup of test_response_receipt_and_publication_constraints[published] _
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+_ ERROR at setup of test_response_receipt_and_publication_constraints[silent] __
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+_ ERROR at setup of test_response_receipt_and_publication_constraints[failed] __
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+____ ERROR at setup of test_snapshot_membership_order_owner_and_disposition ____
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+_____ ERROR at setup of test_snapshot_attempt_identity_pointer_and_version _____
+tests/test_s3_legality_behavior.py:48: in active
+    with ready(tmp_path / "active.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+_______ ERROR at setup of test_snapshot_wire_claimless_and_exact_routes ________
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+___________ ERROR at setup of test_snapshot_retry_terminal_coupling ____________
+tests/test_s3_legality_behavior.py:48: in active
+    with ready(tmp_path / "active.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+_ ERROR at setup of test_snapshot_publication_parent_receipt_and_frozen_envelope _
+tests/test_s3_legality_behavior.py:40: in pending
+    with ready(tmp_path / "rules.sqlite3") as store:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_store.py:112: in ready
+    db.assignments.accept(
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+=================================== FAILURES ===================================
+_____ test_no_wake_is_not_a_passive_claim_and_decisions_are_strictly_typed _____
+tests/test_wake.py:220: in test_no_wake_is_not_a_passive_claim_and_decisions_are_strictly_typed
+    with pytest.raises(ValueError, match="WakePolicy"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'WakePolicy'
+E     Actual message: 'Expected a family object.'
+__________ test_durable_turn_records_native_phases_before_completion ___________
+tests/test_coordination_nominal.py:202: in test_durable_turn_records_native_phases_before_completion
+    store.attempts.settle_nonpublication(
+src/agent_comms/attempt_store.py:320: in settle_nonpublication
+    snapshot.settle(self.session, outcome, reason_code, acquired)
+src/agent_comms/coordination_snapshot.py:240: in settle
+    session.release_resources(self, outcome, boundary)
+src/agent_comms/coordination_session.py:167: in release_resources
+    snapshot.release_resources(boundary, outcome)
+src/agent_comms/coordination_snapshot.py:345: in release_resources
+    metadata = bus.log._private_marker_unlocked()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:504: in _private_marker_unlocked
+    raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E   agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+________________ test_new_response_state_roundtrips_real_store _________________
+tests/test_coordination_nominal.py:222: in test_new_response_state_roundtrips_real_store
+    db.execute(
+E   sqlite3.OperationalError: table executions has no column named exact_target
+___ test_private_initial_opt_in_full_n_observer_and_exact_public_projection ____
+tests/test_coordination_cohort.py:109: in test_private_initial_opt_in_full_n_observer_and_exact_public_projection
+    first = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/coordination_cohort.py:277: in accept_delivery_cohort
+    assignment.insert(db)
+src/agent_comms/typed_table.py:701: in insert
+    return db.execute(*self._insertion())
+                       ^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:698: in _insertion
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+    ^^^^^
+src/agent_comms/typed_table.py:698: in <genexpr>
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:330: in encode
+    self.value.decode(encoded)
+src/agent_comms/field_codec.py:705: in decode
+    member = self.family.decode(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/declared_family.py:107: in decode
+    raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
+E   ValueError: Unknown AssignmentState name: 'awaiting'
+________________ test_sealed_receipts_follow_recipient_progress ________________
+tests/test_coordination_cohort.py:192: in test_sealed_receipts_follow_recipient_progress
+    accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+src/agent_comms/coordination_cohort.py:277: in accept_delivery_cohort
+    assignment.insert(db)
+src/agent_comms/typed_table.py:701: in insert
+    return db.execute(*self._insertion())
+                       ^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:698: in _insertion
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+    ^^^^^
+src/agent_comms/typed_table.py:698: in <genexpr>
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:330: in encode
+    self.value.decode(encoded)
+src/agent_comms/field_codec.py:705: in decode
+    member = self.family.decode(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/declared_family.py:107: in decode
+    raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
+E   ValueError: Unknown AssignmentState name: 'awaiting'
+________________ test_zero_member_zero_claim_and_direct_message ________________
+tests/test_coordination_cohort.py:220: in test_zero_member_zero_claim_and_direct_message
+    single = accept_delivery_cohort(comms.bus, root_id, direct.seq, store)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/coordination_cohort.py:277: in accept_delivery_cohort
+    assignment.insert(db)
+src/agent_comms/typed_table.py:701: in insert
+    return db.execute(*self._insertion())
+                       ^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:698: in _insertion
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+    ^^^^^
+src/agent_comms/typed_table.py:698: in <genexpr>
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:330: in encode
+    self.value.decode(encoded)
+src/agent_comms/field_codec.py:705: in decode
+    member = self.family.decode(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/declared_family.py:107: in decode
+    raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
+E   ValueError: Unknown AssignmentState name: 'awaiting'
+________ test_legacy_preexisting_claim_blocks_entire_batch_and_rollback ________
+tests/test_coordination_cohort.py:243: in test_legacy_preexisting_claim_blocks_entire_batch_and_rollback
+    store.assignments.accept(legacy)
+src/agent_comms/assignment_store.py:32: in accept
+    assignment.require_initial_decision()
+src/agent_comms/coordination_tables/assignments.py:91: in require_initial_decision
+    raise IdentityConflict("claim acceptance requires initial frozen decision")
+E   agent_comms.coordination_errors.IdentityConflict: claim acceptance requires initial frozen decision
+__________ test_no_wake_observer_cannot_gain_legacy_claim_after_seal ___________
+tests/test_coordination_cohort.py:262: in test_no_wake_observer_cannot_gain_legacy_claim_after_seal
+    result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/coordination_cohort.py:277: in accept_delivery_cohort
+    assignment.insert(db)
+src/agent_comms/typed_table.py:701: in insert
+    return db.execute(*self._insertion())
+                       ^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:698: in _insertion
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+    ^^^^^
+src/agent_comms/typed_table.py:698: in <genexpr>
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:330: in encode
+    self.value.decode(encoded)
+src/agent_comms/field_codec.py:705: in decode
+    member = self.family.decode(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/declared_family.py:107: in decode
+    raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
+E   ValueError: Unknown AssignmentState name: 'awaiting'
+_____ test_keyed_response_replay_after_initial_row_and_receipt_backed_page _____
+tests/test_coordination_cohort.py:305: in test_keyed_response_replay_after_initial_row_and_receipt_backed_page
+    case = _ready(tmp_path, direct=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_coordination_response.py:102: in _ready
+    accepted = accept_delivery_cohort(comms.bus, root_id, original.seq, store)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/coordination_cohort.py:277: in accept_delivery_cohort
+    assignment.insert(db)
+src/agent_comms/typed_table.py:701: in insert
+    return db.execute(*self._insertion())
+                       ^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:698: in _insertion
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+    ^^^^^
+src/agent_comms/typed_table.py:698: in <genexpr>
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:330: in encode
+    self.value.decode(encoded)
+src/agent_comms/field_codec.py:705: in decode
+    member = self.family.decode(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/declared_family.py:107: in decode
+    raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
+E   ValueError: Unknown AssignmentState name: 'awaiting'
+__ test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only ___
+tests/test_wake_candidate_index.py:203: in test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only
+    accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+src/agent_comms/coordination_cohort.py:277: in accept_delivery_cohort
+    assignment.insert(db)
+src/agent_comms/typed_table.py:701: in insert
+    return db.execute(*self._insertion())
+                       ^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:698: in _insertion
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+    ^^^^^
+src/agent_comms/typed_table.py:698: in <genexpr>
+    tuple(item.encode(getattr(self, item.name)) for item in writable))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/typed_table.py:330: in encode
+    self.value.decode(encoded)
+src/agent_comms/field_codec.py:705: in decode
+    member = self.family.decode(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/declared_family.py:107: in decode
+    raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
+E   ValueError: Unknown AssignmentState name: 'awaiting'
+=========================== short test summary info ============================
+FAILED tests/test_wake.py::test_no_wake_is_not_a_passive_claim_and_decisions_are_strictly_typed
+FAILED tests/test_coordination_nominal.py::test_durable_turn_records_native_phases_before_completion
+FAILED tests/test_coordination_nominal.py::test_new_response_state_roundtrips_real_store
+FAILED tests/test_coordination_cohort.py::test_private_initial_opt_in_full_n_observer_and_exact_public_projection
+FAILED tests/test_coordination_cohort.py::test_sealed_receipts_follow_recipient_progress
+FAILED tests/test_coordination_cohort.py::test_zero_member_zero_claim_and_direct_message
+FAILED tests/test_coordination_cohort.py::test_legacy_preexisting_claim_blocks_entire_batch_and_rollback
+FAILED tests/test_coordination_cohort.py::test_no_wake_observer_cannot_gain_legacy_claim_after_seal
+FAILED tests/test_coordination_cohort.py::test_keyed_response_replay_after_initial_row_and_receipt_backed_page
+FAILED tests/test_wake_candidate_index.py::test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only
+ERROR tests/test_s3_legality_behavior.py::test_assignment_positive_numbers_and_timestamps[wire_seq]
+ERROR tests/test_s3_legality_behavior.py::test_assignment_positive_numbers_and_timestamps[revision]
+ERROR tests/test_s3_legality_behavior.py::test_execution_attempt_reference_and_budget[queued]
+ERROR tests/test_s3_legality_behavior.py::test_execution_attempt_reference_and_budget[pending]
+ERROR tests/test_s3_legality_behavior.py::test_execution_attempt_reference_and_budget[active]
+ERROR tests/test_s3_legality_behavior.py::test_execution_attempt_reference_and_budget[completed]
+ERROR tests/test_s3_legality_behavior.py::test_execution_attempt_reference_and_budget[deferred]
+ERROR tests/test_s3_legality_behavior.py::test_execution_attempt_reference_and_budget[failed]
+ERROR tests/test_s3_legality_behavior.py::test_execution_numeric_time_and_route_boundaries
+ERROR tests/test_s3_legality_behavior.py::test_replay_bits_revision_and_ambiguity
+ERROR tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints[pending]
+ERROR tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints[publishing]
+ERROR tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints[deferred]
+ERROR tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints[published]
+ERROR tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints[silent]
+ERROR tests/test_s3_legality_behavior.py::test_response_receipt_and_publication_constraints[failed]
+ERROR tests/test_s3_legality_behavior.py::test_snapshot_membership_order_owner_and_disposition
+ERROR tests/test_s3_legality_behavior.py::test_snapshot_attempt_identity_pointer_and_version
+ERROR tests/test_s3_legality_behavior.py::test_snapshot_wire_claimless_and_exact_routes
+ERROR tests/test_s3_legality_behavior.py::test_snapshot_retry_terminal_coupling
+ERROR tests/test_s3_legality_behavior.py::test_snapshot_publication_parent_receipt_and_frozen_envelope
+10 failed, 74 passed, 21 errors in 22.80s

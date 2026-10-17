@@ -8,6 +8,7 @@ from agent_comms.bus_source_page import AddressedPage
 
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination_cohort import sealed_cohort_assignments
+from agent_comms.coordination_tables.assignments import MessageAudience
 from agent_comms.coordination_response import prepare_fenced_response, publish_fenced_response
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.proven_source_coverage import SourceCoverage
@@ -65,7 +66,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
             required_through_seq=response.seq,
         )
         assert [entry.source_seq for entry in page.entries] == [response.seq]
-        assert page.entries[0].wake_mode is BoundedTriageWake
+        assert page.entries[0].audience is MessageAudience.COLLECTIVE
         # Repeating the publisher/recipient poll does not duplicate the row or K.
         publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         await _accept_visible_deliveries(

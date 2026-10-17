@@ -25,7 +25,6 @@ from agent_comms.cohort_schema import (
 from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 from agent_comms.coordination_errors import (
     IdentityConflict,
-    IntegrityViolationError,
     SchemaVersionError,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
@@ -33,7 +32,6 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
-from agent_comms.wake import NoWakeDecision, WakeDecision
 
 _LOG = logging.getLogger(__name__)
 
@@ -57,33 +55,25 @@ def _assignment_id(root: str, seq: int, lookup: str) -> str:
 def _expected_assignments(
     initial: CommittedDelivery, accepted_at_ms: int
 ) -> tuple[WakeAssignment, ...]:
-    result: list[WakeAssignment] = []
-    for recipient, decision in zip(initial.audience.recipients, initial.decisions, strict=True):
-        if recipient.recipient_lookup != decision.recipient:
-            raise IntegrityViolationError("bus decision does not match frozen N")
-        if type(decision) is NoWakeDecision:
-            continue
-        if type(decision) is not WakeDecision:
-            raise IntegrityViolationError("bus decision has an unsupported kind")
-        result.append(
-            WakeAssignment(
-                assignment_id=_assignment_id(
-                    initial.wire_root_id, initial.message.seq, decision.recipient
-                ),
-                recipient=recipient.canonical_thread,
-                recipient_lookup=decision.recipient,
-                wire_seq=initial.message.seq,
-                message_id=initial.message.message_id,
-                audience=decision.audience,
-                accepted_at_ms=accepted_at_ms,
-                updated_at_ms=accepted_at_ms,
-                revision=1,
-                resolver_version=RESOLVER_VERSION,
-                policy_version=POLICY_VERSION,
-                lifecycle=decision.wake_mode.initial_state()(),
-            )
+    return tuple(
+        WakeAssignment(
+            assignment_id=_assignment_id(
+                initial.wire_root_id, initial.message.seq, decision.recipient
+            ),
+            recipient=recipient.canonical_thread,
+            recipient_lookup=decision.recipient,
+            wire_seq=initial.message.seq,
+            message_id=initial.message.message_id,
+            audience=decision.audience,
+            accepted_at_ms=accepted_at_ms,
+            updated_at_ms=accepted_at_ms,
+            revision=1,
+            resolver_version=RESOLVER_VERSION,
+            policy_version=POLICY_VERSION,
+            lifecycle=lifecycle,
         )
-    return tuple(result)
+        for recipient, decision, lifecycle in initial.assignment_decisions()
+    )
 
 
 def _immutable_assignment_matches(current: WakeAssignment, expected: WakeAssignment) -> bool:
@@ -109,7 +99,8 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> Acce
     row = ClaimBatchReceipts.one(db, wire_root_id=initial.wire_root_id, wire_seq=message.seq)
     if row is None or not row.sealed:
         raise IdentityConflict("cohort receipt is absent or unsealed")
-    expected_count = sum(type(decision) is WakeDecision for decision in initial.decisions)
+    expected = _expected_assignments(initial, row.accepted_at_ms)
+    expected_count = len(expected)
     if any(
         getattr(row, field) != expected
         for field, expected in (
@@ -126,7 +117,6 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> Acce
         )
     ):
         raise IdentityConflict("sealed cohort receipt conflicts with committed bus")
-    expected = _expected_assignments(initial, row.accepted_at_ms)
     members = ClaimBatchMembers.select(
         db,
         where="wire_root_id=? AND wire_seq=?",
@@ -177,8 +167,8 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> Acce
     # as a K member or hidden by a valid sealed N receipt.
     if any(
         WakeAssignment.one(db, recipient_lookup=recipient.recipient_lookup, wire_seq=message.seq)
-        for recipient, decision in zip(audience.recipients, initial.decisions, strict=True)
-        if type(decision) is NoWakeDecision
+        for recipient in audience.recipients
+        if recipient.recipient_lookup not in selected
     ):
         raise IdentityConflict("no-wake observer has a conflicting unbound claim")
     return AcceptedCohort(

@@ -14,7 +14,7 @@ import json
 import os
 import secrets
 from contextlib import suppress
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -196,13 +196,9 @@ class SelectedWritePlans:
             lookup = owner.incarnation.lookup
             with Coordination(str(self.comms.root / "coordination.sqlite3")) as store:
                 assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
-                selected = [
-                    assignment
-                    for assignment in assignments
-                    if assignment.source == MessageReference(source_seq, source_message_id)
-                    and assignment.recipient == owner.name
-                    and assignment.lifecycle.full_pending
-                ]
+                reference = MessageReference(source_seq, source_message_id)
+                selected = [chosen for assignment in assignments
+                            if (chosen := assignment.lifecycle.selected_write(assignment, reference, owner.name)) is not None]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")
             path = ExistingFileClaim(Path(resource)).normalized(Path(owner.worktree))

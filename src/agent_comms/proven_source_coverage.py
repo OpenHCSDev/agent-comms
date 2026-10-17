@@ -31,7 +31,7 @@ from .private_bus_checkpoint import (
     PrefixWitness,
     verify_private_bus_checkpoint_unlocked,
 )
-from .wake import NoWakeDecision, WakeDecision
+from .assignment_states import AssignmentState
 
 if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope
@@ -131,33 +131,26 @@ class SourceCoverage:
             covered, inputs, no_wake, blocked = after_seq if partial else 0, [], [], None
             for initial in initials:
                 seq = initial.message.seq
-                matches = [
-                    (recipient, decision)
-                    for recipient, decision in zip(
-                        initial.audience.recipients, initial.decisions, strict=True
-                    )
-                    if recipient.recipient_lookup == self.recipient_lookup
-                ]
-                if len(matches) > 1:
-                    raise IdentityConflict("duplicate stable lookup in frozen audience")
-                if not matches:
+                if not initial.audience.includes_lookup(self.recipient_lookup):
                     covered = seq
                     continue
-                recipient, decision = matches[0]
-                receipt = self._receipt(initial)
-                if receipt is None:
+                matches = [(recipient, lifecycle)
+                           for recipient, _decision, lifecycle in initial.assignment_decisions()
+                           if recipient.recipient_lookup == self.recipient_lookup]
+                accepted = self._accepted(initial)
+                if accepted is None:
                     blocked = seq
                     break
-                if type(decision) is NoWakeDecision:
+                if not matches:
                     no_wake.append(seq)
-                elif type(decision) is WakeDecision:
-                    evidence = self._selected_inputs(seq, recipient, decision, receipt, source_reads)
+                for recipient, lifecycle in matches:
+                    evidence = self._selected_inputs(seq, recipient, lifecycle, accepted, source_reads)
                     if not evidence:
                         blocked = seq
                         break
                     inputs.extend(evidence)
-                else:
-                    raise IdentityConflict("unsupported frozen wake decision")
+                if blocked is not None:
+                    break
                 covered = seq
             if blocked is None:
                 covered = max(covered, horizon)
@@ -187,7 +180,7 @@ class SourceCoverage:
             request.require_exhausted(more)
         return witness, tuple(initials), more
 
-    def _receipt(self, initial: CommittedDelivery) -> AcceptedCohort | None:
+    def _accepted(self, initial: CommittedDelivery) -> AcceptedCohort | None:
         with self.store.session.read():
             db = self.store.session._connection
             assert_cohort_schema(db)
@@ -198,21 +191,21 @@ class SourceCoverage:
             return _receipt_matches(db, initial) if sealed and sealed.sealed else None
 
     def _selected_inputs(
-        self, seq: int, recipient: FrozenRecipient, decision: WakeDecision, receipt: AcceptedCohort,
+        self, seq: int, recipient: FrozenRecipient, lifecycle: AssignmentState, accepted: AcceptedCohort,
         source_reads: NativeEvidenceScope,
     ) -> tuple[HistoricalNativeInput, ...]:
         assignments = [
             a
-            for a in receipt.assignments
+            for a in accepted.assignments
             if a.recipient_lookup == self.recipient_lookup
             and a.recipient == recipient.canonical_thread
         ]
-        if len(assignments) != 1 or assignments[0].lifecycle.mode != decision.wake_mode:
+        if len(assignments) != 1 or assignments[0].lifecycle.mode != lifecycle.mode:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
-        if not decision.wake_mode.active:
+        if not lifecycle.mode.active:
             return ()  # PASSIVE is not native injection.
         evidence = self.native_inputs(seq, source_reads=source_reads)
-        if decision.wake_mode.proves_source(evidence) and all(
+        if lifecycle.mode.proves_source(evidence) and all(
             p.assignment_id == assignments[0].assignment_id for p in evidence
         ):
             return evidence

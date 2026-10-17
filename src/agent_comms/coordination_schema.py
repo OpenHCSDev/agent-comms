@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-from agent_comms.assignment_states import AssignmentState
+from agent_comms.assignment_states import AssignmentState, EngagedAssignment, PendingNotification
 from agent_comms.attempt_states import AttemptState, RetryPredecessor
 from agent_comms.execution_states import ExecutionState
 from agent_comms.obligation_states import ResponseState
@@ -58,6 +58,9 @@ def _schema_context():
         execution_names=_sql_members(ExecutionState),
         attempt_names=_sql_members(AttemptState),
         assignment_names=_sql_members(AssignmentState),
+        pending_assignment_names=_sql_values(
+            member.declared_name for member in AssignmentState.members_with(PendingNotification)
+        ),
         wake_names=_sql_members(WakePolicy),
         response_names=_sql_members(ResponseState),
         recovery_names=_sql_members(RecoveryCondition),
@@ -71,7 +74,7 @@ def _schema_context():
             member.declared_name for member in AttemptState.members_with(RetryPredecessor)
         ),
         engaged_execution_names=_sql_members(
-            ExecutionState, lambda member: member.assignment_state().engaged
+            ExecutionState, lambda member: issubclass(member.assignment_state(), EngagedAssignment)
         ),
         unstarted_execution_names=_sql_members(ExecutionState, lambda member: member.unstarted),
         required_attempt_execution_names=_sql_members(

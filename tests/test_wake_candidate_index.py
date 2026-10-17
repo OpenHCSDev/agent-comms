@@ -30,7 +30,7 @@ from agent_comms.wake_candidate_index import (
     ProjectionUnavailableError,
     WakeCandidateIndex,
 )
-from agent_comms.wake_policy import FullWake
+from agent_comms.coordination_tables.assignments import MessageAudience
 
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="private N/K bus requires POSIX")
 
@@ -49,10 +49,14 @@ def _maintain_in_process(root: str, root_id: str, through_bytes: int, start, res
     start.wait()
     try:
         index = WakeCandidateIndex(Comms(Path(root)).bus.log)
+        hint = index.notify_committed_append(root_id=root_id, through_bytes=through_bytes)
         outcome = index.catch_up_committed_append(
-            index.notify_committed_append(root_id=root_id, through_bytes=through_bytes),
-            bootstrap_new=True, max_rows=256, max_bytes=8 * 1024 * 1024,
+            hint, bootstrap_new=True, max_rows=256, max_bytes=8 * 1024 * 1024,
         )
+        while not outcome.caught_up:
+            outcome = index.catch_up_committed_append(
+                hint, max_rows=256, max_bytes=8 * 1024 * 1024,
+            )
     except BaseException as error:
         results.put(("error", type(error).__name__, str(error)))
     else:
@@ -105,7 +109,7 @@ def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) ->
         process.join(timeout=15)
         assert process.exitcode == 0
     outcomes = [results.get(timeout=2) for _ in processes]
-    assert all(outcome[0] == "ok" for outcome in outcomes), outcomes
+    assert all(outcome == ("ok", True) for outcome in outcomes), outcomes
     with sqlite3.connect(index.path) as db:
         checkpoint = db.execute(
             "SELECT last_seq, byte_offset FROM candidate_checkpoint WHERE singleton=1"
@@ -127,7 +131,7 @@ def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path):
         # Deliberate index corruption, not a normal writer: STRICT protects
         # storage types and the version CHECK must be bypassed to inject it.
         db.execute("PRAGMA ignore_check_constraints=ON")
-        db.execute("UPDATE candidate_checkpoint SET version=4")
+        db.execute("UPDATE candidate_checkpoint SET version=999")
     with pytest.raises(ProjectionRebuildRequiredError):
         index.page(root_id=root_id, recipient_lookup=lookup['Alice'], after_seq=0,
                    required_through_seq=message.seq)
@@ -146,7 +150,7 @@ def test_existing_candidate_schema_reopens_in_wal_through_the_store_owner(tmp_pa
     assert index.maintain()
     with index.snapshot() as db:
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 3
+        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 4
 
 
 def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
@@ -167,7 +171,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     assert index.maintain(rebuild=True)
     with sqlite3.connect(index.path) as db:
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 3
+        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 4
     selected = index.page(
         root_id=root_id,
         recipient_lookup=lookup["Alice"],
@@ -175,7 +179,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
         required_through_seq=message.seq,
     )
     assert len(selected.entries) == 1
-    assert selected.entries[0].wake_mode is FullWake
+    assert selected.entries[0].audience is MessageAudience.MENTIONED
     assert selected.entries[0].source_seq == message.seq
     assert not selected.has_more
     assert (
@@ -194,7 +198,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
         required_through_seq=message.seq,
         delivery_only=True,
     )
-    assert len(passive.entries) == 1 and passive.entries[0].wake_mode is None
+    assert len(passive.entries) == 1 and passive.entries[0].audience is MessageAudience.OBSERVER
     # Bus projection is only a candidate: coordinator has not sealed ANY wake.
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         for name in ("Alice", "Bob"):

@@ -25,9 +25,8 @@ from .checkpoint_seals import PrefixSource
 from .delivery_policy import KeyedResponseReceipt
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
-from .wake import NoWakeDecision, WakeDecision
-from .wake_policy import WakePolicy
+from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable, sql_literal
+from .coordination_tables.assignments import MessageAudience
 from .wire_log import OpenedWireSnapshot, WireLog
 from .wire_metadata import WireRootIdText
 from .wire_record import WireRecord
@@ -48,7 +47,7 @@ class CandidateTable:
 @dataclass(frozen=True)
 class CandidateCheckpoint(CandidateTable, TypedTable):
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
-    version: Literal[3]
+    version: Literal[4]
     root_id: str
     device: int
     inode: int
@@ -90,11 +89,11 @@ class Candidate(CandidateTable, TypedTable):
     recipient_lookup: str = field(metadata={"sql": Column(primary_key=True)})
     sender: str
     target: str
-    wake_mode: type[WakePolicy] | None  # None means a delivery-only/no-wake member.
+    audience: MessageAudience
     without_rowid = True
     indexes = (
-        Index(("recipient_lookup", "source_seq"), where="wake_mode IS NOT NULL"),
-        Index(("recipient_lookup", "source_seq"), where="wake_mode IS NULL"),
+        Index(("recipient_lookup", "source_seq"), where=f"audience!={sql_literal(MessageAudience.OBSERVER)}"),
+        Index(("recipient_lookup", "source_seq"), where=f"audience={sql_literal(MessageAudience.OBSERVER)}"),
     )
 
 
@@ -202,7 +201,7 @@ class WakeCandidateIndex(TypedStore):
         if checkpoint is None and not (rebuild or bootstrap_new):
             raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
         if rebuild or checkpoint is None:
-            return CandidateCheckpoint(1, 3, root_id, stat.st_dev, stat.st_ino, 0, "", 0)
+            return CandidateCheckpoint(1, 4, root_id, stat.st_dev, stat.st_ino, 0, "", 0)
         checkpoint.require_source(stream, stat, root_id)
         return checkpoint
 
@@ -219,8 +218,6 @@ class WakeCandidateIndex(TypedStore):
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
             ):
-                if type(decision) not in {WakeDecision, NoWakeDecision}:
-                    raise ProjectionUnavailableError("unknown candidate wake decision")
                 rows.append(
                     Candidate(
                         message.seq,
@@ -228,9 +225,7 @@ class WakeCandidateIndex(TypedStore):
                         recipient.recipient_lookup,
                         message.sender,
                         message.target,
-                        type(decision.wake_mode)
-                        if type(decision) is WakeDecision
-                        else None,
+                        decision.audience,
                     )
                 )
         return _ParsedRow(sequence, tuple(rows), verified.receipt)
@@ -316,7 +311,7 @@ class WakeCandidateIndex(TypedStore):
             row.insert(db)
         CandidateCheckpoint(
             1,
-            3,
+            4,
             root_id,
             stat.st_dev,
             stat.st_ino,
@@ -508,9 +503,9 @@ class WakeCandidateIndex(TypedStore):
                         f'SELECT * FROM "{Candidate.declared_name}" '
                         "WHERE recipient_lookup=? AND source_seq>? "
                         + (
-                            "AND wake_mode IS NULL "
+                            f"AND audience={sql_literal(MessageAudience.OBSERVER)} "
                             if request.delivery_only
-                            else "AND wake_mode IS NOT NULL "
+                            else f"AND audience!={sql_literal(MessageAudience.OBSERVER)} "
                         )
                         + "ORDER BY source_seq LIMIT ?",
                         (request.recipient_lookup, request.after_seq, request.limit + 1),
