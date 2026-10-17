@@ -14,7 +14,7 @@ import pytest
 from agent_comms import store_files
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.activity import ActivityState
-from agent_comms.agent_events import AgentInfo
+from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.threads import Thread
@@ -50,7 +50,8 @@ def _claim_thread(root: str, result_queue: Any, start: Event) -> None:
 def _write_runtime_state(root: str, name: str, start: Event) -> None:
     comms = wire(root)
     start.wait()
-    comms.agents.observe_runtime_info(name, AgentInfo(model=f"provider/{name}", context_used=25, context_size=100))
+    comms.agents.observe_runtime_info(name, ContextUsageObservation(context_used=25))
+    comms.agents.observe_runtime_info(name, AgentInfo(model=f"provider/{name}", context_size=100))
     comms.agents.set_activity(name, ActivityState.WORKING, f"work-{name}")
     comms.ledger.merge({name: "ready"}, author=name)
 
