@@ -56,7 +56,7 @@ class ProjectResumeCheck(OwnerTurnScheduleCheck):
 
 
 class WakeScheduleCheck(SessionScheduleCheck):
-    """Validated wake admission and execution under the existing turn lock.
+    """Check wake permission and execute it under the existing turn lock.
 
     A queued wake never carries a stale owner grant across a lock wait. The
     current owner and active goal are read only after acquiring the turn lock.

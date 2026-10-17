@@ -176,7 +176,7 @@ class CoordinationStore:
     def observing(
         path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
     ):
-        """Own an existing committed read, never initialization or write admission."""
+        """Read existing committed data without initializing storage or permitting writes."""
         with CoordinationReadUnavailable.checking():
             try:
                 with closing(CoordinationStore.read_snapshot(path, contention)) as db:

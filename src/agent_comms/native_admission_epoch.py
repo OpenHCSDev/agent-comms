@@ -1,7 +1,7 @@
-"""Original SQLite send epoch owns admission and released-owner behavior.
+"""The recorded SQLite send generation determines send and released-owner behavior.
 
 NULL and a positive integer are the original column's storage representations.
-FieldCodec decodes that boundary once into these explicit admission members.
+FieldCodec decodes that boundary once into these explicit send states.
 Neither an absent epoch nor a later release proves that prompt bytes were unwritten.
 """
 
@@ -42,7 +42,7 @@ class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmissi
 
 @dataclass(frozen=True)
 class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
-    # Explicit SQL NULL representation, not an optional internal admission state.
+    # Represent SQL NULL explicitly, rather than using an optional send state.
     value: None = None
 
     def matches(self, admission_generation: int) -> bool:
@@ -100,7 +100,7 @@ class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
         # The original send contract admitted only journals inside this
         # recipient's native-sessions directory, and recorded selected identity
         # later, with the context receipt. That directory remains checked by
-        # VerifiedOwnerLoss. New admissions atomically record the selected file;
+        # VerifiedOwnerLoss. New send grants atomically record the selected file;
         # keep its additional subprocess check whenever it exists. Neither
         # representation permits borrowing the replacement owner's selection.
         session = row.selected_session

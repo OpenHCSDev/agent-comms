@@ -61,7 +61,7 @@ class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed out
 
 
 class NativePiInputNotSent(NativePiUnavailable):
-    """Original admission never entered its prompt writer; grants no replay."""
+    """The input never entered its prompt writer; this does not permit replay."""
 
     def __init__(self, error, attestation):
         self.attestation = attestation
@@ -81,7 +81,7 @@ class NativePiInputNotSent(NativePiUnavailable):
 
 
 class NativePiPromptRejected(NativePiUnavailable):
-    """A correlated RPC refusal; it grants no retry or admission authority."""
+    """A refusal matched to its RPC request; it permits neither retry nor new input."""
 
     def __init__(self, response: pi.Response):
         self.response = response
@@ -566,7 +566,7 @@ class NativePiRpcLaunch:
 
         The returned factory retains the original verified CLI for its owner's
         lifetime. Every call still constructs a new complete source/auth launch;
-        it grants no child readiness, input admission or prior context proof.
+        it proves neither child readiness, permission to send input nor prior context.
         """
         package = Path(package).absolute()
         return cls.verified_launcher(package, _trusted_package(package))
@@ -652,7 +652,7 @@ class NativePiRpcLaunch:
 def _read_private_file(path: Path):
     """Yield strict private evidence rows, checking the same opened revision.
 
-    Historical bytes are not an admission quota. A bounded byte snapshot is
+    Historical bytes do not set the live input budget. A bounded byte snapshot is
     validated before decoding; callers must exhaust the resulting observation.
     """
     with PrivateEvidenceRead.open(path) as evidence:

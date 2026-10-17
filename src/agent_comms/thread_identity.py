@@ -206,7 +206,7 @@ class UnrecordedThreadIncarnation(ThreadIncarnation):
 
 @dataclass(frozen=True, kw_only=True)
 class ThreadProvenance:
-    """Recorded thread provenance, without process, turn or admission authority."""
+    """Recorded thread identity, without permission to own a process or start a turn."""
 
     name: str
     tags: frozenset[str]
@@ -314,13 +314,13 @@ class OwnerIdentity:
 
 @dataclass(frozen=True, slots=True)
 class AdmissionIdentity:
-    """An allocation from RegistryDocument.admissions, never an owner lease."""
+    """A registry-allocated input generation, never an owner lease."""
 
     incarnation: ThreadIncarnation
     admission_generation: int
 
     def includes(self, previous: AdmissionIdentity) -> bool:
-        """Order only within this exact registry admission allocation domain."""
+        """Compare order only within this registry's input-generation counter."""
         return self.incarnation == previous.incarnation and self.admission_generation >= previous.admission_generation
 
 

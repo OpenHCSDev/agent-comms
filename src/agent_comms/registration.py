@@ -72,7 +72,7 @@ class Registration:
     def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
         """Publish an observed native source under its original executable lease.
 
-        Registry admission checks own the determining facts. A changing progress
+        Registry permission checks own the determining facts. A changing progress
         phase is retained from the locked document, not compared to an old view.
         Native session identity and context proof remain with their producers.
         """
@@ -243,7 +243,7 @@ class Registration:
             return effects
 
     def live_owner_with_admission(self, name: str) -> tuple[Thread, int]:
-        """Read the durable process admission, independent of metadata revisions."""
+        """Read the stored process input generation, independent of metadata revisions."""
         with self.store.reading() as document:
             owner = RegistryOwner.capture_local(document.snapshot(), name)
             return owner.thread, owner.admission_generation
@@ -251,7 +251,7 @@ class Registration:
     def lease_live_turn_with_admission(
         self, expected: Thread, turn_id: str, *, expected_generation: int
     ) -> tuple[Thread, int]:
-        """Claim a turn against stable admission, allowing unrelated metadata changes."""
+        """Claim a turn against the input generation, allowing unrelated metadata changes."""
         Thread.require_declaration(expected)
         turn = TurnId.for_registration(turn_id)
         generation = GenerationCounter.require_positive(expected_generation)

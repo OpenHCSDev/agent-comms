@@ -1,4 +1,4 @@
-"""Single owner-turn admission, native stream and terminal settlement."""
+"""One owner turn: check permission, run the native stream and record its result."""
 
 from __future__ import annotations
 

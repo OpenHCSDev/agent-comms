@@ -112,6 +112,6 @@ def run_selected_write(
     implicit: bool,
     **kwargs: object,
 ) -> T:
-    """Enter route admission inside the worker that actually performs the write."""
+    """Acquire the route locks inside the worker that actually performs the write."""
     with selected_write(root, implicit=implicit):
         return operation(*args, **kwargs)

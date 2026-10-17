@@ -1,4 +1,4 @@
-"""One turn's extension UI admission, observed receipt and same-child replies."""
+"""One turn's extension UI permission, observed input record and same-child replies."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ class ExtensionUiSession:
             await self.fail(str(error), session)
             return
         # Input forwarding may become uncertain while the controller is awaiting
-        # the user. Admission must still hold when its answer reaches Pi.
+        # the user. Input permission must still hold when its answer reaches Pi.
         if not session.prompt_state.permits_extension_ui(session):
             choice = CancelledUiChoice()
         response = choice.response(request)

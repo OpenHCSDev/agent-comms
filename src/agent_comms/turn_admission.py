@@ -1,4 +1,4 @@
-"""Native prompt admission advances only from the corresponding observed events."""
+"""Update native prompt-send state only from events that match the prompt."""
 
 from __future__ import annotations
 
