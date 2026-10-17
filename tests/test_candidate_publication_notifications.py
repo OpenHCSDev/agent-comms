@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-from agent_comms import candidate_maintenance, claim_admission
+from agent_comms import candidate_maintenance, claim_claim
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_response import (
     prepare_fenced_response, publish_fenced_response, resolve_existing_response,
@@ -145,7 +145,7 @@ def test_selected_claim_and_terminal_release_notify_after_their_boundaries(tmp_p
     monkeypatch.setattr("test_claim_bus_read.prepare_fence_token", lambda: "notification-token")
     with selected_turn() as (comms, store, selected, resource):
         calls, finished = notifications(comms)
-        claim = claim_admission.publish_selected_resource_claim(comms, store, selected, "Alice", ExistingFileClaim(resource))
+        claim = claim_claim.publish_selected_resource_claim(comms, store, selected, "Alice", ExistingFileClaim(resource))
         first_bytes = comms.bus.log.path.stat().st_size
         assert calls == [first_bytes]
         assert finished.wait(5)

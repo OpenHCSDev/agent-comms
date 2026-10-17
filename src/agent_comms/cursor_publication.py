@@ -31,7 +31,7 @@ from .message_bus import MessageBus
 from .native_entries import NativeEvidenceScope
 from .native_source_cursor import NativeSourceCursor
 from .runtime import RuntimeServer
-from .thread_identity import AdmissionIdentity
+from .thread_identity import ClaimedIdentity
 
 
 @dataclass
@@ -83,7 +83,7 @@ class CursorPublication:
         if self.root_id is None:
             return None
         try:
-            owner, generation = self.comms.registry.live_owner_with_admission(thread_name)
+            owner, generation = self.comms.registry.live_owner_with_claim(thread_name)
         except RelationViolationError:
             return None  # This process has no live owner input grant.
         if owner.pid != os.getpid():
@@ -91,7 +91,7 @@ class CursorPublication:
         return CursorScope(
             session_id,
             self.root_id,
-            AdmissionIdentity(owner.incarnation, generation),
+            ClaimedIdentity(owner.incarnation, generation),
             owner.pid,
         )
 

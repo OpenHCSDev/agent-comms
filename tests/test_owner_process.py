@@ -625,7 +625,7 @@ def test_backend_publication_preserves_independent_frontend(tmp_path, monkeypatc
     decoded.require_publication_originals()
     link_directory = os.open(links, os.O_RDONLY | os.O_DIRECTORY)
     try:
-        # Exercise original link effects, not native route admission or owners.
+        # Exercise original link effects, not native route claim_scope or owners.
         decoded.publish_links(link_directory)
         decoded.require_preserved_defaults()
     finally:

@@ -25,7 +25,7 @@ from .restart_refusals import (
     OwnerGenerationChangedRefusal,
 )
 from .routing import TurnRouting
-from .thread_identity import AdmissionIdentity, GenerationCounter, OwnerIdentity
+from .thread_identity import ClaimedIdentity, GenerationCounter, OwnerIdentity
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
     ArchivedThreadStatus,
@@ -85,7 +85,7 @@ class RegistryDocument(RegistryPresence):
     last_seen: dict[str, float] = field(default_factory=dict)
     aliases: dict[str, str] = field(default_factory=dict)
     owners: GenerationCounter = field(default_factory=GenerationCounter)
-    admissions: GenerationCounter = field(default_factory=GenerationCounter)
+    claims: GenerationCounter = field(metadata={"wire_name": 'admissions'}, default_factory=GenerationCounter)
 
     def copy(self) -> RegistryDocument:
         return replace(
@@ -95,8 +95,8 @@ class RegistryDocument(RegistryPresence):
             last_seen=dict(self.last_seen),
             aliases=dict(self.aliases),
             owners=GenerationCounter(self.owners.counter, dict(self.owners.generations)),
-            admissions=GenerationCounter(
-                self.admissions.counter, dict(self.admissions.generations)
+            claims=GenerationCounter(
+                self.claims.counter, dict(self.claims.generations)
             ),
         )
 
@@ -110,7 +110,7 @@ class RegistryDocument(RegistryPresence):
             status=self.statuses[thread.name],
             last_seen=self.last_seen[thread.name],
             owner_generation=self.owners.generations[thread.name],
-            claimed_generation=self.admissions.generations[thread.name],
+            claimed_generation=self.claims.generations[thread.name],
             names=self.names_for(thread.name),
         )
 
@@ -134,6 +134,7 @@ class RegistryDocument(RegistryPresence):
             def counter(raw_counter: dict) -> dict:
                 return {**raw_counter, "generations": own(raw_counter["generations"])}
 
+            claims_key = FieldCodec.record_key(cls, "claims")
             restricted = {
                 "threads": own(raw["threads"]),
                 "statuses": own(raw["statuses"]),
@@ -143,7 +144,7 @@ class RegistryDocument(RegistryPresence):
                     if target == canonical
                 },
                 "owners": counter(raw["owners"]),
-                "admissions": counter(raw["admissions"]),
+                claims_key: counter(raw[claims_key]),
             }
         except (AttributeError, KeyError, TypeError) as error:
             raise RelationViolationError(f"Invalid registry document: {error!r}") from error
@@ -194,8 +195,8 @@ class RegistryDocument(RegistryPresence):
                 raise ValueError("thread presence does not match declarations")
             if not names <= document.owners.generations.keys():
                 raise ValueError("missing owner generation")
-            if not names <= document.admissions.generations.keys():
-                raise ValueError("missing admission generation")
+            if not names <= document.claims.generations.keys():
+                raise ValueError("missing claim_scope generation")
             if any(name != thread.name for name, thread in document.threads.items()):
                 raise ValueError("thread name differs from its declaration")
             if any(
@@ -289,7 +290,7 @@ class RegistryDocument(RegistryPresence):
             self.threads[thread.name] = thread
             self.statuses[thread.name] = source.statuses[thread.name].restored()
             self.last_seen[thread.name] = source.seen_at(thread.name)
-            self.admissions.advance(thread.name)
+            self.claims.advance(thread.name)
             self.owners.advance(thread.name)
         if additions or aliases:
             self.aliases.update(aliases)
@@ -323,11 +324,11 @@ class RegistryDocument(RegistryPresence):
             if target == canonical:
                 self.aliases[alias] = new_name
         self.aliases[canonical] = new_name
-        self.admissions.rename(canonical, new_name)
+        self.claims.rename(canonical, new_name)
         self.owners.rename(canonical, new_name)
         return canonical, new_name
 
-    def fence_idle_owner(self, expected: Thread, *, expected_admission_generation: int) -> int:
+    def fence_idle_owner(self, expected: Thread, *, expected_claimed_generation: int) -> int:
         """Atomically deny new turns for exactly one idle owner before signaling.
 
         The outer wire lock alone cannot exclude a direct registry claim; this
@@ -341,13 +342,13 @@ class RegistryDocument(RegistryPresence):
             raise OwnerBusyRefusal() from error
         if current != expected:
             raise OwnerChangedBeforeFenceRefusal()
-        if snapshot.claimed_generations[current.name] != expected_admission_generation:
+        if snapshot.claimed_generations[current.name] != expected_claimed_generation:
             raise OwnerGenerationChangedRefusal()
         self.statuses[expected.name] = expected.execution.registered_status(
             expected, StoppedThreadStatus())
-        self.admissions.advance(expected.name)
+        self.claims.advance(expected.name)
         self.owners.advance(expected.name)
-        return self.admissions.generations[expected.name]
+        return self.claims.generations[expected.name]
 
     def unregister(self, name: str) -> None:
         name = self.canonical_name(name)
@@ -358,7 +359,7 @@ class RegistryDocument(RegistryPresence):
         thread = self.threads[name]
         self.statuses[name] = thread.execution.registered_status(thread, StoppedThreadStatus())
         self.threads[name] = replace(thread, active_turn=None)
-        self.admissions.advance(name)
+        self.claims.advance(name)
 
     def archive(self, name: str) -> None:
         name = self.canonical_name(name)
@@ -367,7 +368,7 @@ class RegistryDocument(RegistryPresence):
         if self.statuses[name].active:
             self.owners.advance(name)
         self.statuses[name] = ArchivedThreadStatus()
-        self.admissions.advance(name)
+        self.claims.advance(name)
 
     def require_originals(self, originals: Sequence[Thread]) -> None:
         for original in originals:
@@ -406,7 +407,7 @@ class RegistryDocument(RegistryPresence):
         if name not in self.threads:
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         self.statuses[name] = self.statuses[name].for_deletion()
-        self.admissions.advance(name)
+        self.claims.advance(name)
 
     def remove(self, name: str) -> tuple[str, ...]:
         """Remove a declaration and atomically detach its surviving children."""
@@ -423,7 +424,7 @@ class RegistryDocument(RegistryPresence):
         del self.threads[name]
         self.statuses.pop(name, None)
         self.last_seen.pop(name, None)
-        self.admissions.advance(name)
+        self.claims.advance(name)
         self.aliases = {alias: target for alias, target in self.aliases.items() if target != name}
         return detached
 
@@ -434,7 +435,7 @@ class RegistryDocument(RegistryPresence):
         previous = self.statuses[name]
         resumed = previous.after_heartbeat(name)
         if previous.changes_owner(resumed):
-            self.admissions.advance(name)
+            self.claims.advance(name)
             self.owners.advance(name)
         self.statuses[name] = resumed
         self.last_seen[name] = time.time()
@@ -454,7 +455,7 @@ class RegistryDocument(RegistryPresence):
                 turn_id,
                 current.pid,
                 routing=routing,
-                claimed_generation=self.admissions.generations[current.name],
+                claimed_generation=self.claims.generations[current.name],
                 turn_generation=current.turn_generation + 1,
             ),
         )
@@ -472,7 +473,7 @@ class RegistryDocument(RegistryPresence):
         canonical_lease = lease.renamed(name)
         if current.turn_lease != canonical_lease:
             return False, None
-        attested = canonical_lease.can_attest(self.admissions.generations[name])
+        attested = canonical_lease.can_attest(self.claims.generations[name])
         attested = attested and self.statuses[name].active
         self.threads[name] = replace(
             current,
@@ -599,7 +600,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             last_seen=MappingProxyType(dict(document.last_seen)),
             aliases=MappingProxyType(dict(document.aliases)),
             owner_generations=MappingProxyType(dict(document.owners.generations)),
-            claimed_generations=MappingProxyType(dict(document.admissions.generations)),
+            claimed_generations=MappingProxyType(dict(document.claims.generations)),
             by_lookup=MappingProxyType(indexed),
         )
 
@@ -643,9 +644,9 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         canonical = self.canonical_name(name)
         return OwnerIdentity(self.threads[canonical].incarnation, self.owner_generations[canonical])
 
-    def admission_identity(self, name: str) -> AdmissionIdentity:
+    def claimed_identity(self, name: str) -> ClaimedIdentity:
         canonical = self.canonical_name(name)
-        return AdmissionIdentity(self.threads[canonical].incarnation, self.claimed_generations[canonical])
+        return ClaimedIdentity(self.threads[canonical].incarnation, self.claimed_generations[canonical])
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
         canonical = self.canonical_name(name)
@@ -657,7 +658,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         thread = self.require_active(owner.incarnation.name)
         owner.require_current(thread, self.owner_generations[thread.name], process)
 
-    def require_stopping_owner(self, expected: Thread, admission: int) -> None:
+    def require_stopping_owner(self, expected: Thread, claim_scope: int) -> None:
         """A fenced stop may target a stopped owner, but never a later birth/lease."""
         try:
             current = self.threads[expected.name]
@@ -669,5 +670,5 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         current.role.require_executable()
         if current.process_identity != expected.process_identity:
             raise RelationViolationError("Stopping owner process changed")
-        if self.claimed_generations[expected.name] != admission:
-            raise RelationViolationError("Stopping owner admission changed")
+        if self.claimed_generations[expected.name] != claim_scope:
+            raise RelationViolationError("Stopping owner claim_scope changed")

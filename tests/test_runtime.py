@@ -52,14 +52,14 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
         decode_updates,
         encode_updates,
     )
-    from agent_comms.thread_identity import AdmissionIdentity
+    from agent_comms.thread_identity import ClaimedIdentity
 
     fact = CursorAdvancedUpdate(
         CursorEnvelope(
             CursorScope(
                 "canonical",
                 "a" * 32,
-                AdmissionIdentity(RecordedThreadIncarnation("canonical", 1000.0), 3),
+                ClaimedIdentity(RecordedThreadIncarnation("canonical", 1000.0), 3),
                 1234,
             ),
             7,
@@ -148,7 +148,7 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", native_events)
     path = socket_path(comms.root, os.getpid())
-    assert path.exists()  # Actual bind and the exchanges below prove OS path admission.
+    assert path.exists()  # Actual bind and the exchanges below prove OS path claim_scope.
     proxy = RuntimeProxy(client, response.session_id, path)
     try:
         metadata = await proxy.subscribe()

@@ -28,7 +28,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     original = comms.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
     inputs = InputDispositions(comms.root)
-    inputs.record("acp:original-unknown", seq=None, owner=owner.name, admission=1,
+    inputs.record("acp:original-unknown", seq=None, owner=owner.name, claim_scope=1,
                   target=owner.name, text="Unpinned original UNKNOWN input; never export/replay")
 
     def command(*args):
@@ -139,7 +139,7 @@ def original_input_consumer_journey(tmp_path, command):
             originals.append(stored_inputs(agent.inputs.dispositions.root).lookup(queued.key))
         assert agent.inputs.dispositions.record(
             "neutral-original", seq=None, owner="beta",
-            admission=origin.admission.claimed_generation, target="beta", text=wording)
+            claim_scope=origin.claim_scope.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()
     other = comms.registry.declare(Thread("unaddressed", frozenset(), origin.project))

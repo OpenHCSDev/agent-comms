@@ -193,10 +193,10 @@ class SelectedParticipant(MroDispatch):
             _require_no_private_owner_rename(comms.root)
             marker = source.marker
             if marker.root_id != root_id:
-                raise IdentityConflict("selected admission wire root changed")
-            after_seq = max(after_seq, marker.admission_after_seq)
+                raise IdentityConflict("selected claim_scope wire root changed")
+            after_seq = max(after_seq, marker.claimed_after_seq)
         try:
-            thread, generation = comms.registry.live_owner_with_admission(name)
+            thread, generation = comms.registry.live_owner_with_claim(name)
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry identity stopped or changed") from error
         owner = RegistryOwner(thread=thread, claimed_generation=generation)
@@ -245,7 +245,7 @@ class SelectedParticipant(MroDispatch):
         # instance's turn or revive an owner through a registration side effect.
         try:
             owner.thread.require_idle()
-            thread, generation = comms.registry.lease_live_turn_with_admission(
+            thread, generation = comms.registry.lease_live_turn_with_claim(
                 owner.thread,
                 secrets.token_hex(16),
                 expected_generation=owner.claimed_generation,
@@ -278,8 +278,8 @@ class SelectedParticipant(MroDispatch):
                 if marker.root_id != root_id:
                     raise IdentityConflict("selected source wire root changed")
                 for assignment in assignments:
-                    if assignment.wire_seq <= marker.admission_after_seq:
-                        raise IdentityConflict("historical source precedes the current admission floor")
+                    if assignment.wire_seq <= marker.claimed_after_seq:
+                        raise IdentityConflict("historical source precedes the current claim_scope floor")
                 return tuple(source.references(tuple(
                     MessageReference(assignment.wire_seq, assignment.message_id)
                     for assignment in assignments

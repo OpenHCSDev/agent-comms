@@ -30,7 +30,7 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
             key,
             seq=message.seq,
             owner=owner.name,
-            admission=1,
+            claim_scope=1,
             target=message.target,
             text=message.body,
         )

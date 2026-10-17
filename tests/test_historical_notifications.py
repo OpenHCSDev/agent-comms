@@ -285,8 +285,8 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     old.registry.register(
         replace(owner, process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    owner, generation = old.registry.live_owner_with_admission("agent")
-    owner, _ = old.registry.lease_live_turn_with_admission(
+    owner, generation = old.registry.live_owner_with_claim("agent")
+    owner, _ = old.registry.lease_live_turn_with_claim(
         owner, "reply-turn", expected_generation=generation
     )
     lease = owner.require_turn_lease()
@@ -297,7 +297,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
         key,
         seq=original.seq,
         owner=owner.name,
-        admission=lease.claimed_generation,
+        claim_scope=lease.claimed_generation,
         target=original.target,
         text=source_text,
         origin=WireInputOrigin(root_id, original.reference),
@@ -305,7 +305,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     native_id = uuid4().hex
     assert inputs.bind(
         key,
-        admission=lease.claimed_generation,
+        claim_scope=lease.claimed_generation,
         turn_id=lease.turn_id,
         native_id=native_id,
         text=source_text,

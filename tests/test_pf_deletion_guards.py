@@ -7,7 +7,7 @@ from typing import get_type_hints
 
 import pytest
 
-from agent_comms import claim_admission, coordination_response
+from agent_comms import claim_claim, coordination_response
 from agent_comms.envelope_claim_transitions import FileClaimPath
 from agent_comms.messaging import Messaging
 from agent_comms.publisher import Publisher
@@ -56,10 +56,10 @@ def test_response_authority_cannot_restore_an_optional_or_pid_only_path():
         assert witness.annotation == "LiveResponseOwner"
 
 
-def test_claim_admission_uses_nominal_paths_without_raw_coercion():
+def test_claim_claim_uses_nominal_paths_without_raw_coercion():
     assert get_type_hints(FileClaimPath)["resource"] is Path
     assert (
-        inspect.signature(claim_admission.publish_selected_resource_claim)
+        inspect.signature(claim_claim.publish_selected_resource_claim)
         .parameters["resource_path"]
         .annotation
         == "FileClaimPath"

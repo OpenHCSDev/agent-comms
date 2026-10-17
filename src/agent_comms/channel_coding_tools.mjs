@@ -16,9 +16,9 @@ export default function channelCodingTools(pi) {
         path,
         request,
         16384,
-        "Tool admission outcome UNKNOWN; inspect before retrying.",
+        "Tool claim outcome UNKNOWN; inspect before retrying.",
       );
-      if (response?.ok !== true) return { block: true, reason: response?.error ?? "Coding tool admission denied." };
+      if (response?.ok !== true) return { block: true, reason: response?.error ?? "Coding tool claim denied." };
     } catch (error) {
       return { block: true, reason: error.message };
     }

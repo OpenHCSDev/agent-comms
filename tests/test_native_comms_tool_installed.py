@@ -14,12 +14,12 @@ async def test_native_send_and_bash_share_checked_execution(native_backend, monk
     native = native_backend
     await native.author_history()
     original = native.session.read_bytes()
-    admissions = []
+    claims = []
     admit = CodingToolOwner.admit
 
     def admitted(owner, round_number, call):
         admit(owner, round_number, call)
-        admissions.append((round_number, call.name))
+        claims.append((round_number, call.name))
 
     monkeypatch.setattr(CodingToolOwner, "admit", admitted)
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
@@ -50,7 +50,7 @@ async def test_native_send_and_bash_share_checked_execution(native_backend, monk
         await owner.inputs.drain_inbox(session)
         await asyncio.wait_for(reply_turn_finished(owner, session), 35)
         assert native.provider.posts == 3
-        assert admissions == [(0, "comms_send"), (1, "bash")]
+        assert claims == [(0, "comms_send"), (1, "bash")]
         assert (native.project / "native-code-effect.txt").read_text() == "one-code-effect\n"
         assert native.session.read_bytes().startswith(original)
         messages = [message for line in comms.bus.log.path.read_text().splitlines()
@@ -68,7 +68,7 @@ async def test_native_send_and_bash_share_checked_execution(native_backend, monk
         assert not list((native.root / "diagnostics").glob("*.json"))
         print("native_comms_coding_result=" + json.dumps({
             "installed_module": str(Path(__import__("agent_comms").__file__).resolve()),
-            "new_inputs": 1, "owner_checks": admissions, "provider_requests": 3,
+            "new_inputs": 1, "owner_checks": claims, "provider_requests": 3,
             "private_messages": 1, "coding_effects": 1, "routed_replies": 1,
             "original_fixture_history_preserved": True,
         }))

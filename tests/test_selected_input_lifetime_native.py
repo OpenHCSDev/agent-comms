@@ -1,7 +1,7 @@
 """Saved selected-owner history through real terminal/uncertain native outcomes.
 
 Only HTTP provider responses and process termination are controlled. The native
-package, admission writer, proof journal, bus and SQLite lifetime are real.
+package, claim_scope writer, proof journal, bus and SQLite lifetime are real.
 """
 
 import asyncio

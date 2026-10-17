@@ -19,7 +19,7 @@ from .goal_attempts import LaunchPermit
 from .messages import Message
 from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
-from .owned_send_admission import OwnedSend
+from .owned_send_claim import OwnedSend
 from .native_input_owner import RegistryOwner
 from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
@@ -165,7 +165,7 @@ class OwnedTurn:
                         key=self.runner.inputs.dispositions.bus_key(origin, self.thread),
                         sequence=origin.seq,
                         owner=self.thread_name,
-                        admission=snapshot.claimed_generations[self.thread_name],
+                        claim_scope=snapshot.claimed_generations[self.thread_name],
                         target=origin.target,
                         source_text=ScheduledTurn.incoming(
                             origin, aliases=snapshot.aliases
@@ -347,7 +347,7 @@ class OwnedTurn:
             session_id=self.session_id,
             thread=self.thread,
             turn=TurnId(self.turn_id),
-            admission=self.turn_lease.claimed_generation,
+            claim_scope=self.turn_lease.claimed_generation,
             goal_permit=self.goal_permit,
             original=replace(self.original, prompt=rendered.text),
         )

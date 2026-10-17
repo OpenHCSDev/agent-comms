@@ -489,7 +489,7 @@ class HistoryArchive:
                     if bus_info is None:
                         archived.path.touch()
                     marker = archived.read_metadata_unlocked(required=True)
-                    marker.admission_after_seq = marker.last_seq
+                    marker.claimed_after_seq = marker.last_seq
                     marker.access = ArchivedAccess()
                     marker.checkpoint_version = None
                     marker.checkpoint_seal = None

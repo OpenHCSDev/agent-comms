@@ -44,7 +44,7 @@ def unknown_owner(directory, admitted, output, exit_allowed):
             await fake(*args, **kwargs)
         os.environ["AGENT_COMMS_THREAD"] = "beta"
         comms.owners.release("beta")
-        raise NativePiUnavailable("UNKNOWN before admission receipt")
+        raise NativePiUnavailable("UNKNOWN before claim_scope receipt")
 
     TrackedTurnSession.execute = fail
     try:
@@ -67,7 +67,7 @@ def unknown_owner(directory, admitted, output, exit_allowed):
         raise TimeoutError("test must release fixture process")
 
 
-@pytest.fixture(params=[False, True], ids=["missing-admission", "admitted-unknown"])
+@pytest.fixture(params=[False, True], ids=["missing-claim_scope", "admitted-unknown"])
 def released_unknown(tmp_path, request):  # noqa: F811
     context = multiprocessing.get_context("fork")
     output, exit_allowed = context.Queue(), context.Event()
@@ -231,17 +231,17 @@ def test_abandon_requires_real_release(released_unknown, damage):
         assert store.snapshots.get(execution_id).is_current
 
 
-def test_missing_admission_cannot_borrow_a_live_successor_release(released_unknown):
+def test_missing_claim_cannot_borrow_a_live_successor_release(released_unknown):
     process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     leave(process, exit_allowed)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         if (
             store.session._connection.execute(
-                f"SELECT sent_owner_admission_generation FROM {NativeRuntimeInput.declared_name}"
+                f"SELECT sent_owner_claimed_generation FROM {NativeRuntimeInput.declared_name}"
             ).fetchone()[0]
             is not None
         ):
-            return  # Recorded admission already binds to the earlier attested release.
+            return  # Recorded claim_scope already binds to the earlier attested release.
         comms = Comms(root)
         comms.registry.register(
             replace(
@@ -313,7 +313,7 @@ print(json.dumps({"type":"response", "id":request["id"],
             f"SELECT * FROM {NativeRuntimeInput.declared_name}"
         ).fetchone()
         execution_id, old_id = old["execution_id"], old["input_id"]
-        assert old["session_id"] is old["sent_owner_admission_generation"] is None
+        assert old["session_id"] is old["sent_owner_claimed_generation"] is None
         snapshot = store.snapshots.get(execution_id)
         assert type(snapshot.execution.lifecycle) is FailedExecution
         assert not snapshot.is_current and not snapshot.can_retry

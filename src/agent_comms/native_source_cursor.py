@@ -55,22 +55,22 @@ class NativeSourceCursor:
     @classmethod
     async def advance_async(
         cls, bus: MessageBus, *, wire_root_id: str, owner: Thread,
-        owner_admission_generation: int, owner_generation: int,
+        owner_claimed_generation: int, owner_generation: int,
         committed_input_id: str | None,
     ):
         return await Coordination.run_async(
             bus.log.path.parent / "coordination.sqlite3",
             partial(cls._advance_owned, bus, wire_root_id, owner,
-                    owner_admission_generation, owner_generation, committed_input_id),
+                    owner_claimed_generation, owner_generation, committed_input_id),
         )
 
     @classmethod
     def _advance_owned(
-        cls, bus, wire_root_id, owner, admission, generation, input_id, store, *,
+        cls, bus, wire_root_id, owner, claim_scope, generation, input_id, store, *,
         source_reads: NativeEvidenceScope | None = None,
     ):
         return cls(bus, store, wire_root_id=wire_root_id).advance(
-            owner=owner, owner_admission_generation=admission,
+            owner=owner, owner_claimed_generation=claim_scope,
             owner_generation=generation, committed_input_id=input_id,
             source_reads=source_reads,
         )
@@ -87,10 +87,10 @@ class NativeSourceCursor:
 
     @classmethod
     def _refresh_owned(cls, bus, wire_root_id, owner_name, source_reads, store):
-        owner, admission = bus._registry.live_owner_with_admission(owner_name)
+        owner, claim_scope = bus._registry.live_owner_with_claim(owner_name)
         person = store.participants.get(owner.incarnation.lookup)
         return cls._advance_owned(
-            bus, wire_root_id, owner, admission, person.participant_generation, None,
+            bus, wire_root_id, owner, claim_scope, person.participant_generation, None,
             store, source_reads=source_reads,
         )
 
@@ -104,7 +104,7 @@ class NativeSourceCursor:
         self,
         *,
         owner: Thread,
-        owner_admission_generation: int,
+        owner_claimed_generation: int,
         owner_generation: int,
         committed_input_id: str | None,
         source_reads: NativeEvidenceScope | None = None,
@@ -116,7 +116,7 @@ class NativeSourceCursor:
             wire_root_id=self.wire_root_id,
             thread=owner,
             generation=owner_generation,
-            claimed_generation=owner_admission_generation,
+            claimed_generation=owner_claimed_generation,
         )
         with NativeEvidenceScope.borrow(source_reads) as source_reads:
             return self._advance_proven(identity, committed_input_id, source_reads,
@@ -176,7 +176,7 @@ class NativeSourceCursor:
             recipient_lookup=owner.lookup,
             owner_thread=owner.thread.name,
             owner_generation=owner.generation,
-            owner_admission_generation=owner.claimed_generation,
+            owner_claimed_generation=owner.claimed_generation,
             covered_seq=coverage.covered_seq,
             injected_seq=coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0,
             input_id=proof.input_id if proof else None,
@@ -190,7 +190,7 @@ class NativeSourceCursor:
             updated = CurrentNativeCursor.update(
                 db,
                 where="wire_root_id=? AND recipient_lookup=? AND owner_generation=? "
-                "AND owner_admission_generation=? AND covered_seq=? AND injected_seq=?",
+                "AND {owner_claimed_generation}=? AND covered_seq=? AND injected_seq=?",
                 parameters=(
                     owner.wire_root_id,
                     owner.lookup,

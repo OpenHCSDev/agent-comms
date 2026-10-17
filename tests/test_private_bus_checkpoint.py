@@ -103,7 +103,7 @@ def test_human_duplicate_check_includes_retained_rows_without_delivery_pointers(
     with _store_lock(comms.root / 'wire'), comms.bus.log.locked():
         comms.bus.log.path.write_text(json.dumps(original.to_wire()) + '\n')
         comms.bus.log.write_metadata_unlocked(WireMetadata(
-            last_seq=1, admission_after_seq=1, writer_protocol_version=1,
+            last_seq=1, claimed_after_seq=1, writer_protocol_version=1,
             wire_root_id=root_id, claim_envelopes_version=1))
         # Replace only this fixture's derived empty certificate, as for the
         # original offline retained cutover. No retained bus is discarded.

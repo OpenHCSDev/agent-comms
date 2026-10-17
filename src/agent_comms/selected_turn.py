@@ -15,7 +15,7 @@ from .coordination_tables.executions import ExecutionOrigin
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
-from .envelope_claim_transitions import WakeAdmission
+from .envelope_claim_transitions import WakeClaim
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .owner_fence import prepare_fence_token
 from .private_send_stage import FullNativeSend, TriageNativeSend
@@ -145,7 +145,7 @@ class SelectedAttempt:
         participant = self.participant
         turn = participant.owner.require_active_turn()
         assignment = self.stage.assignments[0]
-        admission = WakeAdmission(
+        claim_scope = WakeClaim(
             wire_root_id=participant.root_id,
             source_seq=assignment.wire_seq,
             source_message_id=assignment.message_id,
@@ -154,7 +154,7 @@ class SelectedAttempt:
             recipient_lookup=participant.lookup,
             execution_id=self.stage.execution.require_attempt().execution_id,
             operation_id=action.operation_id(),
-            owner_admission_generation=participant.owner.claimed_generation,
+            owner_claimed_generation=participant.owner.claimed_generation,
             turn_id=turn.id,
             participant_generation=participant.identity.generation,
             attempt_ordinal=self.stage.execution.require_attempt().attempt_ordinal,
@@ -162,7 +162,7 @@ class SelectedAttempt:
         return CodingToolOwner(
             participant.comms,
             participant.store,
-            admission,
+            claim_scope,
             participant.owner.thread.name,
             session.directory,
             input_id,
@@ -206,11 +206,11 @@ class SelectedAttempt:
     async def run(self, execution, session: SelectedSession, action, write_authority):
         participant = self.participant
         request, action = await self.prepare(session, action, write_authority)
-        self.stage.progress.input_id = request.admission.input_id
+        self.stage.progress.input_id = request.claim_scope.input_id
         async with request.native_failures():
-            tools = self.tool_owner(session, request.admission.input_id, action)
+            tools = self.tool_owner(session, request.claim_scope.input_id, action)
             await participant.transition(PromptAcceptancePhase())
-            result = await request.admission.execute(
+            result = await request.claim_scope.execute(
                 execution,
                 provider=participant.provider,
                 model=participant.model,
@@ -226,7 +226,7 @@ class SelectedAttempt:
                 participant.store.session.path,
                 lambda store: action.apply(replace(tools, store=store)),
             )
-            request.admission.commit(participant.store, result.context)
+            request.claim_scope.commit(participant.store, result.context)
             self.stage.progress.finish()
             await Coordination.run_worker(partial(
                 participant.owner.require_running_turn, participant.comms.registry
@@ -272,7 +272,7 @@ class SelectedConsideration:
         )
         async with request.native_failures():
             await participant.transition(PromptAcceptancePhase())
-            result = await request.admission.execute(
+            result = await request.claim_scope.execute(
                 execution,
                 provider=participant.provider,
                 model=participant.model,
@@ -280,10 +280,10 @@ class SelectedConsideration:
             )
             await participant.transition(PublishingPhase())
             outcome = SelectedTriageOutcome.acquire(result.text)
-            settled = outcome.settle(participant, stage, request.admission, result.context)
+            settled = outcome.settle(participant, stage, request.claim_scope, result.context)
             continued = session.continued(result.context)
         # The FULL request owns its own failure boundary. Never report its
         # failure through the already-completed triage request's error handler.
         return await outcome.continue_turn(
-            participant, continued, request.admission.input_id, execution, settled
+            participant, continued, request.claim_scope.input_id, execution, settled
         )

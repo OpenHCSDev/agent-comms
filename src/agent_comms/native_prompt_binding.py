@@ -23,7 +23,7 @@ from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .native_admission_rules import NativeIdentityCheck
+from .native_claim_rules import NativeIdentityCheck
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeInputRecord, NativeInputIdText, NativeInputExecution
 from .field_codec import FieldCodec

@@ -30,7 +30,7 @@ class Client:
 
 
 def capture(comms):
-    return HumanInputOrigin.capture(comms, comms.registry.snapshot().admission_identity("beta"))
+    return HumanInputOrigin.capture(comms, comms.registry.snapshot().claimed_identity("beta"))
 
 
 def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tmp_path):
@@ -40,8 +40,8 @@ def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tm
     )
     comms, agent, _, _ = _owner(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
-    admission = comms.registry.snapshot().admission_identity('beta')
-    scope = QueueScope('beta', admission, comms.registry.require('beta').pid)
+    claim_scope = comms.registry.snapshot().claimed_identity('beta')
+    scope = QueueScope('beta', claim_scope, comms.registry.require('beta').pid)
     for projection in (PendingQueueProjection(), UnavailableQueueProjection()):
         observation = QueueChangedUpdate(None, 0, projection)
         assert FieldCodec.decode(QueueChangedUpdate, FieldCodec.encode(observation)) == observation
@@ -86,7 +86,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         assert row.context_provenance() in contribution.provenance
         native_id = "b" * 32
         sent = "User follow-up:\n" + command.user_text
-        assert inputs.bind(key, admission=row.admission, turn_id="held-native", native_id=native_id, text=sent)
+        assert inputs.bind(key, claim_scope=row.claim_scope, turn_id="held-native", native_id=native_id, text=sent)
         assert inputs.started(key, turn_id="held-native", native_id=native_id, text=sent)
         # Existing terminal settlement never rewrites a started original as
         # unsent or grants a replay; the canonical native completion owns that.
@@ -126,7 +126,7 @@ def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(tmp
     comms, agent, _, _ = _owner(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     origin = capture(comms)
-    neutral = ReservedInput("old", None, "beta", origin.admission.claimed_generation,
+    neutral = ReservedInput("old", None, "beta", origin.claim_scope.claimed_generation,
                             "beta", "Exact old user-looking text")
     payload = FieldCodec.encode(neutral)
     assert "origin" not in payload

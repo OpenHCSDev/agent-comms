@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import field, dataclass
 from typing import TYPE_CHECKING
 
 from .reservation_rules import ReservationRule, RuleCheck
@@ -37,7 +37,7 @@ class OrdinaryOwnerCheck(RuleCheck):
     current: Thread
     registry: RegistrySnapshot
     canonical: str
-    admission: int
+    claim_scope: int = field(metadata={"wire_name": 'admission'})
     turn: TurnId
 
 
@@ -57,12 +57,12 @@ class OrdinaryRunningRule(ReservationRule):
         return not check.registry.statuses[check.canonical].running
 
 
-class OrdinaryAdmissionRule(ReservationRule):
+class OrdinaryClaimRule(ReservationRule):
     check_type = OrdinaryOwnerCheck
-    explanation = "The ordinary owner admission generation changed."
+    explanation = "The ordinary owner claim_scope generation changed."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
-        return check.registry.claimed_generations.get(check.canonical) != check.admission
+        return check.registry.claimed_generations.get(check.canonical) != check.claim_scope
 
 
 class OrdinaryProcessRule(ReservationRule):
@@ -121,7 +121,7 @@ class MissingAcceptedInputRule(ReservationRule):
 class AcceptedInputCheck(RuleCheck):
     receipt: QueuedInput
     current: Thread
-    admission: int
+    claim_scope: int = field(metadata={"wire_name": 'admission'})
     input_id: str
     keys: tuple[str, ...]
     accepted_source: TurnInputSource | None
@@ -132,7 +132,7 @@ class AcceptedInputAuthorityRule(ReservationRule):
     explanation = "The live input's accepted owner or goal authority changed."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return not check.receipt.current(check.current, check.admission)
+        return not check.receipt.current(check.current, check.claim_scope)
 
 
 class AcceptedInputKeyRule(ReservationRule):

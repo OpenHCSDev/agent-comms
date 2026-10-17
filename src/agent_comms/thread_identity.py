@@ -313,13 +313,13 @@ class OwnerIdentity:
 
 
 @dataclass(frozen=True, slots=True)
-class AdmissionIdentity:
+class ClaimedIdentity:
     """A registry-allocated input generation, never an owner lease."""
 
     incarnation: ThreadIncarnation
     claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
 
-    def includes(self, previous: AdmissionIdentity) -> bool:
+    def includes(self, previous: ClaimedIdentity) -> bool:
         """Compare order only within this registry's input-generation counter."""
         return self.incarnation == previous.incarnation and self.claimed_generation >= previous.claimed_generation
 

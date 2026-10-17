@@ -50,8 +50,8 @@ if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
     from .agent_backend import TurnInbox
     from .coordinated_runtime import SelectedExecution
-    from .owned_send_admission import OwnedSend
-    from .private_send_admission import PrivateSendAdmission
+    from .owned_send_claim import OwnedSend
+    from .private_send_claim import PrivateSendClaim
 
 
 T = TypeVar("T")
@@ -243,7 +243,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
-        prompt_send_boundary: PrivateSendAdmission | None = None,
+        prompt_send_boundary: PrivateSendClaim | None = None,
         maintenance_root: Path | None = None,
         selected_tool_mode: NativeToolMode | None = None,
         observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,

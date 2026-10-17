@@ -18,7 +18,7 @@ from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
-from .thread_identity import AdmissionIdentity, OwnerIdentity
+from .thread_identity import ClaimedIdentity, OwnerIdentity
 
 if TYPE_CHECKING:
     from .owner_cutover import OwnerCutover
@@ -61,7 +61,7 @@ class RetiredOwnerLaunch:
     """Original stopped registry observation plus acquired launch resources."""
 
     owner: OwnerIdentity
-    admission: AdmissionIdentity
+    claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
     launch: RetainedOwnerLaunch
 
     @classmethod
@@ -70,7 +70,7 @@ class RetiredOwnerLaunch:
         """Capture the original allocations after stopping, without permitting live work."""
         original.require_local_process(launch.process)
         owner = cls(snapshot.owner_identity(original.name),
-                    snapshot.admission_identity(original.name), launch)
+                    snapshot.claimed_identity(original.name), launch)
         if owner.owner.incarnation != original.incarnation:
             raise RelationViolationError('Retired owner incarnation changed')
         owner.require_current(snapshot)
@@ -83,8 +83,8 @@ class RetiredOwnerLaunch:
     def require_current(self, snapshot: RegistrySnapshot) -> Thread:
         if snapshot.owner_identity(self.name) != self.owner:
             raise RelationViolationError('Retired owner incarnation/generation changed')
-        if snapshot.admission_identity(self.name) != self.admission:
-            raise RelationViolationError('Retired owner admission changed')
+        if snapshot.claimed_identity(self.name) != self.claim_scope:
+            raise RelationViolationError('Retired owner claim_scope changed')
         thread = snapshot.threads[self.name]
         thread.require_local_process(self.launch.process)
         thread.require_idle()

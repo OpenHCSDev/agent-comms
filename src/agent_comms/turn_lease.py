@@ -124,8 +124,8 @@ class TurnFence:
             self.identity, incarnation=replace(self.identity.incarnation, name=name)
         ))
 
-    def can_attest(self, admission: int) -> bool:
-        return self.identity.generation > 0 and self.claimed_generation > 0 and self.claimed_generation == admission
+    def can_attest(self, claim_scope: int) -> bool:
+        return self.identity.generation > 0 and self.claimed_generation > 0 and self.claimed_generation == claim_scope
 
     def matches(self, other: TurnFence) -> bool:
         """Lease and finished observations may describe the same exact turn."""

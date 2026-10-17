@@ -32,7 +32,7 @@ class PromptSendNotWritten(PromptSendFailure):  # noqa: N818 - original prebyte 
     """The writer never obtained permission or wrote this payload."""
 
 
-def _enter_admission(
+def _enter_claim(
     fd: int,
     boundary: Callable[[], AbstractContextManager[None]],
     cancelled: threading.Event,
@@ -69,8 +69,8 @@ def _write_fenced(
     # the owner loop is synchronously waiting to stop this registry incarnation.
     written = 0
     try:
-        with measurements.operation("admission_wait"):
-            admitted = _enter_admission(fd, boundary, cancelled, measurements)
+        with measurements.operation("claim_wait"):
+            admitted = _enter_claim(fd, boundary, cancelled, measurements)
         with admitted:
             deadline = time.monotonic() + timeout
             remaining = memoryview(payload)

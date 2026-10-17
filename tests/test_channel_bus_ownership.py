@@ -65,7 +65,7 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     assert comms.bus.awareness_segments(replace(observer, created_at=observer.created_at + 1), ()) == ()
     with comms.bus.log.locked():
         marker = comms.bus.log._private_marker_unlocked()
-        marker.admission_after_seq = marker.last_seq
+        marker.claimed_after_seq = marker.last_seq
         comms.bus.log.write_metadata_unlocked(marker)
     assert comms.bus.awareness_segments(observer, ()) == ()
 

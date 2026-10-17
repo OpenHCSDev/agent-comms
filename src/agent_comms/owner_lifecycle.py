@@ -29,7 +29,7 @@ from .restart_refusals import (
     OwnerSelectionChangedRefusal,
 )
 from .store_files import _store_lock
-from .thread_identity import AdmissionIdentity, OwnerIdentity
+from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
 
@@ -109,12 +109,12 @@ class OwnerReleaseReceipt:
 
     def __post_init__(self) -> None:
         if self.before <= 0 or self.after <= self.before:
-            raise ValueError("Owner release requires an advanced admission and a closed turn")
+            raise ValueError("Owner release requires an advanced claim_scope and a closed turn")
         self.thread.require_idle()
 
-    def current(self, snapshot: RegistrySnapshot, expected: Thread, admission: int) -> bool:
+    def current(self, snapshot: RegistrySnapshot, expected: Thread, claim_scope: int) -> bool:
         """The stored release proves this retired owner, never a replacement."""
-        if self.before != admission or self.thread.incarnation != expected.incarnation:
+        if self.before != claim_scope or self.thread.incarnation != expected.incarnation:
             return False
         if self.thread.process_identity != expected.process_identity:
             return False
@@ -139,11 +139,11 @@ class OwnerReleaseReceipt:
         process = self.thread.require_process()
         if process.alive():
             raise RelationViolationError("Released native owner process is still alive")
-        actual = snapshot.admission_identity(current.name)
-        released = AdmissionIdentity(self.thread.incarnation, self.after)
+        actual = snapshot.claimed_identity(current.name)
+        released = ClaimedIdentity(self.thread.incarnation, self.after)
         if not actual.includes(released):
-            raise RelationViolationError("Native release admission regressed")
-        source.sent_owner_admission_generation.require_release(self, snapshot, current)
+            raise RelationViolationError("Native release claim_scope regressed")
+        source.sent_owner_claimed_generation.require_release(self, snapshot, current)
 
 
 class OwnerReleaseStore(ThreadOwnedState, LockedStore[dict[str, OwnerReleaseReceipt]]):

@@ -113,7 +113,7 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
 
 
 @pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])
-def test_reactivation_rotates_owner_and_admission_without_rebinding_history(tmp_path, status):
+def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
     registry.register(
         Thread(

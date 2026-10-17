@@ -249,13 +249,13 @@ class Thread(ThreadProvenance):
         if self.active_turn is not None:
             raise RelationViolationError("live owner already has an active turn")
 
-    def require_current_turn(self, admission: int) -> None:
+    def require_current_turn(self, claim_scope: int) -> None:
         turn = self.active_turn
-        if turn is not None and not turn.current(admission, self.turn_generation):
-            raise RelationViolationError("live owner turn admission is no longer current")
+        if turn is not None and not turn.current(claim_scope, self.turn_generation):
+            raise RelationViolationError("live owner turn claim_scope is no longer current")
 
-    def require_turn(self, turn_id: TurnId, admission: int) -> None:
-        self.require_current_turn(admission)
+    def require_turn(self, turn_id: TurnId, claim_scope: int) -> None:
+        self.require_current_turn(claim_scope)
         turn = self.active_turn
         if turn is None or TurnId(turn.id) != turn_id:
             raise RelationViolationError("live owner does not hold the requested turn")
@@ -361,7 +361,7 @@ class Thread(ThreadProvenance):
                     thread.worktree, thread.execution, thread.model, thread.thinking_level)
         return launch(self) == launch(other)
 
-    def without_turn_admission(self) -> Thread:
+    def without_turn_claim(self) -> Thread:
         if self.active_turn is None:
             return self
         return replace(self, active_turn=replace(self.active_turn, claimed_generation=None))
@@ -454,12 +454,12 @@ class Thread(ThreadProvenance):
             return self.has_authored_turn(identity, turn) or identity.generation == lease.identity.generation - 1
         return identity.generation == self.turn_generation and self.last_finished_turn_id == turn.value
 
-    def observed_turn(self, admission: int) -> TurnFence | None:
+    def observed_turn(self, claim_scope: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
         turn_id = self.active_turn.id if self.active_turn is not None else self.last_finished_turn_id
         if turn_id is None:
             return None
-        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, admission)
+        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
 
     def has_goal_revision(self, goal_id: str, minimum_revision: int) -> bool:
         return self.goal is not None and self.goal.accepts_observation(goal_id, minimum_revision)

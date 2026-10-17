@@ -605,7 +605,7 @@ class ThreadManagement:
                 )
                 spec.task.record_first_input(
                     partial(InputDispositions(self.root).record, owner=owned.name, target=owned.name,
-                        admission=self.registry.snapshot().claimed_generations[owned.name],
+                        claim_scope=self.registry.snapshot().claimed_generations[owned.name],
                     ))
                 return owned
             except OSError:

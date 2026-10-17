@@ -62,19 +62,19 @@ def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
     assert registry.require('renamed').turn_lease == next_turn.turn_lease
 
 
-def test_idle_restart_fence_cannot_borrow_metadata_or_admission(tmp_path):
+def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
     registry = Registration(tmp_path / 'registry.json')
     registry.register(Thread('owner', frozenset(), str(tmp_path)))
     original = registry.snapshot()
     expected = original.threads['owner']
-    admission = original.claimed_generations['owner']
+    claim_scope = original.claimed_generations['owner']
     registry.register(replace(expected, title='changed'))
     with pytest.raises(RelationViolationError, match='changed'):
-        registry.fence_idle_owners(((expected, admission),))
+        registry.fence_idle_owners(((expected, claim_scope),))
     current = registry.require('owner')
     registry.register(current, new_owner=True)
-    with pytest.raises(RelationViolationError, match='admission'):
-        registry.fence_idle_owners(((current, admission),))
+    with pytest.raises(RelationViolationError, match='claim_scope'):
+        registry.fence_idle_owners(((current, claim_scope),))
     generation = registry.snapshot().claimed_generations['owner']
     assert registry.fence_idle_owners(((current, generation),))[0][1] > generation
     assert registry.status('owner').stopped

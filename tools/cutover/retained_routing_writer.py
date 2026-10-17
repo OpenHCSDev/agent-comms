@@ -41,7 +41,7 @@ def main():
                        pass_fds=(custody,), check=True)
         after = service.bus.log.read_metadata_unlocked()
         if replace(after, checkpoint_version=None, checkpoint_seal=None) != retained:
-            raise ValueError('Carry changed original wire admission/identity metadata.')
+            raise ValueError('Carry changed original wire claim_scope/identity metadata.')
         plan.require_sources(service.root)
 
 

@@ -37,7 +37,7 @@ from agent_comms.acp_failure import BackendDeliveryFailure
 from agent_comms.context_reading import UnmeasuredContext
 from agent_comms.agent_events import CompactionStart
 from agent_comms.pi_payloads import McpLiveReceipt
-from agent_comms.thread_identity import AdmissionIdentity
+from agent_comms.thread_identity import ClaimedIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptPage
 from agent_comms.turn_lease import ActiveTurn, TurnState
@@ -50,7 +50,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("pilot", frozenset(), str(tmp_path)))
     read = comms.transcripts.capture_page_read("pilot")
-    owner = AdmissionIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
+    owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
     queue_scope = QueueScope("pilot", owner, 123)
     samples = (
         ContextAnnotatedUpdate(

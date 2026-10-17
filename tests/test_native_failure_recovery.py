@@ -258,7 +258,7 @@ def replacement_release(root):
     comms.owners.release("beta")
 
 
-def test_later_attested_release_still_fences_original_admission(released_failure):
+def test_later_attested_release_still_fences_original_claim(released_failure):
     process, exit_allowed, root, execution_id, _input_id, session_file = released_failure
     leave(process, exit_allowed)
     replacement = multiprocessing.get_context("fork").Process(

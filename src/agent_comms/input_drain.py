@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from dataclasses import dataclass, replace
+from dataclasses import field, dataclass, replace
 from contextlib import aclosing
 from functools import partial
 from pathlib import Path
@@ -44,7 +44,7 @@ from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import ProjectResumeCheck, WakeScheduleCheck
 from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock
-from .thread_identity import AdmissionIdentity
+from .thread_identity import ClaimedIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
 from .wire_metadata import WireMetadata
@@ -170,7 +170,7 @@ class SettledTick:
 
     revision: TickRevision
     entry: RegistryEntry
-    admission_after_seq: int | None = None
+    claimed_after_seq: int | None = field(default=None, metadata={"wire_name": 'admission_after_seq'})
     through_seq: int = 0
 
 
@@ -335,7 +335,7 @@ class InputObservation:
                 )
                 if idle and shared_unchanged:
                     settled = SettledTick(
-                        revision, entry, settled.admission_after_seq, settled.through_seq,
+                        revision, entry, settled.claimed_after_seq, settled.through_seq,
                     )
                     continue
                 if idle and not shared_unchanged:
@@ -384,7 +384,7 @@ class InputObservation:
                         if self._quiescent(session_id):
                             marker = await Coordination.run_worker(self._bus_marker)
                             settled = SettledTick(
-                                revision, entry, marker.admission_after_seq, marker.last_seq,
+                                revision, entry, marker.claimed_after_seq, marker.last_seq,
                             )
                         elif self._repeat_observation_ready(session_id, drained):
                             # The first empty private observation may advance its
@@ -416,7 +416,7 @@ class InputObservation:
         component. An unavailable answer keeps the full tick — unavailable
         never means 'not mine'.
         """
-        admission_after_seq, through_seq = settled.admission_after_seq, settled.through_seq
+        claimed_after_seq, through_seq = settled.claimed_after_seq, settled.through_seq
         try:
             if (
                 revision.bus != settled.revision.bus
@@ -428,15 +428,15 @@ class InputObservation:
                     revision,
                     entry.thread.incarnation.lookup,
                 ))
-                if marker.admission_after_seq != settled.admission_after_seq or addressed:
+                if marker.claimed_after_seq != settled.claimed_after_seq or addressed:
                     return None
-                admission_after_seq, through_seq = marker.admission_after_seq, marker.last_seq
+                claimed_after_seq, through_seq = marker.claimed_after_seq, marker.last_seq
             if revision.coordination != settled.revision.coordination:
                 if not await self._own_coordination_unchanged(session_id, entry):
                     return None
         except UNAVAILABLE_DRAIN_ERRORS:
             return None
-        return SettledTick(revision, entry, admission_after_seq, through_seq)
+        return SettledTick(revision, entry, claimed_after_seq, through_seq)
 
     def _private_observation_revision(
         self, session_id: str, root_id: str, wire: tuple, entry: RegistryEntry,
@@ -491,7 +491,7 @@ class InputObservation:
             return (
                 source.witness.source_identity,
                 source.committed_sequence(),
-                source.marker.admission_after_seq,
+                source.marker.claimed_after_seq,
             )
         wire = await self.comms.bus.log.read_certified_async(wire_revision)
         entry = (await self._own_entry(session_id)).entry
@@ -596,8 +596,8 @@ class InputDrain(InputObservation):
 
     async def queue_binding(self, session_id: str) -> QueueScope | None:
         try:
-            owner, admission = await Coordination.run_worker(partial(
-                self.comms.registry.live_owner_with_admission,
+            owner, claim_scope = await Coordination.run_worker(partial(
+                self.comms.registry.live_owner_with_claim,
                 self.sessions.bindings.get(session_id, session_id),
             ))
         except (RelationViolationError, UnregisteredThreadError):
@@ -605,7 +605,7 @@ class InputDrain(InputObservation):
             return None
         return QueueScope(
             session_id,
-            AdmissionIdentity(owner.incarnation, admission),
+            ClaimedIdentity(owner.incarnation, claim_scope),
             owner.pid,
         )
 

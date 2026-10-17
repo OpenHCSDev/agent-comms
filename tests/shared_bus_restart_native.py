@@ -1,7 +1,7 @@
 """Actual private retained restart and concurrent automatic inbox drains.
 
 Only the localhost provider is controlled. Worker, registry, bus, selected
-admission, native process, source proof and response publication remain real.
+claim_scope, native process, source proof and response publication remain real.
 """
 import argparse
 import hashlib
@@ -224,7 +224,7 @@ async def configured_pure_channel(arguments):
                         inputs = [row for row in all_inputs
                                   if original_ids.intersection(membership[row.input_id])]
                         dispatched = tuple(row for row in inputs if
-                            row.sent_owner_admission_generation.reservation_violation()
+                            row.sent_owner_claimed_generation.reservation_violation()
                             and not row.reference.recorded)
                     # SQLite is last in the original lock order. Release its
                     # read snapshot before registry/bus/history observations;
@@ -290,7 +290,7 @@ async def configured_pure_channel(arguments):
                                         native = recorded_inputs[cursor.input_id]
                                         assert cursor.owner_identity == native.owner_identity
                                         assert cursor.reference == native.reference
-                                        assert native.sent_owner_admission_generation.matches(cursor.owner_admission_generation)
+                                        assert native.sent_owner_claimed_generation.matches(cursor.owner_claimed_generation)
                                         assert cursor.injected_seq >= originals[-1].seq
                                         assert fact.envelope.scope.owner_pid == service.registry.require(native.owner_thread).pid
                                         published_coverage[native.owner_thread] = fact.envelope
@@ -408,7 +408,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
         while True:
             claims, inputs, _ = observe(cancelled)
             admitted = tuple(row for row in inputs
-                if row.sent_owner_admission_generation.reservation_violation()
+                if row.sent_owner_claimed_generation.reservation_violation()
                 and not row.reference.recorded)
             if admitted:
                 break
@@ -439,7 +439,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
         assert final_receipts == cancelled_receipts, 'Cancellation later published an extra original reply'
         return {'cancelled_original': FieldCodec.encode(cancelled.reference),
             'continued_original': FieldCodec.encode(continuation.reference),
-            'cancelled_admission_stages': [row.reference_stage.declared_name for row in admitted],
+            'cancelled_claim_stages': [row.reference_stage.declared_name for row in admitted],
             'cancelled_native_inputs': FieldCodec.encode(cancelled_inputs),
             'cancelled_claims': FieldCodec.encode(cancelled_claims),
             'cancelled_publications': FieldCodec.encode(cancelled_receipts),
@@ -632,7 +632,7 @@ async def retained_owner():
         await agent.shutdown()
 
 
-class AdmissionContention(DeclaredFamily, affix='Contention'):
+class ClaimContention(DeclaredFamily, affix='Contention'):
     """Real held resource in the existing continuous native journey."""
 
     @classmethod
@@ -640,7 +640,7 @@ class AdmissionContention(DeclaredFamily, affix='Contention'):
     def custody(cls, service, owners): ...
 
 
-class WireReadContention(AdmissionContention, declared_name='wire'):
+class WireReadContention(ClaimContention, declared_name='wire'):
     @classmethod
     @contextmanager
     def custody(cls, service, owners):
@@ -648,7 +648,7 @@ class WireReadContention(AdmissionContention, declared_name='wire'):
             yield True
 
 
-class PromptBindingContention(AdmissionContention, declared_name='binding'):
+class PromptBindingContention(ClaimContention, declared_name='binding'):
     @classmethod
     @contextmanager
     def custody(cls, service, owners):
@@ -710,7 +710,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
     def publish_cancel_and_pending(self):
         from agent_comms.store_files import _store_lock
 
-        # Both original publications precede admission, under the same existing
+        # Both original publications precede claim_scope, under the same existing
         # wire custody. No observer can reserve the first between the two.
         with _store_lock(self.service._wire_lock_path):
             sender = self.service.registry.require('human')
@@ -858,7 +858,7 @@ async def run(arguments):
             if reserved:
                 # The family holds the actual resource, not a replaced runtime
                 # or invented Busy response. Each gate keeps its original IDs.
-                with AdmissionContention.decode(arguments.contention_resource).custody(
+                with ClaimContention.decode(arguments.contention_resource).custody(
                     service, len(names)
                 ) as ready:
                     if not ready:
@@ -985,14 +985,14 @@ async def run(arguments):
             async with asyncio.timeout(30):
                 while not contention_held.is_set():
                     await asyncio.sleep(.03)
-                # Verify the real dedicated writer is waiting at admission;
+                # Verify the real dedicated writer is waiting at claim_scope;
                 # readiness/lease alone would not prove the affected seam.
                 while True:
                     owner = service.registry.require(names[0])
                     stack = await asyncio.to_thread(subprocess.run,
                         ['sudo','-n','/home/ts/.local/bin/py-spy','dump','--pid',
                          str(owner.pid),'--nonblocking'],capture_output=True,text=True,timeout=5)
-                    if '_enter_admission' in stack.stdout:
+                    if '_enter_claim' in stack.stdout:
                         (stage/'writer-wait-before-cancel.txt').write_text(stack.stdout)
                         break
                     await asyncio.sleep(.05)
@@ -1205,13 +1205,13 @@ if __name__=='__main__':
     parser.add_argument('--contention',action='store_true')
     parser.add_argument('--contention-seconds',type=float,default=12)
     parser.add_argument('--contention-resource',default='wire',
-                        choices=[kind.declared_name for kind in AdmissionContention.members_with(AdmissionContention)])
+                        choices=[kind.declared_name for kind in ClaimContention.members_with(ClaimContention)])
     parser.add_argument('--cancel-before-grant',action='store_true')
     parser.add_argument('--wave-size',type=int,default=1)
     parser.add_argument('--configured-owner',help='Read only this original model/level; submit fresh private mixed-route originals')
     parser.add_argument('--configured-pure-channel',action='store_true')
     parser.add_argument('--configured-saved-preparation',action='store_true',
-                        help='One saved configured fork: ordinary ACP admission, cancel, then a distinct new original')
+                        help='One saved configured fork: ordinary ACP claim_scope, cancel, then a distinct new original')
     parser.add_argument('--busy-reader',action='store_true')
     parser.add_argument('--configured-peers',nargs='*',default=[])
     parser.add_argument('--observation-seconds',type=float,default=180,

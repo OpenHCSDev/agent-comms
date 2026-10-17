@@ -73,6 +73,6 @@ class CapturedOriginalOwner:
     retained: RetainedOwnerLaunch = field(repr=False)
 
     def require_current(self) -> Thread:
-        """Fresh original shared read; owner AND admission AND process proof."""
+        """Fresh original shared read; owner AND claim_scope AND process proof."""
         observed = self.reader.observe(self.source.name, self.selection)
         return self.selection.require_current(observed.document.snapshot())

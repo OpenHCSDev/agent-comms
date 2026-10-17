@@ -34,7 +34,7 @@ tmp_path = private_root_fixture
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
-class OwnerAdmissionCase(DeclaredFamily, affix="Case"):
+class OwnerClaimCase(DeclaredFamily, affix="Case"):
     @abstractmethod
     async def create(self, comms): ...
 
@@ -51,7 +51,7 @@ class OwnerAdmissionCase(DeclaredFamily, affix="Case"):
         assert comms.registry.require(thread.name).incarnation == thread.incarnation
 
 
-class OrdinaryOwnerCase(OwnerAdmissionCase):
+class OrdinaryOwnerCase(OwnerClaimCase):
     repetitions = 2400
 
     async def create(self, comms):
@@ -71,7 +71,7 @@ class OrdinaryOwnerCase(OwnerAdmissionCase):
         assert native.session.read_bytes().startswith(original)
 
 
-class ForkOwnerCase(OwnerAdmissionCase):
+class ForkOwnerCase(OwnerClaimCase):
     repetitions = 900
 
     async def create(self, comms):
@@ -117,7 +117,7 @@ class ForkOwnerCase(OwnerAdmissionCase):
 
 @pytest.mark.parametrize(
     "case",
-    [member() for member in OwnerAdmissionCase.members_with(OwnerAdmissionCase)],
+    [member() for member in OwnerClaimCase.members_with(OwnerClaimCase)],
     ids=lambda case: case.declared_name,
 )
 async def test_underbudget_physical_native_owner_answers_without_compaction(

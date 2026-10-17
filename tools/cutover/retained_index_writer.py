@@ -48,7 +48,7 @@ def main():
                        env=environment, pass_fds=(custody,), check=True)
         after = log.read_metadata_unlocked()
         if replace(after, checkpoint_version=None, checkpoint_seal=None) != retained:
-            raise RelationViolationError('Cutover changed original marker identity or admission.')
+            raise RelationViolationError('Cutover changed original marker identity or claim_scope.')
         if bus_digest(log.path) != before:
             raise RelationViolationError('Cutover changed original bus bytes.')
 

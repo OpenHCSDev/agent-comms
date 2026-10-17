@@ -391,10 +391,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         bus = MessageBus(
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
         )
-        def read_admission():
+        def read_claim():
             with bus.log.certified_read() as source:
-                return source.marker.admission_after_seq
-        admission_after_seq = await Coordination.run_worker(read_admission)
+                return source.marker.claimed_after_seq
+        claimed_after_seq = await Coordination.run_worker(read_claim)
         store_path = self._comms.root / "coordination.sqlite3"
         # One execution owns this wake's package acquisition: acceptance of new
         # originals and the selected launch share it instead of verifying twice.
@@ -421,7 +421,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # A running turn takes its owner's pending messages as inputs;
             # whatever it cannot take wakes this owner once the turn ends.
             await DeliveredInput.deliver_pending(
-                self.inputs, session_id, owner, bus, wire_root_id, admission_after_seq
+                self.inputs, session_id, owner, bus, wire_root_id, claimed_after_seq
             )
             await self.cursors.publish(session_id, thread_name)
             return 0
@@ -429,7 +429,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             with store.session.read():
                 participant = store.participants.get(owner.incarnation.lookup)
                 candidate = next_sealed_assignment(
-                    store, participant.lookup, owner.name, after_seq=admission_after_seq,
+                    store, participant.lookup, owner.name, after_seq=claimed_after_seq,
                 )
                 if candidate is None:
                     return False

@@ -43,7 +43,7 @@ CompactionJournal(original)  # Authentic installed writer creates its own SQL.
 for suffix in ('-journal', '-wal', '-shm'):
     private_file(Path(str(original) + suffix), b'original private companion ' + suffix.encode())
 inputs = InputDispositions(root / InputDispositions.filename)
-inputs.record('bus:160', seq=160, owner='fixture', admission=1,
+inputs.record('bus:160', seq=160, owner='fixture', claim_scope=1,
               target='fixture', text='never replay')
 private_file(root / 'native.jsonl', b'original sealed native bytes\n')
 private_file(root / 'native.jsonl.input-proof', b'original proof bytes\n')

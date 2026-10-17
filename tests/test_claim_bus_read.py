@@ -21,7 +21,7 @@ import pytest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.claim_admission import (
+from agent_comms.claim_claim import (
     publish_selected_resource_claim,
     write_selected_claimed_file,
 )
@@ -31,7 +31,7 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohor
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
+from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.messages import ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.read_basis import DMDisplayScope
@@ -47,7 +47,7 @@ from agent_comms.turn_context import (
 )
 
 pytestmark = pytest.mark.skipif(
-    sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
+    sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
 )
 
 
@@ -99,8 +99,8 @@ def selected_turn():
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
             lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
             assignment = sealed_cohort_assignments(store, lookup)[0]
-            owner, generation = comms.registry.live_owner_with_admission("Alice")
-            owner, generation = comms.registry.lease_live_turn_with_admission(
+            owner, generation = comms.registry.live_owner_with_claim("Alice")
+            owner, generation = comms.registry.lease_live_turn_with_claim(
                 owner, "selected-turn", expected_generation=generation
             )
             person = store.participants.get(lookup)
@@ -117,7 +117,7 @@ def selected_turn():
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
             ))
-            admission = WakeAdmission(
+            claim_scope = WakeClaim(
                 wire_root_id=root_id,
                 source_seq=message.seq,
                 source_message_id=message.message_id,
@@ -126,12 +126,12 @@ def selected_turn():
                 recipient_lookup=lookup,
                 execution_id="execution",
                 operation_id="f" * 32,
-                owner_admission_generation=generation,
+                owner_claimed_generation=generation,
                 turn_id=owner.active_turn.id,
                 participant_generation=person.participant_generation,
                 attempt_ordinal=1,
             )
-            yield comms, store, admission, resource
+            yield comms, store, claim_scope, resource
 
 
 def settle_failed(store):
@@ -147,7 +147,7 @@ def settle_failed(store):
 
 
 def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.MonkeyPatch) -> None:
-    with selected_turn() as (comms, store, admission, resource):
+    with selected_turn() as (comms, store, claim_scope, resource):
         log = comms.bus.log
 
         def whole_bus(*_, **__):
@@ -156,13 +156,13 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         with monkeypatch.context() as patch:
             patch.setattr(log, "verified_records_unlocked", whole_bus)
             claimed = publish_selected_resource_claim(
-                comms, store, admission, "Alice", ExistingFileClaim(resource)
+                comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
             )
             # Asking again for the same file in the same turn returns the held claim.
             assert publish_selected_resource_claim(
-                comms, store, admission, "Alice", ExistingFileClaim(resource)
+                comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
             ) == claimed
-            write_selected_claimed_file(comms, store, admission, "Alice", claimed, b"value = 2\n")
+            write_selected_claimed_file(comms, store, claim_scope, "Alice", claimed, b"value = 2\n")
             record_context(comms, "Alice", 3)
             settle_failed(store)
         assert resource.read_bytes() == b"value = 2\n"
@@ -188,19 +188,19 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
 
 
 def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
-    with selected_turn() as (comms, store, admission, resource):
+    with selected_turn() as (comms, store, claim_scope, resource):
         claimed = publish_selected_resource_claim(
-            comms, store, admission, "Alice", ExistingFileClaim(resource)
+            comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
         )
         assert dict(comms.bus.log.claim_projection()) == {str(resource): claimed}
         comms.messaging.send_message("Alice", "sender", "Explicit release",
                                      releases=(str(resource),))
         with pytest.raises(IdentityConflict, match="already consumed"):
             publish_selected_resource_claim(
-                comms, store, admission, "Alice", ExistingFileClaim(resource)
+                comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
             )
         again = publish_selected_resource_claim(
-            comms, store, replace(admission, operation_id="e" * 32), "Alice",
+            comms, store, replace(claim_scope, operation_id="e" * 32), "Alice",
             ExistingFileClaim(resource),
         )
         assert again.generation != claimed.generation

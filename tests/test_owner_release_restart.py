@@ -273,7 +273,7 @@ def test_voluntary_exit_during_grace_is_reaped_without_force(releasing_owner):
     assert not child.alive()
 
 
-@pytest.mark.parametrize("change", ["birth", "admission", "receipt"])
+@pytest.mark.parametrize("change", ["birth", "claim_scope", "receipt"])
 def test_changed_owner_after_release_refuses_escalation_and_replacement(releasing_owner, change):
     comms, child = releasing_owner
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -290,7 +290,7 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
                 ),
                 new_owner=True,
             )
-        elif change == "admission":
+        elif change == "claim_scope":
             comms.registry.register(current, new_owner=True)
         else:
             comms.owners.releases.replace({})

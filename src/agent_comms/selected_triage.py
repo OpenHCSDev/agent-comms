@@ -117,7 +117,7 @@ class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
             return RejectedTriageOutcome(error)
 
     @abstractmethod
-    def settle(self, participant, stage, admission, context) -> tuple[WakeAssignment, ...]: ...
+    def settle(self, participant, stage, claim_scope, context) -> tuple[WakeAssignment, ...]: ...
 
     @abstractmethod
     async def continue_turn(self, participant, session, input_id, execution, settled): ...
@@ -127,9 +127,9 @@ class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
 class DecidedTriageOutcome(SelectedTriageOutcome):
     decision: SelectedTriage
 
-    def settle(self, participant, stage, admission, context):
-        return stage.commit(participant.store, participant.identity, admission.input_id,
-                            admission.token_digest, context, self.decision)
+    def settle(self, participant, stage, claim_scope, context):
+        return stage.commit(participant.store, participant.identity, claim_scope.input_id,
+                            claim_scope.token_digest, context, self.decision)
 
     async def continue_turn(self, participant, session, input_id, execution, settled):
         return await self.decision.continue_turn(participant, session, input_id, execution, settled)
@@ -139,9 +139,9 @@ class DecidedTriageOutcome(SelectedTriageOutcome):
 class RejectedTriageOutcome(SelectedTriageOutcome):
     error: InvalidTriageDecision
 
-    def settle(self, participant, stage, admission, context):
+    def settle(self, participant, stage, claim_scope, context):
         return stage.fail_decision(participant.store, participant.identity,
-                                   admission.input_id, admission.token_digest, context)
+                                   claim_scope.input_id, claim_scope.token_digest, context)
 
     async def continue_turn(self, participant, session, input_id, execution, settled):
         from .selected_result import CoordinatedTurn, publish_native_failure

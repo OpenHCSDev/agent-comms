@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.native_input_owner import ParticipantOwner, RegistryOwner
-from agent_comms.private_send_admission import PrivateSendAdmission
+from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.private_send_stage import NativeSendStage
 
 pytestmark = pytest.mark.refactor_guard
@@ -30,10 +30,10 @@ def test_retired_private_send_closure_and_owner_helpers_have_no_callers():
     )
 
 
-def test_private_admission_owners_stay_within_s7_bounds_without_runner_state():
+def test_private_claim_owners_stay_within_s7_bounds_without_runner_state():
     for path in {
         Path(inspect.getfile(owner))
-        for owner in (PrivateSendAdmission, NativeSendStage, RegistryOwner, ParticipantOwner)
+        for owner in (PrivateSendClaim, NativeSendStage, RegistryOwner, ParticipantOwner)
     }:
         source = path.read_text()
         assert len(source.splitlines()) <= 1000, path
@@ -45,7 +45,7 @@ def test_private_admission_owners_stay_within_s7_bounds_without_runner_state():
 
 
 def test_private_send_does_not_rebuild_identity_tuples_or_compare_bare_pids():
-    for name in ("native_input_owner", "private_send_stage", "native_admission_rules"):
+    for name in ("native_input_owner", "private_send_stage", "native_claim_rules"):
         for node in ast.walk(ast.parse((SOURCE / f"{name}.py").read_text())):
             if isinstance(node, ast.Compare):
                 assert not any(

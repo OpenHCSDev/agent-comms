@@ -25,7 +25,7 @@ def main():
         pass
 
     # The real UI-facing history API calls Messaging.user_identity. With no
-    # prior USER, that registers a non-executable record without turn admission.
+    # prior USER, that registers a non-executable record without turn claim_scope.
     service.views.dm_display_page('phase-alpha', worktree=str(root), limit=1)
     # The ACP configuration owner has another ordinary metadata writer. No
     # backend, session attachment or native operation is started by this call.

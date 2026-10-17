@@ -65,7 +65,7 @@ class NativePiInputNotSent(NativePiUnavailable):
 
     def __init__(self, error, attestation):
         self.attestation = attestation
-        super().__init__(f"Native Pi failed before prompt admission; input not sent: {error}")
+        super().__init__(f"Native Pi failed before prompt claim_scope; input not sent: {error}")
 
     @property
     def diagnostic_evidence(self):

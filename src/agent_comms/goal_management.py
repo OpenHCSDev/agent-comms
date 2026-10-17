@@ -65,12 +65,12 @@ class Goals:
         return self.goal_store
 
     def ready_goal_grant_locked(
-        self, owner: Thread, admission: int, generation: Generation
+        self, owner: Thread, claim_scope: int, generation: Generation
     ) -> str:
         """Caller holds wire; recover only this owner's original unused READY grant."""
         try:
             owner.require_active_goal(generation.goal_id).require_order(self, owner.incarnation)
-            GoalLaunchOwner(thread=owner, claimed_generation=admission).require_ready(
+            GoalLaunchOwner(thread=owner, claimed_generation=claim_scope).require_ready(
                 self.registry.snapshot(), generation.goal_id,
             )
         except (RelationViolationError, ValueError, StaleFence) as error:

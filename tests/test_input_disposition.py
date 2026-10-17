@@ -19,7 +19,7 @@ def test_record_rejects_nonstring_before_durable_unknown(tmp_path: Path, invalid
             "acp:" + "f" * 32,
             seq=None,
             owner="kid",
-            admission=1,
+            claim_scope=1,
             target="kid",
             text=invalid_text,
         )
@@ -28,8 +28,8 @@ def test_record_rejects_nonstring_before_durable_unknown(tmp_path: Path, invalid
 
 def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
     store = InputDispositions(tmp_path)
-    assert store.record("bus:7", seq=7, owner="kid", admission=3, target="kid", text="ask")
-    assert not store.record("bus:7", seq=7, owner="kid", admission=3, target="kid", text="ask")
+    assert store.record("bus:7", seq=7, owner="kid", claim_scope=3, target="kid", text="ask")
+    assert not store.record("bus:7", seq=7, owner="kid", claim_scope=3, target="kid", text="ask")
     assert (
         InputDispositions(tmp_path)
         .unresolved(frozenset({"kid"}))
@@ -39,7 +39,7 @@ def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
     )
 
     native_id = "a" * 32
-    assert store.bind("bus:7", admission=3, turn_id="turn-1", native_id=native_id, text="full ask")
+    assert store.bind("bus:7", claim_scope=3, turn_id="turn-1", native_id=native_id, text="full ask")
     assert not store.started("bus:7", turn_id="turn-1", native_id="b" * 32, text="full ask")
     assert not store.started("bus:7", turn_id="turn-1", native_id=native_id, text="wrong")
     assert store.started("bus:7", turn_id="turn-1", native_id=native_id, text="full ask")
@@ -67,9 +67,9 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
         )
     )
     store = InputDispositions(comms.root)
-    store.record("bus:7", seq=7, owner="kid", admission=1, target="#review", text="exact source")
-    store.record("bus:8", seq=8, owner="peer", admission=1, target="#review", text="other owner")
-    store.bind("bus:7", admission=1, turn_id="turn", native_id="a" * 32, text="private wrapper")
+    store.record("bus:7", seq=7, owner="kid", claim_scope=1, target="#review", text="exact source")
+    store.record("bus:8", seq=8, owner="peer", claim_scope=1, target="#review", text="other owner")
+    store.bind("bus:7", claim_scope=1, turn_id="turn", native_id="a" * 32, text="private wrapper")
     comms.threads.rename_managed_thread("kid", "new-kid", owner_pid=os.getpid())
     expected = [
         {
@@ -101,7 +101,7 @@ def _cold_snapshots(root, gate, results):
 
 def test_cold_wal_snapshots_do_not_compete_for_initialization(tmp_path):
     store = InputDispositions(tmp_path)
-    store.record("original", seq=None, owner="kid", admission=1, target="kid", text="original")
+    store.record("original", seq=None, owner="kid", claim_scope=1, target="kid", text="original")
     context = multiprocessing.get_context("spawn")
     gate, results = context.Barrier(2), context.Queue()
     workers = [context.Process(target=_cold_snapshots, args=(str(tmp_path), gate, results))
@@ -124,11 +124,11 @@ def test_cold_wal_snapshots_do_not_compete_for_initialization(tmp_path):
 
 def test_admitted_snapshot_retains_cut_without_blocking_writer(tmp_path):
     store = InputDispositions(tmp_path)
-    store.record("original", seq=None, owner="kid", admission=1, target="kid", text="original")
+    store.record("original", seq=None, owner="kid", claim_scope=1, target="kid", text="original")
     with ThreadPoolExecutor(max_workers=1) as writer:
         with store.snapshot() as connection:
             appended = writer.submit(
-                store.record, "later", seq=None, owner="kid", admission=1,
+                store.record, "later", seq=None, owner="kid", claim_scope=1,
                 target="kid", text="later",
             )
             assert appended.result(timeout=2)

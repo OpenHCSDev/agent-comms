@@ -92,7 +92,7 @@ def run_journal_inventory(base, source_python, inventory_path):
     if digest(inventory_path) != before_sha:
         raise AssertionError('Original running-source inventory changed')
     # The actual current journal entrypoint authenticates target DDL and reads
-    # the original operations/states. It returns no original admission receipt.
+    # the original operations/states. It returns no original claim_scope receipt.
     from agent_comms.compaction_journal import CompactionJournal
     journal = CompactionJournal(candidate)
     with journal.transaction() as db:

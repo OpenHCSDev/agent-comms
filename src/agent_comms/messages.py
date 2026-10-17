@@ -302,8 +302,8 @@ class Message:
         public_envelope_digest(public)
         return message
 
-    def require_retained_admission(self, admission_after_seq: int) -> None:
-        if self.claim_transition is None and self.seq > admission_after_seq:
+    def require_retained_claim(self, claimed_after_seq: int) -> None:
+        if self.claim_transition is None and self.seq > claimed_after_seq:
             raise RelationViolationError(
                 "Unattested public initial exceeds the retained history boundary."
             )

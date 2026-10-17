@@ -5,10 +5,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import field, dataclass
 from typing import TYPE_CHECKING
 
-from .ordinary_admission_rules import (
+from .ordinary_claim_rules import (
     AcceptedInputCheck,
     InputKeysCheck,
     MissingAcceptedInputCheck,
@@ -49,7 +49,7 @@ class OwnedSend:
     session_id: str
     thread: Thread
     turn: TurnId
-    admission: int
+    claim_scope: int = field(metadata={"wire_name": 'admission'})
     original: OriginalTurnInput
     goal_permit: LaunchPermit | None
 
@@ -80,7 +80,7 @@ class OwnedSend:
             current=current,
             registry=snapshot,
             canonical=canonical,
-            admission=self.admission,
+            claim_scope=self.claim_scope,
             turn=self.turn,
         ).require_valid()
         InputKeysCheck(source=source, text=text).require_valid()
@@ -94,7 +94,7 @@ class OwnedSend:
         AcceptedInputCheck(
             receipt=accepted,
             current=current,
-            admission=self.admission,
+            claim_scope=self.claim_scope,
             input_id=source.accepted_id,
             keys=source.keys,
             accepted_source=self.inputs.following_sources.get(self.session_id, {}).get(
@@ -141,7 +141,7 @@ class OwnedSend:
         # never reinterpret a failed durable operation as a retryable policy refusal.
         if not self.inputs.dispositions.bind_turn_input(
             source.keys,
-            admission=self.admission,
+            claim_scope=self.claim_scope,
             turn_id=self.turn.value,
             native_id=native_id,
             text=sent_text,

@@ -381,10 +381,10 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             assert result["pid"] == process.pid and result["drained"] == 1
             assert result["fake_inputs"] == 1 and resource.read_bytes() == b"after second pid\n"
             owner = Comms(root).bus.log.claim_projection()[str(resource)]
-            assert owner.owner == "beta" and owner.admission is not None
+            assert owner.owner == "beta" and owner.claim_scope is not None
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 assert (
-                    store.assignments.get(owner.admission.wake_assignment_id).lifecycle.declared_name
+                    store.assignments.get(owner.claim_scope.wake_assignment_id).lifecycle.declared_name
                     == "completed"
                 )
                 assert (

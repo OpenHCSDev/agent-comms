@@ -26,7 +26,7 @@ from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import RecordedGoalWait, NoGoalWait
 
 
-@pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
+@pytest.mark.parametrize("changed", ["claim_scope", "pid", "process_birth", "rename"])
 async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     tmp_path, monkeypatch, changed
 ):
@@ -42,9 +42,9 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     store = comms.goals.open_goal_store()
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Work"))
     owner = comms.registry.require("parent")
-    admission = comms.registry.snapshot().claimed_generations["parent"]
-    if changed == "admission":
-        admission += 1
+    claim_scope = comms.registry.snapshot().claimed_generations["parent"]
+    if changed == "claim_scope":
+        claim_scope += 1
     elif changed == "pid":
         owner = replace(owner, process_identity=ProcessIdentity(owner.pid + 1, owner.process_identity.start_time))
     elif changed == "process_birth":
@@ -59,7 +59,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
             pytest.raises(StaleAttemptError, match="owner changed") if changed != "rename" else nullcontext(),
         ):
             comms.goals.ready_goal_grant_locked(
-                owner, admission, store.snapshot(goal.id)
+                owner, claim_scope, store.snapshot(goal.id)
             )
         if changed != "rename":
             assert store.ready_grant(goal.id, 1) == old_grant
@@ -239,7 +239,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
         "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
     )
 
-    # Represent a wait recorded by an older owner before cycle admission was
+    # Represent a wait recorded by an older owner before cycle claim_scope was
     # enforced. Both turns subsequently finish without any dependency reply.
     owner = comms.registry.require("bob")
     peer = comms.registry.require("alice")

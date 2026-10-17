@@ -37,7 +37,7 @@ async def _accept_visible_deliveries(
             marker = bus.log._private_marker_unlocked()
             if marker.root_id != root_id:
                 raise IdentityConflict("private initial wire root changed")
-            admitted_after = max(after_seq, marker.admission_after_seq)
+            admitted_after = max(after_seq, marker.claimed_after_seq)
             with resource.session.read():
                 assert_cohort_schema(resource.session._connection)
                 sealed = CohortDeliveryReceipts.sealed_sequences_after(

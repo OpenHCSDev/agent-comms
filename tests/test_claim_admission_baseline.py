@@ -1,6 +1,6 @@
 """Characterize the CURRENT separation of N/K wake and resource claims.
 
-This is not an admission bridge or an assertion that an unselected observer
+This is not an claim_scope bridge or an assertion that an unselected observer
 should be able to edit another worker's file. The follow-up must gate the
 native write boundary; independent explicit file claims still have a use.
 No model/provider is started by this test.
@@ -27,8 +27,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> None:
-    with TemporaryDirectory(prefix="ac-claim-admission-", dir="/var/tmp") as dirname:
+def test_selected_wake_and_file_claims_have_no_common_claim_receipt() -> None:
+    with TemporaryDirectory(prefix="ac-claim-claim_scope-", dir="/var/tmp") as dirname:
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
         worktree = Path(dirname) / "work"
@@ -65,7 +65,7 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
 
             # Existing explicit resource claims are valid independent operations.
             # They neither consult nor reference the sealed N/K receipt. A
-            # future native edit admission must join these two authorities.
+            # future native edit claim_scope must join these two authorities.
             committed = comms.messaging.send_message(
                 "Bob",
                 "#team",

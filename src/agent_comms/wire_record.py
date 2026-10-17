@@ -100,7 +100,7 @@ class WireRecord(ABC):
             self.receipt.add_unique(seen)
 
     @abstractmethod
-    def require_admission(self, metadata: WireMetadata) -> None: ...
+    def require_claim(self, metadata: WireMetadata) -> None: ...
 
     @abstractmethod
     def checkpoint_rows(self, offset: int, length: int, previous_sequence: int): ...
@@ -199,7 +199,7 @@ class ObservationWireRecord(WireRecord):
     def sequence_after(self, previous: int) -> int:
         return previous
 
-    def require_admission(self, metadata: WireMetadata) -> None:
+    def require_claim(self, metadata: WireMetadata) -> None:
         # Decoding validates the observation; it cannot permit delivery.
         return None
 
@@ -214,8 +214,8 @@ class ObservationWireRecord(WireRecord):
 class PublicWireRecord(MessageWireRecord):
     message: Message
 
-    def require_admission(self, metadata: WireMetadata) -> None:
-        self.message.require_retained_admission(metadata.admission_after_seq)
+    def require_claim(self, metadata: WireMetadata) -> None:
+        self.message.require_retained_claim(metadata.claimed_after_seq)
 
 
 @dataclass
@@ -237,7 +237,7 @@ class WireScan:
             if not isinstance(value, dict):
                 raise ValueError("Bus row is not an object.")
             record = WireRecord.from_wire(value, self.metadata.root_id)
-            record.require_admission(self.metadata)
+            record.require_claim(self.metadata)
             record.record_key(self.seen_keys)
             self.previous_sequence = record.sequence_after(self.previous_sequence)
             return record

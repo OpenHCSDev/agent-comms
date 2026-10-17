@@ -20,7 +20,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_input_record import FullNativeExecution
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.native_admission_epoch import UnrecordedNativeAdmission
+from agent_comms.native_claim_epoch import UnrecordedNativeClaim
 from agent_comms.selected_actions import SelectedExistingFileWrite
 from agent_comms.selected_tool_broker import (
     SelectedToolIntent,
@@ -54,22 +54,22 @@ def nominal_broker_stub(monkeypatch):
 
     bound = []
 
-    def selected_tool_mode_for_owner(comms, store, admission, owner, session_dir, input_id):
+    def selected_tool_mode_for_owner(comms, store, claim_scope, owner, session_dir, input_id):
         with store.session.read():
             row = NativeRuntimeInput.one(store.session._connection, input_id=input_id)
         assert row is not None
-        assert admission.wake_assignment_id in row.execution.source_assignment_ids(
+        assert claim_scope.wake_assignment_id in row.execution.source_assignment_ids(
             store.session._connection, input_id
         )
         assert row.owner_thread == owner
-        assert row.owner_lookup == admission.recipient_lookup
-        assert row.attempt_ordinal == admission.attempt_ordinal == 1
-        assert row.stage is FullNativeExecution and row.sent_owner_admission_generation == UnrecordedNativeAdmission()
+        assert row.owner_lookup == claim_scope.recipient_lookup
+        assert row.attempt_ordinal == claim_scope.attempt_ordinal == 1
+        assert row.stage is FullNativeExecution and row.sent_owner_claimed_generation == UnrecordedNativeClaim()
         assert (
             comms.registry.snapshot().claimed_generations[owner]
-            == admission.owner_admission_generation
+            == claim_scope.owner_claimed_generation
         )
-        bound.append((admission, owner, session_dir, input_id))
+        bound.append((claim_scope, owner, session_dir, input_id))
         return mode_type(lambda request: None)  # never invoke fake mutation
 
     monkeypatch.setattr(broker, "selected_tool_mode_for_owner", selected_tool_mode_for_owner)
@@ -197,7 +197,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
         result = await fake(*args, **kwargs)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             row = NativeRuntimeInput.one(store.session._connection, input_id=kwargs["input_id"])
-        assert row.sent_owner_admission_generation.matches(bound[0][0].owner_admission_generation)
+        assert row.sent_owner_claimed_generation.matches(bound[0][0].owner_claimed_generation)
         return result
 
     monkeypatch.setattr(TrackedTurnSession, "execute", observed)
@@ -210,11 +210,11 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
     ).run()
     assert result is not None and result.publications
     assert len(calls) == len(kwargs_seen) == len(bound) == 1
-    admission, owner, session_dir, input_id = bound[0]
-    assert owner == "beta" and admission.source_seq == initial.message.seq
-    assert admission.source_message_id == initial.message.message_id
-    assert admission.recipient_lookup == RecordedThreadIncarnation("fixture", people[2].created_at).lookup
-    assert admission.wire_root_id == root_id and admission.attempt_ordinal == 1
+    claim_scope, owner, session_dir, input_id = bound[0]
+    assert owner == "beta" and claim_scope.source_seq == initial.message.seq
+    assert claim_scope.source_message_id == initial.message.message_id
+    assert claim_scope.recipient_lookup == RecordedThreadIncarnation("fixture", people[2].created_at).lookup
+    assert claim_scope.wire_root_id == root_id and claim_scope.attempt_ordinal == 1
     assert input_id == kwargs_seen[0]["input_id"] and session_dir == kwargs_seen[0]["session_dir"]
     assert "selected_claimed_write at most once" in calls[0][1]
     assert "using no tools" not in calls[0][1]
@@ -292,10 +292,10 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
             different = ("1" if original[0] == "0" else "0") + original[1:]
             return replace(result, context=replace(result.context, input_id=different))
         if failure == "stale_epoch":
-            # Disposable-only simulated admission revocation, not a live
+            # Disposable-only simulated claim_scope revocation, not a live
             # stop/restart or destructive registry state transition.
             with comms.registry.store.editing() as edit:
-                edit.document.admissions.advance("beta")
+                edit.document.claims.advance("beta")
                 edit.commit()
         return result
 

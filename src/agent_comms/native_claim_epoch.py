@@ -16,13 +16,13 @@ from .coordination_errors import StaleFence
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import JsonShapeFamily, JsonShapeMember
-from .thread_identity import AdmissionIdentity, GenerationCounter
+from .thread_identity import ClaimedIdentity, GenerationCounter
 
 if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
 
 
-class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmission"):
+class NativeClaimEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeClaim"):
     @abstractmethod
     def matches(self, claimed_generation: int) -> bool: ...
 
@@ -30,7 +30,7 @@ class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmissi
     def reservation_violation(self) -> bool: ...
 
     def record(self, row, db, claimed_generation: int, session: NativeSessionIdentity) -> None:
-        raise StaleFence("native input admission was already bound")
+        raise StaleFence("native input claim_scope was already bound")
 
     @abstractmethod
     def require_release(self, receipt, snapshot, current) -> None: ...
@@ -41,7 +41,7 @@ class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmissi
 
 
 @dataclass(frozen=True)
-class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
+class UnrecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
     # Represent SQL NULL explicitly, rather than using an optional send state.
     value: None = None
 
@@ -54,14 +54,14 @@ class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
     def record(self, row, db, claimed_generation: int, session: NativeSessionIdentity) -> None:
         updated = row.update(
             db,
-            where="input_id=? AND sent_owner_admission_generation IS NULL",
+            where="input_id=? AND {sent_owner_claimed_generation} IS NULL",
             parameters=(row.input_id,),
-            sent_owner_admission_generation=RecordedNativeAdmission(claimed_generation),
+            sent_owner_claimed_generation=RecordedNativeClaim(claimed_generation),
             session_id=session.session_id,
             session_file=session.session_file,
         )
         if updated.rowcount != 1:
-            raise StaleFence("native input admission was already bound")
+            raise StaleFence("native input claim_scope was already bound")
 
     def require_release(self, receipt, snapshot, current) -> None:
         current.require_local_process(receipt.thread.require_process())
@@ -75,7 +75,7 @@ class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
 
 
 @dataclass(frozen=True)
-class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
+class RecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
     value: int
 
     def __post_init__(self) -> None:
@@ -88,10 +88,10 @@ class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
         return True
 
     def require_release(self, receipt, snapshot, current) -> None:
-        sent = AdmissionIdentity(current.incarnation, self.value)
-        fence = AdmissionIdentity(receipt.thread.incarnation, receipt.before)
+        sent = ClaimedIdentity(current.incarnation, self.value)
+        fence = ClaimedIdentity(receipt.thread.incarnation, receipt.before)
         if not fence.includes(sent):
-            raise RelationViolationError("Native release predates the sending admission")
+            raise RelationViolationError("Native release predates the sending claim_scope")
         if snapshot.claimed_generations[current.name] == receipt.after:
             if not receipt.current(snapshot, current, receipt.before):
                 raise RelationViolationError("Native release differs from its stopped declaration")

@@ -155,7 +155,7 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     assert sent.claim_transition.message_id == sent.message_id
     assert sent.claim_transition.seq == sent.seq
     assert comms.bus.log.latest_sequence() == sent.seq
-    # Durable claim history keeps its external shape, including absent admission.
+    # Durable claim history keeps its external shape, including absent claim_scope.
     stored = json.loads(comms.bus.log.path.read_text().splitlines()[0])
     assert stored["claim_transition"] == {
         "owner": "alice",

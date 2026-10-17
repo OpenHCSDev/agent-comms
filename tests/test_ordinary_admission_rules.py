@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms import ordinary_admission_rules as rules
+from agent_comms import ordinary_claim_rules as rules
 from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_status import StoppedThreadStatus
@@ -19,16 +19,16 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
     inspected = []
 
     async def events(*args, **kwargs):
-        admission = kwargs["send_boundary"]
+        claim_scope = kwargs["send_boundary"]
         snapshot = comms.registry.snapshot()
         current = snapshot.threads["project"]
         check = rules.OrdinaryOwnerCheck(
-            expected=admission.thread,
+            expected=claim_scope.thread,
             current=current,
             registry=snapshot,
             canonical="project",
-            admission=admission.admission,
-            turn=admission.turn,
+            claim_scope=claim_scope.claim_scope,
+            turn=claim_scope.turn,
         )
         check.require_valid()
 
@@ -44,7 +44,7 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
             rules.OrdinaryRunningRule: replace(
                 check, registry=replace(snapshot, statuses={"project": StoppedThreadStatus()})
             ),
-            rules.OrdinaryAdmissionRule: replace(check, admission=check.admission + 1),
+            rules.OrdinaryClaimRule: replace(check, claim_scope=check.claim_scope + 1),
             rules.OrdinaryProcessRule: changed(
                 replace(
                     current,
@@ -79,10 +79,10 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
                 threads={"renamed": renamed},
                 aliases={"project": "renamed"},
                 statuses={"renamed": snapshot.statuses["project"]},
-                claimed_generations={"renamed": admission.admission},
+                claimed_generations={"renamed": claim_scope.claim_scope},
             ),
         ).require_valid()
-        with admission(None, "a" * 32, args[2]) as allowed:
+        with claim_scope(None, "a" * 32, args[2]) as allowed:
             assert allowed is True
             # A separately opened flock description cannot acquire while the native
             # callback is yielded, exactly where backend stdin.write executes.
@@ -96,7 +96,7 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
         assert kwargs["native_start"](None, "a" * 32, args[2])
         yield ae.InputStarted(id=None)
         yield ae.StreamSettled()
-        yield ae.Done(ok=True, text="Admission inspected")
+        yield ae.Done(ok=True, text="Claim inspected")
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:

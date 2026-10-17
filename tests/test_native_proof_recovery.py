@@ -162,7 +162,7 @@ async def test_actual_native_killed_context_commit_keeps_unknown(
             == original
         )
         assert owner.provider.posts == 1
-    # Actual new native process performs hot-journal recovery before admission.
+    # Actual new native process performs hot-journal recovery before claim_scope.
     resumed = await owner.run("A genuinely new diagnostic input after native crash recovery")
     assert resumed[-1].ok, resumed[-1]
     assert owner.session.read_bytes().startswith(history)

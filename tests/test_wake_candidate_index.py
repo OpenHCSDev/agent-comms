@@ -1,4 +1,4 @@
-"""Bounded, disposable N/K candidate pages are never admission receipts."""
+"""Bounded, disposable N/K candidate pages are never claim_scope receipts."""
 
 from __future__ import annotations
 

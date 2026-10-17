@@ -177,13 +177,13 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             )
             session_file.chmod(0o600)
         assert session_file is not None
-        # Model only admission in its dedicated thread, not native receipt.
+        # Model only claim_scope in its dedicated thread, not native receipt.
         def admitted():
-            admission = _kwargs["prompt_send_boundary"]
+            claim_scope = _kwargs["prompt_send_boundary"]
             identity = NativeSessionIdentity(
                 json.loads(session_file.read_text().splitlines()[0])["id"], str(session_file)
             )
-            with admission(identity):
+            with claim_scope(identity):
                 calls.append((input_id, prompt))
 
         await asyncio.to_thread(admitted)
@@ -252,8 +252,8 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         # Relevance guidance can mention triage inside a FULL prompt too.
         from agent_comms.private_send_stage import TriageNativeSend
 
-        admission = _kwargs["prompt_send_boundary"]
-        if isinstance(admission.stage, TriageNativeSend):
+        claim_scope = _kwargs["prompt_send_boundary"]
+        if isinstance(claim_scope.stage, TriageNativeSend):
             reply = json.dumps({"decision": decision})
         else:
             reply = "42"
@@ -796,7 +796,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
 
         def admitted():
             with kwargs["prompt_send_boundary"](identity):
-                pytest.fail("renamed selected source reached raw-send admission")
+                pytest.fail("renamed selected source reached raw-send claim_scope")
 
         await asyncio.to_thread(admitted)
 
@@ -813,7 +813,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     assert calls == [] and not saved.exists() and moved.exists()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
-            "SELECT sent_owner_admission_generation,session_id FROM native_runtime_input"
+            "SELECT sent_owner_claimed_generation,session_id FROM native_runtime_input"
         ).fetchone()
         assert row is not None and tuple(row) == (None, None)
         assert (
@@ -1106,13 +1106,13 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    original_claim = Registration.lease_live_turn_with_admission
+    original_claim = Registration.lease_live_turn_with_claim
 
     def stop_before_claim(self, *args, **kwargs):
         comms.registry.unregister("beta")
         return original_claim(self, *args, **kwargs)
 
-    monkeypatch.setattr(Registration, "lease_live_turn_with_admission", stop_before_claim)
+    monkeypatch.setattr(Registration, "lease_live_turn_with_claim", stop_before_claim)
     with pytest.raises(StaleFence, match="stopped or busy before native turn"):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
@@ -1138,7 +1138,7 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    original_claim = Registration.lease_live_turn_with_admission
+    original_claim = Registration.lease_live_turn_with_claim
     expected = comms.registry.require("beta")
 
     def change_registry_before_claim(self, *args, **kwargs):
@@ -1151,7 +1151,7 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
         return original_claim(self, *args, **kwargs)
 
     monkeypatch.setattr(
-        Registration, "lease_live_turn_with_admission", change_registry_before_claim
+        Registration, "lease_live_turn_with_claim", change_registry_before_claim
     )
     if mutation == "stop_then_heartbeat":
         with pytest.raises(StaleFence, match="stopped or busy before native turn"):

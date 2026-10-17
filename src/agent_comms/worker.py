@@ -67,7 +67,7 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
                 if not row.queued_for(
                     owner.incarnation, snapshot.claimed_generations[name], row.source_text
                 ):
-                    raise ValueError("Startup input no longer belongs to this owner admission")
+                    raise ValueError("Startup input no longer belongs to this owner claim_scope")
             return row
         row = await Coordination.run_worker(capture)
         await agent.inputs.emit_input_disposition(name, row)

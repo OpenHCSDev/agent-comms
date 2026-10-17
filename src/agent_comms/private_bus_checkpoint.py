@@ -32,7 +32,7 @@ from .envelope_claim_transitions import (
     ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
 )
 from .coordination_tables.publications import PublicationIntents
-from .errors import HumanAdmissionBlockedError, RelationViolationError
+from .errors import HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
@@ -211,7 +211,7 @@ class CertifiedSourceRead:
         self.require_open_prefix()
         PublicMessages.require_contiguous(self.connection)
         if self.marker.last_seq != self.witness.through_seq:
-            raise HumanAdmissionBlockedError(
+            raise HumanClaimBlockedError(
                 "Private bus sequence reservation has UNKNOWN outcome; "
                 "human send blocked, do not retry."
             )
@@ -555,7 +555,7 @@ class ClaimCommits(CheckpointTable, TypedTable):
         "sql": Column(unique=True, generated="json_extract(transition,'$.seq')"),
     })
     operation_id: str | None = field(default=None, init=False, compare=False, metadata={
-        "sql": Column(unique=True, generated="json_extract(transition,'$.admission.operation_id')"),
+        "sql": Column(unique=True, generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')"),
     })
 
     @classmethod
@@ -667,7 +667,7 @@ class PublicMessages(CheckpointTable, TypedTable):
     @classmethod
     def require_contiguous(cls, db: sqlite3.Connection) -> None:
         if cls.exists(db, where=cls.gap):
-            raise HumanAdmissionBlockedError(
+            raise HumanClaimBlockedError(
                 "Private bus sequence gap has UNKNOWN outcome; "
                 "human send blocked, do not retry."
             )
@@ -1497,7 +1497,7 @@ def addressed_source_pointers_unlocked(
                 f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} FROM {Addressed.declared_name} a "
                 f"JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
                 "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq DESC LIMIT ?",
-                (lookup, marker.admission_after_seq, limit),
+                (lookup, marker.claimed_after_seq, limit),
             )
         )
         marker.seal.check_final(saved, path)

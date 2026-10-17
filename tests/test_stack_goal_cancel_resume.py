@@ -157,7 +157,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             "acp:uncertain-sentinel",
             seq=None,
             owner=session,
-            admission=1,
+            claim_scope=1,
             target=session,
             text="UNCERTAIN_INPUT_MUST_NOT_REPLAY",
         )

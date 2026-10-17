@@ -335,7 +335,7 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
         assert (
             len(
                 NativeRuntimeInput.select(
-                    store.session._connection, where="sent_owner_admission_generation IS NOT NULL"
+                    store.session._connection, where="sent_owner_claimed_generation IS NOT NULL"
                 )
             )
             == 0
@@ -377,7 +377,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
     before = cursor_envelope((await agent.sessions.metadata(sid)))
     assert before.status == "none"
     assert before.revision >= 1
-    assert before.scope.admission.incarnation.name == sid
+    assert before.scope.claim_scope.incarnation.name == sid
     assert before.scope.wire_root_id == root_id
     updates = []
 
@@ -488,8 +488,8 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
     assert len(calls) == 1
 
 
-async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_path, monkeypatch):
-    """No reattach is required for a registry stop/heartbeat admission bump."""
+async def test_observed_mid_session_claim_change_invalidates_old_proof(tmp_path, monkeypatch):
+    """No reattach is required for a registry stop/heartbeat claim_scope bump."""
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
@@ -649,7 +649,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         # canonical selected execution on the same SDK-authored saved source.
         # This direct original requires FULL; it is not a relevance probe.
         # Runtime observation is an actual concurrent consumer; whichever
-        # original drain owns the admission consumes the original assignment.
+        # original drain owns the claim_scope consumes the original assignment.
         await agent.inputs.drain_inbox(session)
         async with asyncio.timeout(30):
             while (

@@ -83,8 +83,8 @@ def _accepted(
 
 
 def _owner(comms: Comms, name: str) -> Thread:
-    original, claimed_generation = comms.registry.live_owner_with_admission(name)
-    owner, _ = comms.registry.lease_live_turn_with_admission(
+    original, claimed_generation = comms.registry.live_owner_with_claim(name)
+    owner, _ = comms.registry.lease_live_turn_with_claim(
         original, f"selected-{name}", expected_generation=claimed_generation
     )
     return owner
@@ -110,7 +110,7 @@ def _projection(
         expected_participant_generation=store.participants.get(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup
         ).participant_generation,
-        expected_admission_generation=claimed_generation,
+        expected_claimed_generation=claimed_generation,
         max_rows=max_rows,
     )
 

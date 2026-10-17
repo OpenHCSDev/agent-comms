@@ -236,11 +236,11 @@ class InputDispositions(TypedStore):
         return message.response_policy.disposition_key(message, owner)
 
     def record(
-        self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str,
+        self, key: str, *, seq: int | None, owner: str, claim_scope: int, target: str, text: str,
         origin: InputOrigin = UnattributedInputOrigin(), custody: ExitStack | None = None,
     ) -> bool:
         """Register supplied reservation rollback before publishing acceptance."""
-        row = ReservedInput(key, seq, owner, admission, target, text,
+        row = ReservedInput(key, seq, owner, claim_scope, target, text,
                             origin=origin)
         document = self.record_originals(row, custody=custody)
         return document.rows[key] is row
@@ -261,12 +261,12 @@ class InputDispositions(TypedStore):
         return self._update(*_members("key", (row.key for row in originals)), reserve)
 
     def reserve_turn(
-        self, owner: str, turn: TurnId, admission: int, text: str, *, custody: ExitStack,
+        self, owner: str, turn: TurnId, claim_scope: int, text: str, *, custody: ExitStack,
     ) -> SingleInputBatch:
         """Enlist rollback before publication; caller retains the original wire scope."""
         from .channel_input_batch import SingleInputBatch
 
-        row = ReservedInput(f"turn:{turn.value}", None, owner, admission, owner, text)
+        row = ReservedInput(f"turn:{turn.value}", None, owner, claim_scope, owner, text)
 
         document = self.reserve_originals(row, custody=custody)
         return SingleInputBatch(document.originals((row.key,)))
@@ -301,13 +301,13 @@ class InputDispositions(TypedStore):
     def clear_native(self, key: str, native_id: str, text: str) -> bool:
         return self._transition(key, lambda row: row.clear_native(native_id, text))
 
-    def bind(self, key: str, *, admission: int, turn_id: str, native_id: str, text: str) -> bool:
+    def bind(self, key: str, *, claim_scope: int, turn_id: str, native_id: str, text: str) -> bool:
         return self.bind_originals(
-            (key,), admission=admission, turn_id=turn_id, native_id=native_id, text=text
+            (key,), claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
         )
 
     def bind_turn_input(
-        self, keys: tuple[str, ...], *, admission: int, turn_id: str, native_id: str, text: str,
+        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: str, native_id: str, text: str,
         already_bound: bool,
     ) -> bool:
         """Bind a turn's unresolved inputs to the native input carrying them.
@@ -318,18 +318,18 @@ class InputDispositions(TypedStore):
         for row in document.rows.values():
             row.require_not_cleared()
         if any(not document.lookup(key).unresolved
-               or not document.lookup(key).matches_admission(admission) for key in keys):
+               or not document.lookup(key).matches_claim(claim_scope) for key in keys):
             return False
         if already_bound:
             return all(document.lookup(key).matches_native(
                 native_id=native_id, turn_id=turn_id, text=text
             ) for key in keys)
         return self.bind_originals(
-            keys, admission=admission, turn_id=turn_id, native_id=native_id, text=text
+            keys, claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
         )
 
     def bind_originals(
-        self, keys: tuple[str, ...], *, admission: int, turn_id: str, native_id: str, text: str
+        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: str, native_id: str, text: str
     ) -> bool:
         """Bind the complete captured original atomically; no partial batch grant."""
         bound = False
@@ -339,7 +339,7 @@ class InputDispositions(TypedStore):
             if not keys or len(set(keys)) != len(keys):
                 return document
             successors = tuple(document.lookup(key).bind(
-                admission=admission, turn_id=turn_id, native_id=native_id, text=text
+                claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
             ) for key in keys)
             if any(row is None for row in successors):
                 return document

@@ -828,7 +828,7 @@ class CommsDecisionTool(CommsAuthoredTaskTool):
     rejected: tuple[str, ...] = tool_field("Nonempty unique valid rejected alternatives")
 
     def declaration(self, owner):
-        return Decision.from_admission(owner, self.scope, self.change,
+        return Decision.from_claim(owner, self.scope, self.change,
                                        chosen=self.chosen, rejected=self.rejected)
 
     def original_body(self, declaration):
@@ -847,7 +847,7 @@ class CommsConstraintTool(CommsAuthoredTaskTool):
     text: str = tool_field("Exact authored restriction, never a paraphrase of another source")
 
     def declaration(self, owner):
-        return Constraint.from_admission(owner, self.scope, self.change)
+        return Constraint.from_claim(owner, self.scope, self.change)
 
     def original_body(self, declaration):
         if not self.text.strip():
@@ -869,7 +869,7 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
     def declaration(self, owner):
         if not self.text.strip():
             raise ValueError("A subtask observation requires its exact description")
-        return Subtask.from_admission(owner, self.scope, self.change, completed=self.completed)
+        return Subtask.from_claim(owner, self.scope, self.change, completed=self.completed)
 
     def original_body(self, declaration):
         return self.text

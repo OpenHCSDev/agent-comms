@@ -94,7 +94,7 @@ class ExecutingCall(CallObservation):
         # A failed terminal fsync cannot be retried or converted to a completed
         # error by a subsequent event. The live receipt must succeed exactly once.
         call.observation = UncertainCall()
-        call.admission.finish(call, is_error, directory, input_id, round_number)
+        call.claim_scope.finish(call, is_error, directory, input_id, round_number)
         call.observation = CompletedCall()
 
 
@@ -109,7 +109,7 @@ class UncertainCall(CallObservation):
     """Interrupted observation; never replay or manufacture a terminal."""
 
 
-class CallAdmission(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
+class CallClaim(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
     def expire(self, call: NativeToolCall) -> None:
         """An unstarted waiter cannot change a tool slot already consumed."""
 
@@ -120,22 +120,22 @@ class CallAdmission(ABC):  # noqa: B024 - shared rejection; leaves override vali
         self, call: NativeToolCall, is_error: bool, directory: Path,
         input_id: str, round_number: int,
     ) -> None:
-        raise SelectedToolDenied("Native tool ran without owner admission")
+        raise SelectedToolDenied("Native tool ran without owner claim_scope")
 
 
-class AwaitingAdmission(CallAdmission):
+class AwaitingClaim(CallClaim):
     def expire(self, call: NativeToolCall) -> None:
-        call.admission = UncertainAdmission()
+        call.claim_scope = UncertainClaim()
 
     async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
         # No retry even when the callback is cancelled or its durable fsync fails.
-        call.admission = UncertainAdmission()
+        call.claim_scope = UncertainClaim()
         await action()
         call.observation.require_executing()
-        call.admission = AdmittedCall()
+        call.claim_scope = AdmittedCall()
 
 
-class AdmittedCall(CallAdmission):
+class AdmittedCall(CallClaim):
     def finish(
         self, call: NativeToolCall, is_error: bool, directory: Path,
         input_id: str, round_number: int,
@@ -143,14 +143,14 @@ class AdmittedCall(CallAdmission):
         call.commit_terminal(is_error, directory, input_id, round_number)
 
 
-class UncertainAdmission(CallAdmission):
+class UncertainClaim(CallClaim):
     def finish(
         self, call: NativeToolCall, is_error: bool, directory: Path,
         input_id: str, round_number: int,
     ) -> None:
         if not is_error:
-            raise SelectedToolDenied("Native tool succeeded without owner admission")
-        call.admission_failed()
+            raise SelectedToolDenied("Native tool succeeded without owner claim_scope")
+        call.claim_failed()
 
 
 @dataclass
@@ -161,7 +161,7 @@ class NativeToolCall(ABC):
     observation: CallObservation = field(
         default_factory=AwaitingAnnouncement, init=False, compare=False
     )
-    admission: CallAdmission = field(default_factory=AwaitingAdmission, init=False, compare=False)
+    claim_scope: CallClaim = field(metadata={"wire_name": 'admission'}, default_factory=AwaitingClaim, init=False, compare=False)
     # Notification only, not a second authority for determining completion.
     started: asyncio.Event = field(
         default_factory=asyncio.Event, init=False, compare=False, repr=False
@@ -193,17 +193,17 @@ class NativeToolCall(ABC):
         try:
             await self._wait_started()
             self.observation.require_executing()
-            await self.admission.consume(self, action)
+            await self.claim_scope.consume(self, action)
         except ToolStartNotSeen:
             # The callback never ran. Withdraw permission, but retain the actual
             # native observations: delayed announcement/start/error events
             # must still reconcile this denied call in its declared round.
-            self.admission.expire(self)
+            self.claim_scope.expire(self)
             self.started.set()
             raise
         except (asyncio.CancelledError, TimeoutError):
             self.observation = UncertainCall()
-            self.admission = UncertainAdmission()
+            self.claim_scope = UncertainClaim()
             self.started.set()  # Wake other waiters; they must fail state validation.
             raise
 
@@ -234,4 +234,4 @@ class NativeToolCall(ABC):
     ) -> None: ...
 
     @abstractmethod
-    def admission_failed(self) -> None: ...
+    def claim_failed(self) -> None: ...

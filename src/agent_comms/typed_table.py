@@ -272,7 +272,7 @@ class Index:
             f"CREATE {'UNIQUE ' if self.unique else ''}INDEX "
             f"{existence}{_identifier(name)} ON {_identifier(owner.declared_name)} "
             f"({owner._column_list(self.columns)})"
-            + (f" WHERE {self.where}" if self.where else "")
+            + (f" WHERE {owner._sql(self.where)}" if self.where else "")
         )
 
 
@@ -332,6 +332,7 @@ class SqlValue:
 @dataclass(frozen=True)
 class _Field(SqlValue):
     name: str
+    wire_name: str
     init: bool
     nullable: bool
     column: Column
@@ -355,6 +356,7 @@ class TypedRow:
         return tuple(
             _Field(
                 name=item.name,
+                wire_name=item.metadata.get("wire_name", item.name),
                 init=item.init,
                 annotation=hints[item.name],
                 nullable=_base_type(hints[item.name])[1] or item.metadata.get("sql", Column()).nullable,
@@ -375,16 +377,18 @@ class TypedRow:
         unknown = set(names).difference(cls.columns())
         if unknown:
             raise ValueError(f"Unknown fields for {cls.__name__}: {sorted(unknown)}")
-        return tuple(item for item in cls._fields() if item.name in names)
+        declared = {item.name: item for item in cls._fields()}
+        return tuple(declared[name] for name in names)
 
     @classmethod
-    def _positions(cls, cursor: sqlite3.Cursor, extra: tuple[str, ...] = ()) -> dict[str, int]:
+    def _positions(cls, cursor: sqlite3.Cursor, extra: tuple[_Field, ...] = ()) -> dict[str, int]:
         if cursor.description is None:
             raise ValueError("Typed read requires a result set")
         names = tuple(item[0] for item in cursor.description)
-        if len(set(names)) != len(names) or set(names) != set((*cls.columns(), *extra)):
+        declared = (*cls._fields(), *extra)
+        if len(set(names)) != len(names) or set(names) != {item.wire_name for item in declared}:
             raise ValueError(f"Query columns do not match {cls.__name__}: {names!r}")
-        return {name: index for index, name in enumerate(names)}
+        return {item.name: names.index(item.wire_name) for item in declared}
 
     @classmethod
     def _decode_row(
@@ -418,7 +422,7 @@ class TypedRow:
         This reads one SQLite snapshot and never re-encodes a stored row as JSON.
         """
         try:
-            positions = cls._positions(cursor, related.columns())
+            positions = cls._positions(cursor, related._fields())
             return [(cls._decode_row(row, positions), related._decode_row(row, positions))
                     for row in cursor]
         finally:
@@ -503,8 +507,13 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     def _column_list(cls, names: tuple[str, ...]) -> str:
         if not names:
             raise ValueError(f"Empty column list for {cls.declared_name}")
-        cls._fields_named(names)
-        return ", ".join(map(_identifier, names))
+        return ", ".join(_identifier(item.wire_name) for item in cls._fields_named(names))
+
+    @classmethod
+    def _sql(cls, expression: str) -> str:
+        for item in cls._fields():
+            expression = expression.replace("{" + item.name + "}", item.wire_name)
+        return expression
 
     @classmethod
     def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
@@ -516,29 +525,28 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             raise TypeError("AUTOINCREMENT requires one rowid primary key")
         for item in cls._fields():
             column = item.column
-            sql = f"{_identifier(item.name)} {item.storage.sql_type}"
+            sql = f"{_identifier(item.wire_name)} {item.storage.sql_type}"
             if column.auto_increment:
                 sql += " PRIMARY KEY AUTOINCREMENT"
-            sql += column.generated_sql
+            sql += cls._sql(column.generated_sql)
             if not item.nullable or column.primary_key:
                 sql += " NOT NULL"
             if column.unique:
                 sql += " UNIQUE"
             if column.references is not None:
                 target, name = column.references
-                target._column_list((name,))
-                sql += f" REFERENCES {_identifier(target.declared_name)} ({_identifier(name)})"
-            for constraint in item.storage.constraints(item.name, item.annotation):
+                sql += f" REFERENCES {_identifier(target.declared_name)} ({target._column_list((name,))})"
+            for constraint in item.storage.constraints(item.wire_name, item.annotation):
                 sql += f" CHECK ({constraint})"
             if column.check:
-                sql += f" CHECK ({column.check})"
+                sql += f" CHECK ({cls._sql(column.check)})"
             definitions.append(sql)
         if keys and not auto_keys:
             definitions.append(f"PRIMARY KEY ({cls._column_list(keys)})")
         elif cls.without_rowid:
             raise TypeError("WITHOUT ROWID requires a declared primary key")
         definitions.extend(f"UNIQUE ({cls._column_list(group)})" for group in cls.unique)
-        definitions.extend(f"CHECK ({check})" for check in cls.checks)
+        definitions.extend(f"CHECK ({cls._sql(check)})" for check in cls.checks)
         definitions.extend(reference.sql(cls) for reference in cls.references())
         table = _identifier(cls.declared_name)
         statements = {
@@ -562,7 +570,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def triggers(cls, *, if_not_exists: bool = False) -> dict[str, str]:
         existence = "IF NOT EXISTS " if if_not_exists else ""
-        return {name: f"CREATE TRIGGER {existence}{name}{body}"
+        return {name: f"CREATE TRIGGER {existence}{name}{cls._sql(body)}"
                 for name, body in cls.trigger_bodies().items()}
 
     @classmethod
@@ -583,9 +591,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         selected = cls._fields_named(tuple(key))
         if selected:
             where = "(" + where + ") AND " + " AND ".join(
-                f"{_identifier(item.name)} IS ?" for item in selected)
+                f"{_identifier(item.wire_name)} IS ?" for item in selected)
             parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
-        return where, parameters
+        return cls._sql(where), parameters
 
     @classmethod
     def _query(
@@ -593,12 +601,11 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         order_by: tuple[str, ...], descending: bool, key: dict[str, object]
     ) -> sqlite3.Cursor:
         where, parameters = cls._condition(where, parameters, key)
-        cls._fields_named(order_by)
         direction = " DESC" if descending else ""
         return db.execute(
             f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
             f"WHERE {where}"
-            + (" ORDER BY " + ", ".join(_identifier(name) + direction for name in order_by)
+            + (" ORDER BY " + ", ".join(cls._column_list((name,)) + direction for name in order_by)
                if order_by else ""),
             parameters,
         )
@@ -729,7 +736,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             raise ValueError(f"Update requires fields for {cls.declared_name}")
         return db.execute(
             f"UPDATE {_identifier(cls.declared_name)} SET "
-            + ", ".join(f"{_identifier(item.name)}=?" for item in selected)
+            + ", ".join(f"{_identifier(item.wire_name)}=?" for item in selected)
             + f" WHERE {where}",
             tuple(item.encode(changes[item.name]) for item in selected) + parameters,
         )

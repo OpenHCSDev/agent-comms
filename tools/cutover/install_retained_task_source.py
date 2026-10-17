@@ -65,7 +65,7 @@ def main():
     if (originals / 'bus.jsonl').read_bytes() != original:
         raise ValueError('Original bus preimage must be retained before publication.')
     if (originals / 'bus_meta.json').read_bytes() != bus.metadata_path.read_bytes():
-        raise ValueError('Original admission marker preimage changed.')
+        raise ValueError('Original claim_scope marker preimage changed.')
     if receipt.exists():
         raise ValueError('Task carry receipt cannot be replaced.')
     # These resources contain positions/derivations of the old physical prefix,
@@ -93,7 +93,7 @@ def main():
     witness = install_private_bus_checkpoint(bus, _bus_locked=True)
     after = bus.read_metadata_unlocked()
     if replace(after, checkpoint_version=None, checkpoint_seal=None) != retained:
-        raise ValueError('Task carry changed original marker identity or input admission.')
+        raise ValueError('Task carry changed original marker identity or input claim_scope.')
     if witness.through_seq != packet['through_seq']:
         raise ValueError('Installed task checkpoint changed the original sequence frontier.')
     result = {'state': 'RETAINED_TASK_SOURCE_CARRY_INSTALLED', 'root_id': root_id,

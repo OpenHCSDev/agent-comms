@@ -65,7 +65,7 @@ class RetryScheduled(CoordinationError):  # noqa: N818 - nominal outcome name
     """The settled execution is durably eligible for its next selected attempt."""
 
 
-class ResponseAdmissionBlocked(RecoveryBlocked):
+class ResponseClaimBlocked(RecoveryBlocked):
     """Response publication lacks final evidence or its exact retained route."""
 
     def __init__(self):

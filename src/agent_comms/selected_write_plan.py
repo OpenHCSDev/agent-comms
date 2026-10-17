@@ -35,7 +35,7 @@ from .declared_family import DeclaredFamily
 from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
 from .jsonl_stream import unique_fields
 from .message_reference import MessageReference
-from .thread_identity import AdmissionIdentity, RecordedThreadIncarnation
+from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 
 _MAX_BYTES = 1024 * 1024
 
@@ -52,7 +52,7 @@ class SelectedWriteBinding:
     root_id: str
     source: MessageReference
     assignment_id: str
-    admission: AdmissionIdentity
+    claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -67,7 +67,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     claim_id: str
     owner: str
     incarnation: float
-    admission_epoch: int
+    claim_epoch: int = field(metadata={"wire_name": 'admission_epoch'})
     expected_attempt_ordinal: Literal[1]
     operation_id: str
     resource: str
@@ -78,7 +78,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     def binding(self) -> SelectedWriteBinding:
         return SelectedWriteBinding(
             self.root_id, MessageReference(self.source_seq, self.source_message_id),
-            self.claim_id, AdmissionIdentity(RecordedThreadIncarnation(self.owner, self.incarnation), self.admission_epoch),
+            self.claim_id, ClaimedIdentity(RecordedThreadIncarnation(self.owner, self.incarnation), self.claim_epoch),
         )
 
     def require_accepted(self):
@@ -187,7 +187,7 @@ class SelectedWritePlans:
                 marker = self.comms.bus.log._private_marker_unlocked()
             if marker.root_id != self.root_id or not marker.claims:
                 raise IdentityConflict("Selected write requires matching private claim root")
-            owner, claimed_generation = self.comms.registry.live_owner_with_admission(owner_name)
+            owner, claimed_generation = self.comms.registry.live_owner_with_claim(owner_name)
             if owner.pid != os.getpid() or owner.active_turn is not None:
                 raise IdentityConflict("Selected write owner is not idle in this process")
             initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
@@ -212,7 +212,7 @@ class SelectedWritePlans:
             record = AcceptedWriteIntent(
                 schema=1, root_id=self.root_id, source_seq=source_seq,
                 source_message_id=source_message_id, claim_id=selected[0].assignment_id,
-                owner=owner.name, incarnation=owner.created_at, admission_epoch=claimed_generation,
+                owner=owner.name, incarnation=owner.created_at, claim_epoch=claimed_generation,
                 expected_attempt_ordinal=1, operation_id=operation_id, resource=str(path),
                 contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
             )
@@ -250,7 +250,7 @@ class SelectedWritePlans:
         row = row.require_accepted()
         expected = SelectedWriteBinding(
             self.root_id, assignment.source, assignment.assignment_id,
-            AdmissionIdentity(owner.incarnation, claimed_generation),
+            ClaimedIdentity(owner.incarnation, claimed_generation),
         )
         if row.binding != expected:
             raise IdentityConflict("Selected write intent is stale or uncertain")

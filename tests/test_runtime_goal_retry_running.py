@@ -73,7 +73,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
         "acp:old-unknown",
         seq=None,
         owner=session,
-        admission=comms.registry.snapshot().claimed_generations[session],
+        claim_scope=comms.registry.snapshot().claimed_generations[session],
         target=session,
         text="Uncertain old input must never replay",
     )
@@ -231,7 +231,7 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(native_backe
             elif fence == "origin":
                 owner.turns.goals.pending_goal_origins[session] = goal.id
             try:
-                # The original socket admission rejects a stopped owner before
+                # The original socket claim_scope rejects a stopped owner before
                 # request dispatch. Other fences reach the live request owner.
                 failure = ConnectionError if fence == "owner" else RuntimeError
                 expected = {"owner": "stopped or unavailable", "origin": "origin turn"}.get(fence, "unresolved")

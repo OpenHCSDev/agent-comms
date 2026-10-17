@@ -113,7 +113,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 if broadcast and len(requests) <= 2:
                     # Both actual owners must reach the endpoint while the
                     # first request is still open. No model turn may retain
-                    # global bus/admission custody through its response.
+                    # global bus/claim_scope custody through its response.
                     if len(requests) == 2:
                         parallel_triage.set()
                     assert parallel_triage.wait(5), "Independent owner blocked behind another native request"

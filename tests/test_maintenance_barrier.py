@@ -245,7 +245,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.agents.begin_turn("owner", "after")
     with pytest.raises(RelationViolationError, match="Maintenance"):
-        comms.registry.lease_live_turn_with_admission(
+        comms.registry.lease_live_turn_with_claim(
             comms.registry.require("owner"),
             "direct",
             expected_generation=comms.registry.snapshot().claimed_generations["owner"],
@@ -343,7 +343,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
 
 
 @pytest.mark.parametrize("fault_at", ["before-state", "after-state"])
-def test_unknown_parent_fsync_does_not_reopen_admission(
+def test_unknown_parent_fsync_does_not_reopen_claim(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fault_at: str
 ) -> None:
     import agent_comms.maintenance_barrier as barrier_module

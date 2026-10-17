@@ -97,7 +97,7 @@ class VerifiedOwnerLoss:
             try:
                 release.require_native_loss(registry, source)
             except (ValueError, IdentityConflict, RelationViolationError) as error:
-                raise RecoveryBlocked(f"native owner release does not prove loss of this admission: {error}") from error
+                raise RecoveryBlocked(f"native owner release does not prove loss of this claim_scope: {error}") from error
             proof = object.__new__(cls)
             for name, value in (
                 ("attempt", attempt),
@@ -138,7 +138,7 @@ class VerifiedOwnerLoss:
         """
         if not self.owns(self._store, self.attempt):
             raise RecoveryBlocked("native exit observation requires acquired owner loss")
-        session_files = self.native_input.sent_owner_admission_generation.recovery_session_files(
+        session_files = self.native_input.sent_owner_claimed_generation.recovery_session_files(
             self.native_input, self.release
         )
         session_dir = (

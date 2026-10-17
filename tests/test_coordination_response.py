@@ -145,11 +145,11 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         backend_done=True,
         process_dead=True,
     ).value.fence
-    owner, admission = comms.registry.live_owner_with_admission("owner")
-    owner, admission = comms.registry.lease_live_turn_with_admission(
-        owner, "fixture-response-turn", expected_generation=admission
+    owner, claim_scope = comms.registry.live_owner_with_claim("owner")
+    owner, claim_scope = comms.registry.lease_live_turn_with_claim(
+        owner, "fixture-response-turn", expected_generation=claim_scope
     )
-    witness = LiveResponseOwner(thread=owner, claimed_generation=admission)
+    witness = LiveResponseOwner(thread=owner, claimed_generation=claim_scope)
     return Fixture(
         comms,
         bus,
@@ -663,12 +663,12 @@ def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
         key = inputs.bus_key(follow_up, case.witness.thread)
         text = "Part 2, mid-turn"
         assert inputs.record(
-            key, seq=follow_up.seq, owner="owner", admission=lease.claimed_generation,
+            key, seq=follow_up.seq, owner="owner", claim_scope=lease.claimed_generation,
             target="owner", text=text, origin=WireInputOrigin(case.root_id, follow_up.reference),
         )
         native_id = uuid4().hex
         assert inputs.bind(
-            key, admission=lease.claimed_generation, turn_id=lease.turn_id,
+            key, claim_scope=lease.claimed_generation, turn_id=lease.turn_id,
             native_id=native_id, text=text,
         )
         assert inputs.started(key, turn_id=lease.turn_id, native_id=native_id, text=text)

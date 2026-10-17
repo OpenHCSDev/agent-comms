@@ -1,4 +1,4 @@
-"""Authored declaration controls: stopped witnesses are not live admission.
+"""Authored declaration controls: stopped witnesses are not live claim_scope.
 
 No root, writer, child, native package or process launch is acquired here.
 """
@@ -98,13 +98,13 @@ def stopped():
     return thread, snapshot
 
 
-def test_retired_witness_cannot_borrow_live_or_replaced_admission():
+def test_retired_witness_cannot_borrow_live_or_replaced_claim():
     thread, snapshot = stopped()
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     assert owner.require_current(snapshot) is thread
-    selection = OwnerRestartSelection(owner.owner, launch.process, owner.admission.claimed_generation)
+    selection = OwnerRestartSelection(owner.owner, launch.process, owner.claim_scope.claimed_generation)
     with pytest.raises(RelationViolationError):
         selection.require_current(snapshot)
     changed = (
@@ -134,7 +134,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
     runtime = RestartEnvironment.inherit(environment)
     original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None, LaunchRuntime(Path("/target/bin/python")))
     encoded = FieldCodec.encode(original)
-    assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
+    assert set(encoded["owners"][0]) == {"owner", "claim_scope", "launch"}
     decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)
     assert decoded == original
     assert decoded.owners[0].require_current(snapshot) is thread

@@ -109,7 +109,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert comms.registry.require("beta").active_turn is None
         assert comms.registry.require("beta").goal == before_goal
         # The completed selected reply consumes its certified dependency wait;
-        # a queued owner input keeps its admission/goal authority across that change.
+        # a queued owner input keeps its claim_scope/goal authority across that change.
         from agent_comms.goal_waits import NoGoalWait
 
         assert comms.goals.goal_wait("beta") == (NoGoalWait() if goal_mode == "standby" else before_wait)
@@ -145,10 +145,10 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
 
     monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden)
-    admission = comms.registry.snapshot().claimed_generations["beta"]
+    claim_scope = comms.registry.snapshot().claimed_generations["beta"]
     old_key = "acp:historical-uncertain"
     agent.inputs.dispositions.record(
-        old_key, seq=None, owner="beta", admission=admission, target="beta", text="Do not replay"
+        old_key, seq=None, owner="beta", claim_scope=claim_scope, target="beta", text="Do not replay"
     )
     old_row = stored_inputs(agent.inputs.dispositions.root).rows[old_key]
     comms.messaging.send_message("sender", "beta", "Selected direct message")
@@ -288,7 +288,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         assert not refused.has_native_binding and not refused.has_started
         assert (
             refused.bind(
-                admission=refused.admission,
+                claim_scope=refused.claim_scope,
                 turn_id="retry",
                 native_id="f" * 32,
                 text=refused.source_text,

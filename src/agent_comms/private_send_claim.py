@@ -44,7 +44,7 @@ from .private_send_stage import NativeSendStage
 
 
 @dataclass(frozen=True, kw_only=True)
-class PrivateSendAdmission:
+class PrivateSendClaim:
     selected: SelectedParticipant
     stage: NativeSendStage
     input_id: str
@@ -89,7 +89,7 @@ class PrivateSendAdmission:
         token: str,
         prompt: RenderedInput,
         session: SelectedSession,
-    ) -> PrivateSendAdmission:
+    ) -> PrivateSendClaim:
         """Reserve once and bind the exact prompt before any native process starts.
 
         A failed binding leaves the durable reservation intact; construction must
@@ -233,8 +233,8 @@ class PrivateSendAdmission:
             # From token consumption through COMMIT/fsync, every failure
             # remains uncertain and propagates without another send attempt.
             if not self._once.acquire(blocking=False):
-                raise IdentityConflict("native send admission cannot be reused")
-            with self._measurements.operation("admission_checks"):
+                raise IdentityConflict("native send claim_scope cannot be reused")
+            with self._measurements.operation("claim_checks"):
                 _require_no_private_owner_rename(self.bus.log.path.parent)
                 self.owner.require_snapshot(
                     registry, "recipient registry owner changed before native send"
@@ -245,8 +245,8 @@ class PrivateSendAdmission:
                     db, self.input_id, self.participant, self.token_digest
                 )
                 self.stage.require_claim(store)
-            with self._measurements.operation("native_admission_record"):
-                reserved.sent_owner_admission_generation.record(
+            with self._measurements.operation("native_claim_record"):
+                reserved.sent_owner_claimed_generation.record(
                     reserved, db, self.owner.claimed_generation, identity
                 )
             # ExitStack commits/closes the coordinator before releasing shared registry/wire locks. No bus publication
@@ -265,6 +265,6 @@ class PrivateSendAdmission:
         except RuntimeError:
             pass
         else:
-            raise IdentityConflict("native send admission requires the isolated raw writer")
+            raise IdentityConflict("native send claim_scope requires the isolated raw writer")
         self._start_once(identity)
         yield

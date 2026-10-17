@@ -15,7 +15,7 @@ from .native_pi import NativePiUnavailable
 from .coordinator import Coordination
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence
-from .turn_admission import UnwrittenPrompt
+from .turn_claim import UnwrittenPrompt
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession

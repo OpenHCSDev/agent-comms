@@ -613,7 +613,7 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path):
             list(source.public_records_for(frozenset({1}), before_offset=source.boundary))
 
 
-def test_reserved_sequence_preserves_committed_read_cut_without_admission(tmp_path):
+def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
     from agent_comms.wire_log import CertifiedOpenedWireSnapshot
     from test_private_bus_checkpoint import _root
 

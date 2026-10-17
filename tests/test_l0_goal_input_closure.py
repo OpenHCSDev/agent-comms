@@ -122,10 +122,10 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for the peer"))
     message = comms.messaging.send_message("peer", "owner", "Review this uncertain reply")
     store = InputDispositions(tmp_path)
-    admission = comms.registry.snapshot().claimed_generations["owner"]
+    claim_scope = comms.registry.snapshot().claimed_generations["owner"]
     key = f"bus:{message.seq}"
     store.record(
-        key, seq=message.seq, owner="owner", admission=admission, target="owner", text=message.body
+        key, seq=message.seq, owner="owner", claim_scope=claim_scope, target="owner", text=message.body
     )
     messages = comms.bus.inbox("owner")
     comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
@@ -145,12 +145,12 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
         second_key,
         seq=second.seq,
         owner="owner",
-        admission=admission,
+        claim_scope=claim_scope,
         target="owner",
         text=second.body,
     )
     assert store.bind(
-        second_key, admission=admission, turn_id="native-turn", native_id="a" * 32, text=second.body
+        second_key, claim_scope=claim_scope, turn_id="native-turn", native_id="a" * 32, text=second.body
     )
     assert store.started(second_key, turn_id="native-turn", native_id="a" * 32, text=second.body)
     comms.goals.update_goal("owner", action)
@@ -192,7 +192,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     try:
         ledger = owner.inputs.dispositions
-        admission = comms.registry.snapshot().claimed_generations[session]
+        claim_scope = comms.registry.snapshot().claimed_generations[session]
         with _store_lock(comms._wire_lock_path), ExitStack() as custody:
             queued, _, _receipt = QueuedInput.capture(
                 owner.inputs, session, text="queued", prompt="queued", echo=True,
@@ -201,12 +201,12 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
             owner.inputs.following_sources[session] = {queued.input_id: queued.source()}
             custody.pop_all()
         ledger.record(
-            "acp:uncertain", seq=None, owner=session, admission=admission,
+            "acp:uncertain", seq=None, owner=session, claim_scope=claim_scope,
             target=session, text="uncertain",
         )
         ledger.bind(
             "acp:uncertain",
-            admission=admission,
+            claim_scope=claim_scope,
             turn_id="finished-owner-turn",
             native_id="b" * 32,
             text="uncertain",

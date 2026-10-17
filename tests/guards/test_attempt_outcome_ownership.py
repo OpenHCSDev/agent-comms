@@ -36,8 +36,8 @@ def test_stores_do_not_restore_outcome_or_row_transition_facades():
         assert not declared & removed, owner
 
 
-def test_goal_admission_uses_claimed_permit_without_removed_store_probe():
-    from agent_comms.ordinary_admission_rules import OrdinaryGoalGrantRule
+def test_goal_claim_uses_claimed_permit_without_removed_store_probe():
+    from agent_comms.ordinary_claim_rules import OrdinaryGoalGrantRule
 
     source = Path(inspect.getfile(OrdinaryGoalGrantRule)).read_text()
     assert not any(

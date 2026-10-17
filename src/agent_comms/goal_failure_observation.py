@@ -21,7 +21,7 @@ from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goals import Goal
-from .thread_identity import AdmissionIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnIdentity
+from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnIdentity
 from .thread_status import ThreadStatus
 from .threads import Thread
 from .turn_lease import TurnFence, TurnLeaseFence
@@ -58,7 +58,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
     owner: str
     owner_created_at: float
     worktree: str
-    admission: int = field(metadata={"sql": Column(check="admission>0")})
+    claim_scope: int = field(metadata={"wire_name": 'admission', "sql": Column(check="{claim_scope}>0")})
     turn_generation: int = field(metadata={"sql": Column(check="turn_generation>0")})
     goal_revision: int = field(metadata={"sql": Column(check="goal_revision>=0")})
     turn_id: str = field(metadata={"sql": Column(unique=True, check="length(turn_id)=32")})
@@ -67,8 +67,8 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
     def __post_init__(self) -> None:
         # These are the durable observation's constraints, independent of any
         # caller's authority. SQL/FieldCodec remains the single stored decoder.
-        if type(self.admission) is not int or self.admission <= 0:
-            raise ValueError("Observation admission must be positive")
+        if type(self.claim_scope) is not int or self.claim_scope <= 0:
+            raise ValueError("Observation claim_scope must be positive")
         if type(self.turn_generation) is not int or self.turn_generation <= 0:
             raise ValueError("Observation turn generation must be positive")
         if not math.isfinite(self.owner_created_at):
@@ -87,21 +87,21 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
         return RecordedThreadIncarnation(self.owner, self.owner_created_at)
 
     @property
-    def admission_identity(self) -> AdmissionIdentity:
-        return AdmissionIdentity(self.incarnation, self.admission)
+    def claimed_identity(self) -> ClaimedIdentity:
+        return ClaimedIdentity(self.incarnation, self.claim_scope)
 
     @property
     def turn(self) -> TurnFence:
-        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.admission)
+        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.claim_scope)
 
-    def matches_owner(self, owner: Thread, admission: int | None) -> bool:
-        if admission is None:
+    def matches_owner(self, owner: Thread, claim_scope: int | None) -> bool:
+        if claim_scope is None:
             return False
-        if self.admission_identity != AdmissionIdentity(owner.incarnation, admission):
+        if self.claimed_identity != ClaimedIdentity(owner.incarnation, claim_scope):
             return False
         if self.worktree != owner.worktree:
             return False
-        observed = owner.observed_turn(admission)
+        observed = owner.observed_turn(claim_scope)
         if observed is None or not self.turn.matches(observed):
             return False
         return owner.has_goal_revision(self.goal_id, self.goal_revision)
@@ -127,9 +127,9 @@ class FailedTurnObservation:
         goal: Goal,
         lease: TurnLeaseFence,
         turn_id: str,
-        admission: int,
+        claim_scope: int,
         current_owner: Thread | None,
-        current_admission: int | None,
+        current_claim: int | None,
         reason: FailureReason,
     ) -> FailedTurnObservation | None:
         # Observation is passive: a changed owner, goal or lease yields no
@@ -137,7 +137,7 @@ class FailedTurnObservation:
         # construction error is a defect and raises.
         evidence = FailedTurnEvidence(
             reservation.attempt_id, reservation.goal_id, reservation.generation,
-            owner.name, owner.created_at, owner.worktree, admission,
+            owner.name, owner.created_at, owner.worktree, claim_scope,
             lease.identity.generation, goal.revision, turn_id, reason,
         )
         if owner.goal != goal or reservation.goal_id != goal.id:
@@ -148,7 +148,7 @@ class FailedTurnObservation:
             return None
         if current_owner.process_identity != owner.process_identity:
             return None
-        if not evidence.matches_owner(current_owner, current_admission):
+        if not evidence.matches_owner(current_owner, current_claim):
             return None
         return cls(reservation, evidence)
 
@@ -191,7 +191,7 @@ def read_failed_turn_projection(
     *,
     owner: Thread,
     owner_status: ThreadStatus,
-    admission: int,
+    claim_scope: int,
 ) -> FailedTurnProjection:
     """Read the existing private goal ledger, never initialize/migrate/repair it.
 
@@ -212,7 +212,7 @@ def read_failed_turn_projection(
         goal.state.failure_projection("")
     except FailureNotObserved as error:
         return unavailable(str(error))
-    if type(admission) is not int or admission <= 0:
+    if type(claim_scope) is not int or claim_scope <= 0:
         return unavailable("owner_or_goal_changed")
     if failure := CoordinationStore.observation_failure(path):
         return unavailable(failure)
@@ -242,7 +242,7 @@ def read_failed_turn_projection(
                 return unavailable("missing_binding")
             if row.identity != expected or attempt.reservation.identity != expected:
                 return unavailable("missing_binding")
-            if not row.matches_owner(owner, admission):
+            if not row.matches_owner(owner, claim_scope):
                 return unavailable("owner_or_goal_changed")
             reason = row.reason.value
     except FailureNotObserved as error:

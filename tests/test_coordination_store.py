@@ -1378,7 +1378,7 @@ def _read_while_other_store_waits(
     read: Callable[[StandaloneCoordination], object],
     write: Callable[[StandaloneCoordination], None],
 ) -> object:
-    """Hold a reader while a second connection waits for write admission."""
+    """Hold a reader while a second connection waits for write claim_scope."""
     first_read = threading.Event()
     writer_ready = threading.Event()
     write_started = threading.Event()
@@ -1403,7 +1403,7 @@ def _read_while_other_store_waits(
                 if selected and not paused:
                     paused = True
                     first_read.set()
-                    assert write_started.wait(timeout=5), "writer never requested admission"
+                    assert write_started.wait(timeout=5), "writer never requested claim_scope"
                     # A real SQLite row was read under the aggregate snapshot.
                     # The second connection must remain blocked before changing state
                     # until its reader exits.

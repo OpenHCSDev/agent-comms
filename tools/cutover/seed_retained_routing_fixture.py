@@ -48,9 +48,9 @@ console.log(JSON.stringify({session:manager.getSessionFile(),user,final}));
         sent_text=prompt, routing=TurnRouting((original,), None))
     service.transcripts.routes.record_input_display('b' * 32, None, sent_text='Retained internal input')
     inputs = InputDispositions(root / InputDispositions.filename)
-    assert inputs.record('acp:unknown-original', seq=None, owner='alpha', admission=1,
+    assert inputs.record('acp:unknown-original', seq=None, owner='alpha', claim_scope=1,
                          target='alpha', text='Protected UNKNOWN original')
-    assert inputs.bind('acp:unknown-original', admission=1, turn_id='retained-unknown',
+    assert inputs.bind('acp:unknown-original', claim_scope=1, turn_id='retained-unknown',
                        native_id='c' * 32, text='Protected UNKNOWN native delivery')
     # A genuine expired original with reply-only routing is still carried;
     # no turn is executed and the original process exits before the batch.

@@ -729,7 +729,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         """
         self.cohort.require_publication_originals()
         self.require_recovery_originals()
-        # The original handoff owns fenced identity/admission, rather than a
+        # The original handoff owns fenced identity/claim_scope, rather than a
         # raw registry hash minted only after stopped validation. Full stored
         # settings must also remain the captured originals before source restore.
         snapshot = stopped.lifecycle.registry.snapshot()
@@ -764,7 +764,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_
     """Parent-only EXECUTION entry, with the reviewed affected journey gates and carry.
 
     A retry never happens here. Any existing receipt/preimage refuses before
-    admission, and the only stop/fence/launch implementation is the original one.
+    claim_scope, and the only stop/fence/launch implementation is the original one.
     """
     if receipt.exists() or receipt.is_symlink() or receipt.with_suffix('.originals').exists():
         raise RuntimeError('Original attempt requires review; never automatically repeat')

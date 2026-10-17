@@ -347,11 +347,11 @@ class RecoverySnapshot:
             current = source.claim_projection()
         owned = tuple(
             claim for claim in current.values()
-            if claim.admission is not None
-            and claim.admission.execution_id == attempt.execution_id
-            and claim.admission.attempt_ordinal == attempt.attempt_ordinal
-            and claim.admission.recipient_lookup == attempt.owner_lookup
-            and claim.admission.participant_generation == attempt.owner_generation
+            if claim.claim_scope is not None
+            and claim.claim_scope.execution_id == attempt.execution_id
+            and claim.claim_scope.attempt_ordinal == attempt.attempt_ordinal
+            and claim.claim_scope.recipient_lookup == attempt.owner_lookup
+            and claim.claim_scope.participant_generation == attempt.owner_generation
         )
         if not owned:
             return

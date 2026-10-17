@@ -215,7 +215,7 @@ class CommittedDelivery(MessageWireRecord):
     def deliveries(self) -> tuple[CommittedDelivery, ...]:
         return (self,)
 
-    def require_admission(self, metadata) -> None:
+    def require_claim(self, metadata) -> None:
         """Factory already bound root/audience; deliveries need no retained-public exception."""
 
     def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):

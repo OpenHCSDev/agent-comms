@@ -16,7 +16,7 @@ from .assignment_states import (
 from .coordination_errors import IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
-from .coordination_errors import ResponseAdmissionBlocked
+from .coordination_errors import ResponseClaimBlocked
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     def assignment_state(cls) -> type[AssignmentState]: ...
 
     def require_final_response(self) -> None:
-        raise ResponseAdmissionBlocked()
+        raise ResponseClaimBlocked()
 
     def validate_budget(self, maximum: int) -> None:
         ordinal = self.current_attempt_ordinal

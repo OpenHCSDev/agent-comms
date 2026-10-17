@@ -1,7 +1,7 @@
 """Real selected Pi send epoch, exact dead-owner recovery, and unrelated new input.
 
 Only the localhost provider response and the owned native child exit are
-controlled. Registry admission, release receipt, process identity, coordinator,
+controlled. Registry claim_scope, release receipt, process identity, coordinator,
 native input/proof journal and recovery monitor use their production owners.
 """
 
@@ -23,7 +23,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
-from agent_comms.native_admission_epoch import RecordedNativeAdmission
+from agent_comms.native_claim_epoch import RecordedNativeClaim
 from agent_comms.native_pi import NativePiTerminalFailure, NativePiUnavailable
 from compaction_loopback import LoopbackProvider
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
@@ -64,7 +64,7 @@ def released_native_owner(directory, package, output, exit_allowed):
                     assert not isinstance(error.value, NativePiTerminalFailure)
                     (source,) = [row for row in owned.records() if row.input_id not in before]
                     assert isinstance(
-                        source.sent_owner_admission_generation, RecordedNativeAdmission
+                        source.sent_owner_claimed_generation, RecordedNativeClaim
                     )
                     with Coordination(str(root / "coordination.sqlite3")) as store:
                         snapshot = store.snapshots.get(source.execution.require_attempt().execution_id)

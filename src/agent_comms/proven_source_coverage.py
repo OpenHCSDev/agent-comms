@@ -182,7 +182,7 @@ class SourceCoverage:
             if source.marker.root_id != self.wire_root_id:
                 raise IdentityConflict("source coverage private wire root changed")
             witness, initials, more = source.addressed_page(self.bus.log, request)
-            if request.after_seq > max(witness.latest_source_seq, source.marker.admission_after_seq):
+            if request.after_seq > max(witness.latest_source_seq, source.marker.claimed_after_seq):
                 raise IdentityConflict("source coverage prefix exceeds certified initials")
             request.require_exhausted(more)
         return witness, tuple(initials), more
@@ -237,8 +237,8 @@ class SourceCoverage:
             ) as source:
                 marker = source.marker
                 if marker.root_id != self.wire_root_id:
-                    raise IdentityConflict("current source admission root changed")
-                floor = marker.admission_after_seq
+                    raise IdentityConflict("current source claim_scope root changed")
+                floor = marker.claimed_after_seq
             if through_seq is not None and 0 < through_seq <= floor:
                 raise IdentityConflict("current source proof precedes this activation")
             covered, inputs, no_wake, witness = floor, [], [], None

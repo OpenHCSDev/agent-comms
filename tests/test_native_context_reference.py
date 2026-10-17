@@ -10,14 +10,14 @@ from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import NativeInputReference, UnrecordedNativeInputReference
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from agent_comms.native_admission_epoch import RecordedNativeAdmission
+from agent_comms.native_claim_epoch import RecordedNativeClaim
 from agent_comms.assignment_states import TriagePendingAssignment
 
 
 def cursor():
     return CurrentNativeCursor(
         wire_root_id="a" * 32, recipient_lookup="b" * 32, owner_thread="owner",
-        owner_generation=1, owner_admission_generation=2, covered_seq=1, injected_seq=1,
+        owner_generation=1, owner_claimed_generation=2, covered_seq=1, injected_seq=1,
         input_id="c" * 32, stage=FullNativeExecution, session_id="original-session",
         request_generation=1,
     )
@@ -64,7 +64,7 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
     assert reservation().reference == UnrecordedNativeInputReference()
     with pytest.raises(IdentityConflict, match="partial"):
         _ = replace(reservation(), request_generation=1).reference
-    recorded = replace(reservation(), sent_owner_admission_generation=RecordedNativeAdmission(2),
+    recorded = replace(reservation(), sent_owner_claimed_generation=RecordedNativeClaim(2),
                        session_id="original-session", session_file="/original/session.jsonl",
                        session_entry_id="original-entry", request_generation=1,
                        llm_context_digest="f" * 64, committed_at_ms=1_791_964_800_001)
@@ -86,7 +86,7 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
     from agent_comms.selected_triage import FullSelectedTriage
 
     recorded = replace(
-        reservation(), sent_owner_admission_generation=RecordedNativeAdmission(2),
+        reservation(), sent_owner_claimed_generation=RecordedNativeClaim(2),
         session_id="original-session", session_file="/original/session.jsonl",
         session_entry_id="original-entry", request_generation=1, llm_context_digest="f" * 64,
         committed_at_ms=1_791_964_800_001,

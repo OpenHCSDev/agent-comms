@@ -18,7 +18,7 @@ from agent_comms.agent_backend import PlacedCompaction
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.messages import InfoKind, Message
-from agent_comms.owned_send_admission import OwnedSend
+from agent_comms.owned_send_claim import OwnedSend
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
@@ -165,21 +165,21 @@ async def owner_turn(comms, tmp_path):
 
 
 async def start_owned_input(execution, progress):
-    admission = OwnedSend(
+    claim_scope = OwnedSend(
         comms=execution.runner.comms,
         inputs=execution.runner.inputs,
         goal_store=execution.runner.comms.goals.open_goal_store(),
         session_id=execution.session_id,
         thread=execution.thread,
         turn=TurnId(execution.turn_id),
-        admission=execution.turn_lease.claimed_generation,
+        claim_scope=execution.turn_lease.claimed_generation,
         original=execution.original,
         goal_permit=execution.goal_permit,
     )
     native_id = uuid4().hex
-    with admission(None, native_id, execution.original.prompt):
+    with claim_scope(None, native_id, execution.original.prompt):
         pass
-    assert admission.native_start(None, native_id, execution.original.prompt)
+    assert claim_scope.native_start(None, native_id, execution.original.prompt)
     await progress.consume(ae.InputStarted(None))
 
 

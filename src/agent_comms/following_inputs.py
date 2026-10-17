@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING
 from .acp_extension import QueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
-from .owned_send_admission import OwnedSend
+from .owned_send_claim import OwnedSend
 from .queued_input import DeliveredInput, InputHandoffRefused
-from .thread_identity import AdmissionIdentity, TurnId
+from .thread_identity import ClaimedIdentity, TurnId
 from .turn_input_source import AcceptedFollowingInput, SelectedOriginalInput
 
 if TYPE_CHECKING:
@@ -91,13 +91,13 @@ class OwnerFollowingInputs(FollowingInputs):
             session_id=self.session_id,
             thread=thread,
             turn=TurnId(lease.turn_id),
-            admission=lease.claimed_generation,
+            claim_scope=lease.claimed_generation,
             original=original,
             goal_permit=None,
         )
         self.scope = QueueScope(
             self.session_id,
-            AdmissionIdentity(lease.identity.incarnation, lease.claimed_generation),
+            ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
             thread.pid,
         )
         inputs.original_sources[self.session_id] = original

@@ -244,9 +244,9 @@ def accept_delivery_cohort(
     with bus.log.certified_read() as source, store.session.transaction() as db:
         marker = source.marker
         if marker.root_id != wire_root_id:
-            raise IdentityConflict("cohort admission wire root changed")
-        if wire_seq <= marker.admission_after_seq:
-            raise IdentityConflict("historical source precedes the current admission floor")
+            raise IdentityConflict("cohort claim_scope wire root changed")
+        if wire_seq <= marker.claimed_after_seq:
+            raise IdentityConflict("historical source precedes the current claim_scope floor")
         initial = source.delivery(wire_seq)
         assert_cohort_schema(db)
         receipt = ClaimBatchReceipts.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)

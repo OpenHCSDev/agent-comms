@@ -15,8 +15,8 @@ from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .native_admission_rules import (
-    GoalRegistryAdmissionCheck,
+from .native_claim_rules import (
+    GoalRegistryClaimCheck,
     GoalRegistryIdentityCheck,
     RegistryIdentityCheck,
     RunningTurnRegistryCheck,
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True)
 class RegistryOwner:
-    check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryAdmissionCheck
+    check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryClaimCheck
     thread: Thread
     claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
 
@@ -47,9 +47,9 @@ class RegistryOwner:
         """Read local executable authority from this single locked snapshot."""
         thread = snapshot.require_active(name)
         thread.require_local_process(ProcessIdentity.capture(os.getpid()))
-        admission = snapshot.claimed_generations[thread.name]
-        thread.require_current_turn(admission)
-        return cls(thread=thread, claimed_generation=admission)
+        claim_scope = snapshot.claimed_generations[thread.name]
+        thread.require_current_turn(claim_scope)
+        return cls(thread=thread, claimed_generation=claim_scope)
 
     def require_exact(
         self, snapshot: RegistrySnapshot, expected: Thread, owner_generation: int
@@ -63,11 +63,11 @@ class RegistryOwner:
         except StaleFence as error:
             raise RelationViolationError(str(error)) from error
 
-    def require_claim(self, expected: Thread, admission: int) -> None:
+    def require_claim(self, expected: Thread, claim_scope: int) -> None:
         try:
             GoalRegistryIdentityCheck(
                 expected=expected, actual=self.thread,
-                expected_admission=admission, admission=self.claimed_generation,
+                expected_claim=claim_scope, claim_scope=self.claimed_generation,
                 process=ProcessIdentity.capture(os.getpid()),
             ).require_valid()
         except ReservationViolationError as error:
@@ -91,23 +91,23 @@ class RegistryOwner:
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str, reason: str) -> RegistryOwner:
         thread = snapshot.threads.get(name)
-        admission = snapshot.claimed_generations.get(name)
-        if thread is None or admission is None:
+        claim_scope = snapshot.claimed_generations.get(name)
+        if thread is None or claim_scope is None:
             raise StaleFence(reason)
-        owner = cls(thread=thread, claimed_generation=admission)
+        owner = cls(thread=thread, claimed_generation=claim_scope)
         owner.require_snapshot(snapshot, reason)
         return owner
 
     def _require_current(
-        self, actual: Thread, admission: int | None, reason: str,
+        self, actual: Thread, claim_scope: int | None, reason: str,
         check: type[RegistryIdentityCheck],
     ) -> None:
         try:
             check(
                 expected=self.thread,
                 actual=actual,
-                expected_admission=self.claimed_generation,
-                admission=admission,
+                expected_claim=self.claimed_generation,
+                claim_scope=claim_scope,
                 process=ProcessIdentity.capture(os.getpid()),
             ).require_valid()
         except ReservationViolationError as error:
@@ -157,11 +157,11 @@ class RegistryOwner:
         self, registry: Registration, check: type[RegistryIdentityCheck],
     ) -> None:
         try:
-            actual, admission = registry.live_owner_with_admission(self.thread.name)
+            actual, claim_scope = registry.live_owner_with_claim(self.thread.name)
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry owner stopped or changed") from error
         self._require_current(
-            actual, admission, "recipient registry owner stopped or changed", check,
+            actual, claim_scope, "recipient registry owner stopped or changed", check,
         )
 
 

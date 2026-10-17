@@ -42,7 +42,7 @@ class RetainedTaskSourceCarry(StoppedOwnerInstallation):
             raise RelationViolationError('Existing preimages prohibit another carry attempt.')
         environment = dict(os.environ)
         environment.pop('PYTHONPATH', None)
-        # Admission occurs BEFORE any owner fence/signal. The same original
+        # Claim occurs BEFORE any owner fence/signal. The same original
         # writer reads again under retained custody after the whole batch stops.
         subprocess.run([
             self.original_python, Path(__file__).with_name('read_original_task_preimage.py'),

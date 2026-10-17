@@ -93,7 +93,7 @@ class OptionalAwarenessProjection:
     after_seq: int
     through_seq: int
     expected_participant_generation: int
-    expected_admission_generation: int
+    expected_claimed_generation: int = field(metadata={"wire_name": 'expected_admission_generation'})
     max_rows: int = 100
     max_text_bytes: int = 16 * 1024
     build_seconds: ClassVar[float] = 0.25
@@ -112,7 +112,7 @@ class OptionalAwarenessProjection:
         claimed_generation: int,
     ) -> OptionalAwarenessProjection:
         with index.log.certified_read() as source:
-            after_seq = source.marker.admission_after_seq
+            after_seq = source.marker.claimed_after_seq
         return cls(index, after_seq, through_seq, generation, claimed_generation,
                    registry=registry)
 
@@ -175,7 +175,7 @@ class OptionalAwarenessProjection:
         # TypedTable/FieldCodec once, where they enter below.
         if not 0 <= self.after_seq < self.through_seq:
             raise ValueError("optional awareness requires a bounded trusted source window")
-        if min(self.expected_participant_generation, self.expected_admission_generation) < 1:
+        if min(self.expected_participant_generation, self.expected_claimed_generation) < 1:
             raise ValueError("optional awareness requires positive captured generations")
         if not 1 <= self.max_rows <= 100:
             raise ValueError("optional awareness row budget is outside the bounded read")
@@ -211,7 +211,7 @@ class OptionalAwarenessProjection:
         if not owner.role.executable:
             raise ProjectionUnavailableError("selected owner is not executable")
         turn = owner.active_turn
-        if turn is None or turn.claimed_generation != self.expected_admission_generation:
+        if turn is None or turn.claimed_generation != self.expected_claimed_generation:
             raise ProjectionUnavailableError("selected owner turn changed")
         if FrozenRecipient(assignment.recipient_lookup, assignment.recipient) != FrozenRecipient(
             owner.incarnation.lookup,
@@ -310,7 +310,7 @@ class OptionalAwarenessProjection:
             snapshot = registry.store._read_unlocked().snapshot()
             RegistryOwner(
                 thread=owner,
-                claimed_generation=self.expected_admission_generation,
+                claimed_generation=self.expected_claimed_generation,
             ).require_snapshot(snapshot, "current registry owner turn changed")
         # A new read transaction, not the earlier candidate/decision snapshot,
         # observes a supported SQL generation advance during the optional read.

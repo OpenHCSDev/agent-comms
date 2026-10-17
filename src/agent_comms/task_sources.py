@@ -363,7 +363,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     permits_agent_revision = True
 
     @classmethod
-    def from_admission(cls, owner, scope, change, **content):
+    def from_claim(cls, owner, scope, change, **content):
         lease = owner.require_turn_lease()
         return cls(scope=scope.select(owner), source_turn=lease.identity,
                    source_turn_id=TurnId(lease.turn_id), change=change, **content)
@@ -555,7 +555,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
         original_author = RecordedThreadIncarnation(origin.author.sender, origin.author.created_at)
         if original_author.resolved(registry) != self.source_user.resolved(registry):
             raise RelationViolationError("USER input pin differs from its original human author")
-        if origin.admission.incarnation.resolved(registry) != self.recipient.resolved(registry):
+        if origin.claim_scope.incarnation.resolved(registry) != self.recipient.resolved(registry):
             raise RelationViolationError("USER input pin recipient did not receive its original input")
         if origin.project != self.scope.project:
             raise RelationViolationError("USER input pin belongs to another project")

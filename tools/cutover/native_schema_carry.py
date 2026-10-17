@@ -227,7 +227,7 @@ class NativeSchemaDeclaration:
                 'original_identity_rows_sha256': row_digest(identities),
                 'original_rows': {name: len(values) for name, values in identities.items()},
                 'original_source_bytes_preserved': True,
-                'admission_receipts_minted': 0, 'input_replays': 0}
+                'claim_receipts_minted': 0, 'input_replays': 0}
 
     @property
     def runtime_objects(self):
@@ -457,7 +457,7 @@ def carry_coordination(db, original, target):
         raise ValueError('Carry changed original autoincrement allocations')
     from agent_comms.native_runtime_input import NativeRuntimeInput, CurrentNativeCursor
     # The target declarations reject partial references. Reading cannot create
-    # a selected session, proof, cursor, assignment, or new admission.
+    # a selected session, proof, cursor, assignment, or new claim_scope.
     NativeRuntimeInput.select(db)
     CurrentNativeCursor.select(db)
     if db.execute('PRAGMA foreign_key_check').fetchall():
@@ -491,7 +491,7 @@ def original_compaction_requests(path):
     """
     from agent_comms.compaction_records import SelectedSummaryAttempt
     from agent_comms.input_origin import InputProvenance
-    from agent_comms.selected_source import SelectedAdmissionSource
+    from agent_comms.selected_source import SelectedClaimSource
 
     declared = NativeSchemaDeclaration.observe()
     if declared.release_versions != (9, 3, 3, 5):
@@ -518,7 +518,7 @@ def original_compaction_requests(path):
 
                 request = FieldCodec.encode(envelope)
                 source = envelope.source
-                if isinstance(source, SelectedAdmissionSource):
+                if isinstance(source, SelectedClaimSource):
                     row = originals.get(source.ingress_key)
                     if row is None or row.digest != source.original_digest:
                         raise ValueError('Selected original lacks its frozen content witness')
@@ -608,7 +608,7 @@ def carry_compaction(db, original, target, requests):
     return {'attempts':len(values), 'created_empty_tables':sorted(additions),
             'original_selected_rows_sha256':row_digest(prior),
             'unchanged_tables_sha256':row_digest(untouched),
-            'original_source_bytes_preserved':True, 'admission_receipts_minted':0,
+            'original_source_bytes_preserved':True, 'claim_receipts_minted':0,
             'input_replays':0}
 
 

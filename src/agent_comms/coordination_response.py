@@ -44,7 +44,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import InfoKind, Message, MessageKind
-from agent_comms.native_admission_rules import RunningTurnRegistryCheck
+from agent_comms.native_claim_rules import RunningTurnRegistryCheck
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence

@@ -27,7 +27,7 @@ from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
-from .thread_identity import AdmissionIdentity, ThreadIncarnation
+from .thread_identity import ClaimedIdentity, ThreadIncarnation
 from .turn_lease import TurnState
 from .wire_metadata import WireRootIdText
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
@@ -90,7 +90,7 @@ class UnknownDeliveryFailure(BackendDeliveryFailure):
         receiver.delivery_unknown(self, body)
 
 
-class AdmissionBlockedFailure(BackendDeliveryFailure):
+class ClaimBlockedFailure(BackendDeliveryFailure):
     def present(self, receiver, body: str) -> None:
         receiver.delivery_blocked(self.description, body)
 
@@ -127,7 +127,7 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
 class AttachmentScope:
     """Logical ACP attachment and executor evidence have separate identities."""
     session_id: str
-    admission: AdmissionIdentity
+    claim_scope: ClaimedIdentity
     owner_pid: int
 
     @property
@@ -136,11 +136,11 @@ class AttachmentScope:
 
     @property
     def owner_created_at(self):
-        return self.admission.incarnation.require_recorded().created_at
+        return self.claim_scope.incarnation.require_recorded().created_at
 
     @property
     def claimed_generation(self):
-        return self.admission.claimed_generation
+        return self.claim_scope.claimed_generation
 
     def relation(self, other: AttachmentScope) -> AttachmentRelation:
         return AttachmentRelation(self, other)
@@ -185,16 +185,16 @@ class AttachmentRelation:
 class CursorScope(AttachmentScope):
     session_id: str
     wire_root_id: str
-    admission: AdmissionIdentity
+    claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
     owner_pid: int
 
     def __post_init__(self):
         WireRootIdText.decode(self.wire_root_id)
-        self.admission.incarnation.require_recorded()
+        self.claim_scope.incarnation.require_recorded()
         if (
             not self.session_id
             or self.owner_pid <= 0
-            or self.admission.claimed_generation <= 0
+            or self.claim_scope.claimed_generation <= 0
         ):
             raise ValueError("Invalid native cursor scope")
 
@@ -255,8 +255,8 @@ class VerifiedCursorObservation(CursorObservation):
         if (
             scope is None
             or cursor.wire_root_id != scope.wire_root_id
-            or cursor.owner_thread != scope.admission.incarnation.name
-            or cursor.owner_admission_generation != scope.claimed_generation
+            or cursor.owner_thread != scope.claim_scope.incarnation.name
+            or cursor.owner_claimed_generation != scope.claimed_generation
             or not 0 <= cursor.injected_seq <= cursor.covered_seq
         ):
             raise ValueError("Cursor observation does not belong to its scope")
@@ -307,7 +307,7 @@ class CursorAdvancedUpdate(AgentCommsUpdate):
 @dataclass(frozen=True)
 class QueueScope(AttachmentScope):
     session_id: str
-    admission: AdmissionIdentity
+    claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
     owner_pid: int
 
     @property
@@ -410,7 +410,7 @@ class AvailableQueueProjection(QueueProjection):
             raise ValueError('Available input queue has no original attachment scope.')
 
     def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
-        return HumanInputOrigin.capture(comms, acquire_scope().admission)
+        return HumanInputOrigin.capture(comms, acquire_scope().claim_scope)
 
 
 @dataclass(frozen=True)

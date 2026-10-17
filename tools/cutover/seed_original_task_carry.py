@@ -20,9 +20,9 @@ def main():
     beta = service.registry.declare(Thread('beta', frozenset({'team'}), str(root)))
     alpha = service.registry.declare(Thread('alpha', frozenset({'team'}), str(root),
                                            process_identity=ProcessIdentity.capture(os.getpid())))
-    alpha, admission = service.registry.live_owner_with_admission(alpha.name)
-    alpha, _ = service.registry.lease_live_turn_with_admission(
-        alpha, 'original-task-turn', expected_generation=admission)
+    alpha, claim_scope = service.registry.live_owner_with_claim(alpha.name)
+    alpha, _ = service.registry.lease_live_turn_with_claim(
+        alpha, 'original-task-turn', expected_generation=claim_scope)
     result = invoke_tool(service, 'comms_decision', {
         'chosen': 'ORIGINAL λ PATH\nNever replay UNKNOWN.',
         'rejected': ['Do not substitute another original.'], 'to': beta.name,

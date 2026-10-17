@@ -240,7 +240,7 @@ class OpenedWireSnapshot:
             if has_private_wire_fields(record):
                 yield message, len(json.dumps(message.to_wire()).encode()) + 1
             else:
-                message.require_retained_admission(metadata.admission_after_seq)
+                message.require_retained_claim(metadata.claimed_after_seq)
                 yield message, raw_size
 
 

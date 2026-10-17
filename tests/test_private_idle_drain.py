@@ -258,7 +258,7 @@ async def test_settled_empty_cursor_is_not_rescanned_while_nothing_changes(
     tmp_path, monkeypatch
 ):
     comms, agent, _root_id = _session(tmp_path)
-    # No source proves a cursor for this admission, so every advance settles
+    # No source proves a cursor for this claim_scope, so every advance settles
     # as an empty observation. Rescanning it cannot change that answer until
     # the owner's observation revision changes.
     calls = []

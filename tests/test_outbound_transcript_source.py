@@ -321,7 +321,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
         comms.transcripts.bind_page_read("renamed", identity)
 
 
-def test_original_page_reuses_captured_frontier_between_admission_fences(tmp_path, monkeypatch):  # noqa: F811
+def test_original_page_reuses_captured_frontier_between_claim_fences(tmp_path, monkeypatch):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     read = comms.transcripts.capture_page_read("beta")
     verify = WireLog.verify_before_read_unlocked
@@ -396,7 +396,7 @@ def test_missing_certified_wire_cannot_be_an_empty_presentation(tmp_path):  # no
 
 def test_bus_guard_preserves_the_callers_original_failure(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
-    failure = OSError("Caller-owned failure after actual durability admission")
+    failure = OSError("Caller-owned failure after actual durability claim_scope")
     with pytest.raises(OSError) as raised:
         with comms.bus.log.locked():
             raise failure
