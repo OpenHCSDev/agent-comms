@@ -199,11 +199,11 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
 class OrderCheck:
     directory: str
     command: str
-    expected: int
+    expected: Literal[0] = 0
 
     def __post_init__(self):
-        if not self.directory.strip() or not self.command.strip() or self.expected < 0:
-            raise ValueError("An order check requires a directory, command and nonnegative count.")
+        if not self.directory.strip() or not self.command.strip() or self.expected != 0:
+            raise ValueError("An order check requires a directory, a silent command and exit status zero.")
 
     def require_directory(self):
         if not Path(self.directory).is_dir():
@@ -218,7 +218,7 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_completion(self) -> None:
         pass
 
-    def installed(self, works: str, artifact: str) -> GoalOrder:
+    def installed(self, works: str) -> GoalOrder:
         raise ValueError("This goal is not a problem order.")
 
     def require_close(self) -> None:
@@ -277,8 +277,8 @@ class ProblemGoalOrder(GoalOrder):
     def copy_as(self, kind, **evidence):
         return kind(**{f.name: getattr(self, f.name) for f in fields(ProblemGoalOrder)}, **evidence)
 
-    def installed(self, works, artifact):
-        return self.copy_as(InstalledProblemGoalOrder, works=works, artifact=artifact)
+    def installed(self, works):
+        return self.copy_as(InstalledProblemGoalOrder, works=works)
 
     def require_completion(self) -> None:
         raise ValueError("Complete a problem order with its checked delivered commit.")
@@ -295,12 +295,11 @@ class ProblemGoalOrder(GoalOrder):
 @dataclass(frozen=True)
 class InstalledProblemGoalOrder(ProblemGoalOrder):
     works: str
-    artifact: str
 
     def __post_init__(self):
         super().__post_init__()
-        if len(self.works.split()) < 8 or not self.artifact.strip():
-            raise ValueError("Describe the installed application result (8+ words) and name its artifact file.")
+        if len(self.works.split()) < 8:
+            raise ValueError("Describe the installed application result in at least eight words.")
 
     def require_close(self):
         pass

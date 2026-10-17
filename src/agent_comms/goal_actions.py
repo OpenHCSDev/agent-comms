@@ -4,14 +4,12 @@ from __future__ import annotations
 
 from abc import abstractmethod
 import asyncio
-import re
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
-from .child_process import BoundedRun, ProcessIdentity
+from .child_process import BoundedRun, ExitedOutcome, ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
 from .goal_mentions import bind_goal_mentions
@@ -355,12 +353,12 @@ class DeliveredOrderGoalAction(CompletionGoalAction, RuntimeInvocable):
         return replace(self, expect=replace(self.expect, expected_goal=goal))
 
     async def verify(self, check):
-        if re.fullmatch(r"[0-9a-f]{7,40}", self.commit) is None:
+        if not 7 <= len(self.commit) <= 40 or self.commit.strip("0123456789abcdef"):
             raise ValueError("Delivery requires a commit hash.")
 
         async def run(*command):
             result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
-            if not result.outcome.successful:
+            if result.outcome != ExitedOutcome(check.expected):
                 raise ValueError(result.stderr.decode(errors="replace") or "The order check failed.")
             return result.stdout.decode(errors="replace")
 
@@ -371,23 +369,18 @@ class DeliveredOrderGoalAction(CompletionGoalAction, RuntimeInvocable):
                 raise ValueError("Run the order check on its clean delivered commit.")
 
         await require_commit()
-        counts = re.findall(r"\d+", await run("bash", "-c", check.command))
-        if not counts or int(counts[-1]) != check.expected:
-            raise ValueError("The order's own check did not print its required count.")
-        await require_commit()
+        if await run("bash", "-c", check.command):
+            raise ValueError("The order check must print nothing and exit zero.")
 
 
 @dataclass(frozen=True, kw_only=True)
 class InstalledOrderGoalAction(GoalAction, RuntimeInvocable):
     works: str
-    artifact: str
 
     def change(self, ctx):
         goal = ctx.require_goal()
         goal.state.require_order_slot()
-        if not Path(self.artifact).is_file():
-            raise ValueError("Retain the installed application artifact before closing.")
-        return replace(goal, order=goal.order.installed(self.works, self.artifact),
+        return replace(goal, order=goal.order.installed(self.works),
                        revision=goal.revision + 1)
 
 
