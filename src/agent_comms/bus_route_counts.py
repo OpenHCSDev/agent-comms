@@ -280,16 +280,13 @@ class RouteIndexBehind(RouteIndexState):
 
 
 @dataclass(frozen=True)
-class RouteIndexBlocked(RouteIndexState, CoordinationReadUnavailable):
+class RouteIndexBlocked(RouteIndexState):
     """Another writer holds the lock; this call could not make progress."""
 
     complete: ClassVar[bool] = False
 
     def defer_read(self, through: int, size: int) -> NoReturn:
-        raise self
-
-    def __str__(self) -> str:
-        return "Route projection writer is busy"
+        raise CoordinationReadUnavailable("Route projection writer is busy")
 
 
 class RouteIndexRebuilding(CoordinationReadUnavailable):
@@ -648,8 +645,6 @@ class WaitingRouteCounts(OpenedRouteCounts):
         while True:
             try:
                 return super()._acquire()
-            except RouteIndexBlocked:
-                with _store_lock(self.path, shared=True):
+            except CoordinationReadUnavailable:
+                with _store_lock(self.path, shared=True, blocking=True):
                     pass
-            except RouteIndexRebuilding:
-                pass
