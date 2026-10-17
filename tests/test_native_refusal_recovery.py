@@ -17,7 +17,7 @@ from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
 from test_acp import facts
-from test_backend import _NATIVE_PROMPT_START, _stub
+from test_backend import _NATIVE_PROMPT_START, _replay_stub
 
 OVERLOADED = "Our servers are currently overloaded. Please try again later."
 
@@ -26,13 +26,12 @@ pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 
 def _stub_with(tmp_path, records):
     lines = "\n".join(json.dumps(record) for record in records)
-    return _stub(
+    return _replay_stub(
         tmp_path,
-        "#!" + sys.executable + "\n"
-        + "import json, sys\n"
-        + "def emit(value):\n    print(json.dumps(value), flush=True)\n"
+        lines,
+        startup="def emit(value):\n    print(json.dumps(value), flush=True)\n"
         + _NATIVE_PROMPT_START
-        + f"for line in {lines!r}.splitlines():\n    emit(json.loads(line))\n",
+        + "prompt_request = prompt\n",
     )
 
 

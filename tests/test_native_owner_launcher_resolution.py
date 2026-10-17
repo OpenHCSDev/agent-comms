@@ -58,11 +58,19 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
     import venv
     from pathlib import Path
 
+    from agent_comms.comms import Comms
     from agent_comms.fresh_private_session import create_fresh_private_session
     from agent_comms.pi_native_backend import PiNativeBackend
     from agent_comms.threads import Thread
 
     package = pinned_native_package()
+    comms = Comms(tmp_path / "wire")
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    environment = {}
+    PrivateNkLaunch(comms.root, root_id, package, None).apply_environment(environment)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
     selected = tmp_path / "selected-core"
     venv.EnvBuilder(with_pip=False, symlinks=True).create(selected)
     (selected / "bin/pi-comms-native").symlink_to(LaunchRuntime.running().native_entrypoint)
