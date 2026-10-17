@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import json
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
@@ -522,33 +523,22 @@ class FieldCodec(Sealed):
             if isinstance(member, Projected) and member.view == view
         })
 
-    @staticmethod
-    def _decode_scalar(target: Any, data: Any) -> Any:
-        """The original strict scalar boundary, after representation selection.
-
-        Exact primitive declarations skip structural dispatch. Unknown targets
-        reach this only after that dispatch, preserving custom annotation
-        equality and record/enum construction precedence.
-        """
-        if target in (str, int, bool, type(None)) and type(data) is target:
-            return data
-        if target is float and type(data) in (int, float) and math.isfinite(data):
-            return data
-        raise ValueError(f"Expected {target}, received {type(data).__name__}")
-
-
 class ValueDecoder(ABC):
-    """One annotation's decode decisions, resolved once from its declaration.
-
-    Each way a value decodes is one subclass. ``compile_decoder`` picks the class
-    from the annotation once; decoding a value is that object's own
-    ``decode``, with no per-value re-classification.
-    """
+    """One annotation owns its wire decoding, draft projection and choice domain."""
 
     __slots__ = ()
 
     @abstractmethod
     def decode(self, data: object) -> object: ...
+
+    editor_annotation = str
+
+    def encode_editor(self, value):
+        encoded = FieldCodec.encode(value)
+        return None if encoded is None else json.dumps(encoded)
+
+    def decode_editor(self, value):
+        return None if value is None else json.loads(value)
 
     def editor_choices(self) -> tuple[tuple[str, object], ...]:
         raise TypeError("The declared decoder does not offer finite choices")
@@ -558,7 +548,21 @@ class _ScalarDecoder(ValueDecoder):
     target: object
 
     def decode(self, data):
-        return FieldCodec._decode_scalar(self.target, data)
+        target = self.target
+        if target in (str, int, bool, type(None)) and type(data) is target:
+            return data
+        if target is float and type(data) in (int, float) and math.isfinite(data):
+            return data
+        raise ValueError(f"Expected {target}, received {type(data).__name__}")
+
+    def encode_editor(self, value):
+        return value if self.target is str else super(_ScalarDecoder, self).encode_editor(value)
+
+    def decode_editor(self, value):
+        return value if self.target is str else super(_ScalarDecoder, self).decode_editor(value)
+
+class _NullDecoder(_ScalarDecoder):
+    editor_annotation = type(None)
 
 @dataclass(frozen=True, slots=True)
 class _RepresentedDecoder(ValueDecoder):
@@ -634,6 +638,10 @@ class _UnionDecoder(ValueDecoder):
     target: object
     alternatives: tuple[ValueDecoder, ...]
 
+    @property
+    def editor_annotation(self):
+        return Union[tuple(item.editor_annotation for item in self.alternatives)]
+
     def decode(self, data):
         first_error = None
         try:
@@ -707,7 +715,8 @@ class _FamilyRecordDecoder(ValueDecoder):
     family: type[DeclaredFamily]
 
     def editor_choices(self):
-        return tuple((member.label, member) for member in self.family.members_with(self.family))
+        return tuple((member.label, {self.family.family_discriminator: member.declared_name})
+                     for member in self.family.members_with(self.family))
 
     def decode(self, data):
         if not isinstance(data, dict):
@@ -785,11 +794,8 @@ def compile_decoder(annotation: object) -> ValueDecoder:
     )
 
 def _structural_decoder(target: object) -> ValueDecoder:
-    if (
-        target is str or target is int or target is bool
-        or target is type(None) or target is float
-    ):
-        return _ScalarDecoder(target)
+    if target is type(None):
+        return _NullDecoder(target)
     if target is Any:
         return _AnyDecoder()
     origin, args = get_origin(target), get_args(target)
