@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 from enum import StrEnum
+
+if TYPE_CHECKING:
+    from .channels import Channel
+    from .threads import Thread
 
 
 class BuiltinChannel(StrEnum):
@@ -71,7 +75,10 @@ class CommandTarget(ABC):
     def bindings(self, declaration, comms, channel, snapshot, catalog): ...
 
     def contexts(self, declaration, channel):
-        return declaration.selection_channels(channel, self.name)
+        return (None,)
+
+    def acquire(self, snapshot, catalog):
+        return self
 
 
 @dataclass(frozen=True)
@@ -84,6 +91,9 @@ class NamedTarget(CommandTarget):
 
 
 class ThreadTarget(NamedTarget):
+    def contexts(self, declaration, channel):
+        return declaration.selection_channels(channel, self.name)
+
     def available(self, snapshot) -> bool:
         return snapshot.canonical_name(self.name) in snapshot.threads
 
@@ -96,8 +106,23 @@ class ThreadTarget(NamedTarget):
 class ChannelTarget(NamedTarget):
     needs_catalog = True
 
+    def acquire(self, snapshot, catalog):
+        channel = catalog.resolve(self.name)
+        members = tuple(thread for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
+                        if channel.matches(thread.tags))
+        return AcquiredChannelTarget(self.name, channel, members)
+
     def bindings(self, declaration, comms, channel, snapshot, catalog):
-        return declaration.channel_bindings(comms, catalog.resolve(self.name), snapshot=snapshot)
+        return self.acquire(snapshot, catalog).bindings(declaration, comms, channel, snapshot, catalog)
+
+
+@dataclass(frozen=True)
+class AcquiredChannelTarget(ChannelTarget):
+    channel: Channel
+    members: tuple[Thread, ...]
+
+    def bindings(self, declaration, comms, channel, snapshot, catalog):
+        return declaration.channel_target_bindings(comms, self, snapshot)
 
 
 @dataclass(frozen=True)
@@ -111,9 +136,6 @@ class ProjectTarget(CommandTarget):
     @property
     def names(self) -> tuple[str, ...]:
         return ()
-
-    def contexts(self, declaration, channel):
-        return (None,)
 
     def bindings(self, declaration, comms, channel, snapshot, catalog):
         return declaration.project_bindings(comms, self.project)

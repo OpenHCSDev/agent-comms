@@ -399,14 +399,8 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return ()
 
     @classmethod
-    def member_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
-        """Use original roster membership and each command's thread eligibility."""
-        if snapshot is None:
-            snapshot = comms.registry.snapshot()
-        return tuple(bound for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
-                     if channel.matches(thread.tags)
-                     for bound in cls.thread_bindings(
-                         comms, thread, snapshot.status(thread.name), channel.name))
+    def channel_target_bindings(cls, comms, target, snapshot) -> tuple[Self, ...]:
+        return cls.channel_bindings(comms, target.channel, snapshot=snapshot)
 
     @classmethod
     def bindings(cls, comms: Comms, target: CommandTarget | str, channel: str | None = None,
@@ -427,34 +421,28 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         # A catalog is one observation. Declarations borrow its original store
         # resources; execution still acquires and rebinds current state.
         snapshot = comms.registry.snapshot()
-        # View actors (including an implicit project actor) need not declare a
-        # thread. Discovery has no thread actions for absent members; execution
-        # still requires its original current binding. Resolve aliases through
-        # the acquired namespace rather than reserving a special actor spelling.
-        available_targets = tuple(item for item in selected if item.available(snapshot))
         catalog = (comms.channels.catalog.read()
                    if channel or any(item.needs_catalog for item in selected) else None)
-        grouped: dict[type[CliCommand], list[CliCommand]] = {}
+        available_targets = tuple(item.acquire(snapshot, catalog) for item in selected if item.available(snapshot))
+        grouped: dict[type[CliCommand], dict[tuple[type, str], CliCommand]] = {}
         for member in cls.members_with(cls):
             if len(selected) > 1 and not member.multiple_targets:
                 continue
             for name in available_targets:
                 for context in name.contexts(member, channel):
-                    try:
-                        available = member.bindings(
-                            comms, name, context, snapshot=snapshot, catalog=catalog)
-                    except ValueError:
-                        if len(selected) == 1:
-                            raise
-                        continue
+                    available = member.bindings(
+                        comms, name, context, snapshot=snapshot, catalog=catalog)
                     for command in available:
                         declaration = member.catalog_declaration() if len(selected) > 1 else member
-                        commands = grouped.setdefault(declaration, [])
+                        commands = grouped.setdefault(declaration, {})
                         bound = command.for_editor(comms, name.name, project)
-                        if bound not in commands:
-                            commands.append(bound)
+                        commands.setdefault(bound.catalog_identity, bound)
         names = tuple(name for item in selected for name in item.names)
-        return tuple(TargetAction(tuple(commands), names) for commands in grouped.values())
+        return tuple(TargetAction(tuple(commands.values()), names) for commands in grouped.values())
+
+    @property
+    def catalog_identity(self) -> tuple[type, str]:
+        return type(self), json.dumps(FieldCodec.encode(self), sort_keys=True)
 
     def for_editor(self, comms: Comms, target: str, project: str) -> Self:
         return self
@@ -1264,19 +1252,24 @@ class ActivityCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StopCliCommand(CliCommand):
-    help = "Stop process"
+class ChannelMemberBindings:
     multiple_targets = True
-    name: str = option("--name", target_bound=True)
+    name: str = option('--name', target_bound=True)
+
+    @classmethod
+    def channel_target_bindings(cls, comms, target, snapshot):
+        return tuple(bound for thread in target.members for bound in cls.thread_bindings(
+            comms, thread, snapshot.statuses[thread.name], target.channel.name))
+
+
+@dataclass(frozen=True, kw_only=True)
+class StopCliCommand(ChannelMemberBindings, CliCommand):
+    help = "Stop process"
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsStopTool
         return (cls(name=thread.name),) if CommsStopTool.available_for_thread(thread, status) else ()
-
-    @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return cls.member_bindings(comms, channel, snapshot=snapshot)
 
     def apply(self, ctx: Comms) -> ThreadStoppedResult:
         ctx.owners.stop(self.name)
@@ -1583,19 +1576,13 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StartCliCommand(CliCommand):
+class StartCliCommand(ChannelMemberBindings, CliCommand):
     help = 'Start thread'
-    multiple_targets = True
-    name: str = option('--name', target_bound=True)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsStartTool
         return (cls(name=thread.name),) if CommsStartTool.available_for_thread(thread, status) else ()
-
-    @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return cls.member_bindings(comms, channel, snapshot=snapshot)
 
     @classmethod
     def reconnect_targets(cls, result: OwnerStartResult | TargetBatchResult) -> tuple[str, ...]:
