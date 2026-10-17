@@ -47,7 +47,7 @@ async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, r
     with Binding.open(state) as db:
         binding=Binding(str(tmp_path),'viewer','session')
         Binding.bind(db, binding)
-        bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,db)
+        bridge=ClaudeBridge(Options(Watch(),None,state),binding,db)
         bridge.comms=Core()
         message=Message(sender='claude-code',target='viewer',type=InfoKind,body='x'*3000,timestamp=1.,seq=1)
         with db:
@@ -65,7 +65,7 @@ async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, r
         assert not acknowledgments
         assert DeliveryRow.select(db)[0].outcome is EmittedOutcome
     with Binding.open(state) as db:
-        bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,db)
+        bridge=ClaudeBridge(Options(Watch(),None,state),binding,db)
         bridge.comms=Core()
         for number in (0,4):
             for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
@@ -124,7 +124,7 @@ def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
 async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(tmp_path,capsys):
     with Binding.open(tmp_path) as db:
         binding=Binding(str(tmp_path),'viewer','session')
-        bridge=ClaudeBridge(Options(Watch(),None,None,None,tmp_path),binding,db)
+        bridge=ClaudeBridge(Options(Watch(),None,tmp_path),binding,db)
         message=Message(sender='peer',target='viewer',type=InfoKind,body='original',timestamp=1.,seq=1)
         with db:
             DeliveryRow(message.message_id,json.dumps(message.to_wire()),EmittedOutcome,ReceivingMonitor(1)).insert(db)

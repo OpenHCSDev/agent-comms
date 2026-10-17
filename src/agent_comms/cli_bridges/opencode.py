@@ -15,7 +15,7 @@ from agent_comms.messages import Message
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
 from .shared import (
-    IncomingFrame, TranscriptBridge, TranscriptUpdate, Options, parse_options, run_bridge, shared_parser,
+    IncomingFrame, TranscriptBridge, TranscriptUpdate, Options, run_bridge,
     Watch, Binding,
 )
 from .opencode_protocol import (
@@ -61,15 +61,15 @@ class Attach(Watch):
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--pid', type=int, required=True)
 
-    def binding(self, options: OpenCodeOptions) -> Binding:
+    def binding(self, arguments: argparse.Namespace) -> Binding:
         from agent_comms.comms import wire
 
-        if options.session is None:
+        if arguments.session is None:
             raise ValueError('Attach requires the selected native session')
-        comms = wire(options.root)
-        name = options.bus_thread or f'opencode-{options.session}'
-        options.state = options.state / options.session
-        return Binding(str(comms.root), name, options.session)
+        comms = wire(arguments.root)
+        name = arguments.bus_thread or f'opencode-{arguments.session}'
+        arguments.state = arguments.state / arguments.session
+        return Binding(str(comms.root), name, arguments.session)
 
     def start(self, bridge: OpenCodeBridge, tasks: asyncio.TaskGroup) -> None:
         from agent_comms.comms import wire
@@ -194,6 +194,5 @@ class OpenCodeBridge(TranscriptBridge[OpenCodeOptions]):
 
 
 def main() -> None:
-    parser = shared_parser(__doc__, Path.home() / '.local/state/opencode-comms-inbox', OpenCodeBridge)
-    run_bridge(OpenCodeBridge, parse_options(parser, OpenCodeOptions))
+    run_bridge(OpenCodeBridge, OpenCodeOptions.parse(__doc__, Path.home() / '.local/state/opencode-comms-inbox', OpenCodeBridge))
 
