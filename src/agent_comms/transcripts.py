@@ -567,11 +567,11 @@ class Transcripts:
                     raise TranscriptChanged()
                 size = through.offset
                 if cursor and cursor.offset > size:
-                    raise ValueError("Cursor is outside the transcript window.")
+                    raise TranscriptChanged()
             frontier = through or source.frontier.cursor(runtime.read_key, size)
             source.require_cursor(frontier)
             if frontier.wire.sequence < 0 or (cursor is not None and not frontier.contains(cursor)):
-                raise ValueError("Cursor is outside the combined transcript source")
+                raise TranscriptChanged()
             traversal = LaterTranscript() if after is not None else EarlierTranscript()
             initial = cursor or frontier
             with reader.projection(source, page.routes) as project:

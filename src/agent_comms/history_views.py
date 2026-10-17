@@ -25,6 +25,7 @@ from .channel_management import ChannelManagement
 from .channel_targets import BuiltinChannel, CommandTarget
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision
+from .errors import UnknownChannelError
 from .exporting import (
     WireExportBoundary,
     WireExportFormat,
@@ -190,18 +191,7 @@ class HistoryViews:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree).name if worktree is not None else None
-        if not self.bus.history.sources():
-            return self.presentation.channel_page(
-                target,
-                viewer=viewer,
-                before=before,
-                after=after,
-                limit=limit,
-                max_bytes=max_bytes,
-            )
-        channel = self.channels.catalog.read().views(self.registry.snapshot().threads).get(target)
-        if channel is None:
-            raise ValueError(f"Unknown channel: {target!r}")
+        channel = self.channels.catalog.read().require_channel(target, self.registry.snapshot().threads)
         return ChannelDisplayHistory(channel, viewer).page(
             self.presentation,
             before=before,
@@ -325,10 +315,19 @@ class HistoryViews:
         incarnation; a channel when it is gone from the catalog or archived.
         """
         snapshot = self.registry.snapshot()
-        views = self.channels.catalog.read().views(snapshot.threads)
+        catalog = self.channels.catalog.read()
+        retired = set()
+        for name in channels:
+            try:
+                channel = catalog.require_channel(name, snapshot.threads)
+            except UnknownChannelError:
+                retired.add(name)
+            else:
+                if channel.archived:
+                    retired.add(name)
         return RetiredViews(
             frozenset(thread for thread in threads if not thread.current(snapshot)),
-            frozenset(channel for channel in channels if channel not in views or views[channel].archived),
+            frozenset(retired),
         )
 
     def thread_presentation(

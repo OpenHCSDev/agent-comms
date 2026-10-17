@@ -368,9 +368,7 @@ class DisplaySelection:
         return self.viewer
 
     def scope(self, target: str) -> ChannelDisplayScope:
-        channel = self.channels.get(target)
-        if channel is None:
-            raise ValueError(f"Unknown channel: {target!r}")
+        channel = self.catalog.require_channel(target, self.registry.threads)
         return ChannelDisplayScope.capture(channel, self.registry)
 
 

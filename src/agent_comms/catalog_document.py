@@ -9,6 +9,7 @@ from dataclasses import dataclass, field, replace
 from .channel_targets import BuiltinChannel, ChannelTarget, Tag
 from .channels import Channel, SavedView, ViewPredicate
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
+from .errors import UnknownChannelError
 from .thread_identity import ThreadProvenance
 
 
@@ -67,23 +68,29 @@ class CatalogDocument:
         return self.tags.union(*(thread.tags for thread in threads.values()))
 
     def views(self, threads: Mapping[str, ThreadProvenance]) -> dict[str, Channel]:
-        tags = self.tags.union(*(thread.tags for thread in threads.values()))
+        first_seen: dict[str, float] = {}
+        for thread in threads.values():
+            for tag in thread.tags:
+                first_seen[tag] = min(first_seen.get(tag, thread.created_at), thread.created_at)
         result = {kind.value: self.resolve(kind.value) for kind in BuiltinChannel}
-        for tag in sorted(tags):
+        for tag in sorted(self.tags.union(first_seen)):
             name = f"#{tag}"
-            preference = self.preferences.get(name)
-            if preference is None:
-                preference = ChannelPreferences(
-                    created_at=min(
-                        (thread.created_at for thread in threads.values() if tag in thread.tags),
-                        default=0.0,
-                    )
-                )
-            result[name] = preference.channel(name, frozenset({tag}))
+            result[name] = self.resolve(name, created_at=first_seen.get(tag, 0.0))
         result.update((f"#{name}", self.resolve(f"#{name}")) for name in self.saved_views)
         return result
 
-    def resolve(self, target: str) -> Channel:
+    def require_channel(self, target: str, threads: Mapping[str, ThreadProvenance]) -> Channel:
+        target = ChannelTarget.normalize_name(target)
+        tag = target.removeprefix("#")
+        first_seen = min(
+            (thread.created_at for thread in threads.values() if tag in thread.tags), default=None
+        )
+        declared = tag in self.tags or tag in self.saved_views or BuiltinChannel.lookup(target) is not None
+        if not declared and first_seen is None:
+            raise UnknownChannelError(f"Unknown channel: {target!r}")
+        return self.resolve(target, created_at=first_seen or 0.0)
+
+    def resolve(self, target: str, *, created_at: float = 0.0) -> Channel:
         target = ChannelTarget.normalize_name(target)
         tag = target.removeprefix("#")
         view = self.saved_views.get(tag)
@@ -93,7 +100,7 @@ class CatalogDocument:
             else (frozenset() if BuiltinChannel.lookup(target) else frozenset({tag}))
         )
         preference = self.preferences.get(
-            target, ChannelPreferences(created_at=view.created_at if view else 0.0)
+            target, ChannelPreferences(created_at=view.created_at if view else created_at)
         )
         return preference.channel(target, members, view)
 
@@ -164,30 +171,26 @@ class CatalogDocument:
         self.remove_channel(f"#{name}")
 
     def set_preferences(self, name: str, threads: Mapping[str, ThreadProvenance], **changes) -> Channel:
-        name = ChannelTarget.normalize_name(name)
-        channel = self.views(threads).get(name)
-        if channel is None:
-            raise ValueError(f"Unknown channel: {name!r}")
-        preference = self.preferences.get(name, ChannelPreferences(created_at=channel.created_at))
-        self.preferences[name] = replace(preference, **changes)
-        return self.resolve(name)
+        channel = self.require_channel(name, threads)
+        preference = self.preferences.get(channel.name, ChannelPreferences(created_at=channel.created_at))
+        self.preferences[channel.name] = replace(preference, **changes)
+        return self.resolve(channel.name)
 
     def set_metadata(
         self, name: str, threads: Mapping[str, ThreadProvenance], *, parent: str | None, archived: bool
     ) -> Channel:
-        name = ChannelTarget.normalize_name(name)
-        current = self.views(threads)
-        if name not in current:
-            raise ValueError(f"Unknown channel: {name!r}")
-        if current[name].builtin is not None:
+        current = self.require_channel(name, threads)
+        if current.builtin is not None:
             raise ValueError("Built-in channels cannot be grouped or archived.")
         if type(archived) is not bool:
             raise ValueError("Channel archived state must be boolean.")
         if parent is not None:
             parent = ChannelTarget.normalize_name(parent)
-            if parent not in current:
-                raise ValueError(f"Unknown parent channel: {parent!r}")
-            if current[parent].builtin is not None:
+            try:
+                parent_channel = self.require_channel(parent, threads)
+            except UnknownChannelError as error:
+                raise ValueError(f"Unknown parent channel: {parent!r}") from error
+            if parent_channel.builtin is not None:
                 raise ValueError("Built-in channels cannot be presentation parents.")
         result = self.set_preferences(name, threads, parent=parent, archived=archived)
         self.validate_parents()
@@ -196,10 +199,13 @@ class CatalogDocument:
     def set_any_mode(self, name: str, enabled: bool, threads: Mapping[str, ThreadProvenance]) -> Channel:
         if type(enabled) is not bool:
             raise ValueError("Channel any_mode must be boolean.")
-        name = ChannelTarget.normalize_name(name)
-        channel = self.views(threads).get(name)
-        if channel is None or not channel.exact or channel.builtin is not None:
-            raise ValueError("Only existing exact tag channels support any_mode.")
+        unsupported = ValueError("Only existing exact tag channels support any_mode.")
+        try:
+            channel = self.require_channel(name, threads)
+        except UnknownChannelError as error:
+            raise unsupported from error
+        if not channel.exact:
+            raise unsupported
         return self.set_preferences(name, threads, any_mode=enabled)
 
     def set_thread_pinned(self, channel: str, thread: str, pinned: bool) -> None:

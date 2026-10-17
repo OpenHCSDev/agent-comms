@@ -147,9 +147,7 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
                    history_revision: FileRevision | None) -> ChannelSelection:
-        channel = catalog.views(snapshot.threads).get(target)
-        if channel is None:
-            raise ValueError(f"Unknown channel: {target!r}")
+        channel = catalog.require_channel(target, snapshot.threads)
         return ChannelSelection(
             viewer=snapshot.require(viewer).incarnation,
             bus_identity=views.bus.reads.bus_identity(views.bus.log.path),
