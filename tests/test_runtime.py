@@ -166,7 +166,7 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
         await until(
             lambda: any(
                 any(isinstance(f, TurnChangedUpdate)
-                    and f.state.active is None and f.state.finished_turn_id is not None
+                    and not f.state.busy and f.state.finished_turn_id is not None
                     for f in decode_updates(u.get("_meta")))
                 for u in updates
             )

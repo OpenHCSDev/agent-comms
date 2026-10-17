@@ -87,7 +87,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
             observation = SessionNotification(session_id=session_id, update=update)
             if any(
                 isinstance(fact, TurnChangedUpdate)
-                and fact.state.active is None and fact.state.finished_turn_id is not None
+                and not fact.state.busy and fact.state.finished_turn_id is not None
                 for fact in decode_updates(observation.update.field_meta)
             ):
                 settled.set()
