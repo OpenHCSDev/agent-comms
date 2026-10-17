@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import field, dataclass
 
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
@@ -27,20 +27,20 @@ from ..wake_candidate_index import ProjectionUnavailableError
 class _SelectedDecision:
     generation: AwarenessClaimGenerations
     assignment: WakeAssignment
-    receipt: ClaimBatchReceipts
+    acknowledgement: ClaimBatchReceipts = field(metadata={"wire_name": 'receipt'})
 
     @classmethod
     def capture(
         cls,
         assignment: WakeAssignment,
-        receipt: ClaimBatchReceipts,
+        acknowledgement: ClaimBatchReceipts,
         member: ClaimBatchMembers,
         delivery: CohortDeliveryReceipts,
         generation: AwarenessClaimGenerations,
     ) -> _SelectedDecision:
-        receipt.require_selected_claim(assignment)
+        acknowledgement.require_selected_claim(assignment)
         expected_member = ClaimBatchMembers(
-            wire_root_id=receipt.wire_root_id,
+            wire_root_id=acknowledgement.wire_root_id,
             wire_seq=assignment.wire_seq,
             ordinal=member.ordinal,
             claim_id=assignment.assignment_id,
@@ -49,7 +49,7 @@ class _SelectedDecision:
         if member != expected_member:
             raise ProjectionUnavailableError("selected source is not the recorded batch member")
         expected_delivery = CohortDeliveryReceipts(
-            wire_root_id=receipt.wire_root_id,
+            wire_root_id=acknowledgement.wire_root_id,
             wire_seq=assignment.wire_seq,
             ordinal=delivery.ordinal,
             recipient_lookup=assignment.recipient_lookup,
@@ -59,8 +59,8 @@ class _SelectedDecision:
         )
         if delivery != expected_delivery:
             raise ProjectionUnavailableError("selected source delivery changed")
-        generation.require_selection(assignment, receipt)
-        return cls(generation, assignment, receipt)
+        generation.require_selection(assignment, acknowledgement)
+        return cls(generation, assignment, acknowledgement)
 
     @property
     def candidate(self):
@@ -68,7 +68,7 @@ class _SelectedDecision:
             self.assignment.wire_seq,
             self.assignment.message_id,
             type(self.assignment.lifecycle.mode),
-            self.receipt.exact_target,
+            self.acknowledgement.exact_target,
         )
 
     def context(self):
@@ -78,7 +78,7 @@ class _SelectedDecision:
             "claim_id": self.assignment.assignment_id,
             "wake_mode": type(self.assignment.lifecycle.mode),
             "disposition": type(self.assignment.lifecycle),
-            "target": self.receipt.exact_target,
+            "target": self.acknowledgement.exact_target,
         }
 
 

@@ -272,14 +272,14 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             fixture.provider.handle = provider_handle
         async with asyncio.timeout(20):
             while not isinstance(
-                (receipt := queue.status(comms, "worker")[0]).state, queue.RestartedRestart
+                (acknowledgement := queue.status(comms, "worker")[0]).state, queue.RestartedRestart
             ):
-                assert receipt.state.active, receipt
+                assert acknowledgement.state.active, acknowledgement
                 await asyncio.sleep(0.02)
         replacement = comms.registry.require("worker")
         owners.append(replacement.process_identity)
-        assert receipt.state.previous == original.process_identity
-        assert receipt.state.current == replacement.process_identity
+        assert acknowledgement.state.previous == original.process_identity
+        assert acknowledgement.state.current == replacement.process_identity
         assert not original.process_alive
         await ready()
         assert replacement.session_file == str(fixture.session)

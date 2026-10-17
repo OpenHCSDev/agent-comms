@@ -90,7 +90,7 @@ async def run(stage, package):
             packets.append({'time': time.time(), 'session': session_id,
                             'update': update.session_update})
 
-    receipt = {'state': 'prepared-no-input', 'stage': str(stage),
+    acknowledgement = {'state': 'prepared-no-input', 'stage': str(stage),
         'installed_python': sys.executable, 'installed_core': str(installed),
         'source_owner': source.name, 'source_session': str(source_file),
         'source_session_sha256_observed': source_hash,
@@ -102,8 +102,8 @@ async def run(stage, package):
         'original_326_327_replays': 0, 'originals': [], 'proof': {}}
 
     def persist(state):
-        receipt['state'] = state
-        (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+        acknowledgement['state'] = state
+        (stage / 'acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2) + '\n')
         print(state, flush=True)
 
     persist('canonical-saved-fork-prepared-no-input')
@@ -120,7 +120,7 @@ async def run(stage, package):
                 'Please reply tersely if you receive this. This is a distinct current '
                 'connectivity request, not continuation of your assigned task or a retry. '
                 'Reply with Received 505-20261002-a1.', worktree=source.worktree)
-            receipt['originals'].append(FieldCodec.encode(original.reference))
+            acknowledgement['originals'].append(FieldCodec.encode(original.reference))
             persist('one-distinct-user-channel-request-published')
             async with asyncio.timeout(300):
                 while True:
@@ -149,7 +149,7 @@ async def run(stage, package):
                                 (original.reference,))[(original.seq, original.message_id)]
                             notification, = handling
                             assert notification.label == 'Responded'
-                            receipt['proof'] = {'assignment': FieldCodec.encode(claims[0]),
+                            acknowledgement['proof'] = {'assignment': FieldCodec.encode(claims[0]),
                                 'native_inputs': FieldCodec.encode(inputs),
                                 'original_publication': FieldCodec.encode(reply),
                                 'canonical_reply': FieldCodec.encode(actual),
@@ -158,15 +158,15 @@ async def run(stage, package):
                             persist('configured-saved-triage-full-canonical-channel-reply-handling-PASS')
                             break
                     if claims and claims[0].lifecycle.terminal:
-                        receipt['terminal_assignment'] = FieldCodec.encode(claims[0])
+                        acknowledgement['terminal_assignment'] = FieldCodec.encode(claims[0])
                         raise AssertionError('Original request ended without a canonical reply')
                     diagnostics = tuple((service.root / 'diagnostics').glob('*.json'))
                     if diagnostics:
-                        receipt['diagnostics'] = [str(path) for path in diagnostics]
+                        acknowledgement['diagnostics'] = [str(path) for path in diagnostics]
                         raise RuntimeError('Actual native/owner diagnostic; preserve input, never retry')
                     await asyncio.sleep(.1)
     except BaseException as error:
-        receipt['failure'] = f'{type(error).__name__}: {error}'
+        acknowledgement['failure'] = f'{type(error).__name__}: {error}'
         persist('FAILED_OR_UNRESOLVED_NO_REPLAY')
         raise
     finally:
@@ -174,12 +174,12 @@ async def run(stage, package):
         # Observation expiry cannot authorize aborting a still-running input.
         if current.active_turn is None:
             await asyncio.to_thread(service.owners.stop, child.name)
-        receipt['owned_owner_after_observation'] = FieldCodec.encode(service.registry.require(child.name).process_identity)
-        receipt['configured_source_hashes_unchanged'] = all(
+        acknowledgement['owned_owner_after_observation'] = FieldCodec.encode(service.registry.require(child.name).process_identity)
+        acknowledgement['configured_source_hashes_unchanged'] = all(
             hashlib.sha256(Path(path).read_bytes()).hexdigest() == digest
             for path, digest in settings_hashes.items())
-        receipt['acp_observations'] = packets
-        (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+        acknowledgement['acp_observations'] = packets
+        (stage / 'acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2) + '\n')
 
 
 if __name__ == '__main__':

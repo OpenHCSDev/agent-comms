@@ -193,13 +193,13 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     try:
         ledger = owner.inputs.dispositions
         claim_scope = comms.registry.snapshot().claimed_generations[session]
-        with _store_lock(comms._wire_lock_path), ExitStack() as custody:
+        with _store_lock(comms._wire_lock_path), ExitStack() as ownership:
             queued, _, _receipt = QueuedInput.capture(
                 owner.inputs, session, text="queued", prompt="queued", echo=True,
-                images=(), controller=None, custody=custody,
+                images=(), controller=None, ownership=ownership,
             )
             owner.inputs.following_sources[session] = {queued.input_id: queued.source()}
-            custody.pop_all()
+            ownership.pop_all()
         ledger.record(
             "acp:uncertain", seq=None, owner=session, claim_scope=claim_scope,
             target=session, text="uncertain",

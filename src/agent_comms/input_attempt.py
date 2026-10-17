@@ -348,7 +348,7 @@ class StartedInput(SentInput):
 
         Stored rows record owner name and input generation, not thread birth or process. The
         publication source independently validates the original complete lease
-        and native ancestry; this receipt never invents their missing proof.
+        and native ancestry; this acknowledgement never invents their missing proof.
         """
         return self if self.matches_lease(lease, snapshot) and self.matches_native(
             turn_id=lease.turn_id, native_id=native_id, text=sent_text,

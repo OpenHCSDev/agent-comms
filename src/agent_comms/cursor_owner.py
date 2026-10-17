@@ -126,7 +126,7 @@ class CursorOwner(RegistryOwner):
         """The recorded input identifies only its own permitted live operation.
 
         A settled caller may additionally fence the expected input ID. Idle
-        projection uses the same immutable receipt, not a cached completion ID;
+        projection uses the same immutable acknowledgement, not a cached completion ID;
         absence of that caller assertion does not erase the recorded input permission.
         """
         if proof is None:
@@ -153,5 +153,5 @@ class CursorOwner(RegistryOwner):
             reserved,
             proof.reference,
         ):
-            raise IdentityConflict("current cursor differs from committed native receipt")
+            raise IdentityConflict("current cursor differs from committed native acknowledgement")
         return True

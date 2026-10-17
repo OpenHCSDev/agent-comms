@@ -25,7 +25,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
     accept_delivery_cohort(comms.bus, root_id, old.seq, old_store)
     assert len(sealed_cohort_assignments(old_store, lookups["bob"])) == 1
     old_store.close()
-    # Preserve the actual old receipt database for history; rebuild only runtime.
+    # Preserve the actual old acknowledgement database for history; rebuild only runtime.
     (comms.root / "coordination.sqlite").rename(comms.root / "prior-runtime.sqlite")
     with comms.bus.log.locked():
         marker = comms.bus.log._private_marker_unlocked()

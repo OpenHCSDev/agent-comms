@@ -230,7 +230,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise RequestError.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
             )
-        receipt = await Coordination.run_worker(partial(SelectedWritePlans(self._comms, root_id).submit,
+        acknowledgement = await Coordination.run_worker(partial(SelectedWritePlans(self._comms, root_id).submit,
             owner_name=owner,
             source_seq=request.source_seq,
             source_message_id=request.source_message_id,
@@ -239,10 +239,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         ))
         attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
         self._selected_write_controllers[(owner, request.source_seq)] = (
-            receipt.operation_id,
+            acknowledgement.operation_id,
             attached,
         )
-        return PromptResponse(stop_reason="end_turn", field_meta=encode_updates(receipt))
+        return PromptResponse(stop_reason="end_turn", field_meta=encode_updates(acknowledgement))
 
     async def _prompt_request(self, session_id: str, prompt: list[Any], request) -> PromptResponse:
         display_text = request.user_text or self._prompt_text(prompt)

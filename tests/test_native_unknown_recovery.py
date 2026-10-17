@@ -29,7 +29,7 @@ from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 
-def unknown_owner(directory, admitted, output, exit_allowed):
+def unknown_owner(directory, authorized, output, exit_allowed):
     # Revoke the real owner before the current failure consumer can settle.
     # Both recorded and unrecorded original inputs remain UNKNOWN; no obsolete
     # failure hook or fabricated owner-loss grant is used.
@@ -40,11 +40,11 @@ def unknown_owner(directory, admitted, output, exit_allowed):
     fake, _calls = _fake_model()
 
     async def fail(*args, **kwargs):
-        if admitted:
+        if authorized:
             await fake(*args, **kwargs)
         os.environ["AGENT_COMMS_THREAD"] = "beta"
         comms.owners.release("beta")
-        raise NativePiUnavailable("UNKNOWN before claim_scope receipt")
+        raise NativePiUnavailable("UNKNOWN before claim_scope acknowledgement")
 
     TrackedTurnSession.execute = fail
     try:
@@ -67,7 +67,7 @@ def unknown_owner(directory, admitted, output, exit_allowed):
         raise TimeoutError("test must release fixture process")
 
 
-@pytest.fixture(params=[False, True], ids=["missing-claim_scope", "admitted-unknown"])
+@pytest.fixture(params=[False, True], ids=["missing-claim_scope", "authorized-unknown"])
 def released_unknown(tmp_path, request):  # noqa: F811
     context = multiprocessing.get_context("fork")
     output, exit_allowed = context.Queue(), context.Event()

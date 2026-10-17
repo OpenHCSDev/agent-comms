@@ -94,7 +94,7 @@ async def test_durable_private_claim_names_each_changed_authority(
                 reservation, row=replace(row, owner_generation=expected.generation + 1)
             ),
             rules.NativeTokenRule: replace(reservation, token_digest="0" * 64),
-            rules.NativeAlreadyAdmittedRule: replace(
+            rules.NativeAlreadyBoundRule: replace(
                 reservation, row=replace(row, sent_owner_claimed_generation=RecordedNativeClaim(1))
             ),
             rules.NativeAlreadyProvenRule: replace(

@@ -185,7 +185,7 @@ class CursorPublication:
 
     async def refresh(self, session_id: str, thread_name: str) -> None:
         if self.delivery(session_id).needs_refresh:
-            # Resume only the cursor projection. The immutable native receipt
+            # Resume only the cursor projection. The immutable native acknowledgement
             # supplies its recorded input grant; no claim or input is resumed.
             await self.publish(session_id, thread_name, advance=True)
 

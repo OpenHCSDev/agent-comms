@@ -27,7 +27,7 @@ from typing import Generic, TypeVar
 
 from agent_comms.coordinator import Coordination
 
-from .claim_claim import publish_selected_resource_claim, write_selected_claimed_file
+from .claim_authority import publish_selected_resource_claim, write_selected_claimed_file
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import CoordinationReadUnavailable
@@ -238,7 +238,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
 
 
 def record_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:
-    """Only a synced terminal receipt lets the tool return success."""
+    """Only a synced terminal acknowledgement lets the tool return success."""
     result = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
     try:
         descriptor = os.open(result, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -248,7 +248,7 @@ def record_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
             os.fsync(output.fileno())
         fsync_directory(result.parent)
     except OSError as error:
-        raise SelectedToolDenied("Selected tool terminal receipt UNKNOWN; no retry") from error
+        raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error
 
 
 def selected_tool_mode_for_owner(
@@ -288,7 +288,7 @@ def selected_tool_mode_for_owner(
 def verify_sent_full_input(
     store: Coordination, claim_scope: WakeClaim, owner_name: str, input_id: str
 ) -> None:
-    """Only the exact FULL input admitted by the owner may call native tools.
+    """Only the exact FULL input authorized by the owner may call native tools.
 
     This is the first check of a tool call and it only reads. Other owners
     write the same database, so the read waits the coordinator's bounded
@@ -326,17 +326,17 @@ def _require_sent_full_input(
 
 
 def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:
-    """Corroborate a live owner result; a persisted receipt alone grants nothing."""
+    """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
     try:
         NativeInputIdText.decode(input_id)
     except (ValueError, TypeError) as error:
         raise SelectedToolDenied("Selected input identity is invalid") from error
-    receipt = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
-    info = receipt.lstat()
+    acknowledgement = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
+    info = acknowledgement.lstat()
     if PrivateFileRole.violation(info) is not None:
-        raise SelectedToolDenied("Selected tool receipt is not private")
-    if receipt.read_bytes() != (call_id + "\n").encode("ascii"):
-        raise SelectedToolDenied("Selected tool has no matching terminal receipt")
+        raise SelectedToolDenied("Selected tool acknowledgement is not private")
+    if acknowledgement.read_bytes() != (call_id + "\n").encode("ascii"):
+        raise SelectedToolDenied("Selected tool has no matching terminal acknowledgement")
 
 
 def perform_selected_write(
@@ -508,7 +508,7 @@ class OwnerToolSocket(ABC, Generic[Call]):
         self.token = token
         self.expected_pid: int | None = None
         # Live owner-side completion only. A visible .done file after failed
-        # fsync is not a durable receipt and must never be promoted by itself.
+        # fsync is not a durable acknowledgement and must never be promoted by itself.
         self._server: asyncio.AbstractServer | None = None
         self._created = False
         self.calls: NativeToolCallTable[Call] = NativeToolCallTable()

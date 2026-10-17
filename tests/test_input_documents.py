@@ -35,12 +35,12 @@ def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custo
     prior = stored_inputs(store.root)
     first = ReservedInput("first", None, "worker", 1, "worker", "First input")
     second = ReservedInput("second", None, "worker", 1, "worker", "Second input")
-    with ExitStack() as custody:
+    with ExitStack() as ownership:
         document = store.record_originals(
             ReservedInput("prior", None, "worker", 1, "worker", "Must not replace"),
             ReservedInput("unknown", None, "worker", 1, "worker", "Must not replay"),
             first, replace(first, source_text="Duplicate must not replace"), second,
-            custody=custody,
+            ownership=ownership,
         )
         assert document.originals((first.key, second.key)) == (first, second)
         assert document.rows[first.key] is first and document.rows[second.key] is second
@@ -62,19 +62,19 @@ def test_failure_after_original_publication_retires_the_batch_and_schedule(tmp_p
     store = InputDispositions(tmp_path)
     rows = tuple(ReservedInput(f"acp:original:{seq}", None, "worker", 1, "worker", "Original")
                  for seq in (1, 2))
-    with pytest.raises(OSError, match="later failure"), ExitStack() as custody:
-        store.record_originals(*rows, custody=custody)
+    with pytest.raises(OSError, match="later failure"), ExitStack() as ownership:
+        store.record_originals(*rows, ownership=ownership)
         raise OSError("later failure")
     assert all(isinstance(row, NotSentInput) for row in stored_inputs(store.root).originals(
         tuple(row.key for row in rows)
     ))
-    with pytest.raises(OSError, match="later failure"), ExitStack() as custody:
-        store.reserve_turn("worker", TurnId("scheduled"), 1, "Original schedule", custody=custody)
+    with pytest.raises(OSError, match="later failure"), ExitStack() as ownership:
+        store.reserve_turn("worker", TurnId("scheduled"), 1, "Original schedule", ownership=ownership)
         raise OSError("later failure")
     scheduled = stored_inputs(store.root)
     assert all(isinstance(row, NotSentInput) for row in scheduled.rows.values())
-    with ExitStack() as custody, pytest.raises(RelationViolationError, match="reservation already exists"):
-        store.reserve_turn("worker", TurnId("scheduled"), 1, "Replacement", custody=custody)
+    with ExitStack() as ownership, pytest.raises(RelationViolationError, match="reservation already exists"):
+        store.reserve_turn("worker", TurnId("scheduled"), 1, "Replacement", ownership=ownership)
     assert stored_inputs(store.root) == scheduled
 
 

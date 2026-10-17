@@ -92,7 +92,7 @@ class OwnedSend:
                 row.require_not_cleared()
             MissingAcceptedInputCheck().require_valid()
         AcceptedInputCheck(
-            receipt=accepted,
+            acknowledgement=accepted,
             current=current,
             claim_scope=self.claim_scope,
             input_id=source.accepted_id,

@@ -13,7 +13,7 @@ from stored_inputs import stored_inputs
 from agent_comms.goal_waits import NoGoalWait
 
 
-async def configured_terminal(owner, thread, output, receipt, marker):
+async def configured_terminal(owner, thread, output, acknowledgement, marker):
     """One installed stdio ACP attachment on the existing configured SDK fork."""
     from acp import spawn_agent_process
     from acp.schema import TextContentBlock
@@ -30,18 +30,18 @@ async def configured_terminal(owner, thread, output, receipt, marker):
     started = time.monotonic()
     async with spawn_agent_process(subscriber, sys.executable, '-m', 'agent_comms.acp',
         cwd=thread.worktree, env=dict(os.environ)) as (connection, process):
-        receipt['acp_pid'] = process.pid
+        acknowledgement['acp_pid'] = process.pid
         await connection.initialize(protocol_version=1)
         await connection.load_session(cwd=thread.worktree, session_id=thread.name, mcp_servers=[])
-        receipt['state'] = 'ONE_DISTINCT_CONFIGURED_ACP_PROMPT_NO_RETRY'
-        (output.parent / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
+        acknowledgement['state'] = 'ONE_DISTINCT_CONFIGURED_ACP_PROMPT_NO_RETRY'
+        (output.parent / 'terminal-acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2))
         pending = asyncio.create_task(connection.prompt(thread.name,
             [TextContentBlock(type='text', text=text)]))
         async with asyncio.timeout(300):
             while not service.registry.require(thread.name).executing:
                 if pending.done():
                     await pending
-                    raise AssertionError('Original turn completed before waiter custody capture')
+                    raise AssertionError('Original turn completed before waiter ownership capture')
                 await asyncio.sleep(.02)
             lease = service.registry.require(thread.name).turn_lease
 
@@ -61,18 +61,18 @@ async def configured_terminal(owner, thread, output, receipt, marker):
         assert response.stop_reason == 'end_turn'
         assert any(marker in str(update) for update in subscriber.updates)
         child = owner.turns.persistent_backends[thread.name].child_state.idle().child
-        receipt.update(original_lease=FieldCodec.encode(lease), terminal_state=FieldCodec.encode(state),
+        acknowledgement.update(original_lease=FieldCodec.encode(lease), terminal_state=FieldCodec.encode(state),
             original_waiter_goal=waiter_goal, waiter_released=True,
             acp_response=response.model_dump(by_alias=True, exclude_none=True),
             native_process=FieldCodec.encode(child.proc.identity),
             prompt_through_return_seconds=time.monotonic() - started)
         (output / 'original-acp-updates.json').write_text(json.dumps(subscriber.updates, indent=2))
     assert process.returncode is not None
-    receipt['acp_exited'] = True
+    acknowledgement['acp_exited'] = True
     return marker, child
 
 
-async def read_actual_context_publication(owner, thread, child, original_input, output, receipt):
+async def read_actual_context_publication(owner, thread, child, original_input, output, acknowledgement):
     """Read the manifest emitted by the one actual model turn, never publish it."""
     import hashlib
     from agent_comms.field_codec import FieldCodec
@@ -123,7 +123,7 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
     usage = [value for value in updates if value.get('update', value).get('sessionUpdate') == 'usage_update']
     # Manifest values are the existing public renderer's captured strings; source
     # message content is recovered and filtered by the same PiMessage renderer.
-    receipt.update(model_onContextReady_publication=True, request_id=request_id,
+    acknowledgement.update(model_onContextReady_publication=True, request_id=request_id,
         native_request_generation=proof.request_generation, actual_manifest_lease=True,
         captured_system_text_read=True, transcript_original_root_and_child_read=True,
         public_renderer_only=True, same_native_child=True, source_query_bytes_unchanged=True,
@@ -144,29 +144,29 @@ async def run(root, receiving_only=False):
     monkey = MonkeyPatch()
     fixture = native_backend.__wrapped__(root, monkey)
     original = None
-    receipt = {"python": sys.executable, "core": agent_comms.__file__, "fixture": str(root),
+    acknowledgement = {"python": sys.executable, "core": agent_comms.__file__, "fixture": str(root),
                "public_inputs": 0, "paid_provider_calls": 0}
     try:
         original = await anext(fixture)
         async with asyncio.timeout(90):
             await test_context_manifest_native_acp_and_cli_continuous(
                 original, receiving_only=receiving_only)
-        receipt["state"] = "SCOPED_PASS"
+        acknowledgement["state"] = "SCOPED_PASS"
     except BaseException as error:
-        receipt["state"] = "FAILED_NO_REPLAY"
-        receipt["error"] = repr(error)
+        acknowledgement["state"] = "FAILED_NO_REPLAY"
+        acknowledgement["error"] = repr(error)
         raise
     finally:
         await fixture.aclose()
         monkey.undo()
         if original is not None:
-            receipt["local_provider_posts"] = original.provider.posts
+            acknowledgement["local_provider_posts"] = original.provider.posts
             requests = root / 'original-provider-requests.json'
             requests.write_text(json.dumps(original.provider.requests))
-            receipt['original_provider_requests'] = str(requests)
-        receipt["elapsed_seconds"] = time.monotonic() - started
-        (root / "terminal-receipt.json").write_text(json.dumps(receipt, indent=2))
-        print(json.dumps(receipt), flush=True)
+            acknowledgement['original_provider_requests'] = str(requests)
+        acknowledgement["elapsed_seconds"] = time.monotonic() - started
+        (root / "terminal-acknowledgement.json").write_text(json.dumps(acknowledgement, indent=2))
+        print(json.dumps(acknowledgement), flush=True)
 
 
 async def run_configured(options):
@@ -188,7 +188,7 @@ async def run_configured(options):
     root.mkdir(mode=0o700)
     output = root / 'configured-context-journey'
     output.mkdir(mode=0o700)
-    receipt = {'state': 'PREPARING_ORIGINAL_CONFIGURED_SOURCE',
+    acknowledgement = {'state': 'PREPARING_ORIGINAL_CONFIGURED_SOURCE',
         'python': sys.executable, 'core': agent_comms.__file__,
         'fixture': str(root), 'public_inputs': 0, 'original_inputs_retried': 0}
     owner = None
@@ -198,7 +198,7 @@ async def run_configured(options):
         source = captured.require_current()
         original_file = Path(source.require_saved_session())
         original_digest = hashlib.sha256(original_file.read_bytes()).hexdigest()
-        receipt.update(model=source.model, thinking=source.thinking_level.declared_name,
+        acknowledgement.update(model=source.model, thinking=source.thinking_level.declared_name,
             original_name=source.name, original_worktree=source.worktree,
             source_file=str(original_file), source_bytes=original_file.stat().st_size,
             original_process=FieldCodec.encode(source.require_process()),
@@ -249,7 +249,7 @@ async def run_configured(options):
         assert thread.name not in owner.turns.persistent_backends
 
         if options.terminal_only or options.recorded_publication:
-            token, child = await configured_terminal(owner, thread, output, receipt,
+            token, child = await configured_terminal(owner, thread, output, acknowledgement,
                                                      options.terminal_marker)
             stored = stored_inputs(service.root)
             original, = stored.rows.values()
@@ -260,13 +260,13 @@ async def run_configured(options):
             replies = tuple(entry for entry in entries[entries.index(user) + 1:] if entry.final_reply)
             assert replies[-1].message.authoritative_text.strip() == token
             assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
-            receipt.update(state='SCOPED_CONFIGURED_SDK_ACP_NATIVE_TERMINAL_PASS',
+            acknowledgement.update(state='SCOPED_CONFIGURED_SDK_ACP_NATIVE_TERMINAL_PASS',
                 original_input=FieldCodec.encode(original), original_native_user=user.id,
                 original_native_reply=replies[-1].id, source_unchanged=True,
                 private_root=str(service.root), fork_file=identity.session_file)
             if options.recorded_publication:
-                await read_actual_context_publication(owner, service.registry.require(thread.name), child, original, output, receipt)
-                receipt['state'] = 'CONFIGURED_MODEL_ON_CONTEXT_READY_PUBLISHED_AND_READ_PASS'
+                await read_actual_context_publication(owner, service.registry.require(thread.name), child, original, output, acknowledgement)
+                acknowledgement['state'] = 'CONFIGURED_MODEL_ON_CONTEXT_READY_PUBLISHED_AND_READ_PASS'
             return
 
         async def query(*arguments):
@@ -293,7 +293,7 @@ async def run_configured(options):
             assert not stored_inputs(service.root).rows
             assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
             captured.require_current()
-            receipt.update(state='SCOPED_COLD_CONFIGURED_SAVED_CONTEXT_PASS',
+            acknowledgement.update(state='SCOPED_COLD_CONFIGURED_SAVED_CONTEXT_PASS',
                 priming_calls=0, native_prompts=0, provider_requests=0,
                 private_root=str(service.root), fork_file=str(selected),
                 fork_sha256=hashlib.sha256(before).hexdigest(), source_unchanged=True,
@@ -303,8 +303,8 @@ async def run_configured(options):
             return
         from retained_input_origin_observer import actual_s2_ingress
         baseline = service.bus.log.latest_sequence()
-        receipt['state'] = 'ONE_CONFIGURED_INPUT_ABOUT_TO_BE_SUBMITTED_NO_RETRY'
-        (root / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
+        acknowledgement['state'] = 'ONE_CONFIGURED_INPUT_ABOUT_TO_BE_SUBMITTED_NO_RETRY'
+        (root / 'terminal-acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2))
         token = 'S5_CONFIGURED_RETAINED_ONCE_473'
         async with actual_s2_ingress(owner, thread, output) as observer:
             original = await observer.submit('Bounded acceptance only. Do not resume '
@@ -328,25 +328,25 @@ async def run_configured(options):
         assert selected.read_bytes().startswith(before)
         assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
         captured.require_current()
-        receipt.update(state='SCOPED_CONFIGURED_SAVED_FORK_TOAD_ACP_NATIVE_CONTEXT_PASS',
+        acknowledgement.update(state='SCOPED_CONFIGURED_SAVED_FORK_TOAD_ACP_NATIVE_CONTEXT_PASS',
             original_inputs=FieldCodec.encode(tuple(stored.rows.values())),
             manifests=len(manifests), source_unchanged=True, query_preserved_journal=True,
             original_native_user=user.id, original_native_reply=terminal_replies[-1].id)
     except BaseException as error:
-        receipt.update(state='FAILED_NO_REPLAY', error=repr(error))
+        acknowledgement.update(state='FAILED_NO_REPLAY', error=repr(error))
         raise
     finally:
         if owner is not None:
-            receipt['original_dispositions'] = FieldCodec.encode(
+            acknowledgement['original_dispositions'] = FieldCodec.encode(
                 stored_inputs(owner._comms.root))
             await owner.shutdown()
             if (options.context_only or options.terminal_only or options.recorded_publication) and 'child' in locals():
-                receipt['native_child_retired'] = child.proc.retired
-                receipt['native_child_exited'] = not child.proc.alive()
+                acknowledgement['native_child_retired'] = child.proc.retired
+                acknowledgement['native_child_exited'] = not child.proc.alive()
                 assert child.proc.retired and not child.proc.alive()
-        receipt['elapsed_seconds'] = time.monotonic() - started
-        (root / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
-        print(json.dumps(receipt), flush=True)
+        acknowledgement['elapsed_seconds'] = time.monotonic() - started
+        (root / 'terminal-acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2))
+        print(json.dumps(acknowledgement), flush=True)
 
 
 def complete_goal_controls(root):
@@ -377,7 +377,7 @@ def complete_goal_controls(root):
     else:
         assert isinstance(source.goal_checkpoint, AbsentGoalCheckpoint)
         assert not original_origin.applies(source, service.registry.snapshot())
-    receipt = {'scope': 'authorized post-terminal goal controls and recorded CLI; continuous49 remains FAILED',
+    acknowledgement = {'scope': 'authorized post-terminal goal controls and recorded CLI; continuous49 remains FAILED',
                'python': sys.executable, 'core': agent_comms.__file__, 'root': str(root),
                'native_prompts': 0, 'provider_calls': 0, 'input_replays': 0, 'owner_restarts': 0,
                'original_goal': FieldCodec.encode(source.goal_checkpoint)}
@@ -405,7 +405,7 @@ def complete_goal_controls(root):
                 actor=RuntimeInvocable)
         except ValueError as error:
             assert 'No declared dependency is working' in str(error)
-            receipt['standby_refused_without_active_dependency'] = str(error)
+            acknowledgement['standby_refused_without_active_dependency'] = str(error)
         else:
             raise AssertionError('Standby accepted a completed, non-active dependency')
         durable = stored_inputs(dispositions.root)
@@ -422,17 +422,17 @@ def complete_goal_controls(root):
             if item.turn.matches_generation(manifests[-1].turn.occurrence.generation)))
         after = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in retained}
         assert before == after
-        receipt.update(state='SCOPED_POST_TERMINAL_CONTROLS_PASS',
+        acknowledgement.update(state='SCOPED_POST_TERMINAL_CONTROLS_PASS',
             absent=FieldCodec.encode(absent), replacement=FieldCodec.encode(current),
             old_scope_inapplicable=True, original_inputs_durably_unchanged=True,
             retained_hashes=after, recorded_cli=recorded, context_diff=difference)
     except BaseException as error:
-        receipt.update(state='FAILED_NO_REPLAY', error=repr(error))
+        acknowledgement.update(state='FAILED_NO_REPLAY', error=repr(error))
         raise
     finally:
-        receipt['elapsed_seconds'] = time.monotonic() - started
-        (root / 'goal-completion-receipt51.json').write_text(json.dumps(receipt, indent=2))
-        print(json.dumps(receipt), flush=True)
+        acknowledgement['elapsed_seconds'] = time.monotonic() - started
+        (root / 'goal-completion-receipt51.json').write_text(json.dumps(acknowledgement, indent=2))
+        print(json.dumps(acknowledgement), flush=True)
 
 
 def complete_history_controls(root):
@@ -506,12 +506,12 @@ def complete_history_controls(root):
     assert 'No original context manifest' in query('history-renamed', '--turn', '1', accepted=False)['error']
     after = hashlib.sha256(service.bus.log.path.read_bytes()).hexdigest()
     assert before == after
-    receipt = dict(state='INSTALLED_HISTORICAL_CLI_PASS', python=sys.executable,
+    acknowledgement = dict(state='INSTALLED_HISTORICAL_CLI_PASS', python=sys.executable,
         core=agent_comms.__file__, original_records=FieldCodec.encode(expected),
         queries=outputs, wire_sha256=after, original_wire_unchanged=True,
         native_prompts=0, provider_calls=0, public_mutations=0, original_input_replays=0)
-    (root / 'context-history-receipt.json').write_text(json.dumps(receipt, indent=2))
-    print(json.dumps({key: value for key, value in receipt.items()
+    (root / 'context-history-acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2))
+    print(json.dumps({key: value for key, value in acknowledgement.items()
                       if key not in ('original_records', 'queries')}), flush=True)
 
 

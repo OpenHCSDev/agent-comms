@@ -54,7 +54,7 @@ console.log(JSON.stringify({session:manager.getSessionFile(),user,final}));
                        native_id='c' * 32, text='Protected UNKNOWN native delivery')
     # A genuine expired original with reply-only routing is still carried;
     # no turn is executed and the original process exits before the batch.
-    service.agents.begin_turn('alpha', 'retained-original-turn', 'Original no-provider custody',
+    service.agents.begin_turn('alpha', 'retained-original-turn', 'Original no-provider ownership',
                              TurnRouting((), MessageRoute('alpha', ('#team',))))
     print(json.dumps({**seed, **native}), flush=True)
 

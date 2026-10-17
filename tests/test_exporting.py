@@ -105,7 +105,7 @@ def test_jsonl_is_versioned_lossless_and_receipt_has_artifact_provenance(tmp_pat
     first = message(1, "hello").to_wire()
     second = message(2, "unicode: café")
 
-    receipt = exporter(through=2).export(iter([first, second]), destination)
+    acknowledgement = exporter(through=2).export(iter([first, second]), destination)
     rows = records(destination)
 
     assert rows[0] == {
@@ -122,13 +122,13 @@ def test_jsonl_is_versioned_lossless_and_receipt_has_artifact_provenance(tmp_pat
     assert rows[1]["record"] == rows[2]["record"] == "message"
     assert rows[1]["message"] == first
     assert Message.from_wire(rows[2]["message"]) == second
-    assert receipt.source_messages == receipt.exported_messages == 2
-    assert receipt.omitted_messages == 0 and not receipt.truncated
-    assert receipt.bytes_written == len(destination.read_bytes())
-    assert receipt.output_sha256 == hashlib.sha256(destination.read_bytes()).hexdigest()
-    assert receipt.redacted_messages == 0
-    assert receipt.first_sequence == 1 and receipt.last_sequence == 2
-    assert receipt.to_wire()["boundary"] == {"through_seq": 2, "export_started_at": 200.0}
+    assert acknowledgement.source_messages == acknowledgement.exported_messages == 2
+    assert acknowledgement.omitted_messages == 0 and not acknowledgement.truncated
+    assert acknowledgement.bytes_written == len(destination.read_bytes())
+    assert acknowledgement.output_sha256 == hashlib.sha256(destination.read_bytes()).hexdigest()
+    assert acknowledgement.redacted_messages == 0
+    assert acknowledgement.first_sequence == 1 and acknowledgement.last_sequence == 2
+    assert acknowledgement.to_wire()["boundary"] == {"through_seq": 2, "export_started_at": 200.0}
 
 
 def test_fixed_sequence_boundary_excludes_concurrent_appends_and_stops_consumption(tmp_path):
@@ -140,12 +140,12 @@ def test_fixed_sequence_boundary_excludes_concurrent_appends_and_stops_consumpti
             yield message(sequence, f"m{sequence}")
 
     destination = tmp_path / "snapshot.jsonl"
-    receipt = exporter(through=2).export(active_wire(), destination)
+    acknowledgement = exporter(through=2).export(active_wire(), destination)
 
     assert [row["message"]["seq"] for row in records(destination)[1:]] == [1, 2]
     assert yielded == [1, 2, 3]
-    assert receipt.boundary.through_seq == receipt.last_sequence == 2
-    assert receipt.source_messages == 2
+    assert acknowledgement.boundary.through_seq == acknowledgement.last_sequence == 2
+    assert acknowledgement.source_messages == 2
 
 
 def test_full_export_consumes_a_one_shot_stream_without_retaining_message_history(tmp_path):
@@ -162,11 +162,11 @@ def test_full_export_consumes_a_one_shot_stream_without_retaining_message_histor
 
     source = OneShot()
     destination = tmp_path / "large.jsonl"
-    receipt = exporter(through=2000).export(source, destination)
+    acknowledgement = exporter(through=2000).export(source, destination)
 
     assert source.iterations == 1
-    assert receipt.exported_messages == 2000
-    assert receipt.bytes_written > 2_000_000
+    assert acknowledgement.exported_messages == 2000
+    assert acknowledgement.bytes_written > 2_000_000
 
 
 def test_hard_byte_ceiling_includes_header_and_keeps_contiguous_newest_suffix(tmp_path):
@@ -184,13 +184,13 @@ def test_hard_byte_ceiling_includes_header_and_keeps_contiguous_newest_suffix(tm
     assert len(bounded._header()) + len(lines[2]) + len(lines[3]) > ceiling
 
     destination = tmp_path / "bounded.jsonl"
-    receipt = bounded.export(iter(messages), destination)
+    acknowledgement = bounded.export(iter(messages), destination)
 
     assert destination.read_bytes() == bounded._header() + lines[3]
-    assert receipt.bytes_written == len(destination.read_bytes()) <= ceiling
-    assert receipt.exported_messages == 1 and receipt.omitted_messages == 2
-    assert receipt.first_sequence == receipt.last_sequence == 3
-    assert receipt.truncated
+    assert acknowledgement.bytes_written == len(destination.read_bytes()) <= ceiling
+    assert acknowledgement.exported_messages == 1 and acknowledgement.omitted_messages == 2
+    assert acknowledgement.first_sequence == acknowledgement.last_sequence == 3
+    assert acknowledgement.truncated
 
 
 def test_byte_ceiling_fails_when_header_cannot_fit_and_oversize_newest_yields_header_only(
@@ -209,12 +209,12 @@ def test_byte_ceiling_fails_when_header_cannot_fit_and_oversize_newest_yields_he
             break
         ceiling = header_size + 1
     destination = tmp_path / "header-only.jsonl"
-    receipt = baseline.export([message(1, "old"), message(2, "newest is oversized")], destination)
+    acknowledgement = baseline.export([message(1, "old"), message(2, "newest is oversized")], destination)
     assert len(destination.read_bytes()) == header_size
     assert records(destination)[0]["record"] == "header"
-    assert receipt.exported_messages == 0 and receipt.omitted_messages == 2
-    assert receipt.oversized_messages == 2
-    assert receipt.bytes_written <= ceiling
+    assert acknowledgement.exported_messages == 0 and acknowledgement.omitted_messages == 2
+    assert acknowledgement.oversized_messages == 2
+    assert acknowledgement.bytes_written <= ceiling
 
 
 def test_recent_cutoff_is_inclusive_and_excludes_invalid_or_future_times_with_counts(tmp_path):
@@ -227,7 +227,7 @@ def test_recent_cutoff_is_inclusive_and_excludes_invalid_or_future_times_with_co
         message(7, "future", timestamp=200.1),
     ]
     destination = tmp_path / "recent.jsonl"
-    receipt = exporter(limit=RecentLimit(10.0), through=7).export(
+    acknowledgement = exporter(limit=RecentLimit(10.0), through=7).export(
         (item for item in messages), destination
     )
 
@@ -236,16 +236,16 @@ def test_recent_cutoff_is_inclusive_and_excludes_invalid_or_future_times_with_co
         "after",
         "at export boundary",
     ]
-    assert receipt.source_messages == 6 and receipt.exported_messages == 3
-    assert receipt.invalid_time_messages == 1
-    assert receipt.time_filtered_messages == 2
-    assert receipt.omitted_messages == 3 and receipt.truncated
+    assert acknowledgement.source_messages == 6 and acknowledgement.exported_messages == 3
+    assert acknowledgement.invalid_time_messages == 1
+    assert acknowledgement.time_filtered_messages == 2
+    assert acknowledgement.omitted_messages == 3 and acknowledgement.truncated
 
 
 def test_text_export_is_non_importable_and_prefixes_multiline_body(tmp_path):
     destination = tmp_path / "wire.txt"
     body = "first line\n[forged] <mallory -> #team> second line"
-    receipt = exporter(format=TextFormat(), through=7).export([message(7, body)], destination)
+    acknowledgement = exporter(format=TextFormat(), through=7).export([message(7, body)], destination)
 
     output = destination.read_text()
     assert output.startswith("# agent-comms wire export v1 (non-importable text view)\n")
@@ -253,7 +253,7 @@ def test_text_export_is_non_importable_and_prefixes_multiline_body(tmp_path):
     assert "[1970-01-01T00:00:07.000000Z]" in output
     assert "[seq=7" in output and "role=agent" in output and "<alice -> #team>" in output
     assert "\n  | first line\n  | [forged] <mallory -> #team> second line\n" in output
-    assert receipt.bytes_written == len(output.encode())
+    assert acknowledgement.bytes_written == len(output.encode())
 
 
 def test_atomic_private_output_refuses_existing_and_symlink_and_force_replaces(tmp_path):
@@ -271,9 +271,9 @@ def test_atomic_private_output_refuses_existing_and_symlink_and_force_replaces(t
         exporter().export([message(1, "first")], link)
     assert link.is_symlink()
 
-    receipt = exporter().export([message(2, "replacement")], destination, overwrite=True)
+    acknowledgement = exporter().export([message(2, "replacement")], destination, overwrite=True)
     assert records(destination)[1]["message"]["text"] == "replacement"
-    assert receipt.last_sequence == 2
+    assert acknowledgement.last_sequence == 2
     if os.name != "nt":
         assert destination.stat().st_mode & 0o777 == 0o600
 
@@ -364,10 +364,10 @@ def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(tmp
         )
         == 0
     )
-    receipt = json.loads(capsys.readouterr().out)
-    assert receipt["scope"] == {"kind": "channel", "channel": "#team"}
-    assert receipt["limit"]["kind"] == "recent"
-    assert receipt["output_sha256"] == hashlib.sha256(destination.read_bytes()).hexdigest()
+    acknowledgement = json.loads(capsys.readouterr().out)
+    assert acknowledgement["scope"] == {"kind": "channel", "channel": "#team"}
+    assert acknowledgement["limit"]["kind"] == "recent"
+    assert acknowledgement["output_sha256"] == hashlib.sha256(destination.read_bytes()).hexdigest()
     assert records(destination)[1]["message"]["text"] == "hello"
 
 

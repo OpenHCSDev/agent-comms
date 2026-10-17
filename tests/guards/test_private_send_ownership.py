@@ -98,7 +98,7 @@ def test_selected_lifetime_cannot_reintroduce_partial_runner_authority():
 
 
 def test_native_execution_consumers_cannot_rebuild_stage_or_nullable_identity():
-    """The admitted execution family replaces the repeated original raw tuple."""
+    """The authorized execution family replaces the repeated original raw tuple."""
     from dataclasses import fields
     from agent_comms.native_input_record import NativeInputIdentity
 

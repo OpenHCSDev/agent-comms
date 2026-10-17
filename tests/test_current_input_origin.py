@@ -110,15 +110,15 @@ def test_foreign_or_changed_origin_refused_before_any_reservation(tmp_path):
                WireInputOrigin(origin.root_id, MessageReference(1, "forged-reference")))
     for witness in invalid:
         with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError):
-            with ExitStack() as custody:
+            with ExitStack() as ownership:
                 QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                    echo=True, images=(), controller=Client(), origin=witness, custody=custody)
-                custody.pop_all()
+                                    echo=True, images=(), controller=Client(), origin=witness, ownership=ownership)
+                ownership.pop_all()
     with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError, match="controller"):
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                echo=True, images=(), controller=None, origin=origin, custody=custody)
-            custody.pop_all()
+                                echo=True, images=(), controller=None, origin=origin, ownership=ownership)
+            ownership.pop_all()
     assert stored_inputs(agent.inputs.dispositions.root).rows == {}
 
 
@@ -174,17 +174,17 @@ def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_p
         FieldCodec.decode(HumanInputOrigin, {**encoded, "goal": None})
 
     with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError, match="scope"):
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                echo=True, images=(), controller=Client(), origin=absent, custody=custody)
-            custody.pop_all()
+                                echo=True, images=(), controller=Client(), origin=absent, ownership=ownership)
+            ownership.pop_all()
     assert stored_inputs(agent.inputs.dispositions.root).rows == {}
 
     with _store_lock(comms._wire_lock_path):
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             queued, _, _receipt = QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                            echo=True, images=(), controller=Client(), origin=restored, custody=custody)
-            custody.pop_all()
+                                            echo=True, images=(), controller=Client(), origin=restored, ownership=ownership)
+            ownership.pop_all()
     assert stored_inputs(agent.inputs.dispositions.root).lookup(queued.key).origin == restored
     assert restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
     current = comms.registry.require("beta")
@@ -207,10 +207,10 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     origin = capture(comms)
     exact = 'Keep the original λ /source.\nNever replay UNKNOWN.'
     with _store_lock(comms._wire_lock_path):
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             queued, _, _receipt = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
-                                            echo=True, images=(), controller=Client(), origin=origin, custody=custody)
-            custody.pop_all()
+                                            echo=True, images=(), controller=Client(), origin=origin, ownership=ownership)
+            ownership.pop_all()
     inputs = agent.inputs.dispositions
     row = stored_inputs(inputs.root).lookup(queued.key)
     original_inputs = inputs.path.read_bytes()
@@ -255,10 +255,10 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
 
     # Same text, separately reserved original inputs never acquire one identity.
     with _store_lock(comms._wire_lock_path):
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             second, _, _receipt = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
-                                            echo=True, images=(), controller=Client(), origin=origin, custody=custody)
-            custody.pop_all()
+                                            echo=True, images=(), controller=Client(), origin=origin, ownership=ownership)
+            ownership.pop_all()
     second_subject = stored_inputs(inputs.root).lookup(second.key).context_provenance()
     second_pin = comms.messaging.pin_input_constraint('beta', second_subject, worktree=origin.project)
     assert second_subject != subject

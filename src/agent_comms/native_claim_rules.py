@@ -192,7 +192,7 @@ class NativeTokenRule(ReservationRule):
         return check.row.owner_token_digest != check.token_digest
 
 
-class NativeAlreadyAdmittedRule(ReservationRule):
+class NativeAlreadyBoundRule(ReservationRule):
     check_type = NativeReservationCheck
     explanation = "The native input was already bound to a sending claim_scope."
 

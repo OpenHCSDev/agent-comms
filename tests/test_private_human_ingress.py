@@ -57,10 +57,10 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     assert {member.recipient_lookup for member in initial.audience.recipients} == set(
         lookups.values()
     )
-    receipt = accept_delivery_cohort(comms.bus, root_id, channel.seq, store)
-    assert isinstance(receipt, Applied)
-    assert receipt.value.member_count == 2
-    assert receipt.value.assignment_count == 1  # Bob is a frozen unmentioned observer.
+    acknowledgement = accept_delivery_cohort(comms.bus, root_id, channel.seq, store)
+    assert isinstance(acknowledgement, Applied)
+    assert acknowledgement.value.member_count == 2
+    assert acknowledgement.value.assignment_count == 1  # Bob is a frozen unmentioned observer.
     dm = comms.messaging.send_user_message("bob", "direct", worktree=str(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
     assert list(comms.views.dm_history_page(channel.sender, "bob").messages)[-1] == dm
@@ -126,7 +126,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
         nonlocal calls
         calls += 1
         original(metadata, row)
-        raise OSError("simulated lost receipt after durable append")
+        raise OSError("simulated lost acknowledgement after durable append")
 
     monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', fail_after_append)
     with pytest.raises(HumanInitialUnknownError, match="do not retry") as raised:

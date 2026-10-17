@@ -720,7 +720,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
     assert await agent.inputs.drain_inbox("beta") == 0
     assert calls == []
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        receipt = store.session._connection.execute(
+        acknowledgement = store.session._connection.execute(
             "SELECT kind,claim_id FROM cohort_delivery_receipts WHERE wire_root_id=? "
             "AND wire_seq=? AND recipient_lookup=?",
             (
@@ -729,7 +729,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
                 RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
             ),
         ).fetchone()
-        assert tuple(receipt) == ("unmentioned_observer", None)
+        assert tuple(acknowledgement) == ("unmentioned_observer", None)
 
 
 async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monkeypatch):

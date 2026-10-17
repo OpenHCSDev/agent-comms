@@ -773,7 +773,7 @@ class TypedStore:
     def _attached(
         self, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
     ) -> Iterator[sqlite3.Connection]:
-        """Serialize WAL attachment and retirement, not admitted SQL work.
+        """Serialize WAL attachment and retirement, not authorized SQL work.
 
         Even a read-only cold attachment initializes the WAL index. Another
         attachment or last-connection cleanup can make that initialization

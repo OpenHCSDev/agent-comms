@@ -25,11 +25,11 @@ class KeyedResponseReceipt:
         from .bus_publication import public_envelope_digest
 
         if self.wire_root_id != root_id:
-            raise ValueError("Response receipt belongs to another wire root.")
+            raise ValueError("Response acknowledgement belongs to another wire root.")
         if self.envelope_digest != public_envelope_digest(message.to_wire()):
-            raise ValueError("Response receipt public envelope digest differs.")
+            raise ValueError("Response acknowledgement public envelope digest differs.")
         if self.publication_key != canonical_publication_key(self.execution_id, message.target):
-            raise ValueError("Response receipt publication key differs from its execution/route.")
+            raise ValueError("Response acknowledgement publication key differs from its execution/route.")
         return self
 
     def add_unique(self, seen_keys: set[str]) -> None:
@@ -47,7 +47,7 @@ class DeliveryManifest:
     control: ControlClassification
     audience: FrozenAudience
     # Exact existing canonical decision projection. Its digest is already bound
-    # by immutable cohort receipts; changing this spelling would change proofs.
+    # by immutable cohort evidences; changing this spelling would change proofs.
     decisions: list[dict[str, str]]
     decisions_digest: str
 

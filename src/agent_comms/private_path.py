@@ -1,7 +1,7 @@
 """POSIX observations and private path roles, never enrollment authority.
 
 These values describe the observed filesystem. Possessing one cannot mint a
-fresh native session, admit an input or replace a returned durable receipt.
+fresh native session, admit an input or replace a returned durable acknowledgement.
 """
 
 from __future__ import annotations
@@ -160,7 +160,7 @@ class PrivateSocketRole(PrivateRole):
         through the held directory FD; native children may use it while the
         listener owns that FD. Receipt paths never derive from this address.
         POSIX platforms without proc use a private, temporary directory link
-        for the same inode. No socket or receipt moves into that directory.
+        for the same inode. No socket or acknowledgement moves into that directory.
         """
         path = Path(path).absolute()
         observed = path.parent.lstat()

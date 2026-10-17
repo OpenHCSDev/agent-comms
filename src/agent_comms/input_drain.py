@@ -410,7 +410,7 @@ class InputObservation:
         Every publisher's append changes the shared bus log, its marker, the
         sealed checkpoint and the coordination store, but none of that is this
         owner's concern until the address record shows rows this owner has not
-        admitted, or this owner's own coordination rows changed. The floor
+        authorized, or this owner's own coordination rows changed. The floor
         comparison and the sealed address read answer the bus and checkpoint
         components; _own_coordination_unchanged answers the coordination
         component. An unavailable answer keeps the full tick — unavailable

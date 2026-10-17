@@ -96,7 +96,7 @@ async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_bac
         }
         assert len(permissions) == 2
         receipts = [update for update in updates if isinstance(update, McpClientReceiptUpdate)]
-        assert len(receipts) == 1 and receipts[0].receipt.input_id == rows[0]["inputId"]
+        assert len(receipts) == 1 and receipts[0].acknowledgement.input_id == rows[0]["inputId"]
         assert owner._comms.registry.require("project").session_file == saved
         await proxy.close()
         proxy = None

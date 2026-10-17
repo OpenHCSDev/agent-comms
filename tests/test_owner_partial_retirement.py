@@ -128,7 +128,7 @@ def test_partial_retirement_transfers_original_custody_and_refuses_launch(mode, 
     phase = failure.stopped
     assert isinstance(phase, FencedOwnerBatch)
     assert phase.captured == batch.captured and phase.launches == batch.launches
-    assert phase.custody is batch.custody
+    assert phase.ownership is batch.ownership
     if mode == 'second_guard':
         assert failure.__cause__ is lifecycle.guard_refusal
         assert lifecycle.signal_boundaries == ['first']

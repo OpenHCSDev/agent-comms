@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-from agent_comms import candidate_maintenance, claim_claim
+from agent_comms import candidate_maintenance, claim_authority
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_response import (
     prepare_fenced_response, publish_fenced_response, resolve_existing_response,
@@ -105,15 +105,15 @@ def test_response_catches_up_and_supplies_recipient_awareness(tmp_path, notifica
                                 exact_target=case.reply_target, owner_witness=case.witness)
         result = publish_fenced_response(case.store, case.bus, case.fence,
                                         exact_target=case.reply_target, owner_witness=case.witness)
-        _, receipt = result.value.require_published_evidence(case.reply_target)
+        _, acknowledgement = result.value.require_published_evidence(case.reply_target)
         assert calls == [case.bus.log.path.stat().st_size]
         assert finished.wait(5)
-        initial = case.bus.log.read_delivery_cohort(case.root_id, receipt.seq)
-        (assignment,) = accept_delivery_cohort(case.bus, case.root_id, receipt.seq, case.store).value.assignments
+        initial = case.bus.log.read_delivery_cohort(case.root_id, acknowledgement.seq)
+        (assignment,) = accept_delivery_cohort(case.bus, case.root_id, acknowledgement.seq, case.store).value.assignments
         sender = _owner(case.comms, "sender")
-        awareness = _projection(index, case.store, sender, 0, receipt.seq)(initial, assignment, sender)
+        awareness = _projection(index, case.store, sender, 0, acknowledgement.seq)(initial, assignment, sender)
         assert awareness.complete
-        assert awareness.selected[0].assignment.wire_seq == receipt.seq
+        assert awareness.selected[0].assignment.wire_seq == acknowledgement.seq
         segments = awareness.segments(16384)
         assert segments and not any(isinstance(segment, OmittedAwareness) for segment in segments)
         assert len(list(case.bus.full_history_page().messages)) == 2
@@ -145,7 +145,7 @@ def test_selected_claim_and_terminal_release_notify_after_their_boundaries(tmp_p
     monkeypatch.setattr("test_claim_bus_read.prepare_fence_token", lambda: "notification-token")
     with selected_turn() as (comms, store, selected, resource):
         calls, finished = notifications(comms)
-        claim = claim_claim.publish_selected_resource_claim(comms, store, selected, "Alice", ExistingFileClaim(resource))
+        claim = claim_authority.publish_selected_resource_claim(comms, store, selected, "Alice", ExistingFileClaim(resource))
         first_bytes = comms.bus.log.path.stat().st_size
         assert calls == [first_bytes]
         assert finished.wait(5)

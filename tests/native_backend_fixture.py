@@ -40,7 +40,7 @@ class NativeBackendFixture:
         self.observed = []
 
     async def author_history(self):
-        """The SDK authors saved rows; no provider or receipt is invented."""
+        """The SDK authors saved rows; no provider or acknowledgement is invented."""
         package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
         result = await BoundedRun.run(
             ("node", "--input-type=module", "-e", """

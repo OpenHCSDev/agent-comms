@@ -77,9 +77,9 @@ def _accepted(
             recipient.canonical_thread,
             committed=True,
         )
-    receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
-    assert len(receipt.assignments) == 1
-    return initial, receipt.assignments[0]
+    acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
+    assert len(acknowledgement.assignments) == 1
+    return initial, acknowledgement.assignments[0]
 
 
 def _owner(comms: Comms, name: str) -> Thread:
@@ -201,7 +201,7 @@ def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
             def crash_after_seal(*_args, **_kwargs):
                 raise RuntimeError("simulated interruption after seal before commit")
 
-            monkeypatch.setattr(cohort, "_receipt_matches", crash_after_seal)
+            monkeypatch.setattr(cohort, "_claim_record", crash_after_seal)
         with pytest.raises(RuntimeError, match="simulated interruption"):
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         assert (
@@ -476,7 +476,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         builder = _projection(index, store, owner, 0, initial.message.seq)
         assert builder(initial, assignment, owner).complete
         # Disposable legacy/disk inconsistency only: supported writes freeze
-        # receipt facts. Restore the original trigger before checking schema.
+        # acknowledgement facts. Restore the original trigger before checking schema.
         db = store.session._connection
         trigger = db.execute(
             "SELECT sql FROM sqlite_master WHERE name='cohort_receipt_update_guard'"
@@ -534,9 +534,9 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         comms.threads._rename_thread("member000", "gamma")
         current_message = comms.messaging.send_initial_cohort("sender", "gamma", "new selected")
         current = comms.bus.log.read_delivery_cohort(root_id, current_message.seq)
-        receipt = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
-        assert len(receipt.assignments) == 1
-        current_claim = receipt.assignments[0]
+        acknowledgement = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
+        assert len(acknowledgement.assignments) == 1
+        current_claim = acknowledgement.assignments[0]
         index.maintain(rebuild=True)
         owner = _owner(comms, "gamma")
         result = _projection(index, store, owner, 0, current.message.seq)(

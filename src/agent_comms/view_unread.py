@@ -177,7 +177,7 @@ class IndexSlice:
 
 @dataclass(frozen=True)
 class ReplyIndexUpdate:
-    """A native-only prepared delta, admitted against one stored prefix."""
+    """A native-only prepared delta, authorized against one stored prefix."""
 
     before: ReplyIndex
     after: ReplyIndex
@@ -225,7 +225,7 @@ class ReplyIndexBatch:
 
 @dataclass
 class NativeReplyPreparation:
-    """The actual admitted work and future; deletion withdraws its original reads."""
+    """The actual authorized work and future; deletion withdraws its original reads."""
 
     reads: dict[str, tuple[ReplyIndex, FileRevision]]
     future: Future[ReplyIndexBatch]
@@ -293,7 +293,7 @@ class TranscriptReadState(ThreadOwnedState):
 
     @property
     def preparation(self) -> Future[ReplyIndexBatch] | None:
-        """The admitted completion itself, for the observer's existing wakeup."""
+        """The authorized completion itself, for the observer's existing wakeup."""
         return self._preparation.future if self._preparation is not None else None
 
     def _close_database(self) -> None:

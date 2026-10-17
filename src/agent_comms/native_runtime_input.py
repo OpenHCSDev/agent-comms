@@ -80,7 +80,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
     def __post_init__(self):
         self.execution
-        # The selected identity and the later context receipt are separate
+        # The selected identity and the later context acknowledgement are separate
         # acquisition phases of this ORIGINAL row, never two source selectors.
         session = self.selected_session
         if session is None:
@@ -108,7 +108,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             raise IdentityConflict("Native input has no recorded selected session") from error
 
     def require_context_proof(self) -> NativeContextProof:
-        """Recover the original committed receipt, never manufacture it from a path."""
+        """Recover the original committed acknowledgement, never manufacture it from a path."""
         from .native_pi import NativeContextProof
 
         reference = self.reference.require_recorded()
@@ -127,11 +127,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
     @classmethod
     def for_native_user(cls, db, reader, user, *, session_id):
-        """The original admitted native file/input owns stage and publication.
+        """The original authorized native file/input owns stage and publication.
 
         Viewer names and current registry owners cannot classify inherited or
-        saved native history. A recorded receipt additionally seals the exact
-        original user entry; a precommit admitted row still owns its stage.
+        saved native history. A recorded acknowledgement additionally seals the exact
+        original user entry; a precommit authorized row still owns its stage.
         """
         rows = cls.select(
             db, where="input_id=? AND session_file=? AND session_id=?",
@@ -166,7 +166,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     def publication_revision(cls, root, reader, owner_lookup):
         """Read only this native source's committed original reply relations.
 
-        Published receipts and their input/attempt links are immutable. Their
+        Published evidences and their input/attempt links are immutable. Their
         maximum sequence and cardinality change on publication or proof reset;
         unrelated owner activity cannot revoke a prepared page. No counter or
         projection is persisted, and the read closes before presentation work.
@@ -194,7 +194,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             )[0]
 
     def published_replies(self, db, user, owner_lookup):
-        """Only this original receipt can lend its execution publication."""
+        """Only this original acknowledgement can lend its execution publication."""
         if (self.owner_lookup, self.session_entry_id) != (owner_lookup, user.id):
             return ()
         return self.execution.published_replies(db, owner_lookup)
@@ -259,7 +259,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         *,
         verdict: type[SelectedTriage] | None = None,
     ) -> None:
-        """Commit the context receipt once against the original selected session."""
+        """Commit the context acknowledgement once against the original selected session."""
         if context.input_id != self.input_id:
             raise StaleFence("native context belongs to another reserved input")
         self.require_session_identity().require_context(context)

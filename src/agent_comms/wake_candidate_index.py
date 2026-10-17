@@ -2,7 +2,7 @@
 
 Maintenance explicitly replays a bounded bus prefix; a page reads SQLite WAL
 plus a 4 KiB prefix-tail fingerprint, never the whole wire or a bus lock.
-Pages never claim that bus decisions are sealed coordinator receipts.
+Pages never claim that bus decisions are sealed coordinator evidences.
 The original bus, coordinator and live owner must be verified independently.
 """
 
@@ -107,7 +107,7 @@ class CandidatePage:
 
 @dataclass(frozen=True, slots=True)
 class CommittedAppendHint:
-    """Untrusted scheduling hint, never a sealed claim or native input receipt."""
+    """Untrusted scheduling hint, never a sealed claim or native input acknowledgement."""
 
     root_id: Annotated[str, WireRootIdText]
     through_bytes: int
@@ -233,7 +233,7 @@ class WakeCandidateIndex(TypedStore):
                         else None,
                     )
                 )
-        return _ParsedRow(sequence, tuple(rows), verified.receipt)
+        return _ParsedRow(sequence, tuple(rows), verified.acknowledgement)
 
     @classmethod
     def _replay_prefix(
@@ -251,7 +251,7 @@ class WakeCandidateIndex(TypedStore):
         response_keys: list[CandidateResponseKey] = []
         stream.seek(offset)
         start = time.monotonic()
-        admitted = 0
+        authorized = 0
         for _ in range(max_rows):
             if time.monotonic() - start > cls.batch_seconds:
                 break  # Bounded maintenance; no expensive hot-path rebuild.
@@ -267,15 +267,15 @@ class WakeCandidateIndex(TypedStore):
             WireRecord.require_row_size(raw, error_type=ProjectionUnavailableError)
             if not raw.endswith(b"\n"):
                 raise ProjectionUnavailableError("incomplete candidate bus row")
-            if len(raw) > available and admitted:
+            if len(raw) > available and authorized:
                 # Keep the batch boundary inside the byte budget once it has
-                # admitted at least one record.
+                # authorized at least one record.
                 stream.seek(-(len(raw)), os.SEEK_CUR)
                 break
-            # A first record larger than the batch budget is admitted alone:
+            # A first record larger than the batch budget is authorized alone:
             # every batch with remaining source bytes must advance the
             # checkpoint; WireRecord independently admits its physical size.
-            admitted += 1
+            authorized += 1
             record = json.loads(raw, object_pairs_hook=unique_wire_object)
             if not isinstance(record, dict):
                 raise ProjectionUnavailableError("candidate bus row is not an object")

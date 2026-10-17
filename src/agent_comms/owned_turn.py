@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 
 
 class OwnedTurn:
-    """One admitted owner turn; stable source facts and native callbacks live here."""
+    """One authorized owner turn; stable source facts and native callbacks live here."""
 
     @property
     def thread(self):
@@ -262,7 +262,7 @@ class OwnedTurn:
                 self.thread,
                 TurnId(self.turn_id),
                 self.turn_lease.claimed_generation,
-                custody=reservation,
+                ownership=reservation,
             )
             self.original_keys = self.original.keys
             # The store enlists rollback before publication. The original keys

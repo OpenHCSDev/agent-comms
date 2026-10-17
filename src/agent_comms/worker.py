@@ -55,7 +55,7 @@ async def run() -> None:
 
 
 async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
-    """Consume this launch's explicitly admitted input, never scan for retries."""
+    """Consume this launch's explicitly authorized input, never scan for retries."""
     from .store_files import _store_lock
 
     async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):

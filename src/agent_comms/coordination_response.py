@@ -9,7 +9,7 @@ linearizes after commit. The
 rollback-journal transaction only spans one bounded, fsynced local bus row;
 ordinary bus reads are completed *before* acquiring a coordinator transaction.
 A crash may still leave a frozen PUBLISHING intent plus a durable bus row. The
-read-only resolver can settle an EXISTING exact receipt using the retained
+read-only resolver can settle an EXISTING exact acknowledgement using the retained
 current owner fence, but never creates an absent row or manufactures owner loss.
 """
 
@@ -179,7 +179,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
                         raise PublicationUncertain("no matching durable append dispatch")
                     matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
                     if matched is None:
-                        raise PublicationUncertain("no keyed bus receipt; no resend authorized")
+                        raise PublicationUncertain("no keyed bus acknowledgement; no resend authorized")
                     completed.append(
                         dispatch.complete(store, boundary, snapshot, intent, obligation, matched)
                     )
@@ -571,7 +571,7 @@ def _terminal_replay(
     owner_witness: LiveResponseOwner,
     exact_target: str,
 ) -> AlreadyApplied[RecoverySnapshot] | None:
-    """A finished immutable receipt may be re-read, never re-published."""
+    """A finished immutable acknowledgement may be re-read, never re-published."""
     snapshot = store.snapshots.get(fence.execution_id)
     if ResponseObligation.response_record(snapshot.publication_receipts, exact_target) is None:
         return None
@@ -580,11 +580,11 @@ def _terminal_replay(
     attempt = snapshot.require_attempt()
     if attempt.authority != fence.authority:
         raise StaleFence("finished response is not this owner's original attempt")
-    intent, receipt = snapshot.require_published_evidence(exact_target)
+    intent, acknowledgement = snapshot.require_published_evidence(exact_target)
     _require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=snapshot.completed_response())
     matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
-    if matched is None or matched.reference != receipt.reference:
-        raise PublicationUncertain("published SQL receipt has no exact durable bus row")
+    if matched is None or matched.reference != acknowledgement.reference:
+        raise PublicationUncertain("published SQL acknowledgement has no exact durable bus row")
     return AlreadyApplied(snapshot)
 
 
@@ -646,7 +646,7 @@ def _settle_fenced_response(
             matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
             if matched is None:
                 if not first_dispatch:
-                    raise PublicationUncertain("no keyed bus receipt; no resend authorized")
+                    raise PublicationUncertain("no keyed bus acknowledgement; no resend authorized")
                 # This call created the durable dispatch barrier, and owns the
                 # only authorized first append while its final fence is locked.
                 from .response_conversation import ResponseConversation

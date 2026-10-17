@@ -403,7 +403,7 @@ class AvailableQueueProjection(QueueProjection):
         return ""
 
     def validate_scope(self, scope: QueueScope | None) -> None:
-        # Null is admitted by the external observation envelope for unavailable
+        # Null is authorized by the external observation envelope for unavailable
         # queues. An available observation without its scope is malformed, not
         # another waiting state or permission to infer a different input grant.
         if scope is None:
@@ -532,7 +532,7 @@ class InputDeliveryChangedUpdate(AgentCommsUpdate):
 @dataclass(frozen=True)
 class McpClientReceiptUpdate(AgentCommsUpdate):
     turn_id: str
-    receipt: McpLiveReceipt
+    acknowledgement: McpLiveReceipt = field(metadata={"wire_name": 'receipt'})
 
 
 class CommsRequest(DeclaredFamily, affix="Request"):

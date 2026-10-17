@@ -1,4 +1,4 @@
-"""One original decision/correction journey through declared tools and wire custody."""
+"""One original decision/correction journey through declared tools and wire ownership."""
 
 import os
 import json
@@ -257,7 +257,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     monkeypatch.setenv("AGENT_COMMS_THREAD", "renamed-alpha")
     comms.registry.release_turn(alpha.turn_lease)
     assert retained.current_authored_sources(comms.registry.require("alpha"), comms.registry.snapshot()) == ()
-    with pytest.raises(ValueError, match="admitted"):
+    with pytest.raises(ValueError, match="authorized"):
         invoke_tool(comms, "comms_decision", request)
     assert bus.read_bytes() == before
     from agent_comms.comms import Comms

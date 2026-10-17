@@ -2,7 +2,7 @@
 
 Socket requests can precede streamed events. Only a matching native start
 permits the owner's action, and only its callback may consume a stored slot.
-These process-local transactions never reconstruct authority from saved receipts.
+These process-local transactions never reconstruct authority from saved evidences.
 """
 
 from __future__ import annotations
@@ -92,7 +92,7 @@ class ExecutingCall(CallObservation):
         input_id: str, round_number: int,
     ) -> None:
         # A failed terminal fsync cannot be retried or converted to a completed
-        # error by a subsequent event. The live receipt must succeed exactly once.
+        # error by a subsequent event. The live acknowledgement must succeed exactly once.
         call.observation = UncertainCall()
         call.claim_scope.finish(call, is_error, directory, input_id, round_number)
         call.observation = CompletedCall()
@@ -132,10 +132,10 @@ class AwaitingClaim(CallClaim):
         call.claim_scope = UncertainClaim()
         await action()
         call.observation.require_executing()
-        call.claim_scope = AdmittedCall()
+        call.claim_scope = AuthorizedCall()
 
 
-class AdmittedCall(CallClaim):
+class AuthorizedCall(CallClaim):
     def finish(
         self, call: NativeToolCall, is_error: bool, directory: Path,
         input_id: str, round_number: int,

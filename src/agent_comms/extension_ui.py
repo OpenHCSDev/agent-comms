@@ -20,14 +20,14 @@ if TYPE_CHECKING:
 class ExtensionUiSession:
     controller: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]] | None
     seen: set[str] = field(default_factory=set, init=False)
-    receipt: McpLiveReceipt | None = field(default=None, init=False)
+    acknowledgement: McpLiveReceipt | None = field(metadata={"wire_name": 'receipt'}, default=None, init=False)
 
     def observe(self, text: str | None, session: TurnSession) -> McpLiveReceipt | None:
-        # A receipt is informational, never permission to call a tool or send.
-        if self.receipt is not None or not session.permits_live_receipt():
+        # A acknowledgement is informational, never permission to call a tool or send.
+        if self.acknowledgement is not None or not session.permits_live_receipt():
             return None
-        self.receipt = McpLiveReceipt.from_status(text, session.original_input_id)
-        return self.receipt
+        self.acknowledgement = McpLiveReceipt.from_status(text, session.original_input_id)
+        return self.acknowledgement
 
     async def choose(self, request: DialogUiRequest, session: TurnSession) -> ExtensionUiChoice:
         key = request.require_id()

@@ -43,13 +43,13 @@ def main():
         actual = (installed / name).read_bytes()
         assert actual == (checkout / 'src/agent_comms' / name).read_bytes()
         hashes[name] = hashlib.sha256(actual).hexdigest()
-    receipt = {'state': 'INSTALLED_USER_PUBLISHER_SOURCE_JOURNEYS_PASS',
+    acknowledgement = {'state': 'INSTALLED_USER_PUBLISHER_SOURCE_JOURNEYS_PASS',
                'installed_package': str(installed), 'module_sha256': hashes,
                'journeys': results, 'provider_calls': 0, 'input_replays': 0,
                'native_launches': 0, 'conftest_scheduler_mock': False,
                'public_changes': [], 'full_native_ACP_UI_acceptance': False}
-    (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
-    print(json.dumps(receipt), flush=True)
+    (stage / 'acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2) + '\n')
+    print(json.dumps(acknowledgement), flush=True)
 
 
 if __name__ == '__main__':

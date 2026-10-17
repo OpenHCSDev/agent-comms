@@ -177,8 +177,8 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             )
             session_file.chmod(0o600)
         assert session_file is not None
-        # Model only claim_scope in its dedicated thread, not native receipt.
-        def admitted():
+        # Model only claim_scope in its dedicated thread, not native acknowledgement.
+        def authorized():
             claim_scope = _kwargs["prompt_send_boundary"]
             identity = NativeSessionIdentity(
                 json.loads(session_file.read_text().splitlines()[0])["id"], str(session_file)
@@ -186,7 +186,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             with claim_scope(identity):
                 calls.append((input_id, prompt))
 
-        await asyncio.to_thread(admitted)
+        await asyncio.to_thread(authorized)
         if fail_on == len(calls):
             raise NativePiUnavailable("fake backend process died")
         if fresh:
@@ -322,7 +322,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
     assert beta is not None and beta.disposition is CompletedAssignment
-    assert tuple(receipt.exact_target for receipt in beta.publications) == ("#team",) and beta.publications
+    assert tuple(acknowledgement.exact_target for acknowledgement in beta.publications) == ("#team",) and beta.publications
     assert len(beta_calls) == 2
     assert WakePolicy.relevance_instruction().content in beta_calls[0][1]
     assert '"expectation":"this is yours; answer the original committed message"' in beta_calls[1][1]
@@ -473,7 +473,7 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
     assert outcome is not None and tuple(
-        receipt.exact_target for receipt in outcome.publications
+        acknowledgement.exact_target for acknowledgement in outcome.publications
     ) == ("sender",)
     assert len(calls) == 1  # direct FULL, no separate triage invocation
     assert '"expectation":"this is yours; answer the original committed message"' in calls[0][1]
@@ -692,7 +692,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
         assert cursor is not None and cursor.input_id == outcome.input_id
         response = next(
             message for message in list(comms.bus.full_history_page().messages)
-            if message.reference in tuple(receipt.reference for receipt in outcome.publications)
+            if message.reference in tuple(acknowledgement.reference for acknowledgement in outcome.publications)
         )
         # The published own reply is nonbinding for beta, but belongs to the
         # certified scanned prefix. It cannot become a second injected source.
@@ -794,11 +794,11 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
         identity = kwargs["session"].identity
         saved.rename(moved)
 
-        def admitted():
+        def authorized():
             with kwargs["prompt_send_boundary"](identity):
                 pytest.fail("renamed selected source reached raw-send claim_scope")
 
-        await asyncio.to_thread(admitted)
+        await asyncio.to_thread(authorized)
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", renamed)
     with pytest.raises(IdentityConflict, match="exact saved session"):

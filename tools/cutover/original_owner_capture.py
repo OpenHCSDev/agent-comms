@@ -2,7 +2,7 @@
 
 Both ends use the current declarations. Old durable records require the separate
 one-shot carry first; there is no source-shape selection or compatibility reader.
-Launch credentials remain in RetainedOwnerLaunch's RAM-only custody.
+Launch credentials remain in RetainedOwnerLaunch's RAM-only ownership.
 """
 from __future__ import annotations
 

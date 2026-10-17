@@ -1,7 +1,7 @@
 """One-shot task member promotion after the original writer certified its preimage.
 
 This is never imported by runtime readers. The old writer owns decoding and
-original prefix custody; the target owns the promoted Message and its re-attested
+original prefix ownership; the target owns the promoted Message and its re-attested
 delivery. This module grants no write, owner start, input or wake authority.
 """
 from dataclasses import replace
@@ -18,7 +18,7 @@ from agent_comms.wire_record import WireRecord
 
 
 class OriginalPublicEnvelope:
-    """Borrow the certified preimage for its existing receipt validator only."""
+    """Borrow the certified preimage for its existing acknowledgement validator only."""
     def __init__(self, original, promoted):
         self.original = original
         self.promoted = promoted
@@ -57,8 +57,8 @@ class AuthoredTaskMemberPromotion:
             sender_name=initial.audience.sender_name,
         )
         recertified = replace(policy, initial=replace(initial, audience=audience))
-        # The original decoder already validated this receipt against its own
-        # Message. The receipt retains execution/key/root; only the new envelope
+        # The original decoder already validated this acknowledgement against its own
+        # Message. The acknowledgement retains execution/key/root; only the new envelope
         # content relation changes. Policy still owns target resolution/validation.
         original_response = policy.require_receipt(
             root_id, OriginalPublicEnvelope(original_public, message))

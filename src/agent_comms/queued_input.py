@@ -121,7 +121,7 @@ class QueuedInput:
         echo: bool,
         images: tuple[ImageInput, ...],
         controller: Any,
-        custody: ExitStack,
+        ownership: ExitStack,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[Self, InputAttempt]:
@@ -147,7 +147,7 @@ class QueuedInput:
             item.key, None, canonical, context.claim_scope.claimed_generation,
             canonical, item.text, origin=origin,
         )
-        document = inputs.dispositions.reserve_originals(row, custody=custody)
+        document = inputs.dispositions.reserve_originals(row, ownership=ownership)
         return item, document.lookup(item.key)
 
     @staticmethod
@@ -174,8 +174,8 @@ class QueuedInput:
     ) -> AsyncIterator[InputReservation[Self]]:
         """Serialize local queue placement; reserve durable input in a worker."""
         async with AsyncExitStack() as rollback:
-            custody = ExitStack()
-            rollback.push_async_callback(Coordination.run_worker, custody.close)
+            ownership = ExitStack()
+            rollback.push_async_callback(Coordination.run_worker, ownership.close)
             async with inputs.queue_lock:
                 sources = tuple(inputs.following_sources.get(session_id, {}).values())
 
@@ -185,7 +185,7 @@ class QueuedInput:
                         return cls.capture(
                             inputs, name, text=text, prompt=prompt, echo=echo,
                             images=images, controller=controller, input_id=input_id,
-                            origin=origin, custody=custody,
+                            origin=origin, ownership=ownership,
                         )
 
                 item, row = await Coordination.run_worker(capture)
@@ -368,13 +368,13 @@ class DeliveredInput(QueuedInput):
                         ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                         origin=WireInputOrigin(root_id, message.reference),
                     )
-                    with ExitStack() as custody:
-                        inputs.dispositions.reserve_originals(row, custody=custody)
+                    with ExitStack() as ownership:
+                        inputs.dispositions.reserve_originals(row, ownership=ownership)
                         paused = store.assignments.transition_preengagement(
                             assignment.assignment_id, DeferredAssignment,
                             expected_revision=assignment.revision,
                         ).value
-                        custody.callback(store.assignments.restore_unbound_delivery, paused)
+                        ownership.callback(store.assignments.restore_unbound_delivery, paused)
                         reserved.append((
                             cls(
                                 text=row.source_text, echo=False, context=context,
@@ -383,7 +383,7 @@ class DeliveredInput(QueuedInput):
                             ),
                             InputContent(text=rendered.text, contributions=rendered.contributions),
                         ))
-                        custody.pop_all()
+                        ownership.pop_all()
 
     @staticmethod
     async def _restore_unplaced(

@@ -18,7 +18,7 @@ from agent_comms.coordinator import Coordination
 from .bus_publication import CommittedDelivery
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
-from .coordination_cohort import _receipt_matches
+from .coordination_cohort import _claim_record
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
@@ -83,10 +83,10 @@ def _verify_selected_wake_state(
         raise IdentityConflict("Wake source or owner turn does not match")
     with store.session.read():
         assert_cohort_schema(store.session._connection)
-        receipt = _receipt_matches(store.session._connection, initial)
+        acknowledgement = _claim_record(store.session._connection, initial)
         if not any(
             assignment.assignment_id == claim_scope.wake_assignment_id
-            for assignment in receipt.assignments
+            for assignment in acknowledgement.assignments
         ):
             raise IdentityConflict("Wake claim is not in the sealed selected cohort")
         assignment = store.assignments.get(claim_scope.wake_assignment_id)
@@ -173,7 +173,7 @@ def publish_selected_resource_claim(
 
     The common lock order keeps stop and coordinator settlement behind the
     pre-append check. A lost append result is UNKNOWN; this call never retries it.
-    The returned claim is an ownership receipt, not file-write authorization.
+    The returned claim is an ownership acknowledgement, not file-write authorization.
     """
     with _selected_claim_boundary(comms, store, claim_scope, owner_name) as (
         bus,

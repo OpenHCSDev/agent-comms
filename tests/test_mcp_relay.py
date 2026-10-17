@@ -51,21 +51,21 @@ async def test_live_projection_requires_owning_acp_turn_and_session(saved_owner)
             updates.append(kwargs)
 
     observer = Observer()
-    receipt = McpLiveReceipt(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
-    event = ae.McpLiveStatus(receipt)
-    async with native.original_input(owner, session_id, "Original receipt operation") as turn:
+    acknowledgement = McpLiveReceipt(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
+    event = ae.McpLiveStatus(acknowledgement)
+    async with native.original_input(owner, session_id, "Original acknowledgement operation") as turn:
         original_id = turn.turn_id
         await owner._emit_event(session_id, event, observer, turn_id=original_id)
         assert len(updates) == 1
         assert updates[0]["session_id"] == session_id
         assert decode_updates(updates[0]["update"].field_meta) == (
-            McpClientReceiptUpdate(original_id, receipt),
+            McpClientReceiptUpdate(original_id, acknowledgement),
         )
     assert not owner.turns.turn_state(session_id).busy
     await owner._emit_event(session_id, event, observer, turn_id=original_id)
     async with native.original_input(owner, session_id, "Distinct successor operation") as successor:
         assert successor.turn_id != original_id
-        # A stale receipt arriving FIRST in a successor turn still loses.
+        # A stale acknowledgement arriving FIRST in a successor turn still loses.
         await owner._emit_event(session_id, event, observer, turn_id=original_id)
         await owner._emit_event("unbound-session", event, observer, turn_id=original_id)
         await owner._emit_event(session_id, event, observer, turn_id=None)
@@ -275,10 +275,10 @@ send({{"type":"message_start","message":{{"role":"user","content":prompt["messag
       "inputId":prompt["inputId"]}}}})
 send({{"type":"message_end","message":{{"role":"assistant","stopReason":"stop"}}}})
 send({{"type":"agent_settled"}})
-receipt = {input_receipt!r}
-receipt["inputId"] = prompt["inputId"]
+acknowledgement = {input_receipt!r}
+acknowledgement["inputId"] = prompt["inputId"]
 send({{"type":"extension_ui_request","id":"late","method":"setStatus",
-      "statusKey":"pi-mcp/live-v1","statusText":json.dumps(receipt)}})
+      "statusKey":"pi-mcp/live-v1","statusText":json.dumps(acknowledgement)}})
 """,
     )
     # A supplied, not-yet-set finish_event leaves stats_requested false at the

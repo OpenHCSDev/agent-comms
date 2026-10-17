@@ -1,4 +1,4 @@
-"""Installed snapshot values, original notification receipts and real sidebar rows."""
+"""Installed snapshot values, original notification evidences and real sidebar rows."""
 import argparse
 import asyncio
 from importlib.resources import files
@@ -48,7 +48,7 @@ async def main():
     comms.owners.stop('stopped')
     comms.owners.stop('archived')
     comms.threads.archive('archived')
-    message = comms.messaging.send_initial_cohort(owner, '#team', 'Original metadata receipt')
+    message = comms.messaging.send_initial_cohort(owner, '#team', 'Original metadata acknowledgement')
     original_wire = comms.bus.log.path.read_bytes()
     actor = comms.views.coordination_snapshot('stopped')
     human = comms.views.viewer_snapshot(str(root))

@@ -139,8 +139,8 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
 
     async def native_events(_bin, _args, task, *_pos, **options):
         native_id = "a" * 32
-        with options["send_boundary"](None, native_id, task) as admitted:
-            assert admitted
+        with options["send_boundary"](None, native_id, task) as authorized:
+            assert authorized
         assert options["native_start"](None, native_id, task)
         yield ae.Chunk(text="socket roundtrip")
         yield ae.StreamSettled()

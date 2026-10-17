@@ -1548,7 +1548,7 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
         PublicationReceipts(execution_id="e", exact_target="requester", seq=1,
                             message_id=message.message_id, received_at_ms=100).insert(c)
-        # PUBLISHING cannot retain receipt at COMMIT.
+        # PUBLISHING cannot retain acknowledgement at COMMIT.
     assert c.execute("SELECT count(*) FROM publication_receipts").fetchone()[0] == 0
     c.execute("BEGIN IMMEDIATE")
     PublicationReceipts(execution_id="e", exact_target="requester", seq=1,
@@ -1570,7 +1570,7 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
         c.execute("UPDATE publication_intents SET message=x'41' WHERE execution_id='e'")
     with pytest.raises(sqlite3.IntegrityError):
         c.execute("UPDATE publication_receipts SET seq=2 WHERE execution_id='e'")
-    with pytest.raises(sqlite3.IntegrityError, match="cannot erase publication receipt"):
+    with pytest.raises(sqlite3.IntegrityError, match="cannot erase publication acknowledgement"):
         c.execute(
             (
                 "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','failed'),revisi"

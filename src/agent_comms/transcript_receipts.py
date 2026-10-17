@@ -111,7 +111,7 @@ class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
 
 @dataclass(frozen=True)
 class AssignedSourceWindow:
-    """Conversation and sent sources captured with one receipt frontier."""
+    """Conversation and sent sources captured with one acknowledgement frontier."""
 
     cursor: WireFrontier
     sources: tuple[CommittedDelivery, ...]

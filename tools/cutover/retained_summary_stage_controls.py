@@ -62,10 +62,10 @@ try: origin.require_original('1'*40,())
 except RuntimeError: checks.append('wrong VCS source head refused by origin owner')
 else: raise AssertionError('wrong VCS source accepted')
 import hashlib
-receipt={'state':'existing-cohort-artifact-boundary-passed','checks':checks,
+acknowledgement={'state':'existing-cohort-artifact-boundary-passed','checks':checks,
  'activation_sha256':hashlib.sha256(a_path.read_bytes()).hexdigest(),
  'source_proof_sha256':hashlib.sha256(p_path.read_bytes()).hexdigest(),
  'source_heads':a.source_heads(),'public_actions':0,'providers':0,
  'strength':'original immutable package relationship; not claim_scope or actual future gate'}
-args.output.write_text(json.dumps(receipt,indent=2)+'\n')
-print(json.dumps(receipt,indent=2))
+args.output.write_text(json.dumps(acknowledgement,indent=2)+'\n')
+print(json.dumps(acknowledgement,indent=2))

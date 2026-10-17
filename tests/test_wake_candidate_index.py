@@ -1,4 +1,4 @@
-"""Bounded, disposable N/K candidate pages are never claim_scope receipts."""
+"""Bounded, disposable N/K candidate pages are never claim_scope evidences."""
 
 from __future__ import annotations
 
@@ -484,7 +484,7 @@ def test_candidate_decode_releases_writer_and_discards_a_losing_batch(tmp_path, 
     def another_writer(cls, source, *args, **kwargs):
         if not races:
             races.append(True)
-            # This is a real second SQL writer, admitted while the outer
+            # This is a real second SQL writer, authorized while the outer
             # operation decodes. Its committed checkpoint must win intact.
             assert not index.maintain(bootstrap_new=True, max_rows=1)
         return replay(source, *args, **kwargs)

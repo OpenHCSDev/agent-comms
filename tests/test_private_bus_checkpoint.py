@@ -144,7 +144,7 @@ def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
     assert witness.offset > 0
     reopened = Comms(comms.root)
     assert [item.message.seq for item in _page(reopened, alice)[1]] == [one.seq, three.seq]
-    # Source completeness says nothing about native injection or SQL receipts.
+    # Source completeness says nothing about native injection or SQL evidences.
     assert len(rows[0].decisions) == 2
 
 
@@ -171,7 +171,7 @@ def test_retained_fact_capture_is_exhaustive_scoped_and_detached(tmp_path, monke
     owner = comms.registry.require("Alice")
     with comms.bus.log.certified_read() as source:
         captured = source.retained_task_facts(owner.incarnation)
-        assert decoded == [], "Decoding retained publication custody"
+        assert decoded == [], "Decoding retained publication ownership"
     later = comms.messaging.send_user_message("Alice", "After the captured cut", worktree=str(tmp_path))
     facts = tuple(captured)
     assert tuple(fact.source for fact in facts if isinstance(fact, UserSourceTaskFact)) == tuple(original)

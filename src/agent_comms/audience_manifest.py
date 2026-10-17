@@ -70,7 +70,7 @@ class FrozenRecipient:
 
 @dataclass(frozen=True, slots=True)
 class FrozenAudience:
-    """Immutable precommit snapshot of the full delivered audience, not a receipt.
+    """Immutable precommit snapshot of the full delivered audience, not a acknowledgement.
 
     Neither the digest nor direct construction attests a bus append. At recovery,
     the bus owner must match this value to the original wire envelope/sideband.

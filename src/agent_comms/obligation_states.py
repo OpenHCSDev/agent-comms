@@ -1,4 +1,4 @@
-"""Response lifecycle owns receipt data and its public recovery projection."""
+"""Response lifecycle owns acknowledgement data and its public recovery projection."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
     @classmethod
     def load(cls, message_id: str | None, seq: int | None) -> ResponseState:
         if message_id is not None or seq is not None:
-            raise IntegrityViolationError("only published obligations may have a receipt")
+            raise IntegrityViolationError("only published obligations may have a acknowledgement")
         return cls()
 
     def require_preparation(self) -> None:
@@ -56,18 +56,18 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
         if not self.retryable:
             raise IdentityConflict("wire completion requires nonpublication obligation")
 
-    def validate_publication(self, intent, receipt) -> None:
+    def validate_publication(self, intent, acknowledgement) -> None:
         if intent is not None and not self.allows_intent:
             raise IntegrityViolationError("publication intent is invalid for obligation state")
         if intent is None and self.requires_intent:
             raise IntegrityViolationError("publishing and published obligations require intent")
-        self.validate_receipt(receipt)
-        if receipt is not None:
-            intent.validate_receipt(receipt)
+        self.validate_receipt(acknowledgement)
+        if acknowledgement is not None:
+            intent.validate_receipt(acknowledgement)
 
-    def validate_receipt(self, receipt) -> None:
-        if receipt is not None:
-            raise IntegrityViolationError("publication receipt exists iff published")
+    def validate_receipt(self, acknowledgement) -> None:
+        if acknowledgement is not None:
+            raise IntegrityViolationError("publication acknowledgement exists iff published")
 
 
 class PendingResponse(ResponseState):
@@ -118,7 +118,7 @@ class PublishedResponse(ResponseState):
 
     def __post_init__(self):
         if not isinstance(self.message_id, str) or not self.message_id:
-            raise IntegrityViolationError("published obligations require a receipt")
+            raise IntegrityViolationError("published obligations require a acknowledgement")
         if type(self.seq) is not int or self.seq <= 0:
             raise ValueError("receipt_seq must be positive")
 
@@ -130,16 +130,16 @@ class PublishedResponse(ResponseState):
     def receipt_seq(self):
         return self.seq
 
-    def validate_receipt(self, receipt) -> None:
-        if receipt is None:
-            raise IntegrityViolationError("publication receipt exists iff published")
-        if (receipt.message_id, receipt.seq) != (self.message_id, self.seq):
-            raise IntegrityViolationError("obligation receipt does not match publication")
+    def validate_receipt(self, acknowledgement) -> None:
+        if acknowledgement is None:
+            raise IntegrityViolationError("publication acknowledgement exists iff published")
+        if (acknowledgement.message_id, acknowledgement.seq) != (self.message_id, self.seq):
+            raise IntegrityViolationError("obligation acknowledgement does not match publication")
 
     @classmethod
     def load(cls, message_id, seq):
         if message_id is None or seq is None:
-            raise IntegrityViolationError("published obligations require a receipt")
+            raise IntegrityViolationError("published obligations require a acknowledgement")
         return cls(message_id, seq)
 
     @classmethod

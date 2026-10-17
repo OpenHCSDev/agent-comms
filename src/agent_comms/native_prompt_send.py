@@ -25,7 +25,7 @@ class PromptSendFailure(RuntimeError):  # noqa: N818 - original writer failure
 
 
 class PromptSendUnknown(PromptSendFailure):  # noqa: N818 - nominal UNKNOWN outcome
-    """The prompt send has no successful completion receipt; never resend."""
+    """The prompt send has no successful completion acknowledgement; never resend."""
 
 
 class PromptSendNotWritten(PromptSendFailure):  # noqa: N818 - original prebyte refusal
@@ -70,8 +70,8 @@ def _write_fenced(
     written = 0
     try:
         with measurements.operation("claim_wait"):
-            admitted = _enter_claim(fd, boundary, cancelled, measurements)
-        with admitted:
+            authorized = _enter_claim(fd, boundary, cancelled, measurements)
+        with authorized:
             deadline = time.monotonic() + timeout
             remaining = memoryview(payload)
             while remaining:
@@ -118,7 +118,7 @@ async def send_fenced_prompt(
     Contention waits for permission without retaining partial locks or
     depending on owner-loop callbacks. The write budget begins only after grant.
     Cancellation or a closed original pipe before grant proves no bytes. No
-    admitted send is retried.
+    authorized send is retried.
     """
     if os.name != "posix" or not payload or timeout <= 0:
         raise PromptSendNotWritten("Fenced prompt requires a live bounded POSIX pipe")

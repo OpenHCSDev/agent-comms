@@ -463,7 +463,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
         send = asyncio.create_task(native_write())
         try:
             # The original exclusive owner must resume on the same loop while
-            # its concurrent native write waits for shared ingress custody.
+            # its concurrent native write waits for shared ingress ownership.
             await asyncio.sleep(0.025)
             assert not entered.is_set()
         except BaseException:

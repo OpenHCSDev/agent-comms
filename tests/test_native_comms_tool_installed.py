@@ -17,11 +17,11 @@ async def test_native_send_and_bash_share_checked_execution(native_backend, monk
     claims = []
     admit = CodingToolOwner.admit
 
-    def admitted(owner, round_number, call):
+    def authorized(owner, round_number, call):
         admit(owner, round_number, call)
         claims.append((round_number, call.name))
 
-    monkeypatch.setattr(CodingToolOwner, "admit", admitted)
+    monkeypatch.setattr(CodingToolOwner, "admit", authorized)
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
         comms = owner._comms
         for name in ("requester", "receiver"):

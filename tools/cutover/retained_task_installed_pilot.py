@@ -44,15 +44,15 @@ def main():
         except subprocess.CalledProcessError:
             pass
         else:
-            raise AssertionError('Corrupt original certificate was admitted.')
+            raise AssertionError('Corrupt original certificate was authorized.')
         assert all(digest(root / name) == expected for name, expected in before.items())
-        assert not operation.receipt.exists()
-        assert not operation.receipt.with_name(operation.receipt.name + '.originals').exists()
-        receipt = {'state': 'CORRUPT_ORIGINAL_REFUSED_BEFORE_CARRY',
+        assert not operation.acknowledgement.exists()
+        assert not operation.acknowledgement.with_name(operation.acknowledgement.name + '.originals').exists()
+        acknowledgement = {'state': 'CORRUPT_ORIGINAL_REFUSED_BEFORE_CARRY',
                    'original_files_unchanged': True, 'preimages_created': False,
                    'provider_calls': 0, 'input_replays': 0, 'public_changes': []}
-        (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
-        print(json.dumps(receipt), flush=True)
+        (stage / 'acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2) + '\n')
+        print(json.dumps(acknowledgement), flush=True)
         return
     # Exercise the actual central operation even with zero live native owners.
     # The publisher cleared its owned fixture process before returning above.
@@ -89,7 +89,7 @@ def main():
     else:
         raise AssertionError('A completed carry was applied twice.')
     assert (root / 'bus.jsonl').read_bytes() == before
-    receipt = {'state': 'INSTALLED_ORIGINAL_TASK_CARRY_USER_SOURCE_PASS',
+    acknowledgement = {'state': 'INSTALLED_ORIGINAL_TASK_CARRY_USER_SOURCE_PASS',
                'target_python': sys.executable, 'original_python': str(original_python),
                'original_reference': seed['original'], 'user_subject': subject.to_wire(),
                'carry': json.loads((stage / 'carry.json').read_text()),
@@ -97,8 +97,8 @@ def main():
                'original_bus_preimage_preserved': True, 'repeat_refused_before_mutation': True,
                'provider_calls': 0, 'native_launches': 0, 'input_replays': 0,
                'full_native_ACP_UI_acceptance': False, 'public_changes': []}
-    (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
-    print(json.dumps(receipt), flush=True)
+    (stage / 'acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2) + '\n')
+    print(json.dumps(acknowledgement), flush=True)
 
 
 if __name__ == '__main__':

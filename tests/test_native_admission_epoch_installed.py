@@ -1,7 +1,7 @@
 """Real selected Pi send epoch, exact dead-owner recovery, and unrelated new input.
 
 Only the localhost provider response and the owned native child exit are
-controlled. Registry claim_scope, release receipt, process identity, coordinator,
+controlled. Registry claim_scope, release acknowledgement, process identity, coordinator,
 native input/proof journal and recovery monitor use their production owners.
 """
 
@@ -122,7 +122,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
             if row.input_id == input_id
         )
         # The original successful seed acquired this saved session. UNKNOWN
-        # deliberately has no reconstructed terminal/session-binding receipt.
+        # deliberately has no reconstructed terminal/session-binding acknowledgement.
         native_path = Path(saved_session)
         native_before = native_path.read_bytes()
         proof_path = Path(str(native_path) + ".input-proof")
@@ -166,7 +166,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
             assert any(
                 row.body == "NEW_NATIVE_EPOCH_COMPLETED" for row in list(comms.views.full_history_page().messages)
             )
-        receipt = {
+        acknowledgement = {
             "provider": "localhost-only",
             "provider_posts": calls + 1,
             "recorded_epoch": True,
@@ -181,8 +181,8 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
             "native_children_closed": all(not child.alive() for child in owned.children),
             "public_effects": 0,
         }
-        (evidence / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-        print(json.dumps(receipt, sort_keys=True))
+        (evidence / "acknowledgement.json").write_text(json.dumps(acknowledgement, indent=2) + "\n")
+        print(json.dumps(acknowledgement, sort_keys=True))
     finally:
         exit_allowed.set()
         await asyncio.to_thread(process.join, 5)

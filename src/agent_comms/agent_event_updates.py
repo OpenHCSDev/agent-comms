@@ -140,7 +140,7 @@ class AcpEventConsumer(MroDispatch):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(McpClientReceiptUpdate(turn_id, event.receipt)),
+                field_meta=encode_updates(McpClientReceiptUpdate(turn_id, event.acknowledgement)),
             ),
         )
 

@@ -125,7 +125,7 @@ def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp
     assert any(outcome is records[0] for outcome in projected[0][1])
     with pytest.raises(ValueError, match="multiple handling receipts"):
         tuple(NotificationAssignment.for_deliveries((initial,), (*records, records[0])))
-    # Duplicate receipts outside the acquired deliveries do not change their result.
+    # Duplicate evidences outside the acquired deliveries do not change their result.
     assert tuple(NotificationAssignment.for_deliveries((), (*records, records[0]))) == ()
 
 
@@ -161,12 +161,12 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
 def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     before = comms.transcripts.capture_page_read("beta")
-    receipt = PublishedMessageToolDetails.from_wire(invoke_tool(
+    acknowledgement = PublishedMessageToolDetails.from_wire(invoke_tool(
         comms, "comms_send",
         {"from": "beta", "to": "sender", "body": "Original outgoing ownership reply"},
         caller=NoThreadCaller(),
     ))
-    message, = comms.bus.log.messages_for_references((receipt.message.source,))
+    message, = comms.bus.log.messages_for_references((acknowledgement.message.source,))
     after = comms.transcripts.capture_page_read("beta")
     assert after.identity.wire_frontier.sequence == message.seq
     assert not before.current()

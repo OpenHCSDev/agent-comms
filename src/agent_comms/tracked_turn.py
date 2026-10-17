@@ -303,19 +303,19 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         return await turn.complete()
 
     async def complete(self) -> NativeTurnResult:
-        async with AsyncExitStack() as custody:
+        async with AsyncExitStack() as ownership:
             retirement = self.startup.measurements.operation("native_custody_retirement")
             # Exit this observation after every original resource callback.
-            custody.push(retirement)
+            ownership.push(retirement)
             try:
-                self.custody = custody
+                self.ownership = ownership
                 # Transport resources are the turn's innermost lifetime. Stop
                 # closes them before child cleanup can block, so an
                 # interrupted selected turn cannot leave its socket path behind.
                 async with AsyncExitStack() as transport:
                     self.native = await self.acquire_native(transport, reuse=True)
-                    custody.push_async_callback(self.retain_or_close)
-                    await custody.enter_async_context(self.native.failures())
+                    ownership.push_async_callback(self.retain_or_close)
+                    await ownership.enter_async_context(self.native.failures())
                     if self.tool_socket is not None:
                         self.tool_socket.expected_pid = self.native.proc.pid
                     self.watchdog.reading()
@@ -344,7 +344,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             finally:
                 # LIFO starts the measurement immediately before cleanup. No
                 # await or manual close may separate this from stack retirement.
-                custody.callback(retirement.__enter__)
+                ownership.callback(retirement.__enter__)
 
     async def retain_or_close(self) -> None:
         """Let the session keep a verified idle child; close any other child."""
@@ -356,12 +356,12 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             return
         await self.native_session.close()
 
-    async def open_transport(self, custody: AsyncExitStack) -> None:
+    async def open_transport(self, ownership: AsyncExitStack) -> None:
         if self.selected_tool_mode is not None:
             self.tool_socket = self.selected_tool_mode.socket(
                 self.launch.session.directory, os.urandom(32).hex()
             )
-            custody.push_async_callback(self.tool_socket.close)
+            ownership.push_async_callback(self.tool_socket.close)
             await self.tool_socket.start()
             self.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(self.tool_socket.address)
             self.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = self.tool_socket.token
@@ -497,7 +497,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
             self.prompt_state = self.prompt_state.start(event)
-            self.evidence = self.custody.enter_context(
+            self.evidence = self.ownership.enter_context(
                 NativeEntry.open_input_evidence(self.active_session_file)
             )
             await Coordination.run_worker(self.evidence.observe)

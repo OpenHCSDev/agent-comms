@@ -68,7 +68,7 @@ class GoalScheduler:
         if scheduled is None:
             return
         # A worker wait cannot reserve the process-local queue. Its original
-        # rules recheck that resource before the admitted work is bound.
+        # rules recheck that resource before the authorized work is bound.
         try:
             check.require_valid()
         except ReservationViolationError:

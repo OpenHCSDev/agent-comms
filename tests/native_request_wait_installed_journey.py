@@ -258,7 +258,7 @@ async def run(arguments):
         report["cleanup"] = "fixture-owned children retired"
         server.close(); await server.wait_closed()
         await asyncio.gather(*tuple(connections), return_exceptions=True)
-        (stage / "receipt.json").write_text(json.dumps(report, indent=2) + "\n")
+        (stage / "acknowledgement.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"complete": report["complete"], "posts": len(posts), "stage": str(stage)}), flush=True)
 
 

@@ -103,12 +103,12 @@ def _immutable_assignment_matches(current: WakeAssignment, expected: WakeAssignm
     )
 
 
-def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:
+def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:
     message = initial.message
     audience = initial.audience
     row = ClaimBatchReceipts.one(db, wire_root_id=initial.wire_root_id, wire_seq=message.seq)
     if row is None or not row.sealed:
-        raise IdentityConflict("cohort receipt is absent or unsealed")
+        raise IdentityConflict("cohort acknowledgement is absent or unsealed")
     expected_count = sum(type(decision) is WakeDecision for decision in initial.decisions)
     if any(
         getattr(row, field) != expected
@@ -125,7 +125,7 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> Acce
             ("policy_version", initial.policy_version),
         )
     ):
-        raise IdentityConflict("sealed cohort receipt conflicts with committed bus")
+        raise IdentityConflict("sealed cohort acknowledgement conflicts with committed bus")
     expected = _expected_assignments(initial, row.accepted_at_ms)
     members = ClaimBatchMembers.select(
         db,
@@ -174,7 +174,7 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> Acce
             raise IdentityConflict("sealed cohort claim immutable facts conflict")
         current.append(actual)
     # A singleton claim for an explicitly no-wake observer cannot be accepted
-    # as a K member or hidden by a valid sealed N receipt.
+    # as a K member or hidden by a valid sealed N acknowledgement.
     if any(
         WakeAssignment.one(db, recipient_lookup=recipient.recipient_lookup, wire_seq=message.seq)
         for recipient, decision in zip(audience.recipients, initial.decisions, strict=True)
@@ -249,9 +249,9 @@ def accept_delivery_cohort(
             raise IdentityConflict("historical source precedes the current claim_scope floor")
         initial = source.delivery(wire_seq)
         assert_cohort_schema(db)
-        receipt = ClaimBatchReceipts.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
-        if receipt is not None:
-            return AlreadyApplied(_receipt_matches(db, initial))
+        acknowledgement = ClaimBatchReceipts.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
+        if acknowledgement is not None:
+            return AlreadyApplied(_claim_record(db, initial))
         if WakeAssignment.select(db, where="wire_seq=?", parameters=(wire_seq,)):
             raise IdentityConflict("singleton claim cannot be adopted by a cohort")
         if ClaimBatchReceipts.select(db, where="wire_seq=?", parameters=(wire_seq,)):
@@ -306,7 +306,7 @@ def accept_delivery_cohort(
             parameters=(wire_root_id, wire_seq),
             sealed=True,
         )
-        return Applied(_receipt_matches(db, initial))
+        return Applied(_claim_record(db, initial))
 
 
 def next_sealed_assignment(
@@ -316,7 +316,7 @@ def next_sealed_assignment(
     *,
     after_seq: int = 0,
 ) -> WakeAssignment | None:
-    """One receipt-backed pending selection shared by observation and execution.
+    """One acknowledgement-backed pending selection shared by observation and execution.
 
     Saturated settled pages cannot hide later work. Observation grants no turn;
     the execution still checks live ownership and verifies its original source.
@@ -353,14 +353,14 @@ def sealed_cohort_assignments(
     store: Coordination, recipient_lookup: str, *, after_seq: int = 0, limit: int = 100,
     state_capability: type = AssignmentState,
 ) -> tuple[WakeAssignment, ...]:
-    """Bounded receipt-backed projection. Never pages unbound singleton claims."""
+    """Bounded acknowledgement-backed projection. Never pages unbound singleton claims."""
     if (
         type(after_seq) is not int
         or after_seq < 0
         or type(limit) is not int
         or not 0 < limit <= 100
     ):
-        raise ValueError("receipt-backed page bounds are invalid")
+        raise ValueError("acknowledgement-backed page bounds are invalid")
     with store.session.read():
         db = store.session._connection
         assert_cohort_schema(db)

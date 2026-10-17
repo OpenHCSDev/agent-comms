@@ -181,7 +181,7 @@ class Message:
         return MessageReference(self.seq, self.message_id)
 
     def notification_references(self) -> tuple[MessageReference, ...]:
-        """Only an admitted delivery has recipient-handling outcomes to project."""
+        """Only an authorized delivery has recipient-handling outcomes to project."""
         return (self.reference,) if self.type.conversation_message and not self.notice else ()
 
     def require_decision(self) -> Decision:

@@ -67,8 +67,8 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
     frozen = comms.bus.log.read_delivery_cohort(root_id, selected.seq)
     assert len(frozen.audience.recipients) == recipients
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        receipt = accept_delivery_cohort(comms.bus, root_id, selected.seq, store).value
-        assert len(receipt.assignments) == 1
+        acknowledgement = accept_delivery_cohort(comms.bus, root_id, selected.seq, store).value
+        assert len(acknowledgement.assignments) == 1
         coverage = SourceCoverage(
             comms.bus,
             store,

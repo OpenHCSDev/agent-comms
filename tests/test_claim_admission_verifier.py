@@ -10,13 +10,13 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import claim_claim
+from agent_comms import claim_authority
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.claim_claim import (
+from agent_comms.claim_authority import (
     publish_selected_resource_claim,
     verify_selected_wake,
     write_selected_claimed_file,
@@ -214,7 +214,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             # A parent rename after obtaining the leaf fd but before truncate
             # must be detected against the pinned chain and must not mutate.
             with monkeypatch.context() as patch:
-                patch.setattr(claim_claim.os, "open", swap_after_open)
+                patch.setattr(claim_authority.os, "open", swap_after_open)
                 with pytest.raises(IdentityConflict, match="parent directory changed"):
                     write_selected_claimed_file(
                         comms, store, claim_scope, "Alice", selected_owner, b"late escape\n"

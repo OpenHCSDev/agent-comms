@@ -14,7 +14,7 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import ClearGoalAction, EditGoalAction, SetGoalAction
 from agent_comms.goal_history import GoalHistoryStore
-from agent_comms.owner_lifecycle import OwnerReleaseReceipt
+from agent_comms.owner_lifecycle import OwnerReleaseEvidence
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.threads import Thread
 from owner_read_projection import CurrentThreadProjection
@@ -36,7 +36,7 @@ def test_current_projection_preserves_authored_reports(tmp_path, disposition):
                               new_owner=True)
     author_model_report(service, 'author', TURN)
     first = service.registry.require('author')
-    release = OwnerReleaseReceipt(1, 2, first)
+    release = OwnerReleaseEvidence(1, 2, first)
     if disposition in ('clear', 'replace', 'older_release'):
         service.goals.update_goal(first.name, ClearGoalAction())
     if disposition in ('replace', 'older_release'):
@@ -52,7 +52,7 @@ def test_current_projection_preserves_authored_reports(tmp_path, disposition):
         assert packet.document == document
         assert RegistryDocument.from_wire(FieldCodec.encode(packet)['document']) == document
     assert any(row.reports_turn(TURN) for row in history)
-    assert FieldCodec.decode(OwnerReleaseReceipt, FieldCodec.encode(release)) == release
+    assert FieldCodec.decode(OwnerReleaseEvidence, FieldCodec.encode(release)) == release
     assert before == files(service.root)
 
 

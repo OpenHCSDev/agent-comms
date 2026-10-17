@@ -13,7 +13,7 @@ from .bus_publication import CommittedDelivery
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_cohort import _receipt_matches, pending_sealed_assignments
+from .coordination_cohort import _claim_record, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, _assert_response_schema
 from .coordination_snapshot import RecoverySnapshot
@@ -58,7 +58,7 @@ class SelectedParticipant(MroDispatch):
 
     @handles(ObservedAttestation)
     async def native_source(self, event: ObservedAttestation) -> None:
-        """Publish the original child identity before its one input is admitted.
+        """Publish the original child identity before its one input is authorized.
 
         The registry remains the current-source owner. This acquired operation
         receives its returned snapshot; input checks use this SAME context,
@@ -267,7 +267,7 @@ class SelectedParticipant(MroDispatch):
         """Borrow one original certificate for the already sealed pending batch.
 
         Initial acceptance owns writes. Selection verifies every original sealed
-        receipt through that same validator, without re-entering acceptance. Both
+        acknowledgement through that same validator, without re-entering acceptance. Both
         read resources close before any native preparation or provider request.
         """
         def capture():
@@ -291,10 +291,10 @@ class SelectedParticipant(MroDispatch):
             with resource.session.read():
                 assert_cohort_schema(resource.session._connection)
                 for assignment, initial in zip(assignments, originals, strict=True):
-                    receipt = _receipt_matches(resource.session._connection, initial)
+                    acknowledgement = _claim_record(resource.session._connection, initial)
                     if not any(row.assignment_id == assignment.assignment_id
-                               for row in receipt.assignments):
-                        raise IdentityConflict("selected assignment is absent from its sealed receipt")
+                               for row in acknowledgement.assignments):
+                        raise IdentityConflict("selected assignment is absent from its sealed acknowledgement")
                     assignment.require_selected_source(initial, identity.thread)
                     identity.require(resource, assignment.recipient_lookup)
 

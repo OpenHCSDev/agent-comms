@@ -168,7 +168,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
             assert projection_bytes() == before
         else:
             # The same observer serves actual foreground work between the two
-            # admitted index units, with no append, expiry tick or new request.
+            # authorized index units, with no append, expiry tick or new request.
             assert any(isinstance(value, ReadAnswered) and value.request_id == 9976
                        and value.value == "bob" for value in results)
         attempts.append(True)
@@ -364,7 +364,7 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
 
 
 def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
-    """Real page coverage and read receipts keep clocks independent of unread."""
+    """Real page coverage and read evidences keep clocks independent of unread."""
     comms = wire(tmp_path)
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))

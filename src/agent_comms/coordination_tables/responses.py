@@ -270,7 +270,7 @@ WHEN json_extract(OLD.lifecycle, '$.kind') = 'published' AND (
     OR json_extract(NEW.lifecycle, '$.seq') IS NOT json_extract(OLD.lifecycle, '$.seq')
 )
 BEGIN
-    SELECT RAISE(ABORT, 'published obligation receipt is frozen');
+    SELECT RAISE(ABORT, 'published obligation acknowledgement is frozen');
 END""",
             "obligation_publication_transition": """
 BEFORE UPDATE ON obligations
@@ -281,7 +281,7 @@ BEGIN
         SELECT 1 FROM publication_intents
         WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
     );
-    SELECT RAISE(ABORT, 'published obligation requires matching receipt')
+    SELECT RAISE(ABORT, 'published obligation requires matching acknowledgement')
     WHERE json_extract(NEW.lifecycle, '$.kind') = 'published' AND NOT EXISTS (
         SELECT 1 FROM publication_receipts
         WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
@@ -299,7 +299,7 @@ BEFORE UPDATE OF lifecycle ON obligations
 WHEN EXISTS (SELECT 1 FROM publication_receipts WHERE execution_id = OLD.execution_id AND exact_target = OLD.exact_target)
  AND json_extract(NEW.lifecycle, '$.kind') != 'published'
 BEGIN
-    SELECT RAISE(ABORT, 'frozen receipt requires published obligation');
+    SELECT RAISE(ABORT, 'frozen acknowledgement requires published obligation');
 END""",
             "obligation_state_with_intent": """
 BEFORE UPDATE OF lifecycle ON obligations

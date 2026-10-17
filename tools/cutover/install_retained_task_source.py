@@ -44,15 +44,15 @@ def prepare(bus, packet):
     if bus.path.read_bytes() != original:
         raise ValueError('Original opened task preimage changed before publication.')
     if scan.previous_sequence != packet['through_seq']:
-        raise ValueError('Task carry changed the original admitted sequence frontier.')
+        raise ValueError('Task carry changed the original authorized sequence frontier.')
     if not changed:
         raise ValueError('No retired task declaration requires this carry.')
     return marker, original, b''.join(target_rows), changed
 
 
 def main():
-    root, descriptor, root_id, receipt, *mode = sys.argv[1:]
-    root, receipt = Path(root), Path(receipt)
+    root, descriptor, root_id, acknowledgement, *mode = sys.argv[1:]
+    root, acknowledgement = Path(root), Path(acknowledgement)
     bus = require_retained_writer(root, descriptor, root_id)
     packet = json.load(sys.stdin)
     marker, original, target, changed = prepare(bus, packet)
@@ -61,13 +61,13 @@ def main():
         return
     if mode:
         raise ValueError('Unknown task carry operation.')
-    originals = receipt.with_name(receipt.name + '.originals')
+    originals = acknowledgement.with_name(acknowledgement.name + '.originals')
     if (originals / 'bus.jsonl').read_bytes() != original:
         raise ValueError('Original bus preimage must be retained before publication.')
     if (originals / 'bus_meta.json').read_bytes() != bus.metadata_path.read_bytes():
         raise ValueError('Original claim_scope marker preimage changed.')
-    if receipt.exists():
-        raise ValueError('Task carry receipt cannot be replaced.')
+    if acknowledgement.exists():
+        raise ValueError('Task carry acknowledgement cannot be replaced.')
     # These resources contain positions/derivations of the old physical prefix,
     # not input outcomes. Candidate replay explicitly refuses an inode change
     # until the stopped operator retires its disposable database and WAL.
@@ -103,8 +103,8 @@ def main():
               'through_seq': witness.through_seq, 'original_lock_retained': True,
               'retired_derived_indices': [path.name for path in retired],
               'native_writes': 0, 'input_replays': 0}
-    write_original(receipt, (json.dumps(result, indent=2) + '\n').encode())
-    descriptor = os.open(receipt.parent, os.O_RDONLY | os.O_DIRECTORY)
+    write_original(acknowledgement, (json.dumps(result, indent=2) + '\n').encode())
+    descriptor = os.open(acknowledgement.parent, os.O_RDONLY | os.O_DIRECTORY)
     try:
         os.fsync(descriptor)
     finally:

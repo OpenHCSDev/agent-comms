@@ -310,7 +310,7 @@ def _mock_model(root, agent, receipt_seen, second_request, release_final):
                 request = json.loads(self.rfile.read(size))
                 requests.append(request)
                 assert len(requests) <= 2, "Unexpected model retry/round"
-                assert receipt_seen.wait(12), "Native live receipt never reached ACP"
+                assert receipt_seen.wait(12), "Native live acknowledgement never reached ACP"
                 if len(requests) == 1:
                     names = [tool["function"]["name"] for tool in request["tools"]]
                     name = next(name for name in names if name.startswith("mcp_fixture_echo_"))
@@ -500,7 +500,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                             if isinstance(fact, McpClientReceiptUpdate):
                                 # The original response gate belongs to this
                                 # attachment, after any mounted observer has
-                                # consumed the receipt. Passive owner logging
+                                # consumed the acknowledgement. Passive owner logging
                                 # cannot attest that the live view received it.
                                 receipt_seen.set()
                             if isinstance(fact, TurnChangedUpdate):
@@ -626,7 +626,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                                 active = None
                         if isinstance(fact, McpClientReceiptUpdate):
                             assert active is not None and active.matches(fact.turn_id)
-                            receipts.append(fact.receipt)
+                            receipts.append(fact.acknowledgement)
                 assert active is None and len(settlements) == len(receipts) == 1, updates
                 assert [FieldCodec.encode(server) for server in receipts[0].servers] == [
                     {

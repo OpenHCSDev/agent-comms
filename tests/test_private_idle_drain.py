@@ -72,7 +72,7 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, 
     with log.certified_read(blocking=False) as source:
         source.require_current()
 
-    # A completed read must release physical custody before its result is
+    # A completed read must release physical ownership before its result is
     # delivered to the event loop. Otherwise synchronous final publication
     # waits on this same process while preventing the awaited file close.
     entered.clear()
@@ -146,9 +146,9 @@ async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
 @pytest.mark.asyncio
 async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path, monkeypatch):
     comms, agent, _root_id = _session(tmp_path)
-    origin = Message("user", "#team", "publication custody", InfoKind)
+    origin = Message("user", "#team", "publication ownership", InfoKind)
     execution = OwnedTurn(
-        agent.turns, "beta", "beta", "publication custody", origins=(origin,)
+        agent.turns, "beta", "beta", "publication ownership", origins=(origin,)
     )
     async with AsyncExitStack() as resources:
         async with AsyncExitStack() as permits:
@@ -669,7 +669,7 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
         assert len(drains) == settled
         assert address_reads
         comms.messaging.send_message("sender", "beta", "for beta")
-        await tick()  # the address record has an unadmitted row for beta: full tick
+        await tick()  # the address record has an unauthorized row for beta: full tick
         assert len(drains) == settled + 1, "a delivered row for the owner did not wake it"
         comms.messaging.send_message("sender", "gamma", "more for gamma")
         (comms.root / "private_bus_checkpoint.sqlite3").unlink()

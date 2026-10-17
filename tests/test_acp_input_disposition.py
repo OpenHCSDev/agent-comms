@@ -1,4 +1,4 @@
-"""Saved SDK owner input custody over actual native pipes and the owner socket."""
+"""Saved SDK owner input ownership over actual native pipes and the owner socket."""
 
 import asyncio
 import json
@@ -105,15 +105,15 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
         try:
             await wait_for(lambda: native.provider.posts == 1)
             # Subscribe after the original input starts, before transferring
-            # this socket controller's distinct follow-up into owned custody.
+            # this socket controller's distinct follow-up into owned ownership.
             await proxy.subscribe()
             accepted = await proxy.request(
                 "prompt", prompt=[{"type": "text", "text": "followup"}],
                 meta=encode_request(QueuePromptRequest()),
             )
-            (receipt,) = decode_updates(accepted["_meta"])
-            assert isinstance(receipt, InputDeliveryChangedUpdate)
-            public_id = receipt.input_id
+            (acknowledgement,) = decode_updates(accepted["_meta"])
+            assert isinstance(acknowledgement, InputDeliveryChangedUpdate)
+            public_id = acknowledgement.input_id
             key = "acp:" + public_id
             await wait_for(lambda: any(event.id == public_id and event.success
                                       for event in acknowledgements))
@@ -191,12 +191,12 @@ async def test_native_steer_keeps_original_input_and_turn_custody(native_backend
                 "prompt", prompt=[{"type": "text", "text": "steer now"}],
                 meta=encode_request(SteerPromptRequest()),
             )
-            (receipt,) = decode_updates(accepted["_meta"])
-            assert isinstance(receipt, InputDeliveryChangedUpdate)
+            (acknowledgement,) = decode_updates(accepted["_meta"])
+            assert isinstance(acknowledgement, InputDeliveryChangedUpdate)
             assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
             rows = stored_inputs(owner.inputs.dispositions.root).rows
             assert len(rows) == 2 and all(row.has_started for row in rows.values())
-            assert sent_text(native, rows["acp:" + receipt.input_id]).endswith("steer now")
+            assert sent_text(native, rows["acp:" + acknowledgement.input_id]).endswith("steer now")
             assert {row.turn_id for row in rows.values()} == {lease.turn_id}
             assert len({row.native_id for row in rows.values()}) == 2
             assert native.provider.posts == 2 and len(native.saved_inputs()) == 3

@@ -91,17 +91,17 @@ class RecoverySnapshot:
 
     def require_published_evidence(self, exact_target: str):
         intent = ResponseObligation.response_record(self.publication_intents, exact_target)
-        receipt = ResponseObligation.response_record(self.publication_receipts, exact_target)
-        if intent is None or receipt is None:
+        acknowledgement = ResponseObligation.response_record(self.publication_receipts, exact_target)
+        if intent is None or acknowledgement is None:
             raise StaleFence("response route has no frozen publication evidence")
-        return intent, receipt
+        return intent, acknowledgement
 
     def completed_response(self) -> bool:
         return self.execution.lifecycle.completed
 
     def require_attempt(self) -> AttemptRecord:
         if self.attempt is None:
-            raise StaleFence("execution has no admitted attempt")
+            raise StaleFence("execution has no authorized attempt")
         return self.attempt
 
     def require_current_attempt(self) -> AttemptRecord:
@@ -205,8 +205,8 @@ class RecoverySnapshot:
         for obligation in self.obligations:
             target = obligation.exact_target
             intent = ResponseObligation.response_record(self.publication_intents, target)
-            receipt = ResponseObligation.response_record(self.publication_receipts, target)
-            obligation.lifecycle.validate_publication(intent, receipt)
+            acknowledgement = ResponseObligation.response_record(self.publication_receipts, target)
+            obligation.lifecycle.validate_publication(intent, acknowledgement)
 
     @projected(view="snapshot")
     def can_retry(self) -> bool:
@@ -228,7 +228,7 @@ class RecoverySnapshot:
         db = session._connection
         execution, attempt = self.execution, self.attempt
         if self.publication_intents:
-            raise PublicationUncertain("publication requires bus-keyed receipt resolution")
+            raise PublicationUncertain("publication requires bus-keyed acknowledgement resolution")
         if (
             attempt is None
             or not self.is_current

@@ -122,7 +122,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         with pytest.raises(InputHandoffRefused, match="Queued input acceptance context changed"):
-            await InitialInput.run(agent.inputs, "project", "project", "admitted before goal change")
+            await InitialInput.run(agent.inputs, "project", "project", "authorized before goal change")
         assert backend_calls == 0
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0].unresolved

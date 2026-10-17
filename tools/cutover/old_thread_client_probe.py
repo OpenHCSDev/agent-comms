@@ -20,7 +20,7 @@ def main():
     assert closed is not None and closed.phase == 'paused'
     try:
         with service.owners.maintenance.allow_input():
-            raise AssertionError('Paused fixture admitted ingress')
+            raise AssertionError('Paused fixture authorized ingress')
     except RelationViolationError:
         pass
 

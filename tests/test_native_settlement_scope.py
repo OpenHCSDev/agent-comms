@@ -13,7 +13,7 @@ from agent_comms.coordination_session import (
 )
 from agent_comms.coordinator import Coordination, StandaloneCoordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
-from agent_comms.claim_claim import publish_selected_resource_claim
+from agent_comms.claim_authority import publish_selected_resource_claim
 from agent_comms.threads import Thread
 from test_claim_bus_read import selected_turn, settle_failed
 

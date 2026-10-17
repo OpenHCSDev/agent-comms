@@ -131,11 +131,11 @@ def original_input_consumer_journey(tmp_path, command):
     originals = []
     with _store_lock(comms._wire_lock_path):
         for _ in range(2):
-            with ExitStack() as custody:
+            with ExitStack() as ownership:
                 queued, _, _receipt = QueuedInput.capture(
                     agent.inputs, "beta", text=wording, prompt=wording, echo=True,
-                    images=(), controller=Client(), origin=origin, custody=custody)
-                custody.pop_all()
+                    images=(), controller=Client(), origin=origin, ownership=ownership)
+                ownership.pop_all()
             originals.append(stored_inputs(agent.inputs.dispositions.root).lookup(queued.key))
         assert agent.inputs.dispositions.record(
             "neutral-original", seq=None, owner="beta",

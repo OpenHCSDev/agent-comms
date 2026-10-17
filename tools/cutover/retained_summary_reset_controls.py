@@ -1,4 +1,4 @@
-"""Small installed-declaration/file-custody controls, never a public cutover."""
+"""Small installed-declaration/file-ownership controls, never a public cutover."""
 from pathlib import Path
 import argparse
 import hashlib
@@ -50,7 +50,7 @@ private_file(root / 'native.jsonl.input-proof', b'original proof bytes\n')
 protected = {str(path): sha(path) for path in (root / inputs.filename, root / 'native.jsonl', root / 'native.jsonl.input-proof')}
 images = {path.name: path.read_bytes() for path in RuntimeCompactionReset(root).paths}
 before = fds()
-receipt = RuntimeCompactionReset(root).retain_and_remove(root / 'preimages')
+acknowledgement = RuntimeCompactionReset(root).retain_and_remove(root / 'preimages')
 assert fds() == before
 assert all(not path.exists() for path in RuntimeCompactionReset(root).paths)
 assert all((root / 'preimages' / name).read_bytes() == body for name, body in images.items())
@@ -104,9 +104,9 @@ cohort = ReviewedRetainedSummaryCohort(base / 'future-target',
 assert FieldCodec.decode(ReviewedRetainedSummaryCohort, FieldCodec.encode(cohort)) == cohort
 checks.append('reviewed cohort uses original FieldCodec/PathText roundtrip; no format alias or raw fallback')
 
-result = {'state':'private-file-custody-controls-passed', 'checks':checks,
-          'runtime_reset':receipt, 'protected_originals':protected,
+result = {'state':'private-file-ownership-controls-passed', 'checks':checks,
+          'runtime_reset':acknowledgement, 'protected_originals':protected,
           'public_actions':0, 'provider_calls':0, 'owner_starts':0, 'prompt_count':0,
           'strength':'runtime resource controls; not whole cutover or public UI acceptance'}
-(base / 'receipt.json').write_text(json.dumps(result, indent=2) + '\n')
-print(json.dumps({'state':result['state'], 'checks':len(checks), 'receipt':str(base/'receipt.json')}))
+(base / 'acknowledgement.json').write_text(json.dumps(result, indent=2) + '\n')
+print(json.dumps({'state':result['state'], 'checks':len(checks), 'acknowledgement':str(base/'acknowledgement.json')}))

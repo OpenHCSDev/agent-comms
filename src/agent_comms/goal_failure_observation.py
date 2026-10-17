@@ -182,7 +182,7 @@ class FailedTurnProjection:
 
     def to_primitive(self) -> dict[str, object]:
         # Deliberately no incident IDs, token, worktree, turn ID, diagnostics,
-        # receipt bodies, canRetry, grants, or control actions.
+        # acknowledgement bodies, canRetry, grants, or control actions.
         return {"schema": 1, **FieldCodec.encode(self)}
 
 

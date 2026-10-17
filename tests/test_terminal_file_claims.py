@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.attempt_states import AttemptFailedAttempt, UnknownOutcomeAttempt
-from agent_comms.claim_claim import publish_selected_resource_claim
+from agent_comms.claim_authority import publish_selected_resource_claim
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.execution_states import FailedExecution

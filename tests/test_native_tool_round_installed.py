@@ -40,7 +40,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         yield {}, "tool_calls"
         if number == 2:
             provider.status = 400
-            provider.error_message = "controlled terminal after the distinct admitted effect"
+            provider.error_message = "controlled terminal after the distinct authorized effect"
 
     message_end = TrackedTurnSession.message_end
 

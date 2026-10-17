@@ -185,7 +185,7 @@ class AssignmentActivityEvidence(TypedRow):
         )
 
 class NotificationSource(DeclaredFamily, affix="NotificationSource"):
-    """Original frozen delivery or handling receipt, never an execution authority."""
+    """Original frozen delivery or handling acknowledgement, never an execution authority."""
 
     @abstractmethod
     def project(self, observation: RecipientActivity) -> MessageNotification: ...

@@ -137,8 +137,8 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
         response = await agent.prompt(
             "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(request)
         )
-        receipt = next(f for f in decode_updates(response.field_meta) if isinstance(f, InputDeliveryChangedUpdate))
-        assert receipt.input_id == request.input_id
+        acknowledgement = next(f for f in decode_updates(response.field_meta) if isinstance(f, InputDeliveryChangedUpdate))
+        assert acknowledgement.input_id == request.input_id
     assert requests[0].input_id != requests[1].input_id
     state = await agent.inputs.queue_state("beta")
     assert [item.input_id for item in state.projection.items] == [request.input_id for request in requests]

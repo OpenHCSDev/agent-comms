@@ -73,8 +73,8 @@ class ResponseClaimBlocked(RecoveryBlocked):
 
 
 class PublicationUncertain(CoordinationError):  # noqa: N818 - nominal outcome name
-    """A frozen publishing intent has no authoritative bus-keyed receipt."""
+    """A frozen publishing intent has no authoritative bus-keyed acknowledgement."""
 
 
 class PublicationActivationBlocked(CoordinationError):  # noqa: N818 - nominal outcome name
-    """No bus-owned idempotent append receipt is available in this slice."""
+    """No bus-owned idempotent append acknowledgement is available in this slice."""

@@ -113,7 +113,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 if broadcast and len(requests) <= 2:
                     # Both actual owners must reach the endpoint while the
                     # first request is still open. No model turn may retain
-                    # global bus/claim_scope custody through its response.
+                    # global bus/claim_scope ownership through its response.
                     if len(requests) == 2:
                         parallel_triage.set()
                     assert parallel_triage.wait(5), "Independent owner blocked behind another native request"
@@ -337,7 +337,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 selection = acquisitions[0]["operations"]["native_launch_selection"]
                 assert selection["count"] == 1 and selection["total_ns"] > 0
             print("Native original timing samples", len(native), "inputs", len(request_inputs),
-                  "maximum parent receipt lag seconds",
+                  "maximum parent acknowledgement lag seconds",
                   max((row["recorded_monotonic_ns"] - int(row["native"]["monotonicNs"])) / 1e9
                   for row in native), flush=True)
             return
@@ -430,7 +430,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 rejected_input = rejected[0].input_id
             assert "invalid triage decision" in list(comms.views.channel_history_page("#team").messages)[-1].body
             fresh = comms.messaging.send_message("answerer", "#team", "CONTINUITY_FRESH_SOURCE")
-            await until(lambda: len(requests) == 3, "Fresh channel source admitted without retrying rejected input")
+            await until(lambda: len(requests) == 3, "Fresh channel source authorized without retrying rejected input")
             await until(
                 lambda: any(isinstance(fact, CursorAdvancedUpdate)
                             and isinstance(fact.envelope.observation, VerifiedCursorObservation)
@@ -500,7 +500,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             evidence = Path(retained_evidence)
             evidence.mkdir(mode=0o700, parents=True, exist_ok=True)
             shutil.copytree(tmp_path, evidence / "private-originals")
-            (evidence / "receipt.json").write_text(json.dumps({
+            (evidence / "acknowledgement.json").write_text(json.dumps({
                 "original_root": str(tmp_path),
                 "wire_root_id": root_id,
                 "native_package": str(package),

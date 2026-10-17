@@ -307,7 +307,7 @@ class SteeringInterrupted(AgentEvent):
 
 @dataclass(frozen=True)
 class McpLiveStatus(AgentEvent):
-    receipt: McpLiveReceipt
+    acknowledgement: McpLiveReceipt = field(metadata={"wire_name": 'receipt'})
 
 
 @dataclass(frozen=True)

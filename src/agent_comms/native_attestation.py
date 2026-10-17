@@ -61,7 +61,7 @@ class NativeAttestation(ABC):
     def invalidate(self) -> NativeAttestation:
         return LostAttestation()
 
-    def admits_extension_input(self, inputs) -> bool:
+    def allows_extension_input(self, inputs) -> bool:
         return False
 
     def conflicts(self, data) -> bool:
@@ -123,7 +123,7 @@ class KnownSessionAttestation(NativeAttestation):
     def require_identity(self) -> NativeSessionIdentity:
         return self.identity
 
-    def admits_extension_input(self, inputs) -> bool:
+    def allows_extension_input(self, inputs) -> bool:
         return inputs.permits_interaction
 
     def conflicts(self, data) -> bool:
@@ -156,7 +156,7 @@ class ObservedAttestation(NativeAttestation):
             return super().require_identity()
         return identity
 
-    def admits_extension_input(self, inputs) -> bool:
+    def allows_extension_input(self, inputs) -> bool:
         return self.identity is not None and inputs.permits_interaction
 
     def conflicts(self, data):

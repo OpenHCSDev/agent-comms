@@ -222,7 +222,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         def lifecycle():
             # This is intentionally a synchronous ordinary callback on the SAME
             # loop that awaits native send. The grant has already released
-            # registry custody; pipe backpressure cannot block this retirement.
+            # registry ownership; pipe backpressure cannot block this retirement.
             comms.registry.unregister(owner.name)
             lifecycle_done.append(True)
 

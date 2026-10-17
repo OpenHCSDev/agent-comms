@@ -369,7 +369,7 @@ class ReviewedRetainedSummaryCohort:
 
 
 class CommandDefaultPublication:
-    """Future command selection shares original link custody and recovery."""
+    """Future command selection shares original link ownership and recovery."""
 
     publication_scope: ClassVar[str]
     published_phase: ClassVar[str]
@@ -382,16 +382,16 @@ class CommandDefaultPublication:
         """Ordinary frontend/backend defaults retain the published native supply."""
         return self.original_route.native_package
 
-    def publish_defaults(self, receipt: Path):
+    def publish_defaults(self, acknowledgement: Path):
         """Change future launches; never stop or replace an existing owner."""
-        if receipt.exists() or receipt.is_symlink():
+        if acknowledgement.exists() or acknowledgement.is_symlink():
             raise RuntimeError('Original default publication attempt requires review; never repeat')
-        PrivateDirectoryRole.require(receipt.parent.lstat())
+        PrivateDirectoryRole.require(acknowledgement.parent.lstat())
         self.require_original()
         if self.native != self.default_native_package:
             raise RuntimeError('This default publication member cannot change native supply')
         with guard_default_route_write(self.original_route.root, blocking=False):
-            self._publish_default_links(receipt)
+            self._publish_default_links(acknowledgement)
 
     def _restore_default_links(self, directory: int):
         """Recover only our target links, preserving any foreign binding."""
@@ -413,7 +413,7 @@ class CommandDefaultPublication:
                for command in self.commands):
             raise RuntimeError('Default recovery preserves an unknown command binding')
 
-    def _publish_default_links(self, receipt: Path):
+    def _publish_default_links(self, acknowledgement: Path):
         directory = os.open(LINKS, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         route_directory = None
         try:
@@ -421,20 +421,20 @@ class CommandDefaultPublication:
             if os.fstat(directory).st_uid != os.geteuid():
                 raise RuntimeError('Default command directory is not owned')
             self.require_original()
-            descriptor = os.open(receipt, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            descriptor = os.open(acknowledgement, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
             with os.fdopen(descriptor, 'w') as opened:
                 json.dump({'phase': self.publication_scope + '-originals-verified',
                            'cohort': FieldCodec.encode(self), 'started': time.time()}, opened, indent=2)
                 opened.flush()
                 os.fsync(opened.fileno())
-            fsync_directory(receipt.parent)
+            fsync_directory(acknowledgement.parent)
             route_directory = os.open(active_route_path().parent,
                                       os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             try:
                 self.publish_route(route_directory)
                 self.publish_links(directory)
                 self.require_preserved_defaults()
-                _atomic_write_text(receipt, json.dumps({'phase': self.published_phase,
+                _atomic_write_text(acknowledgement, json.dumps({'phase': self.published_phase,
                     'cohort': FieldCodec.encode(self), 'finished': time.time()}, indent=2)+'\n', fsync_parent=True)
             except BaseException as cause:
                 recovery_error = None
@@ -452,7 +452,7 @@ class CommandDefaultPublication:
                 phase = self.publication_scope + (
                     '-failed-original-links-restored' if recovery_error is None
                     else '-failed-links-unknown')
-                _atomic_write_text(receipt, json.dumps({'phase': phase,
+                _atomic_write_text(acknowledgement, json.dumps({'phase': phase,
                     'cohort': FieldCodec.encode(self), 'error': repr(cause),
                     'recovery_error': recovery_error, 'finished': time.time()}, indent=2)+'\n', fsync_parent=True)
                 raise
@@ -604,7 +604,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
     task_carry: StoppedOwnerInstallation
     runtime_installation: RuntimeInstallation
     route_directory: int
-    receipt: Path
+    acknowledgement: Path = field(metadata={"wire_name": 'receipt'})
     recovery_originals: tuple[ReviewedArtifact, ...] = field(init=False, repr=False)
 
     def __post_init__(self):
@@ -633,9 +633,9 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
             original.require_original()
 
     def note(self, phase, **facts):
-        previous = json.loads(self.receipt.read_text())
+        previous = json.loads(self.acknowledgement.read_text())
         previous.update(phase=phase, **facts)
-        _atomic_write_text(self.receipt, json.dumps(previous, indent=2)+'\n', fsync_parent=True)
+        _atomic_write_text(self.acknowledgement, json.dumps(previous, indent=2)+'\n', fsync_parent=True)
 
     def require_selection(self, snapshot, owners):
         live = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}
@@ -681,15 +681,15 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         for original in self.originals:
             if original.process_alive or snapshot.threads[original.name] != original:
                 raise RuntimeError('Original owner exit/configuration proof changed')
-        directory = self.receipt.with_suffix('.originals')
+        directory = self.acknowledgement.with_suffix('.originals')
         directory.mkdir(mode=0o700)
         PrivateDirectoryRole.require(directory.lstat())
         paths = self.protected_files()
         protected = {str(path): digest(path) for path in sorted(paths)}
         # No decoding of old input records from a target-compaction journal.
-        with ExitStack() as custody:
-            runtime = custody.enter_context(RuntimeCompactionFiles(ROOT).acquire())
-            goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
+        with ExitStack() as ownership:
+            runtime = ownership.enter_context(RuntimeCompactionFiles(ROOT).acquire())
+            goals = ownership.enter_context(RuntimeGoalFiles(ROOT).acquire())
             # Freeze original membership before deriving the byte-preserved
             # partition. Goal members have their own preimage/row/DDL proof.
             unchanged = self.runtime_installation.unchanged_protected(paths, runtime).difference(goals.paths)
@@ -703,8 +703,8 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                       registry_original_sha256=digest(directory / 'registry.json'))
             goal_installation = self.runtime_installation.synchronize_goal(
                 goals, directory / 'goal-ledger')
-            installed_goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
-            # The carry and runtime member share the ORIGINAL stopped wire custody.
+            installed_goals = ownership.enter_context(RuntimeGoalFiles(ROOT).acquire())
+            # The carry and runtime member share the ORIGINAL stopped wire ownership.
             self.task_carry.after_stopped(lifecycle)
             installed = self.runtime_installation.install(runtime, directory / 'runtime-compaction')
             if self.protected_files() != paths or {str(path): digest(path) for path in unchanged} != invariant:
@@ -748,7 +748,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         for original, result in zip(self.originals, results, strict=True):
             current = snapshot.threads[result.thread]
             if result.thread != original.name or replace(current, process_identity=original.process_identity) != original:
-                raise RuntimeError('Original settings readback differs under retained wire custody')
+                raise RuntimeError('Original settings readback differs under retained wire ownership')
             RetainedOwnerLaunch.capture(current, snapshot, interpreter=str(self.cohort.target / 'bin/python'))
         self.note('retained-batch-launched-configurations-verified-public-ui-pending',
                   results=FieldCodec.encode(results), finished=time.time())
@@ -760,13 +760,13 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
 
 
 def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_carry: StoppedOwnerInstallation,
-            runtime_installation: RuntimeInstallation, receipt: Path):
+            runtime_installation: RuntimeInstallation, acknowledgement: Path):
     """Parent-only EXECUTION entry, with the reviewed affected journey gates and carry.
 
-    A retry never happens here. Any existing receipt/preimage refuses before
+    A retry never happens here. Any existing acknowledgement/preimage refuses before
     claim_scope, and the only stop/fence/launch implementation is the original one.
     """
-    if receipt.exists() or receipt.is_symlink() or receipt.with_suffix('.originals').exists():
+    if acknowledgement.exists() or acknowledgement.is_symlink() or acknowledgement.with_suffix('.originals').exists():
         raise RuntimeError('Original attempt requires review; never automatically repeat')
     cohort.require_original()
     service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
@@ -782,11 +782,11 @@ def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_
     try:
         acquire_exclusive_route_lock(directory)
         operation = PublishRetainedSummary(cohort, audience, owners, task_carry,
-                                          runtime_installation, directory, receipt)
+                                          runtime_installation, directory, acknowledgement)
         operation.require_selection(snapshot, owners)
-        receipt.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        PrivateDirectoryRole.require(receipt.parent.lstat())
-        descriptor = os.open(receipt, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        acknowledgement.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        PrivateDirectoryRole.require(acknowledgement.parent.lstat())
+        descriptor = os.open(acknowledgement, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(descriptor, 'w') as opened:
             json.dump({'phase':'preflight-complete', 'started':time.time(),
                        'cohort':FieldCodec.encode(cohort),
@@ -795,7 +795,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_
                        'owners_before':FieldCodec.encode(audience)}, opened, indent=2)
             opened.flush()
             os.fsync(opened.fileno())
-        fsync_directory(receipt.parent)
+        fsync_directory(acknowledgement.parent)
         runtime = RestartEnvironment(path=os.environ.get('PATH'), virtual_env=str(cohort.target)).for_interpreter(cohort.target / 'bin/python')
         return service.owners.restart_owners(runtime=runtime, cutover=operation)
     finally:

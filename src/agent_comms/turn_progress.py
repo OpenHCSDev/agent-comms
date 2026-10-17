@@ -270,7 +270,7 @@ class TurnProgress(events.AgentEventConsumer):
                 turn_id=self.turn_lease.turn_id, route=self.routing.reply,
             )
         if isinstance(published, events.Done):
-            # ACP publication may replace Done with its notification receipt;
+            # ACP publication may replace Done with its notification acknowledgement;
             # terminal consumers retain that exact completed outcome.
             self.result = published
         await self.publication.dispatch(published)

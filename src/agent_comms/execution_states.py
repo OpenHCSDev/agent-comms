@@ -221,6 +221,6 @@ class FailedExecution(InterruptedExecution):
 
     def validate_snapshot(self, snapshot, authorized):
         if bool(snapshot.publication_receipts):
-            raise IntegrityViolationError("failed execution cannot erase a publication receipt")
+            raise IntegrityViolationError("failed execution cannot erase a publication acknowledgement")
         if snapshot.attempt is not None and authorized:
             raise IntegrityViolationError("authorized retry cannot settle failed")

@@ -1,4 +1,4 @@
-"""Channel batch identity is proved by actual durable admitted inputs."""
+"""Channel batch identity is proved by actual durable authorized inputs."""
 
 from contextlib import AsyncExitStack
 from dataclasses import replace
@@ -47,11 +47,11 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
     ):
         assert not InputBatch.capture(messages, input_keys, text, owner, document).admits_multiple
 
-    with pytest.raises(ValueError, match="receipt is unavailable"):
+    with pytest.raises(ValueError, match="acknowledgement is unavailable"):
         InputBatch.capture(origins, (keys[0], "missing"), prompt, owner, document)
-    admitted = InputBatch.capture(origins, keys, prompt, owner, document)
-    assert admitted.originals == document.originals(keys)
-    assert admitted.keys == keys and admitted.prompt == prompt
+    authorized = InputBatch.capture(origins, keys, prompt, owner, document)
+    assert authorized.originals == document.originals(keys)
+    assert authorized.keys == keys and authorized.prompt == prompt
 
 
 @pytest.mark.asyncio

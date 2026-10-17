@@ -39,7 +39,7 @@ class RegistryOwner:
 
     @property
     def turn_lease(self) -> TurnLeaseFence:
-        """The admitted owner declaration determines its exact original lease."""
+        """The authorized owner declaration determines its exact original lease."""
         return self.thread.require_turn_lease()
 
     @classmethod
@@ -128,7 +128,7 @@ class RegistryOwner:
         return actual
 
     def require_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:
-        """Observe this admitted turn's source without admitting another input.
+        """Observe this authorized turn's source without admitting another input.
 
         Check the goal when accepting input. A legitimate goal change
         during this turn does not revoke its source observation; the exact

@@ -98,7 +98,7 @@ def test_valid_json_without_newline_not_exposed_by_any_gated_read(
     with pytest.raises(RelationViolationError, match="Incomplete"):
         list(comms.bus.full_history_page().messages)
     with pytest.raises(RelationViolationError, match="Incomplete"):
-        comms.bus.log.messages_for_references((MessageReference(1, "receipt"),))
+        comms.bus.log.messages_for_references((MessageReference(1, "acknowledgement"),))
     with pytest.raises(RelationViolationError, match="Incomplete"):
         comms.bus.log.latest_sequence()
     with (
@@ -558,14 +558,14 @@ def test_large_transition_reopens_and_exports_without_a_second_parser_limit(
     assert comms.bus.log.messages_for_references((committed.reference,)) == (committed,)
     assert all(owner.owner == "alice" for owner in comms.bus.log.claim_projection().values())
     destination = tmp_path / "safe-export.jsonl"
-    receipt = comms.views.export_wire(
+    acknowledgement = comms.views.export_wire(
         destination,
         format=JsonlFormat(),
         scope=EverythingScope(),
         limit=FullLimit(),
     )
     exported = [json.loads(line) for line in destination.read_text().splitlines()]
-    assert receipt.exported_messages == 1
+    assert acknowledgement.exported_messages == 1
     assert len(exported) == 2 and exported[1]["record"] == "message"
     assert exported[1]["message"] == committed.to_wire()
 

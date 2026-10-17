@@ -371,7 +371,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     def __post_init__(self):
         self.author.require_recorded()
         if self.source_turn.generation <= 0:
-            raise ValueError("A task declaration requires its original admitted turn")
+            raise ValueError("A task declaration requires its original authorized turn")
 
     @property
     def author(self):
@@ -397,7 +397,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
         self.require_sender(owner.name)
         lease = owner.require_turn_lease()
         if (lease.identity, lease.turn_id) != (self.source_turn, self.source_turn_id.value):
-            raise RelationViolationError("Task declaration's original turn is no longer admitted")
+            raise RelationViolationError("Task declaration's original turn is no longer authorized")
         self.scope.require_current(owner)
 
     def require_publication(self, sender, registry, original_source):

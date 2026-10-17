@@ -1,4 +1,4 @@
-"""One-use declared native carry under the existing stopped custody.
+"""One-use declared native carry under the existing stopped ownership.
 
 Original declarations authenticate the source. Current declarations own target
 DDL. Only matched clones are transformed; original files remain preimages.
@@ -621,7 +621,7 @@ class CarriedNativeStore(DeclaredFamily, affix='NativeStore'):
     candidate_sha256: str
     evidence: dict[str, Any]
 
-    def publisher(self, root, custody):
+    def publisher(self, root, ownership):
         def publish(staging, original):
             staging.replace_original(original)
         return publish
@@ -654,10 +654,10 @@ class PromptBindingNativeStore(NativeReleaseStore):
     def carry(cls, db, original, target, requests):
         return carry_binding(db, original, target)
 
-    def publisher(self, root, custody):
+    def publisher(self, root, ownership):
         from agent_comms.private_sidecar import _locked_directory, _read_snapshot, _publish
 
-        directory = custody.enter_context(_locked_directory(root / self.name))
+        directory = ownership.enter_context(_locked_directory(root / self.name))
         snapshot = _read_snapshot(directory, self.name)
         if snapshot is None:
             raise ValueError('Original prompt binding disappeared')
@@ -738,8 +738,8 @@ class NativeSchemaCarryPlan:
 
     def install(self, destination):
         self.require_candidate()
-        with ExitStack() as custody:
-            acquired = custody.enter_context(RuntimeNativeFiles(self.root).acquire())
+        with ExitStack() as ownership:
+            acquired = ownership.enter_context(RuntimeNativeFiles(self.root).acquire())
             by_name = {item.path.name:item for item in acquired.originals}
             if set(by_name) != {item.name for item in self.stores}:
                 raise ValueError('Original native store membership changed')
@@ -752,8 +752,8 @@ class NativeSchemaCarryPlan:
     def install_prepared(root, candidate, stores, acquired, destination, review,
                          classification='runtime/declaration-original-source-carry'):
         """One retained-preimage/publication lifetime for every carried store."""
-        with ExitStack() as custody:
-            publishers = {item.name:item.publisher(root, custody) for item in stores}
+        with ExitStack() as ownership:
+            publishers = {item.name:item.publisher(root, ownership) for item in stores}
             return NativeSchemaCarryPlan.publish_prepared(
                 root, candidate, stores, acquired, destination, review, publishers, classification)
 

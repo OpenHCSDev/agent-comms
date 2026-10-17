@@ -141,9 +141,9 @@ async def test_uncertain_binding_commit_denies_native_send_and_retry(tmp_path, m
     publish = private_sidecar._publish
 
     def uncertain(*args, **kwargs):
-        # Model a lost success receipt after the snapshot really became durable.
+        # Model a lost success acknowledgement after the snapshot really became durable.
         publish(*args, **kwargs)
-        raise private_sidecar.SidecarCommitUnknown("lost commit receipt")
+        raise private_sidecar.SidecarCommitUnknown("lost commit acknowledgement")
 
     monkeypatch.setattr(private_sidecar, "_publish", uncertain)
     with pytest.raises(private_sidecar.SidecarCommitUnknown):
@@ -183,14 +183,14 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
             session_file.chmod(0o600)
         assert session_file is not None
 
-        def admitted():
+        def authorized():
             identity = NativeSessionIdentity(
                 json.loads(session_file.read_text().splitlines()[0])["id"], str(session_file)
             )
             with _["prompt_send_boundary"](identity):
                 calls.append((input_id, prompt))
 
-        await asyncio.to_thread(admitted)
+        await asyncio.to_thread(authorized)
         if fresh:
             entries = [{"type": "session", "id": "isolated-session"}]
             proof_rows = []
@@ -656,7 +656,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
             opt_in=True,
         ).run()
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        # A mismatched journal cannot become a live-recorded source receipt.
+        # A mismatched journal cannot become a live-recorded source acknowledgement.
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,

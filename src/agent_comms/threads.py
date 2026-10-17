@@ -432,7 +432,7 @@ class Thread(ThreadProvenance):
     def require_turn_lease(self) -> TurnLeaseFence:
         lease = self.turn_lease
         if lease is None:
-            raise RelationViolationError("An admitted original turn is required")
+            raise RelationViolationError("An authorized original turn is required")
         return lease
 
     def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
@@ -444,7 +444,7 @@ class Thread(ThreadProvenance):
 
         Beginning a lease clears last_finished_turn_id. The preceding allocation
         is still derived from the original monotonic turn owner, not copied into
-        a timing register. Its row supplied the original admitted ID/generation.
+        a timing register. Its row supplied the original authorized ID/generation.
         Neither allocation nor finishing supplies subtask completion.
         """
         if identity.incarnation != self.incarnation:

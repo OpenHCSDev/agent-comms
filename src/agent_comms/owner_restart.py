@@ -148,7 +148,7 @@ class StoppedOwnerBatch:
     lifecycle: OwnerLifecycle
     wire_descriptor: int
     handoff: OwnerRestartHandoff
-    custody: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
+    ownership: ExitStack = field(metadata={"wire_name": 'custody'}, default_factory=ExitStack, repr=False, compare=False)
 
     @classmethod
     def accept(cls, lifecycle: OwnerLifecycle, descriptor: int, handoff: OwnerRestartHandoff):
@@ -173,7 +173,7 @@ class StoppedOwnerBatch:
 
     def close(self) -> None:
         """Release held locks and descriptors; never launch or retry inputs."""
-        self.custody.close()
+        self.ownership.close()
 
     def recover(self, operation: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
         results = operation.recover(self)
@@ -197,7 +197,7 @@ class StoppedOwnerFailure(Exception):
     """A failed fenced/stopped phase, not an unsignalled restart refusal."""
 
     def __init__(self, stopped: StoppedOwnerBatch | FencedOwnerBatch, operation: OwnerCutover):
-        super().__init__('Cutover failed after fencing; retirement custody requires explicit disposition')
+        super().__init__('Cutover failed after fencing; retirement ownership requires explicit disposition')
         self.stopped = stopped
         self.operation = operation
 
@@ -219,7 +219,7 @@ class FencedOwnerBatch:
     runtime: RestartEnvironment
     exited_processes: tuple[RetainedOwnerLaunch, ...] = ()
     retired: tuple[RetiredOwnerLaunch, ...] = ()
-    custody: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
+    ownership: ExitStack = field(metadata={"wire_name": 'custody'}, default_factory=ExitStack, repr=False, compare=False)
 
     @property
     def unconfirmed(self) -> tuple[tuple[Thread, int], ...]:
@@ -228,7 +228,7 @@ class FencedOwnerBatch:
         return tuple(item for item in self.captured if item[0].name not in names)
 
     def close(self) -> None:
-        self.custody.close()
+        self.ownership.close()
 
     def recover(self, operation: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
         # A partial fence has no all-stopped launch authority. In particular,
@@ -258,7 +258,7 @@ class FencedOwnerBatch:
                 from .attempt_recovery import RecoveryMonitorCapability
 
                 RecoveryMonitorCapability.settle_stopped_owner(self.lifecycle.root, thread)
-            wire = self.custody.enter_context(self.lifecycle.restart_wire())
+            wire = self.ownership.enter_context(self.lifecycle.restart_wire())
             snapshot = self.lifecycle.registry.snapshot()
             owners = progress.retired
             progress = replace(progress, retired=())
@@ -268,7 +268,7 @@ class FencedOwnerBatch:
             handoff = OwnerRestartHandoff(str(self.lifecycle.root), progress.retired, self.runtime,
                                          self.request.agent_bin, self.request.agent_args,
                                          self.request.launch_runtime)
-            stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, self.custody.pop_all())
+            stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, self.ownership.pop_all())
         except BaseException as cause:
             failure = StoppedOwnerFailure(progress, cutover)
             failure.__cause__ = cause
@@ -305,8 +305,8 @@ class AdmittedOwnerBatch:
             ) for thread, _ in captured)
             if captured:
                 cutover.require_launch(lifecycle)
-            admitted = cls(lifecycle, tuple(captured), launches, request, runtime)
-            fenced = admitted.fence()
+            authorized = cls(lifecycle, tuple(captured), launches, request, runtime)
+            fenced = authorized.fence()
         return fenced.complete(cutover)
 
     def fence(self) -> FencedOwnerBatch:

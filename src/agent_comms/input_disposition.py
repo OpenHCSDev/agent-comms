@@ -59,7 +59,7 @@ class InputDocument:
         try:
             return tuple(self.rows[key] for key in keys)
         except KeyError as error:
-            raise ValueError("Original input receipt is unavailable") from error
+            raise ValueError("Original input acknowledgement is unavailable") from error
 
     def transition(self, keys: tuple[str, ...], change) -> InputDocument:
         """Each original state decides its successor; unchanged rows stay intact."""
@@ -83,8 +83,8 @@ class InputDocument:
         Look up that producer's exact native ID/text rather than choosing the
         initial turn input, a public event or the first matching row.
         """
-        return tuple(receipt for row in self.rows.values()
-                     if (receipt := row.started_for_native(
+        return tuple(acknowledgement for row in self.rows.values()
+                     if (acknowledgement := row.started_for_native(
                          lease, native_id, sent_text, snapshot=snapshot
                      )) is not None)
 
@@ -237,22 +237,22 @@ class InputDispositions(TypedStore):
 
     def record(
         self, key: str, *, seq: int | None, owner: str, claim_scope: int, target: str, text: str,
-        origin: InputOrigin = UnattributedInputOrigin(), custody: ExitStack | None = None,
+        origin: InputOrigin = UnattributedInputOrigin(), ownership: ExitStack | None = None,
     ) -> bool:
         """Register supplied reservation rollback before publishing acceptance."""
         row = ReservedInput(key, seq, owner, claim_scope, target, text,
                             origin=origin)
-        document = self.record_originals(row, custody=custody)
+        document = self.record_originals(row, ownership=ownership)
         return document.rows[key] is row
 
     def record_originals(
-        self, *originals: ReservedInput, custody: ExitStack | None = None,
+        self, *originals: ReservedInput, ownership: ExitStack | None = None,
     ) -> InputDocument:
         """Publish one original cohort; return its exact captured document."""
         def reserve(original: InputDocument) -> InputDocument:
             changed = original.record(*originals)
-            if changed is not original and custody is not None:
-                custody.callback(
+            if changed is not original and ownership is not None:
+                ownership.callback(
                     self.settle_unbound,
                     tuple(key for key in changed.rows if key not in original.rows),
                 )
@@ -261,21 +261,21 @@ class InputDispositions(TypedStore):
         return self._update(*_members("key", (row.key for row in originals)), reserve)
 
     def reserve_turn(
-        self, owner: str, turn: TurnId, claim_scope: int, text: str, *, custody: ExitStack,
+        self, owner: str, turn: TurnId, claim_scope: int, text: str, *, ownership: ExitStack,
     ) -> SingleInputBatch:
         """Enlist rollback before publication; caller retains the original wire scope."""
         from .channel_input_batch import SingleInputBatch
 
         row = ReservedInput(f"turn:{turn.value}", None, owner, claim_scope, owner, text)
 
-        document = self.reserve_originals(row, custody=custody)
+        document = self.reserve_originals(row, ownership=ownership)
         return SingleInputBatch(document.originals((row.key,)))
 
     def reserve_originals(
-        self, *originals: ReservedInput, custody: ExitStack,
+        self, *originals: ReservedInput, ownership: ExitStack,
     ) -> InputDocument:
         """Require fresh originals, retaining the exact publication and rollback."""
-        document = self.record_originals(*originals, custody=custody)
+        document = self.record_originals(*originals, ownership=ownership)
         if any(document.rows[row.key] is not row for row in originals):
             raise RelationViolationError("Input reservation already exists")
         return document

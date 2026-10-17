@@ -578,7 +578,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                 for command in bindings:
                     if not any(command == previous for _, _, _, previous in planned):
                         planned.append((len(planned) + len(outcomes), name, context, command))
-        # Parameters and every existing warning are admitted before any write.
+        # Parameters and every existing warning are authorized before any write.
         edited = tuple(command.for_editor(comms, name.name, project).edited(arguments).with_confirmation(confirmed)
                        for _, name, _, command in planned)
         for (position, name, context, original), command in zip(planned, edited, strict=True):
@@ -700,7 +700,7 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
     max_message_characters: int = option("--max-message-characters", default=12000)
 
     def apply(self, ctx: Comms) -> Any:
-        receipt = ctx.threads.import_thread(
+        acknowledgement = ctx.threads.import_thread(
             self.source,
             self.format,
             name=self.name,
@@ -712,7 +712,7 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
                 self.max_messages, self.max_characters, self.max_message_characters
             ),
         )
-        return receipt.to_wire()
+        return acknowledgement.to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1453,7 +1453,7 @@ class PollCliCommand(CliCommand):
 class ContextCliCommand(CliCommand):
     help = "Inspect original context contributors without sending an input"
     thread: str = option("thread")
-    turn: int | None = option("--turn", default=None, help="Original admitted turn generation")
+    turn: int | None = option("--turn", default=None, help="Original authorized turn generation")
     diff: bool = option("--diff", default=False, action="store_true")
     imported: bool = option("--imported", default=False, action="store_true",
                             help="Original imported instruction references, not current context")

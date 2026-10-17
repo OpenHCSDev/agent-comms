@@ -513,7 +513,7 @@ class RegistryDocument(RegistryPresence):
         return self._turn_effects(lease, lambda state: state.native_phase_effects(phase))
 
     def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:
-        """Publish only the source fact of an already admitted original owner."""
+        """Publish only the source fact of an already authorized original owner."""
         current = original.require_source_snapshot(self.snapshot())
         return self._native_source_publication(current, session_file)
 

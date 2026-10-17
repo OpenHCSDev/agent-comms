@@ -80,7 +80,7 @@ class Registration:
             change = edit.document.prepare_native_source(original, session_file)
             self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
-            # observed source must not rewrite this admitted turn's settings.
+            # observed source must not rewrite this authorized turn's settings.
             observed = replace(change.installed_thread,
                 worktree=original.thread.worktree, model=original.thread.model,
                 thinking_level=original.thread.thinking_level)

@@ -33,10 +33,10 @@ class NativeClaimEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeClaim"):
         raise StaleFence("native input claim_scope was already bound")
 
     @abstractmethod
-    def require_release(self, receipt, snapshot, current) -> None: ...
+    def require_release(self, acknowledgement, snapshot, current) -> None: ...
 
     @abstractmethod
-    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
+    def recovery_session_files(self, row, acknowledgement) -> tuple[Path, ...]:
         """Original launch selections to inspect after attested owner loss."""
 
 
@@ -63,10 +63,10 @@ class UnrecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
         if updated.rowcount != 1:
             raise StaleFence("native input claim_scope was already bound")
 
-    def require_release(self, receipt, snapshot, current) -> None:
-        current.require_local_process(receipt.thread.require_process())
+    def require_release(self, acknowledgement, snapshot, current) -> None:
+        current.require_local_process(acknowledgement.thread.require_process())
         current.require_idle()
-        if not receipt.current(snapshot, current, receipt.before):
+        if not acknowledgement.current(snapshot, current, acknowledgement.before):
             raise RelationViolationError("Unrecorded native send has no exact stopped release")
 
     def recovery_session_files(self, row, stopped) -> tuple[Path, ...]:
@@ -87,19 +87,19 @@ class RecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
     def reservation_violation(self) -> bool:
         return True
 
-    def require_release(self, receipt, snapshot, current) -> None:
+    def require_release(self, acknowledgement, snapshot, current) -> None:
         sent = ClaimedIdentity(current.incarnation, self.value)
-        fence = ClaimedIdentity(receipt.thread.incarnation, receipt.before)
+        fence = ClaimedIdentity(acknowledgement.thread.incarnation, acknowledgement.before)
         if not fence.includes(sent):
             raise RelationViolationError("Native release predates the sending claim_scope")
-        if snapshot.claimed_generations[current.name] == receipt.after:
-            if not receipt.current(snapshot, current, receipt.before):
+        if snapshot.claimed_generations[current.name] == acknowledgement.after:
+            if not acknowledgement.current(snapshot, current, acknowledgement.before):
                 raise RelationViolationError("Native release differs from its stopped declaration")
 
-    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
-        # The original send contract admitted only journals inside this
+    def recovery_session_files(self, row, acknowledgement) -> tuple[Path, ...]:
+        # The original send contract authorized only journals inside this
         # recipient's native-sessions directory, and recorded selected identity
-        # later, with the context receipt. That directory remains checked by
+        # later, with the context acknowledgement. That directory remains checked by
         # VerifiedOwnerLoss. New send grants atomically record the selected file;
         # keep its additional subprocess check whenever it exists. Neither
         # representation permits borrowing the replacement owner's selection.

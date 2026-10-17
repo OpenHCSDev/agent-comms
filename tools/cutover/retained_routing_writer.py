@@ -14,11 +14,11 @@ from routing_recovery import retain_originals
 
 
 def main():
-    root, target_python, installer, root_id, receipt, provenance_declaration = sys.argv[1:]
+    root, target_python, installer, root_id, acknowledgement, provenance_declaration = sys.argv[1:]
     service = Comms(Path(root))
     environment = dict(os.environ)
     environment.pop('PYTHONPATH', None)
-    with (service.bus.log.locked() as custody,
+    with (service.bus.log.locked() as ownership,
           _store_lock(service.root / 'registry.json'),
           _store_lock(service.root / 'transcript_routes.sqlite3')):
         marker = service.bus.log._private_marker_unlocked()
@@ -28,17 +28,17 @@ def main():
         encoded = json.dumps(FieldCodec.encode(plan))
         subprocess.run([
             target_python, str(Path(installer).with_name('validate_retained_routing.py')),
-            root, str(custody), root_id,
-        ], input=encoded, text=True, env=environment, pass_fds=(custody,), check=True)
-        retain_originals(service, Path(receipt), plan)
+            root, str(ownership), root_id,
+        ], input=encoded, text=True, env=environment, pass_fds=(ownership,), check=True)
+        retain_originals(service, Path(acknowledgement), plan)
         # Every original and target routing cell has now been validated. This is
         # the same old-writer/index operation, not a second batch or lock path.
         retained = replace(marker, checkpoint_version=None, checkpoint_seal=None)
         service.bus.log.write_metadata_unlocked(retained)
         (service.root / 'private_bus_checkpoint.sqlite3').unlink()
-        subprocess.run([target_python, installer, root, str(custody), root_id, receipt],
+        subprocess.run([target_python, installer, root, str(ownership), root_id, acknowledgement],
                        input=encoded, text=True, env=environment,
-                       pass_fds=(custody,), check=True)
+                       pass_fds=(ownership,), check=True)
         after = service.bus.log.read_metadata_unlocked()
         if replace(after, checkpoint_version=None, checkpoint_seal=None) != retained:
             raise ValueError('Carry changed original wire claim_scope/identity metadata.')

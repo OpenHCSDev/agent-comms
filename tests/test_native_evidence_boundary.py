@@ -66,7 +66,7 @@ def test_non_user_tracked_identity_cannot_disappear_into_display_fallback(role):
     raw = {"type": "message", "id": "entry", "message": {
         "role": role, "content": [], "inputId": "a" * 32,
     }}
-    # Pi requires assistant content; omission fails before tracked-role custody.
+    # Pi requires assistant content; omission fails before tracked-role ownership.
     # Both original history and input-proof projection must reject this same ID.
     for decode in (NativeEntry.from_evidence, NativeEntry.wire_member(raw).input_evidence):
         with pytest.raises(ValueError, match="must belong to a user"):

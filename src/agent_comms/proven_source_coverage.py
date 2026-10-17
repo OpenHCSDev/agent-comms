@@ -24,7 +24,7 @@ from .audience_manifest import FrozenRecipient
 from .bus_publication import CommittedDelivery
 from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_cohort import AcceptedCohort, _receipt_matches
+from .coordination_cohort import AcceptedCohort, _claim_record
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
 from .private_bus_checkpoint import (
@@ -144,14 +144,14 @@ class SourceCoverage:
                     covered = seq
                     continue
                 recipient, decision = matches[0]
-                receipt = self._receipt(initial)
-                if receipt is None:
+                acknowledgement = self._receipt(initial)
+                if acknowledgement is None:
                     blocked = seq
                     break
                 if type(decision) is NoWakeDecision:
                     no_wake.append(seq)
                 elif type(decision) is WakeDecision:
-                    evidence = self._selected_inputs(seq, recipient, decision, receipt, source_reads)
+                    evidence = self._selected_inputs(seq, recipient, decision, acknowledgement, source_reads)
                     if not evidence:
                         blocked = seq
                         break
@@ -195,15 +195,15 @@ class SourceCoverage:
             sealed = ClaimBatchReceipts.one(
                 db, wire_root_id=self.wire_root_id, wire_seq=initial.message.seq
             )
-            return _receipt_matches(db, initial) if sealed and sealed.sealed else None
+            return _claim_record(db, initial) if sealed and sealed.sealed else None
 
     def _selected_inputs(
-        self, seq: int, recipient: FrozenRecipient, decision: WakeDecision, receipt: AcceptedCohort,
+        self, seq: int, recipient: FrozenRecipient, decision: WakeDecision, acknowledgement: AcceptedCohort,
         source_reads: NativeEvidenceScope,
     ) -> tuple[HistoricalNativeInput, ...]:
         assignments = [
             a
-            for a in receipt.assignments
+            for a in acknowledgement.assignments
             if a.recipient_lookup == self.recipient_lookup
             and a.recipient == recipient.canonical_thread
         ]

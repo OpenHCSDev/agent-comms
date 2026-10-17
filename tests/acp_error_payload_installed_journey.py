@@ -194,7 +194,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
                           "nested_provider_reason_preserved": True,
                           "passive_failed_history_and_dispositions_unchanged": True,
                           "public_effects": 0, "paid_calls": 0, "replays": 0}
-                (evidence / "receipt.json").write_text(json.dumps(report, indent=2) + "\n")
+                (evidence / "acknowledgement.json").write_text(json.dumps(report, indent=2) + "\n")
                 print("ACTUAL_INSTALLED_SDK_ACP_ERROR_PAYLOAD_PASS", json.dumps(report), flush=True)
     finally:
         await asyncio.to_thread(comms.owners.stop, "error-native")

@@ -166,13 +166,13 @@ class SubscribeRuntimeRequest(RuntimeRequest):
             )
         while line := await ctx.reader.readline():
             response = json.loads(line)
-            receipt = response.get("permissionResponse") if isinstance(response, dict) else None
-            if not isinstance(receipt, dict):
+            acknowledgement = response.get("permissionResponse") if isinstance(response, dict) else None
+            if not isinstance(acknowledgement, dict):
                 continue
-            reply_id = receipt.get("id")
+            reply_id = acknowledgement.get("id")
             pending = ctx.client.pending.get(reply_id) if isinstance(reply_id, str) else None
             if pending is not None and not pending.done():
-                pending.set_result(receipt)
+                pending.set_result(acknowledgement)
 
 
 @dataclass(frozen=True, kw_only=True)

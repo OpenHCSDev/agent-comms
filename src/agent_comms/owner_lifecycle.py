@@ -102,7 +102,7 @@ class OwnerStartResult:
 
 
 @dataclass(frozen=True)
-class OwnerReleaseReceipt:
+class OwnerReleaseEvidence:
     before: int
     after: int
     thread: Thread
@@ -129,7 +129,7 @@ class OwnerReleaseReceipt:
         """A recorded release confirms only its exact dead process and input generation.
 
         A recorded send can be fenced by a later release in the same incarnation.
-        An unrecorded epoch instead needs the exact current stopped receipt. Both
+        An unrecorded epoch instead needs the exact current stopped acknowledgement. Both
         paths preserve UNKNOWN; neither says bytes were unwritten or permits retry.
         """
         current = snapshot.threads.get(self.thread.name)
@@ -146,21 +146,21 @@ class OwnerReleaseReceipt:
         source.sent_owner_claimed_generation.require_release(self, snapshot, current)
 
 
-class OwnerReleaseStore(ThreadOwnedState, LockedStore[dict[str, OwnerReleaseReceipt]]):
+class OwnerReleaseStore(ThreadOwnedState, LockedStore[dict[str, OwnerReleaseEvidence]]):
     lock_rank = 6
     @property
     def record_type(self):
-        return dict[str, OwnerReleaseReceipt]
+        return dict[str, OwnerReleaseEvidence]
 
-    def empty(self) -> dict[str, OwnerReleaseReceipt]:
+    def empty(self) -> dict[str, OwnerReleaseEvidence]:
         return {}
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
-        """A receipt attests one declared owner; it ends with the declaration."""
+        """A acknowledgement attests one declared owner; it ends with the declaration."""
         names = {thread.name for thread in threads}
         self.update(
             lambda receipts: (
-                {name: receipt for name, receipt in receipts.items() if name not in names}
+                {name: acknowledgement for name, acknowledgement in receipts.items() if name not in names}
                 if names & receipts.keys()
                 else receipts
             )
@@ -352,7 +352,7 @@ class OwnerLifecycle:
                 return
             generation = snapshot.claimed_generations[thread.name]
         # The process may already be dead. It still needs the exact release
-        # receipt before the execution owner can settle its attempted input.
+        # acknowledgement before the execution owner can settle its attempted input.
         if thread.process_alive:
             self._stop_process(thread, generation)
         self._finish_stopped_owner(thread, generation)
@@ -468,7 +468,7 @@ class OwnerLifecycle:
     def _require_same_stop_owner(self, thread: Thread, claimed_generation: int) -> None:
         snapshot = self.registry.snapshot()
         # Voluntary release advances the input generation and marks STOPPED before Python
-        # finishes shutting down. Its exact receipt preserves the signaled
+        # finishes shutting down. Its exact acknowledgement preserves the signaled
         # incarnation; it does not prove OS exit or authorize a replacement PID.
         if self._released_same_owner(snapshot, thread, claimed_generation):
             return
@@ -482,10 +482,10 @@ class OwnerLifecycle:
     def _released_same_owner(
         self, snapshot: RegistrySnapshot, thread: Thread, claimed_generation: int
     ) -> bool:
-        receipt = self.releases.read().get(thread.name)
+        acknowledgement = self.releases.read().get(thread.name)
         return (
-            receipt.current(snapshot, thread, claimed_generation)
-            if receipt is not None
+            acknowledgement.current(snapshot, thread, claimed_generation)
+            if acknowledgement is not None
             else False
         )
 
@@ -521,6 +521,6 @@ class OwnerLifecycle:
         """Share retirement only after the caller's distinct identity checks."""
         self.registry.unregister(thread.name)
         after = self.registry.snapshot()
-        receipt = OwnerReleaseReceipt(before, after.claimed_generations[thread.name],
+        acknowledgement = OwnerReleaseEvidence(before, after.claimed_generations[thread.name],
                                       after.threads[thread.name])
-        self.releases.update(lambda receipts: {**receipts, thread.name: receipt})
+        self.releases.update(lambda receipts: {**receipts, thread.name: acknowledgement})

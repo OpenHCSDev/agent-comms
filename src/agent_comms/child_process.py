@@ -40,7 +40,7 @@ class IdentityMismatchError(ProcessLookupError):
 
 
 class ChildRetirementError(BaseException):
-    """Capability: the child owner's cleanup receipt failed, independently of cancellation."""
+    """Capability: the child owner's cleanup acknowledgement failed, independently of cancellation."""
 
 
 class ChildRetirementFailed(RuntimeError, ChildRetirementError):
@@ -48,7 +48,7 @@ class ChildRetirementFailed(RuntimeError, ChildRetirementError):
 
 
 class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
-    """Preserve cancellation and an independently failed retirement receipt."""
+    """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
 @dataclass(frozen=True)

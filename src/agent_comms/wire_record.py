@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 class WireRecord(ABC):
     __slots__ = ()
-    receipt: KeyedResponseReceipt | None = None
+    acknowledgement: KeyedResponseReceipt | None = None
     max_row_bytes: ClassVar[int] = 8 * 1024 * 1024
 
     @classmethod
@@ -60,7 +60,7 @@ class WireRecord(ABC):
 
     @classmethod
     def certified_public_messages(cls, value: Mapping) -> tuple[Message, ...]:
-        """Public output of a row already admitted by the complete WireScan.
+        """Public output of a row already authorized by the complete WireScan.
 
         Silent observations have no public messages. Their original manifests
         were validated by certification and need no second reconstruction.
@@ -96,8 +96,8 @@ class WireRecord(ABC):
         )
 
     def record_key(self, seen: set[str]) -> None:
-        if self.receipt is not None:
-            self.receipt.add_unique(seen)
+        if self.acknowledgement is not None:
+            self.acknowledgement.add_unique(seen)
 
     @abstractmethod
     def require_claim(self, metadata: WireMetadata) -> None: ...
@@ -122,7 +122,7 @@ class MessageWireRecord(WireRecord):
 
 
 class WireObservation(DeclaredFamily, affix="WireObservation"):
-    """A silent fact; it has no message, audience, receipt or sequence allocation."""
+    """A silent fact; it has no message, audience, acknowledgement or sequence allocation."""
 
     @abstractmethod
     def context_manifests(self): ...

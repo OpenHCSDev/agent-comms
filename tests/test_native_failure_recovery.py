@@ -55,7 +55,7 @@ def failed_owner(directory, output, exit_allowed):
                 + "\n"
             )
         # Revoke the real owner before the failure consumer can settle. This
-        # leaves the original admitted input unresolved without an obsolete
+        # leaves the original authorized input unresolved without an obsolete
         # failure hook or a fabricated owner-loss grant.
         os.environ["AGENT_COMMS_THREAD"] = "beta"
         comms.owners.release("beta")
@@ -134,7 +134,7 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
                 f"SELECT * FROM {NativeRuntimeInput.declared_name} WHERE input_id=?", (input_id,)
             ).fetchone()
         )
-        assert after == before  # No forged context, cursor, or acceptance receipt.
+        assert after == before  # No forged context, cursor, or acceptance acknowledgement.
         with pytest.raises(RecoveryBlocked):
             RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
 

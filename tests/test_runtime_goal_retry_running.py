@@ -90,7 +90,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
         max_active_backends = max(max_active_backends, active_backends)
         try:
             # Only the external stream's terminal delivery is held/interrupted.
-            # Native input IDs, starts, source receipts and phases stay original.
+            # Native input IDs, starts, source evidences and phases stay original.
             async with aclosing(native_stream(*args, **kwargs)) as stream:
                 async for event in stream:
                     if number == 1 and isinstance(event, ae.InputStarted):

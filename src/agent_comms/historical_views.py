@@ -258,7 +258,7 @@ class HistorySource:
         info = log.path.stat()
         if (log.read_metadata_unlocked(required=True).root_id != self.wire_root_id
                 or (info.st_dev, info.st_ino) != self.bus_identity or info.st_size != self.size):
-            raise ValueError("Recorded provenance lost original wire custody")
+            raise ValueError("Recorded provenance lost original wire ownership")
 
     @classmethod
     def require(cls, sources: tuple[HistorySource, ...], key: str) -> HistorySource:

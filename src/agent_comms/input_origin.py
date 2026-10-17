@@ -150,7 +150,7 @@ class HumanInputOrigin(InputOrigin):
 
     def matches_owner(self, recorded_name, incarnation):
         """The captured original birth survives a rename, unlike a neutral name."""
-        admitted = self.claim_scope.incarnation.require_recorded()
+        authorized = self.claim_scope.incarnation.require_recorded()
         original = incarnation.require_recorded()
-        return (recorded_name == admitted.name
-                and admitted.created_at == original.created_at)
+        return (recorded_name == authorized.name
+                and authorized.created_at == original.created_at)

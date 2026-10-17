@@ -106,8 +106,8 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     for extra_target in extra_targets:
         message = comms.messaging.send_initial_cohort("sender", extra_target, "Another original question")
         delivery = comms.bus.log.read_delivery_cohort(root_id, message.seq)
-        receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
-        (extra_assignment,) = receipt.assignments
+        acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
+        (extra_assignment,) = acknowledgement.assignments
         sources.append(SelectedSource(extra_assignment.assignment_id, store.assignments, delivery))
     reply_target = original.exact_reply_target
     assert reply_target is not None
@@ -202,9 +202,9 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
         assert all(row.lifecycle.require_completion() for row in settled.assignments)
         assert settled.current_execution_id is None
         for route in routes:
-            intent, receipt = settled.require_published_evidence(route)
+            intent, acknowledgement = settled.require_published_evidence(route)
             message = case.bus.log.read_keyed_response(intent)
-            assert message.reference == receipt.reference and message.target == route
+            assert message.reference == acknowledgement.reference and message.target == route
             assert message.answers == tuple(
                 assignment.source for assignment in settled.assignments
                 if assignment.lifecycle.exact_target == route
@@ -454,7 +454,7 @@ def test_fresh_selection_refuses_missing_saved_reply_without_resend(
         accept_delivery_cohort(case.comms.bus, case.root_id, fresh.seq, case.store)
         install_native_runtime_schema(case.store)
 
-        with pytest.raises(PublicationUncertain, match="no keyed bus receipt; no resend"):
+        with pytest.raises(PublicationUncertain, match="no keyed bus acknowledgement; no resend"):
             SelectedParticipant.prepare(
                 case.comms, case.bus, case.store, case.root_id, "owner", case.origin_seq
             )

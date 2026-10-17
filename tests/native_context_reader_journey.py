@@ -135,14 +135,14 @@ async def read_original_context(
                 assert mixed_text.text != root_text.text
                 assert fixture.session.read_bytes() == selected_before
                 assert owner._comms.bus.log.latest_sequence() == 0
-                receipt = {'scope':'Installed authenticated reads of an original authored SDK capture',
+                acknowledgement = {'scope':'Installed authenticated reads of an original authored SDK capture',
                     'model_request_capture':False, 'provider_calls':fixture.provider.posts,
                     'new_native_inputs':0, 'original_user_rows':len(original_inputs),
                     'original_request':original.require_request_id(),
                     'root_text':root_text.text, 'child_text':child_text.text,
                     'mixed_text':mixed_text.text, 'mixed_request':mixed_original.require_request_id(),
                     'root_and_child_differ':True, 'original_native_bytes_unchanged':True}
-                (fixture.root.parent / 'recorded-reader-receipt.json').write_text(json.dumps(receipt, indent=2))
+                (fixture.root.parent / 'recorded-reader-acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2))
         finally:
             await connection.close()
     finally:
@@ -161,20 +161,20 @@ async def read_original_context(
 async def run(root, sdk_source_path=None):
     root.mkdir(mode=0o700)
     started = time.monotonic()
-    receipt = {"python": sys.executable, "scope": "Authored SDK recorded root/mixed/child installed RPC reads",
+    acknowledgement = {"python": sys.executable, "scope": "Authored SDK recorded root/mixed/child installed RPC reads",
                "model_request_capture": False, "new_native_inputs": 0}
     try:
         async with native_backend_fixture(root) as fixture:
             await read_original_context(fixture, recorded_readers=True, sdk_source_path=sdk_source_path)
-            receipt["provider_calls"] = fixture.provider.posts
-        receipt["state"] = "SCOPED_PASS"
+            acknowledgement["provider_calls"] = fixture.provider.posts
+        acknowledgement["state"] = "SCOPED_PASS"
     except BaseException as error:
-        receipt.update(state="FAILED_NO_REPLAY", error=repr(error))
+        acknowledgement.update(state="FAILED_NO_REPLAY", error=repr(error))
         raise
     finally:
-        receipt["elapsed_seconds"] = time.monotonic() - started
-        (root / "terminal-receipt.json").write_text(json.dumps(receipt, indent=2)+"\n")
-        print(json.dumps(receipt), flush=True)
+        acknowledgement["elapsed_seconds"] = time.monotonic() - started
+        (root / "terminal-acknowledgement.json").write_text(json.dumps(acknowledgement, indent=2)+"\n")
+        print(json.dumps(acknowledgement), flush=True)
 
 
 if __name__ == "__main__":

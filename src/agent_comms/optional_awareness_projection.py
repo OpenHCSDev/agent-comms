@@ -43,7 +43,7 @@ from .cohort_schema import (
     assert_cohort_schema,
     assert_optional_awareness_schema,
 )
-from .coordination_cohort import _receipt_matches
+from .coordination_cohort import _claim_record
 from .errors import RelationViolationError
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
@@ -359,9 +359,9 @@ class OptionalAwarenessProjection:
         )
         if people != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]:
             raise ProjectionUnavailableError("selected participant owner changed")
-        receipt = _receipt_matches(db, initial)
-        if not any(current == assignment for current in receipt.assignments):
-            raise ProjectionUnavailableError("current selected claim lost its sealed receipt")
+        acknowledgement = _claim_record(db, initial)
+        if not any(current == assignment for current in acknowledgement.assignments):
+            raise ProjectionUnavailableError("current selected claim lost its sealed acknowledgement")
 
     def _selected_decisions(
         self, db: sqlite3.Connection, root_id: str, lookup: str, through_seq: int

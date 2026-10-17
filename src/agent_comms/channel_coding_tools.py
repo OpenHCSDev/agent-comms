@@ -1,4 +1,4 @@
-"""Normal Pi coding tools admitted by the selected channel turn's existing owner.
+"""Normal Pi coding tools authorized by the selected channel turn's existing owner.
 
 Pi owns actual read/bash/edit/write execution. This module owns the cooperative
 pre-tool claim check, using the bus's existing claims and native input ledger.
@@ -15,7 +15,7 @@ from pathlib import Path
 
 from agent_comms.coordinator import Coordination
 
-from .claim_claim import (
+from .claim_authority import (
     publish_selected_resource_claim,
     verify_selected_wake,
 )
@@ -123,13 +123,13 @@ class CodingToolOwner:
                 owner = self.comms.registry.require(self.owner_name)
                 canonical = resource.normalized(Path(owner.worktree))
                 prior = self.claims.get(canonical)
-                claim_claim = (
+                claim_authority = (
                     prior.claim_scope
                     if prior is not None
                     else replace(self.claim_scope, operation_id=slot)
                 )
                 claimed = publish_selected_resource_claim(
-                    self.comms, store, claim_claim, self.owner_name, resource
+                    self.comms, store, claim_authority, self.owner_name, resource
                 )
                 self.claims[canonical] = claimed
 

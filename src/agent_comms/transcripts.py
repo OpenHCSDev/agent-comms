@@ -414,7 +414,7 @@ class Transcripts:
         """Expose the source owner's complete identity without parsing its page.
 
         Native bytes alone are insufficient: input display/routing and older
-        bus receipts contribute to the same projection. Registry-owned thread
+        bus evidences contribute to the same projection. Registry-owned thread
         metadata also carries inherited fork text and source selection.
         """
         if not 1 <= source_limit <= MessageNotification.window_limit:

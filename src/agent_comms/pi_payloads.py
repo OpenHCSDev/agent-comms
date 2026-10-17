@@ -1179,7 +1179,7 @@ class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
 
 @dataclass(frozen=True, kw_only=True)
 class PublishedMessageToolDetails(NativeToolDetails):
-    """The send owner supplies its original committed message, not a guessed receipt."""
+    """The send owner supplies its original committed message, not a guessed acknowledgement."""
 
     strict_fields = True
     id: str
@@ -1332,10 +1332,10 @@ class McpLiveReceipt:
         if text is None or len(text) > 8192:
             return None
         try:
-            receipt = FieldCodec.decode(cls, json.loads(text, object_pairs_hook=unique_fields))
+            acknowledgement = FieldCodec.decode(cls, json.loads(text, object_pairs_hook=unique_fields))
         except (TypeError, ValueError):
             return None
-        return receipt if receipt.input_id == input_id else None
+        return acknowledgement if acknowledgement.input_id == input_id else None
 
     def __post_init__(self):
         if re.fullmatch(r"[a-f0-9]{32}", self.input_id) is None:

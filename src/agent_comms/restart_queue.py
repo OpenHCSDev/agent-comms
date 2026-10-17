@@ -354,7 +354,7 @@ def step(comms: Comms) -> None:
                 source_interpreter=record.source_interpreter,
                 launch_runtime=record.target.launch_runtime,
             )
-            (receipt,) = PreserveOwnerRuntime().restart(comms.owners, request)
+            (acknowledgement,) = PreserveOwnerRuntime().restart(comms.owners, request)
         except RestartRefusal as refusal:
             record = record.transition(refusal.queue_state())
         except StoppedOwnerFailure as exc:
@@ -368,7 +368,7 @@ def step(comms: Comms) -> None:
             record = record.transition(
                 RestartedRestart(
                     previous=record.selection.process,
-                    current=ProcessIdentity.capture(receipt.pid),
+                    current=ProcessIdentity.capture(acknowledgement.pid),
                 )
             )
         with queue.locked():

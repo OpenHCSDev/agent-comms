@@ -57,14 +57,14 @@ def test_selected_wake_and_file_claims_have_no_common_claim_receipt() -> None:
             message = comms.messaging.send_initial_cohort(
                 "sender", "#team", "Please investigate @Alice"
             )
-            receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator).value
-            assert receipt.member_count == 2
-            assert receipt.assignment_count == 1
+            acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator).value
+            assert acknowledgement.member_count == 2
+            assert acknowledgement.assignment_count == 1
             assert sealed_cohort_assignments(coordinator, RecordedThreadIncarnation("fixture", people["Alice"]).lookup)
             assert sealed_cohort_assignments(coordinator, RecordedThreadIncarnation("fixture", people["Bob"]).lookup) == ()
 
             # Existing explicit resource claims are valid independent operations.
-            # They neither consult nor reference the sealed N/K receipt. A
+            # They neither consult nor reference the sealed N/K acknowledgement. A
             # future native edit claim_scope must join these two authorities.
             committed = comms.messaging.send_message(
                 "Bob",

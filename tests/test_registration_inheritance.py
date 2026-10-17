@@ -1,4 +1,4 @@
-"""Current registration declarations, incarnation and saved relationship custody."""
+"""Current registration declarations, incarnation and saved relationship ownership."""
 
 from dataclasses import dataclass, field, replace
 

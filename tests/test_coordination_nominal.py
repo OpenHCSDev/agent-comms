@@ -301,7 +301,7 @@ def test_original_target_and_receipt_legality_is_owned_by_current_variants():
         with pytest.raises((TypeError, ValueError)):
             FieldCodec.decode(AssignmentState, damaged)
 
-    # A publication has a complete receipt; non-publication variants have none.
+    # A publication has a complete acknowledgement; non-publication variants have none.
     published = FieldCodec.encode(PublishedResponse("message", 1))
     for field in ("message_id", "seq"):
         damaged = dict(published)
