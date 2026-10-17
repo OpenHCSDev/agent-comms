@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .acp_extension import CoordinationChangedUpdate
@@ -16,12 +16,9 @@ from .agent_activity import AgentActivity
 
 @dataclass(frozen=True)
 class ReplyTiming:
-    reply_window: float = field(default_factory=lambda: float(os.environ.get(
-        "AGENT_COMMS_REPLY_WINDOW", 8.0)))
-    no_reply_window: float = field(default_factory=lambda: float(os.environ.get(
-        "AGENT_COMMS_NO_REPLY_WINDOW", 2.5)))
-    reply_quiet: float = field(default_factory=lambda: float(os.environ.get(
-        "AGENT_COMMS_REPLY_QUIET", 1.5)))
+    reply_window: float = 8.0
+    no_reply_window: float = 2.5
+    reply_quiet: float = 1.5
 
     def overridden(self, **values):
         return replace(self, **{name: value for name, value in values.items() if value is not None})
