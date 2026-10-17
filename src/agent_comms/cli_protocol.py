@@ -17,7 +17,7 @@ from .messages import Message
 
 if TYPE_CHECKING:
     from .child_process import AttachedChild
-    from .cli_bridges.shared import CliBridge, CoreConnection, LineMonitorBridge, ObservedMonitor
+    from .cli_bridges.shared import CliBridge
 
 
 class WireModel(BaseModel):
@@ -68,19 +68,14 @@ class Outcome(DeclaredFamily, affix='Outcome'):
     """Stored spellings stay the same; their owners perform confirmation."""
 
     @classmethod
-    async def acknowledge(cls, core: CoreConnection, message: Message) -> None:
+    async def acknowledge(cls, bridge: CliBridge, message: Message) -> None:
         """Pending transport outcomes cannot advance Core's read state."""
-
-    @classmethod
-    async def observe_monitor(cls, bridge: LineMonitorBridge, message: Message,
-                              record: ObservedMonitor) -> None:
-        await bridge.finish_delivery(message, DeliveredOutcome, record)
 
 
 class FilteredOutcome(Outcome):
     @classmethod
-    async def acknowledge(cls, core: CoreConnection, message: Message) -> None:
-        await core.acknowledge(message)
+    async def acknowledge(cls, bridge: CliBridge, message: Message) -> None:
+        await asyncio.to_thread(bridge.comms.messaging.acknowledge, bridge.binding.bus, (message.reference,))
 
 
 class UnconfirmedOutcome(Outcome):
@@ -88,10 +83,7 @@ class UnconfirmedOutcome(Outcome):
 
 
 class DeliveredOutcome(FilteredOutcome):
-    @classmethod
-    async def observe_monitor(cls, bridge: LineMonitorBridge, message: Message,
-                              record: ObservedMonitor) -> None:
-        """Reopened history preserves the first confirmation record and time."""
+    pass
 
 
 class EmittedOutcome(UnconfirmedOutcome):
@@ -166,19 +158,7 @@ class ArrivedMessage(WatchLine):
     message: InstanceOf[Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(Message.to_wire)]]
 
     async def handle(self, bridge: CliBridge) -> None:
-        message = self.message
-        conversation = message.type.conversation_message
-        outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        if not bridge.journal.begin(message, outcome):
-            await bridge.journal.outcome(message).acknowledge(bridge.core, message)
-            return
-        if not conversation:
-            await bridge.finish_delivery(message, outcome)
-            return
-        result = await bridge.deliver(message)
-        await bridge.finish_delivery(message, result)
-        print(f'{result.declared_name}: {message.message_id} from {message.sender}',
-              file=sys.stderr, flush=True)
+        await bridge.accept(self.message)
 
 
 WATCH_LINE = TypeAdapter(WatchLine.declared_union())

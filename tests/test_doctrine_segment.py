@@ -1,10 +1,10 @@
-"""The maintenance doctrine segment derives from its one declared source file."""
+"""Retained doctrine remains decodable but is not repeated in new prompts."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from agent_comms.turn_context import ContextSegment, CoordinationSegment, InstructionFile, NextContextTurn, TurnContext
+from agent_comms.turn_context import ContextSegment, CoordinationSegment, InstructionFile, NextContextTurn, TurnContext, UserInputSegment
 from test_private_bus_checkpoint import _root
 
 # The provider measures the real tokens (about four bytes per token); the
@@ -20,8 +20,8 @@ def _doctrine():
 
 
 def test_the_segment_derives_its_text_from_the_declared_file(tmp_path: Path):
-    captured = _doctrine().capture()
     instruction = InstructionFile.read("doctrine.md")
+    captured = _doctrine()(instruction=instruction, provenance=(instruction.source,))
     assert captured.instruction == instruction
     assert captured.provenance == (instruction.source,)
     assert captured.text() == instruction.content
@@ -30,17 +30,16 @@ def test_the_segment_derives_its_text_from_the_declared_file(tmp_path: Path):
     assert len(instruction.content.encode()) <= FILE_BYTE_BUDGET
 
 
-def test_every_owner_context_injects_the_doctrine_before_coordination(tmp_path: Path):
+def test_owner_context_does_not_repeat_project_maintenance_rules(tmp_path: Path):
     comms, _ = _root(tmp_path)
     for name in ("Alice", "Bob", "outsider"):
         context = TurnContext.for_owner(
             comms.registry.require(name), NextContextTurn(), "original task", (), ()
         )
         kinds = tuple(type(segment) for segment in context.segments)
-        assert kinds[0] is _doctrine()
-        assert kinds[1] is CoordinationSegment
-        assert kinds[2].public_title() == "User Input"
-        assert context.segments[0].text() == InstructionFile.read("doctrine.md").content
+        assert kinds == (CoordinationSegment, UserInputSegment)
+        assert _doctrine() not in kinds
+        assert InstructionFile.read("doctrine.md").content not in context.render().text
         assert context.render().text.startswith(context.segments[0].text())
 
 

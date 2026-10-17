@@ -48,9 +48,9 @@ from .turn_context import InputContributionCoordinates
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
-    from .agent_backend import TurnInboxItem
+    from .agent_backend import TurnInbox
     from .coordinated_runtime import SelectedExecution
-    from .owned_send_admission import OwnedSendAdmission
+    from .owned_send_admission import OwnedSend
     from .private_send_admission import PrivateSendAdmission
 
 
@@ -340,7 +340,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                                 f"Native Pi operation failed: {type(error).__name__}: {error}"
                             ) from error
                     except NativePiUnavailable as error:
-                        self.admission.raise_native_failure(error, self.native.attestation)
+                        self.prompt_state.raise_native_failure(error, self.native.attestation)
             finally:
                 # LIFO starts the measurement immediately before cleanup. No
                 # await or manual close may separate this from stack retirement.
@@ -405,7 +405,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             try:
                 async with MaintenanceBarrier(
                     self.maintenance_root / "registry.json"
-                ).admit_ingress_async():
+                ).ingress_async() as status:
+                    status.require_open()
                     self.write(command, payload)
             except RelationViolationError as error:
                 raise NativePiUnavailable(
@@ -475,10 +476,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     measurements=self.startup.measurements,
                 )
 
-    @property
-    def prompt_id(self) -> str:
-        return self.command.id
-
     @handles(pi.Response)
     async def response(self, event: pi.Response) -> None:
         request = self.native.reader.correlate(event)
@@ -487,7 +484,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 raise NativePiUnavailable("Native Pi prompt acknowledgement differs")
             if event.success is not True:
                 raise NativePiPromptRejected(event)
-            self.admission = self.admission.acknowledge(event)
+            self.prompt_state = self.prompt_state.acknowledge(event)
         elif issubclass(event.command, commands.MutatesSession):
             raise NativePiUnavailable("Native Pi session identity changed during a turn")
         else:
@@ -499,19 +496,19 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     async def committed_input(self, event: pi.InputCommitted) -> None:
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
-            self.admission = self.admission.start(event)
+            self.prompt_state = self.prompt_state.start(event)
             self.evidence = self.custody.enter_context(
                 NativeEntry.open_input_evidence(self.active_session_file)
             )
             await Coordination.run_worker(self.evidence.observe)
             await self.following.open(self)
 
-    def forward_inbox(self, inbox: asyncio.Queue[TurnInboxItem], admission: OwnedSendAdmission) -> None:
+    def forward_inbox(self, inbox: TurnInbox, sender: OwnedSend) -> None:
         """Later inputs go to the running child under the owner's write checks."""
         self.inputs.queue = inbox
-        self.send_boundary = admission
-        self.interrupt_boundary = partial(admission, already_bound=True)
-        self.native_start = admission.native_start
+        self.send_boundary = sender
+        self.interrupt_boundary = partial(sender, already_bound=True)
+        self.native_start = sender.native_start
         self.ensure_input_forwarding()
 
     @handles(pi.MessageStart)
@@ -562,7 +559,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         event.outcome.finish_request(self)
 
     async def context_proof(self) -> NativeContextProof:
-        if not self.admission.acknowledged:
+        if not self.prompt_state.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
         # The original event consumer serializes observations. Cancellation
         # joins this read before the acquired evidence/custody can close.

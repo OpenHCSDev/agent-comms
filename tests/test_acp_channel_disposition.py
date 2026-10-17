@@ -188,7 +188,7 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
                     store.session._connection.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}")
                 )
                 assert len(rows) == 1 and rows[0].session_id is None
-            assert comms.bus.log.message_by_id(message.message_id) == message
+            assert comms.bus.log.messages_for_references((message.reference,)) == (message,)
             assert not owner.inputs.pending_turns
         finally:
             release.set()

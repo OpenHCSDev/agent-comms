@@ -98,7 +98,7 @@ def test_valid_json_without_newline_not_exposed_by_any_gated_read(
     with pytest.raises(RelationViolationError, match="Incomplete"):
         list(comms.bus.full_history_page().messages)
     with pytest.raises(RelationViolationError, match="Incomplete"):
-        comms.bus.log.message_by_id("receipt")
+        comms.bus.log.messages_for_references((MessageReference(1, "receipt"),))
     with pytest.raises(RelationViolationError, match="Incomplete"):
         comms.bus.log.latest_sequence()
     with (
@@ -281,7 +281,8 @@ def test_raw_alias_claim_is_refused_before_append_or_projection(
             comms.bus.log._append_private_unlocked(metadata, record)
     assert list(comms.views.full_history_page().messages) == [first]
     assert list(comms.bus.log.claim_projection()) == [str(worktree / "a.py")]
-    assert comms.bus.log.message_by_id(second.message_id) is None
+    with pytest.raises(RelationViolationError, match="not its original source"):
+        comms.bus.log.messages_for_references((second.reference,))
 
 
 def test_release_requires_exact_owner_and_preserves_generation(
@@ -554,7 +555,7 @@ def test_large_transition_reopens_and_exports_without_a_second_parser_limit(
     assert len(json.dumps(committed.to_wire()["claim_transition"])) > 16_384
     assert len(Comms(comms.root).bus.log.claim_projection()) == len(resources)
     assert list(comms.views.full_history_page().messages) == [committed]
-    assert comms.bus.log.message_by_id(committed.message_id) == committed
+    assert comms.bus.log.messages_for_references((committed.reference,)) == (committed,)
     assert all(owner.owner == "alice" for owner in comms.bus.log.claim_projection().values())
     destination = tmp_path / "safe-export.jsonl"
     receipt = comms.views.export_wire(
@@ -621,10 +622,10 @@ def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(
     assert bus.read_bytes().endswith(b"\n")
     raw = json.loads(bus.read_text().splitlines()[0])
     assert raw["claim_transition"]["claims"] == [str(worktree / "a.py")]
-    receipt = raw["id"]
+    reference = MessageReference(raw["seq"], raw["id"])
     phase = "reader_blocked"
     denied = (
-        lambda: comms.bus.log.message_by_id(receipt),
+        lambda: comms.bus.log.messages_for_references((reference,)),
         lambda: _ordinary_locked_iterator(comms),
         lambda: _ordinary_snapshot(comms),
         lambda: list(comms.views.full_history_page().messages),
@@ -638,7 +639,7 @@ def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(
             read()
     assert fsyncs == 1 + len(denied)
     phase = "allow"
-    message = comms.bus.log.message_by_id(receipt)
+    message, = comms.bus.log.messages_for_references((reference,))
     assert message is not None and message.claim_transition is not None
     assert _ordinary_locked_iterator(comms) == [message]
     assert _ordinary_snapshot(comms)[0][0] == message
@@ -658,7 +659,7 @@ def test_claim_bearing_json_valid_no_newline_never_exposed(tmp_path: Path) -> No
     assert bus.read_bytes().endswith(b"\n")
     bus.write_bytes(bus.read_bytes()[:-1])  # crash left an incomplete but JSON-valid tail
     denied = (
-        lambda: comms.bus.log.message_by_id(committed.message_id),
+        lambda: comms.bus.log.messages_for_references((committed.reference,)),
         lambda: _ordinary_locked_iterator(comms),
         lambda: _ordinary_snapshot(comms),
         lambda: list(comms.views.full_history_page().messages),

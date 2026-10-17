@@ -20,7 +20,7 @@ from .following_inputs import OwnerFollowingInputs
 from .queued_input import InitialInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
-from .agent_backend import AgentBackend, InputRequest, SendNow, TurnInboxItem
+from .agent_backend import AgentBackend, InputRequest, SendNow, TurnInbox
 from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .coordinator import Coordination
@@ -307,7 +307,7 @@ class TurnRunner:
         if sent_seq:
             document = self.comms.bus.reads.read()
             for name in snapshot.threads:
-                if name != thread_name and sent_seq in self.comms.bus.reads.seen_sequences(
+                if name != thread_name and sent_seq in self.comms.bus.reads.cursor(
                     name, snapshot, document=document
                 ):
                     return True
@@ -459,7 +459,7 @@ class TurnRunner:
         update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
         await self.effects._emit_event(session_id, update, client=client)
 
-    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue[TurnInboxItem] | None:
+    async def active_backend_inbox(self, session_id: str) -> TurnInbox | None:
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
         return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
 
@@ -498,13 +498,12 @@ class TurnRunner:
         async with self.turn_locks.setdefault(session_id, asyncio.Lock()):
             task = asyncio.current_task()
             assert task is not None
-            inbox: asyncio.Queue[TurnInboxItem] = asyncio.Queue()
+            owner = await Coordination.run_worker(partial(
+                self.comms.registry.require, execution.owner_name,
+            ))
+            inbox = self.inputs.bind_native_turn(session_id, owner)
             self.turn_tasks[session_id] = task
-            self.inputs.backend_inboxes[session_id] = inbox
             try:
-                owner = await Coordination.run_worker(partial(
-                    self.comms.registry.require, execution.owner_name,
-                ))
                 result = await execution.run(
                     on_compaction=partial(self.effects._emit_event, session_id),
                     pi_session=self.backend_for(session_id, owner),

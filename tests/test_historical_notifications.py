@@ -54,8 +54,8 @@ def test_recorded_notifications_do_not_decode_registry_or_acquire_activity(archi
         results = source.notification_references(sources, tuple(message.reference for message in messages))
     notification, = results[messages[0].seq, messages[0].message_id]
     assert notification.recipient == "agent"
-    assert notification.state == "Sent" and not notification.busy
-    assert "stopped" not in notification.detail
+    assert notification.label == "Sent" and not notification.state.working
+    assert "stopped" not in notification.state.detail
     assert notification.displayed_to == ()
     assert not (Path(source.root) / "coordination.sqlite3").exists()
     assert all(path.read_bytes() == original for path, original in preserved.items())
@@ -143,7 +143,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
 
     activity = AssignmentActivity(
         triage_inflight=False,
-        context_progress=ShownToModelProgress(1),
+        progress=ShownToModelProgress(1),
         response=UnansweredResponse(),
     )
     with pytest.raises(TypeError, match="activity"):
@@ -156,16 +156,16 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         activity=activity,
         updated_at_ms=1,
     )
-    assert recorded.state.startswith("Read ") and not recorded.busy
-    assert recorded.detail == ""
+    assert recorded.label.startswith("Read ") and not recorded.state.working
+    assert recorded.state.detail == ""
     live = assignment.notification(
         recipient,
         observation=UnavailableRecipientActivity(),
         activity=activity,
         updated_at_ms=1,
     )
-    assert live.state.startswith("Read ") and not live.busy
-    assert live.detail == ""
+    assert live.label.startswith("Read ") and not live.state.working
+    assert live.state.detail == ""
 
 
 def test_sent_recipient_progresses_through_durable_read_and_answer(archived_notification):
@@ -179,11 +179,11 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         AssignmentActivity,
         UnansweredResponse,
     )
-    from agent_comms.notification_progress import QueuedProgress, SentProgress, ShownToModelProgress
+    from agent_comms.notification_progress import QueuedProgress, SentProgress, ShownToModelProgress, SelectedReadProgress
 
     sent_activity = AssignmentActivity(
         triage_inflight=False,
-        context_progress=SentProgress(1_000),
+        progress=SentProgress(1_000),
         response=UnansweredResponse(),
     )
     engagement = EngagedAssignment.build(FullWake(), "durable-execution", "sender")
@@ -193,14 +193,14 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         activity=sent_activity,
         updated_at_ms=1_000,
     )
-    queued_activity = replace(sent_activity, context_progress=QueuedProgress(1_000))
+    queued_activity = replace(sent_activity, progress=QueuedProgress(1_000))
     queued = FullWake().initial_state().build_preengagement(FullWake()).notification(
         recipient,
         observation=RecordedRecipientActivity(),
         activity=queued_activity,
         updated_at_ms=1_000,
     )
-    read_activity = replace(sent_activity, context_progress=ShownToModelProgress(2_000))
+    read_activity = replace(sent_activity, progress=ShownToModelProgress(2_000))
     read = engagement.notification(
         recipient,
         observation=RecordedRecipientActivity(),
@@ -236,12 +236,12 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         updated_at_ms=2_000,
     )
 
-    assert sent.state.startswith("Sent ") and sent.progress == SentProgress(1_000)
-    assert queued.state.startswith("Queued ") and queued.progress == QueuedProgress(1_000)
-    assert read.state.startswith("Read ") and read.progress == ShownToModelProgress(2_000)
-    assert answered.state.startswith("Answered ") and answered.answered_at_ms == 3_000
-    assert delivered.state.startswith("Read ") and delivered.progress == ShownToModelProgress(2_000)
-    assert delivered_answer.state.startswith("Answered ")
+    assert sent.label.startswith("Sent ") and sent.state == SentProgress(1_000)
+    assert queued.label.startswith("Queued ") and queued.state == QueuedProgress(1_000)
+    assert read.label.startswith("Read ") and read.state == SelectedReadProgress(2_000)
+    assert answered.label.startswith("Answered ") and answered.answered_at_ms == 3_000
+    assert delivered.label.startswith("Read ") and delivered.state == ShownToModelProgress(2_000)
+    assert delivered_answer.label.startswith("Answered ")
     assert delivered_answer.answer == MessageReference(99, "durable-reply")
     assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
 
@@ -272,7 +272,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
         (original.reference,)
     )[original.seq, original.message_id]
     assert unrelated.answers == ()
-    assert notification.state.startswith("Read ")
+    assert notification.label.startswith("Read ")
     assert notification.answer is None
 
     import os
@@ -320,7 +320,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     )[original.seq, original.message_id]
 
     assert response.answers == (original.reference,)
-    assert notification.state.startswith("Answered ")
+    assert notification.label.startswith("Answered ")
     assert notification.answer == response.reference
     assert notification.answered_at_ms == int(response.timestamp * 1000)
 
@@ -380,10 +380,10 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     current, = old.views.message_notifications_for_references((messages[0].reference,))[
         messages[0].seq, messages[0].message_id
     ]
-    assert current.state == "Acknowledged" and not current.displayed_to
+    assert current.label == "Acknowledged" and not current.displayed_to
     with live.bus.history.read_sources() as sources:
         archived, = source.notification_references(sources, (messages[0].reference,))[
             messages[0].seq, messages[0].message_id
         ]
-    assert archived.state == "Sent" and not archived.displayed_to
+    assert archived.label == "Sent" and not archived.displayed_to
     assert FieldCodec.decode(RecipientActivity, FieldCodec.encode(RecordedRecipientActivity())) == RecordedRecipientActivity()

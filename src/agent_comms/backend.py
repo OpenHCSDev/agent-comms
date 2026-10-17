@@ -20,12 +20,12 @@ import json
 import secrets
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
-from contextlib import AbstractContextManager, AsyncExitStack, aclosing, asynccontextmanager, contextmanager, nullcontext
+from contextlib import AsyncExitStack, aclosing, contextmanager
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from .agent_backend import InputRequest, SendNow, TurnInboxItem
+from .agent_backend import TurnInbox
 from .child_process import ProcessIdentity
 from .request_progress import RequestProgress
 
@@ -38,7 +38,7 @@ from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
 from .image_inputs import ImageInput
 from .turn_context import InputContributionCoordinates
-from .maintenance_barrier import MaintenanceBarrier
+from .send_outcome import SendBoundary
 from .native_attestation import AttestationError
 from .native_custody import PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
@@ -88,24 +88,6 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
         TurnSession.active.pop(task, None)
 
 
-@asynccontextmanager
-async def _maintenance_send_boundary(
-    root: Path,
-    delegate: Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None,
-    public_id: str | None,
-    native_id: str,
-    text: str,
-) -> AsyncIterator[bool | None]:
-    """Acquire shared ingress without blocking the loop needed to release it.
-
-    The original delegate checks and stdin.write consume this same custody
-    synchronously. Release it before pipe drain, native ACK or any other await.
-    """
-    async with MaintenanceBarrier(root / "registry.json").admit_ingress_async():
-        with delegate(public_id, native_id, text) if delegate else nullcontext(True) as allowed:
-            yield allowed
-
-
 async def stream_agent_events(
     agent_bin: str,
     agent_args: Sequence[str],
@@ -113,18 +95,13 @@ async def stream_agent_events(
     cwd: str,
     env_extra: dict[str, str] | None = None,
     session_file: str | None = None,
-    steering_queue: asyncio.Queue[TurnInboxItem] | None = None,
+    steering_queue: TurnInbox | None = None,
     finish_event: asyncio.Event | None = None,
     images: Sequence[ImageInput] = (),
     model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
-    require_input_id: bool = True,
-    send_boundary: (
-        Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
-    ) = None,
-    interrupt_boundary: (
-        Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
-    ) = None,
+    send_boundary: SendBoundary | None = None,
+    interrupt_boundary: SendBoundary | None = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
     *,
     persistent_session: PersistentPiSession,
@@ -170,7 +147,6 @@ async def stream_agent_events(
                             context_contributions=context_contributions,
                             model_wait_timeout=model_wait_timeout,
                             rpc_abort_grace=rpc_abort_grace,
-                            require_input_id=require_input_id,
                             send_boundary=send_boundary,
                             native_start=native_start,
                             interrupt_boundary=interrupt_boundary,
@@ -196,23 +172,19 @@ class TurnSession:
     """One Pi turn: owns input admission, native identity, settlement and child lifetime."""
 
     active: ClassVar[dict[asyncio.Task[Any], TurnSession]] = {}
+    prompt_type = UnwrittenPrompt
 
     def __init__(
         self,
         launch: NativePiRpcLaunch,
         task: str,
-        steering_queue: asyncio.Queue[TurnInboxItem] | None = None,
+        steering_queue: TurnInbox | None = None,
         finish_event: asyncio.Event | None = None,
         images: Sequence[ImageInput] = (),
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
         rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
-        require_input_id: bool = True,
-        send_boundary: (
-            Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
-        ) = None,
-        interrupt_boundary: (
-            Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
-        ) = None,
+        send_boundary: SendBoundary | None = None,
+        interrupt_boundary: SendBoundary | None = None,
         native_start: Callable[[str | None, str, str], bool] | None = None,
         persistent_session: PersistentPiSession | None = None,
         native_session: PersistentPiSession | None = None,
@@ -231,7 +203,6 @@ class TurnSession:
             model_wait_timeout, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
         )
         self.rpc_abort_grace = rpc_abort_grace
-        self.require_input_id = require_input_id
         self.send_boundary = send_boundary
         self.interrupt_boundary = interrupt_boundary
         self.native_start = native_start
@@ -244,8 +215,8 @@ class TurnSession:
         self.native_session: PersistentPiSession = session
         self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup if startup is not None else NativeStartup.for_launch(launch)
-        self.inputs = InputForwarding(steering_queue)
-        self.admission = UnwrittenPrompt()
+        self.inputs = InputForwarding(steering_queue if steering_queue is not None else TurnInbox())
+        self.prompt_state = self.prompt_type()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
         self.output = TurnOutput(sensitive=bool(images))
@@ -265,11 +236,11 @@ class TurnSession:
 
     @property
     def started_input(self):
-        return self.admission.started and self.inputs.permits_admission
+        return self.prompt_state.started and self.inputs.permits_interaction
 
     @property
     def awaiting_native_attestation(self):
-        return self.require_input_id and not self.native.attestation.observed
+        return not self.native.attestation.observed
 
     async def consume_native_event(self, event):
         """Observe one decoded event through the shared native lifecycle owner."""
@@ -302,15 +273,15 @@ class TurnSession:
         return self.native.attestation.trustworthy
 
     def matches_original_input(self, message):
-        return self.inputs.permits_admission and message.matches_input(
-            self.task, self.original_input_id, self.require_input_id
+        return self.inputs.permits_interaction and message.matches_input(
+            self.task, self.original_input_id
         )
 
     def committable_message(self, text):
         return self.started_input and self.accepts_output and self.output.matches_message(text)
 
     def ensure_input_forwarding(self):
-        if self.inputs.can_forward(self.native.proc.stdin):
+        if self.native.proc.stdin is not None:
             self.stdin = self.native.proc.stdin
             self.native.forward_input(partial(self.inputs.forward, self))
 
@@ -322,7 +293,7 @@ class TurnSession:
 
     async def admit_user_message(self, message, event):
         """Own the original/follow-up input effect across all decoded user messages."""
-        if self.admission.awaiting_start and self.matches_original_input(message):
+        if self.prompt_state.awaiting_start and self.matches_original_input(message):
             if not self.notify_input_started(None, self.original_input_id, self.task):
                 self.inputs.uncertain = True
                 self.output.record_failure(
@@ -331,7 +302,7 @@ class TurnSession:
                 await self.abort_stalled_rpc()
                 self.finished = True
                 return
-            self.admission = self.admission.start(event)
+            self.prompt_state = self.prompt_state.start(event)
             if self.has_start_listener:
                 yield events.InputStarted(id=None)
             self.ensure_input_forwarding()
@@ -364,7 +335,7 @@ class TurnSession:
         """Only tracked, live input may publish an informational package receipt."""
         if self.stats.requested:
             return False
-        return self.require_input_id and self.admission.permits_extension_ui(self)
+        return self.prompt_state.permits_extension_ui(self)
 
     async def abort_stalled_rpc(self) -> None:
         await self.native.finish_input()
@@ -415,9 +386,9 @@ class TurnSession:
                 f"Native resource acquisition failed: {type(error).__name__}: {error}"
             )
             failure.__cause__ = error
-            self.admission.raise_native_failure(failure, self.launch.session.attestation())
+            self.prompt_state.raise_native_failure(failure, self.launch.session.attestation())
         except NativePiUnavailable as error:
-            self.admission.raise_native_failure(error, self.launch.session.attestation())
+            self.prompt_state.raise_native_failure(error, self.launch.session.attestation())
 
     async def acquire_native(self, resources: AsyncExitStack, *, reuse: bool) -> PiSessionChild:
         """Acquire leaf transport once in the original turn's resource lifetime."""
@@ -454,9 +425,7 @@ class TurnSession:
                     self.output.sensitive |= self.native.sensitive_diagnostics
                     if self.native.proc.stdin is not None:
                         try:
-                            if not self.require_input_id:
-                                self.grant_prompt()
-                            self.native.proc.stdin.write(self.stdin_payload)
+                            self.native.proc.stdin.write(self.native.reader.encode(self.native.attestation.request))
                             await self.native.proc.stdin.drain()
                         except (BrokenPipeError, ConnectionResetError):
                             pass
@@ -477,9 +446,8 @@ class TurnSession:
                                 await error.refuse(self)
                                 break
                             if self.native.attestation.observed:
-                                await self.input_ready()
-                                if self.finished:
-                                    break
+                                self.inputs.queue.begin(self.prompt_state)
+                                self.ensure_input_forwarding()
                         async for event in self.payload.consume(self):
                             yield event
                         if self.finished:
@@ -552,40 +520,8 @@ class TurnSession:
 
     def grant_prompt(self) -> None:
         """Original granted write starts both admission and its input-start clock."""
-        self.admission = self.admission.dispatch()
+        self.prompt_state = self.prompt_state.dispatch()
         self.watchdog.await_input()
-
-    async def input_ready(self) -> None:
-        assert self.native.proc.stdin is not None
-        try:
-            self.boundary_context = _maintenance_send_boundary(
-                self.startup.root,
-                self.send_boundary,
-                None,
-                self.original_input_id,
-                self.task,
-            )
-            async with self.boundary_context as self.authorized:
-                if self.authorized:
-                    self.grant_prompt()
-                    self.native.proc.stdin.write(self.prompt_payload)
-            if not self.authorized:
-                self.output.record_failure(
-                    failures.InputMissing("Input authority changed before Pi prompt send.")
-                )
-                await self.native.shutdown()
-                self.finished = True
-                return
-            await self.native.proc.stdin.drain()
-        except (BrokenPipeError, ConnectionResetError):
-            self.output.record_failure(
-                failures.InputIdUnavailable(
-                    "Pi RPC prompt could not be sent after capability preflight."
-                )
-            )
-            await self.native.shutdown()
-            self.finished = True
-            return
 
     async def invalidate_identity(self) -> AsyncIterator[events.AgentEvent]:
         self.native.attestation = self.native.attestation.invalidate()
@@ -606,46 +542,30 @@ class TurnSession:
         """Pi compacted after an overflow and re-sends the same request."""
         self.output.request_retried()
 
+    @property
+    def prompt_id(self):
+        return self.command.id
+
+    @property
+    def original_input_id(self):
+        return self.command.input_id
+
     def prepare_launch(self) -> None:
-        self.prompt_id = (
-            f"agent-comms-prompt-{secrets.token_hex(16)}"
-            if self.persistent_session is not None
-            else "agent-comms-prompt"
-        )
-        self.original_input_id = secrets.token_hex(16)
-        self.prompt_request = commands.Prompt(
-            id=self.prompt_id,
-            input_id=self.original_input_id,
+        self.command = commands.Prompt(
+            id=f"agent-comms-prompt-{secrets.token_hex(16)}",
+            input_id=secrets.token_hex(16),
             message=self.task,
             images=self.images or None,
             context_contributions=self.context_contributions,
         )
-        self.prompt_payload = PiRpcChannel.command_bytes(self.prompt_request)
-        self.stdin_payload = PiRpcChannel.command_bytes(self.native.attestation.request)
-        if not self.require_input_id:
-            self.stdin_payload += self.prompt_payload
 
     async def initialize_rpc(self) -> AsyncIterator[events.AgentEvent]:
         self.explicit_interrupt = False
         self.rejected_commands: list[events.AgentEvent] = []
-        if self.inputs.can_forward(self.native.proc.stdin):
-            self.stdin = self.native.proc.stdin
-            if not self.require_input_id:
-                self.ensure_input_forwarding()
         self.model_name: str | None = None
         self.session_name: str | None = None
         self.active_session_file = self.launch.session.session_file
         self.settlement_count = 0
-        self.native.reader.pending.add(
-            commands.GetState,
-            self.native.attestation.request.id,
-            request=self.native.attestation.request,
-        )
-        self.native.reader.pending.add(
-            commands.Prompt,
-            self.prompt_id,
-            request=self.prompt_request,
-        )
         self.watchdog.reading()
         self.active_tools: set[str] = set()
         self.started_during_abort: list[str | None] = []
@@ -657,9 +577,8 @@ class TurnSession:
         identity = self.native.attestation.identity
         if (
             self.persistent_session is not None
-            and self.require_input_id
             and identity is not None
-            and self.admission.permits_retention(self)
+            and self.prompt_state.permits_retention(self)
         ):
             self.native.sensitive_diagnostics = self.output.sensitive
             self.native_session.retain(self.native, identity)

@@ -14,7 +14,7 @@ from .messages import Message
 from .private_path import FileRevision
 from .read_basis import (
     ChannelDisplayScope, DisplaySelection, DMDisplayBasis, DMDisplayScope,
-    MessageDisplayScope, NoDisplaySelection,
+    MessageDisplayScope, NoDisplaySelection, ReadCursor,
 )
 from .wire_log import OpenedWireSnapshot
 
@@ -253,7 +253,7 @@ class UnreadBeforeRequest(MessageReadRequest[bool]):
 
     scope: DMDisplayScope
     before: int
-    seen: frozenset[int]
+    seen: ReadCursor
     empty: ClassVar[bool] = False
 
     def includes(self, message: Message | BusPageRow) -> bool:

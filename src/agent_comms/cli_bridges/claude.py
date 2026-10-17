@@ -9,7 +9,7 @@ from agent_comms.private_path import FileRevision
 from .claude_protocol import CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame
 from .shared import (
     LineMonitorBridge, Options, TranscriptUpdate,
-    parse_options, run_bridge, shared_parser,
+    run_bridge,
 )
 
 
@@ -74,5 +74,4 @@ class ClaudeBridge(LineMonitorBridge):
 
 
 def main() -> None:
-    parser = shared_parser(__doc__, Path.home() / '.local/state/claude-comms-inbox', ClaudeBridge)
-    run_bridge(ClaudeBridge, parse_options(parser, Options))
+    run_bridge(ClaudeBridge, Options.parse(__doc__, Path.home() / '.local/state/claude-comms-inbox', ClaudeBridge))

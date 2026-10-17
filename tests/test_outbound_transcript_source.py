@@ -11,6 +11,7 @@ from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
+from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.wire_log import WireLog
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor, TranscriptRead
@@ -57,10 +58,10 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     notice = next(item for item in comms.views.thread_presentation('sender').notifications
                   if item.recipient=='beta')
-    assert notice.state=='Sent'
-    assert notice.detail == ''
+    assert notice.label=='Sent'
+    assert notice.state.detail == ''
     assert notice.message.reference==initial.message.reference
-    assert not notice.busy
+    assert not notice.state.working
     # A diagnostic from another owner generation cannot block a current
     # participant; neither its text nor a running PID grants that relation.
     foreign = replace(diagnostic,owner=replace(owner,generation=owner.generation+1))
@@ -68,7 +69,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     comms.agents.activity.emit(replace(activity,diagnostic=foreign))
     current = next(item for item in comms.views.thread_presentation('sender').notifications
                    if item.recipient=='beta')
-    assert current.state=='Sent'
+    assert current.label=='Sent'
 
 
 def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):  # noqa: F811
@@ -88,7 +89,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     wire_before = comms.bus.log.path.read_bytes()
     notices = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
-    assert beta.state=='Sent' and beta.detail == ''
+    assert beta.label=='Sent' and beta.state.detail == ''
     assert beta.recipient_identity.recipient_lookup==RecordedThreadIncarnation("fixture", comms.registry.require('beta').created_at).lookup
     with Coordination(str(root/'coordination.sqlite3')) as store:
         assert WakeAssignment.select(store.session._connection)==before
@@ -160,16 +161,12 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
 def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     before = comms.transcripts.capture_page_read("beta")
-    receipt = invoke_tool(
-        comms,
-        "comms_send",
-        {
-            "from": "beta",
-            "to": "sender",
-            "body": "Original outgoing ownership reply",
-        }, caller=NoThreadCaller(),
-    )
-    message = comms.bus.log.message_by_id(receipt["id"])
+    receipt = PublishedMessageToolDetails.from_wire(invoke_tool(
+        comms, "comms_send",
+        {"from": "beta", "to": "sender", "body": "Original outgoing ownership reply"},
+        caller=NoThreadCaller(),
+    ))
+    message, = comms.bus.log.messages_for_references((receipt.message.source,))
     after = comms.transcripts.capture_page_read("beta")
     assert after.identity.wire_frontier.sequence == message.seq
     assert not before.current()
@@ -200,7 +197,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     lookup = RecordedThreadIncarnation("fixture", target.created_at).lookup
     receipts = comms.views.thread_presentation("sender").notifications
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
-    assert beta.message.reference == message.reference and beta.state == "Sent"
+    assert beta.message.reference == message.reference and beta.label == "Sent"
     original = next(
         row.assignment for row in NotificationAssignment.read(root, (initial,)).resolve(root)
         if row.assignment.recipient_lookup == lookup
@@ -254,8 +251,8 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     target_outcome = next(
         item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
     )
-    assert target_outcome.state.startswith("Read ")
-    assert target_outcome.detail == ""
+    assert target_outcome.label.startswith("Read ")
+    assert target_outcome.state.detail == ""
 
 
 def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa: F811
