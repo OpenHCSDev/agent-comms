@@ -6,7 +6,7 @@ import json
 import logging
 from abc import abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
@@ -61,13 +61,9 @@ class TranscriptCursor:
         return self.receipts.sequence if self.receipts is not None else 0
 
     def at_offset(self, offset: int) -> TranscriptCursor:
-        from dataclasses import replace
-
         return replace(self, offset=offset)
 
     def at_sequence(self, sequence: int) -> TranscriptCursor:
-        from dataclasses import replace
-
         if self.receipts is None:
             if sequence == 0:
                 return self
@@ -97,6 +93,18 @@ class TranscriptCursor:
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
         return self.receipts is not None and self.receipts.covers(sequence)
+
+    def over_native(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
+        """These receipts over the furthest committed native prefix they include.
+
+        Wire assignment can advance without transferring anonymous native output,
+        so the native position comes from what is already committed.
+        """
+        within = tuple(prefix for prefix in prefixes if prefix.receipts_within(self))
+        prefix = max((prefix for prefix in within if prefix.session_file == self.session_file),
+                     key=lambda prefix: prefix.offset,
+                     default=next(iter(within), TranscriptCursor(self.session_file, 0)))
+        return replace(prefix, receipts=self.receipts)
 
 
 @dataclass(frozen=True, slots=True)

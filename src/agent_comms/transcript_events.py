@@ -46,6 +46,22 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
 
 
 @dataclass(frozen=True)
+class TranscriptCoverage:
+    """The incoming wire sequences and native inputs a run of events carries."""
+
+    events: tuple[TranscriptEvent, ...]
+
+    @property
+    def sequences(self) -> frozenset[int]:
+        return frozenset(source.seq for event in self.events
+                         for source in event.incoming_sources if source.seq > 0)
+
+    @property
+    def native_inputs(self) -> frozenset[str]:
+        return frozenset(native_id for event in self.events for native_id in event.native_inputs)
+
+
+@dataclass(frozen=True)
 class TextTranscript(TranscriptEvent):
     text: str = ""
 
