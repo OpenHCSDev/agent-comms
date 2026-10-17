@@ -32,10 +32,11 @@ from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.private_path import PrivateDirectoryRole
 from agent_comms.store_files import _atomic_write_text
 from agent_comms.threads import Thread
-from publish_openhcs_recovery import COMMANDS, LINKS, ROOT, digest, fsync_directory, require_no_clients, retain_file
+from publish_openhcs_recovery import COMMANDS, digest, fsync_directory, require_no_clients, retain_file
 from retained_summary_reset import RuntimeCompactionFiles, RuntimeGoalFiles
 from native_schema_carry import RuntimeNativeFiles
 from runtime_installation import RuntimeInstallation
+from publish_runtime import RuntimePublication
 from cutover_child import restore_stopped_batch
 
 
@@ -300,11 +301,21 @@ class ReviewedRetainedSummaryCohort:
         """Each publication member owns its actual original command supply."""
         return self.current_prefix
 
+    @property
+    def root(self):
+        return self.original_route.root
+
+    @property
+    def command_directory(self):
+        return Path.home() / '.local/bin'
+
     def require_original(self):
-        if self.original_route.root != ROOT:
-            raise RuntimeError('This reviewed one-use publisher names another public root')
         if sys.executable != str(self.target / 'bin/python'):
             raise RuntimeError('Use the reviewed target interpreter')
+        self.require_artifacts()
+
+    def require_artifacts(self):
+        PrivateDirectoryRole.require(self.root.lstat())
         self.activation.require_original()
         self.source_proof.require_original()
         activation = FieldCodec.decode(CohortActivation, json.loads(self.activation.path.read_text()))
@@ -332,11 +343,11 @@ class ReviewedRetainedSummaryCohort:
         if read_active_route() != self.original_route:
             raise RuntimeError('Original active route changed; recapture/review required')
         for command in self.commands:
-            if (LINKS / command).readlink() != self.original_command_prefix(command) / 'bin' / command:
+            if (self.command_directory / command).readlink() != self.original_command_prefix(command) / 'bin' / command:
                 raise RuntimeError('Original default changed; recapture/review required')
             if not (self.target / 'bin' / command).is_file():
                 raise RuntimeError('Reviewed target entrypoint is missing')
-            temporary = LINKS / (command + '.retained-summary-publish')
+            temporary = self.command_directory / (command + '.retained-summary-publish')
             if temporary.exists() or temporary.is_symlink():
                 raise RuntimeError('Original publication attempt requires review')
 
@@ -354,14 +365,14 @@ class ReviewedRetainedSummaryCohort:
 
     def publish_links(self, directory: int | None = None):
         for command in self.commands:
-            link = LINKS / command if directory is None else command
+            link = self.command_directory / command if directory is None else command
             if Path(os.readlink(link, dir_fd=directory)) != self.original_command_prefix(command) / 'bin' / command:
                 raise RuntimeError('Default changed during publication; remain stopped')
-            temporary = LINKS / (command + '.retained-summary-publish') if directory is None else command + '.retained-summary-publish'
+            temporary = self.command_directory / (command + '.retained-summary-publish') if directory is None else command + '.retained-summary-publish'
             os.symlink(self.target / 'bin' / command, temporary, dir_fd=directory)
             os.replace(temporary, link, src_dir_fd=directory, dst_dir_fd=directory)
         if directory is None:
-            fsync_directory(LINKS)
+            fsync_directory(self.command_directory)
         else:
             os.fsync(directory)
         if read_active_route() != replace(self.original_route, native_package=self.native):
@@ -414,7 +425,7 @@ class CommandDefaultPublication:
             raise RuntimeError('Default recovery preserves an unknown command binding')
 
     def _publish_default_links(self, receipt: Path):
-        directory = os.open(LINKS, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        directory = os.open(self.command_directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         route_directory = None
         try:
             fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -480,7 +491,7 @@ class ReviewedBackendCohort(CommandDefaultPublication, ReviewedRetainedSummaryCo
         self.require_preserved_defaults()
 
     def require_preserved_defaults(self):
-        if (LINKS / 'toad').readlink() != self.frontend_prefix / 'bin/toad':
+        if (self.command_directory / 'toad').readlink() != self.frontend_prefix / 'bin/toad':
             raise RuntimeError('Original frontend default changed; remain stopped')
 
     def publish(self, directory: int, links_directory: int | None = None):
@@ -562,7 +573,7 @@ class ReviewedFrontendCohort(CommandDefaultPublication, ReviewedRetainedSummaryC
         backend = FieldCodec.decode(InstalledSourceProof,
                                     json.loads(self.backend_source_proof.path.read_text()))
         for command in COMMANDS:
-            if command not in self.commands and (LINKS / command).readlink() != backend.prefix / 'bin' / command:
+            if command not in self.commands and (self.command_directory / command).readlink() != backend.prefix / 'bin' / command:
                 raise RuntimeError('Original backend default changed')
 
     def publish_route(self, directory: int):
@@ -597,8 +608,60 @@ class ReviewedCommsFrontendCohort(ReviewedFrontendCohort):
 
 
 @dataclass(frozen=True)
+class ReviewedInstalledRuntime(RuntimePublication):
+    """The current pointer publisher, extended with original-stop evidence."""
+
+    original_route: ActiveRoute
+    current_prefix: Annotated[Path, PathText]
+    build_proof: ReviewedArtifact
+
+    @property
+    def root(self):
+        return self.original_route.root
+
+    @property
+    def target(self):
+        return self.runtime
+
+    @property
+    def native(self):
+        return self.original_route.native_package
+
+    def require_artifacts(self):
+        self.build_proof.require_original()
+        if self.build_proof.path != self.runtime / 'build.json':
+            raise ValueError('Reviewed build metadata names another runtime')
+        PrivateDirectoryRole.require(self.root.lstat())
+        verify_native_package(self.native)
+        for link, target in self.links.items():
+            target.relative_to(self.runtime)
+            target.stat()
+            if not link.is_symlink():
+                raise ValueError('Original runtime entrypoint is not a symlink')
+        self.require_publication_originals()
+
+    def require_original(self):
+        if sys.executable != str(self.runtime / 'bin/python'):
+            raise ValueError('Goal publication requires the reviewed target decoder')
+        self.require_artifacts()
+
+    def require_publication_originals(self):
+        if read_active_route() != self.original_route or self.current.resolve(strict=True) != self.current_prefix:
+            raise ValueError('Original route or runtime pointer changed')
+        for link, target in self.links.items():
+            if link.resolve(strict=True) != self.current_prefix / target.relative_to(self.runtime):
+                raise ValueError('Original runtime entrypoint changed')
+
+    def publish(self, directory):
+        self.require_publication_originals()
+        # RuntimePublication owns the declaration-derived launchers and the one
+        # atomic pointer. Do not copy its publication algorithm into this tool.
+        super().publish(self.root)
+
+
+@dataclass(frozen=True)
 class PublishRetainedSummary(StoppedOwnerInstallation):
-    cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort
+    cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort | ReviewedInstalledRuntime
     audience: tuple[OwnerRestartSelection, ...]
     originals: tuple[Thread, ...]
     task_carry: StoppedOwnerInstallation
@@ -618,9 +681,9 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         """Include payloads the installation may replace, not only invariants."""
         from agent_comms.wire_log import WireLog
 
-        bus = WireLog(ROOT / 'bus.jsonl')
+        bus = WireLog(self.cohort.root / 'bus.jsonl')
         paths = self.protected_files().union(
-            RuntimeCompactionFiles(ROOT).paths, RuntimeNativeFiles(ROOT).paths,
+            RuntimeCompactionFiles(self.cohort.root).paths, RuntimeNativeFiles(self.cohort.root).paths,
             (bus.path, bus.metadata_path),
             self.task_carry.recovery_paths(),
         )
@@ -646,10 +709,13 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
             current.require_idle()
             if current != original:
                 raise RuntimeError('Original owner settings changed')
-        self.cohort.require_original()
-        require_no_clients(self.audience)
-        InputDispositions(ROOT / InputDispositions.filename).read()
+        self.require_cohort()
+        require_no_clients(self.audience, self.cohort.root)
+        InputDispositions(self.cohort.root / InputDispositions.filename).read()
         self.task_carry.require_selection(snapshot, owners)
+
+    def require_cohort(self):
+        self.cohort.require_original()
 
     def protected_files(self) -> frozenset[Path]:
         # Original uncertainty and evidence stay in their OWN stores. Runtime
@@ -659,7 +725,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                      'native_prompt_bindings.sqlite3', 'goal_history.sqlite3',
                      'goal_waits.json', 'goal_pause_events.json'):
             for suffix in ('', '-journal', '-wal', '-shm'):
-                path = ROOT / (name + suffix)
+                path = self.cohort.root / (name + suffix)
                 if path.exists() or path.is_symlink():
                     paths.add(path)
         for original in self.originals:
@@ -670,13 +736,13 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                     proof = Path(str(session) + suffix)
                     if proof.exists() or proof.is_symlink():
                         paths.add(proof)
-        paths.update(path for path in RuntimeGoalFiles(ROOT).paths
+        paths.update(path for path in RuntimeGoalFiles(self.cohort.root).paths
                      if path.exists() or path.is_symlink())
         return frozenset(paths)
 
     def after_stopped(self, lifecycle):
         self.cohort.require_original()
-        require_no_clients(self.audience)
+        require_no_clients(self.audience, self.cohort.root)
         snapshot = lifecycle.registry.snapshot()
         for original in self.originals:
             if original.process_alive or snapshot.threads[original.name] != original:
@@ -688,14 +754,14 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         protected = {str(path): digest(path) for path in sorted(paths)}
         # No decoding of old input records from a target-compaction journal.
         with ExitStack() as custody:
-            runtime = custody.enter_context(RuntimeCompactionFiles(ROOT).acquire())
-            goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
+            runtime = custody.enter_context(RuntimeCompactionFiles(self.cohort.root).acquire())
+            goals = custody.enter_context(RuntimeGoalFiles(self.cohort.root).acquire())
             # Freeze original membership before deriving the byte-preserved
             # partition. Goal members have their own preimage/row/DDL proof.
             unchanged = self.runtime_installation.unchanged_protected(paths, runtime).difference(goals.paths)
             invariant = {str(path): protected[str(path)] for path in unchanged}
             original_files = self.runtime_installation.retain_protected(paths, directory)
-            retain_file(ROOT / 'registry.json', directory / 'registry.json')
+            retain_file(self.cohort.root / 'registry.json', directory / 'registry.json')
             fsync_directory(directory)
             fsync_directory(directory.parent)
             self.note('all-original-owners-stopped-originals-audited',
@@ -703,7 +769,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                       registry_original_sha256=digest(directory / 'registry.json'))
             goal_installation = self.runtime_installation.synchronize_goal(
                 goals, directory / 'goal-ledger')
-            installed_goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
+            installed_goals = custody.enter_context(RuntimeGoalFiles(self.cohort.root).acquire())
             # The carry and runtime member share the ORIGINAL stopped wire custody.
             self.task_carry.after_stopped(lifecycle)
             installed = self.runtime_installation.install(runtime, directory / 'runtime-compaction')
@@ -754,8 +820,12 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                   results=FieldCodec.encode(results), finished=time.time())
         return results
 
+    def launch_runtime(self, stopped):
+        from agent_comms.launch_runtime import LaunchRuntime
+        return LaunchRuntime(self.cohort.target / 'bin/python')
+
     def bind_target_launch(self, lifecycle):
-        lifecycle.pin_private_nk_launch(ROOT, self.cohort.original_route.wire_root_id,
+        lifecycle.pin_private_nk_launch(self.cohort.root, self.cohort.original_route.wire_root_id,
                                        self.cohort.native)
 
 
@@ -766,10 +836,16 @@ def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_
     A retry never happens here. Any existing receipt/preimage refuses before
     admission, and the only stop/fence/launch implementation is the original one.
     """
+    cohort.require_original()
+    return runtime_installation.publish(cohort, task_carry, receipt)
+
+
+def publish_original(cohort, task_carry, runtime_installation, receipt,
+                     operation_type=PublishRetainedSummary):
+    """The selected original decoder owns the existing stop/fence algorithm."""
     if receipt.exists() or receipt.is_symlink() or receipt.with_suffix('.originals').exists():
         raise RuntimeError('Original attempt requires review; never automatically repeat')
-    cohort.require_original()
-    service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
+    service = Comms(cohort.root, private_initial_writes=False, private_claim_writes=False)
     snapshot = service.registry.snapshot()
     owners = tuple(OwnerRestartRequest().threads(snapshot))
     if not owners:
@@ -781,7 +857,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_
     directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         acquire_exclusive_route_lock(directory)
-        operation = PublishRetainedSummary(cohort, audience, owners, task_carry,
+        operation = operation_type(cohort, audience, owners, task_carry,
                                           runtime_installation, directory, receipt)
         operation.require_selection(snapshot, owners)
         receipt.parent.mkdir(mode=0o700, parents=True, exist_ok=True)

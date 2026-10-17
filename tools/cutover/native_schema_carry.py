@@ -57,7 +57,7 @@ class NativeSchemaDeclaration:
         from agent_comms.compaction_records import JournalTable
         # The original interpreter need not expose a target-only schema helper.
         # Both authentic producers declare membership through this capability.
-        goal = cls.observe_goal()
+        goal = GoalNativeStore.schema()
         coordination_meta = SchemaMeta.current()
         response_version = get_args(get_type_hints(ResponseSchemaMeta)['version'])[0]
         native_version = get_args(get_type_hints(NativeRuntimeSchemaMeta)['version'])[0]
@@ -93,61 +93,6 @@ class NativeSchemaDeclaration:
                    coordination_meta.schema_version, coordination_meta.snapshot_version, response_version,
                    coordination, goal, writable, metadata, compaction,
                    {table.declared_name: table.columns() for table in journals})
-
-    @staticmethod
-    def observe_goal():
-        from agent_comms.goal_attempts import GoalLedgerTable
-        from agent_comms.typed_table import TypedTable
-        return {name: sql for table in TypedTable.members_with(GoalLedgerTable)
-                for name, sql in table.schema_objects().items()}
-
-    def require_goal(self, db):
-        from agent_comms.goal_attempts import assert_goal_attempt_schema
-        if objects(db) != self.goal:
-            raise ValueError('Goal ledger differs from the target declaration')
-        assert_goal_attempt_schema(db)
-
-    def synchronize_goal(self, acquired, destination, original_schema):
-        """Derive the stopped carry from actual DDL, never a version number."""
-        acquired.require_original()
-        if not acquired.originals:
-            return {'classification': 'goal/absent', 'created': False}
-        original, = acquired.originals
-        with closing(sqlite3.connect(original.path.as_uri()+'?mode=ro', uri=True)) as db:
-            if objects(db) == self.goal:
-                self.require_goal(db)
-                return {'classification': 'goal/preserve', 'original_files': acquired.evidence()}
-            if objects(db) != original_schema:
-                raise ValueError('Original goal ledger differs from its authentic declaration preimage')
-        candidate = destination.with_name(destination.name + '.candidate')
-        candidate.mkdir(mode=0o700)
-        name = str(original.path.relative_to(acquired.paths[0].parents[1]))
-        path = candidate / name
-        path.parent.mkdir(mode=0o700)
-        retain_file(original.path, path)
-        with closing(sqlite3.connect(path, isolation_level=None)) as db:
-            db.execute('PRAGMA foreign_keys=OFF')
-            db.execute('PRAGMA synchronous=EXTRA')
-            db.execute('BEGIN IMMEDIATE')
-            try:
-                evidence = carry_goal(db, self)
-                db.execute('COMMIT')
-            except BaseException:
-                db.execute('ROLLBACK')
-                raise
-        with path.open('rb') as stream:
-            os.fsync(stream.fileno())
-        fsync_directory(path.parent)
-        fsync_directory(candidate)
-        store = GoalNativeStore(original.sha256, digest(path), evidence)
-        if name != store.name:
-            raise ValueError('Acquired goal resource names another store')
-        result = NativeSchemaCarryPlan.install_prepared(
-            acquired.paths[0].parents[1], candidate, (store,), acquired, destination, self,
-            classification='goal/declaration-preserve')
-        with closing(sqlite3.connect(original.path.as_uri()+'?mode=ro', uri=True)) as db:
-            self.require_goal(db)
-        return result
 
     @property
     def release_versions(self):
@@ -343,7 +288,7 @@ def rebuild(db, schema, table_rows):
             db.execute(sql)
 
 
-def carry_goal(db, target):
+def carry_goal(db):
     """Rebuild generated constraints as one family, preserving every fact row."""
     from agent_comms.goal_attempts import GoalAttemptSchema, GoalLedgerTable
     from agent_comms.typed_table import TypedTable
@@ -374,8 +319,9 @@ def carry_goal(db, target):
         identities = fields if table.without_rowid else ('rowid', *fields)
         identity_rows[name] = rows(db, name, identities)
         payload[name] = (identities, identity_rows[name])
-    rebuild(db, target.goal, payload)
-    target.require_goal(db)
+    target = GoalNativeStore.schema()
+    rebuild(db, target, payload)
+    GoalNativeStore.require_schema(db)
     after_rows = inventory(db)
     for name in before_rows.keys() - {GoalAttemptSchema.declared_name}:
         if after_rows[name] != before_rows[name]:
@@ -385,13 +331,13 @@ def carry_goal(db, target):
     if db.execute('PRAGMA integrity_check').fetchall() != [('ok',)] or db.execute('PRAGMA foreign_key_check').fetchall():
         raise ValueError('Carried goal ledger constraints are not satisfied')
     return {'original_ddl_sha256': row_digest(before_objects),
-            'target_ddl_sha256': row_digest(target.goal),
+            'target_ddl_sha256': row_digest(target),
             'original_rows': {name: len(values) for name, values in before_rows.items()},
             'carried_rows': {name: len(values) for name, values in after_rows.items()},
             'unchanged_rows_sha256': row_digest({name: before_rows[name] for name in sorted(identity_rows)}),
             'row_identity_sha256': row_digest(identity_rows),
-            'changed_schema_objects': sorted(name for name in before_objects.keys() | target.goal.keys()
-                                             if before_objects.get(name) != target.goal.get(name)),
+            'changed_schema_objects': sorted(name for name in before_objects.keys() | target.keys()
+                                             if before_objects.get(name) != target.get(name)),
             'metadata_owner': GoalAttemptSchema.declared_name}
 
 
@@ -638,6 +584,64 @@ class NativeReleaseStore(CarriedNativeStore):
 class GoalNativeStore(CarriedNativeStore):
     name = 'goal-private/goal_attempts.sqlite3'
 
+    @staticmethod
+    def schema():
+        from agent_comms.goal_attempts import GoalLedgerTable
+        from agent_comms.typed_table import TypedTable
+        return {name: sql for table in TypedTable.members_with(GoalLedgerTable)
+                for name, sql in table.schema_objects().items()}
+
+    @classmethod
+    def require_schema(cls, db):
+        from agent_comms.goal_attempts import assert_goal_attempt_schema
+        if objects(db) != cls.schema():
+            raise ValueError('Goal ledger differs from the target declaration')
+        assert_goal_attempt_schema(db)
+
+    @classmethod
+    def synchronize(cls, acquired, destination, original_schema):
+        """Goal DDL does not depend on retired native compaction declarations."""
+        acquired.require_original()
+        if not acquired.originals:
+            return {'classification': 'goal/absent', 'created': False}
+        original, = acquired.originals
+        schema = cls.schema()
+        with closing(sqlite3.connect(original.path.as_uri()+'?mode=ro', uri=True)) as db:
+            if objects(db) == schema:
+                cls.require_schema(db)
+                return {'classification': 'goal/preserve', 'original_files': acquired.evidence()}
+            if objects(db) != original_schema:
+                raise ValueError('Original goal ledger differs from its authentic declaration preimage')
+        candidate = destination.with_name(destination.name + '.candidate')
+        candidate.mkdir(mode=0o700)
+        name = str(original.path.relative_to(acquired.paths[0].parents[1]))
+        if name != cls.name:
+            raise ValueError('Acquired goal resource names another store')
+        path = candidate / name
+        path.parent.mkdir(mode=0o700)
+        retain_file(original.path, path)
+        with closing(sqlite3.connect(path, isolation_level=None)) as db:
+            db.execute('PRAGMA foreign_keys=OFF')
+            db.execute('PRAGMA synchronous=EXTRA')
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                evidence = carry_goal(db)
+                db.execute('COMMIT')
+            except BaseException:
+                db.execute('ROLLBACK')
+                raise
+        with path.open('rb') as stream:
+            os.fsync(stream.fileno())
+        fsync_directory(path.parent)
+        fsync_directory(candidate)
+        store = cls(original.sha256, digest(path), evidence)
+        result = NativeSchemaCarryPlan.install_prepared(
+            acquired.paths[0].parents[1], candidate, (store,), acquired, destination, schema,
+            classification='goal/declaration-preserve')
+        with closing(sqlite3.connect(original.path.as_uri()+'?mode=ro', uri=True)) as db:
+            cls.require_schema(db)
+        return result
+
 
 class GoalDocumentNativeStore(CarriedNativeStore):
     """A retained document containing Goal values, not execution permissions."""
@@ -711,6 +715,7 @@ class GoalHistoryNativeStore(GoalDocumentNativeStore):
     @classmethod
     def convert(cls, path, conversion):
         from agent_comms.goal_history import GoalHistoryEntry
+        from agent_comms.goals import Goal
         with closing(sqlite3.connect(path)) as db:
             original = inventory(db)
             table = GoalHistoryEntry.declared_name
@@ -719,8 +724,9 @@ class GoalHistoryNativeStore(GoalDocumentNativeStore):
                 for value in (before, after):
                     goal = json.loads(value) if value is not None else None
                     conversion.goal(goal)
-                    converted.append(json.dumps(goal, allow_nan=False) if goal is not None else None)
-                db.execute(f'UPDATE {quoted(table)} SET "before"=?,"after"=? WHERE sequence=?', (*converted, sequence))
+                    converted.append(FieldCodec.decode(Goal | None, goal))
+                GoalHistoryEntry.update(db, where='sequence=?', parameters=(sequence,),
+                                        before=converted[0], after=converted[1])
             # Every sequence, state (including uncertain), timestamp and owner
             # must remain exact. Only the two declared Goal cells may differ.
             old = original[table]
@@ -805,6 +811,22 @@ def original_goal_formats(root):
             'originals': originals}
 
 
+class RuntimeGoalFormatFiles(RuntimeCompactionFiles):
+    @property
+    def paths(self):
+        documents = tuple(self.root / member.name for member in
+                          CarriedNativeStore.members_with(GoalDocumentNativeStore))
+        return (*documents, self.root / '.registry-owner-guard', self.root / 'todos.sqlite3',
+                *(Path(str(path) + suffix) for path in documents if path.suffix == '.sqlite3'
+                  for suffix in ('-journal', '-wal', '-shm')))
+
+    def acquire(self):
+        if any(path.exists() or path.is_symlink() for path in self.paths
+               if path.name.endswith(('-journal', '-wal', '-shm'))):
+            raise ValueError('Original Goal companion requires stopped review')
+        return super().acquire()
+
+
 @dataclass(frozen=True)
 class GoalFormatCarryPlan:
     """Prepared copies only. Publication requires the original stopped handoff."""
@@ -859,6 +881,43 @@ class GoalFormatCarryPlan:
                        (json.dumps(FieldCodec.encode(plan), indent=2) + '\n').encode())
         fsync_directory(candidate)
         return plan
+
+    def install(self, stopped, destination):
+        """Accept the existing inherited wire; never stop, fence or signal here."""
+        if Path(stopped.handoff.root) != self.root:
+            raise ValueError('Stopped handoff names another Goal root')
+        if any(owner.launch.process.alive() for owner in stopped.handoff.owners):
+            raise ValueError('Goal conversion requires the original owners stopped')
+        with RuntimeGoalFormatFiles(self.root).acquire() as acquired:
+            originals = {item.path: item for item in acquired.originals}
+            for store in self.stores:
+                if originals[self.root / store.name].sha256 != store.original_sha256:
+                    raise ValueError('Stopped Goal document changed after preparation')
+                if digest(self.candidate / store.name) != store.candidate_sha256:
+                    raise ValueError('Prepared Goal candidate changed')
+            result = NativeSchemaCarryPlan.install_prepared(
+                self.root, self.candidate, self.stores, acquired, destination, self,
+                classification='goal-format/original-source-carry')
+            changed = {self.root / store.name for store in self.stores}
+            changed.add(self.root / '.registry-owner-guard')
+            acquired.unchanged_by(changed).require_original()
+        # Check installed semantics against the actual retained preimages, not
+        # a regenerated history or a claim inferred from successful replacement.
+        members = {member.name: member for member in
+                   CarriedNativeStore.members_with(GoalDocumentNativeStore)}
+        for store in self.stores:
+            member = members[store.name]
+            before = member.goals(destination / store.name)
+            after = member.goals(self.root / store.name)
+            if len(before) != len(after):
+                raise ValueError('Installed Goal document lost a retained value')
+            for original, installed in zip(before, after, strict=True):
+                self.source.goal(original)
+                if original != installed:
+                    raise ValueError('Installed Goal differs from its retained original')
+        from agent_comms.registry_store import RegistryStore
+        RegistryStore(self.root / 'registry.json').private_guard_unlocked()
+        return result
 
 
 class CoordinationNativeStore(NativeReleaseStore):
@@ -986,11 +1045,12 @@ class NativeSchemaCarryPlan:
         PrivateDirectoryRole.require(destination.lstat())
         write_original(destination / 'reviewed-carry.json',
                        (json.dumps(FieldCodec.encode(review), indent=2)+'\n').encode())
-        for item in stores:
-            parent = (destination / item.name).parent
+        for original in acquired.originals:
+            retained = destination / original.path.relative_to(root)
+            parent = retained.parent
             if parent != destination:
                 parent.mkdir(mode=0o700, exist_ok=True)
-            retain_file(root / item.name, destination / item.name)
+            retain_file(original.path, retained)
             fsync_directory(parent)
         write_original(destination / 'reviewed-stores.json',
                        (json.dumps(FieldCodec.encode(stores), indent=2)+'\n').encode())
@@ -1040,7 +1100,7 @@ if __name__ == '__main__':
         print(json.dumps(FieldCodec.encode(GoalFormatCarryPlan.prepare(
             args.source_root, args.goal_format_candidate, args.source_python))))
     elif args.goal_declaration:
-        print(json.dumps(NativeSchemaDeclaration.observe_goal()))
+        print(json.dumps(GoalNativeStore.schema()))
     elif args.declaration:
         print(json.dumps(FieldCodec.encode(NativeSchemaDeclaration.observe())))
     elif args.compaction_requests:

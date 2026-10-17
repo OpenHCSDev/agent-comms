@@ -12,12 +12,16 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import json
 from importlib.metadata import distribution
 import os
 from pathlib import Path
 import subprocess
 import sys
 import uuid
+from typing import Annotated
+
+from agent_comms.field_codec import FieldCodec, PathText
 
 from agent_comms.active_route import read_active_route
 from agent_comms.cli_bridges import opencode
@@ -29,8 +33,8 @@ from agent_comms.restart_queue import enqueue
 
 @dataclass(frozen=True)
 class RuntimePublication:
-    runtime: Path
-    links: dict[Path, Path]
+    runtime: Annotated[Path, PathText]
+    links: dict[Annotated[Path, PathText], Annotated[Path, PathText]]
 
     @property
     def current(self) -> Path:
@@ -80,6 +84,26 @@ class RuntimePublication:
             self.replace_link(link, self.current / target.relative_to(self.runtime))
         self.replace_link(self.current, self.runtime)
 
+    def carry_goals(self, route, candidate: Path, receipt: Path):
+        from agent_comms.owner_cutover import PreserveOwnerRuntime
+        from publish_openhcs_recovery import digest
+        from publish_retained_summary import ReviewedArtifact, ReviewedInstalledRuntime, publish
+        from runtime_installation import CarryGoalFormatsRuntimeInstallation
+
+        original = self.current.resolve(strict=True)
+        source = original / 'bin/python'
+        environment = dict(os.environ)
+        environment.pop('PYTHONPATH', None)
+        captured = subprocess.run(
+            [str(source), str(Path(__file__).with_name('native_schema_carry.py')), '--goal-declaration'],
+            env=environment, capture_output=True, text=True, check=True)
+        schema = FieldCodec.decode(dict[str, str], json.loads(captured.stdout))
+        proof = self.runtime / 'build.json'
+        reviewed = ReviewedInstalledRuntime(self.runtime, self.links, route, original,
+                                            ReviewedArtifact(proof, digest(proof)))
+        installation = CarryGoalFormatsRuntimeInstallation(schema, source, candidate)
+        return publish(reviewed, PreserveOwnerRuntime(), installation, receipt)
+
     @staticmethod
     def replace_link(link: Path, target: Path) -> None:
         temporary = link.with_name(f'.{link.name}.{uuid.uuid4().hex}')
@@ -98,11 +122,22 @@ class RuntimePublication:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Inspect publication without changing links or queueing restarts')
+    parser.add_argument('--carry-goals', action='store_true', help='One-shot stopped P107 Goal conversion; never queue or replay inputs')
+    parser.add_argument('--candidate', type=Path, help='Fresh persistent candidate directory for --carry-goals')
+    parser.add_argument('--receipt', type=Path, help='Fresh persistent operation receipt for --carry-goals')
     options = parser.parse_args()
+    if options.carry_goals and (options.check or options.candidate is None or options.receipt is None):
+        parser.error('--carry-goals requires --candidate and --receipt, and cannot use --check')
+    if not options.carry_goals and (options.candidate is not None or options.receipt is not None):
+        parser.error('--candidate and --receipt require --carry-goals')
     publication = RuntimePublication.installed()
     route = read_active_route()
     if route is None:
         raise ValueError('Runtime publication requires the installed route')
+    if options.carry_goals:
+        results = publication.carry_goals(route, options.candidate, options.receipt)
+        print(f'Published {publication.runtime}; retained {len(results)} stopped owners', flush=True)
+        return
     comms = wire(route)
     owners = tuple(OwnerRestartRequest().threads(comms.registry.snapshot()))
     if options.check:

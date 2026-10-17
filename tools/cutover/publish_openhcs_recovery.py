@@ -86,7 +86,7 @@ def require_stage(args):
     verify_native_package(NATIVE)
 
 
-def require_no_clients(audience):
+def require_no_clients(audience, root):
     """Decode argv boundaries once; explicit unrelated private roots are excluded.
 
     No PID is signal authority here. Exact original workers are checked by the
@@ -117,11 +117,11 @@ def require_no_clients(audience):
             environment = dict(item.split(b'=', 1) for item in (entry / 'environ').read_bytes().split(b'\0') if b'=' in item)
             selected_root = environment.get(b'AGENT_COMMS_ROOT')
             platform.require(identity)
-            if selected_root is not None and os.fsdecode(selected_root) != str(ROOT):
+            if selected_root is not None and os.fsdecode(selected_root) != str(root):
                 continue
             if module == 'agent_comms.worker' and identity in {item.process for item in audience}:
                 continue  # Only these exact workers belong to the canonical retained batch.
-            if client or selected_root == os.fsencode(ROOT):
+            if client or selected_root == os.fsencode(root):
                 raise RuntimeError(f'Unretired or unclassified client: exact process {identity}')
         except ProcessLookupError:
             continue
@@ -238,7 +238,7 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
         self.require_sources()
         InputDispositions(ROOT / InputDispositions.filename).read()
         require_publication_preimages(self.original_route, self.current)
-        require_no_clients(self.audience)
+        require_no_clients(self.audience, ROOT)
 
     def retain_preimages(self):
         directory = self.receipt.with_suffix('.originals')
@@ -284,7 +284,7 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
     def after_stopped(self, lifecycle):
         # The canonical batch holds .wire.lock and proves all exact original exits.
         require_publication_preimages(self.original_route, self.current)
-        require_no_clients(self.audience)
+        require_no_clients(self.audience, ROOT)
         snapshot = lifecycle.registry.snapshot()
         for original in self.originals:
             if snapshot.threads[original.name] != original:
