@@ -9,42 +9,16 @@ from pathlib import Path
 from .errors import RelationViolationError
 
 
-@dataclass(frozen=True, slots=True)
-class NativeSessionFiles:
-    """One saved session: the transcript, its input-proof journal and writer lock.
+class SessionFiles:
+    """Declared session members share reference checks and deletion lifecycle."""
 
-    The input proof is a SQLite journal written by the native process; its
-    rollback/WAL companions belong to it. Any other file sharing the session's
-    name is unexpected and refuses deletion.
-    """
-
+    __slots__ = ()
     session: Path
-
-    @classmethod
-    def of(cls, session_file: str) -> NativeSessionFiles:
-        return cls(Path(session_file).resolve())
-
-    @property
-    def input_proof(self) -> Path:
-        return Path(f"{self.session}.input-proof")
+    members: tuple[Path, ...]
 
     @property
     def schema_paths(self) -> tuple[Path, ...]:
-        return (self.input_proof,)
-
-    @property
-    def writer_lock(self) -> Path:
-        return self.session.with_name(f".{self.session.name}.agent-comms-writer.lock")
-
-    @property
-    def members(self) -> tuple[Path, ...]:
-        proof = self.input_proof
-        return (
-            self.session,
-            proof,
-            *(proof.with_name(proof.name + suffix) for suffix in ("-journal", "-wal", "-shm")),
-            self.writer_lock,
-        )
+        return (self.session,)
 
     def present(self) -> tuple[Path, ...]:
         return tuple(path for path in self.members if path.exists() or path.is_symlink())
@@ -118,3 +92,41 @@ class NativeSessionFiles:
             finally:
                 os.close(directory)
         return freed
+
+
+@dataclass(frozen=True, slots=True)
+class NativeSessionFiles(SessionFiles):
+    """One saved session: the transcript, its input-proof journal and writer lock.
+
+    The input proof is a SQLite journal written by the native process; its
+    rollback/WAL companions belong to it. Any other file sharing the session's
+    name is unexpected and refuses deletion.
+    """
+
+    session: Path
+
+    @classmethod
+    def of(cls, session_file: str) -> NativeSessionFiles:
+        return cls(Path(session_file).resolve())
+
+    @property
+    def input_proof(self) -> Path:
+        return Path(f"{self.session}.input-proof")
+
+    @property
+    def schema_paths(self) -> tuple[Path, ...]:
+        return (self.input_proof,)
+
+    @property
+    def writer_lock(self) -> Path:
+        return self.session.with_name(f".{self.session.name}.agent-comms-writer.lock")
+
+    @property
+    def members(self) -> tuple[Path, ...]:
+        proof = self.input_proof
+        return (
+            self.session,
+            proof,
+            *(proof.with_name(proof.name + suffix) for suffix in ("-journal", "-wal", "-shm")),
+            self.writer_lock,
+        )

@@ -96,10 +96,6 @@ class PiSessionFile(RuntimeLocation):
     def imported_sources(self):
         return NativeTranscript(Path(self.path)).imported_sources()
 
-    @property
-    def read_key(self) -> str:
-        return self.path
-
     def storage_files(self):
         return (NativeSessionFiles(Path(self.path)),)
 
@@ -173,12 +169,12 @@ class PersistentPiSession:
 
 class PiNativeBackend(
     PersistentPiSession,
-    AgentBackend,
     Interrupts,
     Compacts,
     ReportsContext,
     Forks,
     ConfiguresModel,
+    AgentBackend,
 ):
     """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
 
@@ -345,8 +341,7 @@ class PiNativeBackend(
 
         commands = []
         if model is not None:
-            provider, model_id = model.split("/", 1)
-            commands.append(SetModel(provider=provider, model_id=model_id))
+            commands.append(SetModel.from_name(model))
         if thinking is not None:
             commands.append(SetThinkingLevel(level=thinking))
         if not commands:

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.agent_backend import AgentBackend, RuntimeLocation
+from agent_comms.agent_backend import AgentBackend, BackendDeclarationError, RuntimeLocation
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
 from agent_comms.pi_native_backend import PiNativeBackend
@@ -39,11 +39,8 @@ def test_location_methods_and_missing_history(tmp_path):
     assert location.read_keys() == (location.path,)
     assert location.presentation() == {'resumable': True}
     assert location.model_choice is None
-    selected = location.select_session(tmp_path, None)
-    assert selected.session_file == location.path
-    assert selected.path == Path(location.path)
-    with pytest.raises(ValueError, match='cannot attest'):
-        selected.attest(None)
+    with pytest.raises(BackendDeclarationError, match='cannot select native sessions'):
+        location.select_session(tmp_path, None)
     with pytest.raises(ValueError, match='forking'):
         location.require_forkable()
     source = location.history_source(tmp_path, None)

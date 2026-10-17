@@ -25,27 +25,63 @@ class TranscriptProjection:
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeEntryCoordinates(PiPayload):
+class RecordedEntry(PiPayload):
     """Original external ancestry fields; opaque entries project this same owner."""
     id: str | None = None
     parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
+    timestamp: str | None = None
+    is_message: ClassVar[bool] = False
+    assistant_message: ClassVar[bool] = False
+    messages: ClassVar[tuple[PiMessage, ...]] = ()
+    final_reply: ClassVar[bool] = False
+
+    @property
+    def input_boundary(self):
+        return any(message.user for message in self.messages)
+
+    def require_entry_id(self) -> str:
+        return self.source_coordinates.original_id
+
+    @property
+    def source_coordinates(self):
+        return self
+
+    @property
+    def recorded_at(self) -> datetime | None:
+        """Pi's external ISO8601 time, decoded once for tolerant transcript display."""
+        if self.timestamp is None:
+            return None
+        try:
+            recorded = datetime.fromisoformat(self.timestamp)
+            recorded.timestamp()
+        except (ValueError, OverflowError):
+            return None
+        return recorded if recorded.utcoffset() is not None else None
+
+    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+        """Project one journal clock onto every display part without inventing time.
+
+        Decode it once, before splitting into message/tool/routing events; ACP
+        consumers receive Unix seconds.
+        """
+        recorded = self.recorded_at
+        timestamp = recorded.timestamp() if recorded is not None else None
+        return [replace(event, timestamp=timestamp) for event in self._events(context)]
+
+    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+        return [event for message in self.messages for event in message.transcript_events(context)]
 
     @property
     def original_id(self):
         if not self.id:
             raise ValueError("Native publication requires an original entry ID")
-        return self.id
+        return str(self.id)
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
+class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
     opaque: ClassVar[bool] = False
-    timestamp: str | None = None
-    is_message: ClassVar[bool] = False
-    assistant_message: ClassVar[bool] = False
-    input_boundary: ClassVar[bool] = False
-    final_reply: ClassVar[bool] = False
 
     def imported_sources(self):
         return ()
@@ -135,13 +171,6 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     def tracked_user(self) -> MessageEntry | None:
         return None
 
-    def require_entry_id(self) -> str:
-        return self.source_coordinates.original_id
-
-    @property
-    def source_coordinates(self):
-        return self
-
     def require_tracked_user(self) -> MessageEntry:
         tracked = self.tracked_user
         if tracked is None:
@@ -155,31 +184,6 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     @property
     def input_id(self) -> str | None:
         return None
-
-    @property
-    def recorded_at(self) -> datetime | None:
-        """Pi's external ISO8601 time, decoded once for tolerant transcript display."""
-        if self.timestamp is None:
-            return None
-        try:
-            recorded = datetime.fromisoformat(self.timestamp)
-            recorded.timestamp()
-        except (ValueError, OverflowError):
-            return None
-        return recorded if recorded.utcoffset() is not None else None
-
-    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
-        """Project one journal clock onto every display part without inventing time.
-
-        Decode it once, before splitting into message/tool/routing events; ACP
-        consumers receive Unix seconds.
-        """
-        recorded = self.recorded_at
-        timestamp = recorded.timestamp() if recorded is not None else None
-        return [replace(event, timestamp=timestamp) for event in self._events(context)]
-
-    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
-        return []
 
     @property
     def unread_reply(self) -> bool:
@@ -410,8 +414,8 @@ class MessageEntry(NativeEntry):
     is_message = True
 
     @property
-    def input_boundary(self):
-        return self.message.user
+    def messages(self):
+        return (self.message,)
 
     @property
     def final_reply(self):
@@ -447,9 +451,6 @@ class MessageEntry(NativeEntry):
             raise ValueError("Native recovery requires an unambiguous failed terminal")
         self.message.require_failed_terminal()
 
-    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
-        return self.message.transcript_events(context)
-
     @property
     def unread_reply(self) -> bool:
         return self.message.unread_reply
@@ -467,25 +468,10 @@ class CompactionEntry(NativeEntry):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StoredEntry(NativeEntry):
+class StoredEntry(RecordedEntry):
     """A committed Pi Durable entry owns zero or more ordinary Pi messages."""
     id: int = field()
-    model: tuple[PiMessage, ...] = ()
-
-    @classmethod
-    def wire_member(cls, value):
-        return cls
-
-    @property
-    def original_id(self):
-        return str(self.id)
-
-    @property
-    def input_boundary(self):
-        return any(message.user for message in self.model)
-
-    def _events(self, context):
-        return [event for message in self.model for event in message.transcript_events(context)]
+    messages: tuple[PiMessage, ...] = field(default=(), metadata={'wire_name': 'model'})
 
 
 class CustomEntry(NativeEntry):
@@ -519,7 +505,7 @@ class UnknownEntry(NativeEntry):
     def source_coordinates(self):
         # Decode once for this source read. No parallel current identity fields
         # are populated on an opaque extension record.
-        return NativeEntryCoordinates.from_wire(self.payload)
+        return RecordedEntry.from_wire(self.payload)
 
 
 @dataclass(frozen=True, kw_only=True)

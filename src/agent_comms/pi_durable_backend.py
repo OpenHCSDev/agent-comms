@@ -11,24 +11,23 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import AgentBackend, Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation, Steers
+from .agent_backend import AgentBackend, BackendDeclarationError, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation
 from .agent_events import Error
 from .native_custody import PiChild
 from .external_transcript import ExternalCut
 from .native_entries import StoredEntry
-from .native_session_files import NativeSessionFiles
+from .native_session_files import SessionFiles
 from .native_transcript import StoredRecord
-from .pi_commands import Compact, PiCommand
-from .pi_events import AutoRetryEnd, DurablePiEvent, MessageEnd, RetryEnd
-from .pi_payloads import PiPayload, PiResponseData
-from .pi_rpc import PiRpcChannel
-from .selected_session import SelectedSession
+from .pi_commands import Compact, GetAvailableModels, GetSessionStats, GetState, PiCommand, SetModel, SetThinkingLevel
+from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
+from .pi_payloads import PiResponseData
+from .pi_vocabulary import ThinkingLevel
 from .transcript_receipts import TranscriptSource
 from .unstarted_runtime import UnstartedRuntime
 
 
 @dataclass(frozen=True)
-class DurableDatabase(RuntimeLocation):
+class DurableDatabase(SessionFiles, RuntimeLocation):
     path: str
 
     def __post_init__(self):
@@ -39,50 +38,26 @@ class DurableDatabase(RuntimeLocation):
         raise ValueError('Durable database forking is not implemented')
 
     def select_session(self, directory, execution):
-        return DurableSelectedSession(directory, self)
+        raise BackendDeclarationError('Durable databases cannot select native sessions')
 
     def history_source(self, root, incarnation):
         return DurableTranscript(self)
 
     @property
-    def read_key(self):
-        return self.path
-
-    def storage_files(self):
-        return (DurableDatabaseFiles(Path(self.path)),)
-
-
-@dataclass(frozen=True)
-class DurableSelectedSession(SelectedSession):
-    location: DurableDatabase
+    def session(self):
+        return Path(self.path)
 
     @property
-    def path(self):
-        return Path(self.location.path)
+    def writer_lock(self):
+        return self.session.with_suffix(self.session.suffix + '.lock')
 
-    @property
-    def session_file(self):
-        return self.location.path
-
-    def attest(self, identity):
-        raise ValueError('A durable database cannot attest a native Pi session')
-
-
-class DurableDatabaseFiles(NativeSessionFiles):
     @property
     def members(self):
-        return (self.session, *(Path(str(self.session) + suffix) for suffix in ('-wal', '-shm', '-journal', '.lock')))
+        path = self.session
+        return (path, *(path.with_name(path.name + suffix) for suffix in ('-wal', '-shm', '-journal')), self.writer_lock)
 
-    @property
-    def schema_paths(self):
-        return (self.session,)
-
-
-@dataclass(frozen=True)
-class DurableEntryQuery:
-    min_entry_id: int | None = field(default=None, metadata={'wire_name': 'minEntryId', 'wire_omit_default': True})
-    max_entry_id: int | None = field(default=None, metadata={'wire_name': 'maxEntryId', 'wire_omit_default': True})
-    order: str = 'descending'
+    def storage_files(self):
+        return (self,)
 
 
 @dataclass(frozen=True)
@@ -115,18 +90,15 @@ class DurableTranscript(TranscriptSource):
             finally:
                 loop.run(child.shutdown())
 
-    def page(self, *, limit=128, cursor=None, query=DurableEntryQuery()):
-        return self.execute(self, Entries(limit, cursor, query))
-
     def cut(self):
-        return ExternalCut(max((entry.id for entry in self.page(limit=1).items), default=0))
+        return ExternalCut(max((entry.id for entry in self.execute(self, Entries(1)).items), default=0))
 
     def records(self, minimum, maximum, order):
         if maximum < minimum:
             return
         cursor = None
         while True:
-            page = self.page(cursor=cursor, query=DurableEntryQuery(minimum, maximum, order))
+            page = self.execute(self, Entries(128, cursor, minimum, maximum, order))
             for entry in page.items:
                 yield StoredRecord(entry.id - 1, entry.id, entry, True)
             cursor = page.cursor
@@ -141,48 +113,8 @@ class DurableTranscript(TranscriptSource):
 
 
 @dataclass(frozen=True)
-class ModelRef(PiPayload):
-    provider: str
-    model_id: str = field(metadata={'wire_name': 'modelId'})
-
-
-@dataclass(frozen=True)
-class AgentSettings(PiPayload):
-    model: ModelRef | None = field(default=None, metadata={'wire_omit_default': True})
-    thinking_level: str | None = field(default=None, metadata={'wire_name': 'thinkingLevel', 'wire_omit_default': True})
-    instructions: str | None = field(default=None, metadata={'wire_omit_default': True})
-
-    @classmethod
-    def selected(cls, model, thinking):
-        return cls(ModelRef(*model.split('/', 1)) if model else None, thinking)
-
-
-@dataclass(frozen=True)
-class ConfigurationData(PiResponseData):
-    models: tuple[str, ...]
-    model: ModelRef | None = None
-    thinking: str | None = None
-
-    def selected(self):
-        if self.model is None:
-            raise ValueError('Durable session has no configured model')
-        return f'{self.model.provider}/{self.model.model_id}', self.thinking
-
-
-@dataclass(frozen=True)
-class InterruptedWork:
-    id: str
-    kind: str
-
-
-@dataclass(frozen=True)
 class RecoveryData(PiResponseData):
-    work: tuple[InterruptedWork, ...]
-
-
-@dataclass(frozen=True)
-class ContextUsageData(ContextUsage, PiResponseData):
-    pass
+    work: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -194,21 +126,6 @@ class DurableRetryEnd(RetryEnd, DurablePiEvent):
     wire_kind = AutoRetryEnd.wire_kind
 
 
-@dataclass(frozen=True, kw_only=True)
-class StoredMessageEnd(MessageEnd, DurablePiEvent):
-    entry: StoredEntry
-    wire_kind = MessageEnd.wire_kind
-
-
-class Snapshot(DurablePiEvent):
-    pass
-
-
-@dataclass(frozen=True)
-class AgentChanged(DurablePiEvent):
-    agent: AgentSettings
-
-
 @dataclass(frozen=True)
 class TaskFailed(DurablePiEvent):
     task_id: int = field(metadata={'wire_name': 'taskId'})
@@ -216,14 +133,6 @@ class TaskFailed(DurablePiEvent):
 
     def convert(self):
         return (Error(self.message),)
-
-
-class RunStart(DurablePiEvent): pass
-class RunEnd(DurablePiEvent): pass
-class InboxUpdate(DurablePiEvent): pass
-class Submission(DurablePiEvent): pass
-class DeferredPoll(DurablePiEvent): pass
-class UsageChanged(DurablePiEvent): pass
 
 
 class HostQuery(PiCommand):
@@ -235,7 +144,9 @@ class HostQuery(PiCommand):
 class Open(HostQuery):
     path: str
     cwd: str
-    agent: AgentSettings
+    provider: str | None
+    model_id: str | None = field(metadata={'wire_name': 'modelId'})
+    thinking_level: str | None = field(metadata={'wire_name': 'thinkingLevel'})
     auth_path: str = field(metadata={'wire_name': 'authPath'})
     response_payload = RecoveryData
 
@@ -245,9 +156,16 @@ class OpenHistory(HostQuery):
     path: str
 
 
-class Watch(HostQuery): pass
-class Unwatch(HostQuery): pass
-class Resume(HostQuery): pass
+class Watch(HostQuery):
+    pass
+
+
+class Unwatch(HostQuery):
+    pass
+
+
+class Resume(HostQuery):
+    pass
 
 
 class Inspect(HostQuery):
@@ -264,18 +182,10 @@ class Settle(HostQuery):
 class Entries(HostQuery):
     limit: int
     cursor: dict[str, JsonValue] | None = None
-    query: DurableEntryQuery = DurableEntryQuery()
+    min_entry_id: int | None = field(default=None, metadata={'wire_name': 'minEntryId', 'wire_omit_default': True})
+    max_entry_id: int | None = field(default=None, metadata={'wire_name': 'maxEntryId', 'wire_omit_default': True})
+    order: str = 'descending'
     response_payload = HistoryData
-
-
-@dataclass(frozen=True)
-class Configure(HostQuery):
-    agent: AgentSettings | None = field(default=None, metadata={'wire_omit_default': True})
-    response_payload = ConfigurationData
-
-
-class ContextUsageQuery(HostQuery):
-    response_payload = ContextUsageData
 
 
 class CompactDurable(Compact):
@@ -283,7 +193,8 @@ class CompactDurable(Compact):
     response_payload = OutcomeData
 
 
-class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, ConfiguresModel):
+class PiDurableBackend(AgentBackend, ReportsContext, ConfiguresModel):
+    serves_threads = False
     location_type = DurableDatabase
     unstarted_type = UnstartedRuntime
     event_kinds = frozenset(kind for member in DurablePiEvent.members_with(DurablePiEvent) for kind in member.known_kinds())
@@ -305,43 +216,13 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
             path = Path(thread.runtime.path)
             path.parent.mkdir(parents=True, exist_ok=True)
             with ExitStack() as resources:
-                lock = resources.enter_context(path.with_suffix(path.suffix + '.lock').open('a+b'))
+                lock = resources.enter_context(thread.runtime.writer_lock.open('a+b'))
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 self.child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
                     cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
-            await self.child.request(Open(str(path), thread.worktree, AgentSettings.selected(thread.model, thread.thinking_level), str(Path.home() / '.pi/agent/auth.json')))
+            model = SetModel.from_name(thread.model)
+            await self.child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
         return self.child
-
-    async def interrupted(self, thread):
-        child = await self.open(thread)
-        return (await child.request(Inspect())).work
-
-    async def settle(self, thread, work, disposition):
-        child = await self.open(thread)
-        await child.request(Settle(work, disposition))
-
-    async def resume(self, thread):
-        child = await self.open(thread)
-        await child.request(Resume())
-
-    async def run_turn(self, thread, content, delivery):
-        async with self.lock:
-            child = await self.open(thread)
-            async with child.reader.turn() as turn:
-                await child.request(Watch())
-                try:
-                    await self.submit_turn(content, delivery)
-                    async for event in turn.converted():
-                        yield event
-                finally:
-                    await child.request(Unwatch())
-
-    async def submit_turn(self, content, delivery):
-        raise RuntimeError('Durable worker integration is unfinished: Core InputId and send-disposition integration required')
-
-    async def abort(self, owner):
-        if self.child is not None:
-            await self.child.shutdown()
 
     async def close_idle(self):
         async with self.lock:
@@ -351,16 +232,22 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
 
     async def context_usage(self, thread):
         child = await self.open(thread)
-        return await child.request(ContextUsageQuery())
-
-    async def compact(self, thread, instructions):
-        child = await self.open(thread)
-        return (await child.request(CompactDurable(custom_instructions=instructions))).outcome
+        usage = (await child.request(GetSessionStats())).context_usage
+        if usage is None:
+            raise ValueError('Durable session has no context observation')
+        return ContextUsage(usage.tokens, usage.context_window)
 
     async def models(self, thread):
         child = await self.open(thread)
-        return (await child.request(Configure())).models
+        return tuple(model.display_name for model in (await child.request(GetAvailableModels())).models)
 
     async def configure(self, thread, model, thinking):
         child = await self.open(thread)
-        return (await child.request(Configure(AgentSettings.selected(model, thinking)))).selected()
+        if model is not None:
+            await child.request(SetModel.from_name(model))
+        if thinking is not None:
+            await child.request(SetThinkingLevel(level=thinking))
+        state = await child.request(GetState())
+        if state.model.display_name is None:
+            raise ValueError('Durable session has no configured model')
+        return state.model.display_name, ThinkingLevel.optional_name(state.thinking_level)

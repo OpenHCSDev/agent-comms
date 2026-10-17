@@ -15,13 +15,18 @@ const { estimateContext } = await import(new URL('./harness/compaction.js', impo
 const Recovery = defineDoc({ kind: 'core.recovery', version: 1, scope: 'session', initial: () => ({ decisions: {} }) });
 let harness, root, stream, models;
 let resumed = false;
-const emit = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
+const emit = (value) => {
+  const { changes, ...update } = value;
+  const frames = value.type === 'message_update'
+    ? changes.map(assistantMessageEvent => ({ ...update, assistantMessageEvent })) : [value];
+  for (const frame of frames) process.stdout.write(`${JSON.stringify(frame)}\n`);
+};
 const ack = Object.freeze({});
 const requireOpen = () => { if (!harness) throw new Error('Host is not open'); };
 const requireResumed = () => { requireOpen(); if (!resumed) throw new Error('Interrupted work must be explicitly abandoned before resume'); };
 const workItems = (inspection) => [
-  ...inspection.tasks.map(({ record }) => ({ id: `task:${record.id}`, kind: record.kind })),
-  ...inspection.submissions.map(record => ({ id: `submission:${record.id}`, kind: 'submission' })),
+  ...inspection.tasks.map(({ record }) => `task:${record.id}`),
+  ...inspection.submissions.map(record => `submission:${record.id}`),
 ];
 const text = (entry) => (entry.model ?? []).flatMap(message => typeof message.content === 'string'
   ? [message.content] : (message.content ?? []).filter(block => block.type === 'text').map(block => block.text)).join('\n');
@@ -42,7 +47,10 @@ const handlers = {
       models, registry, env: ({ cwd }) => new NodeExecutionEnv({ cwd: cwd ?? request.cwd }),
       onReport: error => process.stderr.write(`${error.stack ?? error}\n`),
     }, context);
-    root = await harness.root(context, { agent: { cwd: request.cwd, ...(request.agent ?? {}) } });
+    const agent = { cwd: request.cwd };
+    if (request.provider) agent.model = { provider: request.provider, modelId: request.modelId };
+    if (request.thinkingLevel) agent.thinkingLevel = request.thinkingLevel;
+    root = await harness.root(context, { agent });
     return { work: workItems(await harness.inspect(context)) };
   },
   async open_history(request) {
@@ -77,10 +85,10 @@ const handlers = {
     requireOpen();
     if (resumed) throw new Error('Recovery is only available before resume');
     if (request.disposition !== 'ABANDON') throw new Error('Only explicit ABANDON is supported');
-    const work = workItems(await harness.inspect(context)).find(item => item.id === request.work);
+    const work = workItems(await harness.inspect(context)).find(item => item === request.work);
     if (!work) throw new Error('Interrupted work does not exist');
-    await harness.commit(async tx => { (await tx.doc(Recovery)).decisions[work.id] = 'ABANDON'; }, context);
-    const [kind, id] = work.id.split(':');
+    await harness.commit(async tx => { (await tx.doc(Recovery)).decisions[work] = 'ABANDON'; }, context);
+    const [kind, id] = work.split(':');
     if (kind === 'task') await harness.abortTask(Number(id), context);
     else await harness.abortSubmission(Number(id), context);
     return ack;
@@ -90,7 +98,7 @@ const handlers = {
     if (resumed) return ack;
     const inspection = await harness.inspect(context);
     const decisions = (await harness.snapshot(Recovery, context))?.decisions ?? {};
-    if (workItems(inspection).some(work => decisions[work.id] !== 'ABANDON')) throw new Error('Interrupted work has no recorded disposition');
+    if (workItems(inspection).some(work => decisions[work] !== 'ABANDON')) throw new Error('Interrupted work has no recorded disposition');
     if (inspection.tasks.some(({ record }) => !record.abortRequested)) throw new Error('Interrupted task was not abort-marked');
     harness.resume();
     resumed = true;
@@ -105,20 +113,31 @@ const handlers = {
   async abort() { requireResumed(); await root.abort(context); return ack; },
   async entries(request) {
     requireOpen();
-    const page = await root.entries(request.query ?? {}, request.limit, request.cursor ?? undefined, context);
+    const { minEntryId, maxEntryId, order } = request;
+    const page = await root.entries({ minEntryId, maxEntryId, order }, request.limit, request.cursor ?? undefined, context);
     return { items: page.items, cursor: page.next ?? null };
   },
-  async context_usage_query() {
+  async get_session_stats() {
     requireOpen();
     const agent = await root.agent(context);
     const model = agent.model && models.getModel(agent.model.provider, agent.model.modelId);
-    return { tokens: estimateContext(await root.context(context), []), window: model?.contextWindow ?? null };
+    return { contextUsage: { tokens: estimateContext(await root.context(context), []), contextWindow: model?.contextWindow ?? null } };
   },
-  async configure(request) {
+  async get_state() {
     requireOpen();
-    if (request.agent) await root.configure(request.agent, context);
     const agent = await root.agent(context);
-    return { model: agent.model, thinking: agent.thinkingLevel, models: (await models.getAvailable()).map(model => `${model.provider}/${model.id}`) };
+    return { model: agent.model ? models.getModel(agent.model.provider, agent.model.modelId) : null, thinkingLevel: agent.thinkingLevel };
+  },
+  async get_available_models() { requireOpen(); return { models: await models.getAvailable() }; },
+  async set_model(request) {
+    requireOpen();
+    await root.configure({ model: { provider: request.provider, modelId: request.modelId } }, context);
+    return ack;
+  },
+  async set_thinking_level(request) {
+    requireOpen();
+    await root.configure({ thinkingLevel: request.level }, context);
+    return ack;
   },
   async compact_durable(request) {
     requireResumed();

@@ -85,8 +85,8 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
         return ()
 
     @property
-    @abstractmethod
-    def read_key(self) -> str: ...
+    def read_key(self) -> str:
+        return self.path
 
     @abstractmethod
     def storage_files(self): ...
@@ -428,6 +428,9 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         validate_backends(dict(AgentBackend.__registry__).values())
         AgentBackend.__registry__ = MappingProxyType(dict(AgentBackend.__registry__))  # type: ignore[assignment]
         AgentBackend._sealed = True
+
+    def run_turn(self, thread: Thread, content: InputContent, delivery: TurnDelivery):
+        raise BackendDeclarationError(f"{type(self).__name__} does not run turns")
 
     @classmethod
     def require_event_family(cls, family: type[DeclaredFamily]) -> None:

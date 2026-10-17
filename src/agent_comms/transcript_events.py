@@ -237,10 +237,5 @@ class ToolEndTranscript(ToolTranscript):
 class TurnDigest:
     """One turn's events in their recorded order, read from the unit's own records."""
 
-    @classmethod
-    def from_records(cls, turn_id, records):
-        return cls(turn_id, tuple(event for record in reversed(records)
-                                 for event in record.turn_events))
-
     turn_id: str
     events: tuple[TranscriptEvent, ...]

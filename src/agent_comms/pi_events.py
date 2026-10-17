@@ -37,11 +37,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class PiEvent(PiPayload, DeclaredFamily):
-    """One record Pi writes to RPC stdout; each member converts one Pi event kind.
-
-    ``PiNativeBackend.event_kinds`` lists what Pi 0.85.1 emits; the family is
-    checked against it when this module finishes importing.
-    """
+    """One declaration-owned record received by the Pi RPC channel."""
 
     wire_tag = "type"
     opaque = False
@@ -132,7 +128,7 @@ class DurablePiEvent(PiEvent):
     @classmethod
     def wire_member(cls, wire):
         members = tuple(member for member in cls.members_with(cls)
-                        if member.wire_kind() == wire.get("type"))
+                        if wire.get("type") in member.known_kinds())
         if len(members) > 1:
             raise ValueError("Ambiguous durable event declaration")
         return members[0] if members else UnknownPiEvent
@@ -144,6 +140,14 @@ class UnreadPayload:
 
     payload: dict[str, Any]
     opaque: ClassVar[bool] = True
+
+
+class IgnoredDurableEvent(UnreadPayload, DurablePiEvent):
+    ignored_kinds = ('run_start', 'run_end', 'inbox_update', 'submission', 'deferred_poll', 'usage_changed', 'snapshot', 'agent_changed')
+
+    @classmethod
+    def known_kinds(cls):
+        return cls.ignored_kinds
 
 
 @dataclass(frozen=True)
@@ -661,7 +665,7 @@ class InputCommitted(NativePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageEnd(NativePiEvent):
+class MessageEnd(NativePiEvent, DurablePiEvent):
     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -698,7 +702,7 @@ class MessageStart(NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageUpdate(NativePiEvent):
+class MessageUpdate(NativePiEvent, DurablePiEvent):
     assistant_message_event: PiDelta | None = field(
         default=None, metadata={"wire_name": "assistantMessageEvent"}
     )
@@ -715,16 +719,12 @@ class MessageUpdate(NativePiEvent):
                 session.usage.provisional = True
                 yield session.context_info()
 
-        for delta in self.deltas:
-            for event in delta.emit(session):
+        if self.assistant_message_event is not None:
+            for event in self.assistant_message_event.emit(session):
                 yield event
 
-    @property
-    def deltas(self):
-        return (self.assistant_message_event,) if self.assistant_message_event is not None else ()
-
     def convert(self):
-        return tuple(event for delta in self.deltas for event in delta.events())
+        return self.assistant_message_event.events() if self.assistant_message_event is not None else ()
 
     accepts_prompt = True
 
@@ -739,17 +739,6 @@ class MessageUpdate(NativePiEvent):
     def observed_phase(self, phase):
         delta = self.assistant_message_event
         return phase.response_output() if delta is not None and delta.response_progress else phase
-
-
-@dataclass(frozen=True, kw_only=True)
-class BatchMessageUpdate(MessageUpdate, DurablePiEvent):
-    """Pi Durable batches the same Pi deltas in one committed update."""
-    changes: tuple[PiDelta, ...]
-    wire_kind = MessageUpdate.wire_kind
-
-    @property
-    def deltas(self):
-        return self.changes
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -801,7 +790,9 @@ class Response(NativePiEvent, DurablePiEvent):
         return super().normalize_field(target, key, value, record)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        owner = session.native.reader.correlate(self) or self.command
+        owner = session.native.reader.correlate(self)
+        if owner is None:
+            raise ValueError('Unsolicited Pi response')
         async for event in owner.on_response(self, session):
             yield event
 

@@ -18,12 +18,12 @@ if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
 from .bus_publication import CommittedDelivery
-from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
+from .coordination_errors import StaleRevision
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, UserTranscript
+from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, TurnDigest, UserTranscript
 
 from .wire_log import ConversationSourceWindowRequest, WireLog
 
@@ -275,7 +275,8 @@ class TranscriptSource:
     source adds the separately acquired wire/publication capability below.
     """
 
-    def turns(self, last):
+    def turns(self, last: int):
+        """Read input-bounded turns under one original record-source cut."""
         turns, pending = [], []
         with self.reading() as reader:
             cut = reader.cut()
@@ -283,10 +284,12 @@ class TranscriptSource:
                 return ()
             with closing(reader.reverse(cut.offset)) as records:
                 for record in records:
+                    if record.entry is None:
+                        continue
                     pending.append(record)
-                    completed = record.completed_turn(pending)
-                    if completed:
-                        turns.extend(completed)
+                    if record.entry.input_boundary:
+                        turns.append(TurnDigest(record.entry.require_entry_id(), tuple(
+                            event for original in reversed(pending) for event in original.events)))
                         pending.clear()
                         if len(turns) >= last:
                             break

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 import asyncio
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from .pending_requests import PendingRequests
@@ -15,7 +15,6 @@ from .sealed import Sealed
 
 if TYPE_CHECKING:
     from .pi_commands import PiCommand
-    from .pi_events import PiEvent, Response
 
 
 class PiRpcChannel(JsonlStreamReader, Sealed):

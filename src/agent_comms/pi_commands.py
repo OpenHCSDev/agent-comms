@@ -36,7 +36,6 @@ from .pi_payloads import (
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import Response
-    from .pi_rpc import PiRpcChannel
 
 
 class SessionSnapshot:
@@ -362,6 +361,13 @@ class SettingCommand(CatalogQuery):
 
 @dataclass(frozen=True, kw_only=True)
 class SetModel(SettingCommand):
+    @classmethod
+    def from_name(cls, model: str | None):
+        if model is None:
+            return cls()
+        provider, model_id = model.split('/', 1)
+        return cls(provider=provider, model_id=model_id)
+
     result_type = events.ModelChanged
     error_message = "Model change failed"
     provider: str | None = field(default=None, metadata={"wire_omit_default": True})

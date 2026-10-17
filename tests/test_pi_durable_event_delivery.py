@@ -6,10 +6,12 @@ import pytest
 
 from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
 from agent_comms.pi_payloads import PiUsage, TextDelta, ThinkingDelta
-from agent_comms.pi_events import BatchMessageUpdate, ToolExecutionStart
+from agent_comms.pi_events import MessageUpdate, DurablePiEvent, ToolExecutionStart
+from agent_comms.pi_commands import GetState, SetThinkingLevel
+from agent_comms.pi_vocabulary import ThinkingLevel
 from agent_comms.pi_durable_backend import (
-    AgentChanged, DurableDatabase, PiDurableBackend, Snapshot, TaskFailed,
-    Configure, AgentSettings, Inspect, Watch, Unwatch,
+    DurableDatabase, PiDurableBackend, TaskFailed,
+    Inspect, Watch, Unwatch,
 )
 
 
@@ -26,13 +28,14 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
         try:
             async with host.reader.turn() as turn:
                 await host.request(Watch())
-                assert isinstance(await turn.next_event(), Snapshot)
-                await host.request(Configure(AgentSettings(instructions='turn-owned event')))
+                assert type(await turn.next_event()) is DurablePiEvent
+                await host.request(SetThinkingLevel(level='low'))
                 changed = await asyncio.wait_for(turn.next_event(), 5)
-                assert isinstance(changed, AgentChanged)
-                assert changed.agent.instructions == 'turn-owned event'
+                assert type(changed) is DurablePiEvent
+                assert ThinkingLevel.optional_name((await host.request(GetState())).thinking_level) == 'low'
                 for event in (
-                    BatchMessageUpdate(usage=PiUsage(), changes=(TextDelta('visible'), ThinkingDelta('reasoning'))),
+                    MessageUpdate(usage=PiUsage(), assistant_message_event=TextDelta('visible')),
+                    MessageUpdate(usage=PiUsage(), assistant_message_event=ThinkingDelta('reasoning')),
                     ToolExecutionStart(tool_call_id='call', tool_name='read', args={}),
                     TaskFailed(task_id=1, message='visible failure'),
                 ):
@@ -48,10 +51,11 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
                 await host.request(Unwatch())
             async with host.reader.turn() as next_turn:
                 await host.request(Watch())
-                assert isinstance(await next_turn.next_event(), Snapshot)
-                await host.request(Configure(AgentSettings(instructions='next turn')))
+                assert type(await next_turn.next_event()) is DurablePiEvent
+                await host.request(SetThinkingLevel(level='off'))
                 changed = await asyncio.wait_for(next_turn.next_event(), 5)
-                assert changed.agent.instructions == 'next turn'
+                assert type(changed) is DurablePiEvent
+                assert ThinkingLevel.optional_name((await host.request(GetState())).thinking_level) == 'off'
                 await host.request(Unwatch())
         finally:
             await host.shutdown()

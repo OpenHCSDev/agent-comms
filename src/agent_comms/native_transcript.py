@@ -14,8 +14,7 @@ if TYPE_CHECKING:
     from .thread_identity import RecordedThreadIncarnation
 
 from .declared_family import DeclaredFamily
-from .native_entries import NativeEntry, SessionEntry, TranscriptProjection
-from .transcript_events import TurnDigest
+from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
 from .private_path import FileRevision
 from .transcript_receipts import TranscriptSource
 
@@ -94,7 +93,7 @@ class SessionCut(RecordsCut):
 class NativeRecord:
     start: int
     end: int
-    entry: NativeEntry | None
+    entry: RecordedEntry | None
     complete: bool
 
     @classmethod
@@ -104,16 +103,6 @@ class NativeRecord:
         complete = raw.endswith(b"\n")
         entry = NativeEntry.read(raw) if complete else None
         return cls(start, end, entry, complete)
-
-    def completed_turn(self, records):
-        entry = self.entry
-        if entry is not None and entry.input_boundary:
-            return (TurnDigest.from_records(entry.require_entry_id(), records),)
-        return ()
-
-    @property
-    def turn_events(self):
-        return self.project(lambda original: original.entry.events(TranscriptProjection()))
 
     def project(self, projection):
         """A decoded record owns whether it can produce presentation events."""
@@ -131,6 +120,10 @@ class NativeRecord:
         entry = self.entry
         return entry.id if entry is not None and entry.is_message else None
 
+    @property
+    def events(self):
+        return self.project(lambda original: original.entry.events(TranscriptProjection()))
+
     def publication_producer(self) -> NativeEntry | None:
         if not self.complete or self.entry is None:
             raise ValueError("Native publication has incomplete evidence")
@@ -141,10 +134,6 @@ class NativeRecord:
 
 
 class StoredRecord(NativeRecord):
-    @property
-    def events(self):
-        return self.turn_events
-
     @property
     def size(self):
         return sum(event.text_size for event in self.events)
