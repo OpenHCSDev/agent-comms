@@ -1,0 +1,128 @@
+diff --git a/src/agent_comms/cli_commands.py b/src/agent_comms/cli_commands.py
+index 47f4b34fe..06a1d8bd1 100644
+--- a/src/agent_comms/cli_commands.py
++++ b/src/agent_comms/cli_commands.py
+@@ -30,6 +30,7 @@ from .child_process import ProcessIdentity
+ from .command import Command
+ from .cli_protocol import ArrivedMessage
+ from .field_codec import FieldCodec
++from .tools import ToolRequest
+ from .comms import Comms
+ from .config_options import (
+     CatalogConfigOption, CatalogSelection, ConfigOptions,
+@@ -78,7 +79,7 @@ def _duration_seconds(value: str) -> float:
+ 
+ 
+ def _json_object(value: str) -> dict[str, Any]:
+-    result = json.loads(value)
++    result = json.loads(value) if isinstance(value, str) else value
+     if not isinstance(result, dict):
+         raise ValueError("invoke --arguments must be a JSON object")
+     return result
+@@ -184,7 +185,7 @@ class TargetField:
+         if self.catalog is not None:
+             return ()
+         if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
+-            return tuple((member.label, FieldCodec.encode(member))
++            return tuple((member.declared_name, FieldCodec.encode(member))
+                          for member in self.annotation.members_with(self.annotation))
+         values = FieldCodec.value_schema(self.annotation).get('enum')
+         return None if values is None else tuple((str(value), str(value)) for value in values)
+@@ -510,7 +511,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
+             elif normalize is not None:
+                 result[key] = normalize(text)
+             elif isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
+-                result[key] = {'kind': text}
++                result[key] = {annotation.family_discriminator: text}
+             elif FieldCodec.value_schema(annotation).get('type') == 'string' or str in get_args(annotation):
+                 result[key] = text
+             else:
+@@ -597,7 +598,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
+         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
+ 
+     @classmethod
+-    def add_parser(cls, subparsers: Any) -> None:
++    def add_parser(cls, subparsers: Any) -> argparse.ArgumentParser:
+         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
+         groups: dict[str, Any] = {}
+         hints = get_type_hints(cls)
+@@ -649,6 +650,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
+             else:
+                 options.pop("required", None)
+             owner.add_argument(*metadata["flags"], **options)
++        return parser
+ 
+     @classmethod
+     def from_namespace(cls, args: argparse.Namespace) -> Self:
+@@ -664,7 +666,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
+             elif isinstance(hints[declared.name], type) and issubclass(
+                 hints[declared.name], DeclaredFamily
+             ):
+-                value = {"kind": value}
++                value = {hints[declared.name].family_discriminator: value}
+             payload[key] = value
+         return member.from_payload(payload)
+ 
+@@ -719,13 +721,34 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
+         return receipt.to_wire()
+ 
+ 
++class ToolArgument(argparse.Action):
++    def __call__(self, parser, namespace, values, option_string=None):
++        namespace.arguments = {**namespace.arguments, self.dest: values}
++
++
+ @dataclass(frozen=True, kw_only=True)
+ class InvokeCliCommand(CliCommand):
+     help = "Invoke one declared adapter tool, as --from THREAD when given"
++
++    @classmethod
++    def add_parser(cls, subparsers):
++        parser = super().add_parser(subparsers)
++        tools = parser.add_subparsers(dest="tool")
++        for declaration in ToolRequest.members_with(ToolRequest):
++            tool = tools.add_parser(declaration.declared_name, help=declaration.description)
++            tool.set_defaults(arguments={})
++            tool.add_argument("--caller", dest="caller", default=argparse.SUPPRESS)
++            schema = declaration.schema()["parameters"]
++            for name, value in schema["properties"].items():
++                converter = {"string": str, "integer": int, "number": float}.get(
++                    value.get("type"), json.loads)
++                tool.add_argument("--" + name.replace("_", "-"), dest=name,
++                    action=ToolArgument, type=converter, required=name in schema["required"],
++                    choices=value.get("enum"), help=value.get("description"))
+     caller: str | None = option(
+         "--from", default=None, help="Calling thread; omit for tools that need no thread"
+     )
+-    tool: str = option("--tool")
++    tool: str = option("--tool", default="")
+     arguments: dict[str, Any] = option(
+         "--arguments",
+         help="Tool arguments as a JSON object",
+diff --git a/src/agent_comms/field_codec.py b/src/agent_comms/field_codec.py
+index f6f3641c7..0cc0bc0fd 100644
+--- a/src/agent_comms/field_codec.py
++++ b/src/agent_comms/field_codec.py
+@@ -119,6 +119,8 @@ class JsonShapeFamily(WireValue):
+         for member in cls.members_with(JsonShapeMember):
+             annotation = cls._value_annotation(member)
+             shape = get_origin(annotation) or annotation
++            if is_dataclass(shape):
++                shape = dict
+             if shape in (tuple, frozenset):
+                 shape = list
+             if shape not in (dict, list, str, int, float, bool, type(None)):
+@@ -136,6 +138,13 @@ class JsonShapeFamily(WireValue):
+     def to_wire(self):
+         return self.value
+ 
++    @classmethod
++    def schema(cls) -> dict[str, Any]:
++        return {"oneOf": [
++            FieldCodec.value_schema(cls._value_annotation(member))
++            for member in cls.members_with(JsonShapeMember)
++        ]}
++
+ 
+ class TextRepresentation(FieldRepresentation):
+     """External text scalars share strict decoding at the canonical boundary."""

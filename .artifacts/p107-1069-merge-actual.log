@@ -1,0 +1,12 @@
+Auto-merging src/agent_comms/external_transcript.py
+CONFLICT (content): Merge conflict in src/agent_comms/external_transcript.py
+Auto-merging src/agent_comms/goals.py
+CONFLICT (content): Merge conflict in src/agent_comms/goals.py
+Auto-merging src/agent_comms/threads.py
+Auto-merging src/agent_comms/todos.py
+CONFLICT (content): Merge conflict in src/agent_comms/todos.py
+Auto-merging src/agent_comms/tools.py
+CONFLICT (content): Merge conflict in src/agent_comms/tools.py
+Auto-merging src/agent_comms/transcript_events.py
+CONFLICT (content): Merge conflict in src/agent_comms/transcript_events.py
+Automatic merge failed; fix conflicts and then commit the result.

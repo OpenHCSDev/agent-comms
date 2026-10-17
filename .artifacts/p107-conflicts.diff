@@ -1,0 +1,216 @@
+diff --cc src/agent_comms/external_transcript.py
+index 19ee94edb,9dff5e728..000000000
+--- a/src/agent_comms/external_transcript.py
++++ b/src/agent_comms/external_transcript.py
+@@@ -21,9 -20,9 +20,13 @@@ from typing import ClassVa
+  from .native_runtime_input import PublishedReplyRevision
+  from .native_transcript import RecordsCut
+  from .thread_identity import ThreadIncarnation
+++<<<<<<< HEAD
+ +from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
+++=======
++ from .transcript_events import TranscriptEvent, TurnDigest
+++>>>>>>> feat/commanded-goals
+  from .transcript_receipts import TranscriptSource
+- from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable, sql_literal
++ from .typed_table import Column, TypedRow, TypedStore, TypedTable
+  
+  
+  @dataclass(frozen=True)
+diff --cc src/agent_comms/goals.py
+index cd8c6ee3b,5395eedf2..000000000
+--- a/src/agent_comms/goals.py
++++ b/src/agent_comms/goals.py
+@@@ -164,80 -257,14 +257,91 @@@ class GoalAuthor(DeclaredFamily, affix=
+      def require_order_source(self, problem_id: str) -> None:
+          raise ValueError("This goal is not a problem-bound order.")
+  
+++<<<<<<< HEAD
+ +    @abstractmethod
+ +    def complete_problem(self, goals, reference: GoalRef) -> None: ...
+ +
+ +    @abstractmethod
+ +    def require_self_direction(self) -> None: ...
+ +
+ +    @abstractmethod
+ +    def require_commander(self, actor: ThreadIncarnation, snapshot) -> None: ...
+ +
+ +    @abstractmethod
+ +    def revised(self, author: ThreadIncarnation, registry, now: float): ...
+ +
+ +    @abstractmethod
+ +    def release(self, goals, reference: GoalRef) -> None: ...
+ +
+ +    @abstractmethod
+ +    def has_report(self, recorded: EventTime) -> bool: ...
+ +
+ +    @property
+ +    @abstractmethod
+ +    def revision_count(self) -> int: ...
+ +
+ +    @abstractmethod
+ +    def notification_targets(
+ +        self, registry, root: Path, *, new_order: bool
+ +    ) -> tuple[ThreadIncarnation, ...]: ...
+ +
+ +    @property
+ +    @abstractmethod
+ +    def issued_times(self) -> tuple[float, ...]: ...
+ +
+ +    @property
+ +    @abstractmethod
+ +    def instruction(self) -> str: ...
+ +
+ +
+ +@dataclass(frozen=True)
+ +class SelfDirectedGoalAuthor(GoalAuthor):
+ +    def require_report(self, progress) -> None:
+ +        pass
+ +
+ +    def require_completion(self, progress, *, root, goal):
+ +        return UnrecordedEventTime()
+ +
+ +    def require_current_order(self, root, goal):
+ +        pass
+ +
+ +    def complete_problem(self, goals, reference):
+ +        pass
+ +
+ +    def require_self_direction(self):
+ +        pass
+ +
+ +    def require_commander(self, actor, snapshot):
+ +        raise ValueError("This existing goal was not issued by a commander.")
+ +
+ +    def revised(self, author, registry, now):
+ +        self.require_commander(author, registry)
+ +
+ +    def release(self, goals, reference):
+ +        pass  # A self-directed goal is no commander's order to take away.
+ +
+ +    def has_report(self, recorded):
+ +        return recorded.since(0)
+ +
+ +    @property
+ +    def revision_count(self):
+ +        return 0
+ +
+ +    def notification_targets(self, registry, root, *, new_order):
+ +        return ()
+ +
+ +    @property
+ +    def issued_times(self):
+++=======
++     def require_self_direction(self):
++         pass
++ 
++     def require_target(self, goals, target, goal_id):
++         if target.goal is not None and not target.goal.state.terminal:
++             target.goal.author.require_self_direction()
++ 
++     def notification_targets(self, goals, *, new_order):
+++>>>>>>> feat/commanded-goals
+          return ()
+  
+      @property
+diff --cc src/agent_comms/todos.py
+index 52b304025,8fd1442bb..000000000
+--- a/src/agent_comms/todos.py
++++ b/src/agent_comms/todos.py
+@@@ -469,20 -406,6 +406,23 @@@ class CommandedGoalAuthor(GoalAuthor)
+                  "\"evidence\":\"actual application evidence\"}. Core executes the problem's "
+                  "declared acceptance check; a mismatch cannot complete the order.")
+  
+++<<<<<<< HEAD
+ +    def require_commander(self, actor, snapshot):
+ +        if self.thread.resolved(snapshot) != actor:
+ +            raise TodoError("Only this order's original commander can judge it or send it back.")
+ +
+ +    def revised(self, author, registry, now):
+ +        self.require_commander(author, registry)
+ +        return replace(self, issued_at=now, revisions=self.revisions + 1)
+ +
+ +    def release(self, goals, reference):
+ +        current = self.todo.require_current(goals.root, reference)
+ +        TodoStore(goals.root).release(current.id, expected_revision=current.revision,
+ +                                      previous=current.assignment.require_assigned(current),
+ +                                      goals=goals)
+ +
+++=======
+++>>>>>>> feat/commanded-goals
+  
+  @dataclass(frozen=True)
+  class TransferredGoalAuthor(CommandedGoalAuthor):
+diff --cc src/agent_comms/tools.py
+index 6fa2f3f0f,d3c6850c9..000000000
+--- a/src/agent_comms/tools.py
++++ b/src/agent_comms/tools.py
+@@@ -679,13 -678,11 +680,16 @@@ class CommsTodosTool(ToolRequest)
+  @dataclass(frozen=True, kw_only=True)
+  class CommsFleetTool(ToolRequest):
+      label = "Fleet"
+-     description = "Running threads, goals, deadlines and latest original tool/message activity, newest first."
++     description = "Canonical problems, exact current orders and observed activity."
+  
+      def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+-         from .cli_commands import FleetCliCommand
++         return {"problems": FieldCodec.encode(comms.todos.fleet(comms.registry, comms.agents))}
+  
+++<<<<<<< HEAD
+ +        return FleetCliCommand().apply(comms)
+ +
+++=======
+++>>>>>>> feat/commanded-goals
+  
+  @dataclass(frozen=True, kw_only=True)
+  class CommsTurnsTool(ToolRequest):
+diff --cc src/agent_comms/transcript_events.py
+index 96c2bf275,c91dacd56..000000000
+--- a/src/agent_comms/transcript_events.py
++++ b/src/agent_comms/transcript_events.py
+@@@ -205,41 -208,7 +208,45 @@@ class ToolStartTranscript(ToolTranscrip
+  
+      @property
+      def title(self) -> str:
+++<<<<<<< HEAD
+ +        from .tool_declaration import ToolDeclaration
+ +
+ +        return ToolDeclaration.caption(self.tool_name, self.detail)
+ +
+ +    @property
+ +    def tool_calls(self):
+ +        return (self,)
+ +
+ +    def made_before(self, at: float) -> bool:
+ +        """Only a recorded selection time proves the call is older than ``at``."""
+ +        return self.timestamp is not None and self.timestamp < at
+ +
+ +    def quotes(self, text: str) -> bool:
+ +        """Whether one string the caller sent contains this exact text.
+ +
+ +        JSON escapes each character alone, so an escaped substring cannot span
+ +        two strings or a key and its value.
+ +        """
+ +        return json.dumps(text)[1:-1] in json.dumps(self.raw_input)
+ +
+ +    @property
+ +    def selection_order(self) -> tuple[bool, float]:
+ +        # Without a recorded selection time, no known call proves it is newer.
+ +        return self.timestamp is None, self.timestamp or 0
+ +
+ +    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None):
+ +        return (self, ToolEndTranscript(
+ +            tool_call_id=self.tool_call_id, tool_name=self.tool_name,
+ +            timestamp=self.timestamp, text=text, ok=ok, diff=diff,
+ +        ))
+ +
+ +    def with_tool_start(self, original):
+ +        if self.tool_call_id == original.tool_call_id and self.timestamp is None:
+ +            return replace(self, timestamp=original.timestamp)
+ +        return self
+++=======
++         return tool_declaration.ToolDeclaration.caption(self.tool_name, self.detail)
+++>>>>>>> feat/commanded-goals
+  
+  
+  @dataclass(frozen=True, kw_only=True)
