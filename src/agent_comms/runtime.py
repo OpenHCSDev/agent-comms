@@ -288,7 +288,7 @@ def present_session(metadata: dict[str, Any], session_id: str) -> dict[str, Any]
 
 
 class RuntimeConnection:
-    """Original root/owner/process-fenced socket custody shared by headless clients."""
+    """A shared headless-client socket connection that checks root, owner and process identity."""
 
     def __init__(self, comms, session_id: str, path: Path):
         self.session_id = session_id

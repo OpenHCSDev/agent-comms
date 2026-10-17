@@ -257,7 +257,7 @@ class TurnSession:
     def record_request_progress(self, progress: RequestProgress) -> None:
         """Record the original sample without borrowing global publication locks.
 
-        The acquired native process supplies custody identity; the configured
+        The acquired native process supplies its identity; the configured
         observer binds the original public turn lease. No phase owns a copy of
         the transport clock or request lifecycle.
         """
@@ -374,7 +374,7 @@ class TurnSession:
         )
 
     async def open_transport(self, resources: AsyncExitStack) -> None:
-        """Leaf-owned launch resources enter the original turn's custody."""
+        """The turn's resource stack closes the backend's launch resources."""
 
     @contextmanager
     def native_acquisition(self):
@@ -405,7 +405,7 @@ class TurnSession:
         return native
 
     async def open_native(self, *, reuse: bool) -> PiSessionChild:
-        """Initial acquisition and prepared continuation share the same custody."""
+        """Let the session manage child ownership for new or continued input."""
         with self.startup.measurements.operation("native_open"):
             return await self.native_session.open(
                 self.launch, reuse=reuse, startup=self.startup, watchdog=self.watchdog,

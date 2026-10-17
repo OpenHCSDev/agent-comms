@@ -84,7 +84,7 @@ class NativeSessionPreparation(backend.TurnSession):
         worktree: str, environment: dict[str, str], session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
-        """Borrow existing child custody through launch, observation and retention."""
+        """Keep the session's child owned through launch, observation and retention."""
         owner = asyncio.current_task()
         launch = await Coordination.run_worker(partial(
             persistent.child_state.managed_launch,

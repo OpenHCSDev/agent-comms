@@ -240,8 +240,8 @@ class CertifiedSourceRead:
 
         The returned iterator owns only the original pointers, copied bytes and
         root selected by this certificate. It is a read snapshot, never a
-        current publication/admission permit. Capture must finish in custody;
-        decoding can finish after that custody has closed.
+        current publication/admission permit. Capture must finish while locks are held;
+        decoding can finish after those locks are released.
         """
         return (resource.value for resource in self.capture_resources(rows))
 
@@ -443,7 +443,7 @@ class CertifiedSourceRead:
 
         SQLite's negative LIMIT requests the complete sender/addressed relation,
         rather than a display page. The existing pointer reader captures bytes
-        now; its decoder may run after publication custody closes. No unrelated
+        now; its decoder may run after releasing the bus locks. No unrelated
         record is decoded and no fact is stored in the checkpoint.
         """
         lookup = incarnation.lookup

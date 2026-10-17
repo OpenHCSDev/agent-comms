@@ -59,7 +59,7 @@ class StoreWait(StoreContention):
 
 @dataclass(frozen=True)
 class StoreBusy(StoreContention):
-    """Do not wait when optional presentation or admission cannot acquire SQLite custody."""
+    """Do not wait when optional display or input work cannot acquire a SQLite lock."""
 
     def reader(self, uri: str) -> sqlite3.Connection:
         with CoordinationReadUnavailable.checking():

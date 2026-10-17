@@ -265,7 +265,7 @@ class OwnedTurn:
             )
             self.original_keys = self.original.keys
             # The store enlists rollback before publication. The original keys
-            # now belong to the outer custody before the worker can return.
+            # now have rollback registered on the outer stack before the worker returns.
             reservation.pop_all()
 
     def open_stream(self, resources: AsyncExitStack, permits: ExitStack):

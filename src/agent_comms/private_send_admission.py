@@ -143,7 +143,7 @@ class PrivateSendAdmission:
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
 
-        TrackedTurnSession retains child/tool custody. Its return or exception
+        TrackedTurnSession owns the child and tool resources. Its return or exception
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer retains the sole one-use send token after durable admission.
         """
@@ -250,7 +250,7 @@ class PrivateSendAdmission:
                 reserved.sent_owner_admission_generation.record(
                     reserved, db, self.owner.admission_generation, identity
                 )
-            # ExitStack commits/closes the coordinator before releasing shared registry/wire custody. No bus publication
+            # ExitStack commits/closes the coordinator before releasing shared registry/wire locks. No bus publication
             # resource is borrowed: the selected claim and prompt are already
             # certified originals, and this grant changes only their SQL/input
             # records. No payload byte is
