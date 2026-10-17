@@ -13,9 +13,8 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .thread_execution import ThreadExecution, NativeThreadExecution
 from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
-from .goals import (
-    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRef, GoalRevision, PresentGoalCheckpoint,
-)
+from .goals import AbsentGoalCheckpoint, Goal, GoalCheckpoint, PresentGoalCheckpoint
+from .goal_attempt_identity import GoalRef, GoalRevision
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
     ThreadProvenance,

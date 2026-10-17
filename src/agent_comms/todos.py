@@ -26,7 +26,8 @@ from .goal_actions import (
     ClearGoalAction, CompletedGoalAction, GoalActionContext, GoalPrecondition,
     RuntimeInvocable, SetGoalAction,
 )
-from .goals import Goal, GoalAuthor, GoalRef, GoalProgress
+from .goals import Goal, GoalAuthor, GoalProgress
+from .goal_attempt_identity import GoalRef
 from .recorded_time import EventTime, RecordedEventTime
 from .registration import Registration
 from .registry_document import RegistrySnapshot

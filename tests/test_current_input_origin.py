@@ -12,7 +12,8 @@ from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, PresentGoalCheckpoint
+from agent_comms.goals import AbsentGoalCheckpoint, Goal, PresentGoalCheckpoint
+from agent_comms.goal_attempt_identity import GoalRevision
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_origin import HumanInputOrigin, UnattributedInputOrigin, WireInputOrigin

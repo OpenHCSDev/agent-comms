@@ -28,6 +28,7 @@ from uuid import uuid4
 
 from .coordination_database import CoordinationStore
 from .goal_attempt_identity import GoalAttemptIdentity
+from .order_ledger import OrderRecords
 from .goal_attempt_phase import (
     ClaimedAttempt,
     FailedAttempt,
@@ -516,7 +517,7 @@ class ProviderUsageTotal:
 _T = TypeVar("_T")
 
 
-class GoalAttemptStore:
+class GoalAttemptStore(OrderRecords):
     """Owner-private SQLite authority; no synthetic model or context claims.
 
     The caller creates a private directory and explicitly initializes it in a

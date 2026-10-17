@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .goals import GoalRevision
+from .goal_attempt_identity import GoalRevision
 from .message_reference import MessageReference
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
 from .turn_context import Provenance, WireProvenance

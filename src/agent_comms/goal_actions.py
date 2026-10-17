@@ -24,7 +24,8 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import Goal, GoalRef, GoalProgress, GoalAuthor, UncommandedGoalAuthor
+from .goals import Goal, GoalProgress, GoalAuthor, UncommandedGoalAuthor
+from .goal_attempt_identity import GoalRef
 from .recorded_time import EventTime, UnrecordedEventTime
 from .threads import Thread
 

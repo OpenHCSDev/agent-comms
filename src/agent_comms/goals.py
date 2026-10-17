@@ -10,6 +10,7 @@ from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
+from .goal_attempt_identity import GoalRef, GoalRevision
 from .goal_states import ActiveGoal, GoalState
 from .recorded_time import EventTime, UnrecordedEventTime
 
@@ -108,30 +109,6 @@ class ReportedGoalProgress(GoalProgress, JsonShapeMember):
     @property
     def block_reason(self) -> str:
         return self.value.next
-
-
-@dataclass(frozen=True, slots=True)
-class GoalRef:
-    owner: RecordedThreadIncarnation
-    goal_id: str
-
-    def __post_init__(self):
-        self.owner.require_recorded()
-        GoalRevision(self.goal_id, 0)
-
-    def same_order(self, other: GoalRef) -> bool:
-        return self.goal_id == other.goal_id and self.owner.same_publication_birth(other.owner)
-
-    def current(self, snapshot) -> Goal | None:
-        if not self.owner.current(snapshot):
-            return None
-        return snapshot.require(self.owner.name).goal_for(self.goal_id)
-
-    def require_current(self, registry) -> Goal:
-        goal = self.current(registry.snapshot())
-        if goal is None:
-            raise ValueError("Goal reference is no longer current.")
-        return goal
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -318,26 +295,6 @@ class GoalMentionSource:
             self.digest.matches(goal.text)
             and self.incarnation.resolved(registry) == owner.incarnation
         )
-
-
-@dataclass(frozen=True)
-class GoalRevision:
-    """A particular revision, independent of text and execution state."""
-
-    id: str
-    revision: int
-
-    def __post_init__(self) -> None:
-        if not FieldCodec.decode(str, self.id):
-            raise ValueError("Goal revision requires identity")
-        try:
-            revision = FieldCodec.decode(int, self.revision)
-        except (TypeError, ValueError) as error:
-            raise ValueError(
-                "Goal revision must be an exact nonnegative 63-bit integer."
-            ) from error
-        if not 0 <= revision < 1 << 63:
-            raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
 
 
 class GoalCheckpoint(DeclaredFamily, affix="GoalCheckpoint"):

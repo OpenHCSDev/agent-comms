@@ -29,7 +29,8 @@ from .goal_attempts import (
     UnresolvedAttemptError,
 )
 from .goal_presentation import GoalExecution
-from .goals import Goal, GoalRevision
+from .goals import Goal
+from .goal_attempt_identity import GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck

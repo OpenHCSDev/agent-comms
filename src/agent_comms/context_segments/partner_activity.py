@@ -11,7 +11,8 @@ from typing import ClassVar
 
 from ..field_codec import FieldCodec
 from ..goal_history import GoalHistoryEntry
-from ..goals import GoalRevision, GoalProgress, TextGoalProgress
+from ..goals import GoalProgress, TextGoalProgress
+from ..goal_attempt_identity import GoalRevision
 from ..goal_states import GoalState
 from ..peer_relevance import Informed
 from ..turn_context import InstructionFile, InstructionSegment, OwnerProvenance

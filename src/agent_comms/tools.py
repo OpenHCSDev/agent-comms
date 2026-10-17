@@ -42,7 +42,8 @@ from .turn_digests import TurnDigestRead
 from .relationships import RelationshipEdit
 from .thread_status import ThreadStatus
 from .work_branches import WorkBranches
-from .order_records import CaughtStage, HeldOrder, JudgedOrder, OrderRecords, StrikeCause
+from .order_records import HeldOrder, JudgedOrder
+from .order_ledger import CaughtStage, StrikeCause
 from .plain_text import PlainText
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
@@ -767,7 +768,7 @@ class CommsFleetStoryTool(ToolRequest):
     limit: int = tool_field("Number of newest records", default=50)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        return {"strikes": FieldCodec.encode(OrderRecords(comms.root).recent_strikes(self.limit))}
+        return {"strikes": FieldCodec.encode(comms.goals.open_goal_store().recent_strikes(self.limit))}
 
 
 @dataclass(frozen=True, kw_only=True)

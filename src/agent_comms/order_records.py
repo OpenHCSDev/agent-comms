@@ -1,144 +1,29 @@
-"""What a commander decided about an order's work, recorded on that order.
-
-A verdict judges one tool call the unit made while holding the order. A send-back
-verdict is a strike: it revises the order's Goal text and counts against the unit,
-with no warning first. Other misses (a missed deadline, a false done claim, missing
-evidence) are strike rows. Nothing here copies the order text, the unit's tool
-input or the story: the Goal history, the transcripts and these rows are read.
-"""
+"""Commander workflows over Goal history, original transcripts and the goal ledger."""
 
 from __future__ import annotations
 
 import time
-from contextlib import closing, contextmanager
-from itertools import islice
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
-from .goal_actions import EditGoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable
 from .field_codec import FieldCodec, projected
+from .goal_actions import EditGoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable
+from .goal_attempt_identity import GoalRef
 from .goal_history import GoalHistoryEntry
-from .goals import GoalRef
-from .transcript_events import ToolStartTranscript
-from .plain_text import PlainText
+from .order_ledger import (
+    AcceptedVerdict, CaughtStage, OrderRecordError, OrderRecords, SentBackVerdict,
+    StrikeCause, StrikeRow, VerdictOutcome, VerdictRow,
+)
 from .thread_identity import RecordedThreadIncarnation
-from .typed_table import Column, Index, SqlValue, TypedStore, TypedTable, sql_literal
+from .transcript_events import ToolStartTranscript
 
 if TYPE_CHECKING:
+    from .goal_attempts import GoalAttemptStore
     from .goal_management import Goals
     from .goals import Goal
     from .threads import Thread
     from .turn_digests import ThreadTurns
-
-
-class OrderRecordError(ValueError):
-    """The verdict or strike does not match the order or the unit's work."""
-
-
-class VerdictOutcome(DeclaredFamily, affix="Verdict"):
-    """What the commander decided about one tool call."""
-
-    strikes: ClassVar[bool]
-
-
-class AcceptedVerdict(VerdictOutcome):
-    strikes = False
-
-
-class SentBackVerdict(VerdictOutcome):
-    strikes = True
-
-
-class StrikeCause(DeclaredFamily, affix="StrikeCause"):
-    """A miss that is not a judged tool call."""
-
-
-class MissedDeadlineStrikeCause(StrikeCause):
-    pass
-
-
-class FalseDoneStrikeCause(StrikeCause):
-    pass
-
-
-class MissingEvidenceStrikeCause(StrikeCause):
-    pass
-
-
-class CaughtStage(DeclaredFamily, affix="CaughtStage"):
-    """Where the miss was caught; a later stage cost more."""
-
-
-class ReviewCaughtStage(CaughtStage):
-    pass
-
-
-class InstallCaughtStage(CaughtStage):
-    pass
-
-
-class LiveCaughtStage(CaughtStage):
-    pass
-
-
-class TristanCaughtStage(CaughtStage):
-    pass
-
-
-@dataclass(frozen=True)
-class VerdictRow(TypedTable):
-    goal: GoalRef = field(metadata={"sql": Column(primary_key=True)})
-    tool_call: str = field(metadata={"sql": Column(primary_key=True)})
-    outcome: type[VerdictOutcome]
-    judge: RecordedThreadIncarnation
-    quoted: str
-    reason: Annotated[str, PlainText]
-    at: float
-    unit: str = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(goal,'$.owner.name')")})
-    indexes = (Index(("unit", "at")), Index(("at",)))
-
-    @property
-    def counted_against(self) -> str:
-        return self.goal.owner.name
-
-    def add(self, connection) -> None:
-        if self.insert_if_absent(connection).rowcount == 0:
-            raise OrderRecordError(f"Tool call {self.tool_call} already has a verdict on this order.")
-
-    @projected(view="wire")
-    def line(self) -> str:
-        return (f"{self.goal.owner.name}: tool call {self.tool_call} {self.outcome.declared_name} "
-                f"by {self.judge.name}: {self.reason}")
-
-
-@dataclass(frozen=True)
-class StrikeRow(TypedTable):
-    id: int | None = field(metadata={"sql": Column(primary_key=True)})
-    goal: GoalRef
-    struck: RecordedThreadIncarnation
-    cause: type[StrikeCause]
-    what_happened: Annotated[str, PlainText]
-    caught: type[CaughtStage]
-    judge: RecordedThreadIncarnation
-    at: float
-    unit: str = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(struck,'$.name')")})
-    indexes = (Index(("unit", "at")), Index(("at",)), Index(("goal",)))
-
-    @property
-    def counted_against(self) -> str:
-        return self.struck.name
-
-    def add(self, connection) -> None:
-        self.insert(connection)
-
-    @projected(view="wire")
-    def line(self) -> str:
-        return (f"{self.struck.name}: {self.cause.declared_name}, caught at "
-                f"{self.caught.declared_name} by {self.judge.name}: {self.what_happened}")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -175,8 +60,6 @@ class HeldOrder:
     goals: Goals
     unit: Thread
     reference: GoalRef
-
-    # Verdicts and the order-work read look at this many of the unit's newest turns.
     judged_turns: ClassVar[int] = 20
 
     @classmethod
@@ -185,15 +68,15 @@ class HeldOrder:
         return cls(goals, thread, GoalRef(thread.incarnation.require_recorded(), goal_id))
 
     @property
-    def records(self) -> OrderRecords:
-        return OrderRecords(self.goals.root)
+    def records(self) -> GoalAttemptStore:
+        return self.goals.open_goal_store()
 
     @property
     def history(self) -> tuple[GoalHistoryEntry, ...]:
         return self.goals.goal_history(self.unit.name, goal_id=self.reference.goal_id)
 
     def work(self, turns: ThreadTurns) -> tuple[OrderCall, ...]:
-        """The unit's tool calls since the order was issued, newest first, with any verdict."""
+        """Original calls since issue, newest first, with their recorded verdicts."""
         history = self.history
         if not history:
             raise OrderRecordError(f"{self.unit.name} never held order {self.reference.goal_id}.")
@@ -213,7 +96,7 @@ class HeldOrder:
 
 @dataclass(frozen=True)
 class OrderStory:
-    """One order's Goal transitions, verdicts and strikes; each owner keeps its own rows."""
+    """Read original Goal transitions and the judgment rows, never a stored story."""
 
     order: GoalRef
     history: tuple[GoalHistoryEntry, ...]
@@ -233,8 +116,6 @@ class JudgedOrder(HeldOrder):
 
     goal: Goal
     judge: RecordedThreadIncarnation
-
-    # An accepting reason quotes this many words of the order the call serves.
     serves_words: ClassVar[int] = 4
 
     @classmethod
@@ -275,7 +156,7 @@ class JudgedOrder(HeldOrder):
         row = self._verdict(turns, AcceptedVerdict, tool_call, quoted, reason)
         with self.goals.writing():
             self._require_current()
-            self.records.record(row)
+            row, _ = self.records.record(row)
         return row
 
     def send_back(self, turns: ThreadTurns, tool_call: str, quoted: str, reason: str,
@@ -283,10 +164,10 @@ class JudgedOrder(HeldOrder):
         row = self._verdict(turns, SentBackVerdict, tool_call, quoted, reason)
         with self.goals.writing() as completed:
             unit = self._require_current()
-            with self.records.recording(row) as strikes:
-                SendBackGoalAction(expect=GoalPrecondition(expected_goal=self.goal),
-                                   judge=self.judge, text=text)._apply_locked(
-                    GoalActionContext(self.goals, unit, RuntimeInvocable, completed=completed))
+            action = SendBackGoalAction(expect=GoalPrecondition(expected_goal=self.goal),
+                                        judge=self.judge, text=text)
+            context = GoalActionContext(self.goals, unit, RuntimeInvocable, completed=completed)
+            row, strikes = self.records.record(row, change=lambda: action._apply_locked(context))
         return Struck.counted(self.goals, row, strikes)
 
     def strike(self, struck: str, cause: type[StrikeCause], what_happened: str,
@@ -297,7 +178,7 @@ class JudgedOrder(HeldOrder):
                             struck=self.goals.registry.require(struck).incarnation.require_recorded(),
                             cause=cause, what_happened=what_happened, caught=caught,
                             judge=self.judge, at=time.time())
-            strikes = self.records.record(row)
+            row, strikes = self.records.record(row)
         return Struck.counted(self.goals, row, strikes)
 
 
@@ -312,7 +193,6 @@ class Struck:
     def counted(cls, goals: Goals, row: VerdictRow | StrikeRow, strikes: int) -> Struck:
         struck = cls(row, strikes)
         if struck.fired:
-            # The limit takes every open order of the struck thread away at once.
             for order in goals.registry.require(row.counted_against).open_orders:
                 order.require_current(goals.registry).author.release(goals, order)
         return struck
@@ -320,64 +200,3 @@ class Struck:
     @projected(view="wire")
     def fired(self) -> bool:
         return self.strikes >= OrderRecords.strike_limit
-
-
-@dataclass(frozen=True, slots=True)
-class OrderRecords(TypedStore):
-    """Verdicts and strikes, indexed by the unit they count against."""
-
-    root: Path
-    filename: ClassVar[str] = "order_records.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (VerdictRow, StrikeRow)
-    # At this many strikes the unit loses its open order and is fired from the task.
-    strike_limit: ClassVar[int] = 2
-
-    @staticmethod
-    def _count(connection, unit: str) -> int:
-        striking = ", ".join(sql_literal(member) for member in
-                             VerdictOutcome.members_with(VerdictOutcome) if member.strikes)
-        [count] = SqlValue.for_annotation(int).read(connection.execute(
-            f'SELECT (SELECT COUNT(*) FROM "{VerdictRow.declared_name}" '
-            f'WHERE "unit" = ? AND "outcome" IN ({striking})) '
-            f'+ (SELECT COUNT(*) FROM "{StrikeRow.declared_name}" WHERE "unit" = ?)',
-            (unit, unit)))
-        return count
-
-    def _rows[Row: TypedTable](self, row: type[Row], **select) -> tuple[Row, ...]:
-        if not self.path.exists():
-            return ()  # nothing was ever recorded; a read creates nothing
-        with self.snapshot() as connection:
-            return tuple(row.select(connection, **select))
-
-    def verdicts(self, order: GoalRef) -> tuple[VerdictRow, ...]:
-        return self._rows(VerdictRow, goal=order, order_by=("at",))
-
-    def strikes_on(self, order: GoalRef) -> tuple[StrikeRow, ...]:
-        return self._rows(StrikeRow, goal=order, order_by=("at",))
-
-    def _newest[Row: TypedTable](self, row: type[Row], limit: int, **select) -> tuple[Row, ...]:
-        if not self.path.exists():
-            return ()
-        with self.snapshot() as connection, closing(row.stream(
-                connection, order_by=("at",), descending=True, **select)) as rows:
-            return tuple(islice(rows, limit))
-
-    def recent_strikes(self, limit: int) -> tuple[VerdictRow | StrikeRow, ...]:
-        """Every strike and send-back, newest first: the fleet's public record."""
-        striking = tuple(member for member in VerdictOutcome.members_with(VerdictOutcome)
-                         if member.strikes)
-        rows = (*self._newest(VerdictRow, limit,
-                              where=f'"outcome" IN ({", ".join(map(sql_literal, striking))})'),
-                *self._newest(StrikeRow, limit))
-        return tuple(sorted(rows, key=lambda row: row.at, reverse=True)[:limit])
-
-    @contextmanager
-    def recording(self, row: VerdictRow | StrikeRow):
-        """Reject duplicate verdicts before changing an order; commit afterward."""
-        with self.writing() as connection:
-            row.add(connection)
-            yield self._count(connection, row.counted_against)
-
-    def record(self, row: VerdictRow | StrikeRow) -> int:
-        with self.recording(row) as strikes:
-            return strikes
