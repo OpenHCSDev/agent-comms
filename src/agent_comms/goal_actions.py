@@ -174,10 +174,6 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
 class TransitionGoalAction(GoalAction):
     progress: GoalProgress | None = None
 
-    def __post_init__(self) -> None:
-        if self.progress is not None:
-            object.__setattr__(self, "progress", GoalProgress.capture(self.progress))
-
     @abstractmethod
     def next_state(self, ctx: GoalActionContext) -> GoalState: ...
 
@@ -344,6 +340,13 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
 class CompletedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
     delivery_time: EventTime = field(default_factory=UnrecordedEventTime)
 
+    @classmethod
+    def ensure(cls, goal: Goal, reference: GoalRef, *, goals: Goals, progress: GoalProgress, actor):
+        if goal.delivery_complete:
+            return goal
+        return cls(progress=progress, expect=GoalPrecondition(expected_goal=goal)).apply(
+            goals, reference.owner.name, actor=actor)
+
     def prepare(self, goals: Goals, thread: Thread) -> GoalAction:
         goal = thread.require_goal()
         delivery = goal.author.require_completion(
@@ -412,7 +415,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
     author: GoalAuthor = field(default_factory=UncommandedGoalAuthor)
 
     def __post_init__(self):
-        Goal.require_deadline(self.deadline)
+        self.deadline.require_deadline()
 
     @classmethod
     async def submit_control(cls, observe, invoke, text: str = "") -> dict:

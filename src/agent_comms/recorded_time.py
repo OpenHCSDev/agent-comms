@@ -21,6 +21,19 @@ class EventTime(DeclaredFamily, affix="EventTime"):
         """Capture a recorded Unix-seconds fact, never the read time."""
         return RecordedEventTime(timestamp)
 
+    @property
+    def recorded(self) -> bool:
+        return False
+
+    def require_deadline(self) -> None:
+        pass
+
+    def before(self, at: float) -> bool:
+        return False
+
+    def after(self, other: EventTime) -> bool:
+        return False
+
     @abstractmethod
     def stamp(self, event: Event) -> Event: ...
 
@@ -44,6 +57,20 @@ class RecordedEventTime(EventTime):
     def __post_init__(self):
         if type(self.at) not in (int, float) or not isfinite(self.at):
             raise ValueError("A recorded event time must be a finite Unix timestamp.")
+
+    @property
+    def recorded(self) -> bool:
+        return True
+
+    def require_deadline(self) -> None:
+        if self.at <= 0:
+            raise ValueError("A goal deadline requires a positive Unix timestamp.")
+
+    def before(self, at: float) -> bool:
+        return self.at < at
+
+    def after(self, other: EventTime) -> bool:
+        return other.before(self.at)
 
     def stamp(self, event: Event) -> Event:
         return replace(event, timestamp=self.at)

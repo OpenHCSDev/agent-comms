@@ -335,9 +335,9 @@ class Thread(ThreadProvenance):
     def open_orders(self) -> tuple[GoalRef, ...]:
         """The unfinished goals this thread holds; the registry keeps at most one."""
         goal = self.goal
-        if goal is None or goal.state.terminal:
+        if goal is None:
             return ()
-        return (GoalRef(self.incarnation.require_recorded(), goal.id),)
+        return goal.state.open_orders(GoalRef(self.incarnation.require_recorded(), goal.id))
 
     def require_goal(self, goal_id: str | None = None) -> Goal:
         if goal_id is None:

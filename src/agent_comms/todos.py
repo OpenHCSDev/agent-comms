@@ -362,10 +362,10 @@ class CommandedGoalAuthor(GoalAuthor):
         if not self.thread.current(goals.registry.snapshot()):
             raise TodoError("Order author incarnation changed.")
         current = target.goal
-        if current is not None:
-            if current.id == goal_id:
-                current.author.require_order_source(self.todo)
-            elif not current.state.terminal:
+        if current is not None and current.id == goal_id:
+            current.author.require_order_source(self.todo)
+        for order in target.open_orders:
+            if order.goal_id != goal_id:
                 raise TodoError("Assignee already has another unresolved goal.")
 
     def require_report(self, progress):
@@ -593,10 +593,9 @@ class TodoStore:
         if not assignment.goal.owner.same_publication_birth(_participant(actor)):
             raise TodoConflict(current)
         current.require_revision(expected_revision)
-        if not assignment.goal.require_current(goals.registry).delivery_complete:
-            CompletedGoalAction(
-                progress=progress, expect=GoalPrecondition(goal_id=assignment.goal.goal_id)
-            ).apply(goals, assignment.goal.owner.name, actor=actor_kind)
+        CompletedGoalAction.ensure(
+            assignment.goal.require_current(goals.registry), assignment.goal,
+            goals=goals, progress=progress, actor=actor_kind)
         return current
 
     def release(self, todo_id: str, *, expected_revision: int, previous: AssignedTodoAssignment,

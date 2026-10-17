@@ -139,7 +139,7 @@ class JsonShapeFamily(WireValue):
         return self.value
 
     @classmethod
-    def schema(cls) -> dict[str, Any]:
+    def schema(cls) -> dict[str, object]:
         return {"oneOf": [
             FieldCodec.value_schema(cls._value_annotation(member))
             for member in cls.members_with(JsonShapeMember)

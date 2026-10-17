@@ -30,7 +30,6 @@ from .child_process import ProcessIdentity
 from .command import Command
 from .cli_protocol import ArrivedMessage
 from .field_codec import FieldCodec
-from .tools import ToolRequest
 from .comms import Comms
 from .config_options import (
     CatalogConfigOption, CatalogSelection, ConfigOptions,
@@ -721,30 +720,10 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
         return receipt.to_wire()
 
 
-class ToolArgument(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        namespace.arguments = {**namespace.arguments, self.dest: values}
-
-
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
 
-    @classmethod
-    def add_parser(cls, subparsers):
-        parser = super().add_parser(subparsers)
-        tools = parser.add_subparsers(dest="tool")
-        for declaration in ToolRequest.members_with(ToolRequest):
-            tool = tools.add_parser(declaration.declared_name, help=declaration.description)
-            tool.set_defaults(arguments={})
-            tool.add_argument("--caller", dest="caller", default=argparse.SUPPRESS)
-            schema = declaration.schema()["parameters"]
-            for name, value in schema["properties"].items():
-                converter = {"string": str, "integer": int, "number": float}.get(
-                    value.get("type"), json.loads)
-                tool.add_argument("--" + name.replace("_", "-"), dest=name,
-                    action=ToolArgument, type=converter, required=name in schema["required"],
-                    choices=value.get("enum"), help=value.get("description"))
     caller: str | None = option(
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )

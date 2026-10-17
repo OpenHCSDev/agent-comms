@@ -92,7 +92,7 @@ def test_problem_closure_and_goal_owned_checked_delivery(todo_comms: Comms):
         progress=progress, expect=GoalPrecondition(goal_id="order-a")), actor=OwnerInvocable)
     goal = todo_comms.registry.require("worker-a").require_goal()
     assert goal.delivery_complete and goal.late
-    assert goal.delivery_time.timestamps == (int(git(repo, "show", "-s", "--format=%ct", "HEAD")),)
+    assert goal.delivery_time == RecordedEventTime(int(git(repo, "show", "-s", "--format=%ct", "HEAD")))
     assert store.get(assigned.id) == assigned
     assert store.complete(assigned.id, expected_revision=2, actor=owner, progress=progress,
                           goals=todo_comms.goals, actor_kind=OwnerInvocable) == assigned
@@ -102,6 +102,6 @@ def test_problem_closure_and_goal_owned_checked_delivery(todo_comms: Comms):
     row = next(row for row in store.fleet(todo_comms.registry, todo_comms.agents)
                if row.todo.id == assigned.id)
     assert row.todo == assigned and row.goal == goal
-    messages = tuple(todo_comms.bus.log.full_history())
+    messages = tuple(todo_comms.views.full_history_page(limit=20).messages)
     assert len(messages) == 2 and all(message.target == "lead" for message in messages)
     assert "Works in app." in messages[-1].body
