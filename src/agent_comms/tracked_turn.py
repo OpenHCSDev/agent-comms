@@ -33,7 +33,7 @@ from .native_pi import (
 )
 from .native_prompt_send import PromptSendFailure, send_fenced_prompt
 from .native_entries import NativeEntry
-from .native_startup import NativeStartupAdmission
+from .native_startup import NativeStartup
 from .diagnostics import PublicationMeasurements
 from .child_process import ProcessIdentity
 from .coordinator import Coordination
@@ -196,7 +196,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         model_wait_timeout,
         prompt_send_boundary,
         maintenance_root,
-        startup: NativeStartupAdmission,
+        startup: NativeStartup,
         selected_tool_mode,
         observe_event,
         request_observer,
@@ -291,8 +291,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             model_wait_timeout=model_wait_timeout,
             prompt_send_boundary=prompt_send_boundary,
             maintenance_root=maintenance_root,
-            startup=session.startup_admission(launch, maintenance_root, prompt_send_boundary,
-                                             measurements=measurements),
+            startup=NativeStartup.for_launch(launch, root=maintenance_root, measurements=measurements),
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
             request_observer=request_observer,
@@ -447,7 +446,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             raise NativePiUnavailable("Native Pi omitted its private session identity")
         self.active_session_file = self.launch.session.attest(observed.identity)
         self.native.attestation = observed
-        self.startup.attest(state)
         if self.observe_event is not None:
             with self.startup.measurements.operation("attestation_publication"):
                 await self.observe_event(observed)
@@ -459,7 +457,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @contextmanager
     def prompt_boundary(self):
-        with self.startup.prompt_boundary(self.prompt_send_boundary, self.native.attestation.identity):
+        with self.prompt_send_boundary(self.native.attestation.identity):
             # The isolated writer alone reaches this original granted boundary.
             # The awaiting owner cannot consume native events until it is joined.
             self.grant_prompt()

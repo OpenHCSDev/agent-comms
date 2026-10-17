@@ -19,7 +19,6 @@ import pytest
 
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.child_process import AttachedChild, Platform
-from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import (
     CAPABILITY,
     NativeContextProof,
@@ -540,46 +539,6 @@ def test_obsolete_copied_fork_is_rejected_before_process() -> None:
         _trusted_package(Path(old))
 
 
-@pytest.mark.parametrize("alias", ["original", "copy", "hardlink", "with_message"])
-async def test_selected_header_marker_denies_path_only_legacy_reopen_before_spawn(
-    tmp_path: Path, monkeypatch, alias: str
-) -> None:
-    import agent_comms.native_pi as native
-
-    fresh = create_fresh_private_session(
-        tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
-    )
-    file = fresh.path
-    if alias == "copy":
-        file = fresh.path.parent / "copy.jsonl"
-        file.write_bytes(fresh.path.read_bytes())
-        file.chmod(0o600)
-    elif alias == "hardlink":
-        file = fresh.path.parent / "alias.jsonl"
-        os.link(fresh.path, file)
-    elif alias == "with_message":
-        with file.open("a") as stream:
-            stream.write(json.dumps({"type": "message", "id": "00000001"}) + "\n")
-
-    async def forbidden(*_args, **_kwargs):
-        raise AssertionError("marked selected source must not spawn via legacy path")
-
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(AttachedChild, "start", forbidden)
-    with pytest.raises(NativePiUnavailable, match="cannot reopen without exact first-start token"):
-        await TrackedTurnSession.execute(
-            tmp_path,
-            input_id=INPUT_ID,
-            prompt="do not send",
-            worktree=tmp_path,
-            session=SavedSelectedSession(
-                file.parent, identity=NativeSessionIdentity(fresh.session_id, str(file))
-            ),
-        )
-    if alias in {"original", "copy"}:
-        fresh.verify_prewrite()
-    elif alias == "with_message":
-        fresh.verify_saved_identity()
 
 
 async def test_untracked_capability_is_rejected_before_prompt(tmp_path: Path, monkeypatch):

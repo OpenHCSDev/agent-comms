@@ -18,9 +18,9 @@ from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
 from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
 from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, projected
-from .mro_dispatch import MroDispatch, handles
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec, projected
+from agent_comms.mro_dispatch import MroDispatch, handles
 
 
 class Measure(DeclaredFamily, affix="Measure"):
@@ -97,24 +97,24 @@ class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
     """A per-node count, kept separately for each file."""
 
 
-class SourceLines(GitMeasure):
-    """Net production lines may not exceed the budget the merged range declares (default 0)."""
+class SourceLines(Measure):
+    """Budget edited lines, retaining moves across the source boundary (50% similarity)."""
 
     trailer: typing.ClassVar[str] = "Src-Budget"
 
     @classmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
-        return {cls.__name__: sum(source.count(b"\n") for _, source in sources)}
-
-    @classmethod
-    def budget(cls, repo: Path, base: str, head: str) -> int:
-        declared = git(repo, "log", f"--format=%(trailers:key={cls.trailer},valueonly)", f"{base}..{head}")
-        return max((int(value) for value in declared.split()), default=0)
-
-    @classmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        before, after = super().compare(repo, base, head, changed, root)
-        return {cls.__name__: before[cls.__name__] + cls.budget(repo, base, head)}, after
+        added = removed = 0
+        records = iter(git(repo, "diff", "--no-ext-diff", "--no-textconv", "--find-renames=50%",
+                           "--numstat", "-z", base, head, "--").split(b"\0")[:-1])
+        for record in records:
+            increase, decrease, path = record.split(b"\t", 2)
+            paths = (path,) if path else (next(records), next(records))
+            if any(path.startswith(root.encode()) and path.endswith(b".py") for path in paths):
+                added += int(increase)
+                removed += int(decrease)
+        declared = git(repo, "log", f"--format=%(trailers:key={cls.trailer},valueonly)", f"{base}..{head}")
+        return {cls.__name__: removed + max((int(value) for value in declared.split()), default=0)}, {cls.__name__: added}
 
 
 @dataclass(frozen=True)
@@ -128,6 +128,10 @@ class ChangedSource:
     @cached_property
     def tree(self) -> ast.Module:
         return ast.parse(self.source, self.path)
+
+    @cached_property
+    def tokens(self) -> tuple[tokenize.TokenInfo, ...]:
+        return tuple(tokenize.tokenize(io.BytesIO(self.source).readline))
 
     @classmethod
     def read(cls, repo: Path, base: str, head: str, path: str) -> ChangedSource:
@@ -186,15 +190,15 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
         return range(line, line + 1)
 
     @classmethod
-    def prose_lines(cls, source: bytes, tree: ast.Module) -> frozenset[int]:
+    def prose_lines(cls, source: ChangedSource) -> frozenset[int]:
         docstrings: set[int] = set()
-        for node in ast.walk(tree):
+        for node in ast.walk(source.tree):
             if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 match node.body:
                     case [ast.Expr(value=ast.Constant(value=str()) as value), *_]:
                         docstrings.update(range(value.lineno, value.end_lineno + 1))
         found: set[int] = set()
-        for token in tokenize.tokenize(io.BytesIO(source).readline):
+        for token in source.tokens:
             if token.type == tokenize.COMMENT or (
                 token.type == tokenize.STRING and token.start[0] in docstrings
             ):
@@ -205,12 +209,12 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        tree = ast.parse(source, filename)
-        return sum(cls.occurrences(node) for node in ast.walk(tree)) + len(cls.prose_lines(source, tree))
+        module = ChangedSource(filename, source, frozenset())
+        return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(cls.prose_lines(module))
 
     @classmethod
     def count_changed(cls, source: ChangedSource) -> int:
-        return super().count_changed(source) + len(cls.prose_lines(source.source, source.tree) & source.lines)
+        return super().count_changed(source) + len(cls.prose_lines(source) & source.lines)
 
 
 class FunctionLocalImport(PerFileMeasure):
@@ -444,12 +448,7 @@ class TypeSwitchArms(DispatchArms, TypeSwitch):
 
 
 class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileOccurrenceMeasure):
-    """Admit the canonical audit collector through the original packaged ratchet.
-
-    Per-file identities keep moving primitive cases into another method/file
-    from cancelling growth. Parsing is the existing Git/source boundary; the
-    shared collector owns primitive arms and codec admission.
-    """
+    """Share the audit collector; per-file counts prevent moving primitive debt."""
 
     @classmethod
     def occurrences(cls, node: ast.AST) -> int:

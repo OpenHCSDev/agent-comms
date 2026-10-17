@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
@@ -18,13 +18,7 @@ if TYPE_CHECKING:
 class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus"):
     """Display activity and warnings, not registry presence or turn authority."""
 
-    @property
-    def busy(self) -> bool:
-        return bool(self.working_members(self))
-
-    def working_members[T](self, member: T) -> tuple[T, ...]:
-        """Select a participant only while this status carries work."""
-        return ()
+    working: ClassVar[bool] = False
 
     def when_idle(self, ordinary: ThreadPresentation,
                   present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
@@ -57,8 +51,7 @@ class IdleThreadPresentationStatus(ThreadPresentationStatus):
 
 @dataclass(frozen=True, slots=True)
 class WorkingThreadPresentationStatus(ThreadPresentationStatus):
-    def working_members[T](self, member: T) -> tuple[T, ...]:
-        return (member,)
+    working: ClassVar[bool] = True
 
     def when_idle(self, ordinary: ThreadPresentation,
                   present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
@@ -78,8 +71,9 @@ class WorkingThreadPresentationStatus(ThreadPresentationStatus):
 class AttentionThreadPresentationStatus(ThreadPresentationStatus):
     activity: ThreadPresentationStatus
 
-    def working_members[T](self, member: T) -> tuple[T, ...]:
-        return self.activity.working_members(member)
+    @property
+    def working(self) -> bool:
+        return self.activity.working
 
     def when_idle(self, ordinary: ThreadPresentation,
                   present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
