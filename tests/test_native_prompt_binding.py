@@ -4,6 +4,7 @@ Fake native Pi only; real provider acceptance stays with the pinned executor.
 """
 
 from __future__ import annotations
+from binding_reads import binding_rows
 
 import asyncio
 import hashlib
@@ -38,12 +39,7 @@ from agent_comms.native_pi import (
     NativePiUnavailable,
     read_tracked_input_digest,
 )
-from agent_comms.native_prompt_binding import (
-    binding_store_path,
-    install_prompt_binding_schema,
-    native_request_digest,
-    read_expected_prompt_binding,
-)
+from agent_comms.native_prompt_binding import binding_store_path, install_prompt_binding_schema, native_request_digest
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.threads import Thread
@@ -323,7 +319,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
             source_seq=initial.message.seq,
         )
         assert len(evidence) == 1 and isinstance(evidence[0].execution, TriageNativeExecution)
-        binding = read_expected_prompt_binding(store, evidence[0].input_id)
+        binding = binding_rows(store, (evidence[0].input_id,)).get(evidence[0].input_id)
         assert binding is not None
         assert binding.stage is TriageNativeExecution
         assert evidence[0].source_seq == initial.message.seq
@@ -639,12 +635,12 @@ async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, 
         assert [type(row.execution) for row in evidence] == [TriageNativeExecution, FullNativeExecution]
         for row in evidence:
             assert row.expected_prompt_equality_established is True
-            binding = read_expected_prompt_binding(store, row.input_id)
+            binding = binding_rows(store, (row.input_id,)).get(row.input_id)
             assert binding is not None and binding.execution == row.execution
             assert binding.expected_prompt_digest == row.expected_prompt_digest
         full = evidence[1]
         assert full.execution.require_attempt().attempt_ordinal == 1
-        assert read_expected_prompt_binding(store, full.input_id).execution == full.execution
+        assert binding_rows(store, (full.input_id,)).get(full.input_id).execution == full.execution
 
 
 async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypatch):
@@ -864,7 +860,7 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
 
         claims = sealed_cohort_assignments(store, RecordedThreadIncarnation("fixture", people[1].created_at).lookup)
         assert [assignment.lifecycle.declared_name for assignment in claims] == ["deferred"]
-        assert read_expected_prompt_binding(store, "0" * 32) is None
+        assert binding_rows(store, ('0' * 32,)).get('0' * 32) is None
     # The sidecar binding row exists and stays immutable, but no equality is
     # reported anywhere because the live proof never arrived.
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -880,4 +876,4 @@ def _all_bindings(store):
     with sqlite3.connect(path) as db:
         db.row_factory = sqlite3.Row
         rows = db.execute("SELECT input_id FROM prompt_binding").fetchall()
-    return [read_expected_prompt_binding(store, row["input_id"]) for row in rows]
+    return [binding_rows(store, (row['input_id'],)).get(row['input_id']) for row in rows]

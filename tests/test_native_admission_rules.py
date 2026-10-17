@@ -1,4 +1,5 @@
 """Named private admission refusals against production-created SQLite rows."""
+from binding_reads import binding_rows
 
 import os
 from dataclasses import replace
@@ -13,7 +14,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinator import Coordination
 from agent_comms.goals import Goal
-from agent_comms.native_prompt_binding import read_expected_prompt_binding
+
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_admission_epoch import RecordedNativeAdmission
 from agent_comms.private_sidecar import native_request_digest
@@ -43,7 +44,7 @@ async def test_durable_private_admission_names_each_changed_authority(
         admission = kwargs["prompt_send_boundary"]
         with Coordination(root / "coordination.sqlite3") as store:
             row = NativeRuntimeInput.one(store.session._connection, input_id=admission.input_id)
-            binding = read_expected_prompt_binding(store, admission.input_id)
+            binding = binding_rows(store, (admission.input_id,)).get(admission.input_id)
         stage = admission.stage
         expected = admission.participant.coordinator_identity(stage.assignment.recipient_lookup)
         reservation = rules.NativeReservationCheck(
