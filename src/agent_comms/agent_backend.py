@@ -63,16 +63,7 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     def history_locations(self, thread, registry, visited):
         yield self, False
-        yield from self.inherited_history(thread, registry, visited)
-
-    def inherited_history(self, thread, registry, visited):
-        if thread.name in visited:
-            return
-        visited.add(thread.name)
-        if thread.parent is not None:
-            parent = registry.require(thread.parent)
-            for location, _ in parent.runtime.history_locations(parent, registry, visited):
-                yield location, True
+        yield from thread.inherited_history(registry, visited)
 
     def external_records(self, root, incarnation):
         raise ValueError("A native session cannot publish an external transcript")
@@ -95,53 +86,6 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     @property
     def model_choice(self):
-        return None
-
-
-@dataclass(frozen=True)
-class UnstartedRuntime(RuntimeLocation):
-    owner: type[AgentBackend]
-
-    def require_forkable(self):
-        raise ValueError("Canonical saved session required")
-
-    async def compact(self, operation):
-        return FailedCompaction("This thread has no saved session to compact.")
-
-    def new_location(self, root, worktree):
-        return self.owner.new_location(root, worktree)
-
-    def arguments(self):
-        return {}
-
-    def read_keys(self):
-        return ()
-
-    def presentation(self):
-        return {"resumable": False}
-
-    def history_locations(self, thread, registry, visited):
-        yield from self.inherited_history(thread, registry, visited)
-        yield self, bool(thread.parent)
-
-    def external_records(self, root, incarnation):
-        return self.history_source(root, incarnation)
-
-    def select_session(self, directory, execution):
-        from .selected_session import SelectedSession
-
-        return SelectedSession(directory)
-
-    def history_source(self, root, incarnation):
-        from .external_transcript import ExternalTranscript
-
-        return ExternalTranscript(root, incarnation)
-
-    def storage_files(self):
-        return ()
-
-    @property
-    def read_key(self) -> str | None:
         return None
 
 
@@ -441,6 +385,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     """
 
     location_type: ClassVar[type[RuntimeLocation]]
+    unstarted_type: ClassVar[type[RuntimeLocation]]
     serves_threads: ClassVar[bool] = True
     serves_new_threads: ClassVar[bool] = False
     event_kinds: ClassVar[frozenset[str]]

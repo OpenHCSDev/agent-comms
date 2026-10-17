@@ -34,7 +34,13 @@ from .agent_backend import (
     RuntimeLocation,
     TurnDelivery,
 )
+from .unstarted_runtime import UnstartedRuntime
 from .native_pi import NativePiRpcLaunch
+from .native_transcript import NativeTranscript
+from .native_session_files import NativeSessionFiles
+from .native_session_reopen import SessionIdentityHelper
+from .selected_session import SavedSelectedSession
+from .fresh_private_session import create_fresh_private_session
 
 if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
@@ -78,9 +84,6 @@ class PiSessionFile(RuntimeLocation):
     path: str
 
     def select_session(self, directory, execution):
-        from .selected_session import SavedSelectedSession
-        from .native_session_reopen import SessionIdentityHelper
-
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
         identity = (retained.identity if retained is not None else
@@ -88,13 +91,9 @@ class PiSessionFile(RuntimeLocation):
         return SavedSelectedSession(directory, identity=identity)
 
     def history_source(self, root, incarnation):
-        from .native_transcript import NativeTranscript
-
         return NativeTranscript(Path(self.path))
 
     def imported_sources(self):
-        from .native_transcript import NativeTranscript
-
         return NativeTranscript(Path(self.path)).imported_sources()
 
     @property
@@ -102,14 +101,10 @@ class PiSessionFile(RuntimeLocation):
         return self.path
 
     def storage_files(self):
-        from .native_session_files import NativeSessionFiles
-
         return (NativeSessionFiles(Path(self.path)),)
 
     @property
     def model_choice(self):
-        from .native_transcript import NativeTranscript
-
         for entry in NativeTranscript(Path(self.path)).tail():
             if entry.model_choice is not None:
                 return entry.model_choice
@@ -193,6 +188,7 @@ class PiNativeBackend(
     """
 
     location_type: ClassVar[type[RuntimeLocation]] = PiSessionFile
+    unstarted_type: ClassVar[type[RuntimeLocation]] = UnstartedRuntime
     serves_new_threads: ClassVar[bool] = True
     event_kinds: ClassVar[frozenset[str]] = PI_0_85_1_EVENT_KINDS
 
@@ -216,8 +212,6 @@ class PiNativeBackend(
 
     @classmethod
     def new_location(cls, root, worktree) -> PiSessionFile:
-        from .fresh_private_session import create_fresh_private_session
-
         return PiSessionFile(str(create_fresh_private_session(root / "sessions", worktree=worktree).path))
 
     def arguments(self, thread: Thread) -> tuple[str, ...]:

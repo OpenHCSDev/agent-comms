@@ -19,6 +19,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
 from agent_comms.threads import Thread
+from agent_comms.unstarted_runtime import UnstartedRuntime
 
 
 # -- registry ---------------------------------------------------------------
@@ -51,7 +52,7 @@ def test_pi_native_serves_threads_with_every_thread_capability():
 
 
 @pytest.mark.parametrize("location", [
-    PiSessionFile("/home/ts/wt/test/session.jsonl"), ab.UnstartedRuntime(PiNativeBackend),
+    PiSessionFile("/home/ts/wt/test/session.jsonl"), UnstartedRuntime(PiNativeBackend),
 ])
 def test_runtime_location_round_trip_uses_declared_backend(location):
     thread = Thread("location", frozenset(), "/home/ts/wt/test", session_file=location.read_key)
@@ -64,7 +65,7 @@ def test_runtime_location_round_trip_uses_declared_backend(location):
 @pytest.mark.parametrize("row", json.loads((Path(__file__).parent / "fixtures/p117/main-registry-rows.json").read_text()))
 def test_main_written_registry_location_round_trip(row):
     restored = FieldCodec.decode(Thread, row)
-    expected = (ab.UnstartedRuntime(PiNativeBackend) if row["session_file"] is None
+    expected = (UnstartedRuntime(PiNativeBackend) if row["session_file"] is None
                 else PiSessionFile(row["session_file"]))
     assert restored.runtime == expected
     assert restored.to_wire() == row

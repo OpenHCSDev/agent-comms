@@ -85,6 +85,15 @@ class Thread(ThreadProvenance):
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
 
+    def inherited_history(self, registry, visited):
+        if self.name in visited:
+            return
+        visited.add(self.name)
+        if self.parent is not None:
+            parent = registry.require(self.parent)
+            for location, _ in parent.runtime.history_locations(parent, registry, visited):
+                yield location, True
+
     def contains_worktree(self, worktree: str) -> bool:
         """This conversation's current and retained project directories."""
         selected = str(Path(worktree).expanduser().resolve())
