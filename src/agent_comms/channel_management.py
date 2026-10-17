@@ -182,7 +182,7 @@ class ChannelManagement:
                 **self.catalog.read().views(self.registry.all_threads()),
             }
             for channel in channels.values():
-                if channel.view is not None:
+                if channel.read_only:
                     continue
                 before, after = channel.matches(thread.tags), channel.matches(updated.tags)
                 if before != after:
