@@ -169,7 +169,7 @@ async def test_native(retained_native_acp_owner):
         )
         assert accepted.input_id in agent.inputs.queued_inputs[sid]
         queued = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
-        assert queued.unresolved and not queued.has_native_binding
+        assert queued.unresolved and queued.has_native_binding
         gate.set()
         native.provider.response_gate = None
         async with asyncio.timeout(30):
