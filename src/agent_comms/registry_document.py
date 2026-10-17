@@ -537,7 +537,7 @@ class RegistryEntry:
     status: ThreadStatus
     last_seen: float
     owner_generation: int
-    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
+    claimed_generation: int
     names: frozenset[str]
 
     def matches_name(self, name: str) -> bool:
