@@ -41,10 +41,6 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
     def without_work(self) -> ThreadPresentationStatus:
         return IdleThreadPresentationStatus()
 
-    def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        """A live CLI inbox shows its bridge state; the CLI's activity reports are not work here."""
-        return replace(ordinary, marker="@", summary="CLI inbox · connected", status=self.without_work())
-
 
 @dataclass(frozen=True, slots=True)
 class IdleThreadPresentationStatus(ThreadPresentationStatus):
@@ -80,10 +76,6 @@ class AttentionThreadPresentationStatus(ThreadPresentationStatus):
 
     def without_work(self) -> ThreadPresentationStatus:
         return replace(self, activity=self.activity.without_work())
-
-    def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        """A warning keeps its own explanation; the CLI's activity reports are still not work."""
-        return replace(ordinary, status=self.without_work())
 
 
 @dataclass(frozen=True, slots=True)
