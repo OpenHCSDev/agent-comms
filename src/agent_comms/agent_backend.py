@@ -504,6 +504,6 @@ def validate_backends(members: Iterable[type]) -> None:
 
 
 # Every backend module is declared before the registry seals.
-from . import pi_native_backend  # noqa: E402,F401
+from . import pi_native_backend, pi_durable_backend  # noqa: E402,F401
 
 AgentBackend.seal()
