@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import re
 from contextlib import ExitStack, contextmanager
-from abc import abstractmethod
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, Literal
@@ -15,7 +13,6 @@ from .pi_vocabulary import ThinkingLevel
 from . import agent_backend as pivot
 from .declared_family import DeclaredFamily
 from .pi_payloads import PiMessage, PiPayload
-from .pi_rpc import unique_fields
 from .routing import TurnRouting
 from .transcript_events import NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputDisplay

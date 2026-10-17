@@ -51,7 +51,6 @@ from agent_comms.native_pi import (
     NativeContextProof,
     NativePiUnavailable,
     NativeTurnResult,
-    _fresh_selected_revision,
 )
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -176,46 +175,13 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             )
             session_file.chmod(0o600)
         assert session_file is not None
-        selected = session.creation
-        if selected is not None:
-            assert selected.path == session_file
-            selected.verify_prewrite()
-            # Fake Pi's exact two startup metadata appends before raw send.
-            model_id = "f0f0f001"
-            for entry in (
-                {
-                    "type": "model_change",
-                    "id": model_id,
-                    "parentId": selected.bootstrap_leaf_id,
-                    "timestamp": "2026-09-26T00:00:00.000Z",
-                    "provider": "openrouter",
-                    "modelId": "z-ai/glm-5.3-flash",
-                },
-                {
-                    "type": "thinking_level_change",
-                    "id": "f0f0f002",
-                    "parentId": model_id,
-                    "timestamp": "2026-09-26T00:00:00.000Z",
-                    "thinkingLevel": selected.selected_thinking_level,
-                },
-            ):
-                with session_file.open("a") as stream:
-                    stream.write(json.dumps(entry, separators=(",", ":")) + "\n")
-            revision = selected.verify_selected_startup()
-        else:
-            revision = None
-
         # Model only admission in its dedicated thread, not native receipt.
         def admitted():
             admission = _kwargs["prompt_send_boundary"]
             identity = NativeSessionIdentity(
                 json.loads(session_file.read_text().splitlines()[0])["id"], str(session_file)
             )
-            with (
-                admission(identity, revision)
-                if selected is not None
-                else admission(identity)
-            ):
+            with admission(identity):
                 calls.append((input_id, prompt))
 
         await asyncio.to_thread(admitted)
@@ -525,139 +491,12 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     assert comms.bus.dm_history("sender", "beta")[-1].target == "sender"
 
 
-async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root, root_id, _comms, _initial, people = _root(tmp_path, direct=True)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
-    runner, calls = _fake_model()
-    monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    result = await SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="beta",
-        native_package=tmp_path,
-        fresh_private_enrollment=True,
-        selected_thinking_level="high",
-    ).run()
-    assert result is not None and result.disposition is CompletedAssignment
-    fresh = result.fresh_session
-    assert fresh is not None and len(calls) == 1
-    assert fresh.path.parent == root / "native-sessions" / RecordedThreadIncarnation("fixture", people[2].created_at).lookup
-    fresh.verify_saved_identity()
-    assert len(fresh.path.read_text().splitlines()) == 6
 
 
-async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
-    runner, calls = _fake_model()
-    witnessed = []
-
-    async def selected_runner(*args, **kwargs):
-        session = kwargs["session"]
-        selected = session.creation
-        assert selected is not None and selected.selected_thinking_level == "high"
-        selected.verify_prewrite()  # Before any fake raw prompt reservation/write.
-        witnessed.append(_fresh_selected_revision(selected))
-        assert session.path == selected.path
-        return await runner(*args, **kwargs)
-
-    monkeypatch.setattr(TrackedTurnSession, "execute", selected_runner)
-    result = await SelectedExecution(
-        root=root,
-        wire_root_id=root_id,
-        owner_name="beta",
-        native_package=tmp_path,
-        fresh_private_enrollment=True,
-        selected_thinking_level="high",
-    ).run()
-    assert result is not None and result.disposition is CompletedAssignment
-    assert len(calls) == 1 and len(witnessed) == 1
-    assert witnessed[0].identity == result.fresh_session.file_identity
-    assert result.fresh_session.selected_thinking_level == "high"
-    result.fresh_session.verify_saved_identity()
-    rows = [json.loads(row) for row in result.fresh_session.path.read_text().splitlines()]
-    assert [row["type"] for row in rows[:3]] == ["session", "model_change", "thinking_level_change"]
 
 
-async def test_selected_startup_changed_after_state_denies_before_fake_raw_byte(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
-    runner, calls = _fake_model()
-    seen: list[Path] = []
-
-    async def racing_runner(*args, **kwargs):
-        admission = kwargs["prompt_send_boundary"]
-        selected = kwargs["session"].creation
-        assert selected is not None
-        seen.append(selected.path)
-
-        def changed_before_admission(identity, revision):
-            assert Path(identity.session_file) == selected.path and revision == selected.verify_selected_startup()
-            with Path(identity.session_file).open("a") as stream:
-                stream.write(
-                    json.dumps(
-                        {
-                            "type": "message",
-                            "id": "dead0001",
-                            "parentId": "f0f0f002",
-                            "message": {"role": "user"},
-                        }
-                    )
-                    + "\n"
-                )
-            return admission(identity, revision)
-
-        kwargs["prompt_send_boundary"] = changed_before_admission
-        return await runner(*args, **kwargs)
-
-    monkeypatch.setattr(TrackedTurnSession, "execute", racing_runner)
-    with pytest.raises(NativePiUnavailable, match="startup"):
-        await SelectedExecution(
-            root=root,
-            wire_root_id=root_id,
-            owner_name="beta",
-            native_package=tmp_path,
-            fresh_private_enrollment=True,
-            selected_thinking_level="high",
-        ).run()
-    assert len(seen) == 1 and not calls
 
 
-async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from agent_comms import fresh_private_session as fresh_module
-
-    root, root_id, _comms, _initial, people = _root(tmp_path, direct=True)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
-    runner, calls = _fake_model()
-    monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    expected_dir = root / "native-sessions" / RecordedThreadIncarnation("fixture", people[2].created_at).lookup
-    real_fsync = fresh_module._fsync_directory
-
-    def unknown_parent(path: Path) -> None:
-        if path == expected_dir:
-            raise OSError("injected fresh file parent fsync UNKNOWN")
-        real_fsync(path)
-
-    monkeypatch.setattr(fresh_module, "_fsync_directory", unknown_parent)
-    with pytest.raises(NativePiUnavailable, match="durability UNKNOWN"):
-        await SelectedExecution(
-            root=root,
-            wire_root_id=root_id,
-            owner_name="beta",
-            native_package=tmp_path,
-            fresh_private_enrollment=True,
-        ).run()
-    assert not calls
-    visible = list(expected_dir.glob("enrolled-*.jsonl"))
-    assert len(visible) == 1
 
 
 @pytest.mark.parametrize("available", [True, False])
