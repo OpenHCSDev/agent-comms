@@ -186,7 +186,7 @@ class RestartQueue:
         with _store_lock(self.lock_path):
             if next(self.directory.glob('*.json'), None) is not None:
                 raise RestartQueueLayoutError(
-                    'Move the old restart queue with tools/cutover/move_restart_queue.py first'
+                    'Restart queue uses a retired layout; existing records require explicit conversion'
                 )
             yield self
 

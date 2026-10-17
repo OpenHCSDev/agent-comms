@@ -573,26 +573,14 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     claimed_generations: Mapping[str, int]
     by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
 
-    def __post_init__(self) -> None:
-        super(RegistrySnapshot, self).__post_init__()
-        seen: set[str] = set()
-        for thread in self.threads.values():
-            lookup = thread.incarnation.require_recorded().lookup
-            if lookup in seen:
-                raise RelationViolationError("Registry creation identities collide.")
-            seen.add(lookup)
-            if self.by_lookup.get(lookup) is not thread:
-                raise RelationViolationError("Snapshot lookup index differs from its threads.")
-        if len(seen) != len(self.by_lookup):
-            raise RelationViolationError("Snapshot lookup index includes an unregistered thread.")
-
     @classmethod
     def capture(cls, document: RegistryDocument) -> RegistrySnapshot:
         """One live registry cut owns the index and all its source maps."""
         indexed: dict[str, Thread] = {}
         for thread in document.threads.values():
-            incarnation = thread.incarnation.require_recorded()
-            lookup = incarnation.lookup
+            lookup = thread.incarnation.require_recorded().lookup
+            if lookup in indexed:
+                raise RelationViolationError("Registry creation identities collide.")
             indexed[lookup] = thread
         return cls(
             threads=MappingProxyType(dict(document.threads)),

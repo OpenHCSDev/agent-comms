@@ -7,6 +7,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import ordinary_admission_rules as rules
 from agent_comms.reservation_rules import ReservationViolationError
+from agent_comms.send_outcome import GrantedSend
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_status import StoppedThreadStatus
 from test_acp_goal_input_authority import owner
@@ -83,7 +84,7 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
             ),
         ).require_valid()
         with claim_scope(None, "a" * 32, args[2]) as allowed:
-            assert allowed is True
+            assert type(allowed) is GrantedSend
             # A separately opened flock description cannot acquire while the native
             # callback is yielded, exactly where backend stdin.write executes.
             with (
