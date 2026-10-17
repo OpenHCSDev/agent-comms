@@ -7,6 +7,7 @@ from agent_comms.comms import wire
 from agent_comms.messages import InfoKind, Message
 from agent_comms.routing import DeliveryScope
 from agent_comms.threads import Thread
+from test_bus_route_counts_locking import _sync
 
 
 def measure(index, actor, seen):
@@ -33,6 +34,7 @@ def test_original_empty_cut_cannot_clear_a_later_index(tmp_path):
     with comms.bus.snapshot(viewer=viewer) as (basis, source):
         assert source.through == 0
         message = comms.messaging.send_message('sender', viewer, 'after empty capture')
+        _sync(comms)
         assert wire(tmp_path).bus.pending_counts(viewer) == {'sender': 1}
         with BusRouteCounts(comms.bus.log.path) as index:
             before = RouteSourceRow.select(index.connection)
@@ -74,6 +76,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
             )
             return answer[2], len(calls)
 
+        _sync(comms)
         initial = retained()
         for phase in range(2):
             for number in range(256):
@@ -85,7 +88,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
                 sender = f'later-{phase}-{number}'
                 comms.registry.declare(Thread(sender, frozenset(), str(tmp_path)))
                 comms.messaging.send_message(sender, viewer, 'a route absent at capture')
-            wire(tmp_path).bus.pending_counts(viewer)  # Real independent catchup.
+            _sync(comms)  # Real independent maintenance; readers do not rebuild.
             after = retained()
             assert after[1] == initial[1]  # No future route eligibility calls.
             assert after[0] <= initial[0] + 32  # No suffix or timestamp-range scan.

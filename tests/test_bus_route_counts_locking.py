@@ -1,4 +1,4 @@
-"""Route-count writers decode outside locks; readers use committed WAL snapshots."""
+"""One preparer advances route counts; readers use committed WAL snapshots."""
 
 import os
 import threading
@@ -6,7 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from agent_comms.bus_route_counts import BusRouteCounts, RouteIndexRebuilding
+from agent_comms.bus_route_counts import BusRouteCounts, RouteSourceRow
 from agent_comms.comms import wire
 from agent_comms.routing import DeliveryMessage
 from agent_comms.threads import Thread
@@ -50,7 +50,7 @@ def test_revision_timestamp_change_does_not_redecode_unchanged_bus(tmp_path, mon
     ).complete
 
 
-def test_reader_counts_uncommitted_append_while_writer_decodes_without_index_lock(
+def test_reader_counts_uncommitted_append_while_writer_decodes_without_blocking_readers(
     tmp_path, monkeypatch
 ):
     comms = _case(tmp_path, monkeypatch)
@@ -78,12 +78,16 @@ def test_reader_counts_uncommitted_append_while_writer_decodes_without_index_loc
     assert comms.bus.pending_counts("recipient") == {"sender": 2}
 
 
-def test_reader_beyond_rebuild_bound_is_rebuilding(tmp_path, monkeypatch):
+def test_reader_beyond_rebuild_bound_serves_tail_without_advancing_index(tmp_path, monkeypatch):
     comms = _case(tmp_path, monkeypatch)
     comms.messaging.send_message("sender", "recipient", "appended")
     comms.messaging.send_message("sender", "recipient", "appended again")
-    # One reader sync commits at most one row past the bound; the second
-    # row stays beyond it.
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
-    with pytest.raises(RouteIndexRebuilding):
-        comms.bus.pending_counts("recipient")
+    with BusRouteCounts(comms.bus.log.path) as index:
+        before = RouteSourceRow.select(index.connection)
+    assert comms.bus.pending_counts("recipient") == {"sender": 3}
+    with BusRouteCounts(comms.bus.log.path) as index:
+        assert RouteSourceRow.select(index.connection) == before
+    assert _sync(comms).complete  # One owner drains every remaining row in one call.
+    with BusRouteCounts(comms.bus.log.path) as index:
+        assert RouteSourceRow.select(index.connection)[0].revision.size == comms.bus.log.path.stat().st_size
