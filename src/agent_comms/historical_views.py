@@ -107,11 +107,11 @@ class ConversationHistoryView:
     def revision(cls, views: HistoryViews, target: str, *, worktree: str) -> ConversationRevision:
         worktree = str(Path(worktree).resolve())
         viewer = views.messaging.user_identity(worktree).name
-        with views.registry.store.reading(views.bus, views.bus.log) as registry, views.channels.catalog.reading() as catalog:
+        with views.registry.store.reading(views.bus, views.bus.log, views.channels.catalog) as registry:
             stores = views.revision()
             return ConversationRevision(
                 stores, cls._selection(
-                    views, registry.snapshot(), catalog, viewer, target, worktree, stores.history,
+                    views, registry.snapshot(), views.channels.catalog._read_unlocked(), viewer, target, worktree, stores.history,
                 ),
             )
 

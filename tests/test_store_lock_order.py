@@ -64,8 +64,10 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
     reader = threading.Thread(target=observe, name="observer", daemon=True)
     writer = threading.Thread(target=publish, name="native", daemon=True)
     try:
-        reader.start(); writer.start()
-        reader.join(5); writer.join(5)
+        reader.start()
+        writer.start()
+        reader.join(5)
+        writer.join(5)
     finally:
         threading.setprofile(prior)
     assert not reader.is_alive() and not writer.is_alive()
