@@ -38,16 +38,16 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     quote = "[agent-comms from peer to worker]\nA genuine user's quoted example"
     # Bind before the session file exists, as on first-turn/fork startup.
     comms.transcripts.routes.record_input_display(
-        "b" * 32, raw_second, sent_text=raw_second, routing=TurnRouting((second,), None)
+        "b" * 32, raw_second, sent_text=raw_second, routing=TurnRouting((second.reference,), None)
     )
     comms.transcripts.routes.record_input_display("c" * 32, quote, sent_text=quote)
     path = tmp_path / "new-session.jsonl"
     append_input(path, "b" * 32, raw_second)
     append_input(path, "c" * 32, quote)
-    comms.threads.attach_session("worker", str(path))
+    comms.threads.attach_session(comms.registry.require("worker"), str(path))
     # Older settlement code labels all records with the initial origin.
     comms.transcripts.routes.record(
-        str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first,), None)
+        str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first.reference,), None)
     )
     reopened = wire(comms.root)
     events = (
@@ -55,9 +55,9 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
         if paged
         else reopened.transcripts.thread_transcript("worker")
     )
-    inputs = [event for event in events if event.declared_name == "user"]
-    assert inputs[0].text == second.body and inputs[0].routing.requests == (second,)
-    assert inputs[1].text == quote and inputs[1].routing is None
+    inputs = [event for event in events if event.declared_name in {"incoming", "user"}]
+    assert len(inputs) == 3 and inputs[1].text == second.body and inputs[1].routing.requests == (second.reference,)
+    assert inputs[2].text == quote and inputs[2].routing is None
 
 
 def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
@@ -65,7 +65,7 @@ def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     incoming = comms.messaging.send_message("peer", "worker", "Verified input")
-    route = TurnRouting((incoming,), None)
+    route = TurnRouting((incoming.reference,), None)
     text = ScheduledTurn.incoming(incoming).prompt
     comms.transcripts.routes.record_input_display("a" * 32, text, sent_text=text, routing=route)
     comms.transcripts.routes.record_input_display("a" * 32, text, sent_text=text, routing=route)
@@ -75,7 +75,7 @@ def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
         )
     path = tmp_path / "changed.jsonl"
     append_input(path, "a" * 32, "unrelated input")
-    comms.threads.attach_session("worker", str(path))
+    comms.threads.attach_session(comms.registry.require("worker"), str(path))
     comms.transcripts.routes.record(str(path), ("aaaaaaaa",), route)
-    event = comms.transcripts.thread_transcript_page("worker").events[0]
+    event = next(event for event in comms.transcripts.thread_transcript_page("worker").events if event.declared_name == 'user')
     assert event.text == "unrelated input" and event.routing is None

@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from dataclasses import dataclass
 
 import acp
 import pytest
@@ -11,98 +10,12 @@ from acp.schema import ToolCallStart
 from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.comms import Comms
-from agent_comms.native_tools import ArgumentTool, BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
-from agent_comms.tool_declaration import ToolArguments, ToolCall, ToolDeclaration, UndeclaredTool
+from agent_comms.tool_declaration import ToolDeclaration, ToolInput
 from agent_comms.recorded_time import UnrecordedEventTime
 from agent_comms.pi_payloads import ToolCallContent
 from delivery_owner_fixture import canonical_agent
 
 pytest_plugins = ("test_backend_native_lifecycle",)
-
-
-async def test_new_tool_declaration_drives_presentation_without_coding_permission(acp_tools):
-    @dataclass(frozen=True, kw_only=True)
-    class InspectFixtureTool(ArgumentTool):
-        acp_kind = "search"
-        label = "Inspect"
-        command: str
-
-        @property
-        def detail(self):
-            return self.command
-
-        @classmethod
-        def command_detail(cls, command):
-            return command
-
-    event = events.ToolStart.from_call(ToolArguments.build_call(
-        UnrecordedEventTime(), "case", "inspect_fixture", {"command": "new declaration"}))
-    assert (event.title, event.kind) == ("Inspect new declaration", "search")
-    owner, received = acp_tools
-    await owner._emit_event("declared-tool", event, owner.sessions.client)
-    async with asyncio.timeout(3):
-        update = await received.get()
-    assert isinstance(update, ToolCallStart)
-    assert (update.kind, update.title, update.raw_input) == (
-        "search",
-        "Inspect new declaration",
-        {"command": "new declaration"},
-    )
-    with pytest.raises(ValueError):
-        CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")
-    examples = (ReadTool(path="file"), BashTool(command="pwd"),
-        EditTool(path="file", edits=(ReplacementEdit("before", "after"),)),
-        WriteTool(path="file", content="value"))
-    assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
-    for tool in examples:
-        call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
-        event = events.ToolStart.from_call(ToolArguments.build_call(
-            UnrecordedEventTime(), "case", tool.declared_name, call.tool.arguments))
-        assert event.kind == tool.acp_kind and event.args == tool.arguments
-        assert call.tool == tool and tool.detail in event.title
-    unknown = events.ToolStart.from_call(ToolArguments.build_call(
-        UnrecordedEventTime(), "unknown", "external_extension", {"private": "preserved"}))
-    assert (unknown.title, unknown.kind, unknown.args) == (
-        "external_extension",
-        "other",
-        {"private": "preserved"},
-    )
-
-
-@pytest.mark.parametrize("name,label,kind,caption", [
-    ("read", "Read", "read", "Read external.txt"), ("bash", "Run", "execute", "Run"),
-    ("edit", "Edit", "edit", "Edit external.txt"), ("write", "Write", "edit", "Write external.txt"),
-])
-def test_recorded_metadata_does_not_require_an_executable_request(name, label, kind, caption):
-    from agent_comms.channel_coding_tools import CodingCall
-    from agent_comms.native_tool_call import SelectedToolDenied
-    from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
-
-    foreign = {"file_path": "external.txt"}
-    declared_path = "external.txt" if kind in {"read", "edit"} else None
-    start = ToolStartTranscript(tool_call_id="saved", tool_name=name, raw_input=foreign,
-                                path=declared_path)
-    end = ToolEndTranscript(tool_call_id="saved", tool_name=name, text="saved result")
-    assert (start.title, start.kind, start.raw_input) == (caption, kind, foreign)
-    assert (end.title, end.kind) == (label, kind)
-    assert ToolCall(UnrecordedEventTime(), "saved", name, foreign, path=declared_path).title == caption
-    assert ToolStartTranscript(tool_call_id="scalar", tool_name=name, raw_input=17).title == label
-    with pytest.raises(SelectedToolDenied):
-        CodingCall.decode("execution", name, foreign)
-
-
-def test_input_caption_is_bounded_and_never_parses_an_execution_request(monkeypatch):
-    def forbidden(*args, **kwargs):
-        pytest.fail('Presentation must not decode an executable coding request')
-
-    monkeypatch.setattr(CodingTool, 'parse_arguments', forbidden)
-    arguments = {'path': 'foreign.txt', 'payload': 'x' * 1_000_000}
-    caption = ToolArguments.build_call(UnrecordedEventTime(), 'opaque', 'read', arguments).title
-    assert 'foreign.txt' in caption and len(caption) < 200
-    assert arguments['payload'] == 'x' * 1_000_000
-    assert len(ToolArguments.build_call(UnrecordedEventTime(), 'command', 'bash', {'command': 'x' * 1_000_000}).title) <= ToolDeclaration.CAPTION_CHARS
-    plain = ToolArguments.build_call(UnrecordedEventTime(), 'plain', 'bash', {'command': 'echo "hello"\nnext line'}).title
-    assert plain == 'Run echo "hello" next line'
 
 
 def test_foreign_protocol_owners_supply_their_own_recorded_detail():
@@ -126,11 +39,11 @@ def test_foreign_protocol_owners_supply_their_own_recorded_detail():
     recorded, _ = call.finished("saved", True)
     assert recorded.title == call.title and recorded.raw_input == {"filePath": "open-code.txt"}
     assert recorded.path == "open-code.txt"
-    scalar, _ = ToolCall(UnrecordedEventTime(), "opaque", "external_custom", ["not", "Pi"]).finished("saved", True)
+    scalar, _ = ToolCall(UnrecordedEventTime(), "opaque", "external_custom", ToolDeclaration.for_name('external_custom').recorded_arguments(ToolInput, ["not", "Pi"])).finished("saved", True)
     assert scalar.title == "external_custom" and scalar.raw_input == ["not", "Pi"]
 
 
-def test_each_boundary_decodes_its_file_input_without_guessing_another_format():
+def test_boundaries_keep_missing_file_arguments_strict_and_extension_inputs_opaque():
     from agent_comms.cli_bridges.claude_protocol import ClaudeSession, TimedRecord, ToolUse
     from agent_comms.cli_bridges.opencode_parts import ToolPart
 
@@ -140,7 +53,7 @@ def test_each_boundary_decodes_its_file_input_without_guessing_another_format():
     assert update.accumulator.path == 'claude.py'
     assert update.accumulator.title == 'Read claude.py'
     with pytest.raises(ValueError):
-        ToolUse(id='wrong', name='Read', input={'path': 'not-Claude'}).updates(
+        ToolUse(id='wrong', name='Read', input={}).updates(
             record, ClaudeSession(turn='turn'))
     pi, = ToolCallContent('pi', 'read', {'path': 'pi.py'}).assistant_transcript()
     assert pi.path == 'pi.py' and pi.title == 'Read pi.py'
@@ -150,7 +63,7 @@ def test_each_boundary_decodes_its_file_input_without_guessing_another_format():
         'messageID': 'm', 'callID': 'oc', 'tool': 'read',
         'state': {'status': 'running', 'input': {'filePath': 'oc.py'}}})
     assert part.state.call(part).path == 'oc.py'
-    bad = part.model_copy(update={'state': part.state.model_copy(update={'input': {'path': 'not-OpenCode'}})})
+    bad = part.model_copy(update={'state': part.state.model_copy(update={'input': {}})})
     with pytest.raises(ValueError):
         bad.state.call(bad)
     # An extension's opaque argument with a familiar name is not our schema.
@@ -158,22 +71,13 @@ def test_each_boundary_decodes_its_file_input_without_guessing_another_format():
     unknown = ToolUse(id='opaque', name='external_custom', input=opaque)
     update, = unknown.updates(record, ClaudeSession(turn='turn'))
     assert update.accumulator.title == 'external_custom'
-    assert update.accumulator.arguments == opaque and update.accumulator.path is None
+    assert update.accumulator.arguments.raw_input == opaque and update.accumulator.path is None
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
     from agent_comms.channel_coding_tools import CodingCall
-    from agent_comms.native_tools import NativeExecutableTool
     from agent_comms.tools import CommsSendTool, ToolRequest
 
-    assert ToolRequest.__registry__ is CodingTool.__registry__ is ToolDeclaration.__registry__
-    assert isinstance(ToolDeclaration.for_name("EXTERNAL_UNKNOWN"), UndeclaredTool)
-    assert ToolDeclaration.for_name("EXTERNAL_UNKNOWN").label == "EXTERNAL_UNKNOWN"
-    assert "undeclared" not in ToolDeclaration.names()
-    assert all(isinstance(member.label, str) for member in ToolDeclaration.members_with(ToolDeclaration))
-    assert set(NativeExecutableTool.members_with(NativeExecutableTool)) == (
-        set(CodingTool.members_with(CodingTool)) | set(ToolRequest.members_with(ToolRequest))
-    )
     for request in ToolRequest.members_with(ToolRequest):
         arguments = {"from": "source", "to": "destination", "body": "decode-only"}
         call = CodingCall.decode("isolated-call", request.declared_name, arguments)

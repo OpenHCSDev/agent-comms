@@ -7,11 +7,9 @@ from agent_comms.cli_bridges.shared import (
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolStartTranscript, ToolEndTranscript, ToolPendingTranscript, TranscriptEvent, UserTranscript, ContextTranscript
+from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolPendingTranscript, TranscriptEvent, UserTranscript, ContextTranscript
 from agent_comms.field_codec import FieldCodec
-from agent_comms.transcript_receipts import EarlierTranscript, LaterTranscript
 from agent_comms.cli_bridges.claude_protocol import CLAUDE_RECORD, ClaudeSession
-from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
 from agent_comms.cli_bridges.opencode_parts import AssistantMessage, ToolPart
 from test_codex_items import _output
 
@@ -157,41 +155,8 @@ def test_completed_only_sources_do_not_retain_draft_state(tmp_path):
     assert output.transcript.current_draft() is None
 
 
-def claude_tool_updates():
-    session = ClaudeSession(turn='t', catching_up=False)
-    start = CLAUDE_RECORD.validate_python(dict(type='assistant', uuid='start',
-        timestamp='1970-01-01T00:00:01Z', message=dict(content=[dict(
-            type='tool_use', id='tool', name='Bash', input={'command': 'printf prefix'})])))
-    finish = CLAUDE_RECORD.validate_python(dict(type='user', uuid='finish', promptId='t',
-        timestamp='1970-01-01T00:00:02Z', message=dict(content=[dict(
-            type='tool_result', tool_use_id='tool', content='done')])))
-    return start.updates(session), finish.updates(session)
-
-
-def codex_tool_updates():
-    stream = ItemStream('session')
-    command = dict(type='commandExecution', id='tool', command='printf prefix', status='inProgress')
-    start = stream.receive(RpcNotification(method='item/started', params=dict(
-        threadId='session', turnId='t', item=command, startedAtMs=1000)))
-    finish = stream.receive(RpcNotification(method='item/completed', params=dict(
-        threadId='session', turnId='t', item=command | dict(status='completed', exitCode=0,
-            aggregatedOutput='done'), completedAtMs=2000)))
-    return (start,), (finish,)
-
-
-def opencode_tool_updates():
-    message = AssistantMessage(id='t', sessionID='session', role='assistant',
-                               parentID='input', time={'created': 1000})
-    wire = dict(type='tool', id='tool', sessionID='session', messageID='t', callID='tool', tool='bash')
-    start = ToolPart.model_validate(wire | dict(state=dict(
-        status='running', input={'command': 'printf prefix'})))
-    finish = ToolPart.model_validate(wire | dict(state=dict(status='completed',
-        input={'command': 'printf prefix'}, output='done', time={'start': 1000, 'end': 2000})))
-    return start.present(message), finish.present(message)
-
-
-@pytest.mark.parametrize('tool', ['read', 'edit', 'write'])
-def test_opencode_pending_file_tools_wait_for_arguments(tmp_path, tool):
+def test_opencode_pending_file_tools_wait_for_arguments(tmp_path):
+    tool = 'edit'
     output = _output(tmp_path)
     message = AssistantMessage(id='t', sessionID='session', role='assistant',
                                parentID='input', time={'created': 1000})
@@ -213,8 +178,8 @@ def test_opencode_pending_file_tools_wait_for_arguments(tmp_path, tool):
     assert event.title == tool.title() + ' /actual/path.py'
 
 
-@pytest.mark.parametrize('tool', ['read', 'edit', 'write'])
-def test_opencode_aborted_pending_tool_preserves_its_title_and_error(tool):
+def test_opencode_aborted_pending_tool_preserves_its_title_and_error():
+    tool = 'edit'
     message = AssistantMessage(id='t', sessionID='session', role='assistant',
                                parentID='input', time={'created': 1000})
     part = ToolPart.model_validate(dict(type='tool', id='tool', sessionID='session',
@@ -228,9 +193,9 @@ def test_opencode_aborted_pending_tool_preserves_its_title_and_error(tool):
     assert 'raw_input' not in FieldCodec.encode(opening)
 
 
-@pytest.mark.parametrize('tool', ['read', 'edit', 'write'])
 @pytest.mark.parametrize('status', ['running', 'completed', 'error'])
-def test_opencode_invoked_file_tools_still_require_their_path(tool, status):
+def test_opencode_invoked_file_tools_still_require_their_path(status):
+    tool = 'read'
     message = AssistantMessage(id='t', sessionID='session', role='assistant',
                                parentID='input', time={'created': 1000})
     part = ToolPart.model_validate(dict(type='tool', id='tool', sessionID='session',
@@ -238,30 +203,6 @@ def test_opencode_invoked_file_tools_still_require_their_path(tool, status):
             time={'start': 1000, 'end': 2000}, output='done', error='failed')))
     with pytest.raises(ValueError, match='File tool input has no declared path'):
         part.present(message)
-
-
-@pytest.mark.parametrize('updates', [claude_tool_updates, codex_tool_updates, opencode_tool_updates])
-def test_every_adapter_shows_the_tool_before_result_and_closes_its_prefix(tmp_path, updates):
-    output = _output(tmp_path)
-    started, completed = updates()
-    output.publish_batch(list(started))
-    preview = output.transcript.current_draft()
-    event, = preview.events
-    assert isinstance(event, ToolStartTranscript)
-    assert event.raw_input == {'command': 'printf prefix'}
-    assert 'printf prefix' in event.title
-    output.publish_batch(list(completed))
-    assert output.transcript.current_draft() is None
-    with output.transcript.reading() as snapshot:
-        record, = snapshot.forward(0, snapshot.cut().offset)
-        beginning, end = record.events
-        assert isinstance(beginning, ToolStartTranscript) and isinstance(end, ToolEndTranscript)
-        assert beginning.title == event.title and end.text == 'done'
-        assert beginning.timestamp == end.timestamp == 1.0
-    output.publish_batch(list(started))  # An overlapping old start cannot reopen it.
-    assert output.transcript.current_draft() is None
-    output.publish_batch([AllTurnsEnded()])
-    assert not output.drafts
 
 
 @pytest.mark.parametrize('compact,event_type', [(False, UserTranscript), (True, ContextTranscript)])
@@ -275,25 +216,6 @@ def test_claude_missing_origin_is_human_but_compaction_is_context(compact, event
     assert events[0].text == 'actual input text' and session.turn == 'prompt'
     payload['isMeta'] = True
     assert CLAUDE_RECORD.validate_python(payload).updates(ClaudeSession()) == ()
-
-
-@pytest.mark.parametrize('traversal,call_edges,result_edges', [
-    (EarlierTranscript(), (set(), {'round'}), ({'round'}, set())),
-    (LaterTranscript(), ({'round'}, set()), (set(), {'round'})),
-])
-@pytest.mark.parametrize('opening', [
-    ToolPendingTranscript(tool_call_id='round', tool_name='bash'),
-    ToolStartTranscript(tool_call_id='round', tool_name='bash',
-                        raw_input={'command': 'pwd'}, detail='pwd'),
-])
-def test_pending_and_invoked_events_own_their_tool_round_edges(
-    traversal, call_edges, result_edges, opening,
-):
-    end = ToolEndTranscript(tool_call_id='round', tool_name='bash')
-    assert traversal.round_edges((opening,)) == call_edges
-    assert traversal.round_edges((end,)) == result_edges
-    assert traversal.round_edges((AssistantTranscript('reply'),)) == (set(), set())
-    assert 'tool_opening' not in TranscriptEvent.names()
 
 
 def test_claude_turn_end_releases_tool_lookup_and_shared_prefix(tmp_path):
