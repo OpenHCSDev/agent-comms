@@ -247,7 +247,7 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
             if current != original:
                 raise RuntimeError('Original configuration changed')
         self.require_sources()
-        InputDispositions(ROOT / InputDispositions.filename).read()
+        InputDispositions(ROOT).unresolved(frozenset(owner.name for owner in owners))
         require_publication_preimages(self.original_route, self.current)
         require_no_clients(self.audience, ROOT)
 

@@ -711,7 +711,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                 raise RuntimeError('Original owner settings changed')
         self.require_cohort()
         require_no_clients(self.audience, self.cohort.root)
-        InputDispositions(self.cohort.root / InputDispositions.filename).read()
+        InputDispositions(self.cohort.root).unresolved(frozenset(owner.name for owner in owners))
         self.task_carry.require_selection(snapshot, owners)
 
     def require_cohort(self):
