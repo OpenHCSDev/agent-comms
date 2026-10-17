@@ -473,10 +473,10 @@ def test_thread_presentation_owns_lifecycle_precedence(tmp_path):
     comms.agents.activity.emit(working)
     view = ThreadView.capture(thread, comms.registry.snapshot(),
                               comms.agents.activity_of("worker"), None, {})
-    assert view.presentation.status.busy
+    assert view.presentation.status.working
     assert view.presentation.summary == "Working · Running tests"
     stopped = replace(view, status=StoppedThreadStatus())
-    assert not stopped.presentation.status.busy
+    assert not stopped.presentation.status.working
     assert stopped.presentation.summary == "Stopped"
     assert stopped.presentation.label == "○ worker"
 

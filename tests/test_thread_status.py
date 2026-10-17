@@ -45,7 +45,7 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
         assert transferred.presentation == displayed
         fresh = ThreadView.capture(thread, snapshot, comms.agents.activity_of("owner"), None, {})
         assert fresh.presentation.summary == "Owner exited"
-        assert not fresh.presentation.status.busy
+        assert not fresh.presentation.status.working
     finally:
         if child.poll() is None:
             child.terminate()
@@ -79,7 +79,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     comms.agents.activity.emit(activity)
     view = ThreadView.capture(thread, reopened.snapshot(), comms.agents.activity_of('owner'), None, {})
     assert view.to_wire()["status"] == status.declared_name
-    assert view.presentation.status.busy == status.active
+    assert view.presentation.status.working == status.active
     visible = comms.views.thread_views()
     individual = comms.views.thread_presentation("owner")
     if visible:

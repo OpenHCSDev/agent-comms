@@ -812,9 +812,9 @@ class CoordinationSnapshot:
         if view is None:
             return ()
         return tuple(
-            working for name in view.members
+            person for name in view.members
             if (person := self.threads.get(name)) is not None and person.status.active
-            for working in person.presentation.status.working_members(person)
+            and person.presentation.status.working
         )
 
     def mention_candidates(self, channel: str) -> tuple[MentionCandidate, ...]:

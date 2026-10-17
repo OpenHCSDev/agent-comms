@@ -182,8 +182,7 @@ class SidebarModel:
     @staticmethod
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
         threads = {name: ThreadRowModel.of(person, snapshot) for name, person in snapshot.threads.items()}
-        working = frozenset(member for name, row in threads.items()
-                            for member in row.status.working_members(name))
+        working = frozenset(name for name, row in threads.items() if row.status.working)
         channels = {name: ChannelRowModel.of(view, snapshot, working)
                     for name, view in snapshot.channels.items()}
         return channels, threads

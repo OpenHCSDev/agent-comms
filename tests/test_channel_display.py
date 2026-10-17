@@ -116,13 +116,13 @@ def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
 
     with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=toggle_after_boundary):
         first = comms.views.viewer_snapshot(str(tmp_path))
-    old = next(view for view in first.channels if view.channel.name == "#api")
+    old = first.channels["#api"]
     assert not old.channel.any_mode
     assert old.last_activity == 0
     assert first.channel_unread["#api"] == 0
 
     second = comms.views.viewer_snapshot(str(tmp_path))
-    new = next(view for view in second.channels if view.channel.name == "#api")
+    new = second.channels["#api"]
     assert new.channel.any_mode
     assert new.last_activity > 0
     assert second.channel_unread["#api"] == 1
