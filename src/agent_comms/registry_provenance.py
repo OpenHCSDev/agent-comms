@@ -96,6 +96,13 @@ class RegistryNames(Generic[Member]):
         for alias in self.aliases:
             yield alias, self.require(alias)
 
+    def names_for(self, name: str) -> frozenset[str]:
+        """Current and retained names of one declared member."""
+        canonical = self.canonical_name(name)
+        return frozenset({canonical, *(
+            alias for alias, target in self.aliases.items() if target == canonical
+        )})
+
     def retired(self, name: str) -> bool:
         """Whether this namespace records that canonical ``name`` was declared and removed.
 

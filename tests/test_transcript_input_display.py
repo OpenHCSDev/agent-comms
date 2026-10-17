@@ -30,8 +30,7 @@ def saved_row(native_id, text, *, images=False, role="user"):
     }
 
 
-@pytest.mark.parametrize("paged", [False, True])
-def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path, paged):
+def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     # These annotations are committed before sending, before Pi creates its first file.
@@ -54,11 +53,7 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
     session.write_text("".join(json.dumps(row) + "\n" for row in rows))
     comms.threads.attach_session(comms.registry.require("worker"), str(session))
     reopened = wire(comms.root)
-    events = (
-        reopened.transcripts.thread_transcript_page("worker").events
-        if paged
-        else reopened.transcripts.thread_transcript("worker")
-    )
+    events = reopened.transcripts.thread_transcript_page("worker").events
     assert [event.text for event in events if event.declared_name == "context"] == [
         GOAL_PROMPT,
         "User follow-up:\nPlease inspect this image\nthen continue.",

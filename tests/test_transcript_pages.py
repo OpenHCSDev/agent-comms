@@ -103,7 +103,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
         "Inspect the renderer",
     ]
     assert [event.declared_name for event in page.events[-2:]] == ["notice", "user"]
-    assert [event.text for event in comms.transcripts.thread_transcript("child")][-2:] == [
+    assert [event.text for event in comms.transcripts.thread_transcript_page("child").events][-2:] == [
         "Forked from @parent. This thread started with:",
         "Inspect the renderer",
     ]
@@ -145,3 +145,15 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
         comms.transcripts.thread_transcript_page(
             "child", through=TranscriptCursor(str(unrelated), unrelated.stat().st_size)
         )
+
+
+def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
+    from agent_comms.transcript_receipts import AssignedSourceCursor
+
+    wire_at = AssignedSourceCursor("root", "recipient", 5).at
+    cursor = TranscriptCursor("a.jsonl", 900, wire_at(5))
+    committed = (TranscriptCursor("a.jsonl", 40, wire_at(2)), TranscriptCursor("a.jsonl", 70, wire_at(5)),
+                 TranscriptCursor("a.jsonl", 99, wire_at(6)), TranscriptCursor("b.jsonl", 500, wire_at(1)))
+    assert cursor.over_native(committed) == TranscriptCursor("a.jsonl", 70, wire_at(5))
+    assert cursor.over_native(committed[3:]) == TranscriptCursor("b.jsonl", 500, wire_at(5))
+    assert cursor.over_native(()) == TranscriptCursor("a.jsonl", 0, wire_at(5))

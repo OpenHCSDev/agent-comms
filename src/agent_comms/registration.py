@@ -58,20 +58,15 @@ class Registration:
             bound = replace(thread, process_identity=process)
             self._commit_registration(edit, edit.document.prepare_registration(
                 bound, ConnectedThreadStatus(), new_owner=True))
-            owner = edit.document.snapshot().owner_identity(bound.name)
+            owner = edit.document.entry(bound.name).owner_identity
         try:
             yield owner.incarnation
         finally:
             with self.store.editing() as edit:
-                snapshot = edit.document.snapshot()
-                try:
-                    snapshot.require_owner_process(owner, process)
-                except RelationViolationError:
-                    pass  # A later owner or explicit stop must remain untouched.
-                else:
-                    current = snapshot.require(owner.incarnation.name)
+                entry = edit.document.entry_if_present(owner.incarnation.name)
+                if entry is not None and entry.owned_by(owner, process):
                     self._commit_registration(edit, edit.document.prepare_registration(
-                        replace(current, process_identity=None), NoBridgeThreadStatus(),
+                        replace(entry.thread, process_identity=None), NoBridgeThreadStatus(),
                         new_owner=False))
 
     def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
@@ -311,16 +306,6 @@ class Registration:
     def canonical_name(self, name: str) -> str:
         with self.store.reading() as document:
             return document.canonical_name(name)
-
-    def aliases_for(self, name: str) -> frozenset[str]:
-        with self.store.reading() as document:
-            canonical = document.canonical_name(name)
-            return frozenset(
-                {
-                    canonical,
-                    *(alias for alias, target in document.aliases.items() if target == canonical),
-                }
-            )
 
     def goal_history(
         self, name: str, *, goal_id: str | None = None
