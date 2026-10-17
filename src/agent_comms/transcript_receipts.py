@@ -183,6 +183,9 @@ class TranscriptTraversal(ABC):
     def predicate(self, sequence, through): ...
 
     @abstractmethod
+    def native_prefix(self, through): ...
+
+    @abstractmethod
     def chooses_native(self, native_time, receipt_time): ...
 
     @abstractmethod
