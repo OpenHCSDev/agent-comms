@@ -495,7 +495,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
             viewer, (messages[1], messages[4]), comms.registry.snapshot(), comms.bus.log.path
         ),
     )
-    assert wire(tmp_path).bus.pending_counts(viewer) == {"bob": 2}
+    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread == {"bob": 2}
     comms.registry.rename("bob", "renamed-bob")
     from agent_comms.routing import DeliveryScope
 
@@ -509,7 +509,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
     # The untagged human inbox still excludes channel rows.
     assert expected == {"renamed-bob": 2}
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
-        assert wire(tmp_path).bus.pending_counts(viewer) == expected
+        assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread == expected
         assert decode.call_count == 0
     ledger = comms.bus.reads.read()
     receiver, connection = Pipe()
@@ -529,7 +529,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
             # Use the real SQLite busy result, not a wording-only DatabaseError.
             with patch.object(CoordinationStore, "writer_timeout", 0):
                 with pytest.raises(CoordinationReadUnavailable) as busy:
-                    wire(tmp_path).bus.pending_counts(viewer)
+                    wire(tmp_path).views.viewer_snapshot(str(tmp_path))
                 assert busy.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
                 await service.observe(set())
             writer.rollback()
@@ -545,7 +545,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
             recovered.append(receiver.recv())
         latest = [r for r in recovered if isinstance(r, SidebarObserved)][-1]
         assert latest.snapshot.unread == {"renamed-bob": 3}
-        assert wire(tmp_path).bus.pending_counts(viewer) == {"renamed-bob": 3}
+        assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread == {"renamed-bob": 3}
         assert service.observations[SidebarReading] is observer
         assert observer.request is request
         assert comms.bus.reads.read() == ledger

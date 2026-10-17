@@ -50,11 +50,11 @@ async def main():
     comms.threads.archive('archived')
     message = comms.messaging.send_initial_cohort(owner, '#team', 'Original metadata acknowledgement')
     original_wire = comms.bus.log.path.read_bytes()
-    actor = comms.views.coordination_snapshot('stopped')
     human = comms.views.viewer_snapshot(str(root))
-    assert set(actor.threads) == {owner, 'stopped'}
-    assert actor.channel_unread['#team'] == human.channel_unread['#team'] == 1
-    assert comms.views.coordination_snapshot('stopped') == actor
+    assert set(human.threads) == {owner, 'stopped'}
+    assert human.channel_unread['#team'] == 1
+    assert comms.bus.pending_count('stopped', '#team') == 1
+    assert comms.views.viewer_snapshot(str(root)) == human
     original = comms.views.message_notifications_for_references((message.reference,))
     assert original[message.seq, message.message_id]
     assert comms.views.message_notifications_for_references(
@@ -63,7 +63,7 @@ async def main():
     comms.views.mark_channel_view_read('#team', worktree=str(root), through=page.newest_seq,
                                       expected_scope=page.display_scope)
     assert comms.views.viewer_snapshot(str(root)).channel_unread['#team'] == 0
-    assert comms.views.coordination_snapshot('stopped').channel_unread['#team'] == 1
+    assert comms.bus.pending_count('stopped', '#team') == 1
     checks = ['full original snapshot value equality', 'original bounded reference notification windows',
               'human display acknowledgement leaves actor delivery pending']
     app = InstalledApp(project_dir=str(root))

@@ -30,11 +30,12 @@ from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.notification_progress import AnsweredProgress, SentProgress, ShownToModelProgress
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
-from stored_inputs import stored_inputs
+from stored_inputs import sent_text, stored_inputs
 from test_backend_native_lifecycle import native_backend
 from native_backend_fixture import wait_for
 
@@ -87,7 +88,15 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
     saved = native.session.read_bytes()
     native.provider.response_gate = asyncio.Event()
     acknowledgements = []
+    prompts = {}
     decode = PiRpcChannel.decode_record
+    encode = PiRpcChannel.command_bytes
+
+    def observed_command(command):
+        frame = encode(command)
+        if isinstance(command, commands.Prompt):
+            prompts[command.input_id] = command
+        return frame
 
     def observed_response(raw, **options):
         event = decode(raw, **options)
@@ -96,6 +105,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
         return event
 
     monkeypatch.setattr(PiRpcChannel, "decode_record", staticmethod(observed_response))
+    monkeypatch.setattr(PiRpcChannel, "command_bytes", staticmethod(observed_command))
     async with native.open_owner(runtime_enabled=True) as (owner, session):
         turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
         attachment = canonical_agent(owner._comms, auto_wake=False)
@@ -143,7 +153,12 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             assert final[key].unresolved is (not second_start)
             assert final[key].has_started is second_start
             assert len({row.native_id for row in final.values()}) == 2
-            assert sent_text(native, final[key]).endswith("followup")
+            sent = prompts[final[key].native_id]
+            assert sent.id == public_id
+            assert final[key].sent_digest.matches(sent.message)
+            assert sent.message.endswith("followup")
+            if second_start:
+                assert sent_text(native, final[key]) == sent.message
             assert len(native.saved_inputs()) == (3 if second_start else 2)
             overview = await proxy.request("input_dispositions", include_history=True)
             assert overview["inputs"] == []
@@ -352,12 +367,13 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             await wait_for(lambda: session in owner.inputs._idle_private_revisions)
             key = message.seq, message.message_id
             pending, = comms.views.message_notifications_for_references((message.reference,))[key]
-            assert pending.state == "Sent" and not pending.busy
+            assert pending.label == "Sent" and not pending.state.working
+            assert not pending.state.read and not pending.state.delivered
             open_release.set()
             await asyncio.wait_for(started.wait(), 30)
             in_flight, = comms.views.message_notifications_for_references((message.reference,))[key]
-            assert in_flight.state == "Sent"
-            assert in_flight.read_at_ms is None
+            assert isinstance(in_flight.state, SentProgress)
+            assert not in_flight.state.read and not in_flight.state.delivered
             started_release.set()
             # Opening is the retry trigger; no second bus append or observation
             # tick is needed to reserve the waiting input.
@@ -375,8 +391,10 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             ]
             assert type(assignments[-1].lifecycle) is DeliveredAssignment
             read, = comms.views.message_notifications_for_references((message.reference,))[key]
-            assert read.state.startswith("Read ") and not read.busy
-            assert read.read_at_ms == assignments[-1].updated_at_ms
+            assert isinstance(read.state, AnsweredProgress) and not read.state.working
+            assert isinstance(read.state.proof, ShownToModelProgress)
+            assert read.state.proof.read_at_ms == assignments[-1].updated_at_ms
+            assert read.answer is not None
             assert native.provider.posts == 2
             rows = [json.loads(line) for line in native.session.read_text().splitlines()]
             tool_result = next(
@@ -437,21 +455,17 @@ async def test_waiting_messages_follow_the_original_on_the_changed_model(
             await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 3)
             held.set()
             assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
-            # Bus inputs are follow-ups, not steering. Pi's default takes each
-            # separately after the original answer, both using the changed model.
-            assert native.provider.posts == 3
-            first, second = native.provider.requests[1:]
-            for request in (first, second):
-                assert request["model"] == "fixture-second"
-                previous = request["messages"][-2]
-                assert previous["role"] == "assistant"
-                assert previous["content"] == native.provider.text
-            assert "first question" in json.dumps(first["messages"])
-            assert "second question" not in json.dumps(first["messages"])
-            assert all(
-                body in json.dumps(second["messages"])
-                for body in ("first question", "second question")
-            )
+            # Busy bus inputs steer the next model call, rather than creating
+            # a separate follow-up response for each message.
+            assert native.provider.posts == 2
+            original, following = native.provider.requests
+            assert following["model"] == "fixture-second"
+            previous = [message for message in following["messages"]
+                        if message["role"] == "assistant"][-1]
+            assert previous["content"] == native.provider.text
+            for body in ("first question", "second question"):
+                assert body not in json.dumps(original["messages"])
+                assert body in json.dumps(following["messages"])
             rows = stored_inputs(owner.inputs.dispositions.root).rows
             assert len(rows) == 3 and all(row.has_started for row in rows.values())
         finally:
