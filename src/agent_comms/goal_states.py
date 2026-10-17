@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
+from time import time
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .declared_family import DeclaredFamily
@@ -96,6 +97,15 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         if not self.may_become(nxt):
             raise ValueError(self.transition_refusal())
 
+    def require_replacement(self, author, current, goal_id) -> None:
+        pass
+
+    def commander_updates(self, deadline, activity) -> tuple[str, ...]:
+        return ()
+
+    def delivery_complete(self, delivery_time) -> bool:
+        return False
+
     def transition_refusal(self) -> str:
         return "This goal cannot make that transition."
 
@@ -130,7 +140,19 @@ class BlockingOnFailure:
         return BlockedGoal(required_block_reason(diagnostic))
 
 
-class OpenGoal(BlockingOnFailure, GoalState):
+class UnfinishedGoal(GoalState):
+    def require_replacement(self, author, current, goal_id) -> None:
+        author.require_open_target(current, goal_id)
+
+    def commander_updates(self, deadline, activity) -> tuple[str, ...]:
+        if deadline.before(time()):
+            return ("Deadline passed without accepted delivery",)
+        if activity is not None and activity.state.busy:
+            return ()
+        return ("Idle with an open goal",)
+
+
+class OpenGoal(BlockingOnFailure, UnfinishedGoal):
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:
         return GoalState.members_with(FromOpenGoal)
@@ -198,7 +220,7 @@ class PausedGoal(OpenGoal, FromOpenGoal):
             raise ValueError(self.source.instruction())
 
 
-class BlockedState(GoalState, FromOpenGoal):
+class BlockedState(UnfinishedGoal, FromOpenGoal):
     def failure_projection(self, reason: str) -> tuple[str, str]:
         return "backend_suspended", reason
 
@@ -265,6 +287,9 @@ class UnrecordedBlockGoal(BlockedState):
 @dataclass(frozen=True)
 class CompletedGoal(BlockingOnFailure, GoalState, FromOpenGoal):
     terminal = True
+
+    def delivery_complete(self, delivery_time) -> bool:
+        return delivery_time.recorded
 
     def after_unverified_completion(self, diagnostic: str) -> GoalState:
         return self.after_failed_turn(diagnostic)

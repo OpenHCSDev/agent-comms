@@ -77,7 +77,7 @@ def _duration_seconds(value: str) -> float:
 
 
 def _json_object(value: str) -> dict[str, Any]:
-    result = json.loads(value)
+    result = json.loads(value) if isinstance(value, str) else value
     if not isinstance(result, dict):
         raise ValueError("invoke --arguments must be a JSON object")
     return result
@@ -600,7 +600,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
     @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
+    def add_parser(cls, subparsers: Any) -> argparse.ArgumentParser:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls)
@@ -652,6 +652,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             else:
                 options.pop("required", None)
             owner.add_argument(*metadata["flags"], **options)
+        return parser
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
@@ -667,7 +668,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif isinstance(hints[declared.name], type) and issubclass(
                 hints[declared.name], DeclaredFamily
             ):
-                value = {"kind": value}
+                value = {hints[declared.name].family_discriminator: value}
             payload[key] = value
         return member.from_payload(payload)
 
@@ -725,10 +726,11 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
+
     caller: str | None = option(
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )
-    tool: str = option("--tool")
+    tool: str = option("--tool", default="")
     arguments: dict[str, Any] = option(
         "--arguments",
         help="Tool arguments as a JSON object",

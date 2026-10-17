@@ -18,6 +18,7 @@ from .registration import Registration
 from .relationships import ThreadRelationships
 from .thread_management import ThreadManagement
 from .thread_configuration import ThreadConfiguration
+from .todos import TodoStore
 from .transcripts import Transcripts
 
 
@@ -40,7 +41,8 @@ class Comms:
         self.agents = AgentActivity(self.root, self.registry)
         self.ledger = CollaborationLedger(self.root / CollaborationLedger.filename, self.registry)
         self.owners = OwnerLifecycle(self.root, self.registry, self.bus)
-        self.goals = Goals(self.root, self.registry, self.bus, self.agents)
+        self.todos = TodoStore(self.root)
+        self.goals = Goals(self.root, self.registry, self.bus, self.agents, self.todos)
         self.transcripts = Transcripts(self.root, self.registry, self.bus, self.messaging)
         self.threads = ThreadManagement(
             self.root, self.registry, self.bus,

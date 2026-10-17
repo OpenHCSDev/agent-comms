@@ -298,7 +298,7 @@ class Thread(ThreadProvenance):
             "original_assignment": self.task,
             "current_goal": (None if goal is None else {
                 "text": goal.text, "status": goal.state.declared_name,
-                "progress": goal.progress,
+                "progress": str(goal.progress),
             }),
         }
 
@@ -320,6 +320,10 @@ class Thread(ThreadProvenance):
         """Select the current record of this goal, including later state/revisions."""
         goal = self.goal
         return goal if goal is not None and goal.id == goal_id else None
+
+    def require_goal_replacement(self, author, goal_id) -> None:
+        if self.goal is not None:
+            self.goal.state.require_replacement(author, self.goal, goal_id)
 
     def require_goal(self, goal_id: str | None = None) -> Goal:
         if goal_id is None:

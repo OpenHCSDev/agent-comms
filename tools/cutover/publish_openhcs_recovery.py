@@ -86,7 +86,7 @@ def require_stage(args):
     verify_native_package(NATIVE)
 
 
-def require_no_clients(audience):
+def require_no_clients(audience, root):
     """Decode argv boundaries once; explicit unrelated private roots are excluded.
 
     No PID is signal authority here. Exact original workers are checked by the
@@ -97,6 +97,12 @@ def require_no_clients(audience):
 
     commands_for_runtime = {path.name for path in RuntimePublication.installed().links} | {'toad-comms'}
     platform = Platform.current()
+    # The existing launch/retirement owner binds each exact process group.
+    # Observation and native helper children belong to that same owned family;
+    # argv spellings (notably multiprocessing's python -c) do not decide it.
+    owned_family = {member for owner in audience
+                    for member in platform.group_members(owner.process)}
+    refusals = []
     for entry in Path('/proc').iterdir():
         if not entry.name.isdecimal() or int(entry.name) == os.getpid():
             continue
@@ -117,18 +123,23 @@ def require_no_clients(audience):
             environment = dict(item.split(b'=', 1) for item in (entry / 'environ').read_bytes().split(b'\0') if b'=' in item)
             selected_root = environment.get(b'AGENT_COMMS_ROOT')
             platform.require(identity)
-            if selected_root is not None and os.fsdecode(selected_root) != str(ROOT):
+            if selected_root is not None and os.fsdecode(selected_root) != str(root):
                 continue
-            if module == 'agent_comms.worker' and identity in {item.process for item in audience}:
-                continue  # Only these exact workers belong to the canonical retained batch.
-            if client or selected_root == os.fsencode(ROOT):
-                raise RuntimeError(f'Unretired or unclassified client: exact process {identity}')
+            if identity in owned_family:
+                continue  # Exact incarnations in the original owned process groups only.
+            if client or selected_root == os.fsencode(root):
+                refusals.append(f'{identity}: {head!r}')
         except ProcessLookupError:
             continue
         except FileNotFoundError:
             continue
-        # Permission/decoding failures deliberately refuse rather than infer absence.
-
+        except (OSError, ValueError) as error:
+            refusals.append(f'Cannot classify process directory {entry.name}: {error!r}')
+        # Permission/decoding failures refuse with the complete known list;
+        # they never certify that an unreadable client is absent.
+    if refusals:
+        raise RuntimeError('Unretired or unclassified clients (complete observed list):\n'
+                           + '\n'.join(refusals))
 
 
 def require_publication_preimages(original, current):
@@ -236,9 +247,9 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
             if current != original:
                 raise RuntimeError('Original configuration changed')
         self.require_sources()
-        InputDispositions(ROOT / InputDispositions.filename).read()
+        InputDispositions(ROOT).unresolved(frozenset(owner.name for owner in owners))
         require_publication_preimages(self.original_route, self.current)
-        require_no_clients(self.audience)
+        require_no_clients(self.audience, ROOT)
 
     def retain_preimages(self):
         directory = self.receipt.with_suffix('.originals')
@@ -284,7 +295,7 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
     def after_stopped(self, lifecycle):
         # The canonical batch holds .wire.lock and proves all exact original exits.
         require_publication_preimages(self.original_route, self.current)
-        require_no_clients(self.audience)
+        require_no_clients(self.audience, ROOT)
         snapshot = lifecycle.registry.snapshot()
         for original in self.originals:
             if snapshot.threads[original.name] != original:

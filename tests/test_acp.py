@@ -4,6 +4,7 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from agent_comms.goals import TextGoalProgress
 from unittest.mock import AsyncMock
 
 import asyncio
@@ -617,7 +618,7 @@ class TestAgentTurn:
         assert len(failures) == 1 and failures[0].failure.detail == message
         goal = wired.registry.require("proj").goal
         assert goal is not None and goal.state.declared_name == "blocked"
-        assert goal.progress == "Backend turn failed; inspect local diagnostics before resuming."
+        assert str(goal.progress) == "Backend turn failed; inspect local diagnostics before resuming."
         assert message not in goal.progress
         assert not wired.registry.require("proj").executing
 
@@ -638,7 +639,7 @@ class TestAgentTurn:
                 wired.goals.update_goal(
                     "proj",
                     CompletedGoalAction(
-                        expect=GoalPrecondition(goal_id=goal.id), progress="Verified complete"
+                        expect=GoalPrecondition(goal_id=goal.id), progress=TextGoalProgress("Verified complete")
                     ),
                     actor=ModelInvocable,
                 )
@@ -652,12 +653,12 @@ class TestAgentTurn:
         assert result.state.declared_name == "blocked"
         if completed_in_turn:
             assert (
-                result.progress
+                str(result.progress)
                 == "Verified complete\n\nGoal turn ended without verified terminal progress."
             )
         else:
             assert (
-                result.progress == "Backend turn failed; inspect local diagnostics before resuming."
+                str(result.progress) == "Backend turn failed; inspect local diagnostics before resuming."
             )
         assert secret not in result.progress
         await agent.turns.goals.schedule_goal("proj")
@@ -689,7 +690,7 @@ class TestAgentTurn:
         current = wired.registry.require("proj").goal
         assert current is not None and current.id == goal.id
         assert current.state.declared_name == "active"
-        assert current.progress == ""
+        assert str(current.progress) == ""
         generation = GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id)
         assert generation is not None and generation.lifecycle == ReadyGeneration()
         assert generation.number == 2
@@ -763,7 +764,7 @@ class TestAgentTurn:
                 name,
                 ActiveGoalAction(
                     expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
-                    progress="independently verified newer progress",
+                    progress=TextGoalProgress("independently verified newer progress"),
                 ),
             )
 
@@ -828,7 +829,7 @@ class TestAgentTurn:
                         if transition is SetGoalAction
                         else transition(
                             expect=GoalPrecondition(goal_id=original.id),
-                            progress="explicit decision",
+                            progress=TextGoalProgress("explicit decision"),
                         )
                     ),
                 )
@@ -874,7 +875,7 @@ class TestAgentTurn:
                 "proj",
                 ActiveGoalAction(
                     expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
-                    progress="independently verified newer progress",
+                    progress=TextGoalProgress("independently verified newer progress"),
                 ),
             )
             yield ae.StreamSettled()
@@ -913,7 +914,7 @@ class TestAgentTurn:
                 "proj",
                 ActiveGoalAction(
                     expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
-                    progress="Completed a verified step",
+                    progress=TextGoalProgress("Completed a verified step"),
                 ),
                 actor=ModelInvocable,
             )
@@ -925,7 +926,7 @@ class TestAgentTurn:
         await agent.turns.run_agent_turn("proj", "proj", "Work toward the active goal")
         goal = wired.registry.require("proj").goal
         assert goal is not None and goal.id == initial.id
-        assert goal.state.declared_name == "active" and goal.progress == "Completed a verified step"
+        assert goal.state.declared_name == "active" and str(goal.progress) == "Completed a verified step"
 
     async def test_goal_completion_and_provider_usage_settle_one_attempt(
         self, wired, tmp_path, monkeypatch
@@ -949,7 +950,7 @@ class TestAgentTurn:
             wired.goals.update_goal(
                 "proj",
                 CompletedGoalAction(
-                    expect=GoalPrecondition(goal_id=goal.id), progress="Verified done"
+                    expect=GoalPrecondition(goal_id=goal.id), progress=TextGoalProgress("Verified done")
                 ),
                 actor=ModelInvocable,
             )
@@ -1050,7 +1051,7 @@ class TestAgentTurn:
             yield fake_input_started(args, kwargs)
             wired.goals.update_goal(
                 "proj",
-                CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="Premature"),
+                CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress=TextGoalProgress("Premature")),
                 actor=ModelInvocable,
             )
             yield ae.ToolEnd(id="goal", name="comms_goal", ok=True)

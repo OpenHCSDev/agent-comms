@@ -299,9 +299,10 @@ class MessageBus:
         if not rows:
             return ()
         first = {
-            relation.peer.lookup
+            lookup
             for relation in relations
             if relation.relevance.grants(Prioritized)
+            for lookup in relation.peer.recorded_or(lambda peer: (peer.lookup,), tuple)
         }
         rows = tuple(sorted(rows, key=lambda row: row.sender_lookup not in first))
         return (AwarenessSegment.capture(self.log.path, marker.root_id, rows),)
