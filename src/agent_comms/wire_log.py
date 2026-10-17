@@ -275,14 +275,14 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
         yield from self.query_page_index(read, empty=())
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ConversationSourceWindowRequest:
     """One bounded indexed conversation selection from a certified wire cut."""
 
-    predicate: str
-    parameters: tuple
     limit: int
     ascending: bool
+    predicate: str = "1"
+    parameters: tuple = ()
     sequences: tuple[int, ...] = ()
 
     def capture(self, source, lookup: str) -> Iterator[CommittedDelivery]:
@@ -396,14 +396,6 @@ class WireLog:
         source.require_marker(marker)
         yield source
         source.require_current()
-
-    def conversation_sources(
-        self, lookup, predicate="1", parameters=(), *, limit, ascending,
-        sequences: tuple[int, ...] = (),
-    ):
-        """Copy a bounded window under the lock; decode after releasing it."""
-        request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending, sequences)
-        return request.capture_many(self, lookup, (request,))[0]
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.

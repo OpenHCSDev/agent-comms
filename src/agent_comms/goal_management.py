@@ -33,6 +33,7 @@ from .input_attempt import ReservedInput
 from .input_disposition import InputDispositions
 from .turn_lease import FinishedTurnFence
 from .todos import TodoStore
+from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)
 
@@ -153,9 +154,10 @@ class Goals:
             sequence for row in unknown.values()
             for sequence in row.bus_sequences_through(after_seq)
         })
-        earlier = self.bus.log.conversation_sources(
-            lookup, sequences=sequences, limit=len(sequences), ascending=True,
-        ) if sequences else ()
+        request = ConversationSourceWindowRequest(
+            sequences=sequences, limit=len(sequences), ascending=True,
+        )
+        earlier = request.capture_many(self.bus.log, lookup, (request,))[0] if sequences else ()
         # Keep older UNKNOWNs, but discover unreserved replies only after this
         # dependency scope's recorded wait. Certification owns both identities.
         replies = {
