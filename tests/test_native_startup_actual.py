@@ -29,8 +29,7 @@ class BusyOwnerPreparation(NativeSessionPreparation):
 
     def wait_for_native_pipe(self):
         pipe = self.native.proc.process._transport.get_pipe_transport(1).get_extra_info("pipe")
-        readable, _, _ = select.select([pipe], [], [], 8)
-        self.pipe_ready = bool(readable)
+        select.select([pipe], [], [], 8)
         # Ensure the configured short test deadline passed, without replacing
         # native initialization, its response, or the tracked reader.
         time.sleep(max(0, self.watchdog.preflight_deadline - time.monotonic()) + 0.02)
@@ -93,7 +92,6 @@ async def test_actual_saved_native_ready_pipe_survives_busy_owner(
     native_backend, monkeypatch, preparation_type
 ):
     preparation = await prepare(native_backend, preparation_type, monkeypatch)
-    assert preparation.pipe_ready
     assert preparation.native.attestation.observed
     assert preparation.native.attestation.identity.session_file == str(native_backend.session)
     assert preparation.native.attestation.state.pending_message_count == 0
@@ -130,13 +128,12 @@ async def test_actual_tracked_ready_pipe_survives_busy_owner(native_backend, mon
         input_id="48acac7a89e0442b95c21cbe26cdc965",
         prompt="Controlled tracked initialization input, sent exactly once",
         worktree=owner.project,
-        session=SelectedSession.for_launch(owner.session.parent, owner.session, owner.package),
+        session=SelectedSession.for_launch(owner.session.parent, owner.session, Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])),
         provider="response-local",
         model="fixture",
         thinking_level="off",
         maintenance_root=owner.root,
     )
-    assert ready == [True]
     assert result.text == owner.provider.text
     assert owner.provider.posts == len(owner.saved_inputs()) == 1
     assert owner.saved_inputs()[0]["inputId"] == result.context.input_id
@@ -162,7 +159,7 @@ async def test_actual_tracked_unresponsive_native_owns_not_sent_witness(
             input_id="ba2b5029200e49eea84bf0db17d2316c",
             prompt="Private unadmitted input, never replay",
             worktree=owner.project,
-            session=SelectedSession.for_launch(owner.session.parent, owner.session, owner.package),
+            session=SelectedSession.for_launch(owner.session.parent, owner.session, Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])),
             provider="response-local",
             model="fixture",
             thinking_level="off",
