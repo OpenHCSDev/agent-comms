@@ -14,6 +14,7 @@ import argparse
 from dataclasses import dataclass
 import json
 from importlib.metadata import distribution
+from io import StringIO
 import os
 from pathlib import Path
 import subprocess
@@ -25,6 +26,8 @@ from agent_comms.field_codec import FieldCodec, PathText
 
 from agent_comms.active_route import read_active_route
 from agent_comms.cli_bridges import opencode
+from agent_comms.cli_commands import StatusCliCommand
+from agent_comms.cli_protocol import CoreError
 from agent_comms.comms import wire
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.launch_runtime import LaunchRuntime
@@ -59,13 +62,16 @@ class RuntimePublication:
         return cls(binary.parent, links)
 
     def require_cli(self, root: Path) -> None:
-        result = subprocess.run(
-            [self.runtime / 'bin/agent-comms', '--root', str(root), 'status'],
-            capture_output=True, text=True,
-        )
-        if result.returncode or result.stderr:
+        """Use the target command inside the caller's held route, not a new client."""
+        output = StringIO()
+        try:
+            result = StatusCliCommand().run(wire(root), output)
+        except Exception as error:
+            output.write(CoreError.from_exception(error).model_dump_json())
+            result = 1
+        if result:
             raise RuntimeError(
-                f'Runtime CLI refused publication (exit {result.returncode}): {result.stderr}'
+                f'Runtime CLI refused publication (exit {result}): {output.getvalue().strip()}'
             )
 
     def publish(self, root: Path) -> None:
@@ -138,21 +144,25 @@ def main() -> None:
         results = publication.carry_goals(route, options.candidate, options.receipt)
         print(f'Published {publication.runtime}; retained {len(results)} stopped owners', flush=True)
         return
-    comms = wire(route)
-    owners = tuple(OwnerRestartRequest().threads(comms.registry.snapshot()))
-    if options.check:
-        publication.require_cli(route.root)
-        print(f'{publication.runtime}: {len(owners)} native workers would be queued for idle reload')
-        return
-    publication.publish(route.root)
-    print(f'Published {publication.runtime}', flush=True)
-    # Queue requests keep original process identity and session settings. A
-    # pending or uncertain previous request is handled by that existing owner.
-    os.environ['VIRTUAL_ENV'] = str(publication.runtime)
-    selected = LaunchRuntime(publication.runtime / 'bin/python')
-    for owner in owners:
-        request = enqueue(comms, owner.name, launch_runtime=selected)
-        print(f'{owner.name}: {request.state.declared_name} ({request.id})', flush=True)
+    # Ordinary publication borrows the route here; the stopped carry above
+    # owns its existing exclusive descriptor instead. Neither creates a child
+    # client to borrow beneath its own publication lock.
+    with route.hold_client_route():
+        comms = wire(route)
+        owners = tuple(OwnerRestartRequest().threads(comms.registry.snapshot()))
+        if options.check:
+            publication.require_cli(route.root)
+            print(f'{publication.runtime}: {len(owners)} native workers would be queued for idle reload')
+            return
+        publication.publish(route.root)
+        print(f'Published {publication.runtime}', flush=True)
+        # Queue requests keep original process identity and session settings. A
+        # pending or uncertain previous request is handled by that existing owner.
+        os.environ['VIRTUAL_ENV'] = str(publication.runtime)
+        selected = LaunchRuntime(publication.runtime / 'bin/python')
+        for owner in owners:
+            request = enqueue(comms, owner.name, launch_runtime=selected)
+            print(f'{owner.name}: {request.state.declared_name} ({request.id})', flush=True)
 
 
 if __name__ == '__main__':
