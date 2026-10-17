@@ -8,9 +8,11 @@ collaboration edges and thread goals remain separate authorities.
 from __future__ import annotations
 
 import sqlite3
+import time
+import asyncio
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
 
@@ -22,6 +24,178 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, TypedRow, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
+from .change_report import FileLine
+from .goals import OrderCheck
+from .child_process import BoundedRun, ExitedOutcome
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrderDelivery(DeclaredFamily, affix="Delivery"):
+    at: EventTime = field(default_factory=UnrecordedEventTime)
+
+    async def run(self, check, *command):
+        result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
+        if result.outcome != ExitedOutcome(0):
+            raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
+        return result.stdout.decode(errors="replace")
+
+    async def verified(self, check):
+        await self.require_source(check)
+        result = await BoundedRun.run(("bash", "-c", check.command), cwd=check.directory, timeout=120)
+        check.result.require(result)
+        return replace(self, at=await self.delivery_time(check))
+
+    @abstractmethod
+    async def require_source(self, check): ...
+
+    @abstractmethod
+    async def delivery_time(self, check): ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommitDelivery(OrderDelivery):
+    commit: str
+
+    def __post_init__(self):
+        if not 7 <= len(self.commit) <= 40 or self.commit.strip("0123456789abcdef"):
+            raise ValueError("Delivery requires a commit hash.")
+
+    async def require_source(self, check):
+        head = (await self.run(check, "git", "rev-parse", "HEAD", f"{self.commit}^{{commit}}")).split()
+        dirty = await self.run(check, "git", "status", "--porcelain", "--untracked-files=no")
+        if len(head) != 2 or head[0] != head[1] or dirty.strip():
+            raise ValueError("Run the order check on its clean delivered commit.")
+
+    async def delivery_time(self, check):
+        return EventTime.capture(float(await self.run(check, "git", "show", "-s", "--format=%ct", self.commit)))
+
+
+@dataclass(frozen=True, kw_only=True)
+class OperationDelivery(OrderDelivery):
+    async def require_source(self, check):
+        pass
+
+    async def delivery_time(self, check):
+        return EventTime.capture(time.time())
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
+    """One checked order lives on its Todo, independently of the unit's Goal."""
+
+    id: str
+    owner: FileLine
+    check: OrderCheck
+    edits: tuple[str, ...]
+    banned: tuple[str, ...]
+    report: str
+    at: EventTime
+    first_call_deadline: EventTime
+
+    def __post_init__(self):
+        if not self.id.strip() or not self.report.strip() or not self.edits or not self.banned:
+            raise ValueError("An order requires identity, edits, banned actions and report.")
+        if any(not text.strip() for text in (*self.edits, *self.banned)):
+            raise ValueError("Order text cannot be empty.")
+        self.at.require_recorded("An order")
+        self.first_call_deadline.require_deadline()
+
+    @property
+    @abstractmethod
+    def pending(self) -> bool: ...
+
+    def copy_as(self, kind, **evidence):
+        return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
+
+    def instructions(self, todo):
+        return "\n".join((f"Problem: {todo.id}: {todo.text}", f"Order: {self.id}",
+            f"Owner: {self.owner.to_wire()}",
+            f"Check: {self.check.directory} :: {self.check.command}",
+            f"Deadline: {FieldCodec.encode(todo.deadline)}",
+            *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
+            "Banned: " + "; ".join(self.banned), "Report: " + self.report))
+
+    def delivered(self, delivery):
+        delivery.at.require_delivery()
+        return self.copy_as(DeliveredProblemOrder, delivery=delivery)
+
+    def installed(self, works, artifact):
+        raise ValueError("Check the delivered order before recording installation.")
+
+    def require_close(self):
+        raise ValueError("Closing requires recorded installed application evidence.")
+
+
+@dataclass(frozen=True, kw_only=True)
+class PendingProblemOrder(ProblemOrder):
+    @property
+    def pending(self):
+        return True
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliveredProblemOrder(ProblemOrder):
+    delivery: OrderDelivery
+
+    @property
+    def pending(self):
+        return False
+
+    def delivered(self, delivery):
+        if delivery != self.delivery:
+            raise ValueError("The order already records a different delivery.")
+        return self
+
+    def installed(self, works, artifact):
+        return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstalledProblemOrder(DeliveredProblemOrder):
+    works: str
+    artifact: str
+
+    def __post_init__(self):
+        super().__post_init__()
+        if len(self.works.split()) < 8 or not self.artifact.strip():
+            raise ValueError("Describe what worked (8+ words) and name its artifact file.")
+
+    def installed(self, works, artifact):
+        if (works, artifact) != (self.works, self.artifact):
+            raise ValueError("The order already records different installed evidence.")
+        return self
+
+    def require_close(self):
+        pass
+
+
+@dataclass(frozen=True)
+class Hunt(DeclaredFamily, affix="Hunt"):
+    where: FileLine
+    why: str
+    at: EventTime
+
+    def __post_init__(self):
+        if len(self.why.split()) < 10:
+            raise ValueError("Describe the inspected code and verdict in ten or more words.")
+        self.at.require_recorded("A hunt")
+
+    def require_order(self, order):
+        pass
+
+
+@dataclass(frozen=True)
+class CleanHunt(Hunt):
+    pass
+
+
+@dataclass(frozen=True)
+class OrderedHunt(Hunt):
+    sent: str
+
+    def require_order(self, order):
+        if self.sent != order.id:
+            raise ValueError("The hunt must name this problem's current order.")
 
 
 class TodoError(ValueError):
@@ -126,10 +300,7 @@ class BlockedTodoState(TodoState):
 class DoneTodoState(TodoState):
     @classmethod
     def prepare_change(cls, goals, current):
-        assignment = current.assignment
-        goal = goals.registry.require(assignment.owner).require_goal(assignment.generation)
-        goal.state.require_order_slot()
-        goal.order.require_close()
+        current.order.require_close()
 
     @classmethod
     def change(cls, current, command):
@@ -150,7 +321,7 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
             raise TodoError("Todo operation requires a positive exact revision")
 
     def prepare(self, goals, current):
-        pass
+        return self
 
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
@@ -160,15 +331,16 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
 class AssignTodo(TodoOperation):
     proposed: Assignment
     deadline: EventTime
+    order: ProblemOrder
 
     def apply(self, current):
         self.deadline.require_deadline()
-        if current.assignment == self.proposed:
-            current.require_result(replace(current, deadline=self.deadline))
-            return current  # The original assignment generation is already reserved.
+        if (current.assignment, current.deadline, current.order) == (self.proposed, self.deadline, self.order):
+            return current
         current.require_revision(self.expected_revision)
         current.require_commander(self.proposed.parent_identity)
-        return replace(current.state.assign(current, self.proposed), deadline=self.deadline)
+        assigned = current if current.assignment == self.proposed else current.state.assign(current, self.proposed)
+        return replace(assigned, deadline=self.deadline, order=self.order, revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -176,6 +348,7 @@ class StrikeTodo(TodoOperation):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
@@ -186,6 +359,51 @@ class StrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class RecordHuntTodo(TodoOperation):
+    actor: ThreadIncarnation
+    hunt: Hunt
+
+    def apply(self, current):
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        self.hunt.where.require_exists()
+        self.hunt.require_order(current.order)
+        return replace(current, hunts=(*current.hunts, self.hunt), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class DeliverTodo(TodoOperation):
+    actor: ThreadIncarnation
+    delivery: OrderDelivery
+
+    def prepare(self, goals, current):
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        return replace(self, delivery=asyncio.run(self.delivery.verified(current.order.check)))
+
+    def apply(self, current):
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        return replace(current, order=current.order.delivered(self.delivery), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class InstallTodo(TodoOperation):
+    actor: ThreadIncarnation
+    works: str
+    artifact: str
+
+    def apply(self, current):
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        if not Path(self.artifact).is_file():
+            raise ValueError("Retain the installed application artifact before closing.")
+        installed = replace(current, order=current.order.installed(self.works, self.artifact))
+        return DoneTodoState.decide(installed, ChangeTodoState(
+            current.revision, DoneTodoState, self.actor, current.assignment.generation))
+
+
+@dataclass(frozen=True)
 class ChangeTodoState(TodoOperation):
     state: type[TodoState]
     actor: ThreadIncarnation
@@ -193,6 +411,7 @@ class ChangeTodoState(TodoOperation):
 
     def prepare(self, goals, current):
         self.state.prepare_change(goals, current)
+        return self
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
@@ -210,8 +429,15 @@ class Todo(TypedTable):
     revision: int = field(metadata={"sql": Column(check="revision>0")})
     goal: GoalRef | None
     assignment: Assignment | None
+    order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
     strikes: tuple[StrikeTodo, ...] = ()
+    hunts: tuple[Hunt, ...] = ()
+
+    @property
+    def pending(self):
+        return self.order.pending
+
     @property
     def creator_identity(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.creator, self.creator_created)
@@ -264,6 +490,7 @@ class Todo(TypedTable):
                 creator_created=proposed.creator_created,
                 goal=proposed.goal,
                 deadline=proposed.deadline,
+                order=proposed.order,
             )
         )
 
@@ -374,6 +601,17 @@ class TodoStore:
                 )
             )
 
+    def for_goal(self, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
+        with closing(self._connect()) as db:
+            return tuple(Todo.select(db,
+                where="json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? AND json_extract(assignment,'$.generation')=?",
+                parameters=(owner.name, owner.created_at, goal_id)))
+
+    def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
+        with closing(self._connect()) as db:
+            return tuple(Todo.select(db, where="creator=? AND creator_created=?",
+                parameters=(commander.name, commander.created_at)))
+
     def create(
         self,
         todo_id: str,
@@ -384,6 +622,7 @@ class TodoStore:
         owner: Thread,
         generation: str,
         deadline: EventTime,
+        order: ProblemOrder,
         goal: GoalRef | None = None,
     ) -> Todo:
         _text(todo_id, "Todo ID", 128)
@@ -405,6 +644,7 @@ class TodoStore:
             assignment=Assignment(assignee.name, assignee.created_at,
                                   identity.name, identity.created_at, generation),
             deadline=deadline,
+            order=order,
         )
         with self._write() as db:
             proposed.insert_if_absent(db)
@@ -431,6 +671,7 @@ class TodoStore:
         parent: Thread,
         generation: str,
         deadline: EventTime,
+        order: ProblemOrder,
     ) -> Todo:
         identity, parent_identity = _thread(owner), _thread(parent)
         proposed = Assignment(
@@ -440,4 +681,4 @@ class TodoStore:
             parent_identity.created_at,
             generation,
         )
-        return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline))
+        return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline, order))

@@ -214,11 +214,12 @@ class OwnedTurn:
             self.task,
             self.runner.comms.views.thread_views(),
             self.relations,
+            self.runner.comms.goals,
             tuple(origin.reference for origin in self.origins),
             batch.originals,
         )
         if self.goal_permit is not None:
-            for segment in self.thread.context_goal_segments():
+            for segment in self.thread.context_goal_segments(self.runner.comms.goals):
                 self.context = self.context.prepend(segment)
         if self.thread.auto_title_pending:
             self.context = self.context.prepend(AutomaticTitleSegment.capture(

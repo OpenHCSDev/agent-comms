@@ -156,7 +156,7 @@ class GoalMentionSource:
         if self.goal_id != goal.id or self.text_revision > goal.revision:
             return False
         return (
-            self.digest.matches(goal.instructions)
+            self.digest.matches(goal.text)
             and self.incarnation.resolved(registry) == owner.incarnation
         )
 
@@ -195,14 +195,46 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
     revision: GoalRevision
 
 
+class CheckResult(DeclaredFamily, affix="CheckResult"):
+    @abstractmethod
+    def require(self, result) -> None: ...
+
+
+@dataclass(frozen=True)
+class SilentCheckResult(CheckResult):
+    def require(self, result):
+        from .child_process import ExitedOutcome
+
+        if result.outcome != ExitedOutcome(0) or result.stdout:
+            raise ValueError("The order check must print nothing and exit zero.")
+
+
+@dataclass(frozen=True)
+class CountCheckResult(CheckResult):
+    expected: int
+
+    def __post_init__(self):
+        if self.expected < 0:
+            raise ValueError("An expected count must be nonnegative.")
+
+    def require(self, result):
+        import re
+        from .child_process import ExitedOutcome
+
+        counts = re.findall(r"\d+", result.stdout.decode(errors="replace"))
+        if not isinstance(result.outcome, ExitedOutcome) or not counts or int(counts[-1]) != self.expected:
+            raise ValueError(f"The order check did not print its expected last integer {self.expected}.")
+
+
 @dataclass(frozen=True)
 class OrderCheck:
     directory: str
     command: str
+    result: CheckResult = field(default_factory=SilentCheckResult)
 
     def __post_init__(self):
         if not self.directory.strip() or not self.command.strip():
-            raise ValueError("An order check requires a directory, a silent command and exit status zero.")
+            raise ValueError("An order check requires a directory and command.")
 
     def require_directory(self):
         if not Path(self.directory).is_dir():
@@ -210,24 +242,17 @@ class OrderCheck:
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_slot(self, goal, goal_id, problem):
-        if goal.id == goal_id:
-            raise ValueError("Goal ID belongs to another problem.")
-        goal.state.require_order_slot()
+        if goal.id != goal_id:
+            goal.state.require_order_slot()
 
     def require_completion(self) -> None:
         pass
 
-    def installed(self, works: str, artifact: str) -> GoalOrder:
-        raise ValueError("This goal is not a problem order.")
+    def instructions(self, todos) -> str:
+        return ""
 
-    def require_close(self) -> None:
-        raise ValueError("Closing a problem requires recorded installed application evidence.")
-
-    def delivery_check(self) -> OrderCheck:
-        raise ValueError("This goal is not a problem order.")
-
-    def instructions(self, text: str) -> str:
-        return text
+    def todos(self, goals, owner, goal_id):
+        return ()
 
     @abstractmethod
     def require_order(self, goal, goals, owner) -> None: ...
@@ -247,61 +272,24 @@ class UnorderedGoalOrder(GoalOrder):
 
 @dataclass(frozen=True)
 class ProblemGoalOrder(GoalOrder):
-    problem: str
-    owner: FileLine
-    check: OrderCheck
-    edits: tuple[str, ...]
-    banned: tuple[str, ...]
-    report: str
+    """A unit's one Goal groups its canonical Todo assignments, not copied orders."""
 
-    def __post_init__(self):
-        if not self.edits or not self.banned:
-            raise ValueError("An order requires edits and banned actions.")
-        if any(not text.strip() for text in (self.problem, self.report, *self.edits, *self.banned)):
-            raise ValueError("Order text cannot be empty.")
+    def require_completion(self):
+        raise ValueError("Complete each problem with its checked delivered commit.")
 
-    def require_slot(self, goal, goal_id, problem):
-        if (goal.id, self.problem) != (goal_id, problem):
-            super().require_slot(goal, goal_id, problem)
+    def require_order(self, goal, goals, owner):
+        if not goals.todos.for_goal(owner, goal.id):
+            raise ValueError("The problem Goal has no assigned Todos.")
 
-    def delivery_check(self):
-        return self.check
+    def require_replacement(self, goal, goals, owner):
+        if any(todo.pending for todo in goals.todos.for_goal(owner, goal.id)):
+            raise ValueError("Finish or release the assigned problems before replacing this Goal.")
 
-    def instructions(self, text):
-        return "\n".join((text, f"Problem: {self.problem}", f"Owner: {self.owner.to_wire()}",
-            f"Check: {self.check.directory} :: {self.check.command}",
-            *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
-            "Banned: " + "; ".join(self.banned), "Report: " + self.report))
+    def todos(self, goals, owner, goal_id):
+        return goals.todos.for_goal(owner, goal_id)
 
-    def copy_as(self, kind, **evidence):
-        return kind(**{f.name: getattr(self, f.name) for f in fields(ProblemGoalOrder)}, **evidence)
-
-    def installed(self, works, artifact):
-        return self.copy_as(InstalledProblemGoalOrder, works=works, artifact=artifact)
-
-    def require_completion(self) -> None:
-        raise ValueError("Complete a problem order with its checked delivered commit.")
-
-    def require_order(self, goal, goals, owner) -> None:
-        todo = goals.todos.get(self.problem)
-        todo.require_assignee(owner, goal.id)
-
-    def require_replacement(self, goal, goals, owner) -> None:
-        goals.todos.get(self.problem).require_released_order(owner, goal.id)
-
-
-@dataclass(frozen=True)
-class InstalledProblemGoalOrder(ProblemGoalOrder):
-    works: str
-    artifact: str
-
-    def __post_init__(self):
-        super().__post_init__()
-        if len(self.works.split()) < 8 or not self.artifact.strip():
-            raise ValueError("Describe the installed application result (8+ words) and name its artifact file.")
-
-    def require_close(self):
-        pass
+    def instructions(self, todos):
+        return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
 
 @dataclass(frozen=True)
@@ -317,9 +305,11 @@ class Goal:
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
 
-    @property
-    def instructions(self) -> str:
-        return self.order.instructions(self.text)
+    def instructions(self, todos) -> str:
+        return self.render_instructions(self.order.instructions(todos))
+
+    def render_instructions(self, orders_text: str) -> str:
+        return "\n\n".join(part for part in (self.text, orders_text) if part)
 
     def require_order(self, goals, owner) -> None:
         self.order.require_order(self, goals, owner)

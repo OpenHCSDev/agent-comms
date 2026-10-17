@@ -24,13 +24,12 @@ from .goal_actions import (
     EditGoalAction,
     GoalAction,
     GoalPrecondition,
-    InstalledOrderGoalAction,
     ModelInvocable,
     OrderGoalAction,
     SetGoalAction,
 )
 from .goal_states import ActiveGoal
-from .todos import ChangeTodoState, DoneTodoState, TodoOperation
+from .todos import DeliverTodo, InstallTodo, OrderDelivery, TodoOperation
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -604,6 +603,16 @@ class CommsTodoTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsTodoListTool(ThreadToolRequest):
+    label = "Read problems"
+    description = "Read the commander's canonical Todo orders, deadlines, strikes and hunts."
+
+    def apply(self, comms, caller):
+        actor = comms.registry.require(caller.name).incarnation
+        return {"todos": FieldCodec.encode(comms.goals.todos.for_commander(actor))}
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsOrderTool(ThreadToolRequest):
     label = "Assign problem order"
     description = "Reserve a Todo assignment and publish its Goal with a deadline; does not replay input."
@@ -612,7 +621,7 @@ class CommsOrderTool(ThreadToolRequest):
 
     def apply(self, comms, caller):
         goal = comms.goals.update_goal(self.owner, replace(self.order, commander=caller.name))
-        return {"goal": goal.to_wire(), "todo": FieldCodec.encode(comms.goals.todos.get(self.order.order.problem))}
+        return {"goal": goal.to_wire(), "todo": FieldCodec.encode(comms.goals.todos.get(self.order.problem))}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -627,15 +636,16 @@ class CommsOrderDoneTool(ThreadToolRequest):
     label = "Check delivered order"
     description = "Verify the order's check on its clean delivered commit before completing its Goal."
     problem: str = tool_field("Problem ID")
-    commit: str = tool_field("Delivered commit hash")
+    delivery: OrderDelivery = tool_field("A clean commit delivery or an operation verified by the order's check")
 
     def apply(self, comms, caller):
         todo = comms.goals.todos.get(self.problem)
         todo.require_commander(comms.registry.require(caller.name).incarnation)
         assignment = todo.assignment
         goal = comms.goals.update_goal(assignment.owner, DeliveredOrderGoalAction(
-            expect=GoalPrecondition(goal_id=assignment.generation), commit=self.commit,
-            progress=f"Delivered {self.commit}; the order check passed."))
+            expect=GoalPrecondition(goal_id=assignment.generation), problem=self.problem,
+            operation=DeliverTodo(todo.revision, comms.registry.require(caller.name).incarnation, self.delivery),
+            progress="The problem's own delivery check passed."))
         return {"goal": goal.to_wire()}
 
 
@@ -651,12 +661,8 @@ class CommsProblemCloseTool(ThreadToolRequest):
         todo = comms.goals.todos.get(self.problem)
         actor = comms.registry.require(caller.name).incarnation
         todo.require_commander(actor)
-        assignment = todo.assignment
-        comms.goals.update_goal(assignment.owner, InstalledOrderGoalAction(
-            expect=GoalPrecondition(goal_id=assignment.generation),
-            works=self.works, artifact=self.artifact))
-        closed = comms.goals.change_problem(self.problem, ChangeTodoState(
-            todo.revision, DoneTodoState, actor, assignment.generation), caller.name)
+        closed = comms.goals.change_problem(self.problem, InstallTodo(
+            todo.revision, actor, self.works, self.artifact), caller.name)
         return {"todo": FieldCodec.encode(closed)}
 
 

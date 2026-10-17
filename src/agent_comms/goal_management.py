@@ -53,12 +53,12 @@ class Goals:
         return TodoStore(self.root)
 
     def change_problem(self, problem, operation, commander):
+        actor = self.registry.require(commander).incarnation
+        current = self.todos.get(problem)
+        current.require_commander(actor)
+        prepared = operation.prepare(self, current)
         with _store_lock(self._wire_lock_path):
-            current = self.todos.get(problem)
-            current.require_commander(self.registry.require(commander).incarnation)
-            operation.prepare(self, current)
-            result = self.todos.apply(problem, operation)
-        return result
+            return self.todos.apply(problem, prepared)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

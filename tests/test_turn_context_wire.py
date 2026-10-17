@@ -104,7 +104,7 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
     images = (ImageInput('YQ==', 'image/png'),)
-    context = TurnContext.for_owner(owner, manifest(owner).turn, 'Original unicode task π 🙂', (), ())
+    context = TurnContext.for_owner(owner, manifest(owner).turn, 'Original unicode task π 🙂', (), (), comms.goals)
     rendered = context.render(images=images)
     expected = ''.join(segment.text() for segment in context.segments)
     assert rendered.text == expected
@@ -127,7 +127,7 @@ def test_current_relevance_resource_is_frozen_with_coordination_provenance(tmp_p
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
     original = WakePolicy.relevance_instruction()
-    captured = CoordinationSegment.capture(owner, (), ())
+    captured = CoordinationSegment.capture(owner, (), (), comms.goals)
     assert original.source in captured.provenance
     assert hashlib.sha256(original.content.encode()).hexdigest() == original.source.sha256
 
