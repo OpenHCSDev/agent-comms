@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import replace
-from contextlib import contextmanager, ExitStack
+from dataclasses import dataclass, replace
 import time
+from contextlib import contextmanager, ExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,10 +26,9 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
 from .goal_presentation import GoalExecution, GoalWaitTarget
-from .goals import Goal, GoalNotice
-from .fleet import UnitProgress
+from .goals import Goal
+from .activity import ObservedActivity
 from .messages import Message, AlertKind
-from .recorded_time import RecordedEventTime
 from .message_bus import MessageBus
 from .store_files import _store_lock
 from .threads import Thread
@@ -37,6 +36,25 @@ from .todos import TodoStore
 from .turn_lease import FinishedTurnFence
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class UnitProgress:
+    summary: str
+    notifies_commander: bool = False
+
+    @classmethod
+    def of(cls, goal: Goal | None, activity: ObservedActivity | None) -> UnitProgress:
+        if goal is not None:
+            if goal.delivery_complete:
+                return cls("Works in app", notifies_commander=True)
+            if not goal.state.terminal and goal.deadline.elapsed(time.time(), 0):
+                return cls("Deadline passed without accepted delivery", notifies_commander=True)
+        if activity is not None and activity.state.busy:
+            return cls("Working")
+        if goal is not None and not goal.state.terminal:
+            return cls("Idle with an open goal", notifies_commander=True)
+        return cls("No open goal")
 
 
 class Goals:
@@ -51,20 +69,18 @@ class Goals:
         self.goal_store: GoalAttemptStore | None = None
 
     @contextmanager
-    def writing(self, *, shared=False):
+    def writing(self):
         # Publication runs after physical custody ends, also on exceptional exits.
         with ExitStack() as completed:
-            with _store_lock(self._wire_lock_path, shared=shared):
+            with _store_lock(self._wire_lock_path):
                 yield completed
 
     def write_goal(self, thread, goal, completed):
         """The work-goal writer; callers hold writing() custody."""
-        if goal is not None:
-            goal = replace(goal, work_time=RecordedEventTime(time.time()))
         snapshot = self.registry.snapshot()
         previous = thread.goal
         self.registry.register(replace(thread, goal=goal), self.registry.status(thread.name))
-        if goal is not None and goal.notification_targets(snapshot, self.root, previous=previous):
+        if goal is not None and goal.notification_targets(self, previous=previous):
             activity = self.agents.activity_of(thread.name, snapshot=snapshot)
             completed.callback(self._notify_transition, thread.incarnation.require_recorded(),
                                previous, goal, activity)
@@ -81,24 +97,15 @@ class Goals:
             if not original.current(snapshot):
                 return
             unit = snapshot.require(original.name)
-            results = []
             summary = progress.summary if same_order else "Order assigned"
-            for target in goal.notification_targets(snapshot, self.root, previous=previous):
+            for target in goal.notification_targets(self, previous=previous):
                 message = Message(
                     sender=unit.name, target=target.name, type=AlertKind,
-                    timestamp=max(goal.work_time.timestamps),
                     body=f"{unit.name}: {summary}. Goal {goal.id}: {goal.text}",
                 )
-                results.append(GoalNotice.publish(self.bus, message, target))
-            current = self.registry.require(unit.name)
-            current_goal = current.goal
-            if goal.same_order_as(current_goal):
-                # Keep every recipient's result, including UNKNOWN; the last
-                # successful send must not erase an earlier uncertain send.
-                # Communication results do not reset the work clock.
-                self.registry.register(replace(current, goal=replace(
-                    current_goal, notices=tuple(results), revision=current_goal.revision + 1,
-                )), self.registry.status(current.name))
+                # The publisher owns send results, including uncertainty. Do
+                # not mirror those results in Goal or automatically resend.
+                self.bus.publisher.publish_ordinary(message)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

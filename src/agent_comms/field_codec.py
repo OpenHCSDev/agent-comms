@@ -258,8 +258,6 @@ class FieldCodec(Sealed):
         """The codec's record declarations and wire keys, in wire order."""
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
-        if issubclass(cls, DeclaredFamily) and not is_dataclass(cls):
-            return ()
         declared = [
             (field, field.metadata.get("wire_name", field.name))
             for field in fields(cls)

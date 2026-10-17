@@ -173,7 +173,7 @@ class MessageBus:
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
         with self.snapshot() as (basis, source):
-            counts = self.pending_counts_for_snapshot(source, basis, [name])[name]
+            counts = self._pending_projection(source, basis, [name])[name]
             if target is None or BuiltinChannel.aggregate_target(target):
                 return sum(counts.values())
             if is_channel_target(target):
@@ -185,7 +185,7 @@ class MessageBus:
 
     def pending_counts(self, name: str) -> Mapping[str, int]:
         with self.snapshot() as (basis, source):
-            return self.pending_counts_for_snapshot(source, basis, [name])[name]
+            return self._pending_projection(source, basis, [name])[name]
 
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
         if not names:
@@ -193,10 +193,10 @@ class MessageBus:
         with self.snapshot() as (basis, source):
             return {
                 name: sum(counts.values())
-                for name, counts in self.pending_counts_for_snapshot(source, basis, names).items()
+                for name, counts in self._pending_projection(source, basis, names).items()
             }
 
-    def pending_counts_for_snapshot(
+    def _pending_projection(
         self, source: OpenedWireSnapshot, basis: DisplaySelection, names: Sequence[str],
     ) -> Mapping[str, Mapping[str, int]]:
         """Bulk delivery counts from one original source, namespace and ledger."""
@@ -389,14 +389,6 @@ class MessageBus:
         return ConversationMessagePageRequest.capture(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         ).read(self.log)
-
-    def latest_sent_messages(self, threads: Sequence[Thread]):
-        if not threads:
-            return {}
-        lookups = tuple(thread.incarnation.stable_thread_lookup() for thread in threads)
-        with self.log.certified_read() as certified:
-            originals = certified.latest_sender_sources(lookups)
-        return {original.audience.sender_lookup: original.message for original in originals}
 
     def conversation_older_unread(
         self, scope: DMDisplayScope, *, before: int, seen: frozenset[int]

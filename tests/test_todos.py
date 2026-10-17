@@ -9,8 +9,8 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import CompletedGoalAction, GoalPrecondition, OwnerInvocable
-from agent_comms.goal_progress import GoalReport, ReportedGoalProgress, WorksInApp
-from agent_comms.goals import Deadline
+from agent_comms.goals import GoalReport, ReportedGoalProgress, WorksInApp
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     AcceptanceCheck, DoneTodoState, SourceTodoWhere, TodoConflict, TodoError,
@@ -74,7 +74,7 @@ def test_problem_closure_and_goal_owned_checked_delivery(todo_comms: Comms):
     create(todo_comms)
     assigned = store.assign(
         "todo-1", expected_revision=1, owner=owner, parent=lead, generation="order-a",
-        deadline=Deadline(time.time() - 60), goals=todo_comms.goals,
+        deadline=RecordedEventTime(time.time() - 60), goals=todo_comms.goals,
     )
     with pytest.raises(TodoError, match="checked completion"):
         store.set_state(assigned.id, expected_revision=2, state=DoneTodoState,

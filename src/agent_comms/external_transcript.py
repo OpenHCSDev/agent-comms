@@ -188,11 +188,6 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
         with self.writing() as connection:
             if events and ExternalItemRow.one(connection, **key) is None:
-                draft = ExternalDraftRow.one(connection, **key)
-                if draft is not None:
-                    for original in draft.events:
-                        for call in original.tool_calls:
-                            events = tuple(event.with_tool_start(call) for event in events)
                 ExternalItemRow(seq=self._cut(connection).offset + 1, events=events,
                                 **key).insert(connection)
             connection.execute(

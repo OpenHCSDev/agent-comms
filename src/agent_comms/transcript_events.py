@@ -25,13 +25,6 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
         return self
 
     @property
-    def tool_calls(self) -> tuple[ToolStartTranscript, ...]:
-        return ()
-
-    def with_tool_start(self, original: ToolStartTranscript) -> TranscriptEvent:
-        return self
-
-    @property
     def text_size(self) -> int:
         return 0
 
@@ -207,21 +200,6 @@ class ToolStartTranscript(ToolTranscript):
         from .tool_declaration import ToolDeclaration
 
         return ToolDeclaration.caption(self.tool_name, self.detail)
-
-    @property
-    def tool_calls(self):
-        return (self,)
-
-    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None):
-        return (self, ToolEndTranscript(
-            tool_call_id=self.tool_call_id, tool_name=self.tool_name,
-            timestamp=self.timestamp, text=text, ok=ok, diff=diff,
-        ))
-
-    def with_tool_start(self, original):
-        if self.tool_call_id == original.tool_call_id and self.timestamp is None:
-            return replace(self, timestamp=original.timestamp)
-        return self
 
 
 @dataclass(frozen=True, kw_only=True)

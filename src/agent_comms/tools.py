@@ -25,9 +25,10 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_states import ActiveGoal
-from .goals import Deadline, GoalDeadline, NoDeadline
-from .todos import AcceptanceCheck, Assignment, TodoWhere
-from .goal_progress import GoalProgress
+from .goals import GoalProgress
+from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .todos import AcceptanceCheck, AssignedTodoAssignment, SourceTodoWhere
+from .message_reference import MessageReference
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -461,7 +462,7 @@ class CommsSetGoalTool(ThreadToolRequest):
         "start, set, or pursue a goal autonomously."
     )
     text: str = tool_field("Persistent objective to pursue")
-    deadline: GoalDeadline = tool_field("Goal deadline", default_factory=NoDeadline)
+    deadline: EventTime = tool_field("Goal deadline", default_factory=UnrecordedEventTime)
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
         goal = comms.goals.update_goal(
@@ -602,7 +603,7 @@ class CommsTodoCreateTool(ThreadToolRequest):
     id: str = tool_field("Unique problem ID")
     repo: str = tool_field("Repository owner/name")
     text: str = tool_field("Problem and requested repair")
-    where: TodoWhere = tool_field("Declared existing source path/line or original message reference")
+    where: SourceTodoWhere | MessageReference = tool_field("Existing source path/line or original message reference")
     acceptance: AcceptanceCheck = tool_field(
         "Checkout repo, command, expected_count; command must exit zero and print one integer")
 
@@ -626,7 +627,7 @@ class CommsTodoAssignTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
         todo = comms.todos.assign(self.id, expected_revision=self.expected_revision,
             owner=comms.registry.require(self.owner), parent=comms.registry.require(caller.name),
-            generation=self.generation, deadline=Deadline(self.deadline), goals=comms.goals)
+            generation=self.generation, deadline=RecordedEventTime(self.deadline), goals=comms.goals)
         return todo.order_result(comms.goals)
 
 
@@ -636,7 +637,7 @@ class CommsTodoTransferTool(ThreadToolRequest):
     description = "Transfer an exact assignment, end its old order and notify its prior owner."
     id: str = tool_field("Problem ID")
     expected_revision: int = tool_field("Exact current Todo revision")
-    previous: Assignment = tool_field("Exact previous assignment from Todo listing")
+    previous: AssignedTodoAssignment = tool_field("Exact previous assignment from Todo listing")
     owner: str = tool_field("New assignee thread")
     generation: str = tool_field("Unique new assignment/Goal ID")
     deadline: float = tool_field("Unix deadline timestamp")
@@ -645,7 +646,7 @@ class CommsTodoTransferTool(ThreadToolRequest):
         todo = comms.todos.transfer(self.id, expected_revision=self.expected_revision,
             previous=self.previous, owner=comms.registry.require(self.owner),
             parent=comms.registry.require(caller.name), generation=self.generation,
-            deadline=Deadline(self.deadline), goals=comms.goals)
+            deadline=RecordedEventTime(self.deadline), goals=comms.goals)
         return todo.order_result(comms.goals)
 
 
