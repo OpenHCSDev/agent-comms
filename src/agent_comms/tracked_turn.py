@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
     from .agent_backend import TurnInbox
     from .coordinated_runtime import SelectedExecution
-    from .owned_send_admission import OwnedSend
+    from .owned_send import OwnedSend
     from .private_send_claim import PrivateSendClaim
 
 

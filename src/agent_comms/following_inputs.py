@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from .acp_extension import QueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
-from .owned_send_admission import OwnedSend
+from .owned_send import OwnedSend
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .thread_identity import ClaimedIdentity, TurnId
 from .turn_input_source import AcceptedFollowingInput, SelectedOriginalInput

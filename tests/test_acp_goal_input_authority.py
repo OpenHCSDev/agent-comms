@@ -25,7 +25,7 @@ from agent_comms.comms import wire
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
 from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
-from agent_comms.owned_send_admission import OwnedSend
+from agent_comms.owned_send import OwnedSend
 from agent_comms.transcript_events import ContextTranscript
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from agent_comms.coordinator import Coordination
 
-from .claim_admission import (
+from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
 )
