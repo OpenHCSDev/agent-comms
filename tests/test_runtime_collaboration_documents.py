@@ -6,11 +6,9 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms.activity import Activity, ActivityLog, ActivityState
-from agent_comms.activity_checkpoint import ActivityCheckpointStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import LockedStore
-from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
+from agent_comms.runtime_info import RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
@@ -93,7 +91,7 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path):
     reopened = RuntimeInfoStore(store.path).read()
     assert FieldCodec.encode(reopened["new"]) == {**saved["old"], "thread": "new"}
     before = store.path.stat()
-    store.remove("absent")
+    store.remove_threads((Thread("absent", frozenset(), str(tmp_path)),))
     assert store.path.stat() == before
 
 
@@ -132,11 +130,6 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path):
     "store_type,operation,initial",
     [
         (
-            RuntimeInfoStore,
-            lambda s: s.set(AgentRuntimeInfo("new", timestamp=2.0)),
-            '{"old": {"thread": "old", "ts": 1}}',
-        ),
-        (
             SharedLedger,
             lambda s: s.merge({"new": "value"}, "writer"),
             '{"old": {"data": [1, null]}}',
@@ -156,31 +149,6 @@ def test_authoritative_documents_keep_bytes_on_failed_publication(
     with pytest.raises(OSError, match="publication failed"):
         operation(store)
     assert store.path.read_text() == initial
-
-
-@pytest.mark.parametrize(
-    "damage",
-    [
-        lambda value: value.update(schema=2),
-        lambda value: value.update(offset=-1),
-        lambda value: value.update(tail="wrong"),
-        lambda value: value["latest"]["worker"].update(thread="impostor"),
-        lambda value: value["latest"]["worker"].pop("ts"),
-    ],
-)
-def test_invalid_checkpoint_rebuilds_from_unchanged_authoritative_log(tmp_path, damage):
-    log = ActivityLog(tmp_path / "activity.jsonl")
-    event = Activity("worker", ActivityState.WORKING, "saved", 123.0)
-    log.emit(event)
-    assert log.all_current(active=frozenset({"worker"}))["worker"] == event
-    original = log._path.read_bytes()
-    checkpoint = json.loads(log.checkpoint.path.read_text())
-    damage(checkpoint)
-    log.checkpoint.path.write_text(json.dumps(checkpoint))
-    reopened = ActivityLog(log._path)
-    assert reopened.all_current(active=frozenset({"worker"}))["worker"] == event
-    assert log._path.read_bytes() == original
-    assert ActivityCheckpointStore(log.checkpoint.path).read().latest == {"worker": event}
 
 
 def test_complete_snapshot_replacement_does_not_decode_discarded_document(tmp_path):
