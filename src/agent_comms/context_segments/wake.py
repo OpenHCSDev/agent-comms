@@ -1,4 +1,4 @@
-"""Read-only N/K wake framing from an already committed selected receipt.
+"""Read-only N/K wake framing from an already committed selected acknowledgement.
 
 The frame tells a one-shot recipient what this wake is for. It grants no
 response or file-write authority: the runner separately verifies the sealed

@@ -18,7 +18,7 @@ from stored_inputs import stored_inputs
 
 @pytest.fixture
 async def prepared_owner(native_backend):
-    """SDK-authored history and original idle native custody; zero seed requests."""
+    """SDK-authored history and original idle native ownership; zero seed requests."""
     native = native_backend
     await native.author_history()
     async with native.open_owner() as (agent, session):

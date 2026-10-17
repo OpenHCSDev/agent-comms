@@ -23,8 +23,8 @@ if TYPE_CHECKING:
 class RegistryIdentityCheck(RuleCheck):
     expected: Thread
     actual: Thread
-    expected_admission: int
-    admission: int | None
+    expected_claim: int
+    claim_scope: int | None
     process: ProcessIdentity
 
     def worktree_matches(self) -> bool:
@@ -37,7 +37,7 @@ class RegistryIdentityCheck(RuleCheck):
         return self.actual.thinking_level == self.expected.thinking_level
 
 
-class RegistryAdmissionCheck(RegistryIdentityCheck):
+class RegistryClaimCheck(RegistryIdentityCheck):
     """A claimed turn uses its captured settings, not the next-turn selection.
 
     Before a claim, configuration must still match. After a claim, the exact
@@ -52,7 +52,7 @@ class RegistryAdmissionCheck(RegistryIdentityCheck):
         return self.expected.turn_lease is not None or super().thinking_matches()
 
 
-class RunningTurnRegistryCheck(RegistryAdmissionCheck):
+class RunningTurnRegistryCheck(RegistryClaimCheck):
     """A turn that already started finishes in the project it started in.
 
     The registry's project selects the next turn, so changing it during a
@@ -69,7 +69,7 @@ class GoalRegistryIdentityCheck(RegistryIdentityCheck):
     """Fresh turn claims capture the goal, not the earlier turn state."""
 
 
-class GoalRegistryAdmissionCheck(GoalRegistryIdentityCheck, RegistryAdmissionCheck):
+class GoalRegistryClaimCheck(GoalRegistryIdentityCheck, RegistryClaimCheck):
     """Selected input/awareness also captures the goal; reply settlement does not."""
 
 
@@ -92,12 +92,12 @@ class RegistryProcessRule(ReservationRule):
         )
 
 
-class RegistryAdmissionRule(ReservationRule):
+class RegistryClaimRule(ReservationRule):
     check_type = RegistryIdentityCheck
-    explanation = "The registry admission generation changed."
+    explanation = "The registry claim_scope generation changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
-        return check.admission != check.expected_admission
+        return check.claim_scope != check.expected_claim
 
 
 class RegistryRoleRule(ReservationRule):
@@ -141,10 +141,10 @@ class RegistrySessionRule(ReservationRule):
 
 
 class RegistryTurnRule(ReservationRule):
-    check_type = RegistryAdmissionCheck
+    check_type = RegistryClaimCheck
     explanation = "The exact captured active turn changed."
 
-    def violated(self, check: RegistryAdmissionCheck) -> bool:
+    def violated(self, check: RegistryClaimCheck) -> bool:
         return check.actual.turn_lease != check.expected.turn_lease
 
 
@@ -192,12 +192,12 @@ class NativeTokenRule(ReservationRule):
         return check.row.owner_token_digest != check.token_digest
 
 
-class NativeAlreadyAdmittedRule(ReservationRule):
+class NativeAlreadyBoundRule(ReservationRule):
     check_type = NativeReservationCheck
-    explanation = "The native input was already bound to a sending admission."
+    explanation = "The native input was already bound to a sending claim_scope."
 
     def violated(self, check: NativeReservationCheck) -> bool:
-        return check.row.sent_owner_admission_generation.reservation_violation()
+        return check.row.sent_owner_claimed_generation.reservation_violation()
 
 
 class NativeAlreadyProvenRule(ReservationRule):

@@ -16,7 +16,7 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .coordination_errors import StaleFence, IdentityConflict
-from .native_admission_epoch import NativeAdmissionEpoch, UnrecordedNativeAdmission
+from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution
 from .selected_triage import SelectedTriage, RecordedTriageText
 from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
@@ -80,7 +80,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
     def __post_init__(self):
         self.execution
-        # The selected identity and the later context receipt are separate
+        # The selected identity and the later context acknowledgement are separate
         # acquisition phases of this ORIGINAL row, never two source selectors.
         session = self.selected_session
         if session is None:
@@ -108,7 +108,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             raise IdentityConflict("Native input has no recorded selected session") from error
 
     def require_context_proof(self) -> NativeContextProof:
-        """Recover the original committed receipt, never manufacture it from a path."""
+        """Recover the original committed acknowledgement, never manufacture it from a path."""
         from .native_pi import NativeContextProof
 
         reference = self.reference.require_recorded()
@@ -127,11 +127,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
     @classmethod
     def for_native_user(cls, db, reader, user, *, session_id):
-        """The original admitted native file/input owns stage and publication.
+        """The original authorized native file/input owns stage and publication.
 
         Viewer names and current registry owners cannot classify inherited or
-        saved native history. A recorded receipt additionally seals the exact
-        original user entry; a precommit admitted row still owns its stage.
+        saved native history. A recorded acknowledgement additionally seals the exact
+        original user entry; a precommit authorized row still owns its stage.
         """
         rows = cls.select(
             db, where="input_id=? AND session_file=? AND session_id=?",
@@ -166,7 +166,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     def publication_revision(cls, root, reader, owner_lookup):
         """Read only this native source's committed original reply relations.
 
-        Published receipts and their input/attempt links are immutable. Their
+        Published evidences and their input/attempt links are immutable. Their
         maximum sequence and cardinality change on publication or proof reset;
         unrelated owner activity cannot revoke a prepared page. No counter or
         projection is persisted, and the read closes before presentation work.
@@ -194,7 +194,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             )[0]
 
     def published_replies(self, db, user, owner_lookup):
-        """Only this original receipt can lend its execution publication."""
+        """Only this original acknowledgement can lend its execution publication."""
         if (self.owner_lookup, self.session_entry_id) != (owner_lookup, user.id):
             return ()
         return self.execution.published_replies(db, owner_lookup)
@@ -217,9 +217,9 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     owner_thread: str
     owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
     owner_token_digest: str = field(metadata={"sql": Column(check="length(owner_token_digest)=64")})
-    sent_owner_admission_generation: NativeAdmissionEpoch = field(
-        default_factory=UnrecordedNativeAdmission,
-        metadata={"sql": Column(check="sent_owner_admission_generation>0",
+    sent_owner_claimed_generation: NativeClaimEpoch = field(
+        default_factory=UnrecordedNativeClaim,
+        metadata={"wire_name": 'sent_owner_admission_generation', "sql": Column(record_key=True, check="{sent_owner_claimed_generation}>0",
                                  storage=IntegerStorage, nullable=True)},
     )
     session_id: str | None = None
@@ -239,7 +239,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
         "(session_id IS NULL AND session_file IS NULL) OR "
         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
-        "AND length(session_file)>0 AND sent_owner_admission_generation IS NOT NULL)",
+        "AND length(session_file)>0 AND {sent_owner_claimed_generation} IS NOT NULL)",
         "(session_entry_id IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL "
         "AND committed_at_ms IS NULL) OR "
         "(session_entry_id IS NOT NULL AND length(session_entry_id)>0 AND request_generation>0 "
@@ -259,7 +259,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         *,
         verdict: type[SelectedTriage] | None = None,
     ) -> None:
-        """Commit the context receipt once against the original selected session."""
+        """Commit the context acknowledgement once against the original selected session."""
         if context.input_id != self.input_id:
             raise StaleFence("native context belongs to another reserved input")
         self.require_session_identity().require_context(context)
@@ -289,15 +289,15 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                 OR NEW.owner_thread IS NOT OLD.owner_thread
                 OR NEW.owner_generation IS NOT OLD.owner_generation
                 OR NEW.owner_token_digest IS NOT OLD.owner_token_digest
-                OR (OLD.sent_owner_admission_generation
+                OR (OLD.{{sent_owner_claimed_generation}}
                     IS NOT NULL
-                    AND NEW.sent_owner_admission_generation
-                        IS NOT OLD.sent_owner_admission_generation)
-                OR (NEW.sent_owner_admission_generation IS NULL AND NEW.session_id IS NOT NULL)
+                    AND NEW.{{sent_owner_claimed_generation}}
+                        IS NOT OLD.{{sent_owner_claimed_generation}})
+                OR (NEW.{{sent_owner_claimed_generation}} IS NULL AND NEW.session_id IS NOT NULL)
                 OR (OLD.session_id IS NOT NULL AND
                     (NEW.session_id IS NOT OLD.session_id OR NEW.session_file IS NOT OLD.session_file))
                 OR OLD.session_entry_id IS NOT NULL
-                OR (NEW.session_id IS NULL AND NEW.sent_owner_admission_generation IS NULL)
+                OR (NEW.session_id IS NULL AND NEW.{{sent_owner_claimed_generation}} IS NULL)
             BEGIN SELECT RAISE(ABORT,'native runtime input identity is frozen'); END""",
             f"{name}_delete_guard": f" BEFORE DELETE ON {name} "
             "BEGIN SELECT RAISE(ABORT,'native runtime input cannot be deleted'); END",
@@ -325,8 +325,8 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     owner_generation: int = field(
         metadata={"sql": Column(primary_key=True, check="owner_generation>0")}
     )
-    owner_admission_generation: int = field(
-        metadata={"sql": Column(primary_key=True, check="owner_admission_generation>0")}
+    owner_claimed_generation: int = field(
+        metadata={"wire_name": 'owner_admission_generation', "sql": Column(record_key=True, primary_key=True, check="{owner_claimed_generation}>0")}
     )
     @property
     def owner_identity(self):
@@ -363,7 +363,7 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
                 OR NEW.recipient_lookup IS NOT OLD.recipient_lookup
                 OR NEW.owner_thread IS NOT OLD.owner_thread
                 OR NEW.owner_generation IS NOT OLD.owner_generation
-                OR NEW.owner_admission_generation IS NOT OLD.owner_admission_generation
+                OR NEW.{{owner_claimed_generation}} IS NOT OLD.{{owner_claimed_generation}}
                 OR NEW.covered_seq < OLD.covered_seq OR NEW.injected_seq < OLD.injected_seq
                 OR (NEW.injected_seq = OLD.injected_seq AND NEW.input_id IS NOT OLD.input_id)
             BEGIN SELECT RAISE(ABORT,'native source cursor cannot regress'); END""",

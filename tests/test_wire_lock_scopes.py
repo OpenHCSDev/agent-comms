@@ -1,4 +1,4 @@
-"""A wire-lock body must never suspend its event loop while holding custody."""
+"""A wire-lock body must never suspend its event loop while holding ownership."""
 
 import ast
 from pathlib import Path
@@ -313,9 +313,9 @@ def relayed_lock():
             pass
 """,
         "exit_stack.py": """def use():
-    with ExitStack() as custody:
-        custody.enter_context(transaction())
-        custody.enter_context(relayed_lock())
+    with ExitStack() as ownership:
+        ownership.enter_context(transaction())
+        ownership.enter_context(relayed_lock())
 """,
     }
     assert _sql_file_lock_violations(sources) == [

@@ -38,9 +38,9 @@ def test_post_dispatch_failure_preserves_bound_uncertainty(tmp_path):
     from agent_comms.input_disposition import InputDispositions
 
     store = InputDispositions(tmp_path)
-    store.record('acp:partial-write', seq=None, owner='owner', admission=1,
+    store.record('acp:partial-write', seq=None, owner='owner', claim_scope=1,
                  target='owner', text='original input')
-    assert store.bind('acp:partial-write', admission=1, turn_id='turn',
+    assert store.bind('acp:partial-write', claim_scope=1, turn_id='turn',
                       native_id='a' * 32, text='original input')
     before = stored_inputs(store.root).lookup('acp:partial-write')
     assert isinstance(before, SentInput)

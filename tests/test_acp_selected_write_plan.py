@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import select
 import signal
 import subprocess
@@ -194,8 +193,8 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             await agent.shutdown()
             return
         response = await agent.prompt("beta", [], field_meta=options)
-        (receipt,) = decode_updates(response.field_meta)
-        assert isinstance(receipt, SelectedWriteAcceptedUpdate)
+        (acknowledgement,) = decode_updates(response.field_meta)
+        assert isinstance(acknowledgement, SelectedWriteAcceptedUpdate)
         assert resource.read_bytes() == b"before\n"
         if scenario == "older_claims":
             assert message.seq > 100
@@ -228,11 +227,12 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             else:
                 agent._selected_write_controllers.clear()  # owner-process crash loses binding
             assert await agent._drain_private_nk("beta", root_id) == 1
-            await reply_turn_finished(agent, "beta")
+            with pytest.raises(IdentityConflict, match="controller changed|no longer bound") as error:
+                await reply_turn_finished(agent, "beta")
             failure = drain_diagnostic(comms, "beta")
             assert isinstance(failure, UnavailableDrainDiagnostic)
             assert failure.error_type == "IdentityConflict"
-            assert re.search("controller changed|no longer bound", failure.reason)
+            assert failure.reason.startswith(str(error.value))
             assert not calls and resource.read_bytes() == b"before\n"
             rows = list((root / "selected-write-plans").glob("*.json"))
             assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "accepted"
@@ -242,7 +242,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         await reply_turn_finished(agent, "beta")
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
         with Comms(root).bus.log.certified_read() as source:
-            assert source.claim_operation_used(receipt.operation_id)
+            assert source.claim_operation_used(acknowledgement.operation_id)
             assert source.claim(str(resource)) is None
         rows = list((root / "selected-write-plans").glob("*.json"))
         assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
@@ -373,18 +373,18 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                 )
             )
             response = await attached.prompt("beta", [], field_meta=options)
-            (receipt,) = decode_updates(response.field_meta)
-            assert isinstance(receipt, SelectedWriteAcceptedUpdate)
+            (acknowledgement,) = decode_updates(response.field_meta)
+            assert isinstance(acknowledgement, SelectedWriteAcceptedUpdate)
             assert resource.read_bytes() == b"before\n"
             (base / "dispatch").touch()
             result = event("terminal")
             assert result["pid"] == process.pid and result["drained"] == 1
             assert result["fake_inputs"] == 1 and resource.read_bytes() == b"after second pid\n"
             owner = Comms(root).bus.log.claim_projection()[str(resource)]
-            assert owner.owner == "beta" and owner.admission is not None
+            assert owner.owner == "beta" and owner.claim_scope is not None
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 assert (
-                    store.assignments.get(owner.admission.wake_assignment_id).lifecycle.declared_name
+                    store.assignments.get(owner.claim_scope.wake_assignment_id).lifecycle.declared_name
                     == "completed"
                 )
                 assert (

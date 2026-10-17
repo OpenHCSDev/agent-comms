@@ -37,16 +37,16 @@ async def _accept_visible_deliveries(
             marker = bus.log._private_marker_unlocked()
             if marker.root_id != root_id:
                 raise IdentityConflict("private initial wire root changed")
-            admitted_after = max(after_seq, marker.admission_after_seq)
+            authorized_after = max(after_seq, marker.claimed_after_seq)
             with resource.session.read():
                 assert_cohort_schema(resource.session._connection)
                 sealed = CohortDeliveryReceipts.sealed_sequences_after(
                     resource.session._connection,
                     wire_root_id=root_id,
                     recipient_lookup=lookup,
-                    after_seq=admitted_after,
+                    after_seq=authorized_after,
                 )
-            addressed = source.addressed_sequences(bus.log, lookup, admitted_after)
+            addressed = source.addressed_sequences(bus.log, lookup, authorized_after)
             # Progress comes from every addressed original in the fixed source
             # cut, including already sealed/historical recipient rows.
             unaccepted = []
@@ -59,12 +59,12 @@ async def _accept_visible_deliveries(
                     raise RelationViolationError("Certified initial lookup differs from bus row.")
                 if any(r.canonical_thread == owner_name for r in recipients):
                     unaccepted.append(initial)
-        visited_after = addressed[-1] if addressed else admitted_after
+        visited_after = addressed[-1] if addressed else authorized_after
         if len(unaccepted) > 100:
             raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
         if unaccepted and acquire_package is not None:
             # An ACP observation with new originals must still validate the package
-            # before SQL acceptance. Sealed receipts require no repeated preflight.
+            # before SQL acceptance. Sealed evidences require no repeated preflight.
             acquire_package()
         for initial in unaccepted:
             # A prior canonical name is historical after a private owner rename.

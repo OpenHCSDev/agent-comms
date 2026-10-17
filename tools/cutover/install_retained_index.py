@@ -11,14 +11,14 @@ from agent_comms.wire_log import WireLog
 
 def require_retained_writer(root, descriptor, root_id):
     root = Path(root)
-    custody = int(descriptor)
-    opened = os.fstat(custody)
+    ownership = int(descriptor)
+    opened = os.fstat(ownership)
     named = (root / '.bus.jsonl.lock').stat()
     if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
         raise ValueError('Inherited descriptor is not the original bus writer lock.')
     # Same opened description, nonblocking verification. A fresh lock acquire
     # would deadlock against the still-live old parent, and is forbidden here.
-    fcntl.flock(custody, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    fcntl.flock(ownership, fcntl.LOCK_EX | fcntl.LOCK_NB)
     bus = WireLog(root / 'bus.jsonl')
     if bus.read_metadata_unlocked().root_id != root_id:
         raise ValueError('Original root identity changed before installation.')

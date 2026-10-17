@@ -1,6 +1,6 @@
 """Run under the selected current runtime; emit one typed acquired read.
 
-No registry or guard write, process signal, native request or input admission.
+No registry or guard write, process signal, native request or input claim_scope.
 The current registry owner validates the document under its shared lock. Old
 records must be carried once before this reader can consume them.
 """

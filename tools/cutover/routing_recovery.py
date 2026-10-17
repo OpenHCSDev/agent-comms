@@ -17,9 +17,9 @@ def write_original(path: Path, value: bytes) -> None:
         os.fsync(output.fileno())
 
 
-def retain_originals(service, receipt: Path, plan) -> None:
+def retain_originals(service, acknowledgement: Path, plan) -> None:
     """Persist exact preimages before either schema/index or routing changes."""
-    destination = receipt.with_name(receipt.name + '.originals')
+    destination = acknowledgement.with_name(acknowledgement.name + '.originals')
     destination.mkdir(mode=0o700)
     sources = (service.root / 'registry.json', service.bus.log.metadata_path,
                service.registry.store.private_guard_unlocked().path)

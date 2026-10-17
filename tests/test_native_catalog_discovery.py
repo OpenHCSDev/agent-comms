@@ -1,4 +1,5 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -46,7 +47,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     native = native_backend
     source = Path(source_name).resolve(strict=True)
     before = hashlib.sha256(source.read_bytes()).hexdigest()
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     created = await ForkSessionHelper.run(ForkSessionRequest(
         str(package), str(source), str(native.project),
         directory=str(native.project / "launch-sessions"),
@@ -55,7 +56,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
         identity=NativeSessionIdentity(created.session_id, created.session_file))
     execution = SelectedExecution(root=native.root,
         wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-        owner_name="launch-custody", native_package=package)
+        owner_name="launch-ownership", native_package=package)
     verifications = []
     verify = native_pi._trusted_package
 
@@ -110,13 +111,13 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     assert len(verifications) == 2 and native.provider.posts == 0
 
     # The same installed worker joins a borrowed, actual SDK-source descriptor.
-    # This checks read custody, not a synthetic input or provider commitment.
+    # This checks read ownership, not a synthetic input or provider commitment.
     entered, release = threading.Event(), threading.Event()
     readers = []
 
     async def observe_saved_source():
-        async with AsyncExitStack() as custody:
-            evidence = custody.enter_context(NativeEntry.open_input_evidence(session.path))
+        async with AsyncExitStack() as ownership:
+            evidence = ownership.enter_context(NativeEntry.open_input_evidence(session.path))
             readers.append(evidence)
 
             def observe():
@@ -354,7 +355,7 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
     source = Path(source_name).resolve(strict=True)
     source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
     created = await ForkSessionHelper.run(ForkSessionRequest(
-        os.environ["PI_COMPACTION_TEST_PACKAGE"], str(source), str(native.project),
+        str(pinned_native_package()), str(source), str(native.project),
         directory=str(native.project / "replacement-sessions"),
     ), cwd=native.project)
     events = native.project / "replacement-events.jsonl"

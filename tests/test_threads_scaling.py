@@ -99,22 +99,22 @@ def test_thread_listing_validates_registry_per_snapshot_not_per_row(wired, monke
     assert checks <= 3
 
 
-def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monkeypatch):
+def test_mounted_viewer_snapshot_reopens_without_scanning_bus(wired, monkeypatch):
     wired.messaging.send("PR111", "#base", "channel activity")
     wired.messaging.send("PR111", "fixer", "direct activity")
-    expected = wired.views.coordination_snapshot()
+    expected = wired.views.viewer_snapshot(str(wired.root))
     fresh = wire(wired.root)
 
     def forbidden_scan():
         raise AssertionError("mounted snapshot reparsed historical bus rows")
 
     monkeypatch.setattr(fresh.bus.log, 'verified_snapshot', forbidden_scan)
-    assert fresh.views.coordination_snapshot() == expected
+    assert fresh.views.viewer_snapshot(str(wired.root)) == expected
 
     wired.messaging.send("PR111", "#base", "new channel activity")
-    updated = fresh.views.coordination_snapshot()
+    updated = fresh.views.viewer_snapshot(str(wired.root))
     assert updated.last_sent["PR111"] >= expected.last_sent["PR111"]
-    assert updated == wire(wired.root).views.coordination_snapshot()
+    assert updated == wire(wired.root).views.viewer_snapshot(str(wired.root))
 
 
 def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired, monkeypatch):
@@ -279,11 +279,11 @@ def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix
 def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacement(wired):
     wired.messaging.send("PR111", "#base", "first")
     wired.messaging.send("fixer", "#base", "second")
-    assert set(wired.views.coordination_snapshot().last_sent) == {"PR111", "fixer"}
+    assert set(wired.views.viewer_snapshot(str(wired.root)).last_sent) == {"PR111", "fixer"}
 
     checkpoint = wired.root / "bus_activity_latest.json"
     checkpoint.write_text("{damaged")
-    assert set(wire(wired.root).views.coordination_snapshot().last_sent) == {"PR111", "fixer"}
+    assert set(wire(wired.root).views.viewer_snapshot(str(wired.root)).last_sent) == {"PR111", "fixer"}
 
     # A valid JSON file can also lose projection values after local damage.
     # The bus is still authoritative when the checkpoint shape survives.
@@ -292,7 +292,7 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
     cached["sent"]["fixer"] = 0.0
     checkpoint.write_text(json.dumps(cached))
     reopened = wire(wired.root)
-    assert reopened.views.coordination_snapshot().last_sent["fixer"] > 0.0
+    assert reopened.views.viewer_snapshot(str(wired.root)).last_sent["fixer"] > 0.0
     assert reopened.bus.channel_activity()["#base"].last_message > 0.0
 
     bus_path = wired.bus.log.path
@@ -301,7 +301,7 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
     os.chmod(replacement, 0o600)
     os.replace(replacement, bus_path)
     with pytest.raises(RelationViolationError, match="Private bus"):
-        wire(wired.root).views.coordination_snapshot()
+        wire(wired.root).views.viewer_snapshot(str(wired.root))
 
 
 def test_route_projection_refuses_atomic_bus_replacement(wired):

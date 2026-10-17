@@ -1,9 +1,8 @@
 """Retained actual Pi -> comms_send CLI -> original source -> ACP cold replay."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
-import os
-from pathlib import Path
 
 import acp
 from acp.schema import TextContentBlock
@@ -23,7 +22,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
     assert (await native.run("Retained original context before outbound tool"))[-1].ok
     await native.persistent.close()
     original_native = native.session.read_bytes()
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
+    package = pinned_native_package().resolve(strict=True)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(native.root)
     owner = canonical_agent(
@@ -128,8 +127,8 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
                 and row["message"].get("toolName") == "comms_send"
             ]
             assert len(tools) == 1 and not tools[0].get("isError")
-            receipt = json.loads(tools[0]["content"][0]["text"])
-            assert receipt == {"id": original.message_id}
+            acknowledgement = json.loads(tools[0]["content"][0]["text"])
+            assert acknowledgement == {"id": original.message_id}
             await client.load_session(cwd=str(native.project), session_id=sender, mcp_servers=[])
             replay = await snapshots.get()
             assert [event for event in replay.events if event.source == original.reference] == sent

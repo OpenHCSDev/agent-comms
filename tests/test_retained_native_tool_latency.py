@@ -1,4 +1,5 @@
 """Real selected native tools over an isolated retained source; localhost only."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import functools
@@ -24,9 +25,9 @@ from agent_comms.tracked_turn import TrackedTurnSession
 from compaction_loopback import LoopbackProvider
 from test_coordinated_runtime import _root
 
-PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+PACKAGE = str(pinned_native_package())
 SOURCE = os.environ.get("NATIVE_TOOL_LATENCY_SOURCE")
-pytestmark = pytest.mark.skipif(not PACKAGE or not SOURCE, reason="Pinned native and isolated retained source required")
+pytestmark = pytest.mark.skipif(not SOURCE, reason="Isolated retained source required")
 
 
 @pytest.fixture
@@ -186,7 +187,7 @@ async def test_installed_retained_native_read_round_preserves_original_custody(t
             assert list(comms.views.full_history_page().messages)[-1].body == provider.text
         assert all(not child.alive() for child in children)
         assert all(reader.source.stream.closed and not reader.entries for reader in readers)
-        receipt = {
+        acknowledgement = {
             "outcome": outcome,
             "source_bytes": original.size, "source_sha256": original_hash,
             "elapsed_seconds": time.perf_counter() - started, "provider_posts": provider.posts,
@@ -200,11 +201,11 @@ async def test_installed_retained_native_read_round_preserves_original_custody(t
             "native_children_retired": all(not child.alive() for child in children),
             "evidence_readers_closed": all(reader.source.stream.closed for reader in readers),
         }
-        assert receipt["original_source_unchanged"] and receipt["original_sha256_unchanged"]
-        print("retained_native_tool_latency=" + json.dumps(receipt))
+        assert acknowledgement["original_source_unchanged"] and acknowledgement["original_sha256_unchanged"]
+        print("retained_native_tool_latency=" + json.dumps(acknowledgement))
         if os.environ.get("NATIVE_TOOL_LATENCY_RECEIPT"):
             path = Path(os.environ["NATIVE_TOOL_LATENCY_RECEIPT"])
-            path.with_name(path.stem + "-" + outcome + path.suffix).write_text(json.dumps(receipt, indent=2) + "\n")
+            path.with_name(path.stem + "-" + outcome + path.suffix).write_text(json.dumps(acknowledgement, indent=2) + "\n")
     finally:
         for child in children:
             await child.stop()

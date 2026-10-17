@@ -1,7 +1,7 @@
 """Actual private retained restart and concurrent automatic inbox drains.
 
 Only the localhost provider is controlled. Worker, registry, bus, selected
-admission, native process, source proof and response publication remain real.
+claim_scope, native process, source proof and response publication remain real.
 """
 import argparse
 import hashlib
@@ -105,11 +105,11 @@ async def configured_pure_channel(arguments):
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.selected_triage import FullSelectedTriage
-    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.coordination_tables.publications import PublicationEvidence
     from agent_comms.field_codec import FieldCodec
     from agent_comms.store_files import _store_lock
     from agent_comms.native_entries import NativeEntry
-    from agent_comms.coordination_cohort import _receipt_matches
+    from agent_comms.coordination_cohort import _claim_record
     from agent_comms.acp_extension import CursorAdvancedUpdate, VerifiedCursorObservation
 
     public = wire()
@@ -224,7 +224,7 @@ async def configured_pure_channel(arguments):
                         inputs = [row for row in all_inputs
                                   if original_ids.intersection(membership[row.input_id])]
                         dispatched = tuple(row for row in inputs if
-                            row.sent_owner_admission_generation.reservation_violation()
+                            row.sent_owner_claimed_generation.reservation_violation()
                             and not row.reference.recorded)
                     # SQLite is last in the original lock order. Release its
                     # read snapshot before registry/bus/history observations;
@@ -264,11 +264,11 @@ async def configured_pure_channel(arguments):
                         for original in originals:
                             initial = service.bus.log.read_delivery_cohort(root_id,original.seq)
                             with store.session.read():
-                                sealed = _receipt_matches(db,initial)
+                                sealed = _claim_record(db,initial)
                             assert {row.assignment_id for row in sealed.assignments} == {
                                 row.assignment_id for row in claims if row.wire_seq == original.seq}
                         for claim in claims:
-                            rows = PublicationReceipts.select(db, where='execution_id=?',
+                            rows = PublicationEvidence.select(db, where='execution_id=?',
                                 parameters=(claim.lifecycle.execution_id,))
                             assert len(rows) == 1 and rows[0].exact_target == '#openhcs'
                             reply, = service.bus.log.messages_for_references((rows[0].reference,))
@@ -290,7 +290,7 @@ async def configured_pure_channel(arguments):
                                         native = recorded_inputs[cursor.input_id]
                                         assert cursor.owner_identity == native.owner_identity
                                         assert cursor.reference == native.reference
-                                        assert native.sent_owner_admission_generation.matches(cursor.owner_admission_generation)
+                                        assert native.sent_owner_claimed_generation.matches(cursor.owner_claimed_generation)
                                         assert cursor.injected_seq >= originals[-1].seq
                                         assert fact.envelope.scope.owner_pid == service.registry.require(native.owner_thread).pid
                                         published_coverage[native.owner_thread] = fact.envelope
@@ -358,7 +358,7 @@ async def configured_pure_channel(arguments):
             (stage/'native-overlap-timeline.json').write_text(json.dumps(timeline,indent=2)+'\n')
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
                 final_inputs = NativeRuntimeInput.select(store.session._connection)
-            receipt = {'final_native_inputs':FieldCodec.encode(final_inputs),'elapsed_seconds' :time.perf_counter()-begun,'failure':failure,
+            acknowledgement = {'final_native_inputs':FieldCodec.encode(final_inputs),'elapsed_seconds' :time.perf_counter()-begun,'failure':failure,
                 'settings':settings,'installed_interpreter':sys.executable,
                 'original_sequences':[row.seq for row in originals],'proof':proof,
                 'public_inputs':0,'original_seq326_replays':0,'provider':'actual configured provider',
@@ -366,15 +366,15 @@ async def configured_pure_channel(arguments):
                 'configured_sources_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
                     for path,digest in source_hashes.items()),
                 'bus_reads': read_spans, 'retained_bus_bytes': service.bus.log.path.stat().st_size}
-            receipt['compaction_events'] = compaction_events
-            (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
-            print(json.dumps(receipt,indent=2),flush=True)
+            acknowledgement['compaction_events'] = compaction_events
+            (stage/'acknowledgement.json').write_text(json.dumps(acknowledgement,indent=2)+'\n')
+            print(json.dumps(acknowledgement,indent=2),flush=True)
 
 
 async def configured_cancel_continue(arguments, service, attachment, name, sender, stage):
     """Use ordinary originals and the existing joined ACP cancellation boundary."""
     from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
-    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.coordination_tables.publications import PublicationEvidence
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.store_files import _store_lock
@@ -398,8 +398,8 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 execution_ids = {link.execution_id for claim in claims
                     for link in ExecutionAssignmentLink.select(
                         db, where='assignment_id=?', parameters=(claim.assignment_id,))}
-                receipts = tuple(receipt for execution_id in sorted(execution_ids)
-                    for receipt in PublicationReceipts.select(
+                receipts = tuple(acknowledgement for execution_id in sorted(execution_ids)
+                    for acknowledgement in PublicationEvidence.select(
                         db, where='execution_id=?', parameters=(execution_id,)))
                 return claims, inputs, receipts
 
@@ -407,10 +407,10 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
     async with asyncio.timeout(arguments.observation_seconds):
         while True:
             claims, inputs, _ = observe(cancelled)
-            admitted = tuple(row for row in inputs
-                if row.sent_owner_admission_generation.reservation_violation()
+            authorized = tuple(row for row in inputs
+                if row.sent_owner_claimed_generation.reservation_violation()
                 and not row.reference.recorded)
-            if admitted:
+            if authorized:
                 break
             assert not (claims and all(claim.lifecycle.completed for claim in claims)), \
                 'Original completed before cancellation; cancellation was not exercised'
@@ -419,7 +419,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
         while service.registry.require(name).active_turn is not None:
             await asyncio.sleep(.03)
         cancelled_claims, cancelled_inputs, cancelled_receipts = observe(cancelled)
-        assert {row.input_id for row in admitted}.issubset({row.input_id for row in cancelled_inputs})
+        assert {row.input_id for row in authorized}.issubset({row.input_id for row in cancelled_inputs})
         retained = {row.input_id: row for row in cancelled_inputs}
         continuation = publish('NEW_CONTINUATION_ORIGINAL')
         while True:
@@ -439,7 +439,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
         assert final_receipts == cancelled_receipts, 'Cancellation later published an extra original reply'
         return {'cancelled_original': FieldCodec.encode(cancelled.reference),
             'continued_original': FieldCodec.encode(continuation.reference),
-            'cancelled_admission_stages': [row.reference_stage.declared_name for row in admitted],
+            'cancelled_claim_stages': [row.reference_stage.declared_name for row in authorized],
             'cancelled_native_inputs': FieldCodec.encode(cancelled_inputs),
             'cancelled_claims': FieldCodec.encode(cancelled_claims),
             'cancelled_publications': FieldCodec.encode(cancelled_receipts),
@@ -462,7 +462,7 @@ async def configured_mixed_routes(arguments):
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_entries import NativeEntry
     from agent_comms.pi_payloads import ToolResultMessage
-    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.coordination_tables.publications import PublicationEvidence
     from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
     from agent_comms.store_files import _store_lock
 
@@ -528,7 +528,7 @@ async def configured_mixed_routes(arguments):
                         execution_ids = {row.execution_id for row in links if row.assignment_id in original_claims}
                         assert len(execution_ids) == 1
                         first_execution = execution_ids.pop()
-                        receipts = PublicationReceipts.select(db,where='execution_id=?',parameters=(first_execution,))
+                        receipts = PublicationEvidence.select(db,where='execution_id=?',parameters=(first_execution,))
                         assert {row.exact_target for row in receipts} == {'#team','human'}
                         replies = service.bus.log.messages_for_references(tuple(row.reference for row in receipts))
                         channel = next(row for row in replies if row.target == '#team')
@@ -537,7 +537,7 @@ async def configured_mixed_routes(arguments):
                         assert 'PRIVATE_ROUTE_490' not in channel.body
                         assert '15' in direct.body and 'PRIVATE_ROUTE_490' in direct.body
                         late_assignment = next(row for row in assignments if row.wire_seq == late.seq)
-                        late_receipts = PublicationReceipts.select(db,where='execution_id=?',
+                        late_receipts = PublicationEvidence.select(db,where='execution_id=?',
                             parameters=(late_assignment.lifecycle.execution_id,))
                         assert len(late_receipts) == 1 and late_receipts[0].exact_target == 'human'
                         assert '23' in service.bus.log.messages_for_references((late_receipts[0].reference,))[0].body
@@ -574,7 +574,7 @@ async def configured_mixed_routes(arguments):
         (stage/'acp-observer.json').write_text(json.dumps(packets,indent=2)+'\n')
         await attachment.shutdown()
         await asyncio.to_thread(service.owners.stop,name)
-        receipt = {'elapsed_seconds':time.perf_counter()-begun,'failure':failure,
+        acknowledgement = {'elapsed_seconds':time.perf_counter()-begun,'failure':failure,
             'model':configured.model,'thinking':configured.thinking_level.declared_name,
             'installed_interpreter':sys.executable,'original_sequences':[row.seq for row in originals],
             'late_original_seq':late.seq if late else None,'proof':proof,'public_mutations':0,
@@ -582,8 +582,8 @@ async def configured_mixed_routes(arguments):
             'all_owned_workers_retired':not service.registry.require(name).process_alive,
             'configured_source_files_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
                 for path,digest in source_hashes.items())}
-        (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
-        print(json.dumps(receipt,indent=2),flush=True)
+        (stage/'acknowledgement.json').write_text(json.dumps(acknowledgement,indent=2)+'\n')
+        print(json.dumps(acknowledgement,indent=2),flush=True)
 
 
 async def retained_owner():
@@ -632,26 +632,26 @@ async def retained_owner():
         await agent.shutdown()
 
 
-class AdmissionContention(DeclaredFamily, affix='Contention'):
+class ClaimContention(DeclaredFamily, affix='Contention'):
     """Real held resource in the existing continuous native journey."""
 
     @classmethod
     @abstractmethod
-    def custody(cls, service, owners): ...
+    def ownership(cls, service, owners): ...
 
 
-class WireReadContention(AdmissionContention, declared_name='wire'):
+class WireReadContention(ClaimContention, declared_name='wire'):
     @classmethod
     @contextmanager
-    def custody(cls, service, owners):
+    def ownership(cls, service, owners):
         with service.bus.log.certified_read():
             yield True
 
 
-class PromptBindingContention(AdmissionContention, declared_name='binding'):
+class PromptBindingContention(ClaimContention, declared_name='binding'):
     @classmethod
     @contextmanager
-    def custody(cls, service, owners):
+    def ownership(cls, service, owners):
         with Coordination(str(service.root/'coordination.sqlite3')) as store:
             path = binding_store_path(store)
             if not path.exists():
@@ -692,7 +692,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
 
     def publish(self):
         # Batch already owns the wire lock. The canonical publication owner
-        # acquires bus/registry custody; Messaging's outer wire scope would nest.
+        # acquires bus/registry ownership; Messaging's outer wire scope would nest.
         if self.collective:
             sender = self.service.registry.require('human')
             self.originals = [self.service.bus.publisher.publish_ordinary(
@@ -710,8 +710,8 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
     def publish_cancel_and_pending(self):
         from agent_comms.store_files import _store_lock
 
-        # Both original publications precede admission, under the same existing
-        # wire custody. No observer can reserve the first between the two.
+        # Both original publications precede claim_scope, under the same existing
+        # wire ownership. No observer can reserve the first between the two.
         with _store_lock(self.service._wire_lock_path):
             sender = self.service.registry.require('human')
             self.originals = [self.service.bus.publisher.publish_ordinary(
@@ -858,7 +858,7 @@ async def run(arguments):
             if reserved:
                 # The family holds the actual resource, not a replaced runtime
                 # or invented Busy response. Each gate keeps its original IDs.
-                with AdmissionContention.decode(arguments.contention_resource).custody(
+                with ClaimContention.decode(arguments.contention_resource).ownership(
                     service, len(names)
                 ) as ready:
                     if not ready:
@@ -985,14 +985,14 @@ async def run(arguments):
             async with asyncio.timeout(30):
                 while not contention_held.is_set():
                     await asyncio.sleep(.03)
-                # Verify the real dedicated writer is waiting at admission;
+                # Verify the real dedicated writer is waiting at claim_scope;
                 # readiness/lease alone would not prove the affected seam.
                 while True:
                     owner = service.registry.require(names[0])
                     stack = await asyncio.to_thread(subprocess.run,
                         ['sudo','-n','/home/ts/.local/bin/py-spy','dump','--pid',
                          str(owner.pid),'--nonblocking'],capture_output=True,text=True,timeout=5)
-                    if '_enter_admission' in stack.stdout:
+                    if '_enter_claim' in stack.stdout:
                         (stage/'writer-wait-before-cancel.txt').write_text(stack.stdout)
                         break
                     await asyncio.sleep(.05)
@@ -1169,7 +1169,7 @@ async def run(arguments):
         if failure is None:
             assert len(native_inputs) == (4 if arguments.wave_size > 1 else
                                          2 if arguments.cancel_before_grant else len(names)), native_inputs
-        receipt={'elapsed_seconds':time.perf_counter()-started,'owners':len(names),
+        acknowledgement={'elapsed_seconds':time.perf_counter()-started,'owners':len(names),
             'history_rows':arguments.history,'saved_original_hashes':source_hashes,
             'saved_source_bytes':arguments.saved_source.stat().st_size if arguments.saved_source else 0,
             'bus_bytes':(service.root/'bus.jsonl').stat().st_size,
@@ -1185,8 +1185,8 @@ async def run(arguments):
             'all_native_turns_active_before_provider_release':concurrent_native if failure is None else False,
             'acp_fact_counts':{kind:sum(type(fact).__name__ == kind for fact in facts)
                 for kind in sorted({type(fact).__name__ for fact in facts})} if failure is None else {}}
-        (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
-        print(json.dumps(receipt,indent=2),flush=True)
+        (stage/'acknowledgement.json').write_text(json.dumps(acknowledgement,indent=2)+'\n')
+        print(json.dumps(acknowledgement,indent=2),flush=True)
 
 
 if __name__=='__main__':
@@ -1205,13 +1205,13 @@ if __name__=='__main__':
     parser.add_argument('--contention',action='store_true')
     parser.add_argument('--contention-seconds',type=float,default=12)
     parser.add_argument('--contention-resource',default='wire',
-                        choices=[kind.declared_name for kind in AdmissionContention.members_with(AdmissionContention)])
+                        choices=[kind.declared_name for kind in ClaimContention.members_with(ClaimContention)])
     parser.add_argument('--cancel-before-grant',action='store_true')
     parser.add_argument('--wave-size',type=int,default=1)
     parser.add_argument('--configured-owner',help='Read only this original model/level; submit fresh private mixed-route originals')
     parser.add_argument('--configured-pure-channel',action='store_true')
     parser.add_argument('--configured-saved-preparation',action='store_true',
-                        help='One saved configured fork: ordinary ACP admission, cancel, then a distinct new original')
+                        help='One saved configured fork: ordinary ACP claim_scope, cancel, then a distinct new original')
     parser.add_argument('--busy-reader',action='store_true')
     parser.add_argument('--configured-peers',nargs='*',default=[])
     parser.add_argument('--observation-seconds',type=float,default=180,

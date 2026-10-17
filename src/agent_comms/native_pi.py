@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
-from .native_package import OWNER_INSTRUCTIONS
+from .native_package import MANIFEST, OWNER_INSTRUCTIONS, pinned_native_package
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .field_codec import FieldCodec
 from .jsonl_stream import unique_fields
@@ -65,7 +65,7 @@ class NativePiInputNotSent(NativePiUnavailable):
 
     def __init__(self, error, attestation):
         self.attestation = attestation
-        super().__init__(f"Native Pi failed before prompt admission; input not sent: {error}")
+        super().__init__(f"Native Pi failed before prompt claim_scope; input not sent: {error}")
 
     @property
     def diagnostic_evidence(self):
@@ -153,7 +153,7 @@ class NativeContextRecord:
     def from_events(cls, input_id, session_id, input_event, context_event):
         """Strictly join the two emitted records through the context declaration.
 
-        This is an emitted receipt, not proof of durable inclusion. A journal
+        This is an emitted acknowledgement, not proof of durable inclusion. A journal
         read must independently corroborate the same complete located record.
         """
         record = FieldCodec.decode(cls, {
@@ -244,22 +244,22 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
     def open_evidence(cls, session_file: Path) -> Iterator[sqlite3.Connection]:
         """Read an indexed snapshot after SQLite's bounded hot-journal recovery.
 
-        A read is corroboration, never a fresh receipt. Keep the private inode
+        A read is corroboration, never a fresh acknowledgement. Keep the private inode
         pinned across SQLite's transaction and refuse redirection or schema drift.
         Open existing storage read/write for SQLite rollback, then forbid SQL
-        writes. A cold history view can recover without a model turn or receipt.
+        writes. A cold history view can recover without a model turn or acknowledgement.
         """
         path = NativeSessionFiles(Path(session_file)).input_proof
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             try:
-                held = custody.enter_context(closing(
+                held = ownership.enter_context(closing(
                     os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
                 ))
                 before = os.fstat(held.fileno())
                 PrivateFileRole.require(before)
                 if before.st_nlink != 1:
                     raise NativePiUnavailable("Native proof must be private and unaliased")
-                db = custody.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
+                db = ownership.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
                 actual = SQLiteSchemaObject.read(
                     db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
                 )
@@ -436,9 +436,6 @@ class NativePiRpcLaunch:
         name this installation's entrypoint, its pinned CLI, or the source stack
         launcher; execution always uses the verified native package.
         """
-        import hashlib
-
-        from .native_package import MANIFEST
         from .private_nk_entrypoint import PrivateNkLaunch
 
         stack_launcher = MANIFEST.parent / "bin" / "pi-native"
@@ -449,12 +446,7 @@ class NativePiRpcLaunch:
         if route is not None:
             package = route.native_package
         elif executable is not None and executable == stack_launcher.resolve():
-            build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
-            package = (
-                MANIFEST.parent
-                / f".pi-native-{build}"
-                / "node_modules/@earendil-works/pi-coding-agent"
-            )
+            package = pinned_native_package()
         else:
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         allowed = (
@@ -510,7 +502,7 @@ class NativePiRpcLaunch:
         environment: dict[str, str] | None = None,
         session_file: str | None = None,
     ) -> NativePiRpcLaunch:
-        """Prepare managed ACP/headless execution; native receipts remain separate."""
+        """Prepare managed ACP/headless execution; native evidences remain separate."""
         try:
             arguments = NativeArguments.parse(arguments).rpc()
         except ValueError as error:
@@ -1080,7 +1072,7 @@ def _verify_context(
     try:
         emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(session_file)
     except (TypeError, ValueError) as error:
-        raise NativePiUnavailable("Native Pi input/context receipt is malformed") from error
+        raise NativePiUnavailable("Native Pi input/context acknowledgement is malformed") from error
     with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
         if not emitted.corroborates_input(input_id, evidence=evidence):
             raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")

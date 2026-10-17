@@ -1,4 +1,5 @@
 """Actual queued owner handoff retains history and accepts a fresh native input."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -53,7 +54,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
     fixture = native_backend
     comms = Comms(fixture.root)
     comms.owners.pin_private_nk_launch(
-        comms.root, os.environ[ROOT_ID_ENV], Path(os.environ['PI_COMPACTION_TEST_PACKAGE'])
+        comms.root, os.environ[ROOT_ID_ENV], pinned_native_package()
     )
     comms.registry.declare(Thread('worker', frozenset(), str(fixture.project)))
     # This test queues work, but deliberately never admits an actual restart.
@@ -101,7 +102,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
 
         # A changed selection, not just a changed target, is superseded too.
         changed = replace(request, selection=replace(
-            request.selection, admission_generation=request.selection.admission_generation - 1
+            request.selection, claimed_generation=request.selection.claimed_generation - 1
         ))
         with store.locked():
             store.save(changed)
@@ -138,7 +139,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         )
     comms = Comms(fixture.root)
     comms.owners.pin_private_nk_launch(
-        comms.root, os.environ[ROOT_ID_ENV], Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        comms.root, os.environ[ROOT_ID_ENV], pinned_native_package()
     )
     comms.registry.declare(
         Thread(
@@ -169,7 +170,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
     source_runtime = Path(os.environ["QUEUE_SOURCE_RUNTIME"])
     source_package = Path(os.environ["QUEUE_SOURCE_PACKAGE"])
     target_interpreter = sys.executable
-    target_package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    target_package = pinned_native_package()
     source_environment = dict(os.environ)
     source_environment.pop("PYTHONPATH", None)
     source_environment.update(
@@ -272,14 +273,14 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             fixture.provider.handle = provider_handle
         async with asyncio.timeout(20):
             while not isinstance(
-                (receipt := queue.status(comms, "worker")[0]).state, queue.RestartedRestart
+                (acknowledgement := queue.status(comms, "worker")[0]).state, queue.RestartedRestart
             ):
-                assert receipt.state.active, receipt
+                assert acknowledgement.state.active, acknowledgement
                 await asyncio.sleep(0.02)
         replacement = comms.registry.require("worker")
         owners.append(replacement.process_identity)
-        assert receipt.state.previous == original.process_identity
-        assert receipt.state.current == replacement.process_identity
+        assert acknowledgement.state.previous == original.process_identity
+        assert acknowledgement.state.current == replacement.process_identity
         assert not original.process_alive
         await ready()
         assert replacement.session_file == str(fixture.session)

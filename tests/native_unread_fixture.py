@@ -7,7 +7,7 @@ def completed_counts(state, viewer, sources):
         if not result.pending:
             return result
         preparation = state.preparation
-        assert preparation is not None, "Native counts are pending without admitted preparation"
+        assert preparation is not None, "Native counts are pending without authorized preparation"
         preparation.result(timeout=10)
     raise AssertionError("Native preparation did not cover the fixture")
 

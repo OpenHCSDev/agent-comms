@@ -89,7 +89,7 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
     request = ObserveSidebar(str(comms.root), True, False)
 
     def observed():
-        snapshot = comms.views.coordination_snapshot()
+        snapshot = comms.views.viewer_snapshot(str(comms.root))
         return SidebarObserved(comms.views.revision(), request, snapshot, SidebarModel.derive(snapshot))
 
     def members(result):

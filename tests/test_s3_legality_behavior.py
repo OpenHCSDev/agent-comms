@@ -14,7 +14,7 @@ from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFa
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    PublicationReceipts,
+    PublicationEvidence,
     canonical_publication_key,
 )
 from agent_comms.execution_states import (
@@ -137,21 +137,21 @@ def test_replay_bits_revision_and_ambiguity(pending):
 def test_response_receipt_and_publication_constraints(owner, pending):
     publication = published_snapshot(pending)
     intent = publication.publication_intents[0]
-    receipt = publication.publication_receipts[0]
+    acknowledgement = publication.publication_evidence[0]
     if owner.published:
-        state = owner.load(receipt.message_id, receipt.seq)
+        state = owner.load(acknowledgement.message_id, acknowledgement.seq)
         for message_id, seq in (
             (None, 1),
-            ("receipt", None),
+            ("acknowledgement", None),
             (None, None),
             ("", 1),
-            ("receipt", 0),
+            ("acknowledgement", 0),
         ):
             with pytest.raises((ValueError, IntegrityViolationError)):
                 owner.load(message_id, seq)
     else:
         state = owner.load(None, None)
-        for message_id, seq in (("receipt", None), (None, 1), ("receipt", 1)):
+        for message_id, seq in (("acknowledgement", None), (None, 1), ("acknowledgement", 1)):
             with pytest.raises(IntegrityViolationError, match="only published"):
                 owner.load(message_id, seq)
     # Exhaust the declaration-owned publication contract without copying its roster.
@@ -163,12 +163,12 @@ def test_response_receipt_and_publication_constraints(owner, pending):
         )
         if permitted:
             state.validate_publication(
-                intent if has_intent else None, receipt if has_receipt else None
+                intent if has_intent else None, acknowledgement if has_receipt else None
             )
         else:
             with pytest.raises(IntegrityViolationError):
                 state.validate_publication(
-                    intent if has_intent else None, receipt if has_receipt else None
+                    intent if has_intent else None, acknowledgement if has_receipt else None
                 )
     row = pending.obligations[0]
     rejected(row, "revision must be positive", revision=0)
@@ -331,7 +331,7 @@ def published_snapshot(pending):
         canonical_publication_key("exec", "owner"),
         message.message_id,
     )
-    receipt = PublicationReceipts(
+    acknowledgement = PublicationEvidence(
         execution_id="exec", exact_target="owner", seq=1,
         message_id=message.message_id, received_at_ms=0,
     )
@@ -339,7 +339,7 @@ def published_snapshot(pending):
         pending,
         obligations=(replace(pending.obligations[0], lifecycle=PublishedResponse(message.message_id, 1)),),
         publication_intents=(intent,),
-        publication_receipts=(receipt,),
+        publication_evidence=(acknowledgement,),
     )
 
 
@@ -350,8 +350,8 @@ def test_snapshot_publication_parent_receipt_and_frozen_envelope(pending):
     rejected(
         value, "publication intent is invalid for obligation state", obligations=pending.obligations
     )
-    rejected(value, "receipt exists iff published", publication_receipts=())
-    # Claimless targets reject a parentless publication before receipt validation.
+    rejected(value, "acknowledgement exists iff published", publication_evidence=())
+    # Claimless targets reject a parentless publication before acknowledgement validation.
     rejected(
         value,
         "publication routes differ from original obligations",
@@ -362,12 +362,12 @@ def test_snapshot_publication_parent_receipt_and_frozen_envelope(pending):
     )
     rejected(
         value,
-        "obligation receipt does not match",
+        "obligation acknowledgement does not match",
         obligations=(replace(value.obligations[0], lifecycle=PublishedResponse("other", 1)),),
     )
     intent = value.publication_intents[0]
     rejected(intent, "publication key is not canonical", publication_key="other")
-    # Message now owns the frozen envelope; receipts only bind its exact identity.
+    # Message now owns the frozen envelope; evidences only bind its exact identity.
     # Preserve each old envelope-mismatch case at that owner, not deleted copies.
     for changes in (
         {"sender": "other-worker"}, {"target": "other-owner"}, {"type": QuestionKind},
@@ -377,7 +377,7 @@ def test_snapshot_publication_parent_receipt_and_frozen_envelope(pending):
     assert intent.matches_publication(intent.message)
     rejected(
         value,
-        "receipt exists iff published",
+        "acknowledgement exists iff published",
         obligations=(replace(value.obligations[0], lifecycle=PublishingResponse()),),
     )
     failed_execution = replace(value.execution, lifecycle=FailedExecution.load(None))
@@ -390,9 +390,9 @@ def test_snapshot_publication_parent_receipt_and_frozen_envelope(pending):
     )
     rejected(
         value,
-        "failed execution cannot erase a publication receipt",
+        "failed execution cannot erase a publication acknowledgement",
         execution=failed_execution,
         assignments=failed_claims,
     )
-    # Wire origin's mandatory parent rejects this before the later receipt guard.
+    # Wire origin's mandatory parent rejects this before the later acknowledgement guard.
     rejected(value, "wire snapshots require original obligations", obligations=())

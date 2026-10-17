@@ -1,4 +1,4 @@
-"""Declared cohort receipts and optional acceptance-generation provenance."""
+"""Declared cohort evidences and optional acceptance-generation provenance."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ _LOG = logging.getLogger(__name__)
 
 
 class CohortTable:
-    """Mandatory sealed N/K receipt declarations."""
+    """Mandatory sealed N/K acknowledgement declarations."""
 
 
 class AwarenessTable:
@@ -66,7 +66,7 @@ class CohortSchemaMeta(CohortTable, TypedTable, PrivateRuntimeSchema):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimBatchReceipts(CohortTable, TypedTable):
+class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_batch_receipts"):
     wire_root_id: str = field(
         metadata={
             "sql": Column(
@@ -105,11 +105,11 @@ class ClaimBatchReceipts(CohortTable, TypedTable):
     without_rowid = True
 
     def require_selected_claim(self, assignment: WakeAssignment) -> None:
-        """An awareness contribution borrows this original sealed receipt."""
+        """An awareness contribution borrows this original sealed acknowledgement."""
         from .wake_candidate_index import ProjectionUnavailableError
 
         if not self.sealed or self.message_id != assignment.message_id:
-            raise ProjectionUnavailableError("selected source receipt is unsealed or changed")
+            raise ProjectionUnavailableError("selected source acknowledgement is unsealed or changed")
 
     @classmethod
     def trigger_bodies(cls):
@@ -138,7 +138,7 @@ class ClaimBatchReceipts(CohortTable, TypedTable):
                 "          OR NEW.resolver_version != OLD.resolver_version\n"
                 "          OR NEW.policy_version != OLD.policy_version\n"
                 "          OR NEW.accepted_at_ms != OLD.accepted_at_ms\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort receipt facts are immu"
+                "        BEGIN SELECT RAISE(ABORT, 'cohort acknowledgement facts are immu"
                 "table'); END"
             ),
             "cohort_receipt_seal_complete": (
@@ -165,7 +165,7 @@ class ClaimBatchReceipts(CohortTable, TypedTable):
                 "                   WHERE m.wire_root_id = OLD.wire_root_id AND m"
                 ".wire_seq = OLD.wire_seq)\n"
                 "                  != OLD.claim_count;\n"
-                "            SELECT RAISE(ABORT, 'noncontiguous cohort receipt or"
+                "            SELECT RAISE(ABORT, 'noncontiguous cohort acknowledgement or"
                 "dinal')\n"
                 "            WHERE EXISTS (\n"
                 "                SELECT 1 FROM cohort_delivery_receipts d\n"
@@ -213,7 +213,7 @@ class ClaimBatchReceipts(CohortTable, TypedTable):
             "cohort_receipt_delete_guard": (
                 "\n"
                 "        BEFORE DELETE ON claim_batch_receipts\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort receipt cannot be dele"
+                "        BEGIN SELECT RAISE(ABORT, 'cohort acknowledgement cannot be dele"
                 "ted'); END"
             ),
         }
@@ -239,7 +239,7 @@ class ClaimBatchMembers(CohortTable, TypedTable):
             ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq"), ClaimBatchReceipts, ("wire_root_id", "wire_seq")
+                ("wire_root_id", "wire_seq"), ClaimBatchAcknowledgements, ("wire_root_id", "wire_seq")
             ),
         )
 
@@ -324,7 +324,7 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
         recipient_lookup: str,
         after_seq: int,
     ) -> frozenset[int]:
-        """Sealed addressed receipts after one recipient's visited position."""
+        """Sealed addressed evidences after one recipient's visited position."""
         rows = cls.read(
             db.execute(
                 "SELECT d.* FROM cohort_delivery_receipts d "
@@ -343,7 +343,7 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq"), ClaimBatchReceipts, ("wire_root_id", "wire_seq")
+                ("wire_root_id", "wire_seq"), ClaimBatchAcknowledgements, ("wire_root_id", "wire_seq")
             ),
         )
 
@@ -388,13 +388,13 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
             "cohort_delivery_update_guard": (
                 " BEFORE UPDATE ON coh"
                 "ort_delivery_receipts\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery receipt is im"
+                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery acknowledgement is im"
                 "mutable'); END"
             ),
             "cohort_delivery_delete_guard": (
                 " BEFORE DELETE ON coh"
                 "ort_delivery_receipts\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery receipt canno"
+                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery acknowledgement canno"
                 "t be deleted'); END"
             ),
         }
@@ -453,12 +453,12 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
             generation=self.owner_generation,
         )
 
-    def require_selection(self, assignment: WakeAssignment, receipt: ClaimBatchReceipts) -> None:
+    def require_selection(self, assignment: WakeAssignment, acknowledgement: ClaimBatchAcknowledgements) -> None:
         """Verify this immutable acceptance capture against its original claim."""
         from .wake_candidate_index import ProjectionUnavailableError
 
         expected = type(self)(
-            claim_id=assignment.assignment_id, wire_root_id=receipt.wire_root_id,
+            claim_id=assignment.assignment_id, wire_root_id=acknowledgement.wire_root_id,
             wire_seq=assignment.wire_seq, recipient_lookup=assignment.recipient_lookup,
             canonical_thread=assignment.recipient, owner_generation=self.owner_generation,
         )
@@ -601,7 +601,7 @@ def _install_optional_awareness_schema(db: sqlite3.Connection) -> None:
 
 
 def install_private_cohort_schema(store: Coordination) -> None:
-    """Create current receipt tables on a fresh coordinator; no old-schema repair."""
+    """Create current acknowledgement tables on a fresh coordinator; no old-schema repair."""
     if type(store) is not Coordination:
         raise TypeError("cohort installation requires an initialized Coordination")
     with store.session.transaction() as db:

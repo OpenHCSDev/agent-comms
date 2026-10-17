@@ -49,7 +49,7 @@ def test_new_declared_delivery_field_inherits_snapshot_without_consumer_edit():
 
 @pytest.mark.parametrize("notice", [False, True], ids=["type-only", "notice-only"])
 def test_valid_durable_receipt_cannot_substitute_different_publication_content(tmp_path, notice):
-    """A fully self-consistent receipt still must match its frozen SQL intent.
+    """A fully self-consistent acknowledgement still must match its frozen SQL intent.
 
     Type and notice are deliberately outside the old hash-derived message ID.
     No forged certificate or partial envelope is used to reach the owned check.
@@ -78,7 +78,7 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
             case.bus.log.path.write_bytes(b"".join(rows[:-1]) + json.dumps(record).encode() + b"\n")
             marker = case.bus.log._private_marker_unlocked()
             verified = list(case.bus.log.verified_records_unlocked(marker))
-            assert verified[-1].message == changed  # Full strict durable receipt validation succeeds.
+            assert verified[-1].message == changed  # Full strict durable acknowledgement validation succeeds.
             with pytest.raises(
                 RelationViolationError, match="checkpoint prefix tail changed"
             ):

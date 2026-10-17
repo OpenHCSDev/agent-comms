@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 
 
 class OwnedTurn:
-    """One admitted owner turn; stable source facts and native callbacks live here."""
+    """One authorized owner turn; stable source facts and native callbacks live here."""
 
     @property
     def thread(self):
@@ -104,7 +104,7 @@ class OwnedTurn:
         self.accepted_input_id = accepted_input_id
         self.dependency_wait_id = dependency_wait_id
 
-    def admit(self, permits: ExitStack):
+    def authorize(self):
         self.original_display = (
             None if self.autonomous_goal else (self.initial_display_text or self.task)
         )
@@ -124,22 +124,9 @@ class OwnedTurn:
         ):
             raise RequestError.invalid_params({"reason": "input_authority_changed"})
         self.goal_permit: LaunchPermit | None = None
-        if self.autonomous_goal and active_goal is None:
-            return
-        if active_goal is not None and not self.original_owner_input:
-            self.goal_permit = TurnGoalAccount.reserve(
-                owner=self.thread,
-                comms=self.runner.comms,
-                autonomous=self.autonomous_goal,
-            )
-            if self.goal_permit is None:
-                return
-            permits.callback(
-                self.goal_permit.retire_unverified, self.runner.comms.goals.open_goal_store()
-            )
         return True
 
-    def begin(self, resources: AsyncExitStack):
+    def begin(self, resources: AsyncExitStack, permits: ExitStack) -> bool:
         self.turn_id = uuid4().hex
         self.routing = TurnRouting(
             tuple(origin.reference for origin in self.origins),
@@ -152,6 +139,20 @@ class OwnedTurn:
             self.lease_custody, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
+        active_goal = self.thread.active_goal
+        if self.autonomous_goal and active_goal is None:
+            return False
+        if active_goal is not None and not self.original_owner_input:
+            self.goal_permit = TurnGoalAccount.reserve(
+                owner=self.thread,
+                comms=self.runner.comms,
+                autonomous=self.autonomous_goal,
+            )
+            if self.goal_permit is None:
+                return False
+            permits.callback(
+                self.goal_permit.retire_unverified, self.runner.comms.goals.open_goal_store()
+            )
         self.input_custody = AsyncExitStack()
         resources.push_async_callback(self.input_custody.aclose)
         self.input_custody.push_async_callback(Coordination.run_worker, self.settle_unbound)
@@ -165,7 +166,7 @@ class OwnedTurn:
                         key=self.runner.inputs.dispositions.bus_key(origin, self.thread),
                         sequence=origin.seq,
                         owner=self.thread_name,
-                        admission=snapshot.admission_generations[self.thread_name],
+                        claim_scope=snapshot.claimed_generations[self.thread_name],
                         target=origin.target,
                         source_text=ScheduledTurn.incoming(
                             origin, aliases=snapshot.aliases
@@ -189,6 +190,7 @@ class OwnedTurn:
         )
         self.prepare_prompt(batch)
         self.reserve_input(batch)
+        return True
 
     def prepare_prompt(self, batch: InputBatch):
         self.worktree = (
@@ -260,8 +262,8 @@ class OwnedTurn:
                 self.runner.inputs.dispositions,
                 self.thread,
                 TurnId(self.turn_id),
-                self.turn_lease.admission_generation,
-                custody=reservation,
+                self.turn_lease.claimed_generation,
+                ownership=reservation,
             )
             self.original_keys = self.original.keys
             # The store enlists rollback before publication. The original keys
@@ -346,7 +348,7 @@ class OwnedTurn:
             session_id=self.session_id,
             thread=self.thread,
             turn=TurnId(self.turn_id),
-            admission=self.turn_lease.admission_generation,
+            claim_scope=self.turn_lease.claimed_generation,
             goal_permit=self.goal_permit,
             original=replace(self.original, prompt=rendered.text),
         )
@@ -377,10 +379,11 @@ class OwnedTurn:
         assert self.owner_task is not None
         permits = ExitStack()
         permit_custody.push_async_callback(Coordination.run_worker, permits.close)
-        if not await Coordination.run_worker(partial(self.admit, permits)):
+        if not await Coordination.run_worker(self.authorize):
             return False
         self.runner.sessions.bindings[self.session_id] = self.thread_name
-        await Coordination.run_worker(partial(self.begin, resources))
+        if not await Coordination.run_worker(partial(self.begin, resources, permits)):
+            return False
         self.open_stream(resources, permits)
         # Early failures close claims before inbox/lease retirement. Once all
         # stream capabilities exist, goal settlement belongs above those resources.

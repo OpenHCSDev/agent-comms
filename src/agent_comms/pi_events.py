@@ -529,9 +529,9 @@ class SetStatusUiRequest(ExtensionUiRequest):
 
     async def apply(self, session):
         if self.status_key == "pi-mcp/live-v1":
-            receipt = session.extension_ui.observe(self.status_text, session)
-            if receipt is not None:
-                yield events.McpLiveStatus(receipt=receipt)
+            acknowledgement = session.extension_ui.observe(self.status_text, session)
+            if acknowledgement is not None:
+                yield events.McpLiveStatus(acknowledgement=acknowledgement)
         session.skip = True
 
 

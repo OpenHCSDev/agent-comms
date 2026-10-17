@@ -40,13 +40,13 @@ def main():
         return result.returncode, payload
 
     journey = controls.original_input_consumer_journey(stage / "saved-state", command)
-    receipt = {"state": "INSTALLED_ORIGINAL_INPUT_CONSUMER_JOURNEY_PASS",
+    acknowledgement = {"state": "INSTALLED_ORIGINAL_INPUT_CONSUMER_JOURNEY_PASS",
                "installed_package": str(installed), "installed_cli": cli,
                "module_sha256": hashes, "calls": calls, "journey": journey,
                "source_overlay": False, "conftest_scheduler_mock": False,
                "native_builds": 0, "full_native_ACP_UI_acceptance": False}
-    (stage / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-    print(json.dumps(receipt), flush=True)
+    (stage / "acknowledgement.json").write_text(json.dumps(acknowledgement, indent=2) + "\n")
+    print(json.dumps(acknowledgement), flush=True)
 
 
 if __name__ == "__main__":

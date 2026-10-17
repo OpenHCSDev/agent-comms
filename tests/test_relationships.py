@@ -43,10 +43,10 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
     comms = setup_wire(tmp_path)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     before = comms.registry.snapshot()
-    receipt = invoke_tool(
+    acknowledgement = invoke_tool(
         comms, "comms_collaboration", {"action": "add", "peer": "peer", "note": "Review"}, caller=ThreadCaller("owner")
     )
-    assert receipt["collaboration"]["owner"] == "owner"
+    assert acknowledgement["collaboration"]["owner"] == "owner"
     mirror = comms.relationships.collaborations("peer")[0]
     assert (mirror.owner, mirror.peer, mirror.note) == ("peer", "owner", "Review")
     assert collaboration_rows(comms, "owner")[0].target == "peer"

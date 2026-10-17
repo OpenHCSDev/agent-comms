@@ -30,7 +30,7 @@ def _mark(comms, peer, root, page):
     )
 
 
-def test_dm_preparation_releases_native_admission_lock(tmp_path, monkeypatch):
+def test_dm_preparation_releases_native_claim_lock(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -40,7 +40,7 @@ def test_dm_preparation_releases_native_admission_lock(tmp_path, monkeypatch):
     prepared = []
 
     def inspect(request, log):
-        # An independent descriptor must acquire the real admission lock while
+        # An independent descriptor must acquire the real claim_scope lock while
         # the original reader still prepares the page; no replacement reader.
         with _store_lock(tmp_path / "wire", blocking=False):
             prepared.append(True)

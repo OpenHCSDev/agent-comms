@@ -1,4 +1,5 @@
 """A published native reply automatically reaches the original channel sender."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import hashlib
@@ -44,10 +45,7 @@ tmp_path = private_root_fixture
 async def test_native_channel_reply_automatically_reaches_original_sender(
     tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast
 ):
-    pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
-    if not pin:
-        pytest.skip("Actual immutable native bundle required")
-    package = Path(pin).resolve(strict=True)
+    package = pinned_native_package()
     requests = []
     failures = []
     request_times = []
@@ -113,7 +111,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 if broadcast and len(requests) <= 2:
                     # Both actual owners must reach the endpoint while the
                     # first request is still open. No model turn may retain
-                    # global bus/admission custody through its response.
+                    # global bus/claim_scope ownership through its response.
                     if len(requests) == 2:
                         parallel_triage.set()
                     assert parallel_triage.wait(5), "Independent owner blocked behind another native request"
@@ -337,7 +335,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 selection = acquisitions[0]["operations"]["native_launch_selection"]
                 assert selection["count"] == 1 and selection["total_ns"] > 0
             print("Native original timing samples", len(native), "inputs", len(request_inputs),
-                  "maximum parent receipt lag seconds",
+                  "maximum parent acknowledgement lag seconds",
                   max((row["recorded_monotonic_ns"] - int(row["native"]["monotonicNs"])) / 1e9
                   for row in native), flush=True)
             return
@@ -430,7 +428,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 rejected_input = rejected[0].input_id
             assert "invalid triage decision" in list(comms.views.channel_history_page("#team").messages)[-1].body
             fresh = comms.messaging.send_message("answerer", "#team", "CONTINUITY_FRESH_SOURCE")
-            await until(lambda: len(requests) == 3, "Fresh channel source admitted without retrying rejected input")
+            await until(lambda: len(requests) == 3, "Fresh channel source authorized without retrying rejected input")
             await until(
                 lambda: any(isinstance(fact, CursorAdvancedUpdate)
                             and isinstance(fact.envelope.observation, VerifiedCursorObservation)
@@ -466,7 +464,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 old, current = before.threads[name], after.threads[name]
                 assert current.incarnation == old.incarnation
                 assert current.process_identity != old.process_identity
-                assert after.admission_generations[name] > before.admission_generations[name]
+                assert after.claimed_generations[name] > before.claimed_generations[name]
                 assert current.session_file == old.session_file
                 assert Path(current.session_file).read_bytes() == saved[name]
             assert len(requests) == seed_count + 2, "Restart replayed saved input"
@@ -500,7 +498,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             evidence = Path(retained_evidence)
             evidence.mkdir(mode=0o700, parents=True, exist_ok=True)
             shutil.copytree(tmp_path, evidence / "private-originals")
-            (evidence / "receipt.json").write_text(json.dumps({
+            (evidence / "acknowledgement.json").write_text(json.dumps({
                 "original_root": str(tmp_path),
                 "wire_root_id": root_id,
                 "native_package": str(package),
@@ -523,9 +521,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.native_pi import NativePiUnavailable
 
-    pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
-    if not pin:
-        pytest.skip("Actual immutable native bundle required")
+    pin = pinned_native_package()
     comms = Comms(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     before = comms.registry.snapshot()

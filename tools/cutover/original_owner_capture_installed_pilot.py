@@ -182,12 +182,12 @@ async def runtime_replacement():
         await attach(target / 'bin/python', 'after')
         assert {path:digest(Path(path)) for path in sessions} == sessions
         assert (links / 'toad').readlink() == source / 'bin/toad'
-        receipt = {'passed':True, 'source':str(source), 'target':str(target),
+        acknowledgement = {'passed':True, 'source':str(source), 'target':str(target),
             'results':FieldCodec.encode(results), 'saved_history_bytes_preserved':True,
             'settings_preserved':True, 'actual_source_and_target_ACP_history':True,
             'frontend_unchanged':True, 'provider_inputs':0, 'public_mutations':0}
-        (output / 'receipt.json').write_text(json.dumps(receipt, indent=2)+'\n')
-        print(json.dumps(receipt), flush=True)
+        (output / 'acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2)+'\n')
+        print(json.dumps(acknowledgement), flush=True)
     finally:
         if service is not None:
             for owner in service.registry.snapshot().threads.values():

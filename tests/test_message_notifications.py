@@ -9,11 +9,11 @@ def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F81
     per_message = comms.views.message_notifications_for_references((message.reference,))
     receipts = comms.views.thread_presentation('beta').notifications
     assert len(receipts) == 1
-    receipt = receipts[0]
-    assert receipt.message == message
-    assert receipt.message.target == '#team'
-    assert replace(receipt, message=None) in per_message[(message.seq, message.message_id)]
-    assert receipt.label == 'Sent'
+    acknowledgement = receipts[0]
+    assert acknowledgement.message == message
+    assert acknowledgement.message.target == '#team'
+    assert replace(acknowledgement, message=None) in per_message[(message.seq, message.message_id)]
+    assert acknowledgement.label == 'Sent'
     assert comms.registry.require('beta').active_turn is None
 
 

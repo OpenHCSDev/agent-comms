@@ -1,7 +1,6 @@
 """Saved native history -> model-set goal -> blocked -> visible UI Retry.
 
-Run with the candidate wheel installed, the shipped Toad dependencies, and
-PI_COMPACTION_TEST_PACKAGE naming the unchanged immutable native package.
+Run with the candidate wheel installed and the shipped Toad dependencies.
 Only the existing loopback provider's responses are controlled.
 """
 from __future__ import annotations

@@ -106,8 +106,8 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
                 (
                     "terminal",
                     result.disposition.declared_name if result else None,
-                    tuple(receipt.exact_target for receipt in result.publications) if result else None,
-                    tuple(receipt.message_id for receipt in result.publications) if result else None,
+                    tuple(acknowledgement.exact_target for acknowledgement in result.publications) if result else None,
+                    tuple(acknowledgement.message_id for acknowledgement in result.publications) if result else None,
                     len(calls),
                 )
             )

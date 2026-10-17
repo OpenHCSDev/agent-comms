@@ -20,7 +20,7 @@ from runtime_installation import RuntimeInstallation
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--review-plan', type=Path, required=True)
-    parser.add_argument('--receipt', type=Path, required=True)
+    parser.add_argument('--acknowledgement', type=Path, required=True)
     parser.add_argument('--runtime-installation', type=Path, required=True,
                         help='Reviewed RuntimeInstallation member JSON')
     parser.add_argument('--execute', action='store_true')
@@ -31,7 +31,7 @@ def main():
                                json.loads(args.review_plan.read_text()))
     runtime = FieldCodec.decode(RuntimeInstallation,
                                 json.loads(args.runtime_installation.read_text()))
-    results = publish(cohort, PreserveOwnerRuntime(), runtime, args.receipt)
+    results = publish(cohort, PreserveOwnerRuntime(), runtime, args.acknowledgement)
     print(json.dumps({'state':'retained-foundation-published-and-launched',
                       'owners':len(results)}), flush=True)
 

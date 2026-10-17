@@ -1,6 +1,7 @@
 """Real isolated owners: birth-bound launch, retirement and refusal to interrupt."""
 
 from __future__ import annotations
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import os
@@ -27,7 +28,7 @@ from agent_comms.turn_lease import ActiveTurn
 
 def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> None:
     comms = Comms(tmp_path)
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
     declared = Thread("worker", frozenset(), str(tmp_path), task="retained task")
@@ -213,7 +214,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     model = "openai-codex/gpt-6.1-sol"
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", model)
     comms = Comms(tmp_path)
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
 
@@ -253,7 +254,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             )
             bus = lifecycle.bus.log
             # This fixture's original writer already understands its original
-            # certificate. Live old-schema custody remains a separate cutover.
+            # certificate. Live old-schema ownership remains a separate cutover.
             with bus.locked():
                 marker = bus.read_metadata_unlocked()
                 before = replace(marker, checkpoint_version=None, checkpoint_seal=None)
@@ -329,8 +330,8 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         )
         assert len(receipts) == 2
         assert all(not owner.process_alive for owner in originals)
-        for index, (receipt, (_, arguments, credential)) in enumerate(zip(receipts, settings, strict=True)):
-            current = comms.registry.require(receipt.thread)
+        for index, (acknowledgement, (_, arguments, credential)) in enumerate(zip(receipts, settings, strict=True)):
+            current = comms.registry.require(acknowledgement.thread)
             ready(current)
             launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
             assert launch.binary == str(target_binary.resolve())
@@ -402,14 +403,14 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         assert failure.__cause__ is original_error
         assert failure.operation is operation
         assert all(not owner.process_alive for owner in latest)
-        assert not wire_available(), 'Failed operation lost original wire custody'
+        assert not wire_available(), 'Failed operation lost original wire ownership'
         try:
             restored = failure.recover()
         finally:
             failure.abandon()
         assert wire_available()
-        for index, receipt in enumerate(restored):
-            current = comms.registry.require(receipt.thread)
+        for index, acknowledgement in enumerate(restored):
+            current = comms.registry.require(acknowledgement.thread)
             ready(current)
             launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
             assert launch.binary == str(target_binary.resolve())
@@ -475,7 +476,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
                 cutover.require_selection(snapshot, owners)
 
             def after_stopped(self, lifecycle):
-                assert not self.receipt.with_suffix('.originals').exists()
+                assert not self.acknowledgement.with_suffix('.originals').exists()
                 raise original_error
 
         class ChangedFailedPublication(EarlyFailedPublication):
@@ -493,18 +494,18 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             before = comms.registry.snapshot()
             captured = tuple(before.require_active(name) for name in selected)
             audience = tuple(OwnerRestartSelection.capture(before, name) for name in selected)
-            receipt = tmp_path / 'early-publication.json'
-            receipt.write_text('{"phase":"preflight-complete"}\n')
+            acknowledgement = tmp_path / 'early-publication.json'
+            acknowledgement.write_text('{"phase":"preflight-complete"}\n')
             operation = EarlyFailedPublication(
                 cohort, audience, captured, PreserveOwnerRuntime(),
-                PreserveRuntimeInstallation({}), route_descriptor, receipt,
+                PreserveRuntimeInstallation({}), route_descriptor, acknowledgement,
             )
             with pytest.raises(StoppedOwnerFailure) as early:
                 comms.owners.restart_owners(selected, cutover=operation)
             assert early.value.__cause__ is original_error
-            assert not receipt.with_suffix('.originals').exists()
-            assert json.loads(receipt.read_text())['phase'] == 'failed-install-original-runtime-restored'
-            assert wire_available(), 'Owned recovery did not retire its wire custody'
+            assert not acknowledgement.with_suffix('.originals').exists()
+            assert json.loads(acknowledgement.read_text())['phase'] == 'failed-install-original-runtime-restored'
+            assert wire_available(), 'Owned recovery did not retire its wire ownership'
             for prior in captured:
                 restored = comms.registry.require(prior.name)
                 ready(restored)
@@ -625,7 +626,7 @@ def test_backend_publication_preserves_independent_frontend(tmp_path, monkeypatc
     decoded.require_publication_originals()
     link_directory = os.open(links, os.O_RDONLY | os.O_DIRECTORY)
     try:
-        # Exercise original link effects, not native route admission or owners.
+        # Exercise original link effects, not native route claim_scope or owners.
         decoded.publish_links(link_directory)
         decoded.require_preserved_defaults()
     finally:

@@ -69,7 +69,7 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
             "#test", "Question in channel", worktree=str(tmp_path)
         )
         # Routing persists by entry identity on the current owned turn. Native
-        # channel notification/admission is covered by the canonical drain tests.
+        # channel notification/claim_scope is covered by the canonical drain tests.
         await asyncio.wait_for(agent.turns.run_agent_turn(
             "worker", "worker", message.body, origins=(message,),
         ), 2)
@@ -126,7 +126,7 @@ async def test_native_user_dm_reply_ignores_earlier_channel_route(
     comms.channels.update_tags("worker", add=frozenset({"test"}))
     human = comms.messaging.user_identity(str(project))
     origin = HumanInputOrigin.capture(
-        comms, comms.registry.snapshot().admission_identity("worker")
+        comms, comms.registry.snapshot().claimed_identity("worker")
     )
     earlier = comms.messaging.send_user_message(
         "#test", "Earlier channel context", worktree=str(project)

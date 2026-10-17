@@ -1,4 +1,4 @@
-"""Current source coverage must stay with its proof and admission owners."""
+"""Current source coverage must stay with its proof and claim_scope owners."""
 
 import ast
 from pathlib import Path

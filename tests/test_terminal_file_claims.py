@@ -1,10 +1,10 @@
 """Exact terminal claim release on real private stores and worker processes."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
 import os
 from dataclasses import replace
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -102,7 +102,6 @@ def test_terminal_release_spans_the_existing_envelope_bound():
         assert sum(m.body.count("file-") for m in notices) == 35
 
 
-@pytest.mark.skipif(not os.environ.get("PI_COMPACTION_TEST_PACKAGE"), reason="requires native bundle")
 @pytest.mark.asyncio
 async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_path):
     from agent_comms.comms import Comms
@@ -120,7 +119,7 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
         comms.owners.pin_private_nk_launch(
             native.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-            Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+            pinned_native_package(),
         )
         original_chunks = native.provider.response_chunks
         gate = asyncio.Event()
@@ -138,7 +137,7 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
             async with asyncio.timeout(40):
                 while target.read_text() != "value = 2\n" or native.provider.posts < 2:
                     await asyncio.sleep(0.02)
-            assert comms.bus.log.claim_projection()[str(target)].admission is not None
+            assert comms.bus.log.claim_projection()[str(target)].claim_scope is not None
             await asyncio.to_thread(comms.owners.stop, "worker")
             assert not comms.registry.require("worker").process_alive
             assert dict(comms.bus.log.claim_projection()) == {}

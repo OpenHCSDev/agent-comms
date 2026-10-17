@@ -105,15 +105,15 @@ def test_response_catches_up_and_supplies_recipient_awareness(tmp_path, notifica
                                 exact_target=case.reply_target, owner_witness=case.witness)
         result = publish_fenced_response(case.store, case.bus, case.fence,
                                         exact_target=case.reply_target, owner_witness=case.witness)
-        _, receipt = result.value.require_published_evidence(case.reply_target)
+        _, acknowledgement = result.value.require_published_evidence(case.reply_target)
         assert calls == [case.bus.log.path.stat().st_size]
         assert finished.wait(5)
-        initial = case.bus.log.read_delivery_cohort(case.root_id, receipt.seq)
-        (assignment,) = accept_delivery_cohort(case.bus, case.root_id, receipt.seq, case.store).value.assignments
+        initial = case.bus.log.read_delivery_cohort(case.root_id, acknowledgement.seq)
+        (assignment,) = accept_delivery_cohort(case.bus, case.root_id, acknowledgement.seq, case.store).value.assignments
         sender = _owner(case.comms, "sender")
-        awareness = _projection(index, case.store, sender, 0, receipt.seq)(initial, assignment, sender)
+        awareness = _projection(index, case.store, sender, 0, acknowledgement.seq)(initial, assignment, sender)
         assert awareness.complete
-        assert awareness.selected[0].assignment.wire_seq == receipt.seq
+        assert awareness.selected[0].assignment.wire_seq == acknowledgement.seq
         segments = awareness.segments(16384)
         assert segments and not any(isinstance(segment, OmittedAwareness) for segment in segments)
         assert len(list(case.bus.full_history_page().messages)) == 2

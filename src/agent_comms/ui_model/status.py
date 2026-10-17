@@ -56,18 +56,18 @@ class ThreadStatusModel:
             return cls.retired(name)
         lines = [presentation.summary, *presentation.status.details]
         excerpts = []
-        for receipt in presentation.notifications:
-            message = receipt.message
+        for acknowledgement in presentation.notifications:
+            message = acknowledgement.message
             if message is None:
                 continue
             excerpt = " ".join(message.body.split())
             if len(excerpt) > NOTIFICATION_EXCERPT:
                 excerpt = excerpt[:NOTIFICATION_EXCERPT - 3] + "…"
-            excerpts.append(f"{message.target} · {message.sender}: {excerpt} — {receipt.state}")
+            excerpts.append(f"{message.target} · {message.sender}: {excerpt} — {acknowledgement.state}")
         if excerpts:
             lines += ["Recent incoming messages:", *excerpts]
         summary = [presentation.summary.partition("\n")[0] or "Ready"]
-        latest = next((receipt for receipt in presentation.notifications if receipt.message is not None), None)
+        latest = next((acknowledgement for acknowledgement in presentation.notifications if acknowledgement.message is not None), None)
         if latest is not None:
             summary.append(f"Latest inbound {latest.message.target} from @{latest.message.sender}: {latest.state}")
         if len(presentation.notifications) > 1:

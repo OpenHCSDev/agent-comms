@@ -75,15 +75,17 @@ class TestMessaging:
         bodies = [m.body for m in wired.bus.inbox("fixer")]
         assert bodies == [f"m{i}" for i in range(5)]
 
-    def test_pending_counts_groups_all_conversations_in_one_result(self, wired):
+    def test_opened_pending_counts_groups_all_conversations_in_one_result(self, wired):
         wired.messaging.send("PR111", "fixer", "direct one")
         wired.messaging.send("PR111", "fixer", "direct two")
         wired.messaging.send("PR111", "#all", "global")
 
-        assert wired.bus.pending_counts("fixer") == {"PR111": 2, "#all": 1}
+        with wired.bus.snapshot(viewer="fixer") as (basis, source):
+            assert wired.bus.pending_counts_opened(source, basis) == {"PR111": 2, "#all": 1}
         references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
         wired.messaging.acknowledge("fixer", references)
-        assert wired.bus.pending_counts("fixer") == {"#all": 1}
+        with wired.bus.snapshot(viewer="fixer") as (basis, source):
+            assert wired.bus.pending_counts_opened(source, basis) == {"#all": 1}
 
     def test_shared_history_page_contract(self, wired):
         for index in range(5):
@@ -310,14 +312,14 @@ class TestThreadOps:
         wired.registry.register(
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid()))
         )
-        before = wired.registry.snapshot().admission_generations[owner.name]
+        before = wired.registry.snapshot().claimed_generations[owner.name]
         monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
 
         wired.owners.stop(owner.name)
 
         snapshot = wired.registry.snapshot()
         assert snapshot.statuses[owner.name].declared_name == "stopped"
-        assert snapshot.admission_generations[owner.name] > before
+        assert snapshot.claimed_generations[owner.name] > before
 
     def test_archive_requires_stopped_thread(self, wired):
         wired.messaging.send("PR111", "fixer", "kept after archive")

@@ -140,14 +140,14 @@ async def test_actual_native_killed_context_commit_keeps_unknown(
             owner.session, original_id, request_generation=1
         )
         await owner.force_reopen()
-    receipt = owner.session.parent / "crash-boundary.txt"
+    acknowledgement = owner.session.parent / "crash-boundary.txt"
     with monkeypatch.context() as crash:
         crash.setenv("LD_PRELOAD", str(crash_preload))
         crash.setenv("PROOF_CRASH_POINT", boundary)
         crash.setenv("PROOF_CRASH_FILE", str(owner.session) + ".input-proof")
-        crash.setenv("PROOF_CRASH_RECEIPT", str(receipt))
+        crash.setenv("PROOF_CRASH_RECEIPT", str(acknowledgement))
         interrupted = await owner.run("This diagnostic input is interrupted, never replay it")
-    assert receipt.read_text() == boundary
+    assert acknowledgement.read_text() == boundary
     assert not interrupted[-1].ok
     assert not owner.persistent.available
     assert len(owner.starts) == len(owner.saved_inputs()) == int(seeded) + 1
@@ -162,7 +162,7 @@ async def test_actual_native_killed_context_commit_keeps_unknown(
             == original
         )
         assert owner.provider.posts == 1
-    # Actual new native process performs hot-journal recovery before admission.
+    # Actual new native process performs hot-journal recovery before claim_scope.
     resumed = await owner.run("A genuinely new diagnostic input after native crash recovery")
     assert resumed[-1].ok, resumed[-1]
     assert owner.session.read_bytes().startswith(history)
@@ -203,14 +203,14 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
     accepted_id = owner.starts[-1][1]
     accepted = NativeContextProof.read_evidence(owner.session, accepted_id)
     await owner.force_reopen()
-    receipt = owner.session.parent / "saved-recovery-crash.txt"
+    acknowledgement = owner.session.parent / "saved-recovery-crash.txt"
     with monkeypatch.context() as crash:
         crash.setenv("LD_PRELOAD", str(crash_preload))
         crash.setenv("PROOF_CRASH_POINT", "before-journal-sync")
         crash.setenv("PROOF_CRASH_FILE", str(owner.session) + ".input-proof")
-        crash.setenv("PROOF_CRASH_RECEIPT", str(receipt))
+        crash.setenv("PROOF_CRASH_RECEIPT", str(acknowledgement))
         failed = await owner.run(unknown_text)
-    assert not failed[-1].ok and receipt.read_text() == "before-journal-sync"
+    assert not failed[-1].ok and acknowledgement.read_text() == "before-journal-sync"
     unknown_id = owner.starts[-1][1]
     # Let the ACTUAL native owner recover the hot database, with get_state only.
     await NativeSessionPreparation.open(
@@ -276,7 +276,7 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
         return future.result()
 
     # Deliberate duplicates of this disposable test's IDs prove native dedup;
-    # they must not append, produce receipts or invoke the local provider.
+    # they must not append, produce evidences or invoke the local provider.
     for identifier, text in (
         (accepted_id, accepted_text),
         (unknown_id, unknown_text),

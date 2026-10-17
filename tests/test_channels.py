@@ -165,21 +165,29 @@ def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path)
     assert comms.registry.status(current.name) == ArchivedThreadStatus()
 
 
-def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog(tmp_path):
+@pytest.mark.asyncio
+async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog(tmp_path):
+    from agent_comms.channel_management import TagDisposition
     from agent_comms.cli_commands import CliCommand
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.field_codec import FieldCodec, compile_decoder
     from agent_comms.tools import CommsTagsTool, tool_catalog
 
     comms = setup_wire(tmp_path)
     action = next(action for action in CliCommand.target_catalog(comms, '#api', project=str(tmp_path))
                   if action.declaration.declared_name == 'delete-tag')
-    disposition = DeleteExclusiveInactiveThreadsTagDisposition
-    choices = next(field.choices for field in action.editable_fields if field.name == 'disposition')
-    assert (disposition.label, FieldCodec.encode(disposition)) in choices
-    edited = action.edited({'disposition': FieldCodec.encode(disposition)})
+    disposition = DeleteExclusiveInactiveThreadsTagDisposition()
+    editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
+    choices = next(field.choices for field in await action.prepare_fields()
+                   if field.name == 'disposition')
+    assert (disposition.label, editor_value) in choices
+    edited = action.edited({'disposition': editor_value})
+    assert edited.bound[0].disposition == disposition
     assert 'only inactive' in edited.confirmation
     tag_tool = next(tool for tool in tool_catalog() if tool['name'] == CommsTagsTool.declared_name)
-    assert FieldCodec.encode(disposition) in str(tag_tool['parameters']['properties']['disposition'])
+    schema = tag_tool['parameters']['properties']['disposition']
+    assert schema['oneOf'] == FieldCodec.value_schema(TagDisposition)['oneOf']
+    assert any(member['properties'][TagDisposition.family_discriminator]['const']
+               == disposition.declared_name for member in schema['oneOf'])
 
 
 def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
@@ -513,10 +521,10 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     comms.messaging.send("b", "#zeta", "Later agent output")
     invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"}, caller=NoThreadCaller())
     assert names(wire(tmp_path))[0] == "#alpha"
-    assert tuple(comms.views.coordination_snapshot("a").channels) == tuple(
-        wire(tmp_path).views.coordination_snapshot("b").channels
+    assert tuple(comms.views.viewer_snapshot(str(tmp_path / "viewer-a")).channels) == tuple(
+        wire(tmp_path).views.viewer_snapshot(str(tmp_path / "viewer-b")).channels
     )
-    assert comms.views.coordination_snapshot().channel_order is LastUserInputChannelSort
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_order is LastUserInputChannelSort
     # Reading or re-sorting must never redefine a channel's creation time.
     assert comms.channels.catalog.read().resolve("#alpha").created_at == 300
     with patch.object(
@@ -548,13 +556,13 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     history = list(wire(tmp_path).views.channel_history_page("#api").messages)
     assert [message.membership.value for message in history] == ["joined", "left"]
     assert all(not message.starts_turn for message in history)
-    assert not comms.views.coordination_snapshot().participants("#api")
+    assert not comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
     comms.agents.begin_turn("peer", "active-turn")
     assert [
-        person.thread.name for person in comms.views.coordination_snapshot().participants("#api")
+        person.thread.name for person in comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
     ] == ["peer"]
     comms.owners.stop("peer")
-    assert not comms.views.coordination_snapshot().participants("#api")
+    assert not comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
 
 
 @pytest.mark.parametrize("order", ChannelSort.members_with(ChannelSort))
@@ -567,7 +575,7 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
     for channel in ("#ui", "#none"):
         result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True}, caller=NoThreadCaller())
         assert result["pinned"]
-    views = observer.views.coordination_snapshot().channels
+    views = observer.views.viewer_snapshot(str(tmp_path)).channels
     assert list(views) == (
         [name for name in original if name in {"#ui", "#none"}]
         + [name for name in original if name not in {"#ui", "#none"}]

@@ -1,4 +1,4 @@
-"""Ordinary input admission must remain independent of the orchestration runner."""
+"""Ordinary input claim_scope must remain independent of the orchestration runner."""
 
 import ast
 import inspect
@@ -35,7 +35,7 @@ def test_owned_turn_no_longer_owns_send_authority_or_native_binding():
     )
 
 
-def test_admission_components_own_state_without_capturing_runner():
+def test_claim_components_own_state_without_capturing_runner():
     for path in {
         Path(inspect.getfile(owner))
         for owner in (OwnedSend, TurnGoalPermission, InputDispositions, TurnInputSource)
@@ -51,7 +51,7 @@ def test_admission_components_own_state_without_capturing_runner():
                 assert node.attr != "runner", (path, node.lineno)
 
 
-def test_ordinary_admission_preserves_named_rule_dispatch_until_callback():
+def test_ordinary_claim_preserves_named_rule_dispatch_until_callback():
     tree = ast.parse(inspect.getsource(OwnedSend))
     assert not any(
         isinstance(node, ast.FunctionDef) and node.name in {"_current_owner", "_accepted"}
@@ -74,7 +74,7 @@ def test_new_input_owners_do_not_restore_long_boolean_chains():
         ), path
 
 
-def test_input_drain_does_not_restore_parallel_admission_maps():
+def test_input_drain_does_not_restore_parallel_claim_maps():
     from agent_comms.input_drain import InputDrain
     from agent_comms.turn_runner import TurnRunner
     from agent_comms.agent_event_updates import AcpEventConsumer

@@ -24,7 +24,7 @@ pytestmark = pytest.mark.refactor_guard
 # Modules that existed only to run, journal, publish or reconcile Core's engine.
 DELETED_MODULES = re.compile(
     r"^(compaction_\w+|owner_compaction_\w+|selected_pi_route|selected_pi_summary_rpc"
-    r"|selected_summary_admission|native_compaction_\w+|continued_private_session"
+    r"|selected_summary_claim|native_compaction_\w+|continued_private_session"
     r"|failed_input_contexts|context_tokens|pi_summary_payloads|transcript_outcomes"
     r"|turn_input_binding|native_revision_text|selected_source)$"
 )
@@ -170,7 +170,7 @@ def test_native_input_patch_leaves_pis_compaction_on_for_tracked_inputs():
     assert not any("lastAssistant && !options?.inputId" in line for line in added)
 
 
-def test_no_admission_rule_waits_on_compaction_state():
+def test_no_claim_rule_waits_on_compaction_state():
     """The inbox's send checks no longer consult a compaction barrier or recorded coverage."""
     rules = [
         f"{module}:{node.name}"

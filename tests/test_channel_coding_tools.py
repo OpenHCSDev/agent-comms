@@ -125,7 +125,7 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
     owner = Owner()
     tmp_path.chmod(0o700)
     socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
-    # Actual owner admission/storage is covered separately. This exercises the
+    # Actual owner claim_scope/storage is covered separately. This exercises the
     # strict native-event/socket correlation and multiple normal tool calls.
     calls = [
         ("call_one|provider-part", "read", {"path": "a"}),

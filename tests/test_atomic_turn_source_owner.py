@@ -37,7 +37,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
             if goal_changed:
                 comms.goals.update_goal("owner", SetGoalAction(text="A distinct goal during this turn"))
                 # An informational source observation grants no new input.
-                # The original input/selected admission still refuses this goal.
+                # The original input/selected claim_scope still refuses this goal.
                 with pytest.raises(StaleFence, match="registry_goal"):
                     initial.require_snapshot(comms.registry.snapshot(), "Original input changed")
             current = comms.registry.require("owner")
@@ -58,14 +58,14 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
     assert comms.registry.require("owner").turn_lease is None
 
 
-@pytest.mark.parametrize("replacement", ["same-turn-id", "new-admission"])
+@pytest.mark.parametrize("replacement", ["same-turn-id", "new-claim_scope"])
 def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement):
     comms = Comms(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn("owner", "same-id")
     assert comms.agents.finish_turn(original.turn_lease)
-    if replacement == "new-admission":
+    if replacement == "new-claim_scope":
         comms.registry.register(comms.registry.require("owner"), new_owner=True)
     current = comms.agents.begin_turn("owner", "same-id")
     before = comms.registry.store.path.read_bytes()

@@ -58,14 +58,14 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
                    "type": "message", "role": "assistant", "content": "Original answer"}}]
     source.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
     original = source.read_bytes()
-    receipt = comms.threads.import_thread(source, ImportFormat.CODEX, name="historical")
+    acknowledgement = comms.threads.import_thread(source, ImportFormat.CODEX, name="historical")
     assert source.read_bytes() == original
-    refs = receipt.historical_instructions
+    refs = acknowledgement.historical_instructions
     assert all(isinstance(ref, CodexRolloutProvenance) for ref in refs)
     assert tuple(ref.public_text(comms) for ref in refs) == (
         "Historical base π.\n", "Historical developer λ.\n")
-    assert FieldCodec.decode(ImportReceipt, receipt.to_wire()) == receipt
-    saved = [json.loads(line) for line in Path(receipt.session_file).read_text().splitlines()]
+    assert FieldCodec.decode(ImportReceipt, acknowledgement.to_wire()) == acknowledgement
+    saved = [json.loads(line) for line in Path(acknowledgement.session_file).read_text().splitlines()]
     metadata = next(record["data"] for record in saved if record["type"] == "custom")
     assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...],
                              metadata["historical_instructions"]) == refs
@@ -91,7 +91,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     assert result["scope"].startswith("historical-imported-instructions")
     # Native configuration records can precede the same original import metadata;
     # conversation remains outside this prefix-only metadata read.
-    session_path = Path(receipt.session_file)
+    session_path = Path(acknowledgement.session_file)
     saved.insert(1, {"type": "model_change", "id": "native-config",
                      "provider": "authored", "modelId": "authored"})
     session_path.write_text("".join(json.dumps(record) + "\n" for record in saved)
@@ -99,7 +99,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     assert ImportedSessionMetadata.sources_for_owner(comms.registry, original_owner) == refs
     messages = json.dumps([record for record in saved if record["type"] == "message"], ensure_ascii=False)
     assert "Historical base π." not in messages and "Historical developer λ." not in messages
-    assert "Private guardian wording" not in Path(receipt.session_file).read_text()
+    assert "Private guardian wording" not in Path(acknowledgement.session_file).read_text()
     assert "Original question" in messages and "Original answer" in messages
     # Appending future turns preserves the original exact record reference.
     with source.open("ab") as output:
@@ -180,10 +180,10 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, c
     opencode_export(source, tmp_path)
     before = source.read_bytes()
     directory = comms.root / "imported_sessions"
-    receipt = comms.threads.import_thread(source, ImportFormat.OPENCODE, name="imported")
+    acknowledgement = comms.threads.import_thread(source, ImportFormat.OPENCODE, name="imported")
     thread = comms.registry.require("imported")
     assert thread.pid == 0 and comms.registry.status(thread.name) == StoppedThreadStatus()
-    assert receipt.source_id == "ses_test" and receipt.imported_messages == 4
+    assert acknowledgement.source_id == "ses_test" and acknowledgement.imported_messages == 4
     assert thread.title == "Current task"
     assert source.read_bytes() == before
     if os.name == "posix":
@@ -228,7 +228,7 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path, comms):
     ]
     source.write_text("".join(json.dumps(record) + "\n" for record in records))
     original = source.read_bytes()
-    receipt = comms.threads.import_thread(
+    acknowledgement = comms.threads.import_thread(
         source, ImportFormat.CODEX, name="paper4_jair", tags=frozenset({"papers"})
     )
     thread = comms.registry.require("paper4_jair")
@@ -236,7 +236,7 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path, comms):
     assert thread.title is None
     assert thread.tags == frozenset({"papers"})
     assert comms.registry.status(thread.name) == StoppedThreadStatus()
-    assert receipt.source_id == "codex-id"
+    assert acknowledgement.source_id == "codex-id"
     assert source.read_bytes() == original
 
 

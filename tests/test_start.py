@@ -1,13 +1,13 @@
+from agent_comms.native_package import pinned_native_package
 import asyncio
 import sys
-import os
-from pathlib import Path
 
 import pytest
 
 from agent_comms import invoke_tool
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import NoThreadCaller
 
 
 def test_attachment_does_not_implicitly_start_a_stopped_or_archived_thread(tmp_path, monkeypatch):
@@ -39,17 +39,17 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     comms = wire(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(
-        comms.root, root_id, Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        comms.root, root_id, pinned_native_package()
     )
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(source)))
     comms.registry.unregister("worker")
     try:
-        result = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"})
+        result = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"}, caller=NoThreadCaller())
         async with asyncio.timeout(10):
             while not socket_path(comms.root, result["pid"]).exists():
                 assert comms.registry.require("worker").process_alive
                 await asyncio.sleep(0.05)
-        again = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"})
+        again = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"}, caller=NoThreadCaller())
         assert not again["launched"] and again["pid"] == result["pid"]
         assert comms.registry.require("worker").session_file == str(source)
     finally:

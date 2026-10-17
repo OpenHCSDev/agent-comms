@@ -30,7 +30,7 @@ class Client:
 
 
 def capture(comms):
-    return HumanInputOrigin.capture(comms, comms.registry.snapshot().admission_identity("beta"))
+    return HumanInputOrigin.capture(comms, comms.registry.snapshot().claimed_identity("beta"))
 
 
 def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tmp_path):
@@ -40,8 +40,8 @@ def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tm
     )
     comms, agent, _, _ = _owner(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
-    admission = comms.registry.snapshot().admission_identity('beta')
-    scope = QueueScope('beta', admission, comms.registry.require('beta').pid)
+    claim_scope = comms.registry.snapshot().claimed_identity('beta')
+    scope = QueueScope('beta', claim_scope, comms.registry.require('beta').pid)
     for projection in (PendingQueueProjection(), UnavailableQueueProjection()):
         observation = QueueChangedUpdate(None, 0, projection)
         assert FieldCodec.decode(QueueChangedUpdate, FieldCodec.encode(observation)) == observation
@@ -86,7 +86,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         assert row.context_provenance() in contribution.provenance
         native_id = "b" * 32
         sent = "User follow-up:\n" + command.user_text
-        assert inputs.bind(key, admission=row.admission, turn_id="held-native", native_id=native_id, text=sent)
+        assert inputs.bind(key, claim_scope=row.claim_scope, turn_id="held-native", native_id=native_id, text=sent)
         assert inputs.started(key, turn_id="held-native", native_id=native_id, text=sent)
         # Existing terminal settlement never rewrites a started original as
         # unsent or grants a replay; the canonical native completion owns that.
@@ -110,15 +110,15 @@ def test_foreign_or_changed_origin_refused_before_any_reservation(tmp_path):
                WireInputOrigin(origin.root_id, MessageReference(1, "forged-reference")))
     for witness in invalid:
         with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError):
-            with ExitStack() as custody:
+            with ExitStack() as ownership:
                 QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                    echo=True, images=(), controller=Client(), origin=witness, custody=custody)
-                custody.pop_all()
+                                    echo=True, images=(), controller=Client(), origin=witness, ownership=ownership)
+                ownership.pop_all()
     with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError, match="controller"):
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                echo=True, images=(), controller=None, origin=origin, custody=custody)
-            custody.pop_all()
+                                echo=True, images=(), controller=None, origin=origin, ownership=ownership)
+            ownership.pop_all()
     assert stored_inputs(agent.inputs.dispositions.root).rows == {}
 
 
@@ -126,7 +126,7 @@ def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(tmp
     comms, agent, _, _ = _owner(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     origin = capture(comms)
-    neutral = ReservedInput("old", None, "beta", origin.admission.admission_generation,
+    neutral = ReservedInput("old", None, "beta", origin.claim_scope.claimed_generation,
                             "beta", "Exact old user-looking text")
     payload = FieldCodec.encode(neutral)
     assert "origin" not in payload
@@ -174,17 +174,17 @@ def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_p
         FieldCodec.decode(HumanInputOrigin, {**encoded, "goal": None})
 
     with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError, match="scope"):
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                echo=True, images=(), controller=Client(), origin=absent, custody=custody)
-            custody.pop_all()
+                                echo=True, images=(), controller=Client(), origin=absent, ownership=ownership)
+            ownership.pop_all()
     assert stored_inputs(agent.inputs.dispositions.root).rows == {}
 
     with _store_lock(comms._wire_lock_path):
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             queued, _, _receipt = QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                            echo=True, images=(), controller=Client(), origin=restored, custody=custody)
-            custody.pop_all()
+                                            echo=True, images=(), controller=Client(), origin=restored, ownership=ownership)
+            ownership.pop_all()
     assert stored_inputs(agent.inputs.dispositions.root).lookup(queued.key).origin == restored
     assert restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
     current = comms.registry.require("beta")
@@ -207,10 +207,10 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     origin = capture(comms)
     exact = 'Keep the original λ /source.\nNever replay UNKNOWN.'
     with _store_lock(comms._wire_lock_path):
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             queued, _, _receipt = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
-                                            echo=True, images=(), controller=Client(), origin=origin, custody=custody)
-            custody.pop_all()
+                                            echo=True, images=(), controller=Client(), origin=origin, ownership=ownership)
+            ownership.pop_all()
     inputs = agent.inputs.dispositions
     row = stored_inputs(inputs.root).lookup(queued.key)
     original_inputs = inputs.path.read_bytes()
@@ -255,10 +255,10 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
 
     # Same text, separately reserved original inputs never acquire one identity.
     with _store_lock(comms._wire_lock_path):
-        with ExitStack() as custody:
+        with ExitStack() as ownership:
             second, _, _receipt = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
-                                            echo=True, images=(), controller=Client(), origin=origin, custody=custody)
-            custody.pop_all()
+                                            echo=True, images=(), controller=Client(), origin=origin, ownership=ownership)
+            ownership.pop_all()
     second_subject = stored_inputs(inputs.root).lookup(second.key).context_provenance()
     second_pin = comms.messaging.pin_input_constraint('beta', second_subject, worktree=origin.project)
     assert second_subject != subject

@@ -1,4 +1,4 @@
-"""Target-format transaction, held under the inherited original writer custody."""
+"""Target-format transaction, held under the inherited original writer ownership."""
 from contextlib import closing, nullcontext
 from dataclasses import replace
 import json
@@ -19,11 +19,11 @@ from validate_retained_routing import read_plan
 
 
 def main():
-    root, descriptor, root_id, receipt = sys.argv[1:]
+    root, descriptor, root_id, acknowledgement = sys.argv[1:]
     root, plan = read_plan(root, descriptor, root_id)
-    receipt = Path(receipt)
-    if receipt.exists():
-        raise ValueError('A retained original receipt cannot be overwritten.')
+    acknowledgement = Path(acknowledgement)
+    if acknowledgement.exists():
+        raise ValueError('A retained original acknowledgement cannot be overwritten.')
     bus = require_retained_writer(root, descriptor, root_id)
     database = root / 'transcript_routes.sqlite3'
     connection_scope = (closing(sqlite3.connect(database.as_uri() + '?mode=rw', uri=True))
@@ -97,8 +97,8 @@ def main():
               'nonrouting_annotations_unchanged': True, 'nonrouting_registry_unchanged': True,
               'recorded_source': FieldCodec.encode(carried_source),
               'original_input_replays': 0, 'provider_calls': 0}
-    _atomic_write_text(receipt, json.dumps(result, indent=2) + '\n', fsync_parent=True)
-    print(json.dumps({'receipt': str(receipt), 'routing_cells': len(plan.cells),
+    _atomic_write_text(acknowledgement, json.dumps(result, indent=2) + '\n', fsync_parent=True)
+    print(json.dumps({'acknowledgement': str(acknowledgement), 'routing_cells': len(plan.cells),
                       'registry_routings': len(plan.turns)}), flush=True)
 
 

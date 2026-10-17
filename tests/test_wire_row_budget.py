@@ -31,9 +31,9 @@ def _row(size: int, newline: bool) -> bytes:
 def test_scan_and_candidate_share_physical_boundary(tmp_path, extra, newline):
     assert WireRecord.max_row_bytes == 8 * 1024 * 1024
     raw = _row(WireRecord.max_row_bytes + extra, newline)
-    # A retained public entry: valid before private admission, not a live claim.
+    # A retained public entry: valid before private claim_scope, not a live claim.
     metadata = WireMetadata(
-        last_seq=1, admission_after_seq=1, writer_protocol_version=1,
+        last_seq=1, claimed_after_seq=1, writer_protocol_version=1,
         wire_root_id='0' * 32,
     )
     if extra:

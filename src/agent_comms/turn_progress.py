@@ -16,7 +16,7 @@ from acp.schema import (
 from . import agent_events as events
 from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
 from .acp_failure import RequestFailure
-from .thread_identity import AdmissionIdentity
+from .thread_identity import ClaimedIdentity
 from .comms import Comms
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress
@@ -213,9 +213,9 @@ class TurnProgress(events.AgentEventConsumer):
         await self.inputs.input_started(
             self.session_id,
             event.id,
-            QueueScope(self.session_id, AdmissionIdentity(
+            QueueScope(self.session_id, ClaimedIdentity(
                 self.turn_lease.identity.incarnation,
-                self.turn_lease.admission_generation,
+                self.turn_lease.claimed_generation,
             ), self.thread.pid),
         )
 
@@ -270,7 +270,7 @@ class TurnProgress(events.AgentEventConsumer):
                 turn_id=self.turn_lease.turn_id, route=self.routing.reply,
             )
         if isinstance(published, events.Done):
-            # ACP publication may replace Done with its notification receipt;
+            # ACP publication may replace Done with its notification acknowledgement;
             # terminal consumers retain that exact completed outcome.
             self.result = published
         await self.publication.dispatch(published)

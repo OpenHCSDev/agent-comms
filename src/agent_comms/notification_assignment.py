@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from .audience_manifest import FrozenRecipient
 from .coordination_schema import COORDINATION_SCHEMA_VERSION
 from .coordination_tables.assignments import WakeAssignment
-from .coordination_tables.publications import PublicationReceipts
+from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
@@ -185,7 +185,7 @@ class AssignmentActivityEvidence(TypedRow):
         )
 
 class NotificationSource(DeclaredFamily, affix="NotificationSource"):
-    """Original frozen delivery or handling receipt, never an execution authority."""
+    """Original frozen delivery or handling acknowledgement, never an execution authority."""
 
     @abstractmethod
     def project(self, observation: RecipientActivity) -> MessageNotification: ...
@@ -334,7 +334,7 @@ class NotificationAssignment(NotificationSource):
                 "FROM w "
                 f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
                 "ON pointer.owner_lookup=w.recipient_lookup "
-                f"LEFT JOIN {PublicationReceipts.declared_name} p "
+                f"LEFT JOIN {PublicationEvidence.declared_name} p "
                 "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target "
                 "ORDER BY w.wire_seq DESC,w.recipient",
                 tuple(source.message.seq for source in sources),

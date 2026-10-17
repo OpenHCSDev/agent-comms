@@ -49,7 +49,7 @@ class InputBatch(ABC):
 
         originals = document.originals(keys)
         single = SingleInputBatch(originals)
-        # Sequence identity proves distinct channel originals in admitted order.
+        # Sequence identity proves distinct channel originals in authorized order.
         channels = {
             origin.seq: origin
             for origin in origins
@@ -58,8 +58,8 @@ class InputBatch(ABC):
         if len(channels) < 2 or tuple(channels.values()) != origins:
             return single
         expected_keys = tuple(InputDispositions.bus_key(origin, owner) for origin in origins)
-        admitted = ChannelInputBatch(originals)
-        return admitted if admitted.keys == expected_keys and admitted.prompt == prompt else single
+        authorized = ChannelInputBatch(originals)
+        return authorized if authorized.keys == expected_keys and authorized.prompt == prompt else single
 
 
 class SingleInputBatch(InputBatch):

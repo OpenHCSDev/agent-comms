@@ -17,7 +17,7 @@ from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import WakeAdmission
+from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.native_tool_call import DuplicateToolCallIdentity, SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
@@ -189,7 +189,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
     session_dir = tmp_path / "session"
     session_dir.mkdir(mode=0o700)
     comms = Comms(root)
-    admission = WakeAdmission(
+    claim_scope = WakeClaim(
         wire_root_id="a" * 32,
         source_seq=1,
         source_message_id="source",
@@ -198,7 +198,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
         recipient_lookup="c" * 32,
         execution_id="execution",
         operation_id="d" * 32,
-        owner_admission_generation=1,
+        owner_claimed_generation=1,
         turn_id="turn",
         participant_generation=1,
         attempt_ordinal=1,
@@ -207,7 +207,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
         install_native_runtime_schema(store)
         input_id = secrets.token_hex(16)
         mode = broker.selected_tool_mode_for_owner(
-            comms, store, admission, "owner", session_dir, input_id
+            comms, store, claim_scope, "owner", session_dir, input_id
         )
         with pytest.raises(SelectedToolDenied, match="exact sent FULL input"):
             mode.action(
@@ -242,8 +242,8 @@ def test_writer_order_and_unknown_after_writer(
     monkeypatch.setattr(broker, "write_selected_claimed_file", write)
     monkeypatch.setattr(broker, "record_selected_terminal", lambda *a: trace.append("terminal"))
     # These dummy owner fields are not production authority; only order is
-    # tested here. The typed admission is checked at runtime in this function.
-    admission = WakeAdmission(
+    # tested here. The typed claim_scope is checked at runtime in this function.
+    claim_scope = WakeClaim(
         wire_root_id="a" * 32,
         source_seq=1,
         source_message_id="source",
@@ -252,15 +252,15 @@ def test_writer_order_and_unknown_after_writer(
         recipient_lookup="c" * 32,
         execution_id="execution",
         operation_id="d" * 32,
-        owner_admission_generation=1,
+        owner_claimed_generation=1,
         turn_id="turn",
         participant_generation=1,
         attempt_ordinal=1,
     )
-    broker.perform_selected_write(None, None, admission, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
+    broker.perform_selected_write(None, None, claim_scope, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
     assert trace == ["claim", "write", "terminal"]
     with pytest.raises(SelectedToolDenied, match="already consumed"):
-        broker.perform_selected_write(None, None, admission, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
+        broker.perform_selected_write(None, None, claim_scope, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
     assert trace == ["claim", "write", "terminal"]
 
 
@@ -274,7 +274,7 @@ def test_post_reservation_effect_unknown_is_never_retried(
     request = broker.SelectedToolRequest(
         "call_1", broker.SelectedWriteArguments("notes.txt", "replacement")
     )
-    admission = WakeAdmission(
+    claim_scope = WakeClaim(
         wire_root_id="a" * 32,
         source_seq=1,
         source_message_id="source",
@@ -283,7 +283,7 @@ def test_post_reservation_effect_unknown_is_never_retried(
         recipient_lookup="c" * 32,
         execution_id="execution",
         operation_id="d" * 32,
-        owner_admission_generation=1,
+        owner_claimed_generation=1,
         turn_id="turn",
         participant_generation=1,
         attempt_ordinal=1,
@@ -303,13 +303,13 @@ def test_post_reservation_effect_unknown_is_never_retried(
     monkeypatch.setattr(broker, "publish_selected_resource_claim", claim)
     monkeypatch.setattr(broker, "write_selected_claimed_file", write)
     with pytest.raises(OSError):
-        broker.perform_selected_write(None, None, admission, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
+        broker.perform_selected_write(None, None, claim_scope, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
     assert observed == (["claim"] if failed_stage == "claim_append_unknown" else ["claim", "write"])
     ledger = tmp_path / "selected-tool-ledger"
     assert (ledger / input_id).exists()
     assert not (ledger / (input_id + ".done")).exists()
     with pytest.raises(SelectedToolDenied, match="already consumed"):
-        broker.perform_selected_write(None, None, admission, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
+        broker.perform_selected_write(None, None, claim_scope, "owner", tmp_path, input_id, request)  # type: ignore[arg-type]
     assert observed == (["claim"] if failed_stage == "claim_append_unknown" else ["claim", "write"])
 
 

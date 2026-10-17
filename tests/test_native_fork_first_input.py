@@ -1,4 +1,5 @@
 """Physical native parent -> normal fork -> first ACP send, without replay."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -34,7 +35,7 @@ tmp_path = private_root_fixture
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
-class OwnerAdmissionCase(DeclaredFamily, affix="Case"):
+class OwnerClaimCase(DeclaredFamily, affix="Case"):
     @abstractmethod
     async def create(self, comms): ...
 
@@ -51,7 +52,7 @@ class OwnerAdmissionCase(DeclaredFamily, affix="Case"):
         assert comms.registry.require(thread.name).incarnation == thread.incarnation
 
 
-class OrdinaryOwnerCase(OwnerAdmissionCase):
+class OrdinaryOwnerCase(OwnerClaimCase):
     repetitions = 2400
 
     async def create(self, comms):
@@ -71,7 +72,7 @@ class OrdinaryOwnerCase(OwnerAdmissionCase):
         assert native.session.read_bytes().startswith(original)
 
 
-class ForkOwnerCase(OwnerAdmissionCase):
+class ForkOwnerCase(OwnerClaimCase):
     repetitions = 900
 
     async def create(self, comms):
@@ -117,7 +118,7 @@ class ForkOwnerCase(OwnerAdmissionCase):
 
 @pytest.mark.parametrize(
     "case",
-    [member() for member in OwnerAdmissionCase.members_with(OwnerAdmissionCase)],
+    [member() for member in OwnerClaimCase.members_with(OwnerClaimCase)],
     ids=lambda case: case.declared_name,
 )
 async def test_underbudget_physical_native_owner_answers_without_compaction(
@@ -189,7 +190,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
             thinking_level="off",
         )
     )
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     attachment = CommsClient(

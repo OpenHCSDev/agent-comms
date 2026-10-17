@@ -1,4 +1,5 @@
 """Current S1 consumer effects and fenced settlement, with real durable owners."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import os
@@ -165,21 +166,21 @@ async def owner_turn(comms, tmp_path):
 
 
 async def start_owned_input(execution, progress):
-    admission = OwnedSend(
+    claim_scope = OwnedSend(
         comms=execution.runner.comms,
         inputs=execution.runner.inputs,
         goal_store=execution.runner.comms.goals.open_goal_store(),
         session_id=execution.session_id,
         thread=execution.thread,
         turn=TurnId(execution.turn_id),
-        admission=execution.turn_lease.admission_generation,
+        claim_scope=execution.turn_lease.claimed_generation,
         original=execution.original,
         goal_permit=execution.goal_permit,
     )
     native_id = uuid4().hex
-    with admission(None, native_id, execution.original.prompt):
+    with claim_scope(None, native_id, execution.original.prompt):
         pass
-    assert admission.native_start(None, native_id, execution.original.prompt)
+    assert claim_scope.native_start(None, native_id, execution.original.prompt)
     await progress.consume(ae.InputStarted(None))
 
 
@@ -362,7 +363,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             "--no-prompt-templates",
         ],
         private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-        private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+        private_nk_native_package=pinned_native_package(),
     )
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
@@ -429,7 +430,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
         comms,
         agent_bin="pi",
         private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-        private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+        private_nk_native_package=pinned_native_package(),
     )
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
