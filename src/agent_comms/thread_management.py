@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
-from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination_errors import CoordinationError, IdentityConflict
 
 from .child_process import ProcessIdentity
 from .registration import Registration
@@ -194,7 +194,7 @@ class ThreadManagement:
             try:
                 self.registry._declare_unlocked(thread, StoppedThreadStatus())
                 self.bus.mark_delivered_through(name, self.bus.log.latest_sequence())
-            except Exception:
+            except (OSError, ValueError, CoordinationError):
                 if name in self.registry:
                     self.registry.remove(name)
                 session_path.unlink(missing_ok=True)

@@ -24,6 +24,7 @@ from .comms import Comms, wire
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .coordination_errors import CoordinationError
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
@@ -362,7 +363,7 @@ def step(comms: Comms) -> None:
             # credentials or authorize installation/input replay in its queue.
             exc.abandon()
             record = record.transition(UncertainRestart(reason=f'{exc}: {exc.__cause__}'))
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             record = record.transition(UncertainRestart(reason=f"{type(exc).__name__}: {exc}"))
         else:
             record = record.transition(
@@ -420,7 +421,7 @@ def main() -> None:
     comms = wire(sys.argv[1])
     try:
         asyncio.run(run(comms))
-    except Exception as exc:
+    except (OSError, ValueError, CoordinationError) as exc:
         queue = RestartQueue(comms.root / DIRECTORY)
         with queue.locked():
             for record in queue.active_records():

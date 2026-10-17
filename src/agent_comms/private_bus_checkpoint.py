@@ -191,7 +191,7 @@ class CertifiedSourceRead:
                     witness = PrefixCertificate._install(bus, prior.marker)
                     self.require_current()
                     return witness
-                except Exception as error:
+                except (OSError, sqlite3.Error, RelationViolationError) as error:
                     raise RelationViolationError(
                         "Carried checkpoint installation outcome UNKNOWN; preserve both roots"
                     ) from error
@@ -1438,38 +1438,37 @@ def append_private_bus_checkpoint_unlocked(
 ) -> PrefixWitness:
     """Append one certified row only AFTER the canonical bus/parent fsync."""
     path = _path(bus.path)
-    try:
-        with closing(_connect(path)) as db, bus.path.open("rb") as stream:
-            saved = _saved(db)
-            info = os.fstat(stream.fileno())
-            offset = info.st_size - len(raw)
-            sequence = record.sequence_after(saved.through_seq)
-            saved.require_append(marker, info, offset, sequence)
-            marker.seal.check_final(saved, path)
-            stream.seek(offset)
-            if stream.read(len(raw)) != raw or _tail(stream, offset) != saved.tail:
-                raise RelationViolationError("Private bus checkpoint append bytes differ.")
-            digest = _chain(bytes.fromhex(saved.digest), raw)
-            expected = PrefixWitness(
-                saved.root_id,
-                FileRevision.from_stat(info),
-                sequence,
-                digest.hex(),
-                _tail(stream, info.st_size),
-            )
-            marker.seal_with(PendingSeal.capture(saved, expected, path))
-            bus.write_metadata_unlocked(marker)
-            with db:
-                _index_row(db, offset, raw, record, saved.through_seq)
-                PrefixCertificate.capture(
-                    saved.root_id, info, sequence, digest, expected.tail
-                ).upsert(db)
-            _directory_sync(path)
-            marker.seal_with(FinalSeal.capture(expected, path))
-            bus.write_metadata_unlocked(marker)
-            return _saved(db)
-    except (sqlite3.Error, OSError) as error:
-        raise RelationViolationError("Private bus checkpoint append outcome UNKNOWN.") from error
+    # WireLog owns UNKNOWN classification: it performed the bus fsync and is
+    # this operation's sole production caller. Preserve the actual failure here.
+    with closing(_connect(path)) as db, bus.path.open("rb") as stream:
+        saved = _saved(db)
+        info = os.fstat(stream.fileno())
+        offset = info.st_size - len(raw)
+        sequence = record.sequence_after(saved.through_seq)
+        saved.require_append(marker, info, offset, sequence)
+        marker.seal.check_final(saved, path)
+        stream.seek(offset)
+        if stream.read(len(raw)) != raw or _tail(stream, offset) != saved.tail:
+            raise RelationViolationError("Private bus checkpoint append bytes differ.")
+        digest = _chain(bytes.fromhex(saved.digest), raw)
+        expected = PrefixWitness(
+            saved.root_id,
+            FileRevision.from_stat(info),
+            sequence,
+            digest.hex(),
+            _tail(stream, info.st_size),
+        )
+        marker.seal_with(PendingSeal.capture(saved, expected, path))
+        bus.write_metadata_unlocked(marker)
+        with db:
+            _index_row(db, offset, raw, record, saved.through_seq)
+            PrefixCertificate.capture(
+                saved.root_id, info, sequence, digest, expected.tail
+            ).upsert(db)
+        _directory_sync(path)
+        marker.seal_with(FinalSeal.capture(expected, path))
+        bus.write_metadata_unlocked(marker)
+        return _saved(db)
 
 
 
