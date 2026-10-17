@@ -7,7 +7,6 @@ from pathlib import Path
 import sqlite3
 
 from .coordination_database import CoordinationStore
-from .native_storage import NativeSessionFiles
 from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedRow, TypedTable
 
 

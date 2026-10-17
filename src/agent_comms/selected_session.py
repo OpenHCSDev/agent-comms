@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
-from .native_session_reopen import NativeSessionIdentity, SessionIdentityHelper
+from .native_session_reopen import NativeSessionIdentity
 from .native_pi import _session_location
 from .launch_runtime import RestartEnvironment
 
@@ -29,6 +29,11 @@ class SelectedSession:
 
     @property
     def path(self) -> Path | None:
+        return None
+
+    @property
+    def session_file(self) -> str | None:
+        """Wire projection of the original selected source, not another field."""
         return None
 
     def attestation(self):
@@ -63,12 +68,12 @@ class SelectedSession:
         return self.attest(actual)
 
     def require_context(self, context) -> None:
-        self.attest(NativeSessionIdentity(context.session_id, str(context.source_path)))
+        self.attest(NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     def continued(self, context) -> SelectedSession:
         self.require_context(context)
         return SavedSelectedSession(self.directory,
-            identity=NativeSessionIdentity(context.session_id, str(context.source_path)))
+            identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     @classmethod
     def for_launch(cls, directory: Path, path: Path | None, package: Path) -> SelectedSession:
@@ -111,6 +116,10 @@ class SavedSelectedSession(SelectedSession):
     @property
     def path(self) -> Path:
         return self.identity.path
+
+    @property
+    def session_file(self) -> str:
+        return self.identity.session_file
 
     def attestation(self):
         from .native_attestation import PendingAttestation

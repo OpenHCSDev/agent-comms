@@ -348,7 +348,7 @@ class TranscriptReadState(ThreadOwnedState):
         """Drop the reply projection of each deleted thread's transcript."""
         sources = set()
         for thread in threads:
-            thread.runtime.collect_read_keys(sources)
+            sources.update(thread.runtime.read_keys())
         if not sources:
             return
         with self._lock:

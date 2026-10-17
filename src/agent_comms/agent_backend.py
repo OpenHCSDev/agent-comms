@@ -18,8 +18,6 @@ import any runtime implementation at module level.
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass
@@ -29,6 +27,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, WireValue
 from .send_outcome import SendBoundary
 
 if TYPE_CHECKING:
@@ -43,12 +42,29 @@ class BackendDeclarationError(TypeError):
     """A backend declaration is incomplete; the message names every missing piece."""
 
 
-class UnstartedRuntimeError(ValueError):
-    """This operation needs a runtime that has started."""
+class RuntimeLocation(DeclaredFamily, WireValue, affix="Runtime"):
+    """Backend behavior, with the existing path/null wire contract."""
 
+    accepts_null = True
+    external_json_shape = True
 
-class RuntimeLocation(DeclaredFamily, affix="Runtime"):
-    """Backend-owned storage and behavior, decoded once at the thread boundary."""
+    def to_wire(self):
+        return self.read_key
+
+    @classmethod
+    def from_wire(cls, data):
+        raise TypeError("Decode a runtime location through its record's stored backend")
+
+    @classmethod
+    def schema(cls):
+        return {"type": ["string", "null"]}
+
+    @staticmethod
+    def choose(incoming, previous):
+        return incoming.inherited(previous)
+
+    def inherited(self, previous):
+        return self
 
     @property
     def backend(self) -> type[AgentBackend]:
@@ -66,16 +82,13 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
         return self
 
     def arguments(self):
-        return {"source_path": self.read_key}
+        return {"session_file": self.read_key}
 
-    def mark_read(self, ledger, viewer, offset):
-        ledger.mark_read(viewer, self.read_key, offset)
+    def read_keys(self):
+        return (self.read_key,)
 
-    def index_read_source(self, name, sources):
-        sources[name] = self.read_key
-
-    def collect_read_keys(self, keys):
-        keys.add(self.read_key)
+    def presentation(self):
+        return {"resumable": True}
 
     def history_locations(self, thread, registry, visited):
         yield self, False
@@ -107,6 +120,13 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 @dataclass(frozen=True)
 class UnstartedRuntime(RuntimeLocation):
     owner: type[AgentBackend]
+
+    def to_wire(self):
+        return None
+
+    def inherited(self, previous):
+        return previous
+
     @property
     def backend(self) -> type[AgentBackend]:
         return self.owner
@@ -125,14 +145,11 @@ class UnstartedRuntime(RuntimeLocation):
     def arguments(self):
         return {}
 
-    def mark_read(self, ledger, viewer, offset):
-        pass
+    def read_keys(self):
+        return ()
 
-    def index_read_source(self, name, sources):
-        pass
-
-    def collect_read_keys(self, keys):
-        pass
+    def presentation(self):
+        return {"resumable": False}
 
     def history_locations(self, thread, registry, visited):
         if thread.name in visited:
@@ -165,7 +182,7 @@ class UnstartedRuntime(RuntimeLocation):
 
     @property
     def read_key(self) -> str:
-        raise UnstartedRuntimeError("This operation requires a started runtime")
+        raise ValueError("This operation requires a started runtime")
 
 
 # ---------------------------------------------------------------------------
@@ -182,12 +199,6 @@ class InputId:
     def __post_init__(self) -> None:
         if type(self.value) is not str or not self.value:
             raise ValueError("An input ID must be a nonempty string")
-
-    @classmethod
-    def for_sources(cls, keys: tuple[str, ...]) -> InputId:
-        if not keys:
-            raise ValueError("An input ID requires reserved sources")
-        return cls(hashlib.sha256(json.dumps(keys).encode()).hexdigest())
 
 
 class WhenBusy(Enum):
@@ -422,7 +433,6 @@ class TurnDelivery:
     provider progress and answer runtime dialogs.
     """
 
-    input_id: InputId
     worktree: str
     environment: dict[str, str]
     inbox: TurnInbox

@@ -106,7 +106,7 @@ class PiSessionFile(RuntimeLocation):
         return self.path
 
     def storage_files(self):
-        from .native_storage import NativeSessionFiles
+        from .native_session_files import NativeSessionFiles
 
         return (NativeSessionFiles(Path(self.path)),)
 
@@ -251,7 +251,7 @@ class PiNativeBackend(
             self.arguments(thread),
             worktree=thread.worktree,
             environment=environment,
-            source_path=thread.runtime.read_key,
+            session_file=thread.runtime.read_key,
             observe=partial(self.observe, thread),
         )
 

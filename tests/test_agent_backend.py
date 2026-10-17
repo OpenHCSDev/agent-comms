@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.agent_backend import UnstartedRuntime
-from agent_comms.pi_native_backend import PiSessionFile
-
 import asyncio
 import json
 import os
@@ -62,11 +59,14 @@ def test_runtime_location_round_trip_uses_declared_backend(location):
     assert restored.backend is PiNativeBackend
 
 
-def test_input_id_is_stable_for_reserved_source_order():
-    assert ab.InputId.for_sources(("a", "bc")) == ab.InputId.for_sources(("a", "bc"))
-    assert ab.InputId.for_sources(("a", "bc")) != ab.InputId.for_sources(("ab", "c"))
-    with pytest.raises(ValueError, match="reserved sources"):
-        ab.InputId.for_sources(())
+@pytest.mark.parametrize("row", json.loads((Path(__file__).parent / "fixtures/p117/main-registry-rows.json").read_text()))
+def test_main_written_registry_location_round_trip(row):
+    restored = FieldCodec.decode(Thread, row)
+    expected = (ab.UnstartedRuntime(PiNativeBackend) if row["session_file"] is None
+                else PiSessionFile(row["session_file"]))
+    assert restored.runtime == expected
+    assert restored.to_wire() == row
+    assert json.dumps(restored.to_wire()) == json.dumps(row)
 
 
 # -- declaration checks -------------------------------------------------------
@@ -185,7 +185,7 @@ def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration():
     encoded = FieldCodec.encode(thread)
     assert "backend" not in encoded
     assert "runtime" not in encoded
-    assert encoded["session_file"] == {"kind": "unstarted", "owner": "pi_native"}
+    assert encoded["session_file"] is None
     assert FieldCodec.decode(Thread, encoded) == thread
     with pytest.raises(ValueError):
         FieldCodec.decode(Thread, {**encoded, "backend": "pi_native"})
@@ -357,7 +357,6 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
     starts = []
     finish = asyncio.Event()
     delivery = ab.TurnDelivery(
-        input_id=ab.InputId.for_sources(("original",)),
         worktree=str(project), environment={}, inbox=ab.TurnInbox(), finish_event=finish,
         send_boundary=None, interrupt_boundary=None,
         input_started=lambda public_id, native_id, text: starts.append(text) or True,
