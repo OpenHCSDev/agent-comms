@@ -78,7 +78,7 @@ class ForkOwnerCase(OwnerAdmissionCase):
         parent = comms.registry.require("physical-parent")
         return await asyncio.to_thread(
             comms.threads.create,
-            ForkSpec(
+            ForkSpec.from_task(
                 name="physical-child",
                 project=parent.worktree,
                 model=parent.model,

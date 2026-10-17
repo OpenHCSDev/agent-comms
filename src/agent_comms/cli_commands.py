@@ -1407,9 +1407,9 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         return (result.created,)
 
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
-        spec = self.spec_type(**{item.name: getattr(self, item.name)
-                                 for item in fields(self.spec_type)})
         asyncio.run(ConfigOptions.configured().validate(self))
+        spec = self.spec_type.from_task(**{item.name: getattr(self, item.name)
+                                           for item in fields(self.spec_type)})
         child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.pid)
 
