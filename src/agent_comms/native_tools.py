@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
+from operator import attrgetter
 from pathlib import Path
-from typing import ClassVar
+from typing import Annotated, ClassVar, get_args, get_origin, get_type_hints
 
-from .tool_declaration import DecodedArguments, PathTool, ToolDeclaration
+from pydantic import ConfigDict, TypeAdapter
+
+from .tool_declaration import Caption, DecodedArguments, PathTool, ToolDeclaration
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 from .native_tool_call import SelectedToolDenied
@@ -49,7 +52,17 @@ class NativeRequestTools:
 class ArgumentTool(ToolDeclaration):
     """The tool declares which input field supplies its caption."""
     declared_name = None
-    caption_field: ClassVar[str]
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        hints = get_type_hints(cls, include_extras=True)
+        for owner in cls.__mro__:
+            for name in owner.__dict__.get('__annotations__', {}):
+                hint = hints[name]
+                if get_origin(hint) is Annotated and any(isinstance(item, Caption) for item in get_args(hint)[1:]):
+                    read = attrgetter(name)
+                    validate = TypeAdapter(hint, config=ConfigDict(strict=True)).validate_python
+                    cls.caption_reader = staticmethod(lambda value: validate(read(value)))
+                    return
 
     @classmethod
     def recorded_arguments(cls, schema, raw):
@@ -60,7 +73,7 @@ class ArgumentTool(ToolDeclaration):
 
     @classmethod
     def caption_subject(cls, arguments: DecodedArguments) -> str:
-        return arguments.input.caption_for(cls.caption_field)
+        return cls.caption_reader(arguments.input)
 
     @classmethod
     def file_location(cls, arguments: DecodedArguments) -> str | None:
@@ -87,10 +100,6 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
         encoded = FieldCodec.encode(self)
         del encoded[self.family_discriminator]
         return encoded
-
-    @property
-    def detail(self) -> str:
-        return getattr(self, self.caption_field)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "claim", self._parse_resource())
@@ -124,8 +133,7 @@ class ReadTool(PathTool, CodingTool):
 class BashTool(CodingTool):
     acp_kind = "execute"
     label = "Run"
-    caption_field = "command"
-    command: str
+    command: Annotated[str, Caption()]
     timeout: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
 
     def _parse_resource(self) -> None:
@@ -170,7 +178,7 @@ class WriteTool(PathTool, CodingTool):
 class GrepTool(ArgumentTool):
     acp_kind = "search"
     label = "Search"
-    caption_field = "pattern"
+    pattern: Annotated[str, Caption()]
 
 
 class GlobTool(GrepTool):
@@ -180,11 +188,11 @@ class GlobTool(GrepTool):
 class WebFetchTool(ArgumentTool, declared_name='webfetch'):
     acp_kind = "fetch"
     label = "Fetch"
-    caption_field = "url"
+    url: Annotated[str, Caption()]
 
 
 class WebSearchTool(GrepTool, declared_name='websearch'):
-    caption_field = "query"
+    query: Annotated[str, Caption()]
 
 
 class ToolSearchTool(WebSearchTool, declared_name='toolsearch'):
@@ -193,7 +201,7 @@ class ToolSearchTool(WebSearchTool, declared_name='toolsearch'):
 
 class AgentTool(ArgumentTool):
     label = "Agent"
-    caption_field = "description"
+    description: Annotated[str, Caption()]
 
 
 class TaskTool(AgentTool):
@@ -211,4 +219,4 @@ class NotebookEditTool(PathTool, ArgumentTool, declared_name='notebookedit'):
 
 class SkillTool(ArgumentTool):
     label = "Skill"
-    caption_field = "skill"
+    skill: Annotated[str, Caption()]

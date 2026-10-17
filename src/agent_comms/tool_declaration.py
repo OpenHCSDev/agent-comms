@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
-from pydantic import AliasChoices, ConfigDict, Field, JsonValue, StrictStr, TypeAdapter
+from pydantic import AliasChoices, ConfigDict, Field, JsonValue
 
 from .cli_protocol import WireModel
 from .declared_family import DeclaredFamily
 from .field_codec import projected
+
+
+class Caption:
+    """Marks the declared argument that supplies a tool's caption."""
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool", discovery_package="agent_comms.tools"):
@@ -54,8 +58,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool", discovery_package="agent_com
 @dataclass(frozen=True, kw_only=True)
 class PathTool:
     """Declared file input shared by execution and recorded presentation."""
-    path: str
-    caption_field: ClassVar[str] = 'path'
+    path: Annotated[str, Caption()]
 
     @classmethod
     def bounded_caption(cls, caption: str, limit: int) -> str:
@@ -123,30 +126,17 @@ class ToolInput(WireModel):
     model_config = ConfigDict(extra='allow')
     __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
     path: str | None = Field(default=None, alias='path', validation_alias=AliasChoices('path'))
-    command: str | None = None
-    pattern: str | None = None
-    caption_codec: ClassVar[TypeAdapter] = TypeAdapter(StrictStr)
-
-    def caption_for(self, field: str) -> str:
-        if field not in type(self).model_fields:
-            raise KeyError(f'Undeclared caption field: {field}')
-        return self.caption_codec.validate_python(getattr(self, field))
-
 
 class ClaudeToolInput(ToolInput):
     path: str | None = Field(default=None, alias='file_path',
                              validation_alias=AliasChoices('file_path', 'notebook_path', 'path'))
-    description: str | None = None
-    url: str | None = None
-    query: str | None = None
-    skill: str | None = None
 
 
 class OpenCodeToolInput(ToolInput):
     path: str | None = Field(default=None, alias='filePath', validation_alias=AliasChoices('filePath', 'path'))
 
 
-class RecordedToolInput(ClaudeToolInput, OpenCodeToolInput):
+class RecordedToolInput(ToolInput):
     path: str | None = Field(default=None, validation_alias=AliasChoices(
         *(path[0] for model in (ToolInput, *ToolInput.__subclasses__())
           for path in model.model_fields['path'].validation_alias.convert_to_aliases())))
