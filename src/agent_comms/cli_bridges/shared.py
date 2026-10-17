@@ -122,7 +122,7 @@ class PendingToolCall(ToolCallDraft):
 
     @property
     def title(self) -> str:
-        return tool_declaration.ToolDeclaration.caption(self.name)
+        return tool_declaration.ToolDeclaration.for_name(self.name).label
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:

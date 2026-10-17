@@ -197,7 +197,7 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
 
     @property
     def title(self) -> str:
-        return ToolDeclaration.caption(self.tool_name)
+        return ToolDeclaration.for_name(self.tool_name).label
 
     @property
     def kind(self) -> str:

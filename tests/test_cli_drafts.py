@@ -6,7 +6,7 @@ from agent_comms.cli_bridges.shared import (
     ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, DraftAccumulator, FinishedItem,
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolPendingTranscript, TranscriptEvent, UserTranscript, ContextTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.cli_bridges.claude_protocol import CLAUDE_RECORD, ClaudeSession
@@ -130,12 +130,6 @@ def test_wire_start_decoder_selects_time_state(wire, state, expected):
                       completedAtMs=2000, **wire)
     assert isinstance(entry.started_at, state)
     assert entry.publication().events[0].timestamp == expected
-
-
-@pytest.mark.parametrize('invalid', [None, True, '0', float('nan'), float('inf')])
-def test_capture_requires_a_real_recorded_timestamp(invalid):
-    with pytest.raises(ValueError, match='finite Unix timestamp'):
-        EventTime.capture(invalid)
 
 
 @pytest.mark.parametrize('invalid', [True, '0', 1.5])

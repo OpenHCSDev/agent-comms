@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from .tool_declaration import PathTool, ToolArguments, ToolDeclaration
+from .tool_declaration import DecodedArguments, PathTool, ToolDeclaration
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 from .native_tool_call import SelectedToolDenied
@@ -49,15 +49,22 @@ class NativeRequestTools:
 class ArgumentTool(ToolDeclaration):
     """The tool declares which input field supplies its caption."""
     declared_name = None
+    caption_field: ClassVar[str]
 
     @classmethod
     def recorded_arguments(cls, schema, raw):
-        parsed = schema.model_validate(raw)
-        return ToolArguments(raw, cls.file_location(parsed.path), parsed.caption_for(cls.caption_field))
+        arguments = DecodedArguments(raw, schema.model_validate(raw))
+        cls.file_location(arguments)
+        cls.caption_subject(arguments)
+        return arguments
 
     @classmethod
-    def file_location(cls, path: str | None) -> str | None:
-        return path
+    def caption_subject(cls, arguments: DecodedArguments) -> str:
+        return arguments.input.caption_for(cls.caption_field)
+
+    @classmethod
+    def file_location(cls, arguments: DecodedArguments) -> str | None:
+        return arguments.input.path
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -82,8 +89,8 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
         return encoded
 
     @property
-    @abstractmethod
-    def detail(self) -> str: ...
+    def detail(self) -> str:
+        return getattr(self, self.caption_field)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "claim", self._parse_resource())
@@ -120,10 +127,6 @@ class BashTool(CodingTool):
     caption_field = "command"
     command: str
     timeout: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
-
-    @property
-    def detail(self) -> str:
-        return self.command
 
     def _parse_resource(self) -> None:
         return None

@@ -52,6 +52,11 @@ def test_boundaries_keep_missing_file_arguments_strict_and_extension_inputs_opaq
     update, = call.updates(record, ClaudeSession(turn='turn'))
     assert update.accumulator.path == 'claude.py'
     assert update.accumulator.title == 'Read claude.py'
+    for name, pattern, title in [('Grep', 'needle', 'Search needle'), ('Glob', '*.py', 'Find *.py')]:
+        search, = ToolUse(id=name, name=name, input={'pattern': pattern, 'path': 'src'}).updates(record, ClaudeSession(turn='turn'))
+        assert search.accumulator.title == title and search.accumulator.path == 'src'
+        saved, _ = search.accumulator.finished('saved', True)
+        assert saved.title == title and saved.path == 'src'
     with pytest.raises(ValueError):
         ToolUse(id='wrong', name='Read', input={}).updates(
             record, ClaudeSession(turn='turn'))
@@ -72,6 +77,8 @@ def test_boundaries_keep_missing_file_arguments_strict_and_extension_inputs_opaq
     update, = unknown.updates(record, ClaudeSession(turn='turn'))
     assert update.accumulator.title == 'external_custom'
     assert update.accumulator.arguments.raw_input == opaque and update.accumulator.path is None
+    with pytest.raises(KeyError):
+        ToolInput.model_validate({'undeclared': 'not a caption'}).caption_for('undeclared')
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
@@ -185,7 +192,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     # The declared label/detail own the title; rawInput retains the native argument.
     # The SDK reports raw arguments, not a caption. Presentation does not validate
     # or reinterpret that object as an execution request; disclosure retains it.
-    expected_title = ToolDeclaration.caption('read', path=str(source))
+    expected_title = ToolDeclaration.caption('read', ToolDeclaration.for_name('read').recorded_arguments(ToolInput, {'path': str(source)}))
     assert 'owned.txt' in expected_title
     assert starts[0].kind == "read" and starts[0].title == expected_title
     assert ends[0].ok and "ACTUAL_READ_CONTENT" in ends[0].output
