@@ -45,7 +45,9 @@ class PiEvent(PiPayload, DeclaredFamily):
 
     wire_tag = "type"
     opaque = False
-    unknown_kind: ClassVar[bool] = False
+    @classmethod
+    def known_kinds(cls):
+        return (cls.wire_kind(),)
 
     @classmethod
     def wire_kind(cls) -> str:
@@ -139,7 +141,9 @@ class UnreadPayload:
 class UnknownPiEvent(UnreadPayload, NativePiEvent, DurablePiEvent):
     """Unrecognized events remain ignorable, never admission evidence."""
 
-    unknown_kind: ClassVar[bool] = True
+    @classmethod
+    def known_kinds(cls):
+        return ()
 
 
 @dataclass(frozen=True)
@@ -788,8 +792,7 @@ class Response(NativePiEvent, DurablePiEvent):
         return super().normalize_field(target, key, value, record)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        owner = session.native.reader.correlate(self) or self.command
-        async for event in owner.on_response(self, session):
+        async for event in self.command.on_response(self, session):
             yield event
 
 

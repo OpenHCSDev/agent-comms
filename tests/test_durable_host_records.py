@@ -7,7 +7,7 @@ import pytest
 from agent_comms.agent_backend import FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction
 from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
 from agent_comms.pi_durable_backend import (
-    CompactDurable, ContextUsageData, ContextUsageQuery, DurableDatabase, DurableHost,
+    CompactDurable, ContextUsageData, ContextUsageQuery, DurableDatabase,
     DurablePiEvent, Inspect, PiDurableBackend, Settle,
 )
 from agent_comms.pi_rpc import PiRpcChannel
@@ -40,7 +40,7 @@ def test_compaction_reply_decodes_directly_to_existing_outcome(result, expected)
     ]}, (Chunk('visible'), Thinking('reasoning'))),
     ({'type': 'tool_execution_start', 'toolCallId': 'call', 'toolName': 'read',
       'args': {'path': 'source.py'}},
-     (ToolStart(id='call', name='read', title='Read', kind='read', args={'path': 'source.py'}),)),
+     (ToolStart(id='call', name='read', title='Read source.py', kind='read', args={'path': 'source.py'}),)),
     ({'type': 'task_failed', 'taskId': 3, 'kind': 'tool', 'message': 'failed'}, (Error('failed'),)),
 ])
 def test_event_fields_and_changes_are_decoded_at_frame_ingress(event, expected):
@@ -91,10 +91,10 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path):
             assert await backend.context_usage(thread) == ContextUsageData(0, None)
             assert await backend.interrupted(thread) == ()
             with pytest.raises(RuntimeError, match='Interrupted work does not exist'):
-                await backend.host.request(Settle('task:missing', 'ABANDON'))
-            assert (await backend.host.request(Inspect())).work == ()
-            assert await backend.host.request(ContextUsageQuery()) == ContextUsageData(0, None)
-            assert not backend.host.reader.done()
+                await backend.child.request(Settle('task:missing', 'ABANDON'))
+            assert (await backend.child.request(Inspect())).work == ()
+            assert await backend.child.request(ContextUsageQuery()) == ContextUsageData(0, None)
+            assert backend.child.proc.alive()
         finally:
             await backend.close_idle()
     asyncio.run(journey())

@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import ExitStack, contextmanager
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from uuid import uuid4
@@ -12,7 +13,7 @@ from pydantic import JsonValue
 
 from .agent_backend import AgentBackend, Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation, Steers
 from .agent_events import Error
-from .child_process import AttachedChild
+from .native_custody import PiChild
 from .external_transcript import ExternalCut
 from .native_entries import StoredEntry
 from .native_session_files import NativeSessionFiles
@@ -90,24 +91,42 @@ class HistoryData(PiResponseData):
     cursor: dict[str, JsonValue] | None = None
 
 
-class DurableTranscriptRead(TranscriptSource):
-    def __init__(self, loop, host):
-        self.loop, self.host = loop, host
-        page = self.page(limit=1) if host is not None else HistoryData(())
-        self.through = max((entry.id for entry in page.items), default=0)
+def _history_request(source, command):
+    with source.reading() as reader:
+        return reader.execute(reader, command)
 
-    def cut(self):
-        return ExternalCut(self.through)
+
+@dataclass(frozen=True)
+class DurableTranscript(TranscriptSource):
+    location: DurableDatabase
+    execute: Callable = field(default=_history_request, repr=False, compare=False)
+
+    @contextmanager
+    def reading(self):
+        if not Path(self.location.path).is_file():
+            yield replace(self, execute=lambda source, command: HistoryData(()))
+            return
+        with asyncio.Runner() as loop:
+            child = loop.run(PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+                cwd=str(Path(self.location.path).parent), event_type=DurablePiEvent))
+            try:
+                loop.run(child.request(OpenHistory(self.location.path)))
+                yield replace(self, execute=lambda source, command: loop.run(child.request(command)))
+            finally:
+                loop.run(child.shutdown())
 
     def page(self, *, limit=128, cursor=None, query=DurableEntryQuery()):
-        return self.loop.run(self.host.request(Entries(limit, cursor, query)))
+        return self.execute(self, Entries(limit, cursor, query))
+
+    def cut(self):
+        return ExternalCut(max((entry.id for entry in self.page(limit=1).items), default=0))
 
     def records(self, minimum, maximum, order):
-        if self.host is None or maximum < minimum:
+        if maximum < minimum:
             return
         cursor = None
         while True:
-            page = self.page(cursor=cursor, query=DurableEntryQuery(minimum, min(maximum, self.through), order))
+            page = self.page(cursor=cursor, query=DurableEntryQuery(minimum, maximum, order))
             for entry in page.items:
                 yield StoredRecord(entry.id - 1, entry.id, entry, True)
             cursor = page.cursor
@@ -119,28 +138,6 @@ class DurableTranscriptRead(TranscriptSource):
 
     def reverse(self, before):
         return self.records(1, before, 'descending')
-
-
-@dataclass(frozen=True)
-class DurableTranscript(TranscriptSource):
-    location: DurableDatabase
-
-    @contextmanager
-    def reading(self):
-        if not Path(self.location.path).is_file():
-            yield DurableTranscriptRead(None, None)
-            return
-        with asyncio.Runner() as loop:
-            lifetime = DurableHost.history(self.location)
-            host = loop.run(lifetime.__aenter__())
-            try:
-                yield DurableTranscriptRead(loop, host)
-            finally:
-                loop.run(lifetime.__aexit__(None, None, None))
-
-    def cut(self):
-        with self.reading() as reader:
-            return reader.cut()
 
 
 @dataclass(frozen=True)
@@ -292,136 +289,13 @@ class CompactDurable(Compact):
     response_payload = OutcomeData
 
 
-def _event_without_turn(event):
-    raise RuntimeError(f'Pi event {event.declared_name!r} arrived with no open turn')
-
-
-class DurableTurn:
-    def __init__(self, host):
-        self.host = host
-        self.events = asyncio.Queue(maxsize=100)
-
-    def receive(self, event):
-        self.events.put_nowait(event)
-
-    async def next_event(self):
-        waiting = asyncio.create_task(self.events.get())
-        try:
-            ready, _ = await asyncio.wait((waiting, self.host.reader), return_when=asyncio.FIRST_COMPLETED)
-            if self.host.reader in ready:
-                self.host.reader.result()
-            return waiting.result()
-        finally:
-            waiting.cancel()
-            await asyncio.gather(waiting, return_exceptions=True)
-
-    async def converted(self):
-        while True:
-            for event in (await self.next_event()).convert():
-                yield event
-
-
-class DurableHost:
-    def __init__(self):
-        self.child = self.lock_file = self.reader = self.channel = None
-        self.deliver_event = _event_without_turn
-
-    async def open(self, location, thread):
-        if self.child is not None:
-            return
-        path = Path(location.path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self.lock_file = path.with_suffix(path.suffix + '.lock').open('a+b')
-        try:
-            fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            await self.start(thread.worktree, (self.lock_file.fileno(),))
-            await self.request(Open(str(path), thread.worktree, AgentSettings.selected(thread.model, thread.thinking_level), str(Path.home() / '.pi/agent/auth.json')))
-        except BaseException:
-            await self.close()
-            raise
-
-    @classmethod
-    @asynccontextmanager
-    async def history(cls, location):
-        host = cls()
-        try:
-            await host.start(str(Path(location.path).parent))
-            await host.request(OpenHistory(location.path))
-            yield host
-        finally:
-            await host.close()
-
-    async def start(self, cwd, pass_fds=()):
-        self.child = await AttachedChild.start(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))), cwd=cwd, pass_fds=pass_fds)
-        self.channel = PiRpcChannel(self.child.stdout, event_type=DurablePiEvent)
-        self.reader = asyncio.create_task(self.read())
-
-    async def read(self):
-        try:
-            while (event := await self.channel.receive(strict=True)) is not None:
-                if isinstance(event, Response):
-                    if self.channel.correlate(event) is None:
-                        raise ValueError('Unsolicited durable response')
-                else:
-                    self.deliver_event(event)
-            tail = '' if self.child.alive() else await self.child.stderr_tail()
-            raise EOFError(f'Durable host closed: {tail}')
-        finally:
-            self.channel.pending.cancel_all()
-
-    @asynccontextmanager
-    async def open_turn(self):
-        if self.deliver_event is not _event_without_turn:
-            raise RuntimeError('A durable turn is already open')
-        turn = DurableTurn(self)
-        self.deliver_event = turn.receive
-        try:
-            await self.request(Watch())
-            yield turn
-        finally:
-            try:
-                await self.request(Unwatch())
-            finally:
-                self.deliver_event = _event_without_turn
-
-    async def request(self, command):
-        self.reader.result() if self.reader.done() else None
-        command = replace(command, id=uuid4().hex)
-        future = self.channel.track(command)
-        try:
-            await self.child.write(self.channel.command_bytes(command))
-            ready, _ = await asyncio.wait((future, self.reader), return_when=asyncio.FIRST_COMPLETED)
-            if self.reader in ready:
-                self.reader.result()
-            response = future.result()
-            if not response.success:
-                raise RuntimeError(response.error)
-            return response.data.require_payload()
-        finally:
-            future.cancel()
-
-    async def close(self):
-        try:
-            if self.child is not None:
-                await self.child.stop()
-            for task in (self.reader,):
-                if task is not None:
-                    task.cancel()
-                    await asyncio.gather(task, return_exceptions=True)
-        finally:
-            self.child = self.reader = self.channel = None
-            if self.lock_file is not None:
-                self.lock_file.close()
-                self.lock_file = None
-
-
 class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, ConfiguresModel):
     location_type = DurableDatabase
     unstarted_type = UnstartedRuntime
-    event_kinds = frozenset(member.wire_kind() for member in DurablePiEvent.members_with(DurablePiEvent) if not member.unknown_kind)
+    event_kinds = frozenset(kind for member in DurablePiEvent.members_with(DurablePiEvent) for kind in member.known_kinds())
 
     def __init__(self):
-        self.host = DurableHost()
+        self.child: PiChild | None = None
         self.lock = asyncio.Lock()
 
     @classmethod
@@ -433,50 +307,66 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
         return DurableDatabase(str(Path(root).absolute() / 'durable-sessions' / f'{uuid4().hex}.sqlite3'))
 
     async def open(self, thread):
-        await self.host.open(thread.runtime, thread)
+        if self.child is None:
+            path = Path(thread.runtime.path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with ExitStack() as resources:
+                lock = resources.enter_context(path.with_suffix(path.suffix + '.lock').open('a+b'))
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+                    cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
+            await self.child.request(Open(str(path), thread.worktree, AgentSettings.selected(thread.model, thread.thinking_level), str(Path.home() / '.pi/agent/auth.json')))
+        return self.child
 
     async def interrupted(self, thread):
-        await self.open(thread)
-        return (await self.host.request(Inspect())).work
+        child = await self.open(thread)
+        return (await child.request(Inspect())).work
 
     async def settle(self, thread, work, disposition):
-        await self.open(thread)
-        await self.host.request(Settle(work, disposition))
+        child = await self.open(thread)
+        await child.request(Settle(work, disposition))
 
     async def resume(self, thread):
-        await self.open(thread)
-        await self.host.request(Resume())
+        child = await self.open(thread)
+        await child.request(Resume())
 
     async def run_turn(self, thread, content, delivery):
         async with self.lock:
-            await self.open(thread)
-            async with self.host.open_turn() as turn:
-                await self.submit_turn(content, delivery)
-                async for event in turn.converted():
-                    yield event
+            child = await self.open(thread)
+            async with child.turn() as turn:
+                await child.request(Watch())
+                try:
+                    await self.submit_turn(content, delivery)
+                    async for event in turn.converted():
+                        yield event
+                finally:
+                    await child.request(Unwatch())
 
     async def submit_turn(self, content, delivery):
         raise RuntimeError('Durable worker integration is unfinished: Core InputId and send-disposition integration required')
 
     async def abort(self, owner):
-        await self.host.close()
+        if self.child is not None:
+            await self.child.shutdown()
 
     async def close_idle(self):
         async with self.lock:
-            await self.host.close()
+            if self.child is not None:
+                await self.child.shutdown()
+                self.child = None
 
     async def context_usage(self, thread):
-        await self.open(thread)
-        return await self.host.request(ContextUsageQuery())
+        child = await self.open(thread)
+        return await child.request(ContextUsageQuery())
 
     async def compact(self, thread, instructions):
-        await self.open(thread)
-        return (await self.host.request(CompactDurable(custom_instructions=instructions))).outcome
+        child = await self.open(thread)
+        return (await child.request(CompactDurable(custom_instructions=instructions))).outcome
 
     async def models(self, thread):
-        await self.open(thread)
-        return (await self.host.request(Configure())).models
+        child = await self.open(thread)
+        return (await child.request(Configure())).models
 
     async def configure(self, thread, model, thinking):
-        await self.open(thread)
-        return (await self.host.request(Configure(AgentSettings.selected(model, thinking)))).selected()
+        child = await self.open(thread)
+        return (await child.request(Configure(AgentSettings.selected(model, thinking)))).selected()

@@ -1,5 +1,15 @@
-"""The original cancellation-safe JSONL transport resource, without a codec."""
+"""Cancellation-safe JSONL framing and shared object-field integrity."""
 import asyncio
+from typing import Any
+
+
+def unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON field")
+        result[key] = value
+    return result
 
 class JsonlStreamReader:
     def __init__(self, reader: asyncio.StreamReader):

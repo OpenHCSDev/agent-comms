@@ -44,7 +44,7 @@ from .native_tool_call import (
 )
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
-from .pi_rpc import unique_fields
+from .jsonl_stream import unique_fields
 from .private_path import PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole, fsync_directory
 from .selected_actions import SelectedAction
 

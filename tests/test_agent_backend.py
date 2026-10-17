@@ -129,11 +129,13 @@ def test_validation_requires_a_location_and_event_kinds():
 
 
 class _ProbeEvent(DeclaredFamily):
-    unknown_kind = False
-
     @classmethod
     def wire_kind(cls):
         return cls.declared_name
+
+    @classmethod
+    def known_kinds(cls):
+        return (cls.wire_kind(),)
 
 
 class AlphaProbe(_ProbeEvent):
@@ -145,7 +147,9 @@ class BetaProbe(_ProbeEvent):
 
 
 class FallbackProbe(_ProbeEvent):
-    unknown_kind = True
+    @classmethod
+    def known_kinds(cls):
+        return ()
 
 
 def test_converter_family_must_cover_exactly_the_runtime_event_kinds():
@@ -170,7 +174,7 @@ def test_pi_event_family_matches_pi_0_85_1_when_imported_fresh():
         [sys.executable, "-c", (
             "from agent_comms import pi_events as p\n"
             "from agent_comms.pi_native_backend import PiNativeBackend as B\n"
-            "kinds = {m.wire_kind() for m in p.PiEvent.members_with(p.PiEvent) if not m.unknown_kind}\n"
+            "kinds = {k for m in p.NativePiEvent.members_with(p.NativePiEvent) for k in m.known_kinds()}\n"
             "assert kinds == B.event_kinds, kinds ^ B.event_kinds\n"
         )],
         capture_output=True, text=True, timeout=60,

@@ -438,7 +438,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
 
 def _event_family_problems(backend: type, family: type[DeclaredFamily]) -> list[str]:
-    declared = {member.wire_kind() for member in family.members_with(family) if not member.unknown_kind}
+    declared = {kind for member in family.members_with(family) for kind in member.known_kinds()}
     expected = backend.event_kinds
     problems = []
     if missing := sorted(expected - declared):

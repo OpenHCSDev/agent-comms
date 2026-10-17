@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.agent_backend import AgentBackend, RuntimeLocation
 from agent_comms.field_codec import FieldCodec
-from agent_comms.pi_durable_backend import DurableDatabase, DurableHost, PiDurableBackend, Inspect
+from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
 from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.threads import Thread
 from agent_comms.turn_runner import TurnRunner
@@ -89,10 +89,10 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path):
                    cwd=Path(__file__).parents[1] / 'src/agent_comms', check=True,
                    capture_output=True, timeout=20)
     async def journey():
-        host = DurableHost()
+        backend = PiDurableBackend()
         thread = Thread('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
                         session_file=location.path)
-        await host.open(location, thread)
+        host = await backend.open(thread)
         try:
             interrupted = await host.request(Inspect())
             def read():
@@ -112,5 +112,5 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path):
             await asyncio.to_thread(read)
             assert await host.request(Inspect()) == interrupted
         finally:
-            await host.close()
+            await host.shutdown()
     asyncio.run(journey())

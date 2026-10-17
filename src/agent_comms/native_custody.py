@@ -8,7 +8,9 @@ from collections.abc import Callable, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
+
+from .pi_events import PiEvent, Response
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .native_attestation import NativeAttestation, PendingAttestation
@@ -22,14 +24,14 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class PiSessionChild:
+class PiChild:
     proc: AttachedChild
     reader: PiRpcChannel
-    key: tuple[NativePiRpcLaunch, tuple[int, int]]
-    attestation: NativeAttestation
-    sensitive_diagnostics: bool = False
-    resources: ExitStack = field(default_factory=ExitStack, repr=False)
-    transport: AsyncExitStack = field(default_factory=AsyncExitStack, repr=False)
+    resources: ExitStack = field(default_factory=ExitStack, repr=False, kw_only=True)
+    transport: AsyncExitStack = field(default_factory=AsyncExitStack, repr=False, kw_only=True)
+    strict: ClassVar[bool] = True
+    _events: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=100), init=False, repr=False)
+    _read_task: asyncio.Task | None = field(default=None, init=False, repr=False)
     forwarding_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
     _close_job: asyncio.Task[ChildOutcome | BaseException] | None = field(default=None, init=False, repr=False)
 
@@ -37,24 +39,72 @@ class PiSessionChild:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
 
     @classmethod
-    async def start(cls, key, attestation):
-        launch, _ = key
-        with ExitStack() as resources:
-            environment = dict(launch.env)
-            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
-                address = resources.enter_context(PrivateSocketRole.address(
-                    Path(environment["AGENT_COMMS_PROJECT_SOCKET"])
-                ))
-                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
-            proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=environment)
-            assert proc.stdout is not None
-            return cls(
-                proc,
-                PiRpcChannel(proc.stdout),
-                key,
-                attestation,
-                resources=resources.pop_all(),
-            )
+    async def start_command(cls, argv, *, cwd, env=None, pass_fds=(), event_type=PiEvent, **state):
+        proc = await AttachedChild.start(argv, cwd=cwd, env=env, pass_fds=pass_fds)
+        return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type), **state)
+
+    def unowned_event(self, event):
+        raise RuntimeError('Pi event arrived with no open turn')
+
+    async def response(self, event):
+        if self.reader.correlate(event) is None:
+            raise ValueError('Unsolicited Pi response')
+
+    async def _read(self):
+        while (event := await self.reader.receive(strict=self.strict)) is not None:
+            if isinstance(event, Response):
+                await self.response(event)
+            else:
+                await self.deliver_event(event)
+
+    async def deliver_event(self, event):
+        await self._events.put(event)
+
+    @asynccontextmanager
+    async def turn(self):
+        if self._read_task is not None:
+            raise RuntimeError('A Pi turn is already open')
+        self._events = asyncio.Queue(maxsize=100)
+        self._read_task = asyncio.create_task(self._read())
+        try:
+            yield self
+        finally:
+            await self.finish_input()
+
+    async def next_event(self):
+        reading = self._read_task
+        if reading is None:
+            raise RuntimeError('No Pi turn is open')
+        if not self._events.empty():
+            return self._events.get_nowait()
+        waiting = asyncio.create_task(self._events.get())
+        try:
+            await asyncio.wait((waiting, reading), return_when=asyncio.FIRST_COMPLETED)
+            return waiting.result() if waiting.done() else reading.result()
+        finally:
+            waiting.cancel()
+            await asyncio.gather(waiting, return_exceptions=True)
+
+    async def request(self, command):
+        if self.retired:
+            raise RuntimeError('Pi child has retired')
+        async with self.failures():
+            if self._read_task is None:
+                response = await command.exchange(self.reader, self.proc.stdin, strict=self.strict, on_event=self.unowned_event)
+            else:
+                async with command.pending_response(self.reader, self.proc.stdin) as future:
+                    await asyncio.wait((future, self._read_task), return_when=asyncio.FIRST_COMPLETED)
+                    response = future.result() if future.done() else self._read_task.result()
+                    if response is None:
+                        raise EOFError('Pi child ended before its response')
+        if response.success is not True:
+            raise RuntimeError(response.error)
+        return response.data.require_payload()
+
+    async def converted(self):
+        while (event := await self.next_event()) is not None:
+            for update in event.convert():
+                yield update
 
     @property
     def retired(self) -> bool:
@@ -69,6 +119,10 @@ class PiSessionChild:
 
     async def finish_input(self) -> None:
         """Retire this input's ingress without retiring a retained idle child."""
+        reading, self._read_task = self._read_task, None
+        if reading is not None:
+            reading.cancel()
+            await asyncio.gather(reading, return_exceptions=True)
         forwarding, self.forwarding_task = self.forwarding_task, None
         if forwarding is not None:
             forwarding.cancel()
@@ -134,6 +188,32 @@ class PiSessionChild:
             if isinstance(error, NativePiUnavailable):
                 error.native_stderr = stderr
             raise
+
+
+@dataclass
+class PiSessionChild(PiChild):
+    key: tuple[NativePiRpcLaunch, tuple[int, int]]
+    attestation: NativeAttestation
+    sensitive_diagnostics: bool = False
+    strict = False
+
+    @classmethod
+    async def start(cls, key, attestation):
+        launch, _ = key
+        with ExitStack() as resources:
+            environment = dict(launch.env)
+            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
+                address = resources.enter_context(PrivateSocketRole.address(Path(environment["AGENT_COMMS_PROJECT_SOCKET"])))
+                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
+            return await cls.start_command(launch.argv, cwd=str(launch.cwd), env=environment,
+                key=key, attestation=attestation, resources=resources.pop_all())
+
+    async def response(self, event):
+        self.reader.correlate(event)
+        await self.deliver_event(event)
+
+    def unowned_event(self, event):
+        pass
 
 
 class NativeCustody(ABC):
@@ -224,10 +304,7 @@ class BorrowedNative(SuccessorNative):
     async def inspect(self, persistent, prepare, request):
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
-        async with request.pending_response(
-            self.child.reader,self.child.proc.stdin
-        ) as response:
-            return (await response).data.require_payload()
+        return await self.child.request(request)
 
 @dataclass
 class RetainedNative(ChildNative):
@@ -254,11 +331,7 @@ class RetainedNative(ChildNative):
     async def inspect_acquired(self, persistent, request):
         async with persistent.lock:
             current = persistent.custody.idle()
-            response = await request.exchange(
-                current.child.reader,current.child.proc.stdin
-            )
-            if response.success is not True:
-                raise ValueError(f"Native request did not succeed: {response.error}")
+            data = await current.child.request(request)
             if request.writes_session:
                 # This child wrote the file itself; its loaded context is the new revision.
                 from .session_revision import SessionRevision
@@ -266,7 +339,7 @@ class RetainedNative(ChildNative):
                 current.revision = SessionRevision.observe(
                     current.identity.session_file
                 ).require_available()
-            return response.data.require_payload()
+            return data
 
     def reuse(self, key):
         if self.child.key == key and self.current:

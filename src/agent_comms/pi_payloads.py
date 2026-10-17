@@ -1327,7 +1327,7 @@ class McpLiveReceipt:
         attestation or permission, even when the current input identity matches.
         """
         import json
-        from .pi_rpc import unique_fields
+        from .jsonl_stream import unique_fields
 
         if text is None or len(text) > 8192:
             return None

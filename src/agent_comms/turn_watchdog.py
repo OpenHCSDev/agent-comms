@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from collections.abc import AsyncIterator, Callable
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -18,6 +20,24 @@ from .native_startup import NATIVE_STARTUP_POLICY
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import PiEvent, RetryAttemptEvent
+
+
+class TurnRead(ABC):
+    @abstractmethod
+    def deliver(self, session): ...
+
+
+class WakeRead(TurnRead):
+    def deliver(self, session):
+        session.skip = True
+
+
+@dataclass(frozen=True)
+class PacketRead(TurnRead):
+    packet: PiEvent | None
+
+    def deliver(self, session):
+        session.accept_packet(self.packet)
 
 
 class TurnWaitExpired(TimeoutError):
@@ -271,10 +291,10 @@ class ProgressWatchdog:
             attempt=attempt,
         )
 
-    async def read(self, session: TurnSession) -> bytes:
+    async def read(self, session: TurnSession) -> TurnRead:
         if session.rejected_signal.is_set():
-            return b"\n"
-        read_task = asyncio.create_task(session.native.reader.readline())
+            return WakeRead()
+        read_task = asyncio.create_task(session.native.next_event())
         reject_task = asyncio.create_task(session.rejected_signal.wait())
         finish_task = (
             asyncio.create_task(session.finish_event.wait())
@@ -303,16 +323,16 @@ class ProgressWatchdog:
                 await session.native.shutdown()
                 if not forwarding.cancelled():
                     forwarding.result()
-                return b""
+                return PacketRead(None)
             if read_task in done:
-                return read_task.result()
+                return PacketRead(read_task.result())
             if finish_task is not None and finish_task in done:
                 read_task.cancel()
                 await asyncio.gather(read_task, return_exceptions=True)
                 if session.awaiting_native_attestation:
-                    return b""
+                    return PacketRead(None)
                 await session.stats.request(session)
-            return b"\n"
+            return WakeRead()
         finally:
             for pending in tasks:
                 if not pending.done():

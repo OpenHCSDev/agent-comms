@@ -1,7 +1,8 @@
 """Pi JSON-line transport; tolerant discovery and strict native proof share one decoder."""
 
 from __future__ import annotations
-from .jsonl_stream import JsonlStreamReader
+from .jsonl_stream import JsonlStreamReader, unique_fields
+from .pi_events import PiEvent
 
 import asyncio
 import json
@@ -16,15 +17,6 @@ if TYPE_CHECKING:
     from .pi_events import PiEvent, Response
 
 
-def unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("Duplicate Pi RPC field")
-        result[key] = value
-    return result
-
-
 class PiRpcChannel(JsonlStreamReader, Sealed):
     """Read whole JSONL records regardless of asyncio's transport buffer limit.
 
@@ -35,15 +27,13 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
 
     OBSERVATION_MAX_BYTES = 16 * 1024
 
-    def __init__(self, reader: asyncio.StreamReader, *, event_type=None):
+    def __init__(self, reader: asyncio.StreamReader, *, event_type: type[PiEvent] = PiEvent):
         super().__init__(reader)
         self.pending = PendingRequests()
         self.event_type = event_type
 
     @staticmethod
-    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None, event_type=None) -> PiEvent:
-        from .pi_events import PiEvent
-
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None, event_type: type[PiEvent] = PiEvent) -> PiEvent:
         if max_bytes is not None and len(raw) > max_bytes:
             raise ValueError("Native RPC record exceeds transport limit")
         if strict and (not raw or not raw.endswith(b"\n")):
@@ -51,7 +41,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
         data = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_fields if strict else None)
         if not isinstance(data, dict):
             raise ValueError("Pi RPC record has wrong type")
-        return (event_type or PiEvent).from_wire(data)
+        return event_type.from_wire(data)
 
     async def receive(
         self, *, strict: bool = False, max_bytes: int | None = None

@@ -14,7 +14,7 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, TextRepresentation
 from .typed_table import TextStorage
-from .pi_rpc import unique_fields
+from .jsonl_stream import unique_fields
 
 
 class InvalidTriageDecision(ValueError):

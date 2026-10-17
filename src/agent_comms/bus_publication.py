@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Final
 from .wire_record import MessageWireRecord
 from .field_codec import TextRepresentation
 from .errors import RelationViolationError
-from .pi_rpc import unique_fields
+from .jsonl_stream import unique_fields
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience

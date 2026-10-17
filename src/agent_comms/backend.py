@@ -398,6 +398,7 @@ class TurnSession:
                     await self.open_transport(transport)
                 native = await self.open_native(reuse=reuse)
                 native.transport = transport.pop_all()
+                await resources.enter_async_context(native.turn())
         self.owner = asyncio.current_task()
         if self.owner is not None:
             self.active[self.owner] = self
@@ -474,12 +475,16 @@ class TurnSession:
             yield self.rejected_commands.pop(0)
         self.rejected_signal.clear()
         try:
-            self.line = await self.watchdog.read(self)
+            read = await self.watchdog.read(self)
         except TurnWaitExpired as expired:
             async for event in expired.wait.expire(self):
                 yield event
             return
-        if not self.line:
+        read.deliver(self)
+
+    def accept_packet(self, packet):
+        self.payload = packet
+        if packet is None:
             if self.awaiting_native_attestation:
                 self.output.preflight_failure = FailureReason.PREFLIGHT_EXIT
                 self.output.diagnostic = {
@@ -497,26 +502,6 @@ class TurnSession:
                 )
             self.finished = True
             return
-        self.line = self.line.strip()
-        if not self.line:
-            self.skip = True
-            return
-        try:
-            self.payload = PiRpcChannel.decode_record(self.line)
-        except json.JSONDecodeError:
-            self.skip = True
-            return
-        except (ValueError, TypeError) as error:
-            if self.awaiting_native_attestation:
-                self.output.record_failure(
-                    failures.InputIdUnavailable(
-                        f"Invalid Pi capability preflight response: {error}"
-                    )
-                )
-                await self.native.shutdown()
-                self.finished = True
-                return
-            raise
 
     def grant_prompt(self) -> None:
         """Original granted write starts both admission and its input-start clock."""
