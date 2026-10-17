@@ -8,7 +8,9 @@ from agent_comms.coordination_errors import StaleRevision
 from agent_comms.assignment_states import IgnoredAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.notification_progress import ContextualProgress, SentProgress, UnrecordedProgress
+from agent_comms.notification_progress import (
+    ContextualProgress, IgnoredProgress, SentProgress, ShownToModelProgress, UnrecordedProgress,
+)
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
@@ -192,10 +194,13 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     assert list(comms.bus.full_history_page().messages)[-1] == message
 
 
-def test_original_target_handling_revokes_open_sender_read_without_new_message(
-    tmp_path,
+async def test_original_target_handling_revokes_open_sender_read_without_new_message(
+    tmp_path, monkeypatch,
 ):  # noqa: F811
-    root, _root_id, comms, initial, _people = _root(tmp_path)
+    from agent_comms.coordinated_runtime import SelectedExecution
+    from test_coordinated_runtime import _fake_model
+
+    root, root_id, comms, initial, _people = _root(tmp_path)
     message = initial.message
     before = comms.transcripts.capture_page_read("sender")
     sender_page = before.read()
@@ -215,10 +220,6 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     assert comms.views.message_notifications_for_references(
         (message.reference,) * (MessageNotification.window_limit + 1)
     ) == {(message.seq, message.message_id): outcomes}
-    original = next(
-        row.assignment for row in NotificationAssignment.read(root, (initial,)).resolve(root)
-        if row.assignment.recipient_lookup == lookup
-    )
     # Both views are already open. Later messages move this original beyond the
     # bounded recent-notification window before its handling changes.
     for index in range(6):
@@ -237,12 +238,16 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     before = comms.transcripts.capture_page_read("sender")
     sender_page = before.read()
     wire_before = comms.bus.log.path.read_bytes()
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        published_revision = comms.views.revision()
-        store.assignments.transition_preengagement(
-            original.assignment_id, IgnoredAssignment, expected_revision=original.revision
-        )
-        assert comms.views.revision().stores_changed_since(published_revision)
+    published_revision = comms.views.revision()
+    runner, calls = _fake_model(decision="IGNORE")
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
+    outcome = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path,
+    ).run()
+    assert outcome is not None and outcome.disposition is IgnoredAssignment
+    assert len(calls) == 1
+    assert comms.views.revision().stores_changed_since(published_revision)
     after = comms.transcripts.capture_page_read("sender")
     assert not before.current()
     assert before.content_current()
@@ -257,10 +262,17 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     assert sender.read_identity != open_sender.read_identity
     assert recipient.read_identity != open_recipient.read_identity
     assert sender.read_identity == after.identity
-    # This direct SQL transition has no native context commit. It must not
-    # fabricate a model-read state from the ignored decision alone.
-    with pytest.raises(ValueError, match="^Read notification has no model-context proof$"):
-        comms.views.message_notifications_for_references((message.reference,))
+    outcomes = comms.views.message_notifications_for_references((message.reference,))[
+        message.seq, message.message_id
+    ]
+    target_outcome = next(
+        item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
+    )
+    assert target_outcome.state == IgnoredProgress(
+        ShownToModelProgress(outcome.context.committed_at_ms)
+    )
+    assert target_outcome.state.read and target_outcome.state.delivered
+    assert target_outcome.state.detail == ""
 
 
 def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa: F811
