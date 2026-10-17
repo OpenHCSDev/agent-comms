@@ -740,7 +740,8 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     assert len(comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))) == 1
     assert await agent.inputs.drain_inbox("beta") == 1
-    await reply_turn_finished(agent, "beta")
+    with pytest.raises(native_pi.NativePiUnavailable, match="fake backend process died"):
+        await reply_turn_finished(agent, "beta")
     failure = drain_diagnostic(comms, "beta")
     assert isinstance(failure, NativeInputDrainDiagnostic)
     assert failure.error_type == "NativePiUnavailable"
