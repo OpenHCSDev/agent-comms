@@ -154,7 +154,7 @@ class Registration:
         roots = current.storage_roots
         proposed = roots
         for effect in effects:
-            proposed = effect.admit(self.storage_rule, proposed)
+            proposed = effect.check(self.storage_rule, proposed)
         if proposed != roots:
             with self.store.editing() as edit:
                 latest = edit.document.require(name)

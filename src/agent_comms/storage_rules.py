@@ -100,7 +100,7 @@ class StorageRule:
 
 
 class StorageEffect:
-    def admit(self, rule, roots):
+    def check(self, rule, roots):
         return roots
 
     def removed_checkouts(self):
@@ -111,7 +111,7 @@ class StorageEffect:
 class WriteStorageEffect(StorageEffect):
     path: Path
 
-    def admit(self, rule, roots):
+    def check(self, rule, roots):
         rule.require_path(roots, self.path)
         return roots
 
@@ -120,13 +120,13 @@ class WriteStorageEffect(StorageEffect):
 class ForbiddenStorageEffect(StorageEffect):
     reason: str
 
-    def admit(self, rule, roots):
+    def check(self, rule, roots):
         rule.deny(self.reason)
 
 
 @dataclass(frozen=True)
 class AllocateStorageEffect(StorageEffect):
-    def admit(self, rule, roots):
+    def check(self, rule, roots):
         rule.require_allocation(roots)
         return roots
 
@@ -135,7 +135,7 @@ class AllocateStorageEffect(StorageEffect):
 class CheckoutStorageEffect(AllocateStorageEffect):
     path: Path
 
-    def admit(self, rule, roots):
+    def check(self, rule, roots):
         rule.require_path(roots, self.path)
         if self.path.parent != rule.checkout_base.resolve() or not re.fullmatch(re.escape(roots.scratch.name) + r'--P[1-9][0-9]*', self.path.name):
             rule.deny(f'checkout destination must be {rule.checkout_base}/{roots.scratch.name}--P<number>')
@@ -148,7 +148,7 @@ class CheckoutStorageEffect(AllocateStorageEffect):
 class RemoveCheckoutStorageEffect(StorageEffect):
     path: Path
 
-    def admit(self, rule, roots):
+    def check(self, rule, roots):
         if self.path not in roots.checkouts[1:]:
             rule.deny('only a registered extra checkout can be removed')
         return roots

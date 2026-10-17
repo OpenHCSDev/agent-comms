@@ -69,7 +69,7 @@ def test_allocation_floor_is_checked_before_usage_walk(tmp_path, monkeypatch):
     monkeypatch.setattr(StorageRule, 'free_gib', lambda self: 0)
     monkeypatch.setattr(StorageRoots, 'usage', lambda self: pytest.fail('walked before rejecting allocation'))
     with pytest.raises(SelectedToolDenied, match='allocation requires'):
-        AllocateStorageEffect().admit(rule, roots)
+        AllocateStorageEffect().check(rule, roots)
 
 
 @pytest.mark.parametrize('command', ['git clone remote target', 'python -m venv env', 'uv sync'])
@@ -78,4 +78,4 @@ def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
     roots = rule.initial_roots('worker', str(tmp_path))
     with pytest.raises(SelectedToolDenied):
         for effect in shell_storage_effects(command, tmp_path):
-            effect.admit(rule, roots)
+            effect.check(rule, roots)
