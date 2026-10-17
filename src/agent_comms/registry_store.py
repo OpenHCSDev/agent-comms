@@ -30,10 +30,16 @@ class RegistryRevision:
     revision: FileRevision | None
     document: RegistryDocument
     raw: dict
-    user_name: str | None = field(init=False)
+    user_name: str | None
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "user_name", next((name for name, thread in self.document.threads.items() if not thread.role.executable), None))
+    @classmethod
+    def capture(cls, revision: FileRevision | None, document: RegistryDocument, raw: dict):
+        user_name = next((name for name, thread in document.threads.items() if not thread.role.executable), None)
+        return cls(revision, document, raw, user_name)
+
+    @property
+    def user(self):
+        return self.document.threads[self.user_name] if self.user_name is not None else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +120,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
                 document = RegistryDocument.from_wire(raw)
             else:
                 document = RegistryDocument.from_wire(raw, (entry.raw, entry.document))
-            self.cache.entry = RegistryRevision(revision, document, raw)
+            self.cache.entry = RegistryRevision.capture(revision, document, raw)
             return document
 
     @property
@@ -126,9 +132,9 @@ class RegistryStore(LockedStore[RegistryDocument]):
         return FileRevision.capture(self.path), FileRevision.capture(self.guard_path)
 
     def read_user(self):
-        with self.reading() as document:
+        with self.reading():
             entry = self.cache.entry
-            return document.threads[entry.user_name] if entry is not None and entry.user_name is not None else None
+            return entry.user if entry is not None else None
 
     def read_entry(self, name: str) -> RegistryEntryRevision:
         """A point lookup from the same decoded revision every registry reader takes."""
@@ -153,7 +159,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.
         if (revision := FileRevision.capture(self.path)) is not None:
-            self.cache.entry = RegistryRevision(revision, document.copy(), raw)
+            self.cache.entry = RegistryRevision.capture(revision, document.copy(), raw)
 
     def _write_unlocked(self, text: str) -> None:
         # The two-file private guard protocol cannot use A8's rollback writer:
