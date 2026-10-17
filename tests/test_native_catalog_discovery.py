@@ -38,7 +38,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_entries import NativeEntry
     from agent_comms.native_session_reopen import NativeSessionIdentity
-    from agent_comms.selected_session import SavedSelectedSession
+    from agent_comms.selected_session import SavedSelectedSession, SelectedSession
 
     source_name = os.environ.get("PI_LAUNCH_TEST_SOURCE")
     if not source_name:
@@ -97,12 +97,10 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
             provider="response-local", model="fixture"))
     malformed = native.project / "malformed.jsonl"
     malformed.write_text("{}\n")
-    wrong = SavedSelectedSession(malformed.parent,
-        identity=NativeSessionIdentity(created.session_id, str(malformed)))
     with pytest.raises((ValueError, native_pi.NativePiUnavailable)):
-        await Coordination.run_worker(partial(execution.tracked_launch,
-            package, worktree=native.project, session=wrong,
-            provider="response-local", model="fixture"))
+        await Coordination.run_worker(partial(SelectedSession.for_launch,
+            malformed.parent, malformed, package))
+    assert malformed.read_text() == "{}\n"
     # Independent new acquisition still verifies the real artifact.
     await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
         package, worktree=native.project, session=session,
