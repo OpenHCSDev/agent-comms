@@ -78,50 +78,50 @@ class GoalScheduler:
 
     def prepare_goal(self, session_id: str) -> ScheduledTurn | None:
         """Read/recover the original READY grant in its joined storage worker."""
-        snapshot = self.comms.registry.snapshot()
-        thread = snapshot.require(self.sessions.require(session_id))
         try:
-            thread.require_local_process(ProcessIdentity.capture(os.getpid()))
-            snapshot.status(thread.name).require_running()
-            thread.require_idle()
-        except RelationViolationError:
-            return
-        goal = thread.active_goal
-        if goal is not None:
-            if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
-                return
-            if self.pending_goal_origins.get(thread.name) == goal.id:
-                return
-            try:
+            with _store_lock(self.comms._wire_lock_path):
+                snapshot = self.comms.registry.snapshot()
+                thread = snapshot.require(self.sessions.require(session_id))
+                try:
+                    thread.require_local_process(ProcessIdentity.capture(os.getpid()))
+                    snapshot.status(thread.name).require_running()
+                    thread.require_idle()
+                except RelationViolationError:
+                    return
+                goal = thread.active_goal
+                if goal is None:
+                    return
+                if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
+                    return
+                if self.pending_goal_origins.get(thread.name) == goal.id:
+                    return
                 store = self.comms.goals.open_goal_store()
                 generation = store.require_generation(goal.id)
                 generation.lifecycle.require_ready()
-                admission = self.comms.registry.snapshot().admission_generations[thread.name]
-                with _store_lock(self.comms._wire_lock_path):
-                    self.comms.goals.ready_goal_grant_locked(thread, admission, generation)
-            except StaleAttemptError:
-                return
-            except MissingGoalGenerationError as error:
-                self.comms.goals.block_goal_after_failed_turn(
-                    thread.name, started_goal=goal, expected_worktree=thread.worktree,
-                    diagnostic=str(error),
-                )
-                return
-            except UnresolvedAttemptError:
-                self.comms.goals.block_goal_after_failed_turn(
-                    thread.name, started_goal=goal, expected_worktree=thread.worktree,
-                    diagnostic="Goal attempt unresolved; inspect diagnostics before Retry.",
-                )
-                return
-            except GoalAttemptError:
-                self.comms.goals.block_goal_after_failed_turn(
-                    thread.name,
-                    started_goal=goal,
-                    expected_worktree=thread.worktree,
-                    diagnostic="Goal launch grant unavailable; explicit Retry required.",
-                )
-                return
-            return ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
+                self.comms.goals.ready_goal_grant_locked(thread, snapshot.admission_generations[thread.name], generation)
+        except StaleAttemptError:
+            return
+        except MissingGoalGenerationError as error:
+            self.comms.goals.block_goal_after_failed_turn(
+                thread.name, started_goal=goal, expected_worktree=thread.worktree,
+                diagnostic=str(error),
+            )
+            return
+        except UnresolvedAttemptError:
+            self.comms.goals.block_goal_after_failed_turn(
+                thread.name, started_goal=goal, expected_worktree=thread.worktree,
+                diagnostic="Goal attempt unresolved; inspect diagnostics before Retry.",
+            )
+            return
+        except GoalAttemptError:
+            self.comms.goals.block_goal_after_failed_turn(
+                thread.name,
+                started_goal=goal,
+                expected_worktree=thread.worktree,
+                diagnostic="Goal launch grant unavailable; explicit Retry required.",
+            )
+            return
+        return ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
 
     async def set_goal(self, session_id: str, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""
