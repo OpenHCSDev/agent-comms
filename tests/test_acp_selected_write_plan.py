@@ -228,7 +228,8 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             else:
                 agent._selected_write_controllers.clear()  # owner-process crash loses binding
             assert await agent._drain_private_nk("beta", root_id) == 1
-            await reply_turn_finished(agent, "beta")
+            with pytest.raises(IdentityConflict, match="controller changed|no longer bound"):
+                await reply_turn_finished(agent, "beta")
             failure = drain_diagnostic(comms, "beta")
             assert isinstance(failure, UnavailableDrainDiagnostic)
             assert failure.error_type == "IdentityConflict"
