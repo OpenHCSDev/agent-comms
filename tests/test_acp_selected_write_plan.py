@@ -35,6 +35,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
+from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.selected_write_plan import SelectedWritePlans
@@ -210,7 +211,8 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         monkeypatch.setattr(TrackedTurnSession, "execute", fake)
         if scenario == "native_failure":
             assert await agent._drain_private_nk("beta", root_id) == 1
-            await reply_turn_finished(agent, "beta")
+            with pytest.raises(NativePiUnavailable, match="fake backend process died"):
+                await reply_turn_finished(agent, "beta")
             failure = drain_diagnostic(comms, "beta")
             assert isinstance(failure, NativeInputDrainDiagnostic)
             assert failure.error_type == "NativePiUnavailable"
@@ -239,8 +241,9 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         assert await agent._drain_private_nk("beta", root_id) == 1
         await reply_turn_finished(agent, "beta")
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
-        claim = Comms(root).bus.log.claim_projection()[str(resource)]
-        assert claim.admission is not None and claim.admission.operation_id == receipt.operation_id
+        with Comms(root).bus.log.certified_read() as source:
+            assert source.claim_operation_used(receipt.operation_id)
+            assert source.claim(str(resource)) is None
         rows = list((root / "selected-write-plans").glob("*.json"))
         assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
         assert await agent._drain_private_nk("beta", root_id) == 0
