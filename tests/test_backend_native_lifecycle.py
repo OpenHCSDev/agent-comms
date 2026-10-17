@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import os
 from functools import partial
 from pathlib import Path
 
@@ -27,8 +26,6 @@ from native_backend_fixture import native_backend_fixture, wait_for
 
 @pytest.fixture
 async def native_backend(tmp_path_factory, monkeypatch):
-    if not os.environ.get("PI_COMPACTION_TEST_PACKAGE"):
-        pytest.skip("Set PI_COMPACTION_TEST_PACKAGE to the immutable native bundle")
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     # Native originals belong to the persistent run, even when a consuming
     # module supplies a separate auto-deleting sealed-bus tmp_path fixture.

@@ -1,9 +1,8 @@
 """Retained actual Pi -> comms_send CLI -> original source -> ACP cold replay."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
-import os
-from pathlib import Path
 
 import acp
 from acp.schema import TextContentBlock
@@ -23,7 +22,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
     assert (await native.run("Retained original context before outbound tool"))[-1].ok
     await native.persistent.close()
     original_native = native.session.read_bytes()
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
+    package = pinned_native_package().resolve(strict=True)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(native.root)
     owner = canonical_agent(

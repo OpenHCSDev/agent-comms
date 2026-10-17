@@ -134,10 +134,6 @@ def test_started_turn_still_finishes_after_its_project_changes(tmp_path):
         replace(turn, thread=comms.registry.require("owner")).require_running_turn(comms.registry)
 
 
-@pytest.mark.skipif(
-    not os.environ.get("PI_COMPACTION_TEST_PACKAGE"),
-    reason="Set PI_COMPACTION_TEST_PACKAGE to the immutable native bundle",
-)
 async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp_path):
     """The live failure: a direct message's turn changed project, then no turn ever started."""
     async with native_backend_fixture(tmp_path) as native:
