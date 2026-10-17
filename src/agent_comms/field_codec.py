@@ -331,8 +331,11 @@ class FieldCodec(Sealed):
             return [cls.encode(item) for item in sorted(value)]
         if isinstance(value, (list, tuple)):
             return [cls.encode(item) for item in value]
-        if isinstance(value, dict) and all(type(key) is str for key in value):
-            return {key: cls.encode(item) for key, item in value.items()}
+        if isinstance(value, dict):
+            key_type, value_type = get_args(annotation) if get_origin(annotation) is dict else (None, None)
+            if key_type is str or (key_type is None and all(type(key) is str for key in value)):
+                return {key: cls.encode(item, value_type) for key, item in value.items()}
+            return [[cls.encode(key, key_type), cls.encode(item, value_type)] for key, item in value.items()]
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
     @classmethod
@@ -403,8 +406,10 @@ class FieldCodec(Sealed):
             return {**cls.value_schema(type(args[0])), "enum": list(args)}
         if origin in (list, tuple, frozenset):
             return {"type": "array", "items": cls.value_schema(args[0])}
-        if origin is dict and args[0] is str:
-            return {"type": "object", "additionalProperties": cls.value_schema(args[1])}
+        if origin is dict:
+            if args[0] is str:
+                return {"type": "object", "additionalProperties": cls.value_schema(args[1])}
+            return {"type": "array", "items": {"type": "array", "prefixItems": [cls.value_schema(arg) for arg in args], "minItems": 2, "maxItems": 2}}
         if origin is type and args and issubclass(args[0], DeclaredFamily):
             return {"type": "string", "enum": list(args[0].names())}
         if isinstance(annotation, type) and issubclass(annotation, Enum):
@@ -678,16 +683,13 @@ class _FixedTupleDecoder(ValueDecoder):
 
 @dataclass(frozen=True, slots=True)
 class _DictDecoder(ValueDecoder):
-    string_keys: bool
+    key: ValueDecoder
     value: ValueDecoder
 
     def decode(self, data):
-        if not isinstance(data, dict) or not self.string_keys:
-            raise ValueError("Expected a JSON object with string keys.")
-        return {
-            FieldCodec._decode_scalar(str, key): self.value.decode(value)
-            for key, value in data.items()
-        }
+        if isinstance(data, dict):
+            return {self.key.decode(key): self.value.decode(value) for key, value in data.items()}
+        return dict(_ListDecoder(_FixedTupleDecoder((self.key, self.value))).decode(data))
 
 @dataclass(frozen=True, slots=True)
 class _FamilyRecordDecoder(ValueDecoder):
@@ -791,7 +793,7 @@ def _structural_decoder(target: object) -> ValueDecoder:
             return _VariadicTupleDecoder(compile_decoder(args[0]))
         return _FixedTupleDecoder(tuple(compile_decoder(item) for item in args))
     if origin is dict:
-        return _DictDecoder(args[0] is str, compile_decoder(args[1]))
+        return _DictDecoder(compile_decoder(args[0]), compile_decoder(args[1]))
     if isinstance(target, type) and issubclass(target, DeclaredFamily):
         return _FamilyRecordDecoder(target)
     return _member_decoder(target)
