@@ -23,6 +23,7 @@ from .thread_status import (
     ConnectedThreadStatus, NoBridgeThreadStatus, RunningThreadStatus, ThreadStatus,
 )
 from .threads import Thread
+from .storage_rules import StorageDecision, StorageRule
 from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
 
@@ -34,6 +35,7 @@ class Registration:
 
     def __init__(self, store_path: Path):
         self.store = RegistryStore(store_path)
+        self.storage_rule = StorageRule.load(store_path.parent)
         self.store.read()
 
     def register(
@@ -78,7 +80,7 @@ class Registration:
         """
         with _store_lock(self.store.path.parent / "wire", shared=True), self.store.editing() as edit:
             change = edit.document.prepare_native_source(original, session_file)
-            self._commit_registration(edit, change)
+            change = self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
             # observed source must not rewrite this authorized turn's settings.
             observed = replace(change.installed_thread,
@@ -128,11 +130,16 @@ class Registration:
         catalog = ChannelCatalog(root / ChannelCatalog.filename)
         with catalog.editing() as channels:
             change = self._prepare_declaration(edit.document, channels, thread, status)
-            self._commit_registration(edit, change)
+            change = self._commit_registration(edit, change)
             channels.remember_tags(change.thread.tags, change.thread.created_at)
         return change.installed_thread
 
-    def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> None:
+    def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
+        if change.thread.storage_roots is None:
+            previous = edit.document.threads.get(change.thread.name)
+            roots = previous.storage_roots if previous is not None else None
+            roots = roots or self.storage_rule.initial_roots(change.thread)
+            change = replace(change, thread=replace(change.thread, storage_roots=roots))
         if change.needs_maintenance_claim:
             MaintenanceBarrier(self.store.path).assert_open_unlocked()
         before = change.prior_goal
@@ -145,6 +152,30 @@ class Registration:
         edit.commit()
         if history is not None and intent is not None:
             history.commit(intent)
+        return change
+
+    def decide_storage(self, name, effects):
+        current = self.require(name)
+        roots = current.storage_roots
+        if roots is None:
+            self.storage_rule.deny('thread has no recorded storage roots; initialize the registry record')
+        proposed = roots
+        for effect in effects:
+            proposed = effect.admit(self.storage_rule, proposed)
+        with self.store.editing() as edit:
+            latest = edit.document.require(name)
+            if latest.incarnation != current.incarnation or latest.storage_roots != roots:
+                self.storage_rule.deny('registered storage ownership changed during the check')
+            added = set(proposed.checkouts) - set(roots.checkouts)
+            for other in edit.document.threads.values():
+                if other.name != name and other.storage_roots is not None:
+                    for path in added:
+                        if any(path == existing or path.is_relative_to(existing) for existing in other.storage_roots.checkouts):
+                            self.storage_rule.deny(f'checkout {path} is registered to {other.name}')
+            edit.document.threads[name] = replace(latest, storage_roots=proposed)
+            edit.commit()
+        removed = tuple(path for effect in effects for path in effect.removed_checkouts())
+        return StorageDecision(current.incarnation, removed, self)
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         with self.store.editing() as edit:

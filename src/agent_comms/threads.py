@@ -17,6 +17,7 @@ from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
+from .storage_rules import StorageRoots
 from .thread_identity import (
     ThreadProvenance,
     ThreadRole,
@@ -59,6 +60,8 @@ class Thread(ThreadProvenance):
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
                               metadata={"wire_required": True})
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
+    storage_roots: StorageRoots | None = field(default=None, kw_only=True,
+        metadata={"wire_omit_default": True, "registration_inheritance": InheritMissing})
     previous_worktrees: tuple[str, ...] = field(
         default=(), metadata={"registration_inheritance": InheritEmpty}
     )
@@ -104,6 +107,7 @@ class Thread(ThreadProvenance):
         """A running turn finishes where it started and owes one turn in the new project."""
         return replace(
             self, worktree=project,
+            storage_roots=self.storage_roots.adding(Path(project).resolve()) if self.storage_roots else None,
             previous_worktrees=tuple(dict.fromkeys((*self.previous_worktrees, previous))),
             project_resume_due=self.project_resume_due or self.executing,
         )
