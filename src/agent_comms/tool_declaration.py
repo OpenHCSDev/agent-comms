@@ -88,7 +88,8 @@ class ToolCallMetadata:
 
     @projected(view="wire", persist=False)
     def title(self) -> str:
-        return ToolDeclaration.caption(self.name, detail=self.arguments.caption, path=self.arguments.path)
+        arguments = self.arguments
+        return ToolDeclaration.caption(self.name, detail=arguments.caption, path=arguments.path)
 
     @projected(view="wire", persist=False)
     def kind(self) -> str:
@@ -131,7 +132,7 @@ class ToolInput(WireModel):
 
 class ClaudeToolInput(ToolInput):
     path: str | None = Field(default=None, alias='file_path',
-                             validation_alias=AliasChoices('file_path', 'notebook_path'))
+                             validation_alias=AliasChoices('file_path', 'notebook_path', 'path'))
     description: str | None = None
     url: str | None = None
     query: str | None = None
@@ -139,7 +140,7 @@ class ClaudeToolInput(ToolInput):
 
 
 class OpenCodeToolInput(ToolInput):
-    path: str | None = Field(default=None, alias='filePath', validation_alias=AliasChoices('filePath'))
+    path: str | None = Field(default=None, alias='filePath', validation_alias=AliasChoices('filePath', 'path'))
 
 
 class RecordedToolInput(ToolInput):
