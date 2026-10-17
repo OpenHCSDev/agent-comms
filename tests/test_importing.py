@@ -195,7 +195,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, c
     for record in records[1:]:
         assert record["parentId"] == parent
         parent = record["id"]
-    context = "\n".join(event.text for event in comms.transcripts.thread_transcript(thread.name))
+    context = "\n".join(event.text for event in comms.transcripts.thread_transcript_page(thread.name).events)
     assert "Keep model authority" in context and "42 passed" in context
     assert "remaining work" in context
     with pytest.raises(ValueError, match="reserved"):

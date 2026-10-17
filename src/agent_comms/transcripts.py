@@ -6,7 +6,7 @@ import json
 import logging
 from abc import abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
@@ -61,13 +61,9 @@ class TranscriptCursor:
         return self.receipts.sequence if self.receipts is not None else 0
 
     def at_offset(self, offset: int) -> TranscriptCursor:
-        from dataclasses import replace
-
         return replace(self, offset=offset)
 
     def at_sequence(self, sequence: int) -> TranscriptCursor:
-        from dataclasses import replace
-
         if self.receipts is None:
             if sequence == 0:
                 return self
@@ -75,12 +71,12 @@ class TranscriptCursor:
         return replace(self, receipts=self.receipts.at(sequence))
 
     def contains(self, other: TranscriptCursor) -> bool:
-        return other.native_within(self) and other.receipts_within(self)
+        return other.native_within(self) and other.wire_within(self)
 
     def native_within(self, parent: TranscriptCursor) -> bool:
         return self.session_file == parent.session_file and self.offset <= parent.offset
 
-    def receipts_within(self, parent: TranscriptCursor) -> bool:
+    def wire_within(self, parent: TranscriptCursor) -> bool:
         return self.receipts is None or parent.includes_receipts(self.receipts)
 
     def includes_receipts(self, receipts: AssignedSourceCursor) -> bool:
@@ -97,6 +93,18 @@ class TranscriptCursor:
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
         return self.receipts is not None and self.receipts.covers(sequence)
+
+    def over_native(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
+        """This wire position over the furthest committed native prefix within it.
+
+        Wire assignment can advance without transferring anonymous native output,
+        so the native position comes from what is already committed.
+        """
+        within = tuple(prefix for prefix in prefixes if prefix.wire_within(self))
+        prefix = max((prefix for prefix in within if prefix.session_file == self.session_file),
+                     key=lambda prefix: prefix.offset,
+                     default=next(iter(within), TranscriptCursor(self.session_file, 0)))
+        return replace(self, session_file=prefix.session_file, offset=prefix.offset)
 
 
 @dataclass(frozen=True, slots=True)
@@ -521,30 +529,12 @@ class Transcripts:
             raise ValueError(f"@{name} reads a native session; a CLI cannot publish its transcript")
         return page.records
 
-    def thread_draft(self, name: str) -> ExternalDraftRow | None:
-        """The canonical source's current output, separate from paged history."""
-        with self._page_source(name, None, None).records.reading() as records:
-            return records.current_draft()
-
     def _page_source(self, name, through, historical_source):
         member = (LiveTranscriptReadIdentity if historical_source is None
                   else RecordedTranscriptReadIdentity)
         return member.resolve_source(
             self, name, through.session_file if through is not None else None, historical_source,
         )
-
-    def thread_transcript(
-        self, name: str, *, max_messages: int = 20, max_bytes: int = 64 * 1024
-    ) -> Sequence[TranscriptEvent]:
-        """The same canonical source supplies bounded preview and paged history."""
-        if max_messages <= 0 or max_bytes <= 0:
-            return ()
-        page = self.thread_transcript_page(name, max_messages=max_messages, max_bytes=max_bytes)
-        return (
-            (NoticeTranscript("Earlier transcript content was omitted from this bounded view."),)
-            if page.has_older
-            else ()
-        ) + page.events
 
     def _thread_transcript_source(
         self, name: str, source_file: str | None = None, *, registry
