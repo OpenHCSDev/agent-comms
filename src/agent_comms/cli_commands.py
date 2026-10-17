@@ -842,7 +842,7 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
 class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="approve-annotations"):
     help = "Approve a pinned external classifier using original human wording and an hourly request budget"
     per_hour: int = option("--per-hour", help="Maximum classifier requests in the rolling hour")
-    segments: tuple[type[ContextSegment], ...] = option("--segments", normalize=json.loads,
+    segments: tuple[type[ContextSegment], ...] = option("--segments", type=json.loads,
         help="JSON list of original segment kinds permitted for disclosure")
 
     def pin_original(self, ctx: Comms, source):
@@ -853,7 +853,7 @@ class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="appro
 @dataclass(frozen=True, kw_only=True)
 class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"):
     help = "Correct one original stored model answer through the human identity owner"
-    label: ModelLabel = option("--label", normalize=json.loads)
+    label: ModelLabel = option("--label", type=json.loads)
     answer: type[SpanAnswer] = option("--answer", editor=ChoiceTargetField)
     worktree: str = option("--worktree", default_factory=os.getcwd)
 
@@ -870,9 +870,9 @@ class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"
 class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
     help = "Report human-reviewed accuracy and probability frequencies for exact annotation versions"
     operation: Literal["calibration"] = option("operation", help="calibration", editor=ChoiceTargetField)
-    question: QuestionVersion = option("--question", normalize=json.loads,
+    question: QuestionVersion = option("--question", type=json.loads,
         help="JSON of the original question member and version digest")
-    classifier: ClassifierVersion = option("--classifier", normalize=json.loads,
+    classifier: ClassifierVersion = option("--classifier", type=json.loads,
         help="JSON of the original classifier member and pinned release")
 
     def apply(self, ctx: Comms):
@@ -944,7 +944,7 @@ class InboxCliCommand(CliCommand):
 class WatchCliCommand(CliCommand, declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
     thread: str = option("--thread")
-    after: MessageReference | None = option("--after", default=None, normalize=json.loads, help="Exclusive original message reference already attempted by this receiver (JSON)")
+    after: MessageReference | None = option("--after", default=None, type=json.loads, help="Exclusive original message reference already attempted by this receiver (JSON)")
     acknowledgment: type[WatchAcknowledgment] = option("--acknowledgment", default=OnReadWatchAcknowledgment, editor=ChoiceTargetField)
 
     def apply(self, ctx: Comms) -> AsyncIterator[Message]:
