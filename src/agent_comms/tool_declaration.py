@@ -38,8 +38,8 @@ class ToolDeclaration(DeclaredFamily, affix="Tool", discovery_package="agent_com
         return caption if len(caption) <= limit else caption[:limit - 1] + '…'
 
     @classmethod
-    def caption_subject(cls, arguments: ToolArguments) -> str:
-        return ''
+    def caption_subject(cls, arguments: ToolArguments) -> str | None:
+        return None
 
     @classmethod
     def recorded_arguments(cls, schema: type[ToolInput], raw: JsonValue) -> ToolArguments:
@@ -67,12 +67,6 @@ class PathTool:
         tail = limit - len(cls.label) - 2
         return cls.label + ' …' + caption[-tail:]
 
-    @classmethod
-    def file_location(cls, arguments: DecodedArguments) -> str:
-        if arguments.input.path is None:
-            raise ValueError('File tool input has no declared path')
-        return arguments.input.path
-
 
 @dataclass(frozen=True)
 class UndeclaredTool(ToolDeclaration):
@@ -98,7 +92,7 @@ class ToolCallMetadata:
         return ToolDeclaration.for_name(self.name).acp_kind
 
     @projected(view="wire", persist=False)
-    def detail(self) -> str:
+    def detail(self) -> str | None:
         return ToolDeclaration.for_name(self.name).caption_subject(self.arguments)
 
     @projected(view="wire", persist=False)
@@ -130,13 +124,14 @@ class ToolInput(WireModel):
 class ClaudeToolInput(ToolInput):
     path: str | None = Field(default=None, alias='file_path',
                              validation_alias=AliasChoices('file_path', 'notebook_path', 'path'))
+    description: str | None = None
 
 
 class OpenCodeToolInput(ToolInput):
     path: str | None = Field(default=None, alias='filePath', validation_alias=AliasChoices('filePath', 'path'))
 
 
-class RecordedToolInput(ToolInput):
+class RecordedToolInput(ClaudeToolInput):
     path: str | None = Field(default=None, validation_alias=AliasChoices(
         *(path[0] for model in (ToolInput, *ToolInput.__subclasses__())
           for path in model.model_fields['path'].validation_alias.convert_to_aliases())))

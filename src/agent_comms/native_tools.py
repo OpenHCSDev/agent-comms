@@ -69,12 +69,11 @@ class ArgumentTool(ToolDeclaration):
     @classmethod
     def recorded_arguments(cls, schema, raw):
         arguments = DecodedArguments(raw, schema.model_validate(raw))
-        cls.file_location(arguments)
         cls.caption_subject(arguments)
         return arguments
 
     @classmethod
-    def caption_subject(cls, arguments: DecodedArguments) -> str:
+    def caption_subject(cls, arguments: DecodedArguments) -> str | None:
         return cls.caption_reader(arguments.input)
 
     @classmethod
@@ -210,8 +209,9 @@ class TaskTool(AgentTool):
     label = "Task"
 
 
-class MonitorTool(AgentTool):
+class MonitorTool(ArgumentTool):
     label = "Monitor"
+    description: Annotated[str | None, Caption()]
 
 
 class NotebookEditTool(PathTool, ArgumentTool, declared_name='notebookedit'):
