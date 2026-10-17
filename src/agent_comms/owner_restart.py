@@ -148,7 +148,7 @@ class StoppedOwnerBatch:
     lifecycle: OwnerLifecycle
     wire_descriptor: int
     handoff: OwnerRestartHandoff
-    ownership: ExitStack = field(metadata={"wire_name": 'custody'}, default_factory=ExitStack, repr=False, compare=False)
+    ownership: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
 
     @classmethod
     def accept(cls, lifecycle: OwnerLifecycle, descriptor: int, handoff: OwnerRestartHandoff):
@@ -219,7 +219,7 @@ class FencedOwnerBatch:
     runtime: RestartEnvironment
     exited_processes: tuple[RetainedOwnerLaunch, ...] = ()
     retired: tuple[RetiredOwnerLaunch, ...] = ()
-    ownership: ExitStack = field(metadata={"wire_name": 'custody'}, default_factory=ExitStack, repr=False, compare=False)
+    ownership: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
 
     @property
     def unconfirmed(self) -> tuple[tuple[Thread, int], ...]:
@@ -277,7 +277,7 @@ class FencedOwnerBatch:
 
 
 @dataclass(frozen=True)
-class AdmittedOwnerBatch:
+class ClaimedOwnerBatch:
     lifecycle: OwnerLifecycle
     captured: tuple[tuple[Thread, int], ...]
     launches: tuple[RetainedOwnerLaunch, ...]

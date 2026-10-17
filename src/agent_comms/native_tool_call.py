@@ -161,7 +161,7 @@ class NativeToolCall(ABC):
     observation: CallObservation = field(
         default_factory=AwaitingAnnouncement, init=False, compare=False
     )
-    claim_scope: CallClaim = field(metadata={"wire_name": 'admission'}, default_factory=AwaitingClaim, init=False, compare=False)
+    claim_scope: CallClaim = field(default_factory=AwaitingClaim, init=False, compare=False)
     # Notification only, not a second authority for determining completion.
     started: asyncio.Event = field(
         default_factory=asyncio.Event, init=False, compare=False, repr=False

@@ -7,7 +7,7 @@ recheck the canonical registry/SQLite snapshot under their operation's locks.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .child_process import ProcessIdentity
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 class RegistryOwner:
     check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryClaimCheck
     thread: Thread
-    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
+    claimed_generation: int
 
     @property
     def turn_lease(self) -> TurnLeaseFence:

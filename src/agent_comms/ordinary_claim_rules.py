@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import field, dataclass
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .reservation_rules import ReservationRule, RuleCheck
@@ -37,7 +37,7 @@ class OrdinaryOwnerCheck(RuleCheck):
     current: Thread
     registry: RegistrySnapshot
     canonical: str
-    claim_scope: int = field(metadata={"wire_name": 'admission'})
+    claim_scope: int
     turn: TurnId
 
 
@@ -119,9 +119,9 @@ class MissingAcceptedInputRule(ReservationRule):
 
 @dataclass(frozen=True, kw_only=True)
 class AcceptedInputCheck(RuleCheck):
-    acknowledgement: QueuedInput = field(metadata={"wire_name": 'receipt'})
+    acknowledgement: QueuedInput
     current: Thread
-    claim_scope: int = field(metadata={"wire_name": 'admission'})
+    claim_scope: int
     input_id: str
     keys: tuple[str, ...]
     accepted_source: TurnInputSource | None

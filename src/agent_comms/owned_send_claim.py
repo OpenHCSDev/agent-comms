@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import field, dataclass
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .ordinary_claim_rules import (
@@ -49,7 +49,7 @@ class OwnedSend:
     session_id: str
     thread: Thread
     turn: TurnId
-    claim_scope: int = field(metadata={"wire_name": 'admission'})
+    claim_scope: int
     original: OriginalTurnInput
     goal_permit: LaunchPermit | None
 

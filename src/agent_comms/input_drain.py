@@ -170,7 +170,7 @@ class SettledTick:
 
     revision: TickRevision
     entry: RegistryEntry
-    claimed_after_seq: int | None = field(default=None, metadata={"wire_name": 'admission_after_seq'})
+    claimed_after_seq: int | None = None
     through_seq: int = 0
 
 

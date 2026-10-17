@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import field, dataclass
+from dataclasses import dataclass
 
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
@@ -27,7 +27,7 @@ from ..wake_candidate_index import ProjectionUnavailableError
 class _SelectedDecision:
     generation: AwarenessClaimGenerations
     assignment: WakeAssignment
-    acknowledgement: ClaimBatchReceipts = field(metadata={"wire_name": 'receipt'})
+    acknowledgement: ClaimBatchReceipts
 
     @classmethod
     def capture(

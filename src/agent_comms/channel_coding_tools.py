@@ -86,7 +86,7 @@ class CoordinationCall(CodingCall):
 class CodingToolOwner:
     comms: Comms
     store: Coordination
-    claim_scope: WakeClaim = field(metadata={"wire_name": 'admission'})
+    claim_scope: WakeClaim
     owner_name: str
     session_dir: Path
     input_id: str

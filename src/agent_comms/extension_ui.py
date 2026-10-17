@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class ExtensionUiSession:
     controller: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]] | None
     seen: set[str] = field(default_factory=set, init=False)
-    acknowledgement: McpLiveReceipt | None = field(metadata={"wire_name": 'receipt'}, default=None, init=False)
+    acknowledgement: McpLiveReceipt | None = field(default=None, init=False)
 
     def observe(self, text: str | None, session: TurnSession) -> McpLiveReceipt | None:
         # A acknowledgement is informational, never permission to call a tool or send.

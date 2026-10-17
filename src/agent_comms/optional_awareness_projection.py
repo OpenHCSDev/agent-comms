@@ -93,7 +93,7 @@ class OptionalAwarenessProjection:
     after_seq: int
     through_seq: int
     expected_participant_generation: int
-    expected_claimed_generation: int = field(metadata={"wire_name": 'expected_admission_generation'})
+    expected_claimed_generation: int
     max_rows: int = 100
     max_text_bytes: int = 16 * 1024
     build_seconds: ClassVar[float] = 0.25

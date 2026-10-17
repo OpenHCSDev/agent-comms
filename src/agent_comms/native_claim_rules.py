@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import field, dataclass
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessIdentity
@@ -23,8 +23,8 @@ if TYPE_CHECKING:
 class RegistryIdentityCheck(RuleCheck):
     expected: Thread
     actual: Thread
-    expected_claim: int = field(metadata={"wire_name": 'expected_admission'})
-    claim_scope: int | None = field(metadata={"wire_name": 'admission'})
+    expected_claim: int
+    claim_scope: int | None
     process: ProcessIdentity
 
     def worktree_matches(self) -> bool:

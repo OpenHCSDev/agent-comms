@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from asyncio import CancelledError
 from contextlib import asynccontextmanager
-from dataclasses import field, dataclass
+from dataclasses import dataclass
 from functools import partial
 
 from .coordination_errors import StaleFence
@@ -19,7 +19,7 @@ from .turn_context import RenderedInput
 @dataclass(frozen=True)
 class SelectedRequest:
     participant: SelectedParticipant
-    claim_scope: PrivateSendClaim = field(metadata={"wire_name": 'admission'})
+    claim_scope: PrivateSendClaim
 
     @classmethod
     async def reserve(cls, participant, session, stage, token, prompt: RenderedInput):
