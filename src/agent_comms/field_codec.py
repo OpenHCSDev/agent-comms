@@ -536,12 +536,15 @@ class ValueDecoder(ABC):
     """One annotation owns its wire decoding, draft projection and choice domain."""
 
     __slots__ = ()
-    _origins = {}
+    _by_origin = {}
+    _by_annotation = {}
 
     def __init_subclass__(cls):
         super().__init_subclass__()
         for origin in cls.__dict__.get("origins", ()):
-            cls._origins[origin] = cls
+            cls._by_origin[origin] = cls
+        for annotation in cls.__dict__.get("annotations", ()):
+            cls._by_annotation[annotation] = cls
 
     @classmethod
     def from_annotation(cls, target, args):
@@ -581,7 +584,7 @@ class _ScalarDecoder(ValueDecoder):
         return value if self.target is str else super(_ScalarDecoder, self).decode_editor(value)
 
 class _NullDecoder(_ScalarDecoder):
-    origins = (type(None),)
+    annotations = (type(None),)
     editor_annotation = type(None)
 
 @dataclass(frozen=True, slots=True)
@@ -603,7 +606,7 @@ class _RepresentedDecoder(ValueDecoder):
 
 @dataclass(frozen=True, slots=True)
 class _AnyDecoder(ValueDecoder, FieldRepresentation):
-    origins = (Any,)
+    annotations = (Any,)
 
     @classmethod
     def from_annotation(cls, target, args):
@@ -734,7 +737,7 @@ class _TupleDecoder(_ArrayDecoder):
         return _FixedTupleDecoder(tuple(compile_decoder(item) for item in args))
 
 class _VariadicTupleDecoder(_TupleDecoder):
-    container = tuple
+    """The inherited item decoder applies to every tuple element."""
 
 class _FixedTupleDecoder(_TupleDecoder):
     def decode_items(self, data):
@@ -840,8 +843,7 @@ def compile_decoder(annotation: object) -> ValueDecoder:
     return _RepresentedDecoder(representation, structural)
 
 def _structural_decoder(target: object) -> ValueDecoder:
-    origin = target if target in (type(None), Any) else get_origin(target)
-    decoder = ValueDecoder._origins.get(origin)
+    decoder = ValueDecoder._by_annotation.get(target) or ValueDecoder._by_origin.get(get_origin(target))
     if decoder is not None:
         return decoder.from_annotation(target, get_args(target))
     if isinstance(target, type) and issubclass(target, DeclaredFamily):
