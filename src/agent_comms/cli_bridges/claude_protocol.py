@@ -12,6 +12,7 @@ from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from agent_comms.activity import ActivityState
+from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tools import BashTool, ReadTool, EditTool, WriteTool, GrepTool, GlobTool
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
@@ -284,7 +285,7 @@ class ToolUse(AssistantBlock):
             call = ToolCall(self.id, self.name, self.input)
         else:
             arguments = arguments_type.model_validate(self.input)
-            call = ToolCall(self.id, arguments.declaration.declared_name, self.input, arguments.detail, arguments.diff())
+            call = ToolCall(self.id, FieldCodec.encode(arguments.declaration), self.input, arguments.detail, arguments.diff())
         session.started(call)
         return (ActiveItem(session.turn, self.id, ActivityState.WORKING, call.title),)
 

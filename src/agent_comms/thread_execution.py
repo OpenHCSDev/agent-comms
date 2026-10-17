@@ -140,7 +140,6 @@ class ExternalThreadExecution(ThreadExecution):
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         if not status.active:
             return ordinary
-        # A stale busy report cannot keep a known-dead CLI working.
         if thread.has_process and not thread.process_alive:
             return replace(ordinary, marker="○", summary="CLI offline",
                            status=ordinary.status.without_work())
