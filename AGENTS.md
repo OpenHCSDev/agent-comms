@@ -55,7 +55,6 @@ receipt acknowledgments. Tristan should not have to decode compressed jargon.
   supplied builds, but must not run `relink.sh`, publication commands or
   restart-queue writes, including one-off helpers.
   Deferred CI and final latency targets do not hold those checkpoints.
-- The open turn owns its runtime event stream. Bind that owner before watching or submitting, drain the watch before releasing it, and fail loudly on an event with no open turn. Never discard runtime events behind an optional sink or nullable queue.
 - Retain warm rendered bodies across tab returns within the existing resource
   limits. Scroll preparation follows velocity and destination intent, then shrinks
   when idle. Do not introduce a parallel cache to repair ownership or freshness.
