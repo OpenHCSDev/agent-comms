@@ -14,7 +14,7 @@ from .field_codec import FieldCodec
 from .thread_execution import ThreadExecution, NativeThreadExecution
 from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
 from .goals import (
-    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRef, GoalRevision, PresentGoalCheckpoint,
+    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
@@ -330,14 +330,6 @@ class Thread(ThreadProvenance):
         """Select the current record of this goal, including later state/revisions."""
         goal = self.goal
         return goal if goal is not None and goal.id == goal_id else None
-
-    @property
-    def open_orders(self) -> tuple[GoalRef, ...]:
-        """The unfinished goals this thread holds; the registry keeps at most one."""
-        goal = self.goal
-        if goal is None:
-            return ()
-        return goal.state.open_orders(GoalRef(self.incarnation.require_recorded(), goal.id))
 
     def require_goal(self, goal_id: str | None = None) -> Goal:
         if goal_id is None:

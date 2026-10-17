@@ -97,17 +97,14 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         if not self.may_become(nxt):
             raise ValueError(self.transition_refusal())
 
-    def open_orders(self, reference):
-        return ()
+    def require_replacement(self, author, current, goal_id) -> None:
+        pass
 
     def commander_updates(self, deadline, activity) -> tuple[str, ...]:
         return ()
 
     def delivery_complete(self, delivery_time) -> bool:
         return False
-
-    def require_send_back(self) -> None:
-        raise ValueError("A finished order cannot be sent back; issue a new order.")
 
     def transition_refusal(self) -> str:
         return "This goal cannot make that transition."
@@ -144,11 +141,8 @@ class BlockingOnFailure:
 
 
 class UnfinishedGoal(GoalState):
-    def require_send_back(self) -> None:
-        pass
-
-    def open_orders(self, reference):
-        return (reference,)
+    def require_replacement(self, author, current, goal_id) -> None:
+        author.require_open_target(current, goal_id)
 
     def commander_updates(self, deadline, activity) -> tuple[str, ...]:
         if deadline.before(time()):

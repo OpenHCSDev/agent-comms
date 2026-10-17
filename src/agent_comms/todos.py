@@ -73,12 +73,6 @@ class SourceTodoWhere:
 
 
 @dataclass(frozen=True)
-class AcceptedCommit:
-    sha: str
-    committed_at: float
-
-
-@dataclass(frozen=True)
 class AcceptanceCheck:
     repo: str
     command: str
@@ -98,7 +92,7 @@ class AcceptanceCheck:
                             f"{result.stderr.decode(errors='replace')[-2000:]}")
         return result.stdout.decode(errors="strict").strip()
 
-    async def _check(self, sha: str) -> AcceptedCommit:
+    async def _check(self, sha: str) -> RecordedEventTime:
         # The delivered commit, not the report's arrival, owns delivery time.
         async with asyncio.timeout(self.timeout):
             head = await self._run("git", "show", "-s", "--format=%H %ct", "HEAD")
@@ -112,9 +106,9 @@ class AcceptanceCheck:
             if await self._run("git", "show", "-s", "--format=%H %ct", "HEAD") != head:
                 raise TodoError("Acceptance checkout changed while the check ran.")
             await self._run("git", "diff", "--exit-code", "HEAD", "--")
-            return AcceptedCommit(actual, float(timestamp))
+            return RecordedEventTime(float(timestamp))
 
-    def check(self, sha: str) -> AcceptedCommit:
+    def check(self, sha: str) -> RecordedEventTime:
         if re.fullmatch(r"[0-9a-fA-F]{7,64}", sha) is None:
             raise TodoError("Completion requires a reported commit SHA.")
         return asyncio.run(self._check(sha))
@@ -364,9 +358,11 @@ class CommandedGoalAuthor(GoalAuthor):
         current = target.goal
         if current is not None and current.id == goal_id:
             current.author.require_order_source(self.todo)
-        for order in target.open_orders:
-            if order.goal_id != goal_id:
-                raise TodoError("Assignee already has another unresolved goal.")
+        super().require_target(goals, target, goal_id)
+
+    def require_open_target(self, current, goal_id):
+        if current.id != goal_id:
+            raise TodoError("Assignee already has another unresolved goal.")
 
     def require_report(self, progress):
         if progress is None:
@@ -385,9 +381,7 @@ class CommandedGoalAuthor(GoalAuthor):
     def require_completion(self, progress, *, goals, goal):
         self.require_report(progress)
         delivery = progress.require_report().delivery
-        delivery.require_completion()
-        accepted = self.require_current_order(goals, goal).acceptance.check(delivery.reported_sha)
-        return RecordedEventTime(accepted.committed_at)
+        return self.require_current_order(goals, goal).acceptance.check(delivery.reported_sha)
 
     def require_self_direction(self):
         raise TodoError("Only the problem's commander can revise this order.")

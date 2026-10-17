@@ -19,13 +19,6 @@ class Delivery(DeclaredFamily):
     evidence: str
 
     @property
-    def summary(self) -> str:
-        return self.evidence
-
-    def require_completion(self) -> None:
-        raise ValueError("Completion requires works_in_app evidence and a commit SHA.")
-
-    @property
     def reported_sha(self) -> str:
         raise ValueError("Completion requires works_in_app with a commit SHA.")
 
@@ -37,9 +30,6 @@ class Unfinished(Delivery):
 @dataclass(frozen=True)
 class WorksInApp(Delivery):
     sha: str
-
-    def require_completion(self) -> None:
-        pass
 
     @property
     def reported_sha(self) -> str:
@@ -60,7 +50,7 @@ class GoalReport:
 
     def __str__(self) -> str:
         return (f"Stupid: {self.stupid}\nDeleted: {self.deleted}\n"
-                f"Delivery: {self.delivery.summary}\nNext: {self.next}")
+                f"Delivery: {self.delivery.evidence}\nNext: {self.next}")
 
 
 class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
@@ -280,8 +270,11 @@ class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
         pass
 
     def require_target(self, goals, target, goal_id):
-        for order in target.open_orders:
-            order.require_current(goals.registry).author.require_self_direction()
+        if target.goal is not None:
+            target.goal.state.require_replacement(self, target.goal, goal_id)
+
+    def require_open_target(self, current, goal_id):
+        current.author.require_self_direction()
 
     def notification_targets(self, goals, *, new_order):
         return ()
