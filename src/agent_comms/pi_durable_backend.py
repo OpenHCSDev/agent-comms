@@ -232,6 +232,7 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
 
     async def compact(self, thread, instructions):
         child = await self.open(thread)
+        await child.request(Resume())
         return (await child.request(CompactDurable(custom_instructions=instructions))).outcome
 
     async def context_usage(self, thread):
