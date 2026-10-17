@@ -69,13 +69,15 @@ def test_reader_counts_uncommitted_append_while_writer_decodes_without_index_loc
         writer = executor.submit(_sync, comms, decode)
         assert entered.wait(5)
         started = time.perf_counter()
-        assert comms.bus.pending_counts("recipient") == {"sender": 2}
+        with comms.bus.snapshot(viewer="recipient") as (basis, source):
+            assert comms.bus.pending_counts_opened(source, basis) == {"sender": 2}
         assert [m.body for m in comms.bus.inbox("recipient")] == ["first", "appended"]
         elapsed = time.perf_counter() - started
         release.set()
         assert writer.result(5).complete
     assert elapsed < 0.2
-    assert comms.bus.pending_counts("recipient") == {"sender": 2}
+    with comms.bus.snapshot(viewer="recipient") as (basis, source):
+        assert comms.bus.pending_counts_opened(source, basis) == {"sender": 2}
 
 
 def test_reader_beyond_rebuild_bound_is_rebuilding(tmp_path, monkeypatch):
@@ -85,5 +87,5 @@ def test_reader_beyond_rebuild_bound_is_rebuilding(tmp_path, monkeypatch):
     # One reader sync commits at most one row past the bound; the second
     # row stays beyond it.
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
-    with pytest.raises(RouteIndexRebuilding):
-        comms.bus.pending_counts("recipient")
+    with pytest.raises(RouteIndexRebuilding), comms.bus.snapshot(viewer="recipient") as (basis, source):
+        comms.bus.pending_counts_opened(source, basis)
