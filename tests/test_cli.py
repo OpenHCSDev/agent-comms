@@ -147,20 +147,22 @@ class TestCliSuccess:
         code, out = cli(tmp_path, "poll", "--thread", "b")
         assert out["thread"]["name"] == "b" and len(out["inbox"]) == 1
 
-    def test_fork_missing_session_reports_error(self, cli, tmp_path):
+    def test_fork_missing_session_reports_error(self, cli, tmp_path, fake_native_catalog):
         code, _ = cli(
             tmp_path, "register", "--name", "a", "--worktree", "/wt", "--execution", "native"
         )
         assert code == 0
-        code, out = cli(tmp_path, "fork", "--name", "kid", "--parent", "a", "--task", "t")
-        assert code == 1 and "session file" in out["error"]
+        code, out = cli(tmp_path, "fork", "--name", "kid", "--parent", "a", "--task", "t",
+                        "--model", "test/model")
+        assert code == 1 and out == {"type": "failed", "error": "Canonical saved session required"}
 
 
 class TestCliFailClosed:
-    def test_fork_cli_parent_reports_transport_error(self, cli, tmp_path):
+    def test_fork_cli_parent_reports_transport_error(self, cli, tmp_path, fake_native_catalog):
         code, _ = cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
         assert code == 0
-        code, out = cli(tmp_path, "fork", "--name", "kid", "--parent", "a", "--task", "t")
+        code, out = cli(tmp_path, "fork", "--name", "kid", "--parent", "a", "--task", "t",
+                        "--model", "test/model")
         assert code == 1 and "no native prompt transport" in out["error"]
 
     def test_generic_invocation_rejects_non_object_arguments(self, cli, tmp_path):
@@ -314,7 +316,7 @@ class TestSelectedTargetActions:
         assert action.editable_fields == ()
         assert action.encode()['parameters']['properties'] == {}
         assert action.edited({}).bound == action.bound
-        for arguments in ({'agent_bin': '/other/native'}, {'agent_args': '--other'}):
+        for arguments in ({'agent_bin': json.dumps('/other/native')}, {'agent_args': '--other'}):
             with pytest.raises(ValueError, match='cannot be overridden'):
                 action.edited(arguments)
             with pytest.raises(ValueError, match='cannot be overridden'):
@@ -363,9 +365,9 @@ class TestSelectedTargetActions:
         assert not comms.registry.require('beta').tags
 
     def test_tag_batch_preserves_active_refusal_and_mixed_target_outcomes(self, tmp_path):
-        from agent_comms.channel_management import ArchiveThreadsTagDisposition
+        from agent_comms.channel_management import ArchiveThreadsTagDisposition, TagDisposition
         from agent_comms.cli_commands import CliCommand, DeleteTagCliCommand, TargetEdit
-        from agent_comms.field_codec import FieldCodec
+        from agent_comms.field_codec import compile_decoder
         from agent_comms.thread_status import RunningThreadStatus
 
         comms = self.declared(tmp_path)
@@ -376,7 +378,7 @@ class TestSelectedTargetActions:
             if action.declaration is DeleteTagCliCommand)
         assert tuple(command.name for command in action.bound) == ('team', 'other')
         result = TargetEdit(DeleteTagCliCommand, selected,
-            {'disposition': FieldCodec.encode(ArchiveThreadsTagDisposition)},
+            {'disposition': compile_decoder(TagDisposition).encode_editor(ArchiveThreadsTagDisposition())},
             confirmed=True).apply(comms)
         assert not result.successful
         assert tuple(outcome.target for outcome in result.outcomes) == selected
@@ -533,6 +535,7 @@ class TestSelectedTargetActions:
     def test_mixed_read_marks_human_views_without_advancing_executor_delivery(self, tmp_path):
         from agent_comms.cli_commands import ReadTargetCliCommand, TargetEdit
         from agent_comms.threads import Thread
+        from native_unread_fixture import completed_snapshot
 
         comms = self.declared(tmp_path)
         source = tmp_path / 'alpha.jsonl'
@@ -546,14 +549,14 @@ class TestSelectedTargetActions:
         comms.messaging.send('alpha', 'beta', 'Executor message')
         comms.messaging.send('alpha', viewer, 'Human DM')
         comms.messaging.send('alpha', '#team', 'Channel message')
-        before = comms.views.viewer_snapshot(str(tmp_path))
+        before = completed_snapshot(comms, str(tmp_path))
         assert before.thread_unread['alpha'] == before.unread['alpha'] == 1
         # The canonical tag change also publishes its membership notification.
         assert before.channel_unread['#team'] == 2
         result = TargetEdit(ReadTargetCliCommand, ('alpha', '#team'),
                             {}, project=str(tmp_path)).apply(comms)
         assert result.successful and tuple(item.result.read for item in result.outcomes) == ('alpha', '#team')
-        after = comms.views.viewer_snapshot(str(tmp_path))
+        after = completed_snapshot(comms, str(tmp_path))
         assert after.thread_unread['alpha'] == after.unread.get('alpha', 0) == 0
         assert after.channel_unread['#team'] == 0
         assert comms.bus.pending_count('beta', 'alpha') == 1
