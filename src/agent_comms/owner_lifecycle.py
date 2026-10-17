@@ -32,18 +32,19 @@ from .store_files import _store_lock
 from .thread_identity import AdmissionIdentity, OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
+from .input_disposition import InputDispositions
 
 _LOG = logging.getLogger(__name__)
 
 
 class LaunchInput:
-    environment_key = "AGENT_COMMS_STARTUP_INPUT_KEY"
     text = ""
 
     def apply_environment(self, environment: dict[str, str]) -> None:
         pass
 
-    def record_first_input(self, record) -> None: pass
+    def record_first_input(self, lifecycle: OwnerLifecycle, thread: Thread) -> None:
+        pass
 
 
 @dataclass(frozen=True)
@@ -52,10 +53,12 @@ class TaskLaunchInput(LaunchInput):
     input_key: str = field(default_factory=lambda: f"acp:{uuid4().hex}", init=False)
 
     def apply_environment(self, environment: dict[str, str]) -> None:
-        environment[self.environment_key] = self.input_key
+        environment[RestartEnvironment.initial_input_key] = self.input_key
 
-    def record_first_input(self, record) -> None:
-        record(self.input_key, seq=None, text=self.text)
+    def record_first_input(self, lifecycle: OwnerLifecycle, thread: Thread) -> None:
+        InputDispositions(lifecycle.root).record(
+            self.input_key, seq=None, owner=thread.name, target=thread.name,
+            admission=lifecycle.registry.snapshot().admission_generations[thread.name], text=self.text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -398,7 +401,7 @@ class OwnerLifecycle:
             "PI_PROMPT",
             "PI_PARENT_ID",
             "PI_TASK",
-            LaunchInput.environment_key,
+            RestartEnvironment.initial_input_key,
             ROOT_ID_ENV,
             PACKAGE_ENV,
         ):

@@ -11,7 +11,6 @@ import stat
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -30,7 +29,6 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
-from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
@@ -89,8 +87,6 @@ class NewThreadSpec:
         from .fresh_private_session import create_fresh_private_session
 
         project = Path(self.project).expanduser().resolve(strict=True)
-        if not project.is_dir():
-            raise ValueError(f"Project path is not a directory: {project}")
         thread = self.declaration(str(project))
         threads.registry.require_declaration_available(thread)
         fresh = create_fresh_private_session(threads.root / "sessions", worktree=project)
@@ -104,25 +100,29 @@ class ForkSpec(NewThreadSpec):
 
     parent: str
 
+    def _parent(self, threads: ThreadManagement) -> Thread:
+        parent = threads.registry.require(self.parent)
+        parent.execution.require_native()
+        return parent
+
+    def child(self, parent: Thread, session_file: str) -> Thread:
+        return replace(self.declaration(self.project), parent=parent.name,
+                       tags=parent.tags if self.tags is None else self.tags, session_file=session_file)
+
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         # Copy saved history outside the wire lock, retaining writer→wire order.
-        parent = threads.registry.require(self.parent)
-        parent.execution.require_native()
-        threads.registry.require_declaration_available(replace(
-            self.declaration(self.project), parent=parent.name,
-            tags=parent.tags if self.tags is None else self.tags, session_file=parent.require_saved_session()))
+        parent = self._parent(threads)
+        threads.registry.require_declaration_available(self.child(parent, parent.require_saved_session()))
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
         with _store_lock(threads._wire_lock_path):
-            current = threads.registry.require(self.parent)
-            current.execution.require_native()
+            current = self._parent(threads)
             if current.incarnation != parent.incarnation or current.session_file != parent.session_file:
                 raise RelationViolationError(
                     f"Parent thread {self.parent!r} changed its saved session during the fork; "
                     f"the created fork {location.path} was not registered."
                 )
-            yield replace(self.declaration(self.project), parent=current.name,
-                          tags=current.tags if self.tags is None else self.tags, session_file=location.path)
+            yield self.child(current, location.path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -622,10 +622,7 @@ class ThreadManagement:
                 owned = self.owners._launch_owner_unlocked(
                     child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
                 )
-                spec.task.record_first_input(
-                    partial(InputDispositions(self.root).record, owner=owned.name, target=owned.name,
-                        admission=self.registry.snapshot().admission_generations[owned.name],
-                    ))
+                spec.task.record_first_input(self.owners, owned)
                 return owned
             except OSError:
                 self.registry.remove(spec.name)
