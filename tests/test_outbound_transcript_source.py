@@ -198,6 +198,7 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
     tmp_path, monkeypatch,
 ):  # noqa: F811
     from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.native_runtime_input import NativeRuntimeInput
     from test_coordinated_runtime import _fake_model
 
     root, root_id, comms, initial, _people = _root(tmp_path)
@@ -268,8 +269,13 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
     target_outcome = next(
         item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
     )
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        native, = NativeRuntimeInput.select(
+            store.session._connection, where="input_id=?", parameters=(outcome.input_id,)
+        )
+        context = native.require_context_proof()
     assert target_outcome.state == IgnoredProgress(
-        ShownToModelProgress(outcome.context.committed_at_ms)
+        ShownToModelProgress(context.committed_at_ms)
     )
     assert target_outcome.state.read and target_outcome.state.delivered
     assert target_outcome.state.detail == ""
