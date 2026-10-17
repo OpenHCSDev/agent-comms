@@ -89,7 +89,6 @@ def test_a_native_session_thread_takes_no_cli_items(tmp_path):
                                   session_file=str(tmp_path / "session.jsonl")))
     with pytest.raises(ValueError, match="native session"):
         comms.transcripts.external("pi")
-    assert comms.transcripts.thread_draft("pi") is None
 
 
 def test_draft_is_current_state_and_finishes_atomically(tmp_path):
@@ -99,7 +98,7 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     comms.registry.declare(Thread("codex", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hel"),))
-    assert comms.transcripts.thread_draft("codex").events[0].text == "Hel"
+    assert transcript.current_draft().events[0].text == "Hel"
     assert transcript.cut().offset == 0
     transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hello"),))
     transcript.finish(turn_id="t", item_id="other", events=(NoticeTranscript("Tool"),))

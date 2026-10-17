@@ -106,7 +106,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
                 )
             except acp.RequestError as failure:
                 raise AssertionError(f"Actual ACP error data: {failure.data!r}") from failure
-            wire = comms.bus.log.full_history()
+            wire = list(comms.bus.full_history_page().messages)
             originals = [
                 message for message in wire if message.body == "Original outbound ownership handoff"
             ]

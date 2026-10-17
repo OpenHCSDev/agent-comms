@@ -11,6 +11,7 @@ from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
+from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.wire_log import WireLog
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor, TranscriptRead
@@ -55,20 +56,20 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
         owner, 'NativePiUnavailable', 'Original outcome uncertain', recorded_at=1.0
     )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
-    notice = next(item for item in comms.views.recent_notifications('sender')
+    notice = next(item for item in comms.views.thread_presentation('sender').notifications
                   if item.recipient=='beta')
-    assert notice.state=='Sent'
-    assert notice.detail == ''
+    assert notice.label=='Sent'
+    assert notice.state.detail == ''
     assert notice.message.reference==initial.message.reference
-    assert not notice.busy
+    assert not notice.state.working
     # A diagnostic from another owner generation cannot block a current
     # participant; neither its text nor a running PID grants that relation.
     foreign = replace(diagnostic,owner=replace(owner,generation=owner.generation+1))
     activity = comms.agents.activity_of('beta').source_event()
     comms.agents.activity.emit(replace(activity,diagnostic=foreign))
-    current = next(item for item in comms.views.recent_notifications('sender')
+    current = next(item for item in comms.views.thread_presentation('sender').notifications
                    if item.recipient=='beta')
-    assert current.state=='Sent'
+    assert current.label=='Sent'
 
 
 def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):  # noqa: F811
@@ -86,9 +87,9 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     with Coordination(str(root/'coordination.sqlite3')) as store:
         before = WakeAssignment.select(store.session._connection)
     wire_before = comms.bus.log.path.read_bytes()
-    notices = comms.views.message_notifications((message,))[message.seq,message.message_id]
+    notices = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
-    assert beta.state=='Sent' and beta.detail == ''
+    assert beta.label=='Sent' and beta.state.detail == ''
     assert beta.recipient_identity.recipient_lookup==RecordedThreadIncarnation("fixture", comms.registry.require('beta').created_at).lookup
     with Coordination(str(root/'coordination.sqlite3')) as store:
         assert WakeAssignment.select(store.session._connection)==before
@@ -97,7 +98,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     # The immutable source's recipient survives rename; current readiness must
     # join its original birth rather than manufacture a new membership/claim.
     comms.registry.rename('beta','renamed')
-    renamed = comms.views.message_notifications((message,))[message.seq,message.message_id]
+    renamed = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
     assert {item.recipient_identity for item in renamed}=={item.recipient_identity for item in notices}
 
 
@@ -160,18 +161,14 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
 def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     before = comms.transcripts.capture_page_read("beta")
-    receipt = invoke_tool(
-        comms,
-        "comms_send",
-        {
-            "from": "beta",
-            "to": "sender",
-            "body": "Original outgoing ownership reply",
-        }, caller=NoThreadCaller(),
-    )
-    message = comms.bus.log.message_by_id(receipt["id"])
+    receipt = PublishedMessageToolDetails.from_wire(invoke_tool(
+        comms, "comms_send",
+        {"from": "beta", "to": "sender", "body": "Original outgoing ownership reply"},
+        caller=NoThreadCaller(),
+    ))
+    message, = comms.bus.log.messages_for_references((receipt.message.source,))
     after = comms.transcripts.capture_page_read("beta")
-    assert after.identity.receipt_frontier.sequence == message.seq
+    assert after.identity.wire_frontier.sequence == message.seq
     assert not before.current()
     with pytest.raises(StaleRevision):
         before.read()
@@ -186,7 +183,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     comms.registry.rename("beta", "renamed")
     reopened = wire(comms.root).transcripts.capture_page_read("renamed").read()
     assert reopened.events == events
-    assert comms.bus.log.full_history()[-1] == message
+    assert list(comms.bus.full_history_page().messages)[-1] == message
 
 
 def test_original_target_handling_revokes_open_sender_read_without_new_message(
@@ -198,9 +195,9 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     sender_page = before.read()
     target = comms.registry.require("beta")
     lookup = RecordedThreadIncarnation("fixture", target.created_at).lookup
-    receipts = comms.views.recent_notifications("sender")
+    receipts = comms.views.thread_presentation("sender").notifications
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
-    assert beta.message.reference == message.reference and beta.state == "Sent"
+    assert beta.message.reference == message.reference and beta.label == "Sent"
     original = next(
         row.assignment for row in NotificationAssignment.read(root, (initial,)).resolve(root)
         if row.assignment.recipient_lookup == lookup
@@ -233,7 +230,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     assert not before.current()
     assert before.content_current()
     assert before.read() == sender_page
-    assert after.identity.receipt_frontier == before.identity.receipt_frontier
+    assert after.identity.wire_frontier == before.identity.wire_frontier
     assert after.read() == sender_page
     assert comms.bus.log.path.read_bytes() == wire_before
     sender = comms.views.thread_presentation("sender")
@@ -243,10 +240,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     assert sender.read_identity != open_sender.read_identity
     assert recipient.read_identity != open_recipient.read_identity
     assert sender.read_identity == after.identity
-    outcomes = comms.views.message_notifications((message,))[message.seq, message.message_id]
-    assert comms.views.message_notifications_for_references((message.reference,)) == {
-        (message.seq, message.message_id): outcomes,
-    }
+    outcomes = comms.views.message_notifications_for_references((message.reference,))[message.seq, message.message_id]
     with pytest.raises(RelationViolationError):
         comms.views.message_notifications_for_references(
             (MessageReference(message.seq + 1, message.message_id),)
@@ -257,8 +251,8 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     target_outcome = next(
         item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
     )
-    assert target_outcome.state.startswith("Read ")
-    assert target_outcome.detail == ""
+    assert target_outcome.label.startswith("Read ")
+    assert target_outcome.state.detail == ""
 
 
 def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa: F811
@@ -268,7 +262,7 @@ def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa
     comms.messaging.send_message("sender", "alpha", "Unrelated original")
     after = comms.transcripts.capture_page_read("beta")
     assert before.identity.bus_revision != after.identity.bus_revision
-    assert before.identity.receipt_frontier == after.identity.receipt_frontier
+    assert before.identity.wire_frontier == after.identity.wire_frontier
     assert not before.current()
     assert before.content_current()
     assert before.read() == page
@@ -301,7 +295,7 @@ def test_open_thread_shares_original_notification_and_frontier_read(tmp_path, mo
     monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
     view = comms.views.thread_presentation("beta")
     assert len(barriers) == 1
-    assert view.read_identity.receipt_frontier.sequence == initial.message.seq
+    assert view.read_identity.wire_frontier.sequence == initial.message.seq
     assert view.notifications[0].message.reference == initial.message.reference
     assert view.notifications[0].recipient_identity.recipient_lookup == RecordedThreadIncarnation("fixture", view.read_identity.thread.created_at).lookup
 
@@ -317,7 +311,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     with pytest.raises(StaleRevision, match="page window"):
         comms.transcripts.bind_page_read(
             "beta", identity,
-            before=TranscriptCursor(identity.session_file, 0, identity.receipt_frontier),
+            before=TranscriptCursor.at(identity.session_file, 0, identity.wire_frontier),
         )
     comms.registry.rename("beta", "renamed")
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity
@@ -344,7 +338,7 @@ def test_original_page_reuses_captured_frontier_between_admission_fences(tmp_pat
     # One bounded page query and one final freshness check. The retained source
     # removes the former pre-read identity reconstruction.
     assert len(barriers) == 2
-    assert page.after.receipts == read.identity.receipt_frontier
+    assert page.after.wire == read.identity.wire_frontier
     assert tuple(event.source for event in page.events) == (initial.message.reference,)
 
 

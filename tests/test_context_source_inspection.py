@@ -260,7 +260,7 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
                                                   captured_text=("Original request system",)),))
     comms.bus.log.record_context(captured)
     assert comms.bus.log.context_manifests(owner.name, comms.registry) == (captured,)
-    assert comms.bus.log.full_history() == []
+    assert list(comms.bus.full_history_page().messages) == []
     assert comms.bus.log.latest_sequence() == 0
     assert captured.public_text_recorded
     assert not replace(captured, segments=(replace(captured.segments[0], captured_text=()),))\

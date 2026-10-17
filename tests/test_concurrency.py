@@ -133,7 +133,7 @@ class TestConcurrentWire:
             [(str(root), sender, 40) for sender in senders],
         )
 
-        messages = list(wire(root).views.full_history())
+        messages = list(wire(root).views.full_history_page(limit=len(senders) * 40).messages)
         assert len(messages) == len(senders) * 40
         assert [message.seq for message in messages] == list(range(1, len(messages) + 1))
         assert len({message.body for message in messages}) == len(messages)

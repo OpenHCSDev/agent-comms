@@ -25,6 +25,7 @@ from .pi_payloads import (
     EmptyData,
     ModelsData,
     PiResponseData,
+    QueueClearedData,
     SessionStatsData,
     StateData,
     SessionSwitchData,
@@ -387,6 +388,14 @@ class SetSteeringMode(PiCommand):
     """How many waiting steers Pi hands the model at one step: "all" or "one-at-a-time"."""
 
     mode: str | None = field(default=None, metadata={"wire_omit_default": True})
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClearQueue(PiCommand):
+    """Remove exactly the selected queued native inputs."""
+
+    response_payload = QueueClearedData
+    input_ids: tuple[str, ...] = field(metadata={"wire_name": "inputIds"})
 
 
 @dataclass(frozen=True, kw_only=True)

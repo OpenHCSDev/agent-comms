@@ -92,10 +92,22 @@ class TurnInboxReceiver(Protocol):
     def place(self, turn: object, item: InputRequest) -> Awaitable[bool]: ...
     def send_now(self, turn: object, item: SendNow) -> Awaitable[bool]: ...
     def use_settings(self, turn: object, item: UseSettings) -> Awaitable[bool]: ...
+    def clear_queue(self, turn: object, item: ClearQueue) -> Awaitable[bool]: ...
+
+
+class TurnInboxItem(ABC):
+    """An inbox item owns its carried inputs and delivery to a running turn."""
+
+    @property
+    def carried_inputs(self) -> tuple[InputId, ...]:
+        return ()
+
+    @abstractmethod
+    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]: ...
 
 
 @dataclass(frozen=True, kw_only=True)
-class InputRequest:
+class InputRequest(TurnInboxItem):
     """One queued user input handed to a backend: identity, content and busy policy.
 
     Routing, goal and bus-delivery provenance stay in Core, keyed by ``input_id``.
@@ -115,7 +127,7 @@ class InputRequest:
 
 
 @dataclass(frozen=True)
-class SendNow:
+class SendNow(TurnInboxItem):
     """Ask the running turn to place these queued steering inputs immediately.
 
     Only a backend with the :class:`Interrupts` role accepts it.
@@ -123,17 +135,12 @@ class SendNow:
 
     input_ids: tuple[InputId, ...]
 
-    @property
-    def carried_inputs(self) -> tuple[InputId, ...]:
-        """A control names inputs already queued; it carries no input of its own."""
-        return ()
-
     def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
         return receiver.send_now(turn, self)
 
 
 @dataclass(frozen=True)
-class UseSettings:
+class UseSettings(TurnInboxItem):
     """Ask the running turn to use the thread's stored model and thinking level.
 
     The backend applies them from its next model call; the call in flight
@@ -143,50 +150,18 @@ class UseSettings:
     model: str
     thinking_level: str
 
-    @property
-    def carried_inputs(self) -> tuple[InputId, ...]:
-        return ()
-
     def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
         return receiver.use_settings(turn, self)
 
 
-# Everything a running turn's inbox carries.
-TurnInboxItem = InputRequest | SendNow | UseSettings
-
-
-class UnansweredReason(DeclaredFamily, affix="Reason"):
-    """Why an input ended without an answer."""
-
-    @property
-    def message(self) -> str:
-        return self.declared_name.replace("_", " ")
-
-
 @dataclass(frozen=True)
-class AbortedReason(UnansweredReason):
-    """The run was aborted before it answered this input."""
+class ClearQueue(TurnInboxItem):
+    """Clear only these queued user inputs, never delivered bus inputs."""
 
+    input_ids: tuple[InputId, ...]
 
-@dataclass(frozen=True)
-class StaleReason(UnansweredReason):
-    """The input was superseded before the backend placed it."""
-
-
-@dataclass(frozen=True)
-class NoModelReason(UnansweredReason):
-    """No model was configured to answer."""
-
-
-@dataclass(frozen=True)
-class FailedReason(UnansweredReason):
-    """The runtime failed while answering; ``text`` is its message, unchanged."""
-
-    text: str
-
-    @property
-    def message(self) -> str:
-        return self.text
+    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
+        return receiver.clear_queue(turn, self)
 
 
 @dataclass(frozen=True)
@@ -195,36 +170,6 @@ class EntryRef:
 
     order: int
     backend_id: str
-
-
-class InputOutcome(DeclaredFamily, affix="Outcome"):
-    """Where one input stands in its backend."""
-
-
-@dataclass(frozen=True)
-class QueuedOutcome(InputOutcome):
-    """Accepted and waiting for a run boundary."""
-
-
-@dataclass(frozen=True)
-class PlacedOutcome(InputOutcome):
-    """Placed into the transcript at ``entry``; the answer is still running."""
-
-    entry: EntryRef
-
-
-@dataclass(frozen=True)
-class AnsweredOutcome(InputOutcome):
-    """Answered; ``entry`` is the final assistant entry."""
-
-    entry: EntryRef
-
-
-@dataclass(frozen=True)
-class UnansweredOutcome(InputOutcome):
-    """Ended without an answer, for ``reason``."""
-
-    reason: UnansweredReason
 
 
 class TranscriptKind(DeclaredFamily, affix="Entry"):
@@ -309,32 +254,6 @@ class FailedCompaction(CompactionOutcome):
 @dataclass(frozen=True)
 class StaleCompaction(CompactionOutcome):
     """The transcript moved past the summary's cut before it was placed."""
-
-
-class InterruptedWork(DeclaredFamily, affix="Work"):
-    """Work a crashed runtime left unfinished, listed before anything resumes."""
-
-
-@dataclass(frozen=True)
-class InterruptedRequestWork(InterruptedWork):
-    """A model request that was running for these inputs."""
-
-    inputs: tuple[InputId, ...]
-
-
-@dataclass(frozen=True)
-class InterruptedToolWork(InterruptedWork):
-    """A tool call that was running; ``replay_safe`` says whether it may run again."""
-
-    call_id: str
-    replay_safe: bool
-
-
-class Disposition(Enum):
-    """What Core decided to do with one piece of interrupted work."""
-
-    RESUME = "resume"
-    ABANDON = "abandon"
 
 
 # ---------------------------------------------------------------------------
@@ -430,22 +349,6 @@ class Forks(ABC):
         """
 
 
-class RecoversAfterCrash(ABC):
-    """Lists interrupted work before anything resumes. Nothing runs until it is settled."""
-
-    @abstractmethod
-    async def interrupted(self, thread: Thread) -> tuple[InterruptedWork, ...]:
-        """Work the runtime left unfinished for this thread."""
-
-    @abstractmethod
-    async def settle(self, thread: Thread, work: InterruptedWork, disposition: Disposition) -> None:
-        """Apply Core's decision to one piece of interrupted work."""
-
-    @abstractmethod
-    async def resume(self, thread: Thread) -> None:
-        """Start scheduling again once every interrupted piece is settled."""
-
-
 class ConfiguresModel(ABC):
     """Lists the models the runtime can use and applies a model / thinking choice."""
 
@@ -472,7 +375,6 @@ THREAD_CAPABILITIES: tuple[type, ...] = (
     Compacts,
     ReportsContext,
     ReadsHistory,
-    RecoversAfterCrash,
     ConfiguresModel,
 )
 

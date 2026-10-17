@@ -149,7 +149,7 @@ class TestThreadOps:
             )
         )
 
-        events = wired.transcripts.thread_transcript("transcript-thread")
+        events = wired.transcripts.thread_transcript_page("transcript-thread").events
 
         assert [event.declared_name for event in events] == [
             "user",
@@ -328,7 +328,7 @@ class TestThreadOps:
         assert wired.registry.status("fixer").declared_name == "archived"
         assert not any(row["name"] == "fixer" for row in wired.views.who())
         assert "fixer" not in wired.registry.active_threads()
-        assert [message.body for message in wired.views.dm_history("PR111", "fixer")] == [
+        assert [message.body for message in list(wired.views.dm_history_page("PR111", "fixer").messages)] == [
             "kept after archive"
         ]
 
@@ -359,7 +359,7 @@ class TestThreadOps:
         assert [message.body for message in wired.bus.inbox("planner", "fixer")] == [
             "old alias routes"
         ]
-        history = wired.views.dm_history("PR111", "fixer")
+        history = list(wired.views.dm_history_page("PR111", "fixer").messages)
         assert [message.body for message in history] == [
             "before rename",
             "old alias routes",
@@ -529,9 +529,9 @@ class TestLedgerOps:
         wired.registry.declare(
             Thread(name="large", tags=frozenset(), worktree=str(tmp_path), session_file=str(path))
         )
-        events = wired.transcripts.thread_transcript("large")
-        assert events[0].declared_name == "notice"
-        assert [event.text for event in events[1:]] == [str(index) for index in range(80, 100)]
+        page = wired.transcripts.thread_transcript_page("large")
+        assert page.has_older
+        assert [event.text for event in page.events] == [str(index) for index in range(80, 100)]
         assert _session_model(path) == ("test", "one")
 
     def test_merge_requires_registered_author(self, wired):

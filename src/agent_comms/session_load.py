@@ -62,13 +62,15 @@ class ExistingSessionLoadPlan(WitnessedSessionLoadPlan):
     binding: LiveThreadOwnerBinding
 
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
-        snapshot = await Coordination.run_worker(lifecycle.comms.registry.snapshot)
+        entry = (await Coordination.run_worker(partial(
+            lifecycle.comms.registry.entry, thread.name,
+        ))).entry
         if thread.incarnation != self.binding.owner.incarnation:
             raise RelationViolationError("Read-only attachment targets a different thread incarnation")
-        snapshot.require_owner_process(self.binding.owner, self.binding.process)
+        current = entry.require_owner_process(self.binding.owner, self.binding.process)
         if not self.binding.process.alive():
             raise RelationViolationError("Read-only attachment owner exited; no owner was started")
-        return snapshot.require_active(thread.name)
+        return current
 
 
 @dataclass(frozen=True, slots=True)

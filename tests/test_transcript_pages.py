@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
-from agent_comms.transcripts import TranscriptCursor
+from agent_comms.transcripts import NativeTranscriptCursor, WireTranscriptCursor
 
 
 def transcript(path, count):
@@ -72,7 +72,7 @@ def test_oversized_message_and_file_identity(tmp_path):
     with pytest.raises(ValueError):
         comms.transcripts.thread_transcript_page("worker", max_messages=0)
     with pytest.raises(TranscriptChanged):
-        comms.transcripts.thread_transcript_page("worker", before=TranscriptCursor(str(path), -1))
+        comms.transcripts.thread_transcript_page("worker", before=NativeTranscriptCursor(str(path), -1))
 
 
 def test_empty_transcript_and_non_message_records(tmp_path):
@@ -103,7 +103,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
         "Inspect the renderer",
     ]
     assert [event.declared_name for event in page.events[-2:]] == ["notice", "user"]
-    assert [event.text for event in comms.transcripts.thread_transcript("child")][-2:] == [
+    assert [event.text for event in comms.transcripts.thread_transcript_page("child").events][-2:] == [
         "Forked from @parent. This thread started with:",
         "Inspect the renderer",
     ]
@@ -143,5 +143,17 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     transcript(unrelated, 1)
     with pytest.raises(TranscriptChanged):
         comms.transcripts.thread_transcript_page(
-            "child", through=TranscriptCursor(str(unrelated), unrelated.stat().st_size)
+            "child", through=NativeTranscriptCursor(str(unrelated), unrelated.stat().st_size)
         )
+
+
+def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
+    from agent_comms.transcript_receipts import AssignedSourceCursor
+
+    wire_at = AssignedSourceCursor("root", "recipient", 5).at
+    cursor = WireTranscriptCursor("a.jsonl", 900, wire_at(5))
+    committed = (WireTranscriptCursor("a.jsonl", 40, wire_at(2)), WireTranscriptCursor("a.jsonl", 70, wire_at(5)),
+                 WireTranscriptCursor("a.jsonl", 99, wire_at(6)), WireTranscriptCursor("b.jsonl", 500, wire_at(1)))
+    assert cursor.over_native(committed) == WireTranscriptCursor("a.jsonl", 70, wire_at(5))
+    assert cursor.over_native(committed[3:]) == WireTranscriptCursor("b.jsonl", 500, wire_at(5))
+    assert cursor.over_native(()) == WireTranscriptCursor("a.jsonl", 0, wire_at(5))

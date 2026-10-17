@@ -19,7 +19,6 @@ from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait
 from .registration import Registration
-from .registry_document import RegistryEntry
 
 if TYPE_CHECKING:
     from .agent_events import GoalChanged
@@ -197,7 +196,7 @@ class Goals:
             dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
         )
         snapshot = self.registry.snapshot()
-        owners = RegistryEntry.names_for(thread, snapshot.aliases)
+        owners = snapshot.names_for(thread.name)
         dispositions = InputDispositions(self.root)
         unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
         eligible = set()

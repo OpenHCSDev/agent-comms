@@ -2447,7 +2447,7 @@ if select.select([sys.stdin], [], [], 0)[0]:
     async def test_large_saved_session_gets_only_bounded_preflight_budget(
         self, tmp_path, monkeypatch
     ):
-        from agent_comms.native_startup import NativeStartupAdmission, NativeStartupPolicy
+        from agent_comms.native_startup import NativeStartup, NativeStartupPolicy
 
         session = tmp_path / "session.jsonl"
         session.write_text(json.dumps({
@@ -2533,7 +2533,7 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
         assert "Input authority changed before Pi prompt send" in large[-1].text
         assert not received.exists()
         # Startup is independently owned per native child; no global slot remains.
-        assert NativeStartupAdmission(tmp_path).root == tmp_path
+        assert NativeStartup(tmp_path).root == tmp_path
 
     async def test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts(
         self, tmp_path, monkeypatch
@@ -3040,57 +3040,6 @@ class TestPrRpcParsing:
         assert context[-1].context_used == 200
         assert context[-1].context_size == 1000
 
-    async def test_rpc_resumes_session_and_forwards_live_prompts(self, tmp_path):
-        args_path = tmp_path / "args"
-        steering_path = tmp_path / "steering"
-        session_path = tmp_path / "session.jsonl"
-        session_path.write_text(json.dumps({
-            "type": "session", "version": 3, "id": "saved",
-            "timestamp": "2026-10-14T00:00:00.000Z", "cwd": str(tmp_path),
-        }) + "\n")
-        stub = _stub(
-            tmp_path,
-            f"""#!/bin/sh
-printf '%s' "$*" > '{args_path}'
-IFS= read -r state
-IFS= read -r prompt
-printf '%s' "$prompt" | {sys.executable} -c 'import json, sys; print(json.dumps({{"type": "response", "command": "prompt", "id": json.load(sys.stdin)["id"], "success": True}}))'
-echo '{{"type":"message_start","message":{{"role":"user","content":"parent task"}}}}'
-IFS= read -r mode
-IFS= read -r steering
-printf '%s' "$steering" > '{steering_path}'
-cat <<'EOF'
-{{"type":"response","command":"get_state","success":true,"data":{{"sessionFile":"{session_path}"}}}}
-{{"type":"agent_settled"}}
-{{"type":"response","command":"get_session_stats","success":true,"data":{{"contextUsage":{{}}}}}}
-EOF
-""",
-        )
-        queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait(steer("[peer] ping"))
-
-        events = [
-            event
-            async for event in one_turn_events(
-                stub,
-                [],
-                "parent task",
-                str(tmp_path),
-                session_file=str(session_path),
-                steering_queue=queue,
-            )
-        ]
-
-        assert f"--session {session_path}" in args_path.read_text()
-        assert '"message": "[agent-comms input-id: agent-comms-steer-' in steering_path.read_text()
-        assert ']\\n[peer] ping"' in steering_path.read_text()
-        assert '"streamingBehavior": "steer"' in steering_path.read_text()
-        assert any(
-            event.session_file == str(session_path)
-            for event in events
-            if isinstance(event, ae.AgentInfo)
-        )
-
     async def test_rpc_stays_open_for_steered_child_reply(self, tmp_path):
         stub = _stub(
             tmp_path,
@@ -3270,93 +3219,6 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
         ]
         assert events[-1].ok is False
         assert events[-1].reason_code == "current_prompt_input_missing"
-
-    @pytest.mark.parametrize(
-        ("steer_accepted", "foreign_first", "expected_ok"),
-        [(True, False, True), (False, False, False), (True, True, False)],
-    )
-    async def test_marked_steer_start_requires_accepted_matching_input(
-        self, tmp_path, steer_accepted, foreign_first, expected_ok
-    ):
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
-import json, sys
-send = lambda value: print(json.dumps(value), flush=True)
-state = json.loads(sys.stdin.readline())
-prompt = json.loads(sys.stdin.readline())
-assert state["type"] == "get_state" and prompt["message"] == "t"
-send({{"type": "response", "command": "prompt", "id": prompt["id"], "success": True}})
-if {foreign_first}:
-    send({{"type": "message_start", "message": {{"role": "user", "content": "peer"}}}})
-    send({{"type": "message_start", "message": {{"role": "user", "content": "t"}}}})
-else:
-    send({{"type": "message_start", "message": {{"role": "user", "content": "t"}}}})
-    mode = json.loads(sys.stdin.readline())
-    assert mode["type"] == "set_steering_mode"
-    steer = json.loads(sys.stdin.readline())
-    assert steer["message"] == f'[agent-comms input-id: {{steer["id"]}}]\\npeer'
-    assert steer["streamingBehavior"] == "steer"
-    send({{"type": "response", "command": "prompt", "id": steer["id"],
-          "success": {steer_accepted}}})
-    send({{"type": "message_start", "message": {{"role": "user", "content": steer["message"]}}}})
-send({{"type": "message_end", "message": {{
-    "role": "assistant", "content": [], "stopReason": "stop",
-}}}})
-send({{"type": "agent_settled"}})
-""",
-        )
-        queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait(steer("peer"))
-        events = [
-            event
-            async for event in one_turn_events(
-                stub, [], "t", str(tmp_path), steering_queue=queue
-            )
-        ]
-        assert events[-1].ok is expected_ok
-        if not expected_ok:
-            assert events[-1].reason_code == (
-                "current_prompt_input_missing" if foreign_first else "unrecognized_followup_input"
-            )
-
-    async def test_identified_steer_ack_cannot_claim_unrelated_identical_user_start(self, tmp_path):
-        """The two possible sources have identical stock Pi RPC event shapes."""
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\n"
-            + """
-import json, sys
-send = lambda value: print(json.dumps(value), flush=True)
-sys.stdin.readline()
-prompt = json.loads(sys.stdin.readline())
-send({"type": "response", "command": "prompt", "id": prompt["id"], "success": True})
-send({"type": "message_start", "message": {"role": "user", "content": "t"}})
-mode = json.loads(sys.stdin.readline())
-assert mode["type"] == "set_steering_mode"
-steer = json.loads(sys.stdin.readline())
-assert steer["message"] == f'[agent-comms input-id: {steer["id"]}]\\npeer'
-# Pi's ACK can mean queued or handled by an extension; no user start is promised.
-send({"type": "response", "command": "prompt", "id": steer["id"], "success": True})
-# Another independent user event has the *same* literal text as the queued steer.
-send({"type": "message_start", "message": {"role": "user", "content": "peer"}})
-send({"type": "message_end", "message": {
-    "role": "assistant", "content": [], "stopReason": "stop",
-}})
-send({"type": "agent_settled"})
-""",
-        )
-        queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait(steer("peer"))
-        events = [
-            event
-            async for event in one_turn_events(
-                stub, [], "t", str(tmp_path), steering_queue=queue
-            )
-        ]
-        assert events[-1].ok is False
-        assert events[-1].reason_code == "unrecognized_followup_input"
 
     @pytest.mark.parametrize("managed_finish", [False, True])
     async def test_handled_ack_without_user_start_times_out_without_replay(

@@ -24,23 +24,21 @@ from .agent_backend import (
     CompactionOutcome,
     ConfiguresModel,
     ContextUsage,
-    Disposition,
     EntryPage,
     EntryRef,
     FailedCompaction,
     Forks,
     InputContent,
-    InterruptedWork,
     Interrupts,
     NothingToCompaction,
     PlacedCompaction,
     ReadsHistory,
-    RecoversAfterCrash,
     ReportsContext,
     RuntimeLocation,
     TranscriptEntry,
     TurnDelivery,
 )
+from .native_pi import NativePiRpcLaunch
 
 if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
@@ -156,7 +154,6 @@ class PiNativeBackend(
     ReportsContext,
     ReadsHistory,
     Forks,
-    RecoversAfterCrash,
     ConfiguresModel,
 ):
     """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
@@ -326,24 +323,16 @@ class PiNativeBackend(
     async def fork(cls, parent: Thread, launcher: str, runtime: LaunchRuntime) -> PiSessionFile:
         """Copy the parent's whole saved history with Pi's own session manager."""
         from .coordinator import Coordination
-        from .native_fork import fork_native_session
+        from .native_fork import RuntimeForkHelper, RuntimeForkRequest
 
-        identity = await Coordination.run_worker(partial(
-            fork_native_session, parent.require_saved_session(), parent.worktree, launcher, runtime,
+        package = await Coordination.run_worker(partial(
+            NativePiRpcLaunch.package_for_command, launcher, runtime,
         ))
+        identity = await RuntimeForkHelper.run(
+            RuntimeForkRequest(str(package), parent.require_saved_session(), parent.worktree,
+                               runtime=runtime), cwd=Path(parent.worktree),
+        )
         return PiSessionFile(identity.session_file)
-
-    # -- RecoversAfterCrash -----------------------------------------------
-
-    async def interrupted(self, thread: Thread) -> tuple[InterruptedWork, ...]:
-        """Pi 0.85.1 keeps no resumable work: a dead child's request is gone, never resent."""
-        return ()
-
-    async def settle(self, thread: Thread, work: InterruptedWork, disposition: Disposition) -> None:
-        raise ValueError("Pi 0.85.1 has no interrupted work to settle")
-
-    async def resume(self, thread: Thread) -> None:
-        """Nothing is scheduled by Pi itself after a restart; Core sends every input."""
 
     # -- ConfiguresModel --------------------------------------------------
 

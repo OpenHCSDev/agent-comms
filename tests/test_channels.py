@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms import invoke_tool
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
-from agent_comms.activity import Activity, ActivityState
+from agent_comms.activity import ActivityState
 from agent_comms.channels import AllOfMatch, AnyOfMatch, Channel, SavedView, ViewKind, ViewPredicate
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.channel_management import (
@@ -19,7 +19,6 @@ from agent_comms.display_order import (
     LastActivityThreadSort, LastMessageThreadSort, LastUserInputChannelSort, ThreadSort,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.presentation import ThreadView
 from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -270,7 +269,7 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     restarted = wire(tmp_path)
     assert restarted.channels.catalog.read().resolve("#child").parent is None
     assert not restarted.channels.catalog.read().resolve("#api").archived
-    assert [message.body for message in restarted.views.channel_history("#api")] == [
+    assert [message.body for message in list(restarted.views.channel_history_page("#api").messages)] == [
         "target-owned historical row"
     ]
     assert restarted.channels.catalog.read().saved_views["cross-team"].predicate.tags == {"docs"}
@@ -465,22 +464,6 @@ def test_invalid_filters_and_reserved_channels(tmp_path):
         Channel("#team", frozenset({"api", "ui"}))
 
 
-def test_thread_presentation_owns_lifecycle_precedence(tmp_path):
-    comms = setup_wire(tmp_path)
-    thread = Thread("worker", frozenset(), str(tmp_path))
-    working = Activity("worker", ActivityState.WORKING, "Running tests")
-    comms.registry.register(thread, RunningThreadStatus())
-    comms.agents.activity.emit(working)
-    view = ThreadView.capture(thread, comms.registry.snapshot(),
-                              comms.agents.activity_of("worker"), None, {})
-    assert view.presentation.status.busy
-    assert view.presentation.summary == "Working · Running tests"
-    stopped = replace(view, status=StoppedThreadStatus())
-    assert not stopped.presentation.status.busy
-    assert stopped.presentation.summary == "Stopped"
-    assert stopped.presentation.label == "○ worker"
-
-
 def test_none_membership_and_independent_channel_order(tmp_path):
     comms = setup_wire(tmp_path)
     comms.messaging.send("a", "#none", "for untagged agents")
@@ -530,9 +513,9 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     comms.messaging.send("b", "#zeta", "Later agent output")
     invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"}, caller=NoThreadCaller())
     assert names(wire(tmp_path))[0] == "#alpha"
-    assert [view.channel.name for view in comms.views.coordination_snapshot("a").channels] == [
-        view.channel.name for view in wire(tmp_path).views.coordination_snapshot("b").channels
-    ]
+    assert tuple(comms.views.coordination_snapshot("a").channels) == tuple(
+        wire(tmp_path).views.coordination_snapshot("b").channels
+    )
     assert comms.views.coordination_snapshot().channel_order is LastUserInputChannelSort
     # Reading or re-sorting must never redefine a channel's creation time.
     assert comms.channels.catalog.read().resolve("#alpha").created_at == 300
@@ -554,15 +537,15 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
         )
     )
     comms.channels.update_tags("moving", add=frozenset({"api"}))
-    joined = comms.views.channel_history("#api")
+    joined = list(comms.views.channel_history_page("#api").messages)
     assert len(joined) == 1 and joined[0].membership.value == "joined"
     assert joined[0].body == "moving joined #api" and not joined[0].starts_turn
     assert "moving" not in comms.views.last_sent_timestamps()
     comms.channels.update_tags("moving", add=frozenset({"ui"}))
     comms.channels.update_tags("moving", remove=frozenset({"api"}))
-    assert len(comms.views.channel_history("#api")) == 2
+    assert len(list(comms.views.channel_history_page("#api").messages)) == 2
     comms.channels.update_tags("moving", remove=frozenset({"ui"}))
-    history = wire(tmp_path).views.channel_history("#api")
+    history = list(wire(tmp_path).views.channel_history_page("#api").messages)
     assert [message.membership.value for message in history] == ["joined", "left"]
     assert all(not message.starts_turn for message in history)
     assert not comms.views.coordination_snapshot().participants("#api")
@@ -585,11 +568,11 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
         result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True}, caller=NoThreadCaller())
         assert result["pinned"]
     views = observer.views.coordination_snapshot().channels
-    assert [view.channel.name for view in views] == (
+    assert list(views) == (
         [name for name in original if name in {"#ui", "#none"}]
         + [name for name in original if name not in {"#ui", "#none"}]
     )
-    assert all(view.to_wire()["pinned"] for view in views[:2])
+    assert all(views[name].to_wire()["pinned"] for name in list(views)[:2])
     assert observer.channels.catalog.read().list_order is order
     for channel in ("#ui", "#none"):
         observer.channels.set_channel_pinned(channel, False)

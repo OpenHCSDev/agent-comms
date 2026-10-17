@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.thread_presentation import (
     IdleThreadPresentationStatus,
+    SessionDisconnected,
     StatusPending,
     ThreadRetired,
     ThreadPresentation,
@@ -44,6 +45,9 @@ class ThreadStatusModel:
 
     def with_delivery(self, delivery: InputDelivery) -> ThreadStatusModel:
         return replace(self, presentation=delivery.presentation(self.presentation))
+
+    def disconnected(self, status: SessionDisconnected) -> ThreadStatusModel:
+        return ThreadStatusModel.known(self.name, status.over(self.presentation))
 
     @classmethod
     def known(cls, name: str, presentation: ThreadPresentation | None) -> ThreadStatusModel:
@@ -103,8 +107,9 @@ class OpenThreadStatus:
         A thread whose store was busy keeps its previous row, or its initial
         StatusPending member until the service completes its first read.
         """
-        rows = {name: ThreadStatusModel.known(name, presentation)
-                for name, presentation in result.presentations.items()}
+        rows = {name: row for name, row in self.rows.rows.items() if name not in result.changed}
+        rows.update((name, ThreadStatusModel.known(name, presentation))
+                    for name, presentation in result.presentations.items())
         rows.update((name, ThreadStatusModel.unreadable(name, error))
                     for name, error in result.unavailable.items())
         rows.update((name, self.open(name)) for name in result.busy)
