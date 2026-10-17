@@ -23,7 +23,7 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import Goal
+from .goals import Goal, ProblemGoalOrder
 from .threads import Thread
 from .recorded_time import EventTime
 
@@ -408,7 +408,7 @@ class OrderGoalAction(GoalAction, RuntimeInvocable):
         todo = ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
             generation=self.goal_id, deadline=self.deadline)
-        return replace(SetGoalAction(text=todo.text, goal_id=self.goal_id).change(ctx), problem=todo.id)
+        return replace(SetGoalAction(text=todo.text, goal_id=self.goal_id).change(ctx), order=ProblemGoalOrder(todo.id))
 
 
 @dataclass(frozen=True, kw_only=True)
