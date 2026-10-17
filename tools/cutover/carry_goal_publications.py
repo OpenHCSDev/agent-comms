@@ -1,0 +1,81 @@
+"""P257 one-shot goal publication carry; stop old readers/writers first.
+
+Republish legacy registry and journal goals at the certified wire head. Earlier
+UNKNOWN input rows remain untouched. Run before carry_goal_wait_owners.py and
+before starting new Core readers. Dry-run by default; no runtime fallback.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sqlite3
+from contextlib import closing, nullcontext
+from pathlib import Path
+
+from agent_comms.field_codec import FieldCodec
+from agent_comms.goal_history import GoalHistoryEntry
+from agent_comms.goals import Goal
+from agent_comms.registry_document import RegistryDocument
+from agent_comms.store_files import _atomic_write_text, _store_lock
+from agent_comms.wire_log import WireLog
+
+
+def carry(root: Path, *, apply: bool = False) -> dict:
+    registry = root / "registry.json"
+    history = root / "goal_history.sqlite3"
+    with _store_lock(root / "wire"), _store_lock(registry):
+        with WireLog(root / "bus.jsonl").certified_read() as source:
+            head = source.committed_sequence()
+        document = json.loads(registry.read_text())
+        goals = [thread["goal"] for thread in document["threads"].values()
+                 if thread["goal"] is not None]
+        connection = sqlite3.connect(f"{history.as_uri()}?mode=rw", uri=True) if history.exists() else None
+        with closing(connection) if connection is not None else nullcontext():
+            rows = []
+            if connection is not None:
+                connection.execute("PRAGMA synchronous=EXTRA")
+                for sequence, before, after in connection.execute(
+                    f'SELECT sequence,"before","after" FROM {GoalHistoryEntry.declared_name}'
+                ):
+                    pair = [json.loads(value) if value is not None else None for value in (before, after)]
+                    rows.append((sequence, pair))
+                    goals.extend(goal for goal in pair if goal is not None)
+            # A retry after interruption reuses the already-published value for
+            # each identity, rather than assigning a second cutover boundary.
+            published = {}
+            for goal in goals:
+                if "published_seq" in goal:
+                    previous = published.setdefault(goal["id"], goal["published_seq"])
+                    if previous != goal["published_seq"]:
+                        raise ValueError("Conflicting publication sequences for one goal")
+            changed = 0
+            for goal in goals:
+                if "published_seq" not in goal:
+                    goal["published_seq"] = published.setdefault(goal["id"], head)
+                    changed += 1
+                FieldCodec.decode(Goal, goal)
+            FieldCodec.decode(RegistryDocument, document)
+            if apply and changed:
+                if connection is not None:
+                    with connection:
+                        for sequence, pair in rows:
+                            connection.execute(
+                                f'UPDATE {GoalHistoryEntry.declared_name} SET "before"=?,"after"=? WHERE sequence=?',
+                                (*[json.dumps(goal) if goal is not None else None for goal in pair], sequence),
+                            )
+                        _atomic_write_text(registry, json.dumps(document))
+                else:
+                    _atomic_write_text(registry, json.dumps(document))
+    return {"published_seq": head, "goal_records": len(goals), "carried_records": changed, "applied": apply}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("root", type=lambda value: Path(value).resolve())
+    parser.add_argument("--apply", action="store_true")
+    args = parser.parse_args()
+    print(json.dumps(carry(args.root, apply=args.apply)))
+
+
+if __name__ == "__main__":
+    main()
