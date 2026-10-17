@@ -94,12 +94,14 @@ class AnsweredProgress(ContextualProgress):
     priority = 2
 
     def notification_label(self, notification):
-        return (self.label if notification.answered_at_ms is None else
-                notification.timed_state(self.label, notification.answered_at_ms))
+        return notification.timed_state(self.label, notification.answered_at_ms)
 
 
 class CompletedProgress(AnsweredProgress):
     detail = "The response workflow completed."
+
+    def notification_label(self, notification):
+        return self.label
 
 class AssignmentProgress(DeliveryProgress):
     @property

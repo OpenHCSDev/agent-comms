@@ -5,19 +5,17 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from typing import ClassVar
+from typing import ClassVar, TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
-from .notification_progress import UnrecordedProgress
 from .notification_progress import (
-    ContextualProgress, PassiveProgress, IgnoredProgress,
+    UnrecordedProgress, ContextualProgress, PassiveProgress, IgnoredProgress,
     EngagedProgress, CompletedProgress, InterruptedProgress, FailedProgress,
 )
 from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .agent_activity import RecipientActivity

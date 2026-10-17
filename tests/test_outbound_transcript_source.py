@@ -57,8 +57,8 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     notice = next(item for item in comms.views.thread_presentation('sender').notifications
                   if item.recipient=='beta')
-    assert notice.state=='Sent'
-    assert notice.detail == ''
+    assert notice.label=='Sent'
+    assert notice.state.detail == ''
     assert notice.message.reference==initial.message.reference
     assert not notice.state.working
     # A diagnostic from another owner generation cannot block a current
@@ -68,7 +68,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     comms.agents.activity.emit(replace(activity,diagnostic=foreign))
     current = next(item for item in comms.views.thread_presentation('sender').notifications
                    if item.recipient=='beta')
-    assert current.state=='Sent'
+    assert current.label=='Sent'
 
 
 def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):  # noqa: F811
@@ -255,7 +255,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
         item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
     )
     assert target_outcome.label.startswith("Read ")
-    assert target_outcome.detail == ""
+    assert target_outcome.state.detail == ""
 
 
 def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa: F811
