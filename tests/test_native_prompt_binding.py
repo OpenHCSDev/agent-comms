@@ -4,7 +4,6 @@ Fake native Pi only; real provider acceptance stays with the pinned executor.
 """
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 from binding_reads import binding_rows
 
 import asyncio
@@ -69,20 +68,8 @@ def _root(tmp_path: Path):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread.create(
-            "sender",
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule()),
-        Thread.create(
-            "alpha",
-            frozenset({"team"}),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            task="math answers",
-            model="openai-codex/gpt-6-sol",
-        storage_rule=StorageRule()),
+        comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task='math answers', model='openai-codex/gpt-6-sol'),
     ]
     for person in people:
         comms.registry.declare(person)
@@ -421,12 +408,7 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
     root, root_id, comms, first, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    beta = Thread.create(
-        "beta",
-        frozenset({"team"}),
-        str(tmp_path),
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    storage_rule=StorageRule())
+    beta = comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(beta)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(

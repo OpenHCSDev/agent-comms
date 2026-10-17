@@ -1,4 +1,3 @@
-from agent_comms.storage_rules import StorageRule
 import json
 
 from agent_comms.field_codec import FieldCodec
@@ -21,7 +20,7 @@ def _page(field, nodes, after=None):
 
 
 def test_branches_off_main_carry_only_their_own_pr_issue_and_checkout(comms, tmp_path, monkeypatch):
-    comms.registry.declare(Thread.create(name="unit", tags=frozenset(), worktree=str(tmp_path / "unit"), storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread(name='unit', tags=frozenset(), worktree=str(tmp_path / 'unit')))
     (tmp_path / "unit").mkdir()
     answers = {
         "repo": "Org/repo\n",

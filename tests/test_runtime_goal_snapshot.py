@@ -1,5 +1,4 @@
 """Goal polling and owner actions use a real socket without launching a provider."""
-from agent_comms.storage_rules import StorageRule
 
 from unittest.mock import AsyncMock
 
@@ -54,7 +53,7 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
         "goal": None, "goalExecution": None,
         "_meta": encode_updates(TurnChangedUpdate(comms.registry.require(session).turn_state)),
     }
-    comms.registry.declare(Thread.create("child", frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     comms.agents.begin_turn("child", "child-work-in-flight")
     goal = comms.goals.update_goal(session, SetGoalAction(text="Review child output"))
     comms.goals.update_goal(

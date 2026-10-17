@@ -5,7 +5,6 @@ Never imports or replays a prior saved input. The caller supplies an isolated
 copy of provider configuration, including the native models-store.json;
 the original configuration is never written.
 """
-from agent_comms.storage_rules import StorageRule
 import argparse
 import asyncio
 import json
@@ -51,7 +50,7 @@ async def main(output, package, launcher, provider, model, thinking):
     try:
         await agent._runtime.start()
         opened = await agent.new_session(cwd=str(project), mcp_servers=[])
-        comms.registry.declare(Thread.create('verifier', frozenset(), str(project), storage_rule=StorageRule()))
+        comms.registry.declare(comms.registry.new_thread('verifier', frozenset(), str(project)))
         instruction = (
             "Isolated native terminal verification. Use bash exactly once to run this "
             "command in the current directory: printf 'effect\\n' >> one-effect.txt . "

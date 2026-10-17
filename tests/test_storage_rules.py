@@ -28,7 +28,7 @@ def test_registry_rule_supplies_new_thread_roots(tmp_path):
     }))
     comms = Comms(tmp_path)
     rule = comms.registry.storage_rule
-    thread = Thread.create('worker', frozenset(), str(tmp_path / 'home'), storage_rule=rule)
+    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path / 'home'))
     assert thread.storage_roots.scratch == tmp_path / 'scratch' / 'worker'
     assert rule.floor_gib == 47
     assert comms.registry.declare(thread).storage_roots == thread.storage_roots
@@ -36,7 +36,7 @@ def test_registry_rule_supplies_new_thread_roots(tmp_path):
 
 def test_ordinary_write_neither_walks_usage_nor_opens_registry_edit(tmp_path, monkeypatch):
     comms = Comms(tmp_path)
-    thread = Thread.create('worker', frozenset(), str(tmp_path), storage_rule=comms.registry.storage_rule)
+    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path))
     comms.registry.declare(thread)
     def forbidden(*args, **kwargs):
         raise AssertionError('ordinary write performed allocation/registry work')
@@ -50,7 +50,7 @@ def test_any_registered_extra_can_be_removed_including_after_shell_error(tmp_pat
     from agent_comms.channel_coding_tools import CodingCall
     from agent_comms.native_tools import ReadTool
     comms = Comms(tmp_path)
-    thread = Thread.create('worker', frozenset(), str(tmp_path / 'home'), storage_rule=comms.registry.storage_rule)
+    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path / 'home'))
     roots = thread.storage_roots.adding(tmp_path / 'first').adding(tmp_path / 'second')
     comms.registry.declare(replace(thread, storage_roots=roots))
     removed = roots.checkouts[index]

@@ -1,7 +1,6 @@
 """Provider-free exact-ID ACP queue projection; no Pi consumption inference."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import os
@@ -38,9 +37,7 @@ from stored_inputs import stored_inputs
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
     comms = Comms(tmp_path / "wire")
-    thread = Thread.create(
-        "beta", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
-    , storage_rule=StorageRule())
+    thread = comms.registry.new_thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"

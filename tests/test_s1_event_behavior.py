@@ -1,5 +1,4 @@
 """Current S1 consumer effects and fenced settlement, with real durable owners."""
-from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -188,12 +187,7 @@ async def start_owned_input(execution, progress):
 def waiting_owner(execution):
     comms = execution.runner.comms
     comms.registry.declare(
-        Thread.create(
-            "waiting",
-            frozenset(),
-            execution.thread.worktree,
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        comms.registry.new_thread('waiting', frozenset(), execution.thread.worktree, process_identity=ProcessIdentity.capture(os.getpid()))
     )
     goal = comms.goals.update_goal("waiting", SetGoalAction(text="Review dependency"))
     comms.goals.update_goal(
@@ -446,12 +440,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
         observed.append(event)
         if isinstance(event, TurnTranscriptUpdate) and event.state.busy and "waiting" not in comms.registry:
             comms.registry.declare(
-                Thread.create(
-                    "waiting",
-                    frozenset(),
-                    str(native.project),
-                    process_identity=ProcessIdentity.capture(os.getpid()),
-                storage_rule=StorageRule())
+                comms.registry.new_thread('waiting', frozenset(), str(native.project), process_identity=ProcessIdentity.capture(os.getpid()))
             )
             goal = comms.goals.update_goal("waiting", SetGoalAction(text="Wait for maintenance"))
             comms.goals.update_goal(

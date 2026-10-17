@@ -1,5 +1,4 @@
 """Current owner queues scope notices without altering durable input evidence."""
-from agent_comms.storage_rules import StorageRule
 
 import os
 from dataclasses import replace
@@ -26,8 +25,8 @@ def seed(comms, name):
 
 def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("peer", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
+    comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(tmp_path)))
     ledger = seed(comms, "owner")
     awaiting = frozenset({"bus:2", "bus:8", "acp:ui"})
     ledger.record("bus:3", seq=3, owner="peer", claim_scope=1, target="peer", text="Peer")
@@ -75,7 +74,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
 
 def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     ledger = InputDispositions(tmp_path)
     ledger.record("bus:1", seq=1, owner="owner", claim_scope=1, target="owner", text="Hello")
     before = ledger.path.read_bytes()

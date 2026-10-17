@@ -5,7 +5,6 @@ binary is faked, but every other hop goes through the real CLI protocol):
 two CLI-registered threads exchange messages, a child forks, the child reads
 its inbox and responds, and the parent acknowledges.
 """
-from agent_comms.storage_rules import StorageRule
 
 import json
 import subprocess
@@ -84,15 +83,7 @@ class TestEndToEndLifecycle:
         comms = wire_root(root)
         parent = comms.registry.require("PR111")
         comms.registry.declare(
-            Thread.create(
-                name=parent.name,
-                tags=parent.tags,
-                worktree=parent.worktree,
-                parent=parent.parent,
-                task=parent.task,
-                process_identity=parent.process_identity,
-                session_file=str(session),
-            storage_rule=StorageRule())
+            comms.registry.new_thread(name=parent.name, tags=parent.tags, worktree=parent.worktree, parent=parent.parent, task=parent.task, process_identity=parent.process_identity, session_file=str(session))
         )
 
         # 2. Parent forks a child (pi binary faked with a live stub script).

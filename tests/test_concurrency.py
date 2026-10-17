@@ -1,7 +1,6 @@
 """Multiprocess and crash-recovery tests for the shared wire stores."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import multiprocessing
 from collections.abc import Callable, Sequence
@@ -30,14 +29,16 @@ def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
 
 def _register_thread(root: str, name: str, start: Event) -> None:
     start.wait()
-    wire(root).registry.declare(Thread.create(name=name, tags=frozenset({"worker"}), worktree="/tmp", storage_rule=StorageRule()))
+    comms = wire(root)
+    comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset({'worker'}), worktree='/tmp'))
 
 
 def _register_thread_same_tick(root: str, name: str, start: Event) -> None:
     start.wait()
 
     store_files.time.time = lambda: 1_700_000_000.0
-    wire(root).registry.declare(Thread.create(name=name, tags=frozenset({"worker"}), worktree="/tmp", storage_rule=StorageRule()))
+    comms = wire(root)
+    comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset({'worker'}), worktree='/tmp'))
 
 
 def _claim_thread(root: str, result_queue: Any, start: Event) -> None:
@@ -77,15 +78,13 @@ def _run_concurrently(
 
 
 class TestConcurrentWire:
-    def test_default_same_tick_owners_get_distinct_durable_claim_identities(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_default_same_tick_owners_get_distinct_durable_claim_identities(self, tmp_path: Path, monkeypatch, *, thread_registration) -> None:
         # Windows 3.11 can return the same clock tick to separate spawned
         # workers. Explicit caller-supplied duplicate identities still fail.
         monkeypatch.setattr("agent_comms.store_files.time.time", lambda: 1_700_000_000.0)
         root = tmp_path / "wire"
-        first = Thread.create(name="first", tags=frozenset(), worktree="/tmp", storage_rule=StorageRule())
-        second = Thread.create(name="second", tags=frozenset(), worktree="/tmp", storage_rule=StorageRule())
+        first = thread_registration.new_thread(name='first', tags=frozenset(), worktree='/tmp')
+        second = thread_registration.new_thread(name='second', tags=frozenset(), worktree='/tmp')
         assert type(first.created_at) is float
         assert first.created_at == second.created_at
         wire(root).registry.declare(first)
@@ -99,12 +98,7 @@ class TestConcurrentWire:
         assert "_generated_created_at" not in stored.require("second").to_wire()
         with pytest.raises(RelationViolationError, match="creation identities collide"):
             wire(root).registry.declare(
-                Thread.create(
-                    name="explicit",
-                    tags=frozenset(),
-                    worktree="/tmp",
-                    created_at=first.created_at,
-                storage_rule=StorageRule())
+                thread_registration.new_thread(name='explicit', tags=frozenset(), worktree='/tmp', created_at=first.created_at)
             )
         assert set(wire(root).registry.all_threads()) == {"first", "second"}
 
@@ -125,7 +119,7 @@ class TestConcurrentWire:
         comms = wire(root)
         senders = [f"worker-{index}" for index in range(6)]
         for sender in senders:
-            comms.registry.declare(Thread.create(name=sender, tags=frozenset(), worktree="/tmp", storage_rule=StorageRule()))
+            comms.registry.declare(comms.registry.new_thread(name=sender, tags=frozenset(), worktree='/tmp'))
 
         ctx = multiprocessing.get_context("spawn")
         _run_concurrently(

@@ -1,7 +1,6 @@
 """Deferred, bounded candidate indexing never becomes delivery/native authority."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -41,23 +40,11 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.registry.declare(
-        Thread.create(
-            "sender",
-            frozenset({"writer"}),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            created_at=1_700_010_000.0,
-        storage_rule=StorageRule())
+        comms.registry.new_thread('sender', frozenset({'writer'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=1700010000.0)
     )
     for number in range(recipients):
         comms.registry.declare(
-            Thread.create(
-                f"member{number:03}",
-                frozenset({"cohort"}),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-                created_at=1_700_010_100.0 + number,
-            storage_rule=StorageRule())
+            comms.registry.new_thread(f'member{number:03}', frozenset({'cohort'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=1700010100.0 + number)
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     return comms, WakeCandidateIndex(comms.bus.log), root_id, RecordedThreadIncarnation("fixture", 1_700_010_100.0).lookup

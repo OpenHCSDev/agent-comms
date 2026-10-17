@@ -3,7 +3,6 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
-from agent_comms.storage_rules import StorageRule
 import argparse
 import hashlib
 import shutil
@@ -142,9 +141,7 @@ async def configured_pure_channel(arguments):
         assert hashlib.sha256(original.read_bytes()).hexdigest() == before
         source_hashes[str(original)] = before
         name = f'purechannel-owner-{index}'
-        child = Thread.create(name, source.tags, source.worktree, parent=source.name,
-            task=source.task, session_file=fork.session_file, model=source.model,
-            thinking_level=source.thinking_level, execution=source.execution, storage_rule=StorageRule())
+        child = service.registry.new_thread(name, source.tags, source.worktree, parent=source.name, task=source.task, session_file=fork.session_file, model=source.model, thinking_level=source.thinking_level, execution=source.execution)
         service.registry.declare(child)
         names.append(name)
         settings.append({'source_owner':source.name, 'private_owner':name,
@@ -154,10 +151,10 @@ async def configured_pure_channel(arguments):
             'source_session_file': str(original),
             'source_session_sha256':before, 'owned_fork':fork.session_file,
             'original_task_sha256':hashlib.sha256((source.task or '').encode()).hexdigest()})
-    service.registry.declare(Thread.create('human', frozenset(), str(project), role=ThreadRole.USER, storage_rule=StorageRule()))
+    service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=ThreadRole.USER))
     if arguments.busy_reader:
-        service.registry.declare(Thread.create('history-sender', frozenset(), str(project), storage_rule=StorageRule()))
-        service.registry.declare(Thread.create('history-recipient', frozenset(), str(project), storage_rule=StorageRule()))
+        service.registry.declare(service.registry.new_thread('history-sender', frozenset(), str(project)))
+        service.registry.declare(service.registry.new_thread('history-recipient', frozenset(), str(project)))
         for index in range(arguments.history):
             service.messaging.send_initial_cohort('history-sender', 'history-recipient',
                 f'Original private retained history {index}: ' + 'history ' * 400)
@@ -474,10 +471,8 @@ async def configured_mixed_routes(arguments):
     assert configured.model, "Configured owner has no selected model"
     stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot)
     name = 'batch-receiver'
-    service.registry.declare(Thread.create('human',frozenset(),str(project),role=ThreadRole.USER, storage_rule=StorageRule()))
-    service.registry.declare(Thread.create(name,frozenset({'team'}),str(project),
-        model=configured.model,thinking_level=configured.thinking_level,
-        task='Answer each original route accurately once; do not expose direct-message content to a channel.', storage_rule=StorageRule()))
+    service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=ThreadRole.USER))
+    service.registry.declare(service.registry.new_thread(name, frozenset({'team'}), str(project), model=configured.model, thinking_level=configured.thinking_level, task='Answer each original route accurately once; do not expose direct-message content to a channel.'))
     sender = service.registry.require('human')
     with _store_lock(service._wire_lock_path):
         originals = [service.bus.publisher.publish_ordinary(Message(sender.name, target, body,
@@ -808,16 +803,14 @@ async def run(arguments):
         env.pop(key, None)
     os.environ.clear();os.environ.update(env)
     names = [f'restart-worker-{index}' for index in range(arguments.owners)]
-    service.registry.declare(Thread.create('fixture-sender',frozenset(),str(project), storage_rule=StorageRule()))
-    service.registry.declare(Thread.create('history-recipient',frozenset(),str(project), storage_rule=StorageRule()))
+    service.registry.declare(service.registry.new_thread('fixture-sender', frozenset(), str(project)))
+    service.registry.declare(service.registry.new_thread('history-recipient', frozenset(), str(project)))
     if arguments.collective:
-        service.registry.declare(Thread.create('human',frozenset(),str(project),role=ThreadRole.USER, storage_rule=StorageRule()))
+        service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=ThreadRole.USER))
     for index in range(arguments.registry_size):
-        service.registry.declare(Thread.create(f'unrelated-{index}',frozenset(),str(project), storage_rule=StorageRule()))
+        service.registry.declare(service.registry.new_thread(f'unrelated-{index}', frozenset(), str(project)))
     for name in names:
-        service.registry.declare(Thread.create(name,frozenset({'team'} if arguments.collective else ()),str(project),
-            model='restart-local/fixture',thinking_level='off',
-            task='Provider-free isolated restart acceptance; reply to each original once', storage_rule=StorageRule()))
+        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model='restart-local/fixture', thinking_level='off', task='Provider-free isolated restart acceptance; reply to each original once'))
     if arguments.saved_source:
         for name in names:
             owner = service.registry.require(name)

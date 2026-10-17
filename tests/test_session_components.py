@@ -1,5 +1,4 @@
 """Session ownership, declaration extension and actual ACP boundary contracts."""
-from agent_comms.storage_rules import StorageRule
 
 import os
 from dataclasses import replace
@@ -101,16 +100,16 @@ async def test_attached_declaration_publishes_membership_without_acquiring_execu
         await attachment.shutdown()
 
 
-def test_thread_service_tier_round_trips_legacy_rows():
+def test_thread_service_tier_round_trips_legacy_rows(*, thread_registration):
     from agent_comms.field_codec import FieldCodec
     from agent_comms.pi_vocabulary import ServiceTier
     from agent_comms.threads import Thread
 
-    encoded = FieldCodec.encode(Thread.create("legacy", frozenset(), ".", storage_rule=StorageRule()))
+    encoded = FieldCodec.encode(thread_registration.new_thread('legacy', frozenset(), '.'))
     assert encoded.pop("service_tier") == "priority"
     restored = FieldCodec.decode(Thread, encoded)
     assert restored.service_tier is ServiceTier.PRIORITY
-    standard = Thread.create("standard", frozenset(), ".", service_tier=ServiceTier.STANDARD, storage_rule=StorageRule())
+    standard = thread_registration.new_thread('standard', frozenset(), '.', service_tier=ServiceTier.STANDARD)
     assert FieldCodec.decode(Thread, FieldCodec.encode(standard)).service_tier is ServiceTier.STANDARD
     with pytest.raises(RelationViolationError, match="configuration changed"):
         standard.require_original_model_configuration(restored)

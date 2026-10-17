@@ -1,5 +1,4 @@
 """S5 identity boundaries: process, turn, provenance and saved-data preservation."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -21,7 +20,7 @@ from agent_comms.threads import Thread
 
 def registry_with_owner(tmp_path):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    registry.register(registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     return registry
 
 
@@ -70,12 +69,12 @@ def test_registry_cannot_forge_turn_counter(tmp_path):
     assert registry.require("owner").turn_generation == 1
 
 
-def test_delete_and_rebind_changes_identity_and_keeps_counter_tombstone(tmp_path):
+def test_delete_and_rebind_changes_identity_and_keeps_counter_tombstone(tmp_path, *, thread_registration):
     registry = registry_with_owner(tmp_path)
     before = registry.snapshot().owner_identity("owner")
     registry.unregister("owner")
     registry.remove("owner")
-    registry.register(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    registry.register(thread_registration.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     after = registry.snapshot().owner_identity("owner")
     assert after.incarnation != before.incarnation
     assert after.generation > before.generation
@@ -93,7 +92,7 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
 
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     comms = Comms(tmp_path)
-    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     first = comms.agents.begin_turn("owner", "reused").turn_lease
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
@@ -117,7 +116,7 @@ def test_restored_active_turn_has_no_claim_authority(tmp_path, revocation):
         registry.live_owner_with_claim("owner")
 
 
-def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
+def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path, *, thread_registration):
     registry = registry_with_owner(tmp_path)
     owner = registry.require("owner")
     old = {"target": "", "participants": [["owner", owner.created_at]]}
@@ -131,7 +130,7 @@ def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
     assert conversation.current(registry.snapshot())
     registry.unregister("owner")
     registry.remove("owner")
-    registry.register(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    registry.register(thread_registration.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     assert not conversation.current(registry.snapshot())
 
 
@@ -200,7 +199,7 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
 
 def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     comms = Comms(tmp_path)
-    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send_message("owner", viewer, "already painted")
     page = comms.views.dm_display_page("owner", worktree=str(tmp_path))
@@ -244,10 +243,9 @@ def test_stopped_status_changes_do_not_invent_another_owner(tmp_path):
     assert registry.snapshot().owner_generations["owner"] == stopped.generation
 
 
-def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_path):
+def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_path, *, thread_registration):
     process = ProcessIdentity.capture(os.getpid())
-    thread = Thread.create("owner", frozenset(), str(tmp_path), process_identity=process,
-                    session_file=str(tmp_path / "a.jsonl"), model="model-a", created_at=1.0, storage_rule=StorageRule())
+    thread = thread_registration.new_thread('owner', frozenset(), str(tmp_path), process_identity=process, session_file=str(tmp_path / 'a.jsonl'), model='model-a', created_at=1.0)
 
     assert thread.same_launch(replace(thread, title="Renamed", tags=frozenset({"team"}), turn_generation=3))
     for changed in (

@@ -1,4 +1,3 @@
-from agent_comms.storage_rules import StorageRule
 import json
 import os
 import sqlite3
@@ -29,10 +28,8 @@ def comms(comms):
     (None, "original", "renamed"),
     ("Authored title", "Authored title", "Authored title"),
 ])
-def test_thread_display_title_is_inherited_without_copying_the_name(
-    tmp_path, title, display, renamed_display
-):
-    thread = Thread.create("original", frozenset(), str(tmp_path), title=title, storage_rule=StorageRule())
+def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path, title, display, renamed_display, *, thread_registration):
+    thread = thread_registration.new_thread('original', frozenset(), str(tmp_path), title=title)
     captured = ThreadProvenance.capture(thread)
     assert thread.title == captured.title == title
     assert thread.display_title == captured.display_title == display

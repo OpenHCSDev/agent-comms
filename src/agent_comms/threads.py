@@ -17,7 +17,7 @@ from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
-from .storage_rules import StorageRoots, StorageRule
+from .storage_rules import StorageRoots
 from .thread_identity import (
     ThreadProvenance,
     ThreadRole,
@@ -84,12 +84,6 @@ class Thread(ThreadProvenance):
     channel_scope_generation: int = 0
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
-
-    @classmethod
-    def create(cls, name, tags, worktree, *args, storage_rule: StorageRule, **values):
-        """A fresh declaration derives required storage from its rule, never a legacy row."""
-        return cls(name, tags, worktree, *args,
-            storage_roots=storage_rule.initial_roots(name, worktree), **values)
 
     def inherited_history(self, registry, visited):
         if self.name in visited:
@@ -487,19 +481,18 @@ class Thread(ThreadProvenance):
         return FieldCodec.encode(self)
 
 
-def current_thread(storage_rule: StorageRule) -> Thread:
+def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""
     from .launch_runtime import RestartEnvironment
 
     name = RestartEnvironment.calling_thread()
     tag_env = os.environ.get("PI_AGENT_TAGS") or os.environ.get("AGENT_COMMS_TAGS", "")
     tags = frozenset(t.strip() for t in tag_env.split(",") if t.strip())
-    return Thread.create(
+    return registry.new_thread(
         name=name,
         tags=tags,
         worktree=os.environ.get("PI_WORKTREE", os.getcwd()),
         parent=os.environ.get("PI_PARENT_ID"),
         task=os.environ.get("PI_TASK"),
         process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=storage_rule,
     )

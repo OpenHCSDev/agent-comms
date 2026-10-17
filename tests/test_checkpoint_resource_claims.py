@@ -1,5 +1,4 @@
 """Checkpoint commit owns current membership and consumed-operation history."""
-from agent_comms.storage_rules import StorageRule
 from dataclasses import replace
 from pathlib import Path
 
@@ -19,7 +18,7 @@ def authored(tmp_path):
     comms = Comms(tmp_path / 'wire')
     root_id = comms.messaging.initialize_private_initial_protocol()
     for name in ('owner', 'peer'):
-        comms.registry.declare(Thread.create(name, frozenset(), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     paths = tuple(tmp_path / name for name in ('one.txt', 'two.txt', 'three.txt'))
     for path in paths:
         path.write_text('owned\n')

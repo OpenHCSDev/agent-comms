@@ -1,7 +1,6 @@
 """Claim-envelope bus durability boundary on an initialized private root."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -64,7 +63,7 @@ def test_complete_visible_after_failed_fsync_must_be_resynced_before_read(
     comms = marked(tmp_path)
     path = comms.bus.log.path
     for name in ("author", "reader"):
-        comms.registry.declare(Thread.create(name, frozenset(), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     comms.messaging.send_message("author", "reader", "one")
     # Rewrite the actual canonical row without fsync, modeling the failed writer.
     path.write_bytes(path.read_bytes())
@@ -133,7 +132,7 @@ def _participants(tmp_path: Path) -> tuple[Comms, Path]:
     (worktree / "b.py").write_text("two")
     comms = Comms(tmp_path / "wire", private_initial_writes=True, private_claim_writes=True)
     for name in ("alice", "bob", "observer"):
-        comms.registry.declare(Thread.create(name, frozenset({"team"}), str(worktree), storage_rule=StorageRule()))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(worktree)))
     comms.messaging.initialize_private_initial_protocol()
     return comms, worktree
 
@@ -408,12 +407,7 @@ def test_same_tick_new_owner_cannot_share_live_claim_release_authority(tmp_path:
     alice = comms.registry.require("alice")
     with pytest.raises(RelationViolationError, match="creation identities collide"):
         comms.registry.declare(
-            Thread.create(
-                "same-tick-peer",
-                frozenset({"team"}),
-                str(worktree),
-                created_at=alice.created_at,
-            storage_rule=StorageRule())
+            comms.registry.new_thread('same-tick-peer', frozenset({'team'}), str(worktree), created_at=alice.created_at)
         )
     assert "same-tick-peer" not in comms.registry
     assert list(comms.views.full_history_page().messages) == [claimed]
