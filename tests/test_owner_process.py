@@ -284,7 +284,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
 
     try:
         for name, arguments, credential in settings:
-            goal = Goal("Protected failed original", name + "-goal", state=BlockedGoal("No replay"))
+            goal = Goal("Protected failed original", name + "-goal", published_seq=0, state=BlockedGoal("No replay"))
             comms.registry.declare(Thread(
                 name, frozenset({name}), str(tmp_path),
                 model=model, thinking_level=thinking,

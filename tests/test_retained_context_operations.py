@@ -21,7 +21,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     comms.messaging.initialize_private_initial_protocol()
     saved = tmp_path / "original.jsonl"
     saved_source(saved)
-    goal = Goal("Original task goal, not an exported human constraint", "original-goal", revision=7)
+    goal = Goal("Original task goal, not an exported human constraint", "original-goal", published_seq=0, revision=7)
     owner = comms.registry.declare(Thread("reader", frozenset(), str(tmp_path),
                                         session_file=str(saved), goal=goal))
     wording = "Original human constraint λ; preserve UNKNOWN and its source."

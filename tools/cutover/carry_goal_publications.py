@@ -16,7 +16,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.goals import Goal
 from agent_comms.registry_document import RegistryDocument
-from agent_comms.store_files import _atomic_write_text, _store_lock
+from agent_comms.registry_store import RegistryStore
+from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
 
 
@@ -26,6 +27,8 @@ def carry(root: Path, *, apply: bool = False) -> dict:
     with _store_lock(root / "wire"), _store_lock(registry):
         with WireLog(root / "bus.jsonl").certified_read() as source:
             head = source.committed_sequence()
+        store = RegistryStore(registry)
+        store.private_guard_unlocked()
         document = json.loads(registry.read_text())
         goals = [thread["goal"] for thread in document["threads"].values()
                  if thread["goal"] is not None]
@@ -54,18 +57,16 @@ def carry(root: Path, *, apply: bool = False) -> dict:
                     goal["published_seq"] = published.setdefault(goal["id"], head)
                     changed += 1
                 FieldCodec.decode(Goal, goal)
-            FieldCodec.decode(RegistryDocument, document)
+            decoded = FieldCodec.decode(RegistryDocument, document)
             if apply and changed:
-                if connection is not None:
-                    with connection:
+                with connection if connection is not None else nullcontext():
+                    if connection is not None:
                         for sequence, pair in rows:
                             connection.execute(
                                 f'UPDATE {GoalHistoryEntry.declared_name} SET "before"=?,"after"=? WHERE sequence=?',
                                 (*[json.dumps(goal) if goal is not None else None for goal in pair], sequence),
                             )
-                        _atomic_write_text(registry, json.dumps(document))
-                else:
-                    _atomic_write_text(registry, json.dumps(document))
+                    store.save_unlocked(decoded)
     return {"published_seq": head, "goal_records": len(goals), "carried_records": changed, "applied": apply}
 
 
