@@ -21,6 +21,10 @@ class EventTime(DeclaredFamily, affix="EventTime"):
         """Capture a recorded Unix-seconds fact, never the read time."""
         return RecordedEventTime(timestamp)
 
+    @property
+    def sort_key(self) -> float:
+        return float("-inf")
+
     def require_deadline(self) -> None:
         raise ValueError("An order requires a recorded deadline.")
 
@@ -50,6 +54,10 @@ class RecordedEventTime(EventTime):
     def __post_init__(self):
         if type(self.at) not in (int, float) or not isfinite(self.at):
             raise ValueError("A recorded event time must be a finite Unix timestamp.")
+
+    @property
+    def sort_key(self) -> float:
+        return self.at
 
     def require_deadline(self) -> None:
         pass

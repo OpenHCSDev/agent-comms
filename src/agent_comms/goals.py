@@ -210,6 +210,12 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_completion(self) -> None:
         pass
 
+    def installed(self, works: str, artifact: str) -> GoalOrder:
+        raise ValueError("This goal is not a problem order.")
+
+    def require_close(self) -> None:
+        raise ValueError("Closing a problem requires recorded installed application evidence.")
+
     def check(self, text: str) -> OrderCheck:
         raise ValueError("This goal is not a problem order.")
 
@@ -238,6 +244,12 @@ class ProblemGoalOrder(GoalOrder):
         r"what do you think|thanks|thank you|sorry|no rush|optional(ly)?|up to you|"
         r"might want|suggest)\b", re.I)
 
+    def require_tone(self, text: str, *, clean: bool) -> None:
+        if not clean and not re.search(
+            r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|"
+            r"sloppy|theater|dumb|worthless|broke|broken|pointless|waste)\b", text, re.I):
+            raise ValueError("A correction names what was wrong, or explicitly declares clean work.")
+
     def check(self, text: str) -> OrderCheck:
         problem = re.search(r"(?m)^Problems?:\s*(P\d+(?:\s*,\s*P\d+)*)\s*$", text)
         owner = re.search(r"(?m)^Owner:\s*(\S+:\d+)\s*$", text)
@@ -256,14 +268,32 @@ class ProblemGoalOrder(GoalOrder):
             raise ValueError("An order requires Banned: and Report: lines.")
         return OrderCheck(check[1], check[2], int(check[3]))
 
+    def installed(self, works, artifact):
+        return InstalledProblemGoalOrder(self.problem, works, artifact)
+
     def require_completion(self) -> None:
         raise ValueError("Complete a problem order with its checked delivered commit.")
 
     def require_order(self, goal, goals, owner) -> None:
-        goals.todos.get(self.problem).require_assignee(owner, goal.id)
+        todo = goals.todos.get(self.problem)
+        todo.require_assignee(owner, goal.id)
+        todo.require_not_fired()
 
     def require_replacement(self, goal, goals, owner) -> None:
         goals.todos.get(self.problem).require_released_order(owner, goal.id)
+
+
+@dataclass(frozen=True)
+class InstalledProblemGoalOrder(ProblemGoalOrder):
+    works: str
+    artifact: str
+
+    def __post_init__(self):
+        if len(self.works.split()) < 8 or not self.artifact.strip():
+            raise ValueError("Describe the installed application result (8+ words) and name its artifact file.")
+
+    def require_close(self):
+        pass
 
 
 @dataclass(frozen=True)

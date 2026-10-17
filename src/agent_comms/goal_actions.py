@@ -6,6 +6,7 @@ from abc import abstractmethod
 import asyncio
 import re
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
@@ -127,13 +128,16 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             goal_id=goal.id, expected_revision=goal.revision,
         )
 
+    def require_actor(self, actor: type) -> None:
+        if not isinstance(self, actor):
+            raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
+
     def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction:
         return self
 
     def apply(self, ctx: GoalActionContext) -> Goal | None:
         self.expect.check(ctx)
-        if not isinstance(self, ctx.actor):
-            raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
+        self.require_actor(ctx.actor)
         if ctx.model_report and any(
             entry.reports_turn(ctx.report_turn)
             for entry in ctx.goals.registry.goal_history(ctx.thread.name)
@@ -377,6 +381,19 @@ class DeliveredOrderGoalAction(CompletionGoalAction, RuntimeInvocable):
 
 
 @dataclass(frozen=True, kw_only=True)
+class InstalledOrderGoalAction(GoalAction, RuntimeInvocable):
+    works: str
+    artifact: str
+
+    def change(self, ctx):
+        goal = ctx.require_goal()
+        if not goal.state.terminal or not Path(self.artifact).is_file():
+            raise ValueError("Finish the order and retain its installed application artifact before closing.")
+        return replace(goal, order=goal.order.installed(self.works, self.artifact),
+                       revision=goal.revision + 1)
+
+
+@dataclass(frozen=True, kw_only=True)
 class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
     block_reason: str | None = None
 
@@ -451,6 +468,7 @@ class OrderGoalAction(GoalAction, RuntimeInvocable):
     expected_revision: int
     deadline: EventTime
     commander: str
+    clean: bool = False
 
     def order_text(self, ctx):
         return ctx.goals.todos.get(self.problem).text
@@ -463,7 +481,10 @@ class OrderGoalAction(GoalAction, RuntimeInvocable):
     def change(self, ctx):
         ctx.thread.require_order_slot(self.goal_id, self.problem)
         self.deadline.require_deadline()
-        ProblemGoalOrder(self.problem).check(self.order_text(ctx))
+        order = ProblemGoalOrder(self.problem)
+        text = self.order_text(ctx)
+        order.require_tone(text, clean=self.clean)
+        order.check(text)
         todo = self.reserve(ctx)
         return replace(SetGoalAction(text=todo.text, goal_id=self.goal_id).change(ctx), order=ProblemGoalOrder(todo.id))
 
