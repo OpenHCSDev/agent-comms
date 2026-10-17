@@ -41,7 +41,7 @@ class PreparedSession(UnwrittenPrompt):
             or state.pending_message_count != 0
         ):
             raise NativePiUnavailable("Native preparation did not attest the idle saved session")
-        session.active_source_path = identity.session_file
+        session.active_source_path = identity.source_path
         await session.stats.request(session)
         return True
 

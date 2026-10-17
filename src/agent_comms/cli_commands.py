@@ -1181,12 +1181,12 @@ class HeartbeatCliCommand(CliCommand):
 class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
     help = "Attach a live Pi session to a registered thread"
     name: str = option("--name")
-    session_file: str = option("--session-file")
+    source_path: str = option("--session-file", wire_name="session_file")
     pid: int | None = option("--pid", default=None)
 
     def apply(self, ctx: Comms) -> Any:
         attached = ctx.threads.attach_session(
-            ctx.registry.require(self.name), self.session_file, pid=self.pid
+            ctx.registry.require(self.name), self.source_path, pid=self.pid
         )
         return {
             "attached": attached.name,
@@ -1512,7 +1512,7 @@ class ContextCliCommand(CliCommand):
                     raise ValueError("Core context belongs to another owner incarnation")
                 try:
                     payload = await connection.request("context")
-                    native = FieldCodec.decode(NativeContextData, payload).require_session_file(
+                    native = FieldCodec.decode(NativeContextData, payload).require_source_path(
                         owner.runtime.path)
                 except (OSError, ValueError, RuntimeError, RequestError) as error:
                     return context, None, str(error)

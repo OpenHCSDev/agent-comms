@@ -26,15 +26,15 @@ class NativeSessionIdentity:
     """SessionManager's observed saved-session identity."""
 
     session_id: str = field(metadata={"wire_name": "sessionId"})
-    session_file: str = field(metadata={"wire_name": "sessionFile"})
+    source_path: str = field(metadata={"wire_name": "sessionFile"})
 
     def __post_init__(self):
-        if not self.session_id or not Path(self.session_file).is_absolute():
+        if not self.session_id or not Path(self.source_path).is_absolute():
             raise NativeReopenError("Saved native session identity is incomplete")
 
     @property
     def path(self) -> Path:
-        return Path(self.session_file)
+        return Path(self.source_path)
 
     def require_same_session(self, other: NativeSessionIdentity) -> None:
         if not self.same_session(other):
@@ -45,10 +45,10 @@ class NativeSessionIdentity:
 
     def same_session(self, other: NativeSessionIdentity) -> bool:
         """A cutpoint may extend this identity without changing its meaning."""
-        return self.session_id == other.session_id and self.session_file == other.session_file
+        return self.session_id == other.session_id and self.source_path == other.source_path
 
     def require_session(self, canonical: str) -> None:
-        if self.session_file != canonical:
+        if self.source_path != canonical:
             raise ValueError("Native identity differs from owner's canonical session")
 
     def covers(self, evidence: NativeEvidenceRead, revision: FileRevision,
@@ -71,11 +71,11 @@ class NativeSessionIdentity:
         )
 
     @staticmethod
-    def locate(package: Path, session_file: str) -> NativeSessionIdentity:
+    def locate(package: Path, source_path: str) -> NativeSessionIdentity:
         """Acquire a verified package before a standalone saved-header lookup."""
         try:
             verify_native_package(package)
-            return SessionIdentityHelper.locate(package, session_file)
+            return SessionIdentityHelper.locate(package, source_path)
         except (OSError, ValueError) as error:
             if isinstance(error, NativeReopenError):
                 raise
@@ -88,7 +88,7 @@ class SessionIdentityHelper(PiHelper):
     result = NativeSessionIdentity
 
     @classmethod
-    def locate(cls, package: Path, session_file: str) -> NativeSessionIdentity:
+    def locate(cls, package: Path, source_path: str) -> NativeSessionIdentity:
         """Locate the original header without constructing another history index.
 
         A located identity is not history readiness. The actual native loader
@@ -96,7 +96,7 @@ class SessionIdentityHelper(PiHelper):
         attestation with this identity before any input can be granted.
         """
         try:
-            file = Path(session_file).absolute()
+            file = Path(source_path).absolute()
             if file != file.resolve(strict=True):
                 raise NativeReopenError("Saved native session path is not canonical")
             before = file.stat()

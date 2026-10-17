@@ -226,12 +226,12 @@ def expected_prompt_bindings(
 
 
 def expected_prompt_matches_journal(
-    session_file: Path, binding: PromptBinding, *, evidence: NativeEvidenceRead | None = None
+    source_path: Path, binding: PromptBinding, *, evidence: NativeEvidenceRead | None = None
 ) -> bool:
     """Join the durable journal digest to the prelaunch binding digest.
 
     A mismatch or an uncommitted input is NOT equality. An unreadable or
     malformed journal is a defect, not inequality, and raises.
     """
-    observed = read_tracked_input_digest(session_file, binding.input_id, evidence=evidence)
+    observed = read_tracked_input_digest(source_path, binding.input_id, evidence=evidence)
     return observed == binding.expected_prompt_digest

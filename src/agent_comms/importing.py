@@ -564,7 +564,7 @@ class CodexImporter(ImportAdapter, format=ImportFormat.CODEX):
 @dataclass(frozen=True, slots=True)
 class ImportReceipt:
     thread: str
-    session_file: str
+    source_path: str = field(metadata={"wire_name": "session_file"})
     source_format: ImportFormat
     source_id: str
     imported_messages: int

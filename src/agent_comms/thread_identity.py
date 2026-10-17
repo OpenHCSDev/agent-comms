@@ -212,7 +212,7 @@ class ThreadProvenance:
     tags: frozenset[str]
     worktree: str
     created_at: float = field(metadata={"wire_required": True})
-    runtime: RuntimeLocation = field(default_factory=UnstartedRuntime.default)
+    runtime: RuntimeLocation = field(default_factory=UnstartedRuntime.default, metadata={"wire_name": "session_file"})
     title: str | None = None
 
     @property

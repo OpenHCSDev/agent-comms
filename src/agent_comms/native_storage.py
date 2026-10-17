@@ -21,8 +21,8 @@ class NativeSessionFiles:
     session: Path
 
     @classmethod
-    def of(cls, session_file: str) -> NativeSessionFiles:
-        return cls(Path(session_file).resolve())
+    def of(cls, source_path: str) -> NativeSessionFiles:
+        return cls(Path(source_path).resolve())
 
     @property
     def input_proof(self) -> Path:

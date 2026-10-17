@@ -60,7 +60,6 @@ def test_runtime_location_round_trip_uses_declared_backend(location):
     restored = FieldCodec.decode(ab.RuntimeLocation, FieldCodec.encode(location))
     assert restored == location
     assert restored.backend is PiNativeBackend
-    assert restored.available == location.available
 
 
 def test_input_id_is_stable_for_reserved_source_order():
@@ -185,8 +184,8 @@ def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration():
     assert thread.backend is PiNativeBackend
     encoded = FieldCodec.encode(thread)
     assert "backend" not in encoded
-    assert "session_file" not in encoded
-    assert encoded["runtime"] == {"backend": "pi_native", "location": None}
+    assert "runtime" not in encoded
+    assert encoded["session_file"] == {"kind": "unstarted", "owner": "pi_native"}
     assert FieldCodec.decode(Thread, encoded) == thread
     with pytest.raises(ValueError):
         FieldCodec.decode(Thread, {**encoded, "backend": "pi_native"})

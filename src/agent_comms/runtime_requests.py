@@ -354,7 +354,7 @@ class ContextRuntimeRequest(ResultRuntimeRequest):
         agent = ctx.server.agent
         owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
         context = await agent.turns.inspect_context(ctx.session_id, owner)
-        return context.require_session_file(owner.runtime.path)
+        return context.require_source_path(owner.runtime.path)
 
     async def result(self, ctx):
         return FieldCodec.encode(await self.inspect(ctx))

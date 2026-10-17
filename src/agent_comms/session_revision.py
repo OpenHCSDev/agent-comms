@@ -57,14 +57,14 @@ class SessionRevision(SessionObservation):
     input_proof: InputProofRevision
 
     @classmethod
-    def observe(cls, session_file: str | None) -> SessionObservation:
-        if not session_file:
+    def observe(cls, source_path: str | None) -> SessionObservation:
+        if not source_path:
             return UnavailableSessionObservation(ValueError("No selected native session"))
         try:
-            native = FileRevision.from_stat(Path(session_file).stat())
+            native = FileRevision.from_stat(Path(source_path).stat())
             try:
                 proof = PresentInputProofRevision(
-                    FileRevision.from_stat(NativeSessionFiles(Path(session_file)).input_proof.stat())
+                    FileRevision.from_stat(NativeSessionFiles(Path(source_path)).input_proof.stat())
                 )
             except FileNotFoundError:
                 proof = MissingInputProofRevision()
@@ -79,5 +79,5 @@ class SessionRevision(SessionObservation):
     def matches(self, reserved: SessionRevision) -> bool:
         return self == reserved
 
-    def current(self, session_file: str | None) -> bool:
-        return self.observe(session_file).matches(self)
+    def current(self, source_path: str | None) -> bool:
+        return self.observe(source_path).matches(self)

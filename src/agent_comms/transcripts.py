@@ -53,7 +53,7 @@ _LOG = logging.getLogger(__name__)
 class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     """A native transcript position; WireTranscriptCursor adds an assigned wire source."""
 
-    runtime: RuntimeLocation
+    runtime: RuntimeLocation = field(metadata={"wire_name": "session_file"})
     offset: int
     wire: ClassVar[WireFrontier] = NoWireFrontier()
 
@@ -117,7 +117,7 @@ class PageSource:
     """The retained stores one thread's transcript page is read from."""
 
     thread: Thread
-    runtime: RuntimeLocation
+    runtime: RuntimeLocation = field(metadata={"wire_name": "session_file"})
     inherited: bool
     root: Path
     log: WireLog
@@ -134,7 +134,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     root: str
     requested_name: str
     thread: ThreadProvenance = field(metadata={"content_exclude": True})
-    runtime: RuntimeLocation
+    runtime: RuntimeLocation = field(metadata={"wire_name": "session_file"})
     records_cut: RecordsCut = field(metadata={"content_exclude": True})
     route_revision: TranscriptRouteRevision
     bus_revision: FileRevision | None = field(metadata={"content_exclude": True})
@@ -198,12 +198,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     @property
     def page_bound(self) -> TranscriptCursor:
         """The original witnessed byte/receipt bound owns page preparation."""
-<<<<<<< HEAD
-        return self.through or TranscriptCursor.at(
-            self.runtime, self.records_cut.offset, self.wire_frontier)
-=======
-        return self.through or self.wire_frontier.cursor(self.session_file, self.records_cut.offset)
->>>>>>> origin/main
+        return self.through or self.wire_frontier.cursor(self.runtime, self.records_cut.offset)
 
     def contains_records_cut(self, other: TranscriptReadIdentity) -> bool:
         """Whether ``other`` still contains the thread records this read captured."""
@@ -581,11 +576,7 @@ class Transcripts:
                 size = through.offset
                 if cursor and cursor.offset > size:
                     raise ValueError("Cursor is outside the transcript window.")
-<<<<<<< HEAD
-            frontier = through or TranscriptCursor.at(runtime, size, source.frontier)
-=======
-            frontier = through or source.frontier.cursor(session_file, size)
->>>>>>> origin/main
+            frontier = through or source.frontier.cursor(runtime, size)
             source.require_cursor(frontier)
             if frontier.wire.sequence < 0 or (cursor is not None and not frontier.contains(cursor)):
                 raise ValueError("Cursor is outside the combined transcript source")
@@ -613,19 +604,10 @@ class Transcripts:
     def transcript_checkpoint(self, name: str) -> TranscriptCursor:
         registry = self.registry.snapshot()
         thread = registry.require(name)
-<<<<<<< HEAD
-        runtime = thread.runtime
-        with runtime.history_source(self.root, thread.incarnation).reading() as source:
+        with thread.runtime.history_source(self.root, thread.incarnation).reading() as source:
             offset = source.cut().offset
-        return TranscriptCursor.at(
-            runtime, offset,
-            AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier,
-=======
-        session_file = thread.session_file or ""
-        path = Path(session_file)
         return AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier.cursor(
-            session_file, path.stat().st_size if session_file and path.is_file() else 0,
->>>>>>> origin/main
+            thread.runtime, offset,
         )
 
     def record_turn_publication(

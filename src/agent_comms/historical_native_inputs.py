@@ -158,14 +158,14 @@ def read_historical_native_inputs(
         evidence: list[HistoricalNativeInput] = []
         for source, row in rows:
             original_session = row.require_session_identity()
-            session_file = original_session.path
+            source_path = original_session.path
             recorded = row.require_context_proof()
             try:
                 # Journal alone cannot promote an unrecorded or uncertain input.
                 # The immutable SQL row is already present from the live event;
                 # this check only corroborates its message-bearing context facts.
                 corroborated = recorded.corroborates_input(
-                    row.input_id, evidence=source_reads.for_source(session_file),
+                    row.input_id, evidence=source_reads.for_source(source_path),
                 )
             except (OSError, ValueError, NativePiUnavailable) as error:
                 raise IdentityConflict("historical native context evidence is unavailable") from error
@@ -181,7 +181,7 @@ def read_historical_native_inputs(
                 if binding.wire_root_id != wire_root_id:
                     raise IdentityConflict("Prelaunch binding names another canonical wire root")
             equality = binding is not None and expected_prompt_matches_journal(
-                session_file, binding, evidence=source_reads.for_source(session_file)
+                source_path, binding, evidence=source_reads.for_source(source_path)
             )
             evidence.append(
                 row.execution.historical_proof(

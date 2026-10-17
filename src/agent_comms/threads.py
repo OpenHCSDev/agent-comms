@@ -46,7 +46,7 @@ class Thread(ThreadProvenance):
     process_identity: ProcessIdentity | None = None
     runtime: RuntimeLocation = field(
         default_factory=UnstartedRuntime.default, kw_only=True,
-        metadata={"registration_inheritance": InheritEmpty},
+        metadata={"registration_inheritance": InheritEmpty, "wire_name": "session_file"},
     )
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     thinking_level: type[ThinkingLevel] | None = field(

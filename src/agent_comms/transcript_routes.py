@@ -70,9 +70,9 @@ def _assert_schema(connection: sqlite3.Connection) -> None:
 class _SessionRoutes:
     """One indexed read snapshot; decode only entries used by the page."""
 
-    def __init__(self, path: Path | None, session_file: str):
+    def __init__(self, path: Path | None, source_path: str):
         self._connection = CoordinationStore.read_snapshot(path) if path else None
-        self._session_file = session_file
+        self._source_path = source_path
         self._cache: dict[str, TurnRouting | None] = {}
         self._input_cache: dict[str, InputDisplay | None] = {}
 
@@ -81,7 +81,7 @@ class _SessionRoutes:
             return None
         if entry_id not in self._cache:
             row = TranscriptRoute.one(
-                self._connection, session_file=self._session_file, entry_id=entry_id
+                self._connection, session_file=self._source_path, entry_id=entry_id
             )
             self._cache[entry_id] = row.routing if row else None
         return self._cache[entry_id]
@@ -166,9 +166,9 @@ class TranscriptRoutes:
         self._initialized = True
         return True
 
-    def for_session(self, session_file: str) -> _SessionRoutes:
+    def for_session(self, source_path: str) -> _SessionRoutes:
         path = self.database_path if self._ensure_database() else None
-        return _SessionRoutes(path, session_file)
+        return _SessionRoutes(path, source_path)
 
     def input_bindings(self) -> dict[str, InputDisplay]:
         """Read typed owner bindings without creating or upgrading a database."""
@@ -181,7 +181,7 @@ class TranscriptRoutes:
                 for row in InputDisplay.select(connection, where="sent_text_digest IS NOT NULL")
             }
 
-    def record(self, session_file: str, entry_ids: tuple[str, ...], routing: TurnRouting) -> None:
+    def record(self, source_path: str, entry_ids: tuple[str, ...], routing: TurnRouting) -> None:
         if not entry_ids:
             return
         self._ensure_database(create=True)
@@ -192,7 +192,7 @@ class TranscriptRoutes:
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
                 for entry_id in entry_ids:
-                    TranscriptRoute(session_file, entry_id, routing).upsert(connection)
+                    TranscriptRoute(source_path, entry_id, routing).upsert(connection)
 
     def record_turn_publication(self, registry, log, lease, checkpoint, routing, published):
         """Join a completed native producer to its original committed wire rows.
@@ -249,7 +249,7 @@ class TranscriptRoutes:
             )
             self._record_publication(str(path), ids, final.entry.id, routing, published)
 
-    def _record_publication(self, session_file, entry_ids, final_id, routing, published):
+    def _record_publication(self, source_path, entry_ids, final_id, routing, published):
         self._ensure_database(create=True)
         with _store_lock(self.database_path), closing(
             CoordinationStore.writer(self.database_path)
@@ -257,14 +257,14 @@ class TranscriptRoutes:
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
                 final_routing = replace(routing, publications=published)
-                previous = TranscriptRoute.one(connection, session_file=session_file, entry_id=final_id)
+                previous = TranscriptRoute.one(connection, session_file=source_path, entry_id=final_id)
                 if previous is not None:
                     previous.require_publication(final_routing)
                 for entry_id in entry_ids:
                     if entry_id == final_id:
                         continue
-                    TranscriptRoute(session_file, entry_id, routing).upsert(connection)
-                TranscriptRoute(session_file, final_id, final_routing).upsert(connection)
+                    TranscriptRoute(source_path, entry_id, routing).upsert(connection)
+                TranscriptRoute(source_path, final_id, final_routing).upsert(connection)
 
     def record_input_display(
         self,

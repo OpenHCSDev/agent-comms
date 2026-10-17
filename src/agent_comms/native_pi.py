@@ -307,7 +307,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
 
 @dataclass(frozen=True, slots=True)
 class NativeContextProof(NativeContextRecord):
-    source_path: Path
+    source_path: Path = field(metadata={"wire_name": "session_file"})
 
     def corroborates_input(
         self, input_id: str, *, evidence: NativeEvidenceRead | None = None

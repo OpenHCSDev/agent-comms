@@ -138,7 +138,7 @@ class VerifiedOwnerLoss:
         """
         if not self.owns(self._store, self.attempt):
             raise RecoveryBlocked("native exit observation requires acquired owner loss")
-        session_files = self.native_input.sent_owner_admission_generation.recovery_session_files(
+        source_paths = self.native_input.sent_owner_admission_generation.recovery_source_paths(
             self.native_input, self.release
         )
         session_dir = (
@@ -160,7 +160,7 @@ class VerifiedOwnerLoss:
                 raise RecoveryBlocked("native process observation was denied") from error
             for index, argument in enumerate(args[:-1]):
                 selected = argument == b"--session" and any(
-                    args[index + 1] == os.fsencode(path) for path in session_files
+                    args[index + 1] == os.fsencode(path) for path in source_paths
                 )
                 allocated = (
                     argument == b"--session-dir" and args[index + 1] == os.fsencode(session_dir)
@@ -362,7 +362,7 @@ class RecoveryMonitorCapability:
 
     @classmethod
     def recover_native_failure(
-        cls, store: Coordination, execution_id: str, session_file: Path
+        cls, store: Coordination, execution_id: str, source_path: Path
     ) -> Applied[RecoverySnapshot]:
         """Retire a released owner's failed native input without recovering acceptance.
 
@@ -385,17 +385,17 @@ class RecoveryMonitorCapability:
                 raise PublicationUncertain("native failure cannot resolve frozen publication")
             reserved = loss.native_input
             original_session = reserved.require_session_identity()
-            session_file = Path(session_file).absolute()
-            original_session.require_session(str(session_file))
+            source_path = Path(source_path).absolute()
+            original_session.require_session(str(source_path))
             with expected_prompt_bindings(store, (reserved.input_id,)) as bindings:
                 binding = bindings.get(reserved.input_id)
                 if binding is None or binding.identity != reserved.identity:
                     raise RecoveryBlocked("native failure lacks its bound original input")
-            with NativeEntry.open_evidence(session_file) as evidence:
-                if not expected_prompt_matches_journal(session_file, binding, evidence=evidence):
+            with NativeEntry.open_evidence(source_path) as evidence:
+                if not expected_prompt_matches_journal(source_path, binding, evidence=evidence):
                     raise RecoveryBlocked("native failure lacks its bound original input")
                 proof = NativeContextProof.read_evidence(
-                    session_file, reserved.input_id, evidence=evidence
+                    source_path, reserved.input_id, evidence=evidence
                 )
                 original_session.require_context(proof)
                 _header, entries = evidence.observe()

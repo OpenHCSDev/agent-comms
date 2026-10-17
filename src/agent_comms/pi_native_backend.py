@@ -159,7 +159,7 @@ class PersistentPiSession:
         if not child.proc.alive():
             return False
         try:
-            revision = SessionRevision.observe(identity.session_file).require_available()
+            revision = SessionRevision.observe(identity.source_path).require_available()
         except SessionRevisionUnavailable:
             return False
         self.custody = RetainedNative(child, identity, revision)
@@ -370,7 +370,7 @@ class PiNativeBackend(
             RuntimeForkRequest(str(package), parent.runtime.path, parent.worktree,
                                runtime=runtime), cwd=Path(parent.worktree),
         )
-        return PiSessionFile(identity.session_file)
+        return PiSessionFile(identity.source_path)
 
     # -- ConfiguresModel --------------------------------------------------
 

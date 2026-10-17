@@ -36,7 +36,7 @@ class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmissi
     def require_release(self, receipt, snapshot, current) -> None: ...
 
     @abstractmethod
-    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
+    def recovery_source_paths(self, row, receipt) -> tuple[Path, ...]:
         """Original launch selections to inspect after attested owner loss."""
 
 
@@ -58,7 +58,7 @@ class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
             parameters=(row.input_id,),
             sent_owner_admission_generation=RecordedNativeAdmission(admission_generation),
             session_id=session.session_id,
-            session_file=session.session_file,
+            session_file=session.source_path,
         )
         if updated.rowcount != 1:
             raise StaleFence("native input admission was already bound")
@@ -69,7 +69,7 @@ class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
         if not receipt.current(snapshot, current, receipt.before):
             raise RelationViolationError("Unrecorded native send has no exact stopped release")
 
-    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
+    def recovery_source_paths(self, row, receipt) -> tuple[Path, ...]:
         # Selection can launch before get_state/send admission records a session.
         # The exact stopped declaration still owns an existing saved selection;
         # an unopened owner instead has only its allocated session directory.
@@ -98,7 +98,7 @@ class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
             if not receipt.current(snapshot, current, receipt.before):
                 raise RelationViolationError("Native release differs from its stopped declaration")
 
-    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
+    def recovery_source_paths(self, row, receipt) -> tuple[Path, ...]:
         # The original send contract admitted only journals inside this
         # recipient's native-sessions directory, and recorded selected identity
         # later, with the context receipt. That directory remains checked by

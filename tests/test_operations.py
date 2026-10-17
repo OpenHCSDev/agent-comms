@@ -15,6 +15,7 @@ from agent_comms.messages import QuestionKind
 from agent_comms.launch_runtime import CallingThreadUnavailable, RestartEnvironment
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.thread_management import ForkSpec
+from agent_comms.pi_native_backend import PiSessionFile
 from agent_comms.threads import Thread
 
 
@@ -145,7 +146,7 @@ class TestThreadOps:
                 name="transcript-thread",
                 tags=frozenset(),
                 worktree=str(tmp_path),
-                session_file=str(session_file),
+                runtime=PiSessionFile(str(session_file)),
             )
         )
 
@@ -180,7 +181,7 @@ class TestThreadOps:
                 name="compacted-thread",
                 tags=frozenset(),
                 worktree=str(tmp_path),
-                session_file=str(session_file),
+                runtime=PiSessionFile(str(session_file)),
             )
         )
 
@@ -272,7 +273,7 @@ class TestThreadOps:
         assert attached.parent == "PR111"
         assert attached.task == "fix auth"
         assert attached.pid == 123
-        assert attached.session_file == str(session_file.resolve())
+        assert attached.runtime == PiSessionFile(str(session_file.resolve()))
         assert wired.registry.status("fixer").declared_name == "running"
 
     def test_attached_session_model_is_registered_once_not_rescanned_for_answers(
@@ -480,7 +481,7 @@ class TestThreadOps:
 
 class TestFork:
     def test_fork_requires_parent_session(self, wired):
-        with pytest.raises(RelationViolationError, match="session file"):
+        with pytest.raises(RelationViolationError, match="unstarted runtime"):
             wired.threads.create(ForkSpec(name="child", parent="PR111", project="/project", model="test/model", thinking_level="high", task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired):

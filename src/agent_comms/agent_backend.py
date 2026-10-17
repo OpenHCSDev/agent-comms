@@ -29,7 +29,6 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, WireValue
 from .send_outcome import SendBoundary
 
 if TYPE_CHECKING:
@@ -433,27 +432,6 @@ class TurnDelivery:
     input_started: Callable[..., bool]
     request_progress: Callable[..., None]
     ui_request: Callable[..., Awaitable[Any]]
-
-
-class Disposition(Enum):
-    ABANDON = "abandon"
-
-
-@dataclass(frozen=True)
-class InterruptedWork:
-    task_id: str
-    kind: str
-
-
-class RecoversAfterCrash(ABC):
-    @abstractmethod
-    async def interrupted(self, thread: Thread) -> tuple[InterruptedWork, ...]: ...
-
-    @abstractmethod
-    async def settle(self, thread: Thread, work: InterruptedWork, disposition: Disposition) -> None: ...
-
-    @abstractmethod
-    async def resume(self, thread: Thread) -> None: ...
 
 
 class RunsTurns(ABC):

@@ -252,7 +252,7 @@ class RetainedNative(ChildNative):
 
     @property
     def current(self) -> bool:
-        return self.child.proc.alive() and self.revision.current(self.identity.session_file)
+        return self.child.proc.alive() and self.revision.current(self.identity.source_path)
 
     def idle(self):
         if not self.current:
@@ -279,7 +279,7 @@ class RetainedNative(ChildNative):
                 from .session_revision import SessionRevision
 
                 current.revision = SessionRevision.observe(
-                    current.identity.session_file
+                    current.identity.source_path
                 ).require_available()
             return response.data.require_payload()
 

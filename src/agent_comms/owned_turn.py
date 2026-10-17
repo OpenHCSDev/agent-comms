@@ -66,11 +66,11 @@ class OwnedTurn:
     def reply_targets(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys(origin.exact_reply_target for origin in self.origins))
 
-    async def attach_native_session(self, session_file):
+    async def attach_native_session(self, source_path):
         """Publish through the owner returned by this original begin operation."""
         self.registry_owner = await Coordination.run_worker(partial(
             self.runner.comms.registry.attach_native_session,
-            self.registry_owner, str(session_file),
+            self.registry_owner, str(source_path),
         ))
 
     def __init__(
