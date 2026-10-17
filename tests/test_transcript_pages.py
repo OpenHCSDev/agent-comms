@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
-from agent_comms.transcript_receipts import NativeTranscriptCursor, WireTranscriptCursor
+from agent_comms.transcript_wire import NativeTranscriptCursor, WireTranscriptCursor
 
 
 def transcript(path, count):
@@ -148,7 +148,7 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
 
 
 def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
-    from agent_comms.transcript_receipts import AssignedSourceCursor
+    from agent_comms.transcript_wire import AssignedSourceCursor
 
     wire_at = AssignedSourceCursor("root", Thread("recipient", frozenset(), "/", created_at=1).incarnation.require_recorded(), 5).at
     cursor = WireTranscriptCursor("a.jsonl", 900, wire_at(5))

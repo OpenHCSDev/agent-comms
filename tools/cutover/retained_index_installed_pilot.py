@@ -10,7 +10,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.store_files import _store_lock
-from agent_comms.transcript_receipts import AssignedTranscriptSource
+from agent_comms.transcript_wire import AssignedTranscriptSource
 from agent_comms.wire_log import WireLog
 from retained_index_cutover import RetainedIndexCutover
 

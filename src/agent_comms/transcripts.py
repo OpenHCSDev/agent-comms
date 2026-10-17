@@ -33,7 +33,7 @@ from .turn_lease import TurnLeaseFence
 from .turn_digests import ThreadTurns, TurnDigestRead
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
-from .transcript_receipts import (
+from .transcript_wire import (
     AssignedTranscriptSource, EarlierTranscript, LaterTranscript, LiveAssignedTranscriptSource,
     TranscriptCursor, TranscriptRecords, TranscriptSource,
 )

@@ -40,7 +40,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.presentation import WireRevision
-from agent_comms.transcript_receipts import TranscriptCursor
+from agent_comms.transcript_wire import TranscriptCursor
 
 if TYPE_CHECKING:
     from concurrent.futures import Future

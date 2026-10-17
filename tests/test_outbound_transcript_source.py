@@ -13,7 +13,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
 from agent_comms.wire_log import WireLog
 from agent_comms.threads import Thread
-from agent_comms.transcript_receipts import TranscriptCursor
+from agent_comms.transcript_wire import TranscriptCursor
 from agent_comms.transcripts import TranscriptRead
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
@@ -129,7 +129,7 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
     from dataclasses import replace
     from agent_comms.field_codec import FieldCodec
     from agent_comms.routing import MessageRoute, TurnRouting
-    from agent_comms.transcript_receipts import AssignedTranscriptSource
+    from agent_comms.transcript_wire import AssignedTranscriptSource
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     reply = comms.messaging.send_message("beta", "sender", "First original reply")

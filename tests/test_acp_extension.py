@@ -39,7 +39,7 @@ from agent_comms.agent_events import CompactionStart
 from agent_comms.pi_payloads import McpLiveReceipt
 from agent_comms.thread_identity import AdmissionIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.transcript_receipts import NativeTranscriptCursor
+from agent_comms.transcript_wire import NativeTranscriptCursor
 from agent_comms.transcripts import TranscriptPage
 from agent_comms.turn_lease import ActiveTurn, TurnState
 from agent_comms.turn_context import ContextManifest, NextContextTurn
