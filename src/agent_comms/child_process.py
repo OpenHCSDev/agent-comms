@@ -1080,8 +1080,13 @@ class AttachedChild(ChildProcess):
         """Collect stdout without competing with the owned bounded stderr reader."""
         output = asyncio.create_task(self._collect_stdout())
         try:
-            if self.stdin is not None:
-                await self.process._feed_stdin(data)
+            try:
+                if data:
+                    await self.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # A command may finish before consuming all supplied input.
+            finally:
+                self.close_input()
             return await output, await asyncio.shield(self._stderr_task)
         finally:
             if not output.done():
@@ -1324,7 +1329,7 @@ class DetachedExitOutcome(ChildOutcome):
         return False
 
 
-class NamespacedChild(AttachedChild):
+class NamespacedChild(ChildProcess):
     """Attached shape with kernel containment and an independent hard deadline.
 
     Lifted from the selected-Pi guardian: namespace PID1 attests readiness before
@@ -1334,8 +1339,8 @@ class NamespacedChild(AttachedChild):
     """
 
     def __init__(self, child: AttachedChild, watchdog: AttachedChild, namespace: str):
-        super().__init__(child.process, child.identity)
-        self._stderr_task = child._stderr_task
+        super().__init__(child.identity)
+        self.child = child
         self.watchdog = watchdog
         self.namespace = namespace
 
@@ -1416,8 +1421,11 @@ class NamespacedChild(AttachedChild):
             if descriptor is not None:
                 os.close(descriptor)
 
+    async def wait(self) -> ChildOutcome:
+        return await self.child.wait()
+
     async def _stop(self) -> ChildOutcome:
-        result = await super()._stop()
+        result = await self.child.stop()
         await self.watchdog.stop()
         deadline = time.monotonic() + STOP_GRACE_SECONDS
         while NamespaceContainment.namespace_alive(self.namespace):
