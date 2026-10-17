@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.assignment_states import CompletedAssignment
-from agent_comms.attempt_recovery import RecoveryMonitorCapability
+from agent_comms.attempt_recovery import AttemptRecovery
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import RecoveryBlocked
@@ -110,7 +110,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
         root = Path(root)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             with pytest.raises(RecoveryBlocked, match="release does not prove loss"):
-                RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
+                AttemptRecovery.abandon_released_native_attempt(store, execution_id)
             assert store.snapshots.get(execution_id).is_current
         exit_allowed.set()
         await asyncio.to_thread(process.join, 5)
@@ -130,7 +130,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
         wire_before = (root / "bus.jsonl").read_bytes()
         with Coordination(str(root / "coordination.sqlite3")) as store:
             before = input_evidence(store)
-            closed = RecoveryMonitorCapability.abandon_released_native_attempt(
+            closed = AttemptRecovery.abandon_released_native_attempt(
                 store, execution_id
             ).value
             assert not closed.is_current and not closed.can_retry
@@ -142,7 +142,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
             assert proof_path.read_bytes() == proof_before
             assert (root / "bus.jsonl").read_bytes() == wire_before
             with pytest.raises(RecoveryBlocked):
-                RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
+                AttemptRecovery.abandon_released_native_attempt(store, execution_id)
         comms.registry.register(
             replace(
                 comms.registry.require("beta"),

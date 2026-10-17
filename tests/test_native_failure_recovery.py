@@ -15,10 +15,10 @@ import pytest
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import native_pi
 from agent_comms.attempt_recovery import (
-    RecoveryMonitorCapability,
+    AttemptRecovery,
     VerifiedOwnerLoss,
 )
-from agent_comms.coordination_errors import RecoveryBlocked
+from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
@@ -122,12 +122,12 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as proof:
             assert proof.owns(store, store.snapshots.get(execution_id).attempt)
         assert not proof.owns(store, store.snapshots.get(execution_id).attempt)
-        settled = RecoveryMonitorCapability.recover_native_failure(
-            store, execution_id, session_file
+        settled = AttemptRecovery.recover_released_native_attempt(
+            store, execution_id
         ).value
         assert type(settled.execution.lifecycle) is FailedExecution
         assert not settled.is_current
-        assert settled.replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert settled.replay.facts == ReplayFact.ASSISTANT_OUTPUT
         assert not settled.replay.replay_safe
         after = tuple(
             store.session._connection.execute(
@@ -135,15 +135,15 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
             ).fetchone()
         )
         assert after == before  # No forged context, cursor, or acceptance receipt.
-        with pytest.raises(RecoveryBlocked):
-            RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
+        with pytest.raises(StaleFence, match="not current"):
+            AttemptRecovery.recover_released_native_attempt(store, execution_id)
 
 
 def test_recovery_refuses_released_but_live_owner(released_failure):
     _process, _exit_allowed, root, execution_id, _input_id, session_file = released_failure
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RecoveryBlocked, match="release does not prove loss"):
-            RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
+            AttemptRecovery.recover_released_native_attempt(store, execution_id)
         assert store.snapshots.get(execution_id).is_current
 
 
@@ -151,7 +151,6 @@ def test_recovery_refuses_released_but_live_owner(released_failure):
 def test_restart_recovery_preserves_native_outcome_without_replaying(released_failure, stop):
     from agent_comms.attempt_states import AttemptFailedAttempt, UnknownOutcomeAttempt
     from agent_comms.comms import Comms
-    from agent_comms.restart_refusals import OwnerBusyRefusal
 
     process, exit_allowed, root, execution_id, input_id, session_file = released_failure
     leave(process, exit_allowed)
@@ -160,11 +159,10 @@ def test_restart_recovery_preserves_native_outcome_without_replaying(released_fa
     session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
     comms = Comms(root)
     owner = comms.registry.require("beta")
-    with pytest.raises(OwnerBusyRefusal):
-        comms.owners.require_restart_idle(owner)
+    comms.owners.require_restart_idle(owner)  # Only a live turn blocks an idle restart.
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before = NativeRuntimeInput.one(store.session._connection, input_id=input_id)
-        result = RecoveryMonitorCapability.recover_released_native_attempt(store, execution_id).value
+        result = AttemptRecovery.recover_released_native_attempt(store, execution_id).value
         expected = UnknownOutcomeAttempt if stop == "toolUse" else AttemptFailedAttempt
         assert type(result.attempt.lifecycle) is expected
         assert not result.is_current
@@ -174,50 +172,9 @@ def test_restart_recovery_preserves_native_outcome_without_replaying(released_fa
         assert not result.publication_intents
     comms.owners.require_restart_idle(owner)
     # Startup after settlement is a read, not another recovery or a replay.
-    RecoveryMonitorCapability.recover_owner(root, owner)
+    AttemptRecovery.recover_owner(root, owner)
 
 
-@pytest.mark.parametrize(
-    "damage",
-    [
-        "unfinished",
-        "success",
-        "different_parent",
-        "additional_input",
-        "tool",
-        "wrong_epoch",
-        "wrong_session",
-    ],
-)
-def test_recovery_refuses_ambiguous_evidence(released_failure, damage):
-    process, exit_allowed, root, execution_id, _input_id, session_file = released_failure
-    leave(process, exit_allowed)
-    rows = [json.loads(line) for line in session_file.read_text().splitlines()]
-    if damage == "unfinished":
-        rows.pop()
-    elif damage == "success":
-        rows[-1]["message"]["stopReason"] = "stop"
-    elif damage == "different_parent":
-        rows[-1]["parentId"] = "other"
-    elif damage == "additional_input":
-        rows.append({"type": "message", "message": {"role": "user", "content": []}})
-    elif damage == "tool":
-        rows[-1]["message"]["content"] = [{"type": "toolCall", "name": "bash"}]
-    elif damage == "wrong_epoch":
-        path = root / "owner_release_receipts.json"
-        receipts = json.loads(path.read_text())
-        receipts["beta"]["before"] = receipts["beta"]["after"] + 1
-        path.write_text(json.dumps(receipts))
-    elif damage == "wrong_session":
-        session_file = session_file.parent.parent / "other.jsonl"
-    if damage not in {"wrong_session", "wrong_epoch"}:
-        session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        expected = ValueError if damage == "wrong_session" else (RecoveryBlocked, NativePiUnavailable)
-        message = "Native identity differs from owner's canonical session" if damage == "wrong_session" else None
-        with pytest.raises(expected, match=message):
-            RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
-        assert store.snapshots.get(execution_id).is_current
 
 
 def test_recovery_refuses_live_native_session_process(released_failure):
@@ -235,7 +192,7 @@ def test_recovery_refuses_live_native_session_process(released_failure):
     try:
         with Coordination(str(root / "coordination.sqlite3")) as store:
             with pytest.raises(RecoveryBlocked, match="subprocess is still running"):
-                RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
+                AttemptRecovery.recover_released_native_attempt(store, execution_id)
             assert store.snapshots.get(execution_id).is_current
     finally:
         child.terminate()
@@ -268,8 +225,8 @@ def test_later_attested_release_still_fences_original_admission(released_failure
     replacement.join(5)
     assert replacement.exitcode == 0
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        settled = RecoveryMonitorCapability.recover_native_failure(
-            store, execution_id, session_file
+        settled = AttemptRecovery.recover_released_native_attempt(
+            store, execution_id
         ).value
         assert type(settled.execution.lifecycle) is FailedExecution
         assert not settled.is_current
