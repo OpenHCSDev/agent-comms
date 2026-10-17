@@ -270,8 +270,7 @@ class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
         pass
 
     def require_target(self, goals, target, goal_id):
-        if target.goal is not None:
-            target.goal.state.require_replacement(self, target.goal, goal_id)
+        target.require_goal_replacement(self, goal_id)
 
     def require_open_target(self, current, goal_id):
         current.author.require_self_direction()
