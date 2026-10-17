@@ -58,7 +58,7 @@ T = TypeVar("T")
 
 
 class NativeCommitObservation(ABC, Generic[T]):
-    """Observed original native receipts, without granting admission or replay."""
+    """Observed native input records, without permission to start or replay input."""
 
     @abstractmethod
     def require(self) -> T: ...

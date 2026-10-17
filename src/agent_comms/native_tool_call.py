@@ -1,7 +1,7 @@
-"""Per-call native observation and owner admission; neither fact implies the other.
+"""Track native tool events and the owner's permission separately for each call.
 
-Socket requests can precede streamed events. Only a correlated native start
-unblocks admission, and only the owner's callback may consume a durable slot.
+Socket requests can precede streamed events. Only a matching native start
+permits the owner's action, and only its callback may consume a stored slot.
 These process-local transactions never reconstruct authority from saved receipts.
 """
 
@@ -111,7 +111,7 @@ class UncertainCall(CallObservation):
 
 class CallAdmission(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
     def expire(self, call: NativeToolCall) -> None:
-        """An unstarted waiter cannot change an already consumed admission."""
+        """An unstarted waiter cannot change a tool slot already consumed."""
 
     async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
         raise SelectedToolDenied("Native tool request was already consumed; outcome may be UNKNOWN")
@@ -155,7 +155,7 @@ class UncertainAdmission(CallAdmission):
 
 @dataclass
 class NativeToolCall(ABC):
-    """One payload owner with orthogonal live observation/admission state."""
+    """One payload owner tracks live events separately from permission to run the call."""
 
     call_id: str
     observation: CallObservation = field(
@@ -195,7 +195,7 @@ class NativeToolCall(ABC):
             self.observation.require_executing()
             await self.admission.consume(self, action)
         except ToolStartNotSeen:
-            # The callback never ran. Close admission, but retain the actual
+            # The callback never ran. Withdraw permission, but retain the actual
             # native observations: delayed announcement/start/error events
             # must still reconcile this denied call in its declared round.
             self.admission.expire(self)

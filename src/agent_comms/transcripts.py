@@ -167,7 +167,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         """Reacquire this exact source without substituting a live namespace."""
 
     def publish_turn(self, publish: Callable[[str, Thread], None]) -> None:
-        """Recorded evidence has no turn settlement or admission authority."""
+        """Recorded evidence cannot settle a turn or permit new input."""
 
     def recapture(self, owner) -> TranscriptReadIdentity:
         return owner.recapture_page_identity(self)

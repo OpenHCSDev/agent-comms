@@ -1,4 +1,4 @@
-"""Registration transitions own epoch, publication and turn-admission consequences.
+"""Registration changes control the owner generation, updates and permission to start turns.
 
 These are transient operations over the one RegistryDocument, never a second
 registry or a stored event format. A replacement always has a previous owner;
@@ -78,7 +78,7 @@ class UpdatedRegistration(RegistrationChange):
     previous_status: ThreadStatus
 
     def declared(self, requested: Thread) -> RegistrationChange:
-        """Decide executor preservation/admission against the locked prior owner."""
+        """Decide whether to keep or claim execution against the locked prior owner."""
         if self.previous.executing:
             if requested.execution is not self.previous.execution:
                 raise RelationViolationError("Cannot replace receiving capability during its active turn.")
@@ -149,7 +149,7 @@ class NativeSourcePublication(UpdatedRegistration):
 
 
 class ExplicitOwnerChange(RegistrationChange):
-    """Fresh explicit admission always revokes imported turn authority."""
+    """Fresh explicit registration always revokes imported permission to run a turn."""
 
     changes_owner = True
 

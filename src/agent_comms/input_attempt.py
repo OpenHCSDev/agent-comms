@@ -137,7 +137,7 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
 @dataclass(frozen=True)
 class StoredInput(InputAttempt):
-    """Recorded owner name/admission provenance, with no invented incarnation."""
+    """The recorded owner name and input generation, without inventing a thread identity."""
 
     exists = True
 
@@ -346,7 +346,7 @@ class StartedInput(SentInput):
     ) -> StartedInput | None:
         """Return this original row's recorded lease/input evidence only.
 
-        Stored rows record name/admission, not thread birth or process. The
+        Stored rows record owner name and input generation, not thread birth or process. The
         publication source independently validates the original complete lease
         and native ancestry; this receipt never invents their missing proof.
         """

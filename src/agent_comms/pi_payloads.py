@@ -347,7 +347,7 @@ class UnknownContent(PiContent):
 
 
 class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
-    """Native transport timing is display evidence, never input admission."""
+    """Show native transport timings without permitting input."""
 
     @classmethod
     def from_text(cls, value: str):
@@ -589,7 +589,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
 
 
 class AbsentMessage(PiMessage):
-    """An omitted external message carries no admission or output authority."""
+    """An omitted external message permits neither new input nor output."""
 
     update_context = True
 

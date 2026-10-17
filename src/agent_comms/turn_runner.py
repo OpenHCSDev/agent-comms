@@ -315,7 +315,7 @@ class TurnRunner:
     ) -> RegistryOwner:
         """Bind the exact installed lease to cleanup before worker delivery.
 
-        The joined worker may commit admission before its awaiting caller is
+        The worker may claim the turn before its awaiting caller is
         cancelled. Register on the caller's stack here, while it still owns
         this operation; no delivered result is needed to retire that lease.
         """

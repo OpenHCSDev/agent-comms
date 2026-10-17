@@ -288,7 +288,7 @@ class TurnDelivery:
     """Core's bindings for one turn, handed to the backend that runs it.
 
     ``inbox`` carries :class:`InputRequest` and :class:`SendNow` records that
-    arrive while the turn runs. The boundaries are Core's admission checks: the
+    arrive while the turn runs. Core checks input permission at these boundaries: the
     backend enters ``send_boundary`` around writing each input and
     ``interrupt_boundary`` around a send-now; ``input_started`` reports that the
     runtime began an input; ``request_progress`` and ``ui_request`` observe

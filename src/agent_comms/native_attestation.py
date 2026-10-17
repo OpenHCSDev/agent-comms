@@ -84,7 +84,7 @@ class PendingAttestation(NativeAttestation):
 
     def accept(self, event: PiEvent) -> NativeAttestation:
         # Pi multiplexes events and independent replies on this channel. Only
-        # this original response may change the pending admission state.
+        # the matching response may change whether this input can start.
         if not event.responds_to(self.request):
             return self
         if event.success is not True:

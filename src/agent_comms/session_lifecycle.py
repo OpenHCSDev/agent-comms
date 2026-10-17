@@ -406,7 +406,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
         return CloseSessionResponse()
 
     def acquire_declared_thread(self, thread: Thread) -> Thread:
-        """Leave the published declaration for the original load admission."""
+        """Leave the registered declaration for the load operation to check."""
         return thread
 
     async def new_session(

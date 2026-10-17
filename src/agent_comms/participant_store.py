@@ -25,11 +25,11 @@ from agent_comms.coordination_tables.participants import (
 
 @dataclass(frozen=True, slots=True)
 class ParticipantSnapshot:
-    """Durable coordinator assignment, independent of process admission.
+    """Stored coordinator assignment, independent of the process's input permission.
 
     This generation begins at registration and advances on explicit coordinator
     reassignment/retry, even if the registry process has not changed. It must
-    never be substituted for a Registration owner or admission generation.
+    never be substituted for the registry's owner or input generation.
     """
 
     lookup: str

@@ -1,4 +1,4 @@
-"""Ordinary owner-turn admission: named checks held through native stdin.write."""
+"""Check an ordinary owner turn and hold its locks through native stdin.write."""
 
 from __future__ import annotations
 

@@ -181,7 +181,7 @@ def write_native_manifest(root: Path) -> None:
     """Commit an assembled package through the existing diagnostic/tree format.
 
     Preparation owns this new, sealed package. This does not update an existing
-    deployment or derive a runtime admission from its old commitment.
+    deployment or use an old package record as permission to start a runtime.
     """
     tree = package_tree_digest(root)
     lines = []
