@@ -29,7 +29,7 @@ from .read_basis import (
 )
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
-from .response_policy import InformationalPolicy, ResponsePolicy
+from .response_policy import InformationalPolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
 from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
 from .wire_log import WireLog
@@ -321,9 +321,7 @@ class HistoricalMessage(Message):
     def history_source(self) -> HistorySource:
         return self.source
 
-    @property
-    def response_policy(self) -> ResponsePolicy:
-        return InformationalPolicy.instance()
+    response_policy = InformationalPolicy.instance()
 
     @property
     def view_cursor(self) -> HistoryCursor:

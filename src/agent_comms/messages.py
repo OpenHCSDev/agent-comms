@@ -287,9 +287,7 @@ class Message:
         ).hexdigest()[:12]
         return digest
 
-    @property
-    def history_source(self):
-        return None
+    history_source = None
 
     @property
     def display_metadata(self) -> dict:

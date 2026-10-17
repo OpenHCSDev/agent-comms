@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
+from typing import ClassVar
 from pydantic import JsonValue
 from urllib.parse import quote
 
@@ -28,17 +29,9 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
         """Non-text native evidence retains its own presentation declaration."""
         return self
 
-    @property
-    def text_size(self) -> int:
-        return 0
-
-    @property
-    def native_inputs(self) -> frozenset[str]:
-        return frozenset()
-
-    @property
-    def incoming_sources(self) -> tuple[MessageReference, ...]:
-        return ()
+    text_size: ClassVar[int] = 0
+    native_inputs: ClassVar[frozenset[str]] = frozenset()
+    incoming_sources: ClassVar[tuple[MessageReference, ...]] = ()
 
     def with_native_input(self, native_id: str | None) -> TranscriptEvent:
         return self
@@ -77,9 +70,7 @@ class TextTranscript(TranscriptEvent):
     def as_context(self) -> ContextTranscript:
         return ContextTranscript(self.text, timestamp=self.timestamp)
 
-    @property
-    def starts_activity(self) -> bool:
-        return True
+    starts_activity = True
 
     @property
     def text_size(self) -> int:
@@ -100,9 +91,7 @@ class LiveTextTranscript(StreamingMerge, MarkdownTranscript):
 
 
 class SilentTranscript:
-    @property
-    def routed(self) -> bool:
-        return False
+    routed = False
 
 
 class OutgoingRoute:
@@ -127,10 +116,7 @@ class WireTextTranscript(MarkdownTranscript):
     """Immutable presentation of one original committed wire record."""
 
     source: MessageReference = field()
-
-    @property
-    def routed(self) -> bool:
-        return True
+    routed = True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -150,13 +136,7 @@ class IncomingTranscript(TextTranscript):
     def source(self):
         return self.message.reference
 
-    @property
-    def route(self):
-        return MessageRoute(self.message.sender, (self.message.target,))
-
-    @property
-    def routed(self) -> bool:
-        return True
+    routed = True
 
     @property
     def routing(self):
@@ -216,9 +196,9 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
 
     def core_message(self, source) -> Message:
         """Read the actual original; a stored report cannot invent its missing kind or role."""
-        for original in source.rows("w.seq=?", (self.source.seq,), limit=1):
-            if self.matches(original.message):
-                return original.message
+        original = source.sent_messages((self.source,)).get(self.source)
+        if original is not None and self.matches(original):
+            return original
         raise ValueError("Sent report no longer matches its original assigned wire message")
 
 
