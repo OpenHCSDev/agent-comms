@@ -66,8 +66,20 @@ class ToolCall:
 @dataclass(frozen=True)
 class Binding(TypedTable):
     root: str
-    bus: str
-    thread: str
+    bus: str = field(metadata={'wire_name': 'bus_thread'})
+    thread: str = field(metadata={'wire_name': 'session'})
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        group = parser.add_argument_group('Core/CLI binding (all or none)')
+        for _, key in FieldCodec.record_fields(cls):
+            group.add_argument('--' + key.replace('_', '-'))
+
+    @classmethod
+    def from_arguments(cls, arguments: argparse.Namespace) -> Binding | None:
+        values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
+                  if vars(arguments)[key] is not None}
+        return FieldCodec.decode(cls, values) if values else None
 
     @classmethod
     @contextmanager
@@ -374,10 +386,26 @@ class AllTurnsEnded(DraftUpdate, TurnEnded):
 @dataclass
 class Options:
     operation: Operation
-    root: str | None
-    bus_thread: str | None
-    session: str | None
+    binding: Binding | None
     state: Path
+
+    @classmethod
+    def parse(cls, description: str | None, state: Path, bridge_type: type[CliBridge]) -> Self:
+        common = argparse.ArgumentParser(add_help=False)
+        Binding.add_arguments(common)
+        common.add_argument('--state', type=Path, default=state)
+        bridge_type.add_arguments(common)
+        parser = argparse.ArgumentParser(description=description)
+        commands = parser.add_subparsers(required=True)
+        for operation in bridge_type.operations:
+            command = commands.add_parser(operation.__name__.lower(), parents=[common])
+            operation.add_arguments(command)
+            command.set_defaults(operation=operation)
+        arguments = parser.parse_args()
+        arguments.operation = arguments.operation.from_arguments(arguments)
+        arguments.binding = arguments.operation.binding(arguments)
+        return cls(**{declared.name: vars(arguments)[key]
+                      for declared, key in FieldCodec.record_fields(cls)})
 
 @dataclass(frozen=True)
 class MonitorEvidence(DeclaredFamily):
@@ -465,12 +493,8 @@ OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
 class Operation(ABC, Generic[OperationBridge]):
     """A decoded CLI command owns its execution."""
 
-    def binding(self, options: Options) -> Binding | None:
-        if any((options.root, options.bus_thread, options.session)):
-            if not all((options.root, options.bus_thread, options.session)):
-                raise ValueError('Supply all three binding arguments or use the saved binding')
-            return Binding(options.root, options.bus_thread, options.session)
-        return None
+    def binding(self, arguments: argparse.Namespace) -> Binding | None:
+        return Binding.from_arguments(arguments)
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
@@ -478,7 +502,7 @@ class Operation(ABC, Generic[OperationBridge]):
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Operation:
-        return FieldCodec.decode(cls, {key: vars(arguments).pop(key) for _, key in FieldCodec.record_fields(cls)})
+        return FieldCodec.decode(cls, {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)})
 
     @abstractmethod
     async def run(self, bridge: OperationBridge) -> None: ...
@@ -796,36 +820,11 @@ class LineMonitorBridge(TranscriptBridge[Options]):
         self.write_line(self.encode(text))
 
 
-def shared_parser(description: str | None, state: Path,
-                  bridge_type: type[CliBridge]) -> argparse.ArgumentParser:
-    common = argparse.ArgumentParser(add_help=False)
-    common.add_argument('--root')
-    common.add_argument('--bus-thread')
-    common.add_argument('--session')
-    common.add_argument('--state', type=Path, default=state)
-    bridge_type.add_arguments(common)
-    parser = argparse.ArgumentParser(description=description)
-    commands = parser.add_subparsers(required=True)
-    for operation in bridge_type.operations:
-        command = commands.add_parser(operation.__name__.lower(), parents=[common])
-        operation.add_arguments(command)
-        command.set_defaults(operation=operation)
-    return parser
-
-
-def parse_options(parser: argparse.ArgumentParser,
-                  options_type: type[BridgeOptions]) -> BridgeOptions:
-    arguments = parser.parse_args()
-    arguments.operation = arguments.operation.from_arguments(arguments)
-    return options_type(**vars(arguments))
-
-
 def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptions) -> None:
-    requested = options.operation.binding(options)
     os.umask(0o077)
     try:
         with Binding.open(options.state) as db, asyncio.Runner() as runner:
-            bridge = bridge_type(options, Binding.bind(db, requested), db)
+            bridge = bridge_type(options, Binding.bind(db, options.binding), db)
             runner.run(bridge.run())
     except asyncio.CancelledError:
         pass

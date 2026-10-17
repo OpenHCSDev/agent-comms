@@ -14,7 +14,7 @@ import aiohttp
 from pydantic import JsonValue
 from agent_comms.messages import Message
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
-from .shared import IncomingFrame, TranscriptBridge, Options, TranscriptUpdate, shared_parser, parse_options, run_bridge
+from .shared import IncomingFrame, TranscriptBridge, Options, TranscriptUpdate, run_bridge
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcFailure, RpcNotification, RpcSuccess, TextInput,
@@ -121,6 +121,5 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
 
 
 def main() -> None:
-    parser = shared_parser(__doc__, Path.home() / '.local/state/codex-comms-inbox', CodexBridge)
-    run_bridge(CodexBridge, parse_options(parser, CodexOptions))
+    run_bridge(CodexBridge, CodexOptions.parse(__doc__, Path.home() / '.local/state/codex-comms-inbox', CodexBridge))
 
