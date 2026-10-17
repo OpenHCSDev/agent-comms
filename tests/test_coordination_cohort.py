@@ -29,7 +29,7 @@ from agent_comms.coordination_cohort import (
 )
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
     canonical_publication_key,
@@ -45,7 +45,7 @@ from agent_comms.messages import InfoKind, Message
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
-from agent_comms.wake_policy import BoundedTriageWake, FullWake
+from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="private initial bus requires POSIX owner/directory durability"

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .channel_targets import CommandTarget
 from .locked_store import LockedStore
 from .private_path import FileIdentity, FileRevision
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation, ReadCursor
@@ -76,17 +77,7 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
     @staticmethod
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
-        from .channel_targets import BuiltinChannel, is_channel_target
-
-        builtin = BuiltinChannel.lookup(message.target)
-        if builtin is not None or is_channel_target(message.target):
-            return Conversation(target=builtin.value if builtin is not None else message.target)
-        names = sorted(
-            {snapshot.canonical_name(name) for name in (message.sender, message.target)}
-        )
-        return Conversation(
-            participants=tuple(snapshot.participant(name).incarnation for name in names)
-        )
+        return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, Conversation)
 
     def capture(
         self,

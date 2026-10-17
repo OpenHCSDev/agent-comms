@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, ClassVar, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
+from .channel_targets import ChannelTarget
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -244,7 +245,7 @@ class CommsPinThreadTool(ToolRequest):
 
         channel = self.channel
         PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
-        canonical = channel if channel.startswith("#") else f"#{channel}"
+        canonical = ChannelTarget.normalize_name(channel)
         return next(
             view.to_wire() for view in comms.views.channel_views() if view.channel.name == canonical
         )

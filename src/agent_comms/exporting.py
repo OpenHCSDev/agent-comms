@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from .bus_publication import reject_private_wire_fields
-from .channel_targets import BuiltinChannel
 from .catalog_store import ChannelCatalog
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -134,25 +133,10 @@ class AuthoredSourceScope(WireExportScope):
 class ChannelScope(WireExportScope):
     channel: str
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.channel, str) or not self.channel.startswith("#"):
-            raise ValueError("A channel wire-export scope requires one #channel.")
-        builtin = BuiltinChannel.lookup(self.channel)
-        if builtin is not None and builtin.aggregate:
-            raise ValueError(
-                f"{self.channel} is an aggregate projection, not an exportable conversation."
-            )
-
     def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
-        if catalog.read().is_view_target(self.channel):
-            raise RelationViolationError(
-                f"Saved view {self.channel!r} has no authoritative wire history."
-            )
-        targets = catalog.read().history_targets(self.channel)
-        if targets is None:
-            raise RelationViolationError(
-                f"View {self.channel!r} is an aggregate, not an exportable conversation."
-            )
+        channel = catalog.read().resolve(self.channel)
+        channel.require_routable()
+        targets = channel.history_targets
         return ResolvedExportScope(self, lambda message: message.target in targets)
 
 

@@ -10,6 +10,7 @@ from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .channel_targets import ChannelTarget
 from .channels import Channel
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
@@ -131,7 +132,7 @@ class ChannelHistory(HistoryView):
     targets: frozenset[str] | None
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
-        return presentation.bus.channel_history_page(self.target, **paging)
+        return presentation.bus.channel_history_page(ChannelTarget(self.target), **paging)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return ChannelDisplayScope(self.target, self.targets)

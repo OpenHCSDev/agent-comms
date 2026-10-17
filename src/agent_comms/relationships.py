@@ -17,7 +17,7 @@ from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from .channel_targets import is_channel_target
+from .channel_targets import CommandTarget
 from .command import Command
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
@@ -314,7 +314,7 @@ class InboundRelationshipGroup(RecentRelationshipGroup):
         sender = context.registry.canonical_name(message.sender)
         if sender == context.thread.name or not context.delivery.delivers(message.sender, message.target):
             return ()
-        return (sender, message.target) if is_channel_target(message.target) else (sender,)
+        return CommandTarget.named(message.target).inbound_relations(sender)
 
 
 class OutboundRelationshipGroup(RecentRelationshipGroup):
@@ -325,8 +325,7 @@ class OutboundRelationshipGroup(RecentRelationshipGroup):
     def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
         if context.registry.canonical_name(message.sender) != context.thread.name:
             return ()
-        target = message.target
-        return (target if is_channel_target(target) else context.registry.canonical_name(target),)
+        return (CommandTarget.named(message.target).canonical_name(context.registry.canonical_name),)
 
 
 class ParentRelationshipGroup(RelationshipGroup):
@@ -422,9 +421,10 @@ class RelationshipContext:
 
     def entry(self, name: str, *, message: Message | None = None,
               detail: str = "") -> RelationshipEntry:
-        name = name if is_channel_target(name) else self.registry.canonical_name(name)
+        target = CommandTarget.named(name)
+        name = target.canonical_name(self.registry.canonical_name)
         return RelationshipEntry(
-            name, "channel" if is_channel_target(name) else "thread", self.people.get(name),
+            name, target.kind, self.people.get(name),
             message.seq if message else 0, message.timestamp if message else 0, detail,
         )
 

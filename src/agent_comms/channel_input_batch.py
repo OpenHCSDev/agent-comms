@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .channel_targets import is_channel_target
+from .channel_targets import CommandTarget
 from .input_attempt import StoredInput
 
 if TYPE_CHECKING:
@@ -53,7 +53,7 @@ class InputBatch(ABC):
         channels = {
             origin.seq: origin
             for origin in origins
-            if origin.seq > 0 and is_channel_target(origin.target)
+            if origin.seq > 0 and CommandTarget.named(origin.target).batchable
         }
         if len(channels) < 2 or tuple(channels.values()) != origins:
             return single
