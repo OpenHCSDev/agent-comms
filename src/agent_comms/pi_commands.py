@@ -104,10 +104,9 @@ class PiCommand(DeclaredFamily):
         data = dict(value)
         kind = data.pop("type", None)
         try:
-            cls.decode(kind)
+            member = cls.decode(kind)
         except ValueError:
             return UnknownCommand(wire=value)
-        member = cls.decode(kind)
         return FieldCodec.decode(cls, {"kind": kind, **member.decode_parameters(data)})
 
     @classmethod
