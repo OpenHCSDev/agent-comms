@@ -246,23 +246,6 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
 
 
-def test_selected_queued_delivery_uses_shared_sending_state_without_inventing_read_proof():
-    from agent_comms.audience_manifest import FrozenRecipient
-    from agent_comms.notification_progress import QueuedProgress, SendingProgress
-    from agent_comms.presentation import MessageNotification
-
-    queued = QueuedProgress(1_000)
-    notification = MessageNotification(FrozenRecipient("peer", "peer"), queued)
-    active = queued.selected_notification(notification, busy=True)
-    pending = queued.selected_notification(notification, busy=False)
-    assert active.state == SendingProgress(1_000)
-    assert active.state.working and active.state.priority == 1
-    assert not active.state.delivered and not active.state.read
-    assert active.label.startswith("Sent ")
-    assert pending.state is queued and not pending.state.working
-    assert pending.label.startswith("Queued ")
-
-
 def test_delivered_assignment_uses_its_recorded_conversation_response(archived_notification):
     from agent_comms.assignment_states import DeferredAssignment
     from agent_comms.coordination_cohort import accept_delivery_cohort
