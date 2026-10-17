@@ -102,7 +102,8 @@ def _validated_context(
     if candidate.wire_envelope_digest != frozen_audience.wire_envelope_digest:
         raise ValueError("message does not match the frozen audience envelope.")
     target = CommandTarget.named(message.target)
-    target.require_frozen_recipients(message, frozen_audience)
+    if message.type.conversation_message:
+        target.require_frozen_recipients(message, frozen_audience)
     return target, target.effective_mentions(message, frozen_audience)
 
 
@@ -113,6 +114,8 @@ def _member_decision(
     target: NamedTarget,
     effective_mentions: frozenset[str],
 ) -> WakeDecision | NoWakeDecision:
+    if not message.type.conversation_message:
+        return NoWakeDecision(recipient.recipient_lookup)
     mode = target.wake_policy(message, recipient, control, effective_mentions)
     if mode is None:
         return NoWakeDecision(recipient.recipient_lookup)

@@ -22,6 +22,7 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
     """Display activity and warnings, not registry presence or turn authority."""
 
     working: ClassVar[bool] = False
+    details: ClassVar[tuple[str, ...]] = ()
 
     def when_idle(self, ordinary: ThreadPresentation,
                   present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
@@ -35,8 +36,8 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
         if detail and not self.working:
             raise RelationViolationError("Idle activity cannot carry a detail.")
 
-    def with_attention(self) -> ThreadPresentationStatus:
-        return AttentionThreadPresentationStatus(self)
+    def with_attention(self, *details: str) -> ThreadPresentationStatus:
+        return AttentionThreadPresentationStatus(self, details)
 
     def without_work(self) -> ThreadPresentationStatus:
         return IdleThreadPresentationStatus()
@@ -61,6 +62,7 @@ class WorkingThreadPresentationStatus(ThreadPresentationStatus):
 @dataclass(frozen=True, slots=True)
 class AttentionThreadPresentationStatus(ThreadPresentationStatus):
     activity: ThreadPresentationStatus
+    details: tuple[str, ...] = ()
 
     @property
     def working(self) -> bool:
@@ -71,8 +73,8 @@ class AttentionThreadPresentationStatus(ThreadPresentationStatus):
         projected = self.activity.when_idle(ordinary, present)
         return replace(projected, status=projected.status.with_attention())
 
-    def with_attention(self) -> ThreadPresentationStatus:
-        return self
+    def with_attention(self, *details: str) -> ThreadPresentationStatus:
+        return replace(self, details=(*self.details, *details)) if details else self
 
     def without_work(self) -> ThreadPresentationStatus:
         return replace(self, activity=self.activity.without_work())

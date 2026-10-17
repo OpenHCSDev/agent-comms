@@ -34,6 +34,7 @@ from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageKind, InfoKind
+from agent_comms.message_reference import MessageReference
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
@@ -470,6 +471,25 @@ class ObservedPart(TypedTable):
 
 @dataclass(frozen=True)
 class DeliveryRow(TypedTable):
+    sequence_sql: ClassVar[str] = "json_extract(payload, '$.seq')"
+
+    @classmethod
+    def schema_objects(cls, *, if_not_exists: bool = False):
+        objects = super().schema_objects(if_not_exists=if_not_exists)
+        existence = 'IF NOT EXISTS ' if if_not_exists else ''
+        objects[f'{cls.declared_name}_sequence'] = (
+            f'CREATE INDEX {existence}"{cls.declared_name}_sequence" '
+            f'ON "{cls.declared_name}" ({cls.sequence_sql})')
+        return objects
+
+    @classmethod
+    def resume_after(cls, db: CoordinationStore) -> MessageReference | None:
+        """The existing journal owns attempted progress, including uncertain emissions."""
+        latest = cls.read(db.execute(
+            f'SELECT {cls._column_list(cls.columns())} FROM "{cls.declared_name}" '
+            f'ORDER BY {cls.sequence_sql} DESC LIMIT 1'))
+        return latest[0].message.reference if latest else None
+
     id: str = field(metadata={'sql': Column(primary_key=True)})
     payload: str
     outcome: type[Outcome] = field(metadata={'sql': Column(index=True)})
@@ -623,15 +643,13 @@ class CliBridge(ABC, Generic[BridgeOptions]):
 
     async def watch(self) -> None:
         await self.prepare_delivery()
-        pending = tuple(outcome.declared_name for outcome in Outcome.members_with(UnconfirmedOutcome))
-        placeholders = ','.join('?' for _ in pending)
-        count = DeliveryRow.count(self.db, where=f'outcome IN ({placeholders})', parameters=pending)
-        print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed deliveries retained without replay: {count}', file=sys.stderr, flush=True)
+        print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay', file=sys.stderr, flush=True)
         while True:
             with (self.options.state / 'watch.stderr.log').open('a') as errors:
                 child = await AttachedChild.start((
                     str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
                     '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
+                    '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
                     '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
                     stdio=StreamingChildStdio(input_enabled=False, stderr=errors))
                 try:

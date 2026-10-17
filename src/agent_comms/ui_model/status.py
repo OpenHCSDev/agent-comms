@@ -54,7 +54,7 @@ class ThreadStatusModel:
         """Decode the observation's nullable presentation once, for local and foreign views."""
         if presentation is None:
             return cls.retired(name)
-        lines = [presentation.summary]
+        lines = [presentation.summary, *presentation.status.details]
         excerpts = []
         for receipt in presentation.notifications:
             message = receipt.message

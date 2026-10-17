@@ -56,7 +56,7 @@ class MessageKind(DeclaredFamily, affix="Kind"):
 
 
 class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
-    """A claim-owner state transition, not conversation content."""
+    """A claim-owner record, not a delivery to a reader."""
 
     conversation_message = False
 
@@ -182,7 +182,7 @@ class Message:
 
     def notification_references(self) -> tuple[MessageReference, ...]:
         """Only an admitted delivery has recipient-handling outcomes to project."""
-        return () if self.notice else (self.reference,)
+        return (self.reference,) if self.type.conversation_message and not self.notice else ()
 
     def require_decision(self) -> Decision:
         return self.task.require_decision()
@@ -244,7 +244,7 @@ class Message:
             for mention in self.mentions
         ):
             raise ValueError("Mention ranges must identify text in the message body.")
-        CommandTarget.named(self.target).validate(self.sender)
+        CommandTarget.named(self.target).validate(self)
 
     @property
     def view_cursor(self) -> int | HistoryCursor:
@@ -311,9 +311,9 @@ class Message:
     @property
     def response_policy(self) -> ResponsePolicy:
         """Typed response semantics without changing the stored target."""
-        if self.notice or self.membership is not None:
-            return InformationalPolicy.instance()
-        return CommandTarget.named(self.target).response_policy(self)
+        if self.type.conversation_message and not self.notice and self.membership is None:
+            return CommandTarget.named(self.target).response_policy(self)
+        return InformationalPolicy.instance()
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None

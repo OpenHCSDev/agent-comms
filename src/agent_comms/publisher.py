@@ -82,7 +82,7 @@ class Publisher:
         if sender not in snapshot.threads:
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
         target = CommandTarget.named(message.target)
-        target.require_publication(sender, snapshot, lambda: self._channels.read() if catalog is None else catalog)
+        target.require_publication(message, snapshot, lambda: self._channels.read() if catalog is None else catalog)
         return sender, target
 
     def _prepare_message_unlocked(

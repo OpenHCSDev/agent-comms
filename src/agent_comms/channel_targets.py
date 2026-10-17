@@ -152,9 +152,9 @@ class ThreadTarget(NamedTarget):
         return declaration.thread_bindings(comms, thread, snapshot.status(thread.name),
                                            channel, catalog=catalog)
 
-    def validate(self, sender=None):
-        if sender == self.name:
-            raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
+    def validate(self, message):
+        if message.sender == self.name and message.type.conversation_message:
+            raise RelationViolationError(f"Thread {message.sender!r} cannot message itself.")
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
         if not set(self.name) <= allowed:
             raise ValueError(f"Message target {self.name!r} is not a thread name or #channel.")
@@ -165,12 +165,12 @@ class ThreadTarget(NamedTarget):
     def ordinary_wake_policy(self, recipient, mentions):
         return FullWake()
 
-    def require_publication(self, sender, snapshot, catalog):
+    def require_publication(self, message, snapshot, catalog):
         target = self.canonical_name(snapshot.canonical_name)
         if target not in snapshot.threads:
             raise UnregisteredThreadError(f"Target {self.name!r} is not a registered thread.")
-        if target == sender:
-            raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
+        if target == snapshot.canonical_name(message.sender) and message.type.conversation_message:
+            raise RelationViolationError(f"Thread {target!r} cannot message itself.")
 
     def initial_delivery(self, sender, message, snapshot, catalog):
         target = self.canonical_name(snapshot.canonical_name)
@@ -240,7 +240,7 @@ class ChannelTarget(NamedTarget):
             return FullWake() if recipient.canonical_thread in mentions else None
         return BoundedTriageWake()
 
-    def require_publication(self, sender, snapshot, catalog):
+    def require_publication(self, message, snapshot, catalog):
         channel = catalog().resolve(self.name)
         if channel.aggregate or channel.view is not None:
             raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
