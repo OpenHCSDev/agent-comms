@@ -27,7 +27,6 @@ from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.active_route import read_active_route
 from agent_comms.cli_bridges import opencode
 from agent_comms.cli_commands import StatusCliCommand
-from agent_comms.cli_protocol import CoreError
 from agent_comms.comms import wire
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.launch_runtime import LaunchRuntime
@@ -64,11 +63,7 @@ class RuntimePublication:
     def require_cli(self, root: Path) -> None:
         """Use the target command inside the caller's held route, not a new client."""
         output = StringIO()
-        try:
-            result = StatusCliCommand().run(wire(root), output)
-        except Exception as error:
-            output.write(CoreError.from_exception(error).model_dump_json())
-            result = 1
+        result = StatusCliCommand().run(wire(root), output)
         if result:
             raise RuntimeError(
                 f'Runtime CLI refused publication (exit {result}): {output.getvalue().strip()}'
