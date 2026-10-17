@@ -107,7 +107,47 @@ fresh result is accepted, then retire through normal borrower checks.
 Full source parsing covered1336 modules with zero omissions; verbose traversal
 timed out. A focused before/after NRA owner/consumer traversal completed against
 the immutable16a tools, current tools and actual target owner classes. This is
-syntax evidence, not a stopped launch result. Operation6 has not yet run.
+syntax evidence, not a stopped launch result.
+
+## Operation 6 failed after conversion; target-only recovery
+
+Codex executed operation6 once with e475 tools. Installed store hashes match
+all three converted candidates:25 registry +21 release +999 history author
+fields. The retained preimages match the originals; the five other recorded
+originals remain unchanged. Typed target inspection decodes37 registry Goals
+(25 ordinary,12 source-less),22 release Goals (21 ordinary,1 source-less) and
+999 history Goals/59 empty cells. Source-less author access refuses rather than
+inventing self-direction.
+
+Publication then failed because `RuntimePublication.require_cli` launched a
+new CLI borrower under the publisher's exclusive route lock. That child needed
+a separate shared lock on the same directory. Its JSON stdout was discarded
+from the error report, leaving empty stderr. Worker3545709 exited; at inspection
+owner generation13814/admission16259 remained stopped and private current still
+selected T055936. No original decoder was restarted and no carry was repeated.
+
+The publication owner now calls the installed `StatusCliCommand.run` directly
+in the same process. Exceptions propagate unchanged; a nonzero command result
+includes its actual JSON output. Ordinary publication owns its shared route in
+`main`; stopped publication uses its already-held exclusive descriptor. An
+actual readback on the converted private root passed under EX, with protected
+store/guard hashes and private pointer unchanged. Evidence:
+`.artifacts/p107-owned-readback.json`. The initial redundant exception wrapper
+was removed at review; it is not a second CLI error boundary.
+
+The before/after NRA syntax pass covers380 tool/target modules with zero
+omissions; `.artifacts/p107-route-readback-owner-sites.txt` records declarations,
+writes, imports, checks and callers. Arbitrary dynamic callbacks/getattr/MRO are
+not proven by that inventory.
+
+Claude authorized one fresh target-only recovery, executed only by Codex:
+verify the installed plan and stopped identity; publish the target prefix under
+EX; release EX; use `wire(read_active_route()).owners.start` for only the recorded
+worker, with the target native binary and original empty argument tuple. Existing
+registry settings own model, thinking level, service tier, worktree and session.
+Do not use the normal publication enqueue loop, repeat carry, replay operation6
+or reconstruct its expired in-memory restart handoff. No pointer/start operation
+was performed by this implementation owner.
 
 Do not repeat a failed attempt. Inspect its original receipt, preimages, process
 and current pointer before disposition. Any changed/uncertain result stays
