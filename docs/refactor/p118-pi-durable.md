@@ -1,78 +1,108 @@
-# P118: durable runtime location integration (draft)
+# P118: durable locations and typed host boundary (draft)
 
-Integration owner: core-native-runtime. Base main `05b0162bc`; frozen
-`work/core-pi-durable` (`b1fa2b97f`, #1127) was merged normally, without editing
+Integration owner: core-native-runtime. Main base `05b0162bc`; frozen
+`work/core-pi-durable` (`b1fa2b97f`, #1127) was merged normally without editing
 that branch. PiNativeBackend remains the new-thread default.
 
-## Owners
+## Location ownership
 
-- DurableDatabase is a member of P117's existing RuntimeLocation family. Its
-  path remains the persisted session_file; no second location envelope exists.
-- AgentBackend's subclass declaration binds location_type._backend once.
-  RuntimeLocation.backend reads that declaration; UnstartedRuntime returns its
-  existing owner. TurnRunner selects through Thread.runtime.backend.
-- DurableDatabase supplies saved history, read keys, selected-source identity
-  and storage files. Native Pi attestation and unsupported durable forking fail
-  explicitly, rather than interpreting SQLite as a native journal.
-- DurableDatabaseFiles reuses NativeSessionFiles' process-reference checks and
-  deletion lifecycle, overriding the actual SQLite/lock members. Schema-report
-  consumes each file owner's schema_paths instead of assuming native proofs.
-- DurableHost owns the Node protocol and child. A paused history host reads the
-  existing root without taking the worker's exclusive lock, resuming work,
-  loading provider credentials, or creating a missing database. SDK 1.3.0 only
-  offers a read/write storage opener: history still runs its idempotent schema
-  initialization. This is not a read-only SQLite capability claim.
-- DurableHistoryPage decodes original host pages once through FieldCodec.
-  Its opaque SDK cursor is JSON, not a string. The SDK continuation is page.next;
-  the frozen host incorrectly read page.cursor and stopped after one page.
-- TranscriptSource owns saved-record projection and input-bounded turn reading.
-  NativeRecord and durable input records own their boundaries; TurnDigest owns
-  event assembly. The replaced native turn loop and external projection copy
-  were deleted. External SQLite readers retain their efficient turn query.
+DurableDatabase belongs to P117's RuntimeLocation family. The path remains the
+persisted session_file; no second location envelope exists. AgentBackend's
+subclass declaration binds location_type._backend once; RuntimeLocation reads
+that declaration and UnstartedRuntime returns its existing owner. TurnRunner
+selects through Thread.runtime.backend.
+
+DurableDatabase supplies history, read keys, selected-source identity and storage
+files. It refuses unsupported durable forks and native Pi attestation instead
+of treating SQLite as a native journal. DurableDatabaseFiles reuses the existing
+file owner's process-reference checks and deletion lifecycle. Schema-report
+consumes file-owner schema_paths rather than assuming native proof files.
+
+A paused DurableHost reads the existing root without taking the worker's
+exclusive lock, resuming work, loading provider credentials, or creating a
+missing database. SDK 1.3.0 still uses a read/write storage opener and idempotent
+schema initialization; this is not a read-only SQLite capability claim.
+History round-trips the SDK's opaque JSON continuation, page.next. The frozen
+host incorrectly read page.cursor and stopped after one page.
+
+## One inbound decoder
+
+DurableHost.read parses each JSONL line and calls FieldCodec.decode(HostMessage,
+...). HostMessage members deliver typed events, typed results, or typed errors.
+No caller selects a decoder or reads a raw host-result/event dictionary.
+
+- HostCommand declarations own request fields and the expected reply type.
+  PendingHostRequest owns the future. A mismatched reply fails while the pending
+  request is still owned, so the reader can finish its future with that failure.
+- DurableEvent and DurableChange use the SDK's type discriminator. Text and
+  thinking delta members create Chunk and Thinking themselves; tool-start and
+  task-error records create their Core events. No payload bag or string chain
+  remains. Event vocabulary derives from DurableEvent.names, not a forwarding
+  wire_kind method.
+- CompactionHostMessage decodes directly into the existing CompactionOutcome
+  family: NothingToCompaction, PlacedCompaction, StaleCompaction, FailedCompaction.
+  There is no second compaction-status family or consumer-side reconstruction.
+- Configuration, context, recovery inspection, settlement and history are typed
+  replies. SDK usage counters reuse PiUsage. SDK-defined arbitrary JSON data,
+  including tool arguments, opaque cursors and uninterpreted stored message or
+  extension data, remains JSON-valued fields; consumers do not interpret these
+  as host protocol shapes.
+- Node and Python use the new frame/request format together. The previous flat
+  dict reader and caller-side history decoder are deleted; no alternate codec,
+  compatibility reader or FieldCodec subclass exists.
+
+TranscriptSource owns saved-record projection and input-bounded turn reading;
+records own their boundaries and TurnDigest assembles events. The replaced
+native loop and external projection copy were removed. External SQLite readers
+retain their efficient turn query.
 
 ## Verification
 
-Real Node/SQLite host, no provider requests and no comms tool inputs:
-
-- Durable/location checks: four pass, including persisted/unstarted round trips,
-  worker selection, missing history, source identity and file members.
-- Existing durable event checks: two pass.
-- Expanded existing backend, external transcript, schema and native transcript
-  batch: 39 pass, two fail. Both failures reproduce on unmodified main:
-  malformed_unknown_and_partial_entries_keep_byte_boundaries and
-  native_ancestry_is_acquired_before_coordinator_read. They are not green.
-- The real SDK writes 260 fresh entries; history traverses all pages in both
-  directions while a writer host holds the database, and reads the newest turn.
-  Original interrupted-work inspection stays unchanged.
-- Required backend equality-dispatch grep: zero.
-- Unchanged full debt ratchet: exit 1. Python source grows by 513 lines; retained
-  frozen-backend protocol code also contributes FamilyFlattened +1,
-  StringDispatch +1, StringDispatchArms +3 and StringSubscript +32. No newly
-  introduced banned vocabulary. No checker scope/budget/threshold changes.
-- NRA Python census: before 1,011 parsed modules plus the unresolved merge
-  conflict in agent_backend.py; after 1,013 modules, zero parse omissions.
-  Includes Core src/tests and Toad src consumers. Dynamic resolution stays open;
+- Original targeted batch: **39 passed**, with the same two known main failures
+  excluded explicitly. Earlier full runs and an unmodified-main reproduction
+  retain both failures: malformed_unknown_and_partial_entries_keep_byte_boundaries
+  and native_ancestry_is_acquired_before_coordinator_read. Neither is green.
+- Additional boundary batch: **10 passed**. Covers all four decoded compaction
+  outcomes, nested event/change records, strict malformed-record rejection,
+  reply/command association, and a real-host error followed by successful typed
+  context/inspection replies. Combined: **49 passed, 2 deselected**.
+- Real SDK/SQLite history contains 260 newly created entries. All pages read in
+  both directions while a writer host remains open; newest-turn reading works
+  and interrupted-work inspection remains unchanged. No model input submitted.
+- Requested single-quoted string-subscript grep: **0**. Backend equality-dispatch
+  grep: **0**. Python compaction status comparisons: **0**.
+- Unchanged debt ratchet against 05b0162bc: **exit 1, SourceLines +908 only**.
+  BannedVocabulary in external_transcript decreases by one; every other delta
+  is zero and introduced findings are empty. In particular StringSubscript,
+  StringDispatch/arms and FamilyFlattened no longer grow. No budget, threshold
+  or scope changes.
+- NRA parser, syntax index and canonical family index cover Core src/tests/tools
+  and Toad src. Before accepted-head refactor: 1,064 modules, 4,523 original
+  classes, 4,262 canonical. After: 1,065 modules, 4,579 original classes, 4,318
+  canonical. Zero parse omissions; the same 261 local/conditional/ambiguous
+  declarations remain OPEN. All 97 backend declarations have a canonical
+  projection. Cross-root attribute/name candidates do not prove dynamic binding.
   JS and pinned SDK declarations were read semantically, not Python-AST parsed.
 
-Evidence in the owned checkout: `.artifacts/p118/`, including source census,
-full check output, main failure reproduction and ratchet JSON. Tests use existing
-installed Python dependencies and borrow the frozen checkout's npm dependencies;
-node_modules is absent from the final Git tree and PR diff. One earlier published
-checkpoint accidentally included its symlink; the following commit removed it.
+Evidence: owned checkout `.artifacts/p118/`, including codec-checks-b.txt,
+codec-ratchet-final.json, codec-{before,after}-family.json and retained main
+failure reproduction. Python source shortstat versus main: **11 files +956/−48**,
+net **+908**. Existing Python and borrowed frozen npm dependencies were reused.
+The ignored node_modules symlink is absent from the final Git tree and PR diff;
+one earlier published checkpoint accidentally included it, then removed it.
 
-## Not delivered by this checkpoint
+## Still outside this checkpoint
 
-Provider submission remains deliberately disabled until initial Core InputId and
-send-disposition integration is connected. Event conversion is incomplete; the
-current saved-history projection retains the frozen host's text projection,
-not full structured tool/thinking history. Durable forks and native-selected
-execution are not claimed. Recovery crash/reopen acceptance is unfinished.
+Provider submission stays disabled until initial Core InputId and send-disposition
+integration is connected. Event conversion and structured tool/thinking history
+are incomplete; durable forks, native-selected execution, recovery crash/reopen
+and configured-provider worker/UI acceptance are not claimed.
 
-No original saved session or UNKNOWN input was replayed. No default runtime,
-installation, Toad source or provider configuration changed. The configured
-provider saved-copy/worker/UI journey is a separate assignment.
+No original saved session or UNKNOWN input was replayed. No installed runtime,
+Toad source or provider configuration changed. The saved-copy/provider journey
+is a separate assignment.
 
-Pinned dependencies remain pi-durable, pi-ai and chord 1.3.0. Install with
-`npm ci --ignore-scripts --omit=dev` in src/agent_comms. The host retains the
-frozen internal estimateContext import because 1.3.0 does not publicly export
-it; place-queued-now also remains unavailable. Neither upstream gap is closed.
+Dependencies remain pi-durable, pi-ai and chord 1.3.0, installed with
+`npm ci --ignore-scripts --omit=dev` in src/agent_comms. The host retains the frozen
+internal estimateContext import because 1.3.0 does not publicly export it;
+place-queued-now also remains unavailable. Neither upstream gap is closed.
