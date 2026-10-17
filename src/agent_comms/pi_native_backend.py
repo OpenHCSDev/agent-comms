@@ -139,6 +139,10 @@ class PersistentPiSession:
         watchdog.spawned(reused)
         return child
 
+    async def context_for_input(self, thread, context):
+        async with self.lock:
+            return await self.child_state.context_for_input(thread, context)
+
     def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
         from .native_custody import RetainedNative
         from .session_revision import SessionRevision, SessionRevisionUnavailable

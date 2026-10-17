@@ -41,20 +41,17 @@ class SelectedWakeSegment(InstructionSegment):
 
     @classmethod
     def capture(cls, sources, owner, *, obligations=(), sent_outcomes=()):
-        instruction = InstructionFile.read("selected-wake.md")
         relevance = WakePolicy.relevance_instruction()
         sent_outcomes = tuple(sent_outcomes)
         if len(sent_outcomes) > cls.sent_limit:
             raise ValueError("Selected wake sent outcomes exceed their bounded window")
-        return cls(
-            provenance=(
-                instruction.source,
+        return super().capture(
+            (
                 relevance.source,
                 OwnerProvenance(owner.incarnation, NextContextTurn().source_revision(owner)),
                 *(WireProvenance(initial.message.reference) for initial, _ in sources),
                 *(WireProvenance(outcome.message.reference) for outcome in sent_outcomes),
             ),
-            instruction=instruction,
             sources=tuple(sources),
             owner=owner,
             obligations=tuple(obligations),
@@ -140,14 +137,8 @@ class DeliveredMessageSegment(InstructionSegment):
 
     @classmethod
     def capture(cls, source, assignment, owner):
-        instruction = InstructionFile.read("delivered-message.md")
-        return cls(
-            provenance=(instruction.source, WireProvenance(source.message.reference)),
-            instruction=instruction,
-            source=source,
-            assignment=assignment,
-            owner=owner,
-        )
+        return super().capture((WireProvenance(source.message.reference),),
+                               source=source, assignment=assignment, owner=owner)
 
     def values(self):
         self.assignment.require_selected_source(self.source, self.owner)
