@@ -95,7 +95,7 @@ class CoordinationSession(CoordinationStore):
 
 
 class NativeBoundary(ExitStack):
-    """Total lock order: shared wire -> bus -> registry -> sidecar -> SQLite."""
+    """Native publication resources, acquired by the canonical lock owner."""
 
     def __init__(self, bus, *, blocking=True, contention=None, measurements=None):
         super().__init__()
@@ -108,21 +108,19 @@ class NativeBoundary(ExitStack):
         self.measurements = measurements if measurements is not None else PublicationMeasurements()
 
     def __enter__(self):
-        from .store_files import _store_lock
+        from .store_files import StoreLock
 
         super().__enter__()
+        operations = {self.bus.log.path.parent / "wire": "wire_exclusion",
+                      self.bus.log.path: "bus_certified_exclusion"}
         try:
-            with self.measurements.operation("wire_exclusion"):
-                self.enter_context(_store_lock(self.bus.log.path.parent / "wire", shared=True,
-                                               blocking=self.blocking, contention=self.contention))
-            with self.measurements.operation("bus_certified_exclusion"):
-                self.bus_lock = self.enter_context(self.bus.log.locked(
-                    blocking=self.blocking, contention=self.contention))
-            with self.measurements.operation("registry_exclusion"):
-                self.enter_context(_store_lock(self.bus._registry.store.path,
-                                               blocking=self.blocking, contention=self.contention))
+            locks = self.enter_context(StoreLock.ordered(
+                {path: path != self.bus.log.path for path in operations},
+                blocking=self.blocking, contention=self.contention,
+                operation=lambda path: self.measurements.operation(operations[path])))
+            self.bus_lock = locks[self.bus.log.path]
             with self.measurements.operation("registry_snapshot"):
-                self.registry = self.bus._registry.store._read_unlocked().snapshot()
+                self.registry = self.bus._registry.snapshot()
             return self
         except BaseException:
             self.close()

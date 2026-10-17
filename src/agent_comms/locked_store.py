@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .field_codec import FieldCodec
-from .store_files import _store_lock
+from .store_files import StoreLock, _store_lock
 
 T = TypeVar("T")
 
@@ -157,9 +157,9 @@ class LockedStore(JsonDocument[T]):
             yield lock.descriptor
 
     @contextmanager
-    def reading(self, *, blocking: bool = True) -> Iterator[T]:
-        """Keep a shared lock through a dependent projection or source check."""
-        with self.locked(shared=True, blocking=blocking):
+    def reading(self, *sources: Path, blocking: bool = True) -> Iterator[T]:
+        """Retain a projection's declared sources and document in canonical order."""
+        with StoreLock.ordered({path: True for path in (self.path, *sources)}, blocking=blocking):
             yield self._read_unlocked()
 
     def read(self) -> T:

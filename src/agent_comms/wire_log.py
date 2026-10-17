@@ -45,7 +45,6 @@ from .store_files import (
     _iter_jsonl_stream,
     _store_lock,
     _store_lock_file,
-    _store_read_lock,
     _held_store_source,
 )
 from .wire_metadata import WireMetadata
@@ -345,7 +344,7 @@ class WireLog:
     @contextmanager
     def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
         """Borrow the original source verified by the canonical reader barrier."""
-        with _store_read_lock(self.path, blocking=blocking, contention=contention) as lock:
+        with _store_lock(self.path, shared=True, blocking=blocking, contention=contention) as lock:
             with self._certified_source(lock) as source:
                 yield source
 
@@ -640,7 +639,7 @@ class WireLog:
     ):
         """Own one fixed opened inode/byte boundary beyond physical custody."""
         with ExitStack() as resources:
-            with _store_read_lock(self.path) as lock:
+            with _store_lock(self.path, shared=True) as lock:
                 metadata = (
                     self._private_marker_unlocked()
                     if self.path.exists() or self.metadata_path.exists()
@@ -722,7 +721,7 @@ class WireLog:
 
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""
-        with _store_read_lock(self.path) as lock:
+        with _store_lock(self.path, shared=True) as lock:
             return self._committed_sequence_unlocked(lock)
 
     def _committed_sequence_unlocked(self, lock: StoreLock) -> int:
