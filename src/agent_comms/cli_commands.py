@@ -1310,14 +1310,7 @@ class RestartCliCommand(CliCommand):
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        from .errors import RelationViolationError
-
-        try:
-            thread.require_restart_owner(status)
-            thread.require_idle()
-        except RelationViolationError:
-            return ()
-        return (cls(name=thread.name),)
+        return () if thread.executing else ((cls(name=thread.name),) if thread.restart_candidates(status) else ())
 
     def apply(self, ctx: Comms) -> Any:
         results = ctx.owners.restart_owners(
