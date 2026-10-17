@@ -200,8 +200,8 @@ class MessageReadRequest[T](ABC):
     def read_opened(self, source: OpenedWireSnapshot) -> T:
         return source.query_page_index(lambda index: self.indexed(index, source), empty=self.empty)
 
-    def indexed_records(self, index, source, rows):
-        for message, size in source.indexed_records(index, rows, before_offset=source.boundary):
+    def indexed_records(self, source, rows):
+        for message, size in source.indexed_records(rows, before_offset=source.boundary):
             if self.includes(message):
                 yield MessagePageRow(message, size)
 
@@ -238,9 +238,9 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
         window = PageWindow(self.limit, self.max_bytes)
         opposite = more = False
         with closing(self.traversal.opposite_offsets(index, self.scope, source.boundary)) as rows:
-            opposite = any(True for _ in self.indexed_records(index, source, rows))
+            opposite = any(True for _ in self.indexed_records(source, rows))
         with closing(self.traversal.offsets(index, self.scope, source.boundary)) as rows:
-            for row in self.indexed_records(index, source, rows):
+            for row in self.indexed_records(source, rows):
                 if not window.take(self.traversal, row):
                     more = True
                     break
@@ -262,7 +262,7 @@ class UnreadBeforeRequest(MessageReadRequest[bool]):
     def indexed(self, index, source: OpenedWireSnapshot) -> bool:
         with closing(OlderTraversal(self.before).offsets(index, self.scope, source.boundary)) as rows:
             candidates = (row for row in rows if self.includes(row))
-            return any(True for _ in self.indexed_records(index, source, candidates))
+            return any(True for _ in self.indexed_records(source, candidates))
 
 
 class ConversationMessagePageRequest(MessagePageRequest):

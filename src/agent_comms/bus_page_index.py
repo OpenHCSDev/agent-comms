@@ -68,6 +68,24 @@ class BusPageRow(PageIndexTable, TypedTable):
     mentions: tuple[str, ...]
     indexes = (Index(("target", "seq")), Index(("offset",)),)
 
+    def record(self, stream: BinaryIO, *, max_bytes: int | None = None) -> tuple[Mapping, int]:
+        stream.seek(self.offset)
+        raw = stream.readline(max_bytes + 1 if max_bytes is not None else -1)
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise OversizedIndexedBusRowError("Indexed bus row exceeds advisory byte budget.")
+        try:
+            record = json.loads(raw)
+        except ValueError as error:
+            raise StaleBusPageIndexError("Indexed bus row is invalid.") from error
+        if (
+            not isinstance(record, Mapping)
+            or int(record.get("seq", 0)) != self.seq
+            or record.get("from") != self.sender
+            or record.get("to") != self.target
+        ):
+            raise StaleBusPageIndexError("Indexed bus row changed.")
+        return record, len(raw)
+
 
 class BusPageIndex:
     batch_bytes = 4 * 1024 * 1024
@@ -109,7 +127,8 @@ class BusPageIndex:
         with self.snapshot():
             actual, _ = self._schema(self.connection)
             saved = BusPageSource.one(self.connection, singleton=1) if actual else None
-            return saved is not None and saved.covers(opened.stream, opened.revision)
+            return saved is not None and saved.covers(
+                opened.stream, replace(opened.revision, size=opened.complete_boundary))
 
     @contextmanager
     def prepared(self, opened: OpenedWireSnapshot):
@@ -176,11 +195,7 @@ class BusPageIndex:
         stream, revision = opened.stream, opened.revision
         if stream is None:
             return None
-        size = opened.boundary
-        if size:
-            stream.seek(size - 1)
-            if stream.read(1) != b"\n":
-                return None
+        size = opened.complete_boundary
         if saved is not None and saved.covers(stream, revision):
             return saved, saved, saved.revision.size, ()
         offset = saved.revision.size if saved is not None else 0
@@ -242,10 +257,13 @@ class BusPageIndex:
         upper: int | None,
         descending: bool,
         targets: frozenset[str] | None,
-        before_offset: int | None = None, after_offset: int = 0,
+        before_offset: int | None = None, after_offset: int | None = None,
     ) -> Generator[BusPageRow, None, None]:
-        clauses: list[str] = ["offset >= ?"]
-        params: list[object] = [after_offset]
+        clauses: list[str] = []
+        params: list[object] = []
+        if after_offset is not None:
+            clauses.append("offset >= ?")
+            params.append(after_offset)
         if targets is not None:
             if not targets:
                 return
@@ -315,24 +333,3 @@ class BusPageIndex:
             ).fetchone()
             clocks[scope.channel], counts[scope.channel] = (last, human), count
         return clocks, counts
-
-    @staticmethod
-    def record(
-        stream: BinaryIO, row: BusPageRow, *, max_bytes: int | None = None
-    ) -> tuple[Mapping, int]:
-        stream.seek(row.offset)
-        raw = stream.readline(max_bytes + 1 if max_bytes is not None else -1)
-        if max_bytes is not None and len(raw) > max_bytes:
-            raise OversizedIndexedBusRowError("Indexed bus row exceeds advisory byte budget.")
-        try:
-            record = json.loads(raw)
-        except ValueError as error:
-            raise StaleBusPageIndexError("Indexed bus row is invalid.") from error
-        if (
-            not isinstance(record, Mapping)
-            or int(record.get("seq", 0)) != row.seq
-            or record.get("from") != row.sender
-            or record.get("to") != row.target
-        ):
-            raise StaleBusPageIndexError("Indexed bus row changed.")
-        return record, len(raw)

@@ -7,7 +7,7 @@ import math
 import os
 import stat
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -26,7 +26,7 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
-from .bus_page_index import BusPageIndex, StaleBusPageIndexError
+from .bus_page_index import BusPageIndex, BusPageRow, StaleBusPageIndexError
 from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
@@ -118,13 +118,14 @@ class OpenedWireSnapshot:
             with index.prepared(self):
                 return read(index)
 
-    def indexed_records(self, index: BusPageIndex, rows, *, before_offset: int):
+    def indexed_records(self, rows: Iterable[BusPageRow], *,
+                        before_offset: int) -> Iterator[tuple[Message, int]]:
         """Decode selected offsets through this original descriptor and byte cut."""
         if self.stream is None or not 0 <= before_offset <= self.boundary:
             raise RelationViolationError("Indexed read exceeds its opened wire cut")
         for row in rows:
             (message, size), = self.public_page_records(
-                *index.record(self.stream, row, max_bytes=before_offset - row.offset),
+                *row.record(self.stream, max_bytes=before_offset - row.offset),
                 self.metadata,
             )
             yield message, size
@@ -269,7 +270,7 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
                                         descending=False, targets=None,
                                         before_offset=before_offset)
             )
-            return tuple(self.indexed_records(index, rows, before_offset=before_offset))
+            return tuple(self.indexed_records(rows, before_offset=before_offset))
 
         yield from self.query_page_index(read, empty=())
 

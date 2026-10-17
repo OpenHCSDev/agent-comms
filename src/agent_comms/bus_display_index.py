@@ -102,10 +102,10 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
             offset = boundary
         else:
             metrics, offset = (dict(checkpoint.activity), dict(checkpoint.counts)), checkpoint.offset
-        for message, _ in opened.query_page_index(
-            lambda index: tuple(opened.indexed_records(index,
-                index.offsets(lower=None, upper=None, targets=None, after_offset=offset,
-                    descending=False, before_offset=boundary), before_offset=boundary)), empty=()):
+        rows = opened.query_page_index(lambda index: tuple(index.offsets(
+            lower=None, upper=None, targets=None, after_offset=offset,
+            descending=False, before_offset=boundary)), empty=())
+        for message, _ in opened.indexed_records(rows, before_offset=boundary):
             semantics.observe(message, metrics)
         projected = DisplayCheckpoint(source, boundary,
                      AppendCheckpoint.fingerprint(stream, boundary),
