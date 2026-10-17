@@ -93,32 +93,25 @@ class CoordinationSession(CoordinationStore):
 
 
 class NativeBoundary(ExitStack):
-    """Total lock order: shared wire -> bus -> registry -> sidecar -> SQLite."""
+    """Publication locks ordered by their namespace, log and registry owners."""
 
     def __init__(self, bus, *, blocking=True, contention=None, measurements=None):
         super().__init__()
         from .diagnostics import PublicationMeasurements
 
         self.bus, self.blocking = bus, blocking
-        # None preserves the physical lock owner's established policy:
-        # blocking calls wait indefinitely and nonblocking calls fail immediately.
         self.contention = contention
         self.measurements = measurements if measurements is not None else PublicationMeasurements()
 
     def __enter__(self):
-        from .store_files import _store_lock
+        from .store_files import StoreLock
 
-        super().__enter__()
         try:
-            with self.measurements.operation("wire_exclusion"):
-                self.enter_context(_store_lock(self.bus.log.path.parent / "wire", shared=True,
-                                               blocking=self.blocking, contention=self.contention))
-            with self.measurements.operation("bus_certified_exclusion"):
-                self.bus_lock = self.enter_context(self.bus.log.locked(
+            with self.measurements.operation("file_exclusion"):
+                locks = self.enter_context(StoreLock.ordered(
+                    {self.bus: True, self.bus.log: False, self.bus._registry.store: True},
                     blocking=self.blocking, contention=self.contention))
-            with self.measurements.operation("registry_exclusion"):
-                self.enter_context(_store_lock(self.bus._registry.store.path,
-                                               blocking=self.blocking, contention=self.contention))
+            self.bus_lock = locks[self.bus.log]
             with self.measurements.operation("registry_snapshot"):
                 self.registry = self.bus._registry.store._read_unlocked().snapshot()
             return self

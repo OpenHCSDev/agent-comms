@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ChannelCatalog(ThreadOwnedState, LockedStore[CatalogDocument]):
+    lock_rank = 3
     filename: ClassVar[str] = "catalog.json"
     json_indent = 2
 
