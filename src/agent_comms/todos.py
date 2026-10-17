@@ -317,9 +317,15 @@ class Todo(TypedTable):
 
     def require_same_creation(self, proposed: Todo) -> None:
         self.require_result(
-            replace(self, id=proposed.id, repo=proposed.repo, text=proposed.text,
-                    creator=proposed.creator, creator_created=proposed.creator_created,
-                    goal=proposed.goal)
+            replace(
+                self,
+                id=proposed.id,
+                repo=proposed.repo,
+                text=proposed.text,
+                creator=proposed.creator,
+                creator_created=proposed.creator_created,
+                goal=proposed.goal,
+            )
         )
 
 
