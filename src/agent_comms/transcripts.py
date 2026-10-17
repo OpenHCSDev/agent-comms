@@ -529,30 +529,12 @@ class Transcripts:
             raise ValueError(f"@{name} reads a native session; a CLI cannot publish its transcript")
         return page.records
 
-    def thread_draft(self, name: str) -> ExternalDraftRow | None:
-        """The canonical source's current output, separate from paged history."""
-        with self._page_source(name, None, None).records.reading() as records:
-            return records.current_draft()
-
     def _page_source(self, name, through, historical_source):
         member = (LiveTranscriptReadIdentity if historical_source is None
                   else RecordedTranscriptReadIdentity)
         return member.resolve_source(
             self, name, through.session_file if through is not None else None, historical_source,
         )
-
-    def thread_transcript(
-        self, name: str, *, max_messages: int = 20, max_bytes: int = 64 * 1024
-    ) -> Sequence[TranscriptEvent]:
-        """The same canonical source supplies bounded preview and paged history."""
-        if max_messages <= 0 or max_bytes <= 0:
-            return ()
-        page = self.thread_transcript_page(name, max_messages=max_messages, max_bytes=max_bytes)
-        return (
-            (NoticeTranscript("Earlier transcript content was omitted from this bounded view."),)
-            if page.has_older
-            else ()
-        ) + page.events
 
     def _thread_transcript_source(
         self, name: str, source_file: str | None = None, *, registry
