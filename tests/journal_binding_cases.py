@@ -5,26 +5,25 @@ import multiprocessing
 from multiprocessing.connection import Connection
 from pathlib import Path
 
-from agent_comms.cli_bridges.shared import Binding, DeliveryJournal
+from agent_comms.cli_bridges.shared import Binding
 from agent_comms.coordination_database import CoordinationStore
 
 
 def _bind(state: Path, requested: Binding, pipe: Connection) -> None:
-    journal = DeliveryJournal(state)
     try:
-        def trace(statement: str) -> None:
-            if statement.startswith('BEGIN'):
-                pipe.send('begin')
+        with Binding.open(state) as db:
+            def trace(statement: str) -> None:
+                if statement.startswith('BEGIN'):
+                    pipe.send('begin')
 
-        journal.db.set_trace_callback(trace)
-        pipe.send('ready')
-        assert pipe.recv() == 'bind'
-        try:
-            pipe.send(('bound', journal.bind(requested)))
-        except ValueError as error:
-            pipe.send(('rejected', str(error)))
+            db.set_trace_callback(trace)
+            pipe.send('ready')
+            assert pipe.recv() == 'bind'
+            try:
+                pipe.send(('bound', Binding.bind(db, requested)))
+            except ValueError as error:
+                pipe.send(('rejected', str(error)))
     finally:
-        journal.close()
         pipe.close()
 
 

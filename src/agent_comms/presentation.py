@@ -31,7 +31,7 @@ from .message_reference import MessageReference
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .messages import Message
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope
+from .read_basis import ChannelDisplayScope, ReadCursor
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock, _store_read_lock
@@ -314,7 +314,7 @@ class DisplaySelection:
     registry: RegistrySnapshot
     catalog: CatalogDocument
     viewer: str | None
-    seen: frozenset[int]
+    seen: ReadCursor
     document: ReadDocument
 
     @classmethod
@@ -324,8 +324,8 @@ class DisplaySelection:
     ) -> DisplaySelection:
         canonical = snapshot.canonical_name(viewer) if viewer is not None else None
         seen = (
-            reads.seen_sequences(viewer, snapshot, document=document)
-            if viewer is not None else frozenset()
+            reads.cursor(viewer, snapshot, document=document)
+            if viewer is not None else ReadCursor()
         )
         return cls(snapshot, catalog, canonical, seen, document)
 
