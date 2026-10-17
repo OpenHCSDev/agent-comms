@@ -93,6 +93,7 @@ def stopped():
         threads={thread.name: thread}, statuses={thread.name: StoppedThreadStatus()},
         last_seen={thread.name: 1.0}, aliases={},
         owner_generations={thread.name: 4}, claimed_generations={thread.name: 5},
+        by_lookup={thread.incarnation.lookup: thread},
     )
     return thread, snapshot
 
@@ -133,7 +134,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
     runtime = RestartEnvironment.inherit(environment)
     original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None, LaunchRuntime(Path("/target/bin/python")))
     encoded = FieldCodec.encode(original)
-    assert set(encoded["owners"][0]) == {"owner", "claim_scope", "launch"}
+    assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
     decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)
     assert decoded == original
     assert decoded.owners[0].require_current(snapshot) is thread

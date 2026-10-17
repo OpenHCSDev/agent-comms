@@ -571,21 +571,17 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     claimed_generations: Mapping[str, int]
-    by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
-
-    def __post_init__(self) -> None:
-        super(RegistrySnapshot, self).__post_init__()
-        indexed: dict[str, Thread] = {}
-        for thread in self.threads.values():
-            lookup = thread.incarnation.require_recorded().lookup
-            if lookup in indexed:
-                raise RelationViolationError("Registry creation identities collide.")
-            indexed[lookup] = thread
-        object.__setattr__(self, "by_lookup", MappingProxyType(indexed))
+    by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
 
     @classmethod
     def capture(cls, document: RegistryDocument) -> RegistrySnapshot:
         """One live registry cut owns the index and all its source maps."""
+        indexed: dict[str, Thread] = {}
+        for thread in document.threads.values():
+            lookup = thread.incarnation.require_recorded().lookup
+            if lookup in indexed:
+                raise RelationViolationError("Registry creation identities collide.")
+            indexed[lookup] = thread
         return cls(
             threads=MappingProxyType(dict(document.threads)),
             statuses=MappingProxyType(dict(document.statuses)),
@@ -593,6 +589,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             aliases=MappingProxyType(dict(document.aliases)),
             owner_generations=MappingProxyType(dict(document.owners.generations)),
             claimed_generations=MappingProxyType(dict(document.claims.generations)),
+            by_lookup=MappingProxyType(indexed),
         )
 
     def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):

@@ -20,13 +20,15 @@ from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.owner_lifecycle import OwnerLifecycle
 from agent_comms.owner_restart import FencedOwnerBatch, OwnerRestartRequest, StoppedOwnerFailure
 from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.comms import Comms
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
 class AuthoredRetirement(OwnerLifecycle):
-    def __init__(self, mode, monkeypatch):
-        self.root = Path('/authored')
+    def __init__(self, mode, monkeypatch, root):
+        comms = Comms(root)
+        super().__init__(root, comms.registry, comms.bus)
         self.mode = mode
         self.originals = tuple(Thread(
             name, frozenset(), '/authored', created_at=float(index + 1),
@@ -38,6 +40,7 @@ class AuthoredRetirement(OwnerLifecycle):
             last_seen={t.name: 1.0 for t in self.originals}, aliases={},
             owner_generations={t.name: 4 for t in self.originals},
             claimed_generations={t.name: 5 for t in self.originals},
+            by_lookup={t.incarnation.lookup: t for t in self.originals},
         )
         self.registry = SimpleNamespace(snapshot=lambda: self.snapshot)
         self.releases = SimpleNamespace(read=lambda: {})
@@ -114,8 +117,8 @@ class CapturedFailure(PreserveOwnerRuntime):
 
 
 @pytest.mark.parametrize('mode', ['second_guard', 'post_stop_witness', 'final_witness'])
-def test_partial_retirement_transfers_original_custody_and_refuses_launch(mode, monkeypatch):
-    lifecycle = AuthoredRetirement(mode, monkeypatch)
+def test_partial_retirement_transfers_original_custody_and_refuses_launch(mode, monkeypatch, tmp_path):
+    lifecycle = AuthoredRetirement(mode, monkeypatch, tmp_path)
     batch = lifecycle.batch()
     operation = CapturedFailure()
     with pytest.raises(StoppedOwnerFailure) as caught:
