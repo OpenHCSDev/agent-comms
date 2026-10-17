@@ -390,9 +390,9 @@ class FullNativeSend(NativeSendStage):
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
         snapshot, attempt = store.attempts.require_fence(self.fence)
+        current.lifecycle.require_engagement()
         if (
-            not isinstance(current.lifecycle, snapshot.execution.lifecycle.assignment_state())
-            or not snapshot.execution.lifecycle.active
+            not snapshot.execution.lifecycle.active
             or not attempt.lifecycle.starting
             or attempt.lifecycle.backend_done
             or attempt.lifecycle.process_dead

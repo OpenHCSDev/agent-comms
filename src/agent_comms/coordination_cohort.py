@@ -60,7 +60,8 @@ def _expected_assignments(
     for recipient, decision in zip(initial.audience.recipients, initial.decisions, strict=True):
         if recipient.recipient_lookup != decision.recipient:
             raise IntegrityViolationError("bus decision does not match frozen N")
-        if decision.audience.observer:
+        lifecycle = decision.initial_assignment()
+        if lifecycle is None:
             continue
         result.append(
             WakeAssignment(
@@ -77,7 +78,7 @@ def _expected_assignments(
                 revision=1,
                 resolver_version=RESOLVER_VERSION,
                 policy_version=POLICY_VERSION,
-                lifecycle=decision.wake_mode.initial_state(),
+                lifecycle=lifecycle,
             )
         )
     return tuple(result)
@@ -175,7 +176,7 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> Acce
     if any(
         WakeAssignment.one(db, recipient_lookup=recipient.recipient_lookup, wire_seq=message.seq)
         for recipient, decision in zip(audience.recipients, initial.decisions, strict=True)
-        if decision.audience.observer
+        if decision.initial_assignment() is None
     ):
         raise IdentityConflict("no-wake observer has a conflicting unbound claim")
     return AcceptedCohort(

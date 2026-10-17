@@ -429,7 +429,7 @@ def _require_cohort_assignments(
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
             )
-            if not decision.audience.observer
+            if decision.initial_assignment() is not None
         }
         if initial.wire_root_id != wire_root_id or assignment.source != initial.message.reference:
             raise IdentityConflict("response claim conflicts with original bus source")

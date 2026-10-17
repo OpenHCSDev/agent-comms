@@ -148,7 +148,7 @@ class SourceCoverage:
                 if receipt is None:
                     blocked = seq
                     break
-                if decision.audience.observer:
+                if decision.initial_assignment() is None:
                     no_wake.append(seq)
                 else:
                     evidence = self._selected_inputs(seq, recipient, decision, receipt, source_reads)

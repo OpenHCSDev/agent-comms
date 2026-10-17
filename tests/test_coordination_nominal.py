@@ -227,11 +227,6 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                     "VALUES ('e','wire',json_object('kind','queued'),'owner','p',1,2,NULL,0,0)"
                 )
                 db.execute(
-                    "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
-                    "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
-                    "','reviewed'),NULL,0,0,1)"
-                )
-                db.execute(
                     "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
                     "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
                     "updated_at_ms,revision) VALUES ('c','owner','p',1,'m',json_object('kind','en"
@@ -239,6 +234,11 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                     "ution_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
                 )
                 db.execute("INSERT INTO execution_claims VALUES ('e','c',0)")
+                db.execute(
+                    "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
+                    "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
+                    "','reviewed'),NULL,0,0,1)"
+                )
             obligation = store.snapshots.get("e").obligation
             assert isinstance(obligation.lifecycle, ReviewedResponse)
             assert FieldCodec.decode(type(obligation), FieldCodec.encode(obligation)) == obligation
