@@ -75,12 +75,12 @@ def _drain_candidate(root: Path) -> None:
                 hint, bootstrap_new=True
             )
             with log._opened_wire_snapshot(need_sequence=False) as source:
-                route_result = routes.sync(
+                routes.sync(
                     source.stream,
                     source.revision,
                     lambda record: DeliveryMessage.from_wire(record, root_id=source.metadata.root_id),
                 )
-            if result.caught_up and route_result.complete:
+            if result.caught_up:
                 with _guard:
                     if _pending[root][1] <= result.checkpoint_bytes:
                         # Retire this worker once, atomically with its final

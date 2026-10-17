@@ -1,8 +1,8 @@
 """Publish a reviewed, wire-compatible runtime and queue idle worker reloads.
 
 Run with the target runtime's Python. The caller must review protocol and store
-compatibility first: this command performs no schema migration. Incompatible
-changes belong to the existing stopped-owner installation workflow.
+compatibility first: canonical schema changes require the existing stopped-owner
+installation workflow. Disposable indexes are prepared before launcher relink.
 
 Command names come from installed package declarations. One atomic runtime
 pointer selects all new launches; existing owners retain their running code
@@ -20,11 +20,14 @@ import sys
 import uuid
 
 from agent_comms.active_route import read_active_route
+from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.cli_bridges import opencode
 from agent_comms.comms import wire
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.restart_queue import enqueue
+from agent_comms.routing import DeliveryMessage
+from agent_comms.wire_log import WireLog
 
 
 @dataclass(frozen=True)
@@ -64,7 +67,17 @@ class RuntimePublication:
                 f'Runtime CLI refused publication (exit {result.returncode}): {result.stderr}'
             )
 
+    def prepare_route_index(self, root: Path) -> None:
+        """Finish the candidate schema's route projection before any relink."""
+        log = WireLog(root / 'bus.jsonl')
+        with log._opened_wire_snapshot(need_sequence=False) as source:
+            BusRouteCounts(log.path).sync(
+                source.stream, source.revision,
+                lambda record: DeliveryMessage.from_wire(record, root_id=source.metadata.root_id),
+            )
+
     def publish(self, root: Path) -> None:
+        self.prepare_route_index(root)
         self.require_cli(root)
         if not self.current.is_symlink():
             if self.current.exists():

@@ -16,7 +16,7 @@ from contextlib import closing
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, NoReturn
+from typing import TYPE_CHECKING, BinaryIO, ClassVar
 
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
@@ -251,12 +251,15 @@ class UnseenDelivery(TypedRow):
 
 @dataclass(frozen=True)
 class RouteIndexState:
-    """How far one writer sync left the committed index behind its cut."""
+    """The indexed prefix and original remainder of one reader's cut."""
 
     complete: ClassVar[bool]
 
-    def defer_read(self, through: int, size: int) -> NoReturn:
-        raise RouteIndexRebuilding(through, size)
+    def indexed_through(self, source: OpenedWireSnapshot) -> int:
+        return source.through
+
+    def appended(self, index: OpenedRouteCounts):
+        return ()
 
 
 @dataclass(frozen=True)
@@ -270,24 +273,11 @@ class RouteIndexBehind(RouteIndexState):
     through: int
     size: int
 
+    def indexed_through(self, source: OpenedWireSnapshot) -> int:
+        return source.through if self.through else 0
 
-@dataclass(frozen=True)
-class RouteIndexBlocked(RouteIndexState):
-    """Another writer holds the lock; this call could not make progress."""
-
-    complete: ClassVar[bool] = False
-
-    def defer_read(self, through: int, size: int) -> NoReturn:
-        raise CoordinationReadUnavailable("Route projection writer is busy")
-
-
-class RouteIndexRebuilding(CoordinationReadUnavailable):
-    """The committed index is too far behind this cut to read its remainder."""
-
-    def __init__(self, through: int, size: int) -> None:
-        self.through = through
-        self.size = size
-        super().__init__(f"Route index covers {through} of {size} bytes")
+    def appended(self, index: OpenedRouteCounts):
+        return index._decoded(index.source.stream, self.through, self.size, index._decode)
 
 
 class BusRouteCounts:
@@ -364,18 +354,10 @@ class BusRouteCounts:
     def sync(
         self, source: BinaryIO | None, revision: FileRevision | None,
         decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
-        *, blocking: bool = True,
-    ) -> RouteIndexState:
-        """Decode a bounded source delta first, then commit under a short lock.
-
-        A reader passes ``blocking=False``: when another writer holds the
-        projection lock it is committing the same bytes, so this reader
-        answers from its own remainder instead of waiting.
-        """
+    ) -> RouteIndexReady:
+        """One preparer drains its original cut, publishing bounded WAL commits."""
         size = revision.size if revision is not None else 0
         if source is not None:
-            # Touching or unlinking a retained inode does not change its cut.
-            # Read the captured open file; the stored row checks index continuity.
             if revision.identity != FileIdentity.from_stat(os.fstat(source.fileno())):
                 raise RelationViolationError(
                     "Route projection source changed before its captured read"
@@ -386,56 +368,44 @@ class BusRouteCounts:
                     raise RelationViolationError(
                         "Route projection source has an incomplete original row"
                     )
-        recorded = self._recorded()
-        if size == 0 and recorded is not None:
-            # An original empty cut cannot retire a later committed projection.
-            return RouteIndexReady()
-        rebuild = recorded is None or source is None
-        offset = recorded.revision.size if recorded and recorded.revision else 0
-        if not rebuild and offset:
-            if not recorded.matches_file(source):
-                rebuild, offset = True, 0
-            elif size < offset:
+        self.prepare()
+        with _store_lock(self.path):
+            recorded = self._recorded()
+            if size == 0 and recorded is not None:
+                return RouteIndexReady()  # An empty cut cannot retire a later projection.
+            rebuild = recorded is None or source is None
+            offset = recorded.revision.size if recorded and recorded.revision else 0
+            if not rebuild and offset:
+                if not recorded.matches_file(source):
+                    rebuild, offset = True, 0
+                elif size < offset:
+                    return RouteIndexReady()
+            if not rebuild and offset == size:
                 return RouteIndexReady()
-        if not rebuild and offset == size:
-            return RouteIndexReady()
-
-        rows: list[DeliveryMessage] = []
-        through = size
-        if source is not None:
-            through = min(size, offset + self.rebuild_bytes)
-            if through < size:
-                source.seek(through)
-                through += len(source.readline(size - through))
-            rows.extend(self._decoded(source, offset, through, decode))
-        tail_digest = RouteSourceRow.tail(source, through) if source is not None else None
-        checkpoint = replace(revision, size=through) if revision is not None else None
-
-        try:
-            with (
-                _store_lock(self.path, blocking=blocking),
-                closing(CoordinationStore.writer(self.path)) as connection,
-            ):
-                connection.execute("PRAGMA synchronous=FULL")
-                connection.execute("BEGIN IMMEDIATE")
-                current_rows = RouteSourceRow.select(connection)
-                current = current_rows[0] if current_rows else None
-                if current != recorded:
-                    connection.rollback()
-                    current_through = current.revision.size if current and current.revision else 0
-                    return (RouteIndexReady() if current_through >= size
-                            else RouteIndexBehind(current_through, size))
-                if rebuild:
-                    for owner in TypedTable.members_with(RouteTable):
-                        connection.execute(f'DELETE FROM "{owner.declared_name}"')
-                for row in rows:
-                    RouteEntryRow.record(connection, row)
-                connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
-                RouteSourceRow(1, checkpoint, tail_digest).insert(connection)
-                connection.commit()
-        except BlockingIOError:
-            return RouteIndexBlocked()
-        return RouteIndexReady() if through == size else RouteIndexBehind(through, size)
+            while rebuild or offset < size:
+                through = size
+                rows = []
+                if source is not None:
+                    through = min(size, offset + self.rebuild_bytes)
+                    if through < size:
+                        source.seek(through)
+                        through += len(source.readline(size - through))
+                    rows.extend(self._decoded(source, offset, through, decode))
+                tail_digest = RouteSourceRow.tail(source, through) if source is not None else None
+                checkpoint = replace(revision, size=through) if revision is not None else None
+                with closing(CoordinationStore.writer(self.path)) as connection:
+                    connection.execute("PRAGMA synchronous=FULL")
+                    connection.execute("BEGIN IMMEDIATE")
+                    if rebuild:
+                        for owner in TypedTable.members_with(RouteTable):
+                            connection.execute(f'DELETE FROM "{owner.declared_name}"')
+                    for row in rows:
+                        RouteEntryRow.record(connection, row)
+                    connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
+                    RouteSourceRow(1, checkpoint, tail_digest).insert(connection)
+                    connection.commit()
+                offset, rebuild = through, False
+        return RouteIndexReady()
 
 
 class OpenedRouteCounts(BusRouteCounts):
@@ -463,12 +433,9 @@ class OpenedRouteCounts(BusRouteCounts):
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
     def _acquire(self) -> OpenedRouteCounts:
-        self._preparation = self.sync(
-            self.source.stream, self.source.revision, self._decode, blocking=False
-        )
         super()._acquire()
         try:
-            self._appended = self._appended_deliveries()
+            self.coverage = self._coverage()
             # SQLite borrows the original routing behavior. Do not decode all
             # route rows into Python requests and encode them back into SQL.
             self.connection.create_function(
@@ -482,26 +449,20 @@ class OpenedRouteCounts(BusRouteCounts):
             raise
         return self
 
-    def _appended_deliveries(self) -> tuple[DeliveryMessage, ...]:
-        """The bounded part of this cut still missing from the SQLite snapshot."""
+    def _coverage(self) -> RouteIndexState:
+        """Read the committed prefix; stream any original tail without rebuilding."""
         stream = self.source.stream
         size = self.source.boundary
         if size == 0:
-            return ()
+            return RouteIndexReady()
+        if stream is None:
+            raise RelationViolationError("Nonempty route source has no original stream")
         records = RouteSourceRow.select(self.connection)
         recorded = records[0] if records else None
         through = recorded.revision.size if recorded and recorded.revision else 0
-        if stream is None:
-            if through:
-                self._preparation.defer_read(0, size)
-            return ()
         if recorded is not None and not recorded.matches_file(stream):
-            self._preparation.defer_read(0, size)
-        if size - through > self.rebuild_bytes:
-            self._preparation.defer_read(through, size)
-        if through >= size:
-            return ()
-        return tuple(self._decoded(stream, through, size, self._decode))
+            through = 0
+        return RouteIndexReady() if through >= size else RouteIndexBehind(through, size)
 
     def _recipients(self, target: str):
         direct = self.registry.canonical_name(target)
@@ -512,9 +473,10 @@ class OpenedRouteCounts(BusRouteCounts):
     def participants_between(self, after_seq: int, through_seq: int) -> frozenset[str]:
         """Names and channel targets of appended rows in this acquired projection."""
         actors = {actor for row in RouteEntryRow.select(
-            self.connection, where="seq>? AND seq<=?", parameters=(after_seq, through_seq),
+            self.connection, where="seq>? AND seq<=?",
+            parameters=(after_seq, min(through_seq, self.coverage.indexed_through(self.source))),
         ) for actor in (row.sender, row.target)}
-        actors.update(actor for delivery in self._appended
+        actors.update(actor for delivery in self.coverage.appended(self)
                       if after_seq < delivery.message.seq <= through_seq
                       for actor in (delivery.message.sender, delivery.message.target))
         return frozenset(actors)
@@ -529,7 +491,7 @@ class OpenedRouteCounts(BusRouteCounts):
 
         for row in self._read_counts(seen):
             add(row.actor, row.sender, row.target, row.count)
-        for item in self._appended:
+        for item in self.coverage.appended(self):
             message = item.message
             for actor in self._recipients(message.target):
                 if self.deliveries[actor].unread(item, self.registry, seen[actor]):
@@ -540,7 +502,7 @@ class OpenedRouteCounts(BusRouteCounts):
         delivery = self.deliveries[actor]
         return (*self._read_deliveries(actor, seen), *(
             UnseenDelivery(item.message.seq, item.message.target)
-            for item in self._appended
+            for item in self.coverage.appended(self)
             if delivery.unread(item, self.registry, seen)
         ))
 
@@ -591,7 +553,7 @@ class OpenedRouteCounts(BusRouteCounts):
                 actor: sorted(self.deliveries[actor].index_targets) for actor in actors
             }),
             "senders": json.dumps(senders), "unrecorded": json.dumps(unrecorded),
-            "through": self.source.through,
+            "through": self.coverage.indexed_through(self.source),
         }
 
     def _read_counts(self, seen: Mapping[str, ReadCursor]) -> list[RouteUnread]:
