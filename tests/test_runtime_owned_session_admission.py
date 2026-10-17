@@ -62,7 +62,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert snapshot.canonical_name(retired.name) == retired.name
         assert comms.registry.canonical_name(retired.name) == retired.name
         with pytest.raises(UnregisteredThreadError):
-            GoalHistoryRuntimeRequest(thread=retired.name).require_owner(snapshot)
+            GoalHistoryRuntimeRequest(thread=retired.name).require_owner(comms.registry.entry(retired.name).entry)
 
         # Use the original production publisher before another independent read.
         # The failed prompt is never resent or turned into a binding.
@@ -70,7 +70,10 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert await proxy.request("goal_history") == {"history": []}
         comms.registry.rename("registered", "renamed-owner")
         assert await proxy.request("goal_history") == {"history": []}
-        assert owner.sessions.require_owned_session(comms.registry.require("renamed-owner"), comms.registry.snapshot()) == "original-acp-session"
+        assert (
+            owner.sessions.require_owned_session(comms.registry.entry("renamed-owner").entry)
+            == "original-acp-session"
+        )
         assert owner.sessions.bindings == {
             "retired-acp-session": "retired-owner",
             "original-acp-session": "registered",

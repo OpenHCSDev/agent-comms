@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, ClassVar, NoReturn
 from uuid import uuid4
 
 from .pi_vocabulary import ThinkingLevel
-from .private_path import FileIdentity, FileRevision, PrivateFileRole
+from .private_path import FileIdentity, FileRevision, PrivateFileRole, fsync_directory
 from .declared_family import DeclaredFamily
 from .native_entries import (
     ModelChangeEntry,
@@ -34,7 +34,6 @@ from .native_entries import (
 from .native_pi import (
     NativePiUnavailable,
     _durable_private_session_dir,
-    _fsync_directory,
     _read_private_header,
 )
 
@@ -520,7 +519,7 @@ def create_fresh_private_session(
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        _fsync_directory(session_dir)
+        fsync_directory(session_dir)
         result = FreshPrivateSession(
             _MINT,
             path,

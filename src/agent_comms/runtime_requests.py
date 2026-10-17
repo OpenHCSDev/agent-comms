@@ -21,6 +21,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .private_bus_checkpoint import ContextManifestReference
 from .goal_actions import GoalAction
+from .owner_protocol import OwnerAnnouncement
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
 from .thread_identity import ThreadIncarnation
@@ -69,18 +70,20 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
         return {"action": FieldCodec.encode(cls), "thread": thread,
                 **FieldCodec.encode(parameters)}
 
-    def require_owner(self, snapshot):
-        owner = snapshot.require(self.thread)
-        if owner.pid != os.getpid() or not snapshot.status(owner.name).running:
+    def require_owner(self, entry):
+        owner = entry.thread
+        if owner.pid != os.getpid() or not entry.status.running:
             raise RuntimeError("This process no longer owns the thread.")
         return owner
 
     async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient
     ) -> RuntimeRequestContext:
-        snapshot = await Coordination.run_worker(server.agent._comms.registry.snapshot)
-        owner = self.require_owner(snapshot)
-        session_id = server.agent.sessions.require_owned_session(owner, snapshot)
+        entry = (await Coordination.run_worker(partial(
+            server.agent._comms.registry.entry, self.thread,
+        ))).entry
+        owner = self.require_owner(entry)
+        session_id = server.agent.sessions.require_owned_session(entry)
         return RuntimeRequestContext(server, reader, client, session_id, owner.name)
 
 
@@ -116,19 +119,20 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
             "AGENT_COMMS_PROJECT_REQUEST": json.dumps(self.to_wire()),
         }
 
-    def require_original(self, snapshot):
-        if not self.binding.owner.incarnation.matches_recorded_name(self.thread, snapshot):
+    def require_original(self, entry):
+        if not entry.matches_name(self.thread):
             raise ValueError("Project request names another original thread")
-        snapshot.require_owner_process(self.binding.owner, self.binding.process)
-        return snapshot.require_active(self.binding.owner.incarnation.name)
+        return entry.require_owner_process(self.binding.owner, self.binding.process)
 
-    def require_owner(self, snapshot):
-        self.require_original(snapshot)
-        return super().require_owner(snapshot)
+    def require_owner(self, entry):
+        self.require_original(entry)
+        return super().require_owner(entry)
 
     async def result(self, ctx):
-        snapshot = await Coordination.run_worker(ctx.server.agent._comms.registry.snapshot)
-        current = self.require_original(snapshot)
+        entry = (await Coordination.run_worker(partial(
+            ctx.server.agent._comms.registry.entry, ctx.name,
+        ))).entry
+        current = self.require_original(entry)
         return {"worktree": current.worktree}
 
 
@@ -136,6 +140,7 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
 class SubscribeRuntimeRequest(RuntimeRequest):
     async def apply(self, ctx: RuntimeRequestContext) -> None:
         agent = ctx.server.agent
+        await ctx.send(FieldCodec.encode(OwnerAnnouncement()))
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
         await agent.sessions.transcript.replay(
@@ -144,7 +149,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
             client=ctx.client,
         )
         await agent.turns.publish_turn_state(ctx.session_id, client=ctx.client)
-        await agent.inputs.replay_unknown_inputs(ctx.session_id, client=ctx.client)
+        await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
         async with agent.sessions.config.session_options(ctx.name) as config_options:
             metadata = await agent.sessions.metadata(ctx.name)
             await ctx.send(
@@ -374,7 +379,7 @@ class ContextSourceRuntimeRequest(ContextRuntimeRequest):
 class ContextCoreRuntimeRequest(ResultRuntimeRequest):
     def read_context(self, ctx):
         comms = ctx.server.agent._comms
-        owner = self.require_owner(comms.registry.snapshot())
+        owner = self.require_owner(comms.registry.entry(ctx.name).entry)
         return TurnContext.for_inspection(comms, owner)
 
     async def inspect(self, ctx):

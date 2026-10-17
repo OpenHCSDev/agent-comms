@@ -11,7 +11,7 @@ import os
 import signal
 import sys
 from abc import ABC, abstractmethod
-from contextlib import aclosing, suppress
+from contextlib import aclosing
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -23,8 +23,11 @@ from metaclass_registry import RegistryConfig
 
 from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_protocol import CORE_ERROR, CoreError, TaggedWire, WireModel
+from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
+from agent_comms.cli_protocol import (
+    DeliveredOutcome, EmittedOutcome, Outcome, TaggedWire,
+    UnconfirmedOutcome, WatchLine, WireModel,
+)
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.comms import Comms
@@ -375,39 +378,6 @@ class Options:
     session: str | None
     state: Path
 
-class Outcome(DeclaredFamily, affix='Outcome'):
-    """Stored spellings stay the same; their owners perform confirmation."""
-
-    @classmethod
-    async def acknowledge(cls, core: CoreConnection, message: Message) -> None:
-        """Pending transport outcomes cannot advance Core's read state."""
-
-    @classmethod
-    async def observe_monitor(cls, bridge: LineMonitorBridge, message: Message,
-                              record: ObservedMonitor) -> None:
-        await bridge.finish_delivery(message, DeliveredOutcome, record)
-
-
-class FilteredOutcome(Outcome):
-    @classmethod
-    async def acknowledge(cls, core: CoreConnection, message: Message) -> None:
-        await core.acknowledge(message)
-
-
-class UnconfirmedOutcome(Outcome):
-    pass
-
-
-class DeliveredOutcome(FilteredOutcome):
-    @classmethod
-    async def observe_monitor(cls, bridge: LineMonitorBridge, message: Message,
-                              record: ObservedMonitor) -> None:
-        """Reopened history preserves the first confirmation record and time."""
-
-
-class EmittedOutcome(UnconfirmedOutcome):
-    pass
-
 @dataclass(frozen=True)
 class DeliveryRow(TypedTable):
     id: str = field(metadata={"sql": Column(primary_key=True)})
@@ -557,7 +527,8 @@ class DeliveryJournal:
                 raise ValueError('This state directory belongs to another Core/CLI conversation')
             return current
 
-    def begin(self, message: Message, payload: str, outcome: type[Outcome]) -> bool:
+    def begin(self, message: Message, outcome: type[Outcome]) -> bool:
+        payload = json.dumps(message.to_wire(), separators=(',', ':')) + '\n'
         with self.db:
             return DeliveryRow(message.message_id, payload, outcome).insert_if_absent(self.db).rowcount == 1
 
@@ -607,37 +578,22 @@ class CoreConnection:
             self.comms.messaging.send, self.binding.bus, target, body, kind)
         return SendResult(id=message_id)
 
-    async def watch(self, state: Path) -> AsyncIterator[tuple[Message, str] | CoreError]:
+    async def watch(self, state: Path) -> AsyncIterator[WatchLine]:
         with (state / 'watch.stderr.log').open('a') as errors:
-            child = await asyncio.create_subprocess_exec(
+            child = await AttachedChild.start((
                 self.executable, '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment),
-                stdout=asyncio.subprocess.PIPE, stderr=errors)
+                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
+                stdio=StreamingChildStdio(input_enabled=False, stderr=errors))
             try:
-                while line := await child.stdout.readline():
-                    wire = json.loads(line)
-                    if isinstance(wire, dict) and 'error' in wire:
-                        yield CORE_ERROR.validate_python(wire)
-                        return
-                    yield Message.from_wire(wire), line.decode()
-                raise RuntimeError(f'Core watch ended, exit {await child.wait()}')
+                item = await WatchLine.read_next(child)
+                while item is not None:
+                    yield item
+                    item = await item.read_next(child)
             finally:
-                await self.join(child)
+                await child.stop()
 
     async def acknowledge(self, message: Message) -> None:
         await asyncio.to_thread(self.comms.messaging.acknowledge, self.binding.bus, (message.reference,))
-
-    @staticmethod
-    async def join(child: asyncio.subprocess.Process) -> None:
-        # An exited child no longer accepts the signal.
-        with suppress(ProcessLookupError):
-            child.terminate()
-        try:
-            async with asyncio.timeout(5):
-                await child.wait()
-        except TimeoutError:
-            child.kill()
-            await child.wait()
 
 BridgeOptions = TypeVar('BridgeOptions', bound=Options)
 OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
@@ -796,27 +752,10 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         self.journal.report_unconfirmed()
         print(f'Watching {self.binding.bus} → {self.binding.thread}', file=sys.stderr, flush=True)
         while True:
+            # Core ends a stream after an unavailable item; the next one reopens it.
             async with aclosing(self.core.watch(self.options.state)) as stream:
                 async for item in stream:
-                    if isinstance(item, CoreError):
-                        delay = item.watch_delay()
-                        print(f'Core watch unavailable: {item.error}; reconnecting read stream',
-                              file=sys.stderr, flush=True)
-                        await asyncio.sleep(delay)
-                        break
-                    message, payload = item
-                    conversation = message.type.conversation_message
-                    outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-                    if not self.journal.begin(message, payload, outcome):
-                        await self.journal.outcome(message).acknowledge(self.core, message)
-                        continue
-                    if not conversation:
-                        await self.finish_delivery(message, outcome)
-                        continue
-                    result = await self.deliver(message)
-                    await self.settle(message, result)
-                    print(f'{result.declared_name}: {message.message_id} from {message.sender}',
-                          file=sys.stderr, flush=True)
+                    await item.handle(self)
 
     async def run(self) -> None:
         try:

@@ -294,13 +294,13 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     uses the same no-replace hardlink pattern as the private store initializer;
     a reader fails closed during the brief two-link staging window.
     """
-    from .cohort_foreground import _preflight
+    from .private_nk_entrypoint import PrivateNkLaunch
 
     path = active_route_path() if path is None else path
     if path.name != "active-route.json" or not path.is_absolute():
         raise ValueError("active comms route requires its absolute route path")
     FieldCodec.encode(route)
-    _preflight(route.root, route.wire_root_id, route.native_package, True)
+    PrivateNkLaunch(route.root, route.wire_root_id, route.native_package, None).validate()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
@@ -318,7 +318,7 @@ def _publish_active_route_locked(
     expected: ActiveRoute | None = None,
 ) -> None:
     """Publish through a checked directory FD already held with route EX."""
-    from .cohort_foreground import _preflight
+    from .private_nk_entrypoint import PrivateNkLaunch
 
     temporary: str | None = None
     try:
@@ -357,7 +357,7 @@ def _publish_active_route_locked(
             os.fsync(fd)
         finally:
             os.close(fd)
-        _preflight(route.root, route.wire_root_id, route.native_package, True)
+        PrivateNkLaunch(route.root, route.wire_root_id, route.native_package, None).validate()
         parent = path.parent.lstat()
         if (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino):
             raise ValueError("active comms route directory changed before publication")

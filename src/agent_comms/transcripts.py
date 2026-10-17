@@ -326,10 +326,9 @@ class TranscriptRead:
         from .coordination_database import CoordinationStore
         from .coordinated_runtime_schema import assert_native_runtime_schema
         from .coordination_response import _assert_response_schema
-        from .recovery_projection import _preflight
 
         database = root / "coordination.sqlite3"
-        failure = _preflight(database)
+        failure = CoordinationStore.observation_failure(database)
         if failure == "missing":
             yield None
             return

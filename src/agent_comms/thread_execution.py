@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -41,6 +42,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
     @classmethod
     def native_command_available(cls, command, status, *, owner_pid: int) -> bool:
         return False
+
+    @classmethod
+    def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
+        """The lifecycle a registration installs; Core launched this owner."""
+        return requested
 
     @classmethod
     def restart_candidates(cls, thread: Thread, status):
@@ -123,9 +129,16 @@ class ExternalThreadExecution(ThreadExecution):
         pass
 
     @classmethod
+    def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
+        """Core launches no process here: the inbox is connected while its bridge lives."""
+        if requested.active and thread.process_alive:
+            return ConnectedThreadStatus()
+        return NoBridgeThreadStatus()
+
+    @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        # The CLI reports its own activity; between turns it is a participant.
+        # Its inbox state is the bridge's registration: connected or no bridge.
         if not status.active:
             return ordinary
         # A stale busy report cannot keep a known-dead CLI working.

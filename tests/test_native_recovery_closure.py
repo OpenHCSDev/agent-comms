@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from acp import RequestError
 
-from agent_comms import backend, cohort_foreground, native_pi
+from agent_comms import backend, native_pi
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import NativeMessageFailureSource, RequestFailure
 from agent_comms.field_codec import FieldCodec
@@ -234,8 +234,7 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     route = PrivateNkLaunch(Path(agent._comms.root), agent._configured_root_id(), package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(cohort_foreground, "_preflight",
-                        lambda root, root_id, pkg, enabled: native_pi._trusted_package(pkg))
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
     try:
         await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
         with pytest.raises(RequestError) as caught:
