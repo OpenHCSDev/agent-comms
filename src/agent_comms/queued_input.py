@@ -10,7 +10,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from functools import partial
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
 
 from acp import RequestError
@@ -124,7 +124,7 @@ class QueuedInput:
         custody: ExitStack,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
-    ) -> tuple[Self, Thread, InputAttempt]:
+    ) -> tuple[Self, InputAttempt]:
         """Called inside the wire boundary; acceptance follows the durable reservation."""
         snapshot = inputs.comms.registry.snapshot()
         canonical = snapshot.canonical_name(name)
@@ -148,7 +148,7 @@ class QueuedInput:
             canonical, item.text, origin=origin,
         )
         document = inputs.dispositions.reserve_originals(row, custody=custody)
-        return item, owner, document.lookup(item.key)
+        return item, document.lookup(item.key)
 
     @staticmethod
     def remaining_capacity(inputs: InputDrain, sources: tuple[TurnInputSource, ...]) -> int:
@@ -188,8 +188,8 @@ class QueuedInput:
                             origin=origin, custody=custody,
                         )
 
-                item, owner, row = await Coordination.run_worker(capture)
-                yield InputReservation(item, owner, row, rollback)
+                item, row = await Coordination.run_worker(capture)
+                yield InputReservation(item, row, rollback)
 
     def place(
         self, inputs: InputDrain, session_id: str,
@@ -205,21 +205,6 @@ class QueuedInput:
         inbox.put_nowait(InputRequest(
             input_id=InputId(self.input_id), content=content, when_busy=source.when_busy,
         ))
-
-    def bind_turn(
-        self, owner: Thread, admission: int, turn_id: str
-    ) -> QueuedInput:
-        return self
-
-    def immediate(self) -> QueuedInput:
-        return self
-
-    def deferred(self, row: InputAttempt, owner: Thread) -> DeferredQueuedInput:
-        return DeferredQueuedInput(
-            **{field.name: getattr(self, field.name) for field in fields(QueuedInput)},
-            receipt=row,
-            turn_id=owner.active_turn.id if owner.active_turn else None,
-        )
 
     async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
         """Transfer this live acceptance under current authority; never recover disk work."""
@@ -285,7 +270,7 @@ class QueuedInput:
         return None
 
     def restore_after_turn(self) -> QueuedInput | None:
-        return self.immediate() if self.echo else None
+        return self if self.echo else None
 
     async def started(self, inputs: InputDrain) -> str | None:
         """The running turn proved this input's start; the text the client shows as the user's."""
@@ -303,7 +288,6 @@ class InputReservation(Generic[ReservedQueuedInput]):
     """A captured input and its rollback until placement takes ownership."""
 
     item: ReservedQueuedInput
-    owner: Thread
     source: InputAttempt
     _rollback: AsyncExitStack
 
@@ -611,20 +595,3 @@ class InitialInput(QueuedInput):
     @property
     def accepted_id(self) -> None:
         return None
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class DeferredQueuedInput(QueuedInput):
-    receipt: InputAttempt
-    turn_id: str | None
-
-    def bind_turn(
-        self, owner: Thread, admission: int, turn_id: str
-    ) -> QueuedInput:
-        return replace(self, turn_id=turn_id) if self.current(owner, admission) else self
-
-    def immediate(self) -> QueuedInput:
-        return QueuedInput(
-            **{field.name: getattr(self, field.name) for field in fields(QueuedInput)}
-        )
-

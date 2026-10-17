@@ -24,18 +24,15 @@ from .agent_backend import (
     CompactionOutcome,
     ConfiguresModel,
     ContextUsage,
-    Disposition,
     EntryPage,
     EntryRef,
     FailedCompaction,
     Forks,
     InputContent,
-    InterruptedWork,
     Interrupts,
     NothingToCompaction,
     PlacedCompaction,
     ReadsHistory,
-    RecoversAfterCrash,
     ReportsContext,
     RuntimeLocation,
     TranscriptEntry,
@@ -156,7 +153,6 @@ class PiNativeBackend(
     ReportsContext,
     ReadsHistory,
     Forks,
-    RecoversAfterCrash,
     ConfiguresModel,
 ):
     """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
@@ -332,18 +328,6 @@ class PiNativeBackend(
             fork_native_session, parent.require_saved_session(), parent.worktree, launcher, runtime,
         ))
         return PiSessionFile(identity.session_file)
-
-    # -- RecoversAfterCrash -----------------------------------------------
-
-    async def interrupted(self, thread: Thread) -> tuple[InterruptedWork, ...]:
-        """Pi 0.85.1 keeps no resumable work: a dead child's request is gone, never resent."""
-        return ()
-
-    async def settle(self, thread: Thread, work: InterruptedWork, disposition: Disposition) -> None:
-        raise ValueError("Pi 0.85.1 has no interrupted work to settle")
-
-    async def resume(self, thread: Thread) -> None:
-        """Nothing is scheduled by Pi itself after a restart; Core sends every input."""
 
     # -- ConfiguresModel --------------------------------------------------
 

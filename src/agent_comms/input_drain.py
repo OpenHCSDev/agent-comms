@@ -749,7 +749,7 @@ class InputDrain(InputObservation):
             echo=request.defer_display, images=images, controller=controller,
             input_id=request.input_id, origin=request.origin,
         ) as reservation:
-            item = request.accepted(reservation.item, reservation.source, reservation.owner)
+            item = reservation.item
             followup = replace(followup, provenance=(
                 *followup.provenance, reservation.source.context_provenance(),
             ))
@@ -770,15 +770,11 @@ class InputDrain(InputObservation):
             raise InputHandoffRefused("Running turn inbox retired before input placement")
 
     def bind_native_turn(
-        self, session_id: str, owner: Thread, admission: int, turn_id: str
+        self, session_id: str, owner: Thread,
     ) -> asyncio.Queue[TurnInboxItem]:
-        """Transfer existing live inputs to the new lease, never read them from disk."""
+        """Open the live turn inbox and capture its configured settings."""
         inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
         self.sessions.config.turn_started(session_id, owner)
-        for input_id, item in self.queued_inputs.get(session_id, {}).items():
-            self.queued_inputs[session_id][input_id] = item.bind_turn(
-                owner, admission, turn_id
-            )
         return inbox
 
     async def send_now(self, session_id: str) -> None:
@@ -786,8 +782,6 @@ class InputDrain(InputObservation):
             inbox = self.backend_inboxes.get(session_id)
             queued = self.queued_inputs.get(session_id, {})
             if inbox is not None and queued:
-                for key, item in tuple(queued.items()):
-                    queued[key] = item.immediate()
                 inbox.put_nowait(SendNow(tuple(InputId(input_id) for input_id in queued)))
 
     async def close(self) -> None:

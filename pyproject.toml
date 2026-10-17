@@ -29,6 +29,7 @@ dependencies = [
     "aiohttp>=3.14",
     "metaclass-registry>=0.4.0",
     "pydantic>=2.13",
+    "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@120c04fb9a0eb4afafab6d621d1c5fd421bb7552#subdirectory=skills/refactor-audit",
 ]
 
 [project.optional-dependencies]
@@ -39,7 +40,6 @@ all = [
     "agent-client-protocol>=0.8",
 ]
 dev = [
-    "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@120c04fb9a0eb4afafab6d621d1c5fd421bb7552#subdirectory=skills/refactor-audit",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23",
@@ -56,6 +56,7 @@ Repository = "https://github.com/OpenHCSDev/agent-comms"
 Issues = "https://github.com/OpenHCSDev/agent-comms/issues"
 
 [project.scripts]
+agent-comms-ratchet = "agent_comms.debt_ratchet:main"
 agent-comms = "agent_comms.cli:main"
 agent-comms-acp = "agent_comms.acp:main"
 agent-comms-agent = "agent_comms.worker:main"

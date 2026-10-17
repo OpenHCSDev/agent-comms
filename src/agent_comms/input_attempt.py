@@ -74,9 +74,6 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
         return False
 
-    def matches_original_provenance(self, source: InputProvenance) -> bool:
-        return False
-
     def require_original_provenance(self, source: InputProvenance):
         raise RelationViolationError("Constraint lacks its original input provenance")
 
@@ -147,11 +144,8 @@ class StoredInput(InputAttempt):
     def context_provenance(self) -> InputProvenance:
         return InputProvenance(self.key, self.origin)
 
-    def matches_original_provenance(self, source: InputProvenance) -> bool:
-        return self.context_provenance() == source
-
     def require_original_provenance(self, source: InputProvenance):
-        if not self.matches_original_provenance(source):
+        if self.context_provenance() != source:
             raise RelationViolationError("Constraint lacks its original input provenance")
         self.origin.require_human()
         return self
@@ -330,12 +324,15 @@ class StartedInput(SentInput):
             raise RelationViolationError("Input start admission changed")
         return self
 
-    def delivered_in(self, lease, root_id, snapshot):
-        if (
+    def matches_lease(self, lease, snapshot) -> bool:
+        return (
             lease.identity.incarnation.matches_recorded_name(self.owner, snapshot)
             and self.matches_admission(lease.admission_generation)
             and self.turn_id == lease.turn_id
-        ):
+        )
+
+    def delivered_in(self, lease, root_id, snapshot):
+        if self.matches_lease(lease, snapshot):
             return self.origin.delivery_reference(root_id)
         return None
 
@@ -353,15 +350,9 @@ class StartedInput(SentInput):
         publication source independently validates the original complete lease
         and native ancestry; this receipt never invents their missing proof.
         """
-        if not lease.identity.incarnation.matches_recorded_name(self.owner, snapshot):
-            return None
-        if not self.matches_admission(lease.admission_generation):
-            return None
-        return (
-            self
-            if self.matches_native(turn_id=lease.turn_id, native_id=native_id, text=sent_text)
-            else None
-        )
+        return self if self.matches_lease(lease, snapshot) and self.matches_native(
+            turn_id=lease.turn_id, native_id=native_id, text=sent_text,
+        ) else None
 
 class NotSentInput(RecoverableUnboundInput):
     unresolved = True

@@ -86,7 +86,7 @@ class OwnerFollowingInputs(FollowingInputs):
         inputs = self.inputs
         thread = await Coordination.run_worker(partial(inputs.comms.registry.require, self.owner.name))
         lease = thread.require_turn_lease()
-        inputs.bind_native_turn(self.session_id, thread, lease.admission_generation, lease.turn_id)
+        inputs.bind_native_turn(self.session_id, thread)
         original = SelectedOriginalInput.answering(session.command.message)
         admission = OwnedSendAdmission(
             comms=inputs.comms,

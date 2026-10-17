@@ -16,7 +16,6 @@ from .input_attempt import (
     InputAttempt,
     MissingInput,
     ReservedInput,
-    SentInput,
     StartedInput,
     StoredInput,
 )
@@ -286,11 +285,9 @@ class InputDispositions(TypedStore):
 
         def update(document: InputDocument) -> InputDocument:
             nonlocal changed
-            next_row = change(document.lookup(key))
-            if next_row is None:
-                return document
-            changed = True
-            return replace(document, rows={**document.rows, key: next_row})
+            successor = document.transition((key,), change)
+            changed = successor is not document
+            return successor
 
         self._update(*_members("key", (key,)), update)
         return changed

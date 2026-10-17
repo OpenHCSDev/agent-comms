@@ -99,19 +99,11 @@ class TurnInboxItem(ABC):
     """An inbox item owns its carried inputs and delivery to a running turn."""
 
     @property
-    @abstractmethod
-    def carried_inputs(self) -> tuple[InputId, ...]: ...
+    def carried_inputs(self) -> tuple[InputId, ...]:
+        return ()
 
     @abstractmethod
     def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]: ...
-
-
-class TurnInboxControl(TurnInboxItem):
-    """A control carries no new input; unread controls cannot start a turn."""
-
-    @property
-    def carried_inputs(self) -> tuple[InputId, ...]:
-        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -135,7 +127,7 @@ class InputRequest(TurnInboxItem):
 
 
 @dataclass(frozen=True)
-class SendNow(TurnInboxControl):
+class SendNow(TurnInboxItem):
     """Ask the running turn to place these queued steering inputs immediately.
 
     Only a backend with the :class:`Interrupts` role accepts it.
@@ -148,7 +140,7 @@ class SendNow(TurnInboxControl):
 
 
 @dataclass(frozen=True)
-class UseSettings(TurnInboxControl):
+class UseSettings(TurnInboxItem):
     """Ask the running turn to use the thread's stored model and thinking level.
 
     The backend applies them from its next model call; the call in flight
@@ -163,7 +155,7 @@ class UseSettings(TurnInboxControl):
 
 
 @dataclass(frozen=True)
-class ClearQueue(TurnInboxControl):
+class ClearQueue(TurnInboxItem):
     """Clear only these queued user inputs, never delivered bus inputs."""
 
     input_ids: tuple[InputId, ...]
@@ -172,76 +164,12 @@ class ClearQueue(TurnInboxControl):
         return receiver.clear_queue(turn, self)
 
 
-class UnansweredReason(DeclaredFamily, affix="Reason"):
-    """Why an input ended without an answer."""
-
-    @property
-    def message(self) -> str:
-        return self.declared_name.replace("_", " ")
-
-
-@dataclass(frozen=True)
-class AbortedReason(UnansweredReason):
-    """The run was aborted before it answered this input."""
-
-
-@dataclass(frozen=True)
-class StaleReason(UnansweredReason):
-    """The input was superseded before the backend placed it."""
-
-
-@dataclass(frozen=True)
-class NoModelReason(UnansweredReason):
-    """No model was configured to answer."""
-
-
-@dataclass(frozen=True)
-class FailedReason(UnansweredReason):
-    """The runtime failed while answering; ``text`` is its message, unchanged."""
-
-    text: str
-
-    @property
-    def message(self) -> str:
-        return self.text
-
-
 @dataclass(frozen=True)
 class EntryRef:
     """A position in a backend's transcript: an order key plus the backend's own ID."""
 
     order: int
     backend_id: str
-
-
-class InputOutcome(DeclaredFamily, affix="Outcome"):
-    """Where one input stands in its backend."""
-
-
-@dataclass(frozen=True)
-class QueuedOutcome(InputOutcome):
-    """Accepted and waiting for a run boundary."""
-
-
-@dataclass(frozen=True)
-class PlacedOutcome(InputOutcome):
-    """Placed into the transcript at ``entry``; the answer is still running."""
-
-    entry: EntryRef
-
-
-@dataclass(frozen=True)
-class AnsweredOutcome(InputOutcome):
-    """Answered; ``entry`` is the final assistant entry."""
-
-    entry: EntryRef
-
-
-@dataclass(frozen=True)
-class UnansweredOutcome(InputOutcome):
-    """Ended without an answer, for ``reason``."""
-
-    reason: UnansweredReason
 
 
 class TranscriptKind(DeclaredFamily, affix="Entry"):
@@ -326,32 +254,6 @@ class FailedCompaction(CompactionOutcome):
 @dataclass(frozen=True)
 class StaleCompaction(CompactionOutcome):
     """The transcript moved past the summary's cut before it was placed."""
-
-
-class InterruptedWork(DeclaredFamily, affix="Work"):
-    """Work a crashed runtime left unfinished, listed before anything resumes."""
-
-
-@dataclass(frozen=True)
-class InterruptedRequestWork(InterruptedWork):
-    """A model request that was running for these inputs."""
-
-    inputs: tuple[InputId, ...]
-
-
-@dataclass(frozen=True)
-class InterruptedToolWork(InterruptedWork):
-    """A tool call that was running; ``replay_safe`` says whether it may run again."""
-
-    call_id: str
-    replay_safe: bool
-
-
-class Disposition(Enum):
-    """What Core decided to do with one piece of interrupted work."""
-
-    RESUME = "resume"
-    ABANDON = "abandon"
 
 
 # ---------------------------------------------------------------------------
@@ -447,22 +349,6 @@ class Forks(ABC):
         """
 
 
-class RecoversAfterCrash(ABC):
-    """Lists interrupted work before anything resumes. Nothing runs until it is settled."""
-
-    @abstractmethod
-    async def interrupted(self, thread: Thread) -> tuple[InterruptedWork, ...]:
-        """Work the runtime left unfinished for this thread."""
-
-    @abstractmethod
-    async def settle(self, thread: Thread, work: InterruptedWork, disposition: Disposition) -> None:
-        """Apply Core's decision to one piece of interrupted work."""
-
-    @abstractmethod
-    async def resume(self, thread: Thread) -> None:
-        """Start scheduling again once every interrupted piece is settled."""
-
-
 class ConfiguresModel(ABC):
     """Lists the models the runtime can use and applies a model / thinking choice."""
 
@@ -489,7 +375,6 @@ THREAD_CAPABILITIES: tuple[type, ...] = (
     Compacts,
     ReportsContext,
     ReadsHistory,
-    RecoversAfterCrash,
     ConfiguresModel,
 )
 

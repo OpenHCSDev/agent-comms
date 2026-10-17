@@ -41,7 +41,6 @@ if TYPE_CHECKING:
     from typing import Any
     from .input_drain import InputDrain
     from .queued_input import QueuedInput
-    from .threads import Thread
 
 
 class AgentCommsUpdate(DeclaredFamily, affix="Update"):
@@ -561,23 +560,18 @@ class PromptRequest(CommsRequest):
         return self.user_text
 
     @abstractmethod
-    def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput: ...
-
-    def enqueue_control(self, inbox: asyncio.Queue[Any], input_id: str) -> None:
-        pass
+    def enqueue_control(self, inbox: asyncio.Queue[Any], input_id: str) -> None: ...
 
     async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
         await inputs.emit_queue_state(session_id)
 
 
 class QueuePromptRequest(PromptRequest):
-    def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput:
-        return item.deferred(row, owner)
+    def enqueue_control(self, inbox: asyncio.Queue[Any], input_id: str) -> None:
+        pass
+
 
 class SteerPromptRequest(PromptRequest):
-    def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput:
-        return item
-
     def enqueue_control(self, inbox: asyncio.Queue[Any], input_id: str) -> None:
         inbox.put_nowait(SendNow((InputId(input_id),)))
 

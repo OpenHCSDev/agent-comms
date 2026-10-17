@@ -8,12 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from tools.debt_ratchet import (
+from agent_comms.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, ForeignFieldSpellings,
     FrozenFieldWrite, FunctionLocalImport, LiteralGetattr,
 )
 
 pytestmark = pytest.mark.refactor_guard
+
 
 
 class Repository:
@@ -43,8 +44,7 @@ class Repository:
 
     def compare(self, base: str, head: str) -> tuple[int, dict]:
         result = subprocess.run(
-            [sys.executable, str(Path(__file__).resolve().parents[2] / "tools/debt_ratchet.py"),
-             "--root", self.root, "--base", base, "--head", head],
+            [sys.executable, "-m", "agent_comms.debt_ratchet", "--root", self.root, "--base", base, "--head", head],
             cwd=self.path,
             capture_output=True,
             text=True,
@@ -131,8 +131,14 @@ def test_other_source_root_does_not_enter_report(repo: Repository) -> None:
     assert report["paths"] == [f"{repo.root}/kept.py"]
 
 
+def test_ratchet_has_one_packaged_owner() -> None:
+    from agent_comms import debt_ratchet
+    assert not (Path(__file__).resolve().parents[2] / "tools/debt_ratchet.py").exists()
+    assert "src/agent_comms/" not in Path(debt_ratchet.__file__).read_text()
+
+
 def test_builtin_handler_measure_uses_shared_collector_and_rejects_growth(repo: Repository) -> None:
-    from tools.debt_ratchet import BuiltinHandlerTypeSwitch
+    from agent_comms.debt_ratchet import BuiltinHandlerTypeSwitch
     from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
     assert issubclass(BuiltinHandlerTypeSwitch, BuiltinHandlerDeclarations)
     source = '''from .mro_dispatch import MroDispatch, handles as cases
@@ -167,7 +173,7 @@ def owner(name: str, lines: int, indent: str = "") -> str:
 @pytest.mark.parametrize("root", ["src/agent_comms", "src/toad", "src/textual"])
 def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(tmp_path: Path, root: str):
     repo = Repository(tmp_path, root)
-    from tools.debt_ratchet import FamilyFlattened
+    from agent_comms.debt_ratchet import FamilyFlattened
     from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
 
     original = "def carry(value):\n    return (value.declared_name, value.family_name)\n"
@@ -201,14 +207,12 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(tm
 
 
 
-def test_small_owners_stay_within_the_class_threshold(repo: Repository) -> None:
+def test_small_owner_growth_and_exact_threshold_pass(repo: Repository) -> None:
     base = repo.commit({"owners.py": owner("Small", 2)})
     head = repo.commit({"owners.py": owner("Small", 500) + owner("New", 500)})
     status, report = repo.compare(base, head)
-    assert status == 1
-    assert report["delta"]["SourceLines"] > 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::Small"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::New"] == 0
+    assert status == 0
+    assert not any(report["delta"].values())
 
 
 def test_class_growth_cannot_be_cancelled_by_another_class(repo: Repository) -> None:
@@ -230,12 +234,11 @@ def test_new_or_crossing_god_class_is_refused(repo: Repository, before: int) -> 
     assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::New"] == 1
 
 
-def test_class_move_keeps_baseline_and_new_small_owner_has_no_class_debt(repo: Repository) -> None:
+def test_class_move_keeps_baseline_and_new_small_owner_is_allowed(repo: Repository) -> None:
     base = repo.commit({"old.py": owner("Existing", 501)})
     moved = repo.commit({"old.py": None, "new.py": owner("Existing", 501) + owner("NewOwner", 25)})
     status, report = repo.compare(base, moved)
-    assert status == 1
-    assert report["delta"]["SourceLines"] > 0
+    assert status == 0
     assert report["base"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
     assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 0
     assert report["delta"][f"GodClassExcess:{repo.root}/new.py::NewOwner"] == 0
@@ -373,8 +376,7 @@ class Reader:
         return not self.connection.closed
 """})
     status, report = repo.compare(base, boolean)
-    assert status == 1
-    assert report["delta"]["SourceLines"] > 0
+    assert status == 0
     assert report["head"][f"ForeignAbsenceProbe:{repo.root}/connection.py"] == 0
 
     missing = repo.commit({"missing.py": """
@@ -411,8 +413,7 @@ def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Reposito
     base = repo.commit({"boundary.py": ""})
     declarations = repo.commit({"boundary.py": source})
     status, report = repo.compare(base, declarations)
-    assert status == 1
-    assert report["delta"]["SourceLines"] > 0
+    assert status == 0
     assert report["head"]["StringSubscript"] == 0
     # Annotation spelling cannot conceal actual initializer/default/decorator/body reads.
     runtime = source + '\n'.join([
@@ -475,7 +476,7 @@ ANY_NON_DECLARATIONS = '\n'.join([
 
 
 def test_any_is_counted_wherever_a_type_is_declared(repo: Repository) -> None:
-    from tools.debt_ratchet import AnyAnnotation
+    from agent_comms.debt_ratchet import AnyAnnotation
 
     uses = AnyAnnotation.uses(ANY_DECLARATIONS.encode(), "declarations.py")
     assert sorted((use.site, use.owner) for use in uses) == [
