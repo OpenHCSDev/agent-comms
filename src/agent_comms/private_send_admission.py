@@ -145,7 +145,7 @@ class PrivateSendAdmission:
 
         TrackedTurnSession owns the child and tool resources. Its return or exception
         follows cleanup; disconnect and unknown outcomes are never committed here.
-        The raw writer retains the sole one-use send token after durable admission.
+        The raw writer keeps the single-use send token after the input is recorded.
         """
         registry = await Coordination.run_worker(self.bus._registry.snapshot)
         try:

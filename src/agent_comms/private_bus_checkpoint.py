@@ -240,7 +240,7 @@ class CertifiedSourceRead:
 
         The returned iterator owns only the original pointers, copied bytes and
         root selected by this certificate. It is a read snapshot, never a
-        current publication/admission permit. Capture must finish while locks are held;
+        permission to write or start a turn. Capture must finish while locks are held;
         decoding can finish after those locks are released.
         """
         return (resource.value for resource in self.capture_resources(rows))
