@@ -17,7 +17,7 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInbox, WhenBusy
 from stored_inputs import stored_inputs
 
 
@@ -166,7 +166,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             f"if(!link.startsWith('http://127.0.0.1:{server.server_port}/')) "
             "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
         )
-        queue = asyncio.Queue()
+        queue = TurnInbox()
         events = []
         first_chunk = asyncio.Event()
         started = asyncio.Event()

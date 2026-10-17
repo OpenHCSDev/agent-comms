@@ -14,7 +14,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp_failure import ProviderRetryResult
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.image_inputs import ImageInput
 from agent_comms.pi_events import AutoRetryStart
@@ -489,7 +489,7 @@ for line in sys.stdin:
         owner = asyncio.current_task()
         with pytest.raises(ValueError, match="Pi RPC record has wrong type"):
             async for _ in one_turn_events(
-                stub, [], "task", str(tmp_path), steering_queue=asyncio.Queue()
+                stub, [], "task", str(tmp_path), steering_queue=TurnInbox()
             ):
                 pass
         assert pid_file.exists()
@@ -1203,7 +1203,7 @@ for line in sys.stdin:
         owner = asyncio.current_task()
         process = None
         events = []
-        queue: asyncio.Queue[InputRequest] = asyncio.Queue()
+        queue = TurnInbox()
         pending = steer("[peer] pending", "in-1")
         async for event in one_turn_events(
             stub, [], "task", str(tmp_path), steering_queue=queue,
@@ -1316,7 +1316,7 @@ cat <<'EOF'
 EOF
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         queue.put_nowait(steer("[peer] ping"))
 
         events = [
@@ -1357,7 +1357,7 @@ IFS= read -r stats
 echo '{"type":"response","command":"get_session_stats","success":true,"data":{"contextUsage":{}}}'
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         finish = asyncio.Event()
         events = []
 
@@ -1842,7 +1842,7 @@ time.sleep(60)
             content=InputContent(text="follow", images=(ImageInput("YWJj", "image/png"),)),
             when_busy=WhenBusy.FOLLOW_UP,
         )
-        queue: asyncio.Queue[InputRequest] = asyncio.Queue()
+        queue = TurnInbox()
         queue.put_nowait(original)
 
         events = [
@@ -2126,7 +2126,7 @@ signal.signal(signal.SIGTERM, lambda *_: None)
 while True: time.sleep(0.1)
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         stream = one_turn_events(stub, [], "work", str(tmp_path), steering_queue=queue)
         try:
             if exit_mode == "malformed":
@@ -2236,7 +2236,7 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
        "data":{{"contextUsage":{{"tokens":33}}}}}})
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         queue.put_nowait(steer("inbox update"))
         async with asyncio.timeout(4):
             events = [
@@ -2279,7 +2279,7 @@ for line in sys.stdin:
         break
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         finish = asyncio.Event()
         events = []
         async with asyncio.timeout(4):
@@ -2797,7 +2797,7 @@ send({{"type":"message_end","message":{{
 send({{"type":"agent_settled"}})
 """,
         )
-        queue = asyncio.Queue() if "steer" in case else None
+        queue = TurnInbox() if "steer" in case else None
         if queue is not None:
             queue.put_nowait(steer("peer"))
         events = [
@@ -2845,7 +2845,7 @@ for line in sys.stdin:
         break
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         queue.put_nowait(steer("channel mention"))
         starts = []
 
@@ -2900,7 +2900,7 @@ for line in sys.stdin:
         break
 """,
         )
-        queue: asyncio.Queue[str | dict] = asyncio.Queue()
+        queue = TurnInbox()
         queue.put_nowait(steer("late direct", "bus-42"))
 
         @contextmanager
@@ -3002,7 +3002,7 @@ IFS= read -r stats
 echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{"contextUsage":{{}}}}}}'
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         finish = asyncio.Event()
         events = []
 

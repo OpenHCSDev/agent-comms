@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms import backend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInbox, WhenBusy
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -33,7 +33,7 @@ async def test_actual_native_watchdog_failure_never_replays(native_backend, outc
 async def test_actual_native_interrupt_promotes_only_selected_followup(native_backend):
     owner = native_backend
     owner.provider.status = 0
-    queue = asyncio.Queue()
+    queue = TurnInbox()
     task = asyncio.create_task(owner.run("Interrupted original", queue=queue))
     try:
         async with asyncio.timeout(10):
@@ -101,7 +101,7 @@ async def test_actual_native_retry_and_compaction_excursions(
         await original(reader, writer)
 
     owner.provider.handle = respond
-    queue = asyncio.Queue()
+    queue = TurnInbox()
     task = asyncio.create_task(
         owner.run("Recover without replaying this input", queue=queue)
     )
