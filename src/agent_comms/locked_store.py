@@ -137,16 +137,14 @@ class JsonDocument(ABC, Generic[T]):
 
 @dataclass(frozen=True, slots=True)
 class LockedStore(JsonDocument[T]):
-    """Document transactions; callbacks return replacements, never mutate or reenter.
-
-    Joint reads acquire declared source owners through StoreLock.ordered.
-    """
+    """Ordered document transactions; callbacks never mutate or reenter."""
 
     lock_rank: ClassVar[int]
 
     def __init_subclass__(cls, **kwargs):
         super(LockedStore, cls).__init_subclass__(**kwargs)
-        if not isabstract(cls) and ("lock_rank" not in cls.__dict__ or cls.lock_rank is None):
+        rank = vars(cls).get("lock_rank")
+        if not isabstract(cls) and rank is None:
             raise TypeError(f"{cls.__name__} must declare its own lock_rank")
 
     @contextmanager
