@@ -122,6 +122,13 @@ class AgentActivity:
         return self._observed(participant, owner,
             self.activity.current(participant.name, active=participant.executing))
 
+    def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
+        if not incarnation.current(snapshot):
+            return False
+        name = snapshot.canonical_name(incarnation.name)
+        return (snapshot.statuses[name].running and snapshot.threads[name].process_alive
+                and self.activity_of(name, snapshot=snapshot).state.busy)
+
     def _observed(self, participant: Thread, owner: OwnerIdentity,
                   event: Activity) -> ObservedActivity:
         activity = ObservedActivity.acquire(event, owner)

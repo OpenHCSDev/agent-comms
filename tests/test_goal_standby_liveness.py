@@ -121,7 +121,7 @@ def test_idle_target_refusal_is_side_effect_free(tmp_path):
         name: (comms.root / name).read_bytes() if (comms.root / name).exists() else None
         for name in authoritative
     }
-    with pytest.raises(ValueError, match="No declared dependency has an active turn.*@child"):
+    with pytest.raises(ValueError, match="No declared dependency is working.*@child"):
         comms.goals.update_goal(
             "owner",
             StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",)),
@@ -347,7 +347,7 @@ def test_stopped_dependency_cannot_be_declared_live(tmp_path):
     comms.registry.register(replace(child, active_turn=None), StoppedThreadStatus())
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Review"))
     assert goal is not None
-    with pytest.raises(ValueError, match="No declared dependency has an active turn"):
+    with pytest.raises(ValueError, match="No declared dependency is working"):
         comms.goals.update_goal(
             "owner",
             StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",)),

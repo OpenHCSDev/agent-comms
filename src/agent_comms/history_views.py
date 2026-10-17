@@ -509,7 +509,7 @@ class HistoryViews:
                 "pending": pending[name],
                 "goal_execution": (
                     execution.to_wire()
-                    if (execution := GoalWaits.execution(t.goal, waits, snapshot)) else None
+                    if (execution := GoalWaits.execution(t.goal, waits, snapshot, self.agents)) else None
                 ),
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",
