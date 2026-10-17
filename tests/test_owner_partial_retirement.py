@@ -38,7 +38,6 @@ class AuthoredRetirement(OwnerLifecycle):
             last_seen={t.name: 1.0 for t in self.originals}, aliases={},
             owner_generations={t.name: 4 for t in self.originals},
             claimed_generations={t.name: 5 for t in self.originals},
-            by_lookup={t.incarnation.lookup: t for t in self.originals},
         )
         self.registry = SimpleNamespace(snapshot=lambda: self.snapshot)
         self.releases = SimpleNamespace(read=lambda: {})
