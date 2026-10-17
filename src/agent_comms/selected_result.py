@@ -10,7 +10,6 @@ from .coordination_errors import IdentityConflict, PublicationActivationBlocked,
 from .coordination_tables.publications import PublicationReceipts
 from .diagnostics import record_terminal_failure
 from .errors import RelationViolationError
-from .fresh_private_session import FreshPrivateSession
 from .messages import AlertKind
 from .native_source_cursor import NativeSourceCursor
 from .private_sidecar import SidecarCommitUnknown
@@ -23,11 +22,10 @@ class CoordinatedTurn:
     input_id: str
     publications: tuple[PublicationReceipts, ...]
     cursor_status: str = "unavailable"
-    fresh_session: FreshPrivateSession | None = None
 
     @classmethod
     async def capture(
-        cls, participant, session, input_id, disposition: type[AssignmentState],
+        cls, participant, input_id, disposition: type[AssignmentState],
         publications: tuple[PublicationReceipts, ...] = (),
     ):
         return cls(
@@ -36,7 +34,6 @@ class CoordinatedTurn:
             input_id,
             publications,
             await cls.cursor_status_for(participant, input_id),
-            session.creation,
         )
 
     @staticmethod

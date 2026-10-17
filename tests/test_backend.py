@@ -2447,7 +2447,7 @@ if select.select([sys.stdin], [], [], 0)[0]:
     async def test_large_saved_session_gets_only_bounded_preflight_budget(
         self, tmp_path, monkeypatch
     ):
-        from agent_comms.native_startup import NativeStartupAdmission, NativeStartupPolicy
+        from agent_comms.native_startup import NativeStartup, NativeStartupPolicy
 
         session = tmp_path / "session.jsonl"
         session.write_text(json.dumps({
@@ -2533,7 +2533,7 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
         assert "Input authority changed before Pi prompt send" in large[-1].text
         assert not received.exists()
         # Startup is independently owned per native child; no global slot remains.
-        assert NativeStartupAdmission(tmp_path).root == tmp_path
+        assert NativeStartup(tmp_path).root == tmp_path
 
     async def test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts(
         self, tmp_path, monkeypatch

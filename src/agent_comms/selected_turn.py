@@ -238,7 +238,7 @@ class SelectedAttempt:
                 participant.store.session.path, participant.bus, self.stage.fence, replies
             )
             return await CoordinatedTurn.capture(
-                participant, session, request.admission.input_id, CompletedAssignment,
+                participant, result.context.input_id, CompletedAssignment,
                 published.publication_receipts,
             )
 
@@ -263,7 +263,7 @@ class SelectedConsideration:
             ).value
             attempt = await SelectedAttempt.engage(participant, created)
             return await attempt.run(execution, session,
-                                     execution.action(session), execution.write_authority)
+                                     execution.action(), execution.write_authority)
         await participant.transition(
             PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {participant.batch.target}")
         )
