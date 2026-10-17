@@ -8,6 +8,7 @@ import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass, replace
+from itertools import groupby
 from pathlib import Path
 from typing import Annotated, ClassVar, TYPE_CHECKING
 
@@ -16,7 +17,6 @@ from .native_tool_call import SelectedToolDenied
 from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
-    from .threads import Thread
     from .registration import Registration
 
 StoragePath = Annotated[Path, PathText]
@@ -89,8 +89,7 @@ class StorageRule:
     def require_path(self, roots, path):
         if '.artifacts' in path.parts:
             self.deny('writes inside .artifacts are forbidden')
-        owned = (roots.scratch, *roots.checkouts)
-        if path.is_relative_to(self.scratch_base) and not any(path.is_relative_to(p) for p in owned):
+        if path.is_relative_to(self.scratch_base) and not any(path.is_relative_to(p) for p in (roots.scratch, *roots.checkouts)):
             self.deny(f'foreign scratch destination {path}; registered scratch is {roots.scratch}')
 
     def render(self, roots):
@@ -111,8 +110,7 @@ class ShellProgram:
 
     @classmethod
     def named(cls, name):
-        stem = re.sub(r'\d+(?:\.\d+)*$', '', name)
-        kind = cls.programs.get(name if name in cls.programs else stem)
+        kind = cls.programs.get(name if name in cls.programs else re.sub(r'\d+(?:\.\d+)*$', '', name))
         return (kind if kind and (kind.versioned or name in kind.names) else cls)()
 
     def matches(self, args, prefixes):
@@ -211,32 +209,24 @@ def physical_path(value, cwd):
 def shell_commands(command):
     """Shell words, not matches in quoted code or here-document bodies."""
     body = []
-    delimiters = []
-    for line in command.splitlines(keepends=True):
-        if delimiters:
-            if line.rstrip('\r\n').lstrip('\t') == delimiters[0]:
-                delimiters.pop(0)
-            continue
+    lines = iter(command.splitlines(keepends=True))
+    for line in lines:
         body.append(line)
-        lex = shlex.shlex(line, posix=True, punctuation_chars='<>')
+        lex = shlex.shlex(line, posix=False, punctuation_chars='<>')
         lex.whitespace_split = True
         words = list(lex)
         for index, word in enumerate(words[:-1]):
             if word in ('<<', '<<-'):
-                delimiters.append(words[index + 1])
+                delimiter = shlex.split(words[index + 1])[0]
+                for line in lines:
+                    if line.rstrip('\r\n').lstrip('\t') == delimiter:
+                        break
     lex = shlex.shlex(''.join(body), posix=True, punctuation_chars=';&|><()\n')
     lex.whitespace = ' \t\r'
     lex.whitespace_split = True
-    words = []
-    for word in lex:
-        if word and set(word) <= set(';&|()\n'):
-            if words:
-                yield words
-                words = []
-        else:
-            words.append(word)
-    if words:
-        yield words
+    for separator, words in groupby(lex, key=lambda word: bool(word) and set(word) <= set(';&|()\n')):
+        if not separator:
+            yield list(words)
 
 
 class ForbidsCommands(ShellProgram):
