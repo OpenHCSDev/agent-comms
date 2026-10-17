@@ -13,7 +13,7 @@ def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F81
     assert receipt.message == message
     assert receipt.message.target == '#team'
     assert replace(receipt, message=None) in per_message[(message.seq, message.message_id)]
-    assert receipt.state == 'Sent'
+    assert receipt.label == 'Sent'
     assert comms.registry.require('beta').active_turn is None
 
 

@@ -64,21 +64,6 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class SentMessageOutcome:
-    """A changed authored message outcome admitted once for prompt context."""
-
-    message: Message
-    recipient_identity: FrozenRecipient
-    state: str
-    detail: str
-    answer: MessageReference | None = None
-
-    @property
-    def recipient(self) -> str:
-        return self.recipient_identity.canonical_thread
-
-
-@dataclass(frozen=True, slots=True)
 class MessageNotification:
     """Read-only display of one recipient's durable assignment decision."""
 
@@ -102,13 +87,8 @@ class MessageNotification:
     def sent_outcome(self) -> SentMessageOutcome | None:
         if not self.changed or self.message is None:
             return None
-        return SentMessageOutcome(
-            self.message,
-            self.recipient_identity,
-            self.label,
-            self.state.detail,
-            self.answer,
-        )
+        return SentMessageOutcome(self.recipient_identity, self.state, message=self.message,
+                                  answer=self.answer, answered_at_ms=self.answered_at_ms)
 
     @classmethod
     def ordered(cls, notifications: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
@@ -319,6 +299,12 @@ class MessageNotification:
             for source in sources
             for notification in projected[source.message.seq, source.message.message_id]
         )
+
+
+@dataclass(frozen=True, slots=True)
+class SentMessageOutcome(MessageNotification):
+    """The same typed outcome, with its original message required for context."""
+    message: Message = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
