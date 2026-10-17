@@ -258,7 +258,7 @@ class AgentActivity:
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
-            return RegistryOwner(thread=leased, admission_generation=lease.admission_generation)
+            return RegistryOwner(thread=leased, claimed_generation=lease.claimed_generation)
 
     def _record_turn_activity(self, name: str, phases: Iterable[TurnPhase]) -> None:
         """Changed phases are real activity events, just like CLI status reports."""

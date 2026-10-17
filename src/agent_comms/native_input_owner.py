@@ -7,7 +7,7 @@ recheck the canonical registry/SQLite snapshot under their operation's locks.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .child_process import ProcessIdentity
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 class RegistryOwner:
     check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryAdmissionCheck
     thread: Thread
-    admission_generation: int
+    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
 
     @property
     def turn_lease(self) -> TurnLeaseFence:
@@ -47,9 +47,9 @@ class RegistryOwner:
         """Read local executable authority from this single locked snapshot."""
         thread = snapshot.require_active(name)
         thread.require_local_process(ProcessIdentity.capture(os.getpid()))
-        admission = snapshot.admission_generations[thread.name]
+        admission = snapshot.claimed_generations[thread.name]
         thread.require_current_turn(admission)
-        return cls(thread=thread, admission_generation=admission)
+        return cls(thread=thread, claimed_generation=admission)
 
     def require_exact(
         self, snapshot: RegistrySnapshot, expected: Thread, owner_generation: int
@@ -58,7 +58,7 @@ class RegistryOwner:
             raise RelationViolationError("live owner generation changed")
         try:
             RegistryOwner(
-                thread=expected, admission_generation=self.admission_generation
+                thread=expected, claimed_generation=self.claimed_generation
             ).require_snapshot(snapshot, "live owner source changed")
         except StaleFence as error:
             raise RelationViolationError(str(error)) from error
@@ -67,7 +67,7 @@ class RegistryOwner:
         try:
             GoalRegistryIdentityCheck(
                 expected=expected, actual=self.thread,
-                expected_admission=admission, admission=self.admission_generation,
+                expected_admission=admission, admission=self.claimed_generation,
                 process=ProcessIdentity.capture(os.getpid()),
             ).require_valid()
         except ReservationViolationError as error:
@@ -84,17 +84,17 @@ class RegistryOwner:
             self.thread.execution.require_native()
         except RelationViolationError as error:
             raise StaleFence("registry owner is not executable") from error
-        if not turn.owned_by(self.thread.pid, self.admission_generation):
+        if not turn.owned_by(self.thread.pid, self.claimed_generation):
             raise StaleFence("registry owner turn witness is invalid")
         return turn
 
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str, reason: str) -> RegistryOwner:
         thread = snapshot.threads.get(name)
-        admission = snapshot.admission_generations.get(name)
+        admission = snapshot.claimed_generations.get(name)
         if thread is None or admission is None:
             raise StaleFence(reason)
-        owner = cls(thread=thread, admission_generation=admission)
+        owner = cls(thread=thread, claimed_generation=admission)
         owner.require_snapshot(snapshot, reason)
         return owner
 
@@ -106,7 +106,7 @@ class RegistryOwner:
             check(
                 expected=self.thread,
                 actual=actual,
-                expected_admission=self.admission_generation,
+                expected_admission=self.claimed_generation,
                 admission=admission,
                 process=ProcessIdentity.capture(os.getpid()),
             ).require_valid()
@@ -124,7 +124,7 @@ class RegistryOwner:
             actual = snapshot.require_active(self.thread.name)
         except RelationViolationError as error:
             raise StaleFence(reason) from error
-        self._require_current(actual, snapshot.admission_generations.get(self.thread.name), reason, check)
+        self._require_current(actual, snapshot.claimed_generations.get(self.thread.name), reason, check)
         return actual
 
     def require_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:

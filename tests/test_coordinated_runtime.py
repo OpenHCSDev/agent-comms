@@ -602,7 +602,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         registry=first_comms.registry,
         through_seq=first_initial.message.seq,
         generation=1,
-        admission_generation=1,
+        claimed_generation=1,
     )
     try:
         omitted = await projection.segments(first_initial, assignment, owner)
@@ -985,9 +985,9 @@ async def test_project_change_during_native_full_turn_denies_response(
     async def change_project(*args, **kwargs):
         result = await runner(*args, **kwargs)
         current = comms.registry.require("beta")
-        before = comms.registry.snapshot().admission_generations["beta"]
+        before = comms.registry.snapshot().claimed_generations["beta"]
         comms.registry.declare(replace(current, worktree=str(other_project)))
-        assert comms.registry.snapshot().admission_generations["beta"] == before
+        assert comms.registry.snapshot().claimed_generations["beta"] == before
         return result
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", change_project)
@@ -1405,7 +1405,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         comms.registry.register(saved)
         restored = comms.registry.require("beta")
         assert restored == replace(
-            saved, active_turn=replace(saved.active_turn, admission_generation=None)
+            saved, active_turn=replace(saved.active_turn, claimed_generation=None)
         )
         assert comms.registry.status("beta").active
 
@@ -1447,16 +1447,16 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         publish = getattr(coordination_response, method)
 
         def revoke_after_tx1(*args, **kwargs):
-            revoked_generation = kwargs["owner_witness"].admission_generation
+            revoked_generation = kwargs["owner_witness"].claimed_generation
             revoke_and_restore()
             if boundary.endswith("forged"):
                 # A same-UID caller can supply a fresh epoch in a dataclass.
                 # The locked registry snapshot must attest that THIS turn was
                 # created in that epoch, not merely compare caller assertions.
-                new_generation = comms.registry.snapshot().admission_generations["beta"]
+                new_generation = comms.registry.snapshot().claimed_generations["beta"]
                 assert new_generation != revoked_generation
                 kwargs["owner_witness"] = replace(
-                    kwargs["owner_witness"], admission_generation=new_generation
+                    kwargs["owner_witness"], claimed_generation=new_generation
                 )
             return publish(*args, **kwargs)
 

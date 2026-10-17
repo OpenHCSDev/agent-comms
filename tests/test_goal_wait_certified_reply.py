@@ -125,7 +125,7 @@ async def test_native(retained_native_acp_owner):
     goal = comms.goals.update_goal(sid, SetGoalAction(text="Process the original peer reply"))
     old_key = "acp:historical-unknown"
     owner = comms.registry.require(sid)
-    admission = comms.registry.snapshot().admission_generations[sid]
+    admission = comms.registry.snapshot().claimed_generations[sid]
     agent.inputs.dispositions.record(
         old_key, seq=None, owner=sid, admission=admission, target=sid,
         text="HISTORICAL_UNKNOWN_MUST_NOT_REPLAY",

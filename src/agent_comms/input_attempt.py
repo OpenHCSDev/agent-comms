@@ -327,7 +327,7 @@ class StartedInput(SentInput):
     def matches_lease(self, lease, snapshot) -> bool:
         return (
             lease.identity.incarnation.matches_recorded_name(self.owner, snapshot)
-            and self.matches_admission(lease.admission_generation)
+            and self.matches_admission(lease.claimed_generation)
             and self.turn_id == lease.turn_id
         )
 

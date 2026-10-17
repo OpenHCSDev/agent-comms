@@ -95,7 +95,7 @@ class SelectedParticipant(MroDispatch):
     @property
     def response_owner(self) -> LiveResponseOwner:
         return LiveResponseOwner(
-            thread=self.owner.thread, admission_generation=self.owner.admission_generation
+            thread=self.owner.thread, claimed_generation=self.owner.claimed_generation
         )
 
     async def transition(self, phase: TurnPhase) -> None:
@@ -199,7 +199,7 @@ class SelectedParticipant(MroDispatch):
             thread, generation = comms.registry.live_owner_with_admission(name)
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry identity stopped or changed") from error
-        owner = RegistryOwner(thread=thread, admission_generation=generation)
+        owner = RegistryOwner(thread=thread, claimed_generation=generation)
         owner.require_registry(comms.registry)
         lookup = thread.incarnation.lookup
         sent_owner, sent_sources = MessageNotification.sent_sources(
@@ -207,7 +207,7 @@ class SelectedParticipant(MroDispatch):
             limit=MessageNotification.window_limit,
         )
         LiveResponseOwner(
-            thread=thread, admission_generation=generation
+            thread=thread, claimed_generation=generation
         ).resolve_retained(store, bus)
         with store.session.read():
             assert_cohort_schema(store.session._connection)
@@ -248,14 +248,14 @@ class SelectedParticipant(MroDispatch):
             thread, generation = comms.registry.lease_live_turn_with_admission(
                 owner.thread,
                 secrets.token_hex(16),
-                expected_generation=owner.admission_generation,
+                expected_generation=owner.claimed_generation,
             )
         except RelationViolationError as error:
             raise StaleFence("selected owner stopped or busy before native turn") from error
         lease = thread.turn_lease
         assert lease is not None
         try:
-            current = RegistryOwner(thread=thread, admission_generation=generation)
+            current = RegistryOwner(thread=thread, claimed_generation=generation)
             current.require_registry(comms.registry)
             current.require_active_turn()
             yield current

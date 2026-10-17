@@ -172,7 +172,7 @@ async def start_owned_input(execution, progress):
         session_id=execution.session_id,
         thread=execution.thread,
         turn=TurnId(execution.turn_id),
-        admission=execution.turn_lease.admission_generation,
+        admission=execution.turn_lease.claimed_generation,
         original=execution.original,
         goal_permit=execution.goal_permit,
     )

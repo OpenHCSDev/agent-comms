@@ -80,9 +80,9 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             assert sealed_cohort_assignments(store, bob_lookup) == ()
             assignment = sealed_cohort_assignments(store, alice_lookup)[0]
             assert type(assignment.lifecycle) is FullPendingAssignment
-            owner, admission_generation = comms.registry.live_owner_with_admission("Alice")
-            owner, admission_generation = comms.registry.lease_live_turn_with_admission(
-                owner, "selected-turn", expected_generation=admission_generation
+            owner, claimed_generation = comms.registry.live_owner_with_admission("Alice")
+            owner, claimed_generation = comms.registry.lease_live_turn_with_admission(
+                owner, "selected-turn", expected_generation=claimed_generation
             )
             person = store.participants.get(alice_lookup)
             execution_id = "verifier-execution"
@@ -117,7 +117,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 recipient_lookup=alice_lookup,
                 execution_id=execution_id,
                 operation_id="f" * 32,
-                owner_admission_generation=admission_generation,
+                owner_admission_generation=claimed_generation,
                 turn_id=owner.active_turn.id,
                 participant_generation=person.participant_generation,
                 attempt_ordinal=1,
@@ -246,7 +246,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             for candidate, name in (
                 (replace(admission, recipient_lookup=bob_lookup), "Bob"),
                 (replace(admission, wake_revision=engaged.revision + 1), "Alice"),
-                (replace(admission, owner_admission_generation=admission_generation + 1), "Alice"),
+                (replace(admission, owner_admission_generation=claimed_generation + 1), "Alice"),
                 (replace(admission, turn_id="old-turn"), "Alice"),
             ):
                 with pytest.raises(IdentityConflict):

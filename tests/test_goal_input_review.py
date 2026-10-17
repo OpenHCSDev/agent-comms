@@ -40,7 +40,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         for text in ("Set standby", "Yes wait")
     ]
     ledger = InputDispositions(comms.root)
-    admission = comms.registry.snapshot().admission_generations["worker"]
+    admission = comms.registry.snapshot().claimed_generations["worker"]
     ledger.record(
         "acp:owner-input",
         seq=None,

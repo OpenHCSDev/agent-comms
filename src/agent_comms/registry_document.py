@@ -110,7 +110,7 @@ class RegistryDocument(RegistryPresence):
             status=self.statuses[thread.name],
             last_seen=self.last_seen[thread.name],
             owner_generation=self.owners.generations[thread.name],
-            admission_generation=self.admissions.generations[thread.name],
+            claimed_generation=self.admissions.generations[thread.name],
             names=self.names_for(thread.name),
         )
 
@@ -341,7 +341,7 @@ class RegistryDocument(RegistryPresence):
             raise OwnerBusyRefusal() from error
         if current != expected:
             raise OwnerChangedBeforeFenceRefusal()
-        if snapshot.admission_generations[current.name] != expected_admission_generation:
+        if snapshot.claimed_generations[current.name] != expected_admission_generation:
             raise OwnerGenerationChangedRefusal()
         self.statuses[expected.name] = expected.execution.registered_status(
             expected, StoppedThreadStatus())
@@ -454,7 +454,7 @@ class RegistryDocument(RegistryPresence):
                 turn_id,
                 current.pid,
                 routing=routing,
-                admission_generation=self.admissions.generations[current.name],
+                claimed_generation=self.admissions.generations[current.name],
                 turn_generation=current.turn_generation + 1,
             ),
         )
@@ -489,7 +489,7 @@ class RegistryDocument(RegistryPresence):
         return True, FinishedTurnFence(
             identity=current.turn_identity,
             turn_id=lease.turn_id,
-            admission_generation=lease.admission_generation,
+            claimed_generation=lease.claimed_generation,
         )
 
     def _turn_effects(
@@ -536,7 +536,7 @@ class RegistryEntry:
     status: ThreadStatus
     last_seen: float
     owner_generation: int
-    admission_generation: int
+    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
     names: frozenset[str]
 
     def matches_name(self, name: str) -> bool:
@@ -569,7 +569,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     last_seen: Mapping[str, float]
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
-    admission_generations: Mapping[str, int]
+    claimed_generations: Mapping[str, int]
     by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -599,7 +599,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             last_seen=MappingProxyType(dict(document.last_seen)),
             aliases=MappingProxyType(dict(document.aliases)),
             owner_generations=MappingProxyType(dict(document.owners.generations)),
-            admission_generations=MappingProxyType(dict(document.admissions.generations)),
+            claimed_generations=MappingProxyType(dict(document.admissions.generations)),
             by_lookup=MappingProxyType(indexed),
         )
 
@@ -624,7 +624,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
 
     def retired(self, name: str) -> bool:
         """Removal keeps the name's generations; they are the deletion record."""
-        return name not in self.threads and name in self.admission_generations
+        return name not in self.threads and name in self.claimed_generations
 
     def restorable_aliases(
         self, available: Mapping[str, Thread], retained: Mapping[str, str]
@@ -645,7 +645,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
 
     def admission_identity(self, name: str) -> AdmissionIdentity:
         canonical = self.canonical_name(name)
-        return AdmissionIdentity(self.threads[canonical].incarnation, self.admission_generations[canonical])
+        return AdmissionIdentity(self.threads[canonical].incarnation, self.claimed_generations[canonical])
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
         canonical = self.canonical_name(name)
@@ -669,5 +669,5 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         current.role.require_executable()
         if current.process_identity != expected.process_identity:
             raise RelationViolationError("Stopping owner process changed")
-        if self.admission_generations[expected.name] != admission:
+        if self.claimed_generations[expected.name] != admission:
             raise RelationViolationError("Stopping owner admission changed")

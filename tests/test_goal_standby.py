@@ -42,7 +42,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     store = comms.goals.open_goal_store()
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Work"))
     owner = comms.registry.require("parent")
-    admission = comms.registry.snapshot().admission_generations["parent"]
+    admission = comms.registry.snapshot().claimed_generations["parent"]
     if changed == "admission":
         admission += 1
     elif changed == "pid":

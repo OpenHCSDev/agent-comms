@@ -76,7 +76,7 @@ class SelectedPrompt:
             registry=participant.bus._registry,
             through_seq=participant.batch.sources[-1].delivery.message.seq,
             generation=participant.identity.generation,
-            admission_generation=participant.owner.admission_generation,
+            claimed_generation=participant.owner.claimed_generation,
         )
         awareness = await projection.segments(
             participant.batch.sources[-1].delivery,
@@ -154,7 +154,7 @@ class SelectedAttempt:
             recipient_lookup=participant.lookup,
             execution_id=self.stage.execution.require_attempt().execution_id,
             operation_id=action.operation_id(),
-            owner_admission_generation=participant.owner.admission_generation,
+            owner_admission_generation=participant.owner.claimed_generation,
             turn_id=turn.id,
             participant_generation=participant.identity.generation,
             attempt_ordinal=self.stage.execution.require_attempt().attempt_ordinal,
@@ -177,7 +177,7 @@ class SelectedAttempt:
                     write_authority.select(
                         assignment,
                         participant.owner.thread,
-                        participant.owner.admission_generation,
+                        participant.owner.claimed_generation,
                         action,
                     ).prepare(participant.owner.thread),
                 )

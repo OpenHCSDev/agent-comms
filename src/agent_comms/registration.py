@@ -246,7 +246,7 @@ class Registration:
         """Read the stored process input generation, independent of metadata revisions."""
         with self.store.reading() as document:
             owner = RegistryOwner.capture_local(document.snapshot(), name)
-            return owner.thread, owner.admission_generation
+            return owner.thread, owner.claimed_generation
 
     def lease_live_turn_with_admission(
         self, expected: Thread, turn_id: str, *, expected_generation: int

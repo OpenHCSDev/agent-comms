@@ -64,7 +64,7 @@ def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):
     leased, _ = registry.lease_local_turn('owner', 'turn')
     with registry.store.editing() as edit:
         edit.document.threads['owner'] = replace(
-            leased, active_turn=replace(leased.active_turn, admission_generation=99),
+            leased, active_turn=replace(leased.active_turn, claimed_generation=99),
         )
         edit.commit()
     with pytest.raises(RelationViolationError, match='turn admission'):

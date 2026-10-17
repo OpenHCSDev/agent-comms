@@ -364,7 +364,7 @@ class Thread(ThreadProvenance):
     def without_turn_admission(self) -> Thread:
         if self.active_turn is None:
             return self
-        return replace(self, active_turn=replace(self.active_turn, admission_generation=None))
+        return replace(self, active_turn=replace(self.active_turn, claimed_generation=None))
 
     def preserve_registration_history(self, previous: Thread) -> Thread:
         """Metadata writers cannot forge channel scope or reset a finished turn."""
@@ -411,7 +411,7 @@ class Thread(ThreadProvenance):
     @property
     def turn_identity(self) -> TurnIdentity | None:
         turn = self.active_turn
-        if turn is None or turn.admission_generation is None or turn.turn_generation is None:
+        if turn is None or turn.claimed_generation is None or turn.turn_generation is None:
             return None
         return TurnIdentity(self.incarnation, turn.turn_generation)
 
@@ -422,11 +422,11 @@ class Thread(ThreadProvenance):
         if identity is None:
             return None
         assert self.active_turn is not None
-        assert self.active_turn.admission_generation is not None
+        assert self.active_turn.claimed_generation is not None
         return TurnLeaseFence(
             identity=identity,
             turn_id=self.active_turn.id,
-            admission_generation=self.active_turn.admission_generation,
+            claimed_generation=self.active_turn.claimed_generation,
         )
 
     def require_turn_lease(self) -> TurnLeaseFence:

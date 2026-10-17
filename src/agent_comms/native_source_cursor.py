@@ -116,7 +116,7 @@ class NativeSourceCursor:
             wire_root_id=self.wire_root_id,
             thread=owner,
             generation=owner_generation,
-            admission_generation=owner_admission_generation,
+            claimed_generation=owner_admission_generation,
         )
         with NativeEvidenceScope.borrow(source_reads) as source_reads:
             return self._advance_proven(identity, committed_input_id, source_reads,
@@ -176,7 +176,7 @@ class NativeSourceCursor:
             recipient_lookup=owner.lookup,
             owner_thread=owner.thread.name,
             owner_generation=owner.generation,
-            owner_admission_generation=owner.admission_generation,
+            owner_admission_generation=owner.claimed_generation,
             covered_seq=coverage.covered_seq,
             injected_seq=coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0,
             input_id=proof.input_id if proof else None,
@@ -195,7 +195,7 @@ class NativeSourceCursor:
                     owner.wire_root_id,
                     owner.lookup,
                     owner.generation,
-                    owner.admission_generation,
+                    owner.claimed_generation,
                     prior.covered_seq,
                     prior.injected_seq,
                 ),
@@ -236,7 +236,7 @@ class NativeSourceCursor:
                     wire_root_id=self.wire_root_id,
                     thread=captured.thread,
                     generation=person.participant_generation,
-                    admission_generation=captured.admission_generation,
+                    claimed_generation=captured.claimed_generation,
                 )
                 cursor = identity.cursor(db)
                 if cursor is not None:

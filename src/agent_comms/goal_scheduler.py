@@ -98,7 +98,7 @@ class GoalScheduler:
                 store = self.comms.goals.open_goal_store()
                 generation = store.require_generation(goal.id)
                 generation.lifecycle.require_ready()
-                self.comms.goals.ready_goal_grant_locked(thread, snapshot.admission_generations[thread.name], generation)
+                self.comms.goals.ready_goal_grant_locked(thread, snapshot.claimed_generations[thread.name], generation)
         except StaleAttemptError:
             return
         except MissingGoalGenerationError as error:

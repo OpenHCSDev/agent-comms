@@ -473,7 +473,7 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
     loaded = await agent.load_session(str(tmp_path), "beta", mcp_servers=[])
     fresh = cursor_envelope(loaded.field_meta)
     assert fresh.status == "none"
-    assert fresh.scope.admission_generation > 0
+    assert fresh.scope.claimed_generation > 0
     release.set()
     await asyncio.wait_for(reply_turn, timeout=5)
     old = next(
@@ -481,7 +481,7 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
         if (cursor := cursor_fact(update.field_meta)) and cursor.envelope.status == "proven"
     )
     assert old.status == "proven" and old.observation.cursor.input_id
-    assert old.scope.admission_generation < fresh.scope.admission_generation
+    assert old.scope.claimed_generation < fresh.scope.claimed_generation
     assert old.revision < fresh.revision
     assert old.scope.session_id == fresh.scope.session_id == "beta"
     assert len(calls) == 1
@@ -517,7 +517,7 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
     assert renewed.status == "none" and not isinstance(
         renewed.observation, VerifiedCursorObservation
     )
-    assert renewed.scope.admission_generation > proven.scope.admission_generation
+    assert renewed.scope.claimed_generation > proven.scope.claimed_generation
     assert renewed.revision > proven.revision
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "second"}, caller=NoThreadCaller())
     before_second = len(updates)
@@ -622,7 +622,7 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
     )
     await agent.cursors.publish("beta", "beta")
     assert updates[-1].status == "unavailable"
-    assert updates[-1].scope.admission_generation > scope.admission_generation
+    assert updates[-1].scope.claimed_generation > scope.claimed_generation
 
 
 async def test_acp_private_does_not_overlap_owner_turn(native_backend):

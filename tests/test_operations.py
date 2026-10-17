@@ -310,14 +310,14 @@ class TestThreadOps:
         wired.registry.register(
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid()))
         )
-        before = wired.registry.snapshot().admission_generations[owner.name]
+        before = wired.registry.snapshot().claimed_generations[owner.name]
         monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
 
         wired.owners.stop(owner.name)
 
         snapshot = wired.registry.snapshot()
         assert snapshot.statuses[owner.name].declared_name == "stopped"
-        assert snapshot.admission_generations[owner.name] > before
+        assert snapshot.claimed_generations[owner.name] > before
 
     def test_archive_requires_stopped_thread(self, wired):
         wired.messaging.send("PR111", "fixer", "kept after archive")

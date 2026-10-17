@@ -79,7 +79,7 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
                 threads={"renamed": renamed},
                 aliases={"project": "renamed"},
                 statuses={"renamed": snapshot.statuses["project"]},
-                admission_generations={"renamed": admission.admission},
+                claimed_generations={"renamed": admission.admission},
             ),
         ).require_valid()
         with admission(None, "a" * 32, args[2]) as allowed:

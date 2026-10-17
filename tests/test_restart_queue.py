@@ -101,7 +101,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
 
         # A changed selection, not just a changed target, is superseded too.
         changed = replace(request, selection=replace(
-            request.selection, admission_generation=request.selection.admission_generation - 1
+            request.selection, claimed_generation=request.selection.claimed_generation - 1
         ))
         with store.locked():
             store.save(changed)

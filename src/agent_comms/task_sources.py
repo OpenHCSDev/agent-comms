@@ -402,7 +402,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
 
     def require_publication(self, sender, registry, original_source):
         author = registry.require(sender)
-        author.require_turn(self.source_turn_id, registry.admission_generations[sender])
+        author.require_turn(self.source_turn_id, registry.claimed_generations[sender])
         self.require_emission(author)
         self.change.require_publication(self, registry, original_source)
 

@@ -122,7 +122,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for the peer"))
     message = comms.messaging.send_message("peer", "owner", "Review this uncertain reply")
     store = InputDispositions(tmp_path)
-    admission = comms.registry.snapshot().admission_generations["owner"]
+    admission = comms.registry.snapshot().claimed_generations["owner"]
     key = f"bus:{message.seq}"
     store.record(
         key, seq=message.seq, owner="owner", admission=admission, target="owner", text=message.body
@@ -192,7 +192,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     try:
         ledger = owner.inputs.dispositions
-        admission = comms.registry.snapshot().admission_generations[session]
+        admission = comms.registry.snapshot().claimed_generations[session]
         with _store_lock(comms._wire_lock_path), ExitStack() as custody:
             queued, _, _receipt = QueuedInput.capture(
                 owner.inputs, session, text="queued", prompt="queued", echo=True,

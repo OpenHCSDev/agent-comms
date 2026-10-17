@@ -139,7 +139,7 @@ def original_input_consumer_journey(tmp_path, command):
             originals.append(stored_inputs(agent.inputs.dispositions.root).lookup(queued.key))
         assert agent.inputs.dispositions.record(
             "neutral-original", seq=None, owner="beta",
-            admission=origin.admission.admission_generation, target="beta", text=wording)
+            admission=origin.admission.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()
     other = comms.registry.declare(Thread("unaddressed", frozenset(), origin.project))

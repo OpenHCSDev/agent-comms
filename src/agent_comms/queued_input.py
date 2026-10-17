@@ -144,7 +144,7 @@ class QueuedInput:
             controller,
         )
         row = ReservedInput(
-            item.key, None, canonical, context.admission.admission_generation,
+            item.key, None, canonical, context.admission.claimed_generation,
             canonical, item.text, origin=origin,
         )
         document = inputs.dispositions.reserve_originals(row, custody=custody)
@@ -258,7 +258,7 @@ class QueuedInput:
         snapshot.statuses[owner.name].require_running()
         owner.require_local_process(ProcessIdentity.capture(os.getpid()))
         owner.require_idle()
-        admission = snapshot.admission_generations[owner.name]
+        admission = snapshot.claimed_generations[owner.name]
         if not self.current(owner, admission):
             raise RelationViolationError("Queued input acceptance context changed")
         if not row.queued_for(owner.incarnation, admission, self.text):
@@ -363,7 +363,7 @@ class DeliveredInput(QueuedInput):
                         (DeliveredMessageSegment.capture(source, assignment, owner),)
                     )
                     row = ReservedInput(
-                        key, message.seq, canonical, context.admission.admission_generation,
+                        key, message.seq, canonical, context.admission.claimed_generation,
                         message.target,
                         ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                         origin=WireInputOrigin(root_id, message.reference),

@@ -142,7 +142,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     ))
     registry.lease_local_turn("worker", "turn")
     lease = registry.require("worker").turn_lease
-    admission = lease.admission_generation
+    admission = lease.claimed_generation
     store = InputDispositions(tmp_path)
     for key, sequence, text in (("bus:1", 1, "First original"), ("bus:2", 2, "Second original")):
         assert store.record(key, seq=sequence, owner="worker", admission=admission,
@@ -176,7 +176,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
         replace(lease, turn_id="foreign"), "a" * 32, "Actual grouped native user", snapshot=snapshot
     )
     assert not document.started_for_native(
-        replace(lease, admission_generation=admission + 1), "a" * 32,
+        replace(lease, claimed_generation=admission + 1), "a" * 32,
         "Actual grouped native user", snapshot=snapshot
     )
     assert not document.started_for_native(

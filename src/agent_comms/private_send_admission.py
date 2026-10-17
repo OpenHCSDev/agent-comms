@@ -248,7 +248,7 @@ class PrivateSendAdmission:
                 self.stage.require_claim(store)
             with self._measurements.operation("native_admission_record"):
                 reserved.sent_owner_admission_generation.record(
-                    reserved, db, self.owner.admission_generation, identity
+                    reserved, db, self.owner.claimed_generation, identity
                 )
             # ExitStack commits/closes the coordinator before releasing shared registry/wire locks. No bus publication
             # resource is borrowed: the selected claim and prompt are already

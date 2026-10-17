@@ -101,7 +101,7 @@ class TurnGoalAccount:
     def reserve(*, owner, comms, autonomous):
         try:
             store = comms.goals.open_goal_store()
-            admission = comms.registry.snapshot().admission_generations[owner.name]
+            admission = comms.registry.snapshot().claimed_generations[owner.name]
             with _store_lock(comms._wire_lock_path):
                 generation = store.require_generation(owner.goal.id)
                 generation.lifecycle.require_ready()
@@ -156,7 +156,7 @@ class TurnGoalAccount:
             generation = store.require_generation(goal.id)
             generation.lifecycle.require_ready()
             grant = self.comms.goals.ready_goal_grant_locked(
-                owner, self.lease.admission_generation, generation,
+                owner, self.lease.claimed_generation, generation,
             )
             permit = store.claim_launch(
                 store.reserve(goal.id, generation.number, ready_grant=grant)
@@ -215,9 +215,9 @@ class TurnGoalAccount:
                 goal=self.owner.goal,
                 lease=self.lease,
                 turn_id=self.turn.value,
-                admission=self.lease.admission_generation,
+                admission=self.lease.claimed_generation,
                 current_owner=snapshot.threads.get(self.thread_name),
-                current_admission=snapshot.admission_generations.get(self.thread_name),
+                current_admission=snapshot.claimed_generations.get(self.thread_name),
                 reason=terminal_failure_reason(asdict(terminal) if terminal is not None else {}),
             )
         with suppress(StaleAttemptError):

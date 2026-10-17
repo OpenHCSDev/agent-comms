@@ -216,7 +216,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                     pending_keys.append(f"bus:{early.seq}")
                 await agent.inputs.drain_inbox("parent")
                 agent.inputs.auto_wake = True
-                admission = comms.registry.snapshot().admission_generations["parent"]
+                admission = comms.registry.snapshot().claimed_generations["parent"]
                 for index in range(4):
                     agent.inputs.dispositions.record(
                         f"acp:owner-input-{index}",

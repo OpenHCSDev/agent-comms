@@ -139,8 +139,8 @@ class AttachmentScope:
         return self.admission.incarnation.require_recorded().created_at
 
     @property
-    def admission_generation(self):
-        return self.admission.admission_generation
+    def claimed_generation(self):
+        return self.admission.claimed_generation
 
     def relation(self, other: AttachmentScope) -> AttachmentRelation:
         return AttachmentRelation(self, other)
@@ -163,21 +163,21 @@ class AttachmentRelation:
     @property
     def ambiguous(self):
         return (not self.same_incarnation or
-                (self.original.admission_generation == self.received.admission_generation
+                (self.original.claimed_generation == self.received.claimed_generation
                  and self.original.owner_pid != self.received.owner_pid))
 
     @property
     def newer(self):
-        return self.same_incarnation and self.received.admission_generation > self.original.admission_generation
+        return self.same_incarnation and self.received.claimed_generation > self.original.claimed_generation
 
     @property
     def older(self):
-        return self.same_incarnation and self.received.admission_generation < self.original.admission_generation
+        return self.same_incarnation and self.received.claimed_generation < self.original.claimed_generation
 
     @property
     def current(self):
         return (self.same_incarnation
-                and self.original.admission_generation == self.received.admission_generation
+                and self.original.claimed_generation == self.received.claimed_generation
                 and self.original.owner_pid == self.received.owner_pid)
 
 
@@ -194,7 +194,7 @@ class CursorScope(AttachmentScope):
         if (
             not self.session_id
             or self.owner_pid <= 0
-            or self.admission.admission_generation <= 0
+            or self.admission.claimed_generation <= 0
         ):
             raise ValueError("Invalid native cursor scope")
 
@@ -256,7 +256,7 @@ class VerifiedCursorObservation(CursorObservation):
             scope is None
             or cursor.wire_root_id != scope.wire_root_id
             or cursor.owner_thread != scope.admission.incarnation.name
-            or cursor.owner_admission_generation != scope.admission_generation
+            or cursor.owner_admission_generation != scope.claimed_generation
             or not 0 <= cursor.injected_seq <= cursor.covered_seq
         ):
             raise ValueError("Cursor observation does not belong to its scope")

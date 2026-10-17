@@ -109,11 +109,11 @@ class OptionalAwarenessProjection:
         registry: Registration,
         through_seq: int,
         generation: int,
-        admission_generation: int,
+        claimed_generation: int,
     ) -> OptionalAwarenessProjection:
         with index.log.certified_read() as source:
             after_seq = source.marker.admission_after_seq
-        return cls(index, after_seq, through_seq, generation, admission_generation,
+        return cls(index, after_seq, through_seq, generation, claimed_generation,
                    registry=registry)
 
     @staticmethod
@@ -211,7 +211,7 @@ class OptionalAwarenessProjection:
         if not owner.role.executable:
             raise ProjectionUnavailableError("selected owner is not executable")
         turn = owner.active_turn
-        if turn is None or turn.admission_generation != self.expected_admission_generation:
+        if turn is None or turn.claimed_generation != self.expected_admission_generation:
             raise ProjectionUnavailableError("selected owner turn changed")
         if FrozenRecipient(assignment.recipient_lookup, assignment.recipient) != FrozenRecipient(
             owner.incarnation.lookup,
@@ -310,7 +310,7 @@ class OptionalAwarenessProjection:
             snapshot = registry.store._read_unlocked().snapshot()
             RegistryOwner(
                 thread=owner,
-                admission_generation=self.expected_admission_generation,
+                claimed_generation=self.expected_admission_generation,
             ).require_snapshot(snapshot, "current registry owner turn changed")
         # A new read transaction, not the earlier candidate/decision snapshot,
         # observes a supported SQL generation advance during the optional read.

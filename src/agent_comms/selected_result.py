@@ -45,7 +45,7 @@ class CoordinatedTurn:
                 participant.bus,
                 wire_root_id=participant.root_id,
                 owner=participant.owner.thread,
-                owner_admission_generation=participant.owner.admission_generation,
+                owner_admission_generation=participant.owner.claimed_generation,
                 owner_generation=participant.identity.generation,
                 committed_input_id=input_id,
             )

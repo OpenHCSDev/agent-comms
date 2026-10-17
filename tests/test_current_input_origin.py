@@ -126,7 +126,7 @@ def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(tmp
     comms, agent, _, _ = _owner(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     origin = capture(comms)
-    neutral = ReservedInput("old", None, "beta", origin.admission.admission_generation,
+    neutral = ReservedInput("old", None, "beta", origin.admission.claimed_generation,
                             "beta", "Exact old user-looking text")
     payload = FieldCodec.encode(neutral)
     assert "origin" not in payload

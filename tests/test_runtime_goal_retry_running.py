@@ -73,7 +73,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
         "acp:old-unknown",
         seq=None,
         owner=session,
-        admission=comms.registry.snapshot().admission_generations[session],
+        admission=comms.registry.snapshot().claimed_generations[session],
         target=session,
         text="Uncertain old input must never replay",
     )

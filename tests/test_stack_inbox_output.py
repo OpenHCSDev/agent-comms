@@ -200,7 +200,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             project = root / "parent"
             project.mkdir()
             await agent.new_session(str(project))
-            admission = comms.registry.snapshot().admission_generations["parent"]
+            admission = comms.registry.snapshot().claimed_generations["parent"]
             old_rows = {
                 f"acp:old-{index:04d}": {
                     "key": f"acp:old-{index:04d}",

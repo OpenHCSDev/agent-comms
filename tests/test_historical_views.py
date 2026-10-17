@@ -349,7 +349,7 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     }
     assert not hasattr(recorded, "process_identity")
     assert not hasattr(recorded, "active_turn")
-    assert not hasattr(source.provenance, "admission_generations")
+    assert not hasattr(source.provenance, "claimed_generations")
     # Required creation is parsed before any constructor clock/default can run.
     raw = FieldCodec.encode(recorded)
     raw.pop("created_at")

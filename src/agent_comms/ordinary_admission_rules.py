@@ -62,7 +62,7 @@ class OrdinaryAdmissionRule(ReservationRule):
     explanation = "The ordinary owner admission generation changed."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
-        return check.registry.admission_generations.get(check.canonical) != check.admission
+        return check.registry.claimed_generations.get(check.canonical) != check.admission
 
 
 class OrdinaryProcessRule(ReservationRule):

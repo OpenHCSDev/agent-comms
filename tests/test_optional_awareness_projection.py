@@ -83,9 +83,9 @@ def _accepted(
 
 
 def _owner(comms: Comms, name: str) -> Thread:
-    original, admission_generation = comms.registry.live_owner_with_admission(name)
+    original, claimed_generation = comms.registry.live_owner_with_admission(name)
     owner, _ = comms.registry.lease_live_turn_with_admission(
-        original, f"selected-{name}", expected_generation=admission_generation
+        original, f"selected-{name}", expected_generation=claimed_generation
     )
     return owner
 
@@ -100,8 +100,8 @@ def _projection(
     max_rows: int = 100,
 ) -> OptionalAwarenessProjection:
     assert owner.active_turn is not None
-    admission_generation = owner.active_turn.admission_generation
-    assert admission_generation is not None
+    claimed_generation = owner.active_turn.claimed_generation
+    assert claimed_generation is not None
     return OptionalAwarenessProjection(
         index,
         after_seq,
@@ -110,7 +110,7 @@ def _projection(
         expected_participant_generation=store.participants.get(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup
         ).participant_generation,
-        expected_admission_generation=admission_generation,
+        expected_admission_generation=claimed_generation,
         max_rows=max_rows,
     )
 

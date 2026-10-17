@@ -248,7 +248,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
         comms.registry.lease_live_turn_with_admission(
             comms.registry.require("owner"),
             "direct",
-            expected_generation=comms.registry.snapshot().admission_generations["owner"],
+            expected_generation=comms.registry.snapshot().claimed_generations["owner"],
         )
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.owners.start("owner")

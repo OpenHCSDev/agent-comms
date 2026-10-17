@@ -24,12 +24,12 @@ if TYPE_CHECKING:
 
 class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmission"):
     @abstractmethod
-    def matches(self, admission_generation: int) -> bool: ...
+    def matches(self, claimed_generation: int) -> bool: ...
 
     @abstractmethod
     def reservation_violation(self) -> bool: ...
 
-    def record(self, row, db, admission_generation: int, session: NativeSessionIdentity) -> None:
+    def record(self, row, db, claimed_generation: int, session: NativeSessionIdentity) -> None:
         raise StaleFence("native input admission was already bound")
 
     @abstractmethod
@@ -45,18 +45,18 @@ class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
     # Represent SQL NULL explicitly, rather than using an optional send state.
     value: None = None
 
-    def matches(self, admission_generation: int) -> bool:
+    def matches(self, claimed_generation: int) -> bool:
         return False
 
     def reservation_violation(self) -> bool:
         return False
 
-    def record(self, row, db, admission_generation: int, session: NativeSessionIdentity) -> None:
+    def record(self, row, db, claimed_generation: int, session: NativeSessionIdentity) -> None:
         updated = row.update(
             db,
             where="input_id=? AND sent_owner_admission_generation IS NULL",
             parameters=(row.input_id,),
-            sent_owner_admission_generation=RecordedNativeAdmission(admission_generation),
+            sent_owner_admission_generation=RecordedNativeAdmission(claimed_generation),
             session_id=session.session_id,
             session_file=session.session_file,
         )
@@ -81,8 +81,8 @@ class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
     def __post_init__(self) -> None:
         GenerationCounter.require_positive(self.value)
 
-    def matches(self, admission_generation: int) -> bool:
-        return self.value == admission_generation
+    def matches(self, claimed_generation: int) -> bool:
+        return self.value == claimed_generation
 
     def reservation_violation(self) -> bool:
         return True
@@ -92,7 +92,7 @@ class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
         fence = AdmissionIdentity(receipt.thread.incarnation, receipt.before)
         if not fence.includes(sent):
             raise RelationViolationError("Native release predates the sending admission")
-        if snapshot.admission_generations[current.name] == receipt.after:
+        if snapshot.claimed_generations[current.name] == receipt.after:
             if not receipt.current(snapshot, current, receipt.before):
                 raise RelationViolationError("Native release differs from its stopped declaration")
 

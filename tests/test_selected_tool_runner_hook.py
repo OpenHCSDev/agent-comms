@@ -66,7 +66,7 @@ def nominal_broker_stub(monkeypatch):
         assert row.attempt_ordinal == admission.attempt_ordinal == 1
         assert row.stage is FullNativeExecution and row.sent_owner_admission_generation == UnrecordedNativeAdmission()
         assert (
-            comms.registry.snapshot().admission_generations[owner]
+            comms.registry.snapshot().claimed_generations[owner]
             == admission.owner_admission_generation
         )
         bound.append((admission, owner, session_dir, input_id))

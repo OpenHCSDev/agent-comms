@@ -124,7 +124,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
         with pytest.raises(StaleFence, match='registry_worktree'):
             observed.require_snapshot(comms.registry.snapshot(), 'New input refused')
         LiveResponseOwner(thread=observed.thread,
-            admission_generation=original.admission_generation).require_snapshot(
+            claimed_generation=original.claimed_generation).require_snapshot(
                 comms.registry.snapshot(), 'Original reply publication')
     finally:
         assert comms.agents.finish_turn(original.turn_lease)

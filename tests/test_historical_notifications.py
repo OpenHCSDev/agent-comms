@@ -297,7 +297,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
         key,
         seq=original.seq,
         owner=owner.name,
-        admission=lease.admission_generation,
+        admission=lease.claimed_generation,
         target=original.target,
         text=source_text,
         origin=WireInputOrigin(root_id, original.reference),
@@ -305,7 +305,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     native_id = uuid4().hex
     assert inputs.bind(
         key,
-        admission=lease.admission_generation,
+        admission=lease.claimed_generation,
         turn_id=lease.turn_id,
         native_id=native_id,
         text=source_text,

@@ -30,7 +30,7 @@ class CursorOwner(RegistryOwner):
 
     def __post_init__(self):
         GenerationCounter.require_positive(self.generation)
-        GenerationCounter.require_positive(self.admission_generation)
+        GenerationCounter.require_positive(self.claimed_generation)
 
     @property
     def participant_identity(self):
@@ -57,13 +57,13 @@ class CursorOwner(RegistryOwner):
             wire_root_id=self.wire_root_id,
             recipient_lookup=self.lookup,
             owner_generation=self.generation,
-            owner_admission_generation=self.admission_generation,
+            owner_admission_generation=self.claimed_generation,
         )
 
     def _matches_input(self, row: NativeRuntimeInput | None, reference: NativeInputReference) -> bool:
         if row is None or row.owner_identity != self.participant_identity:
             return False
-        return row.sent_owner_admission_generation.matches(self.admission_generation) and row.reference == reference
+        return row.sent_owner_admission_generation.matches(self.claimed_generation) and row.reference == reference
 
     def matches_prefix(
         self, db: sqlite3.Connection, evidence: tuple[HistoricalNativeInput, ...]
@@ -107,7 +107,7 @@ class CursorOwner(RegistryOwner):
 
     def require_recorded_reference(self, db: sqlite3.Connection, reference: NativeInputReference) -> None:
         row = NativeRuntimeInput.one(db, input_id=reference.input_id)
-        if row is None or not row.sent_owner_admission_generation.matches(self.admission_generation):
+        if row is None or not row.sent_owner_admission_generation.matches(self.claimed_generation):
             raise IdentityConflict("current cursor input admission differs")
         if not self._matches_input(
             row,
@@ -144,7 +144,7 @@ class CursorOwner(RegistryOwner):
         reserved = NativeRuntimeInput.one(db, input_id=proof.input_id)
         if (
             reserved is not None
-            and not reserved.sent_owner_admission_generation.matches(self.admission_generation)
+            and not reserved.sent_owner_admission_generation.matches(self.claimed_generation)
         ):
             if prior is None or injected_seq > prior.injected_seq:
                 return False

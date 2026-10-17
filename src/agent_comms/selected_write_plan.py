@@ -187,7 +187,7 @@ class SelectedWritePlans:
                 marker = self.comms.bus.log._private_marker_unlocked()
             if marker.root_id != self.root_id or not marker.claims:
                 raise IdentityConflict("Selected write requires matching private claim root")
-            owner, admission_generation = self.comms.registry.live_owner_with_admission(owner_name)
+            owner, claimed_generation = self.comms.registry.live_owner_with_admission(owner_name)
             if owner.pid != os.getpid() or owner.active_turn is not None:
                 raise IdentityConflict("Selected write owner is not idle in this process")
             initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
@@ -212,7 +212,7 @@ class SelectedWritePlans:
             record = AcceptedWriteIntent(
                 schema=1, root_id=self.root_id, source_seq=source_seq,
                 source_message_id=source_message_id, claim_id=selected[0].assignment_id,
-                owner=owner.name, incarnation=owner.created_at, admission_epoch=admission_generation,
+                owner=owner.name, incarnation=owner.created_at, admission_epoch=claimed_generation,
                 expected_attempt_ordinal=1, operation_id=operation_id, resource=str(path),
                 contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
             )
@@ -240,7 +240,7 @@ class SelectedWritePlans:
             return SelectedWriteAcceptedUpdate(operation_id, source_seq, selected[0].assignment_id)
 
     def load(
-        self, assignment: WakeAssignment, owner: Thread, admission_generation: int
+        self, assignment: WakeAssignment, owner: Thread, claimed_generation: int
     ) -> PlannedWrite | None:
         lookup = owner.incarnation.lookup
         path = self._path(assignment.wire_seq, lookup)
@@ -250,7 +250,7 @@ class SelectedWritePlans:
         row = row.require_accepted()
         expected = SelectedWriteBinding(
             self.root_id, assignment.source, assignment.assignment_id,
-            AdmissionIdentity(owner.incarnation, admission_generation),
+            AdmissionIdentity(owner.incarnation, claimed_generation),
         )
         if row.binding != expected:
             raise IdentityConflict("Selected write intent is stale or uncertain")

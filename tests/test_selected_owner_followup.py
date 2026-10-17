@@ -145,7 +145,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
 
     monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden)
-    admission = comms.registry.snapshot().admission_generations["beta"]
+    admission = comms.registry.snapshot().claimed_generations["beta"]
     old_key = "acp:historical-uncertain"
     agent.inputs.dispositions.record(
         old_key, seq=None, owner="beta", admission=admission, target="beta", text="Do not replay"

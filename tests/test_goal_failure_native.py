@@ -106,7 +106,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
                 sid, SetGoalAction(text="One journaled autonomous continuation")
             )
             store = comms.goals.open_goal_store()
-            admission = comms.registry.snapshot().admission_generations[sid]
+            admission = comms.registry.snapshot().claimed_generations[sid]
             preserved = "acp:unrelated-unattempted"
             agent.inputs.dispositions.record(
                 preserved,
@@ -195,7 +195,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert len(native.saved_inputs()) == 2
             goal = comms.goals.update_goal(sid, SetGoalAction(text="Exercise one explicit failed attempt"))
             store = comms.goals.open_goal_store()
-            admission = comms.registry.snapshot().admission_generations[sid]
+            admission = comms.registry.snapshot().claimed_generations[sid]
             key = "acp:retained-unknown"
             agent.inputs.dispositions.record(
                 key, seq=None, owner=sid, admission=admission,
@@ -245,7 +245,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             before = store.path.read_bytes()
             projected = read_failed_turn_projection(
                 store.path, owner=owner, owner_status=registry.statuses[sid],
-                admission=registry.admission_generations[sid],
+                admission=registry.claimed_generations[sid],
             )
             assert projected.state == ("owner_paused" if owner_pauses else "backend_suspended"), projected
             assert projected.reason != "missing_binding"

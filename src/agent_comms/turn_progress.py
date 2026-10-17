@@ -215,7 +215,7 @@ class TurnProgress(events.AgentEventConsumer):
             event.id,
             QueueScope(self.session_id, AdmissionIdentity(
                 self.turn_lease.identity.incarnation,
-                self.turn_lease.admission_generation,
+                self.turn_lease.claimed_generation,
             ), self.thread.pid),
         )
 

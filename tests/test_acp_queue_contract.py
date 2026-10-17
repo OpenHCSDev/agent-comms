@@ -43,8 +43,8 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
     comms.registry.declare(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"
-    owner, admission_generation = comms.registry.live_owner_with_admission("beta")
-    return comms, agent, owner.created_at, admission_generation
+    owner, claimed_generation = comms.registry.live_owner_with_admission("beta")
+    return comms, agent, owner.created_at, claimed_generation
 
 
 async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, monkeypatch):
@@ -61,7 +61,7 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
         for key in (first, second)
     }
     initial = await agent.inputs.queue_state("beta")
-    assert initial.scope.admission_generation == generation
+    assert initial.scope.claimed_generation == generation
     assert initial.projection.items == (
         QueueItem(first, "same text"),
         QueueItem(second, "same text"),
@@ -98,7 +98,7 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
     )
     comms.registry.register(comms.registry.require("beta"), new_owner=True)
     current = await agent.inputs.queue_state("beta")
-    assert current.scope.admission_generation > generation
+    assert current.scope.claimed_generation > generation
     assert current.projection.items == current.projection.restored == ()
     assert second in agent.inputs.restored_inputs["beta"]
 
@@ -225,7 +225,7 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
         assert scope.relation(replace(scope, session_id="new-route")).foreign
         assert scope.relation(replace(scope, owner_pid=124)).ambiguous
         assert scope.relation(replace(scope, admission=replace(original, incarnation=replace(original.incarnation, created_at=1001.0)))).ambiguous
-        assert scope.relation(replace(scope, admission=replace(original, admission_generation=8))).newer
-        assert scope.relation(replace(scope, admission=replace(original, admission_generation=6))).older
+        assert scope.relation(replace(scope, admission=replace(original, claimed_generation=8))).newer
+        assert scope.relation(replace(scope, admission=replace(original, claimed_generation=6))).older
     assert scopes[1].relation(replace(scopes[1], wire_root_id="b" * 32)).foreign
     assert original != renamed  # Routing identity equality is deliberately unchanged.

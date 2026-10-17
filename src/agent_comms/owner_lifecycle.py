@@ -62,7 +62,7 @@ class TaskLaunchInput(LaunchInput):
 class OwnerRestartSelection:
     identity: OwnerIdentity
     process: ProcessIdentity
-    admission_generation: int
+    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
 
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str):
@@ -70,7 +70,7 @@ class OwnerRestartSelection:
         return cls(
             snapshot.owner_identity(owner.name),
             owner.require_process(),
-            snapshot.admission_generations[owner.name],
+            snapshot.claimed_generations[owner.name],
         )
 
     @property
@@ -82,7 +82,7 @@ class OwnerRestartSelection:
             snapshot.require_owner_process(self.identity, self.process)
         except RelationViolationError as error:
             raise OwnerSelectionChangedRefusal() from error
-        if snapshot.admission_generations[self.name] != self.admission_generation:
+        if snapshot.claimed_generations[self.name] != self.claimed_generation:
             raise OwnerGenerationChangedRefusal()
         return snapshot.require_active(self.name)
 
@@ -118,7 +118,7 @@ class OwnerReleaseReceipt:
             return False
         if self.thread.process_identity != expected.process_identity:
             return False
-        if self.after != snapshot.admission_generations.get(self.thread.name):
+        if self.after != snapshot.claimed_generations.get(self.thread.name):
             return False
         if self.thread != snapshot.threads.get(self.thread.name):
             return False
@@ -321,16 +321,16 @@ class OwnerLifecycle:
         return cutover.restart(self, request)
 
     @contextmanager
-    def _signal_guard(self, thread: Thread, admission_generation: int):
+    def _signal_guard(self, thread: Thread, claimed_generation: int):
         with _store_lock(self._wire_lock_path):
-            self._require_same_stop_owner(thread, admission_generation)
+            self._require_same_stop_owner(thread, claimed_generation)
             yield
 
-    def _stop_process(self, thread: Thread, admission_generation: int) -> None:
+    def _stop_process(self, thread: Thread, claimed_generation: int) -> None:
         identity = thread.require_process()
         with suppress(ProcessLookupError):
             ObservedProcess(identity).stop_sync(
-                guard=lambda: self._signal_guard(thread, admission_generation),
+                guard=lambda: self._signal_guard(thread, claimed_generation),
             )
 
     def stop(self, name: str) -> None:
@@ -350,7 +350,7 @@ class OwnerLifecycle:
                 else:
                     self.registry.unregister(thread.name)
                 return
-            generation = snapshot.admission_generations[thread.name]
+            generation = snapshot.claimed_generations[thread.name]
         # The process may already be dead. It still needs the exact release
         # receipt before the execution owner can settle its attempted input.
         if thread.process_alive:
@@ -465,37 +465,37 @@ class OwnerLifecycle:
         assert owned is not None
         return owned
 
-    def _require_same_stop_owner(self, thread: Thread, admission_generation: int) -> None:
+    def _require_same_stop_owner(self, thread: Thread, claimed_generation: int) -> None:
         snapshot = self.registry.snapshot()
         # Voluntary release advances the input generation and marks STOPPED before Python
         # finishes shutting down. Its exact receipt preserves the signaled
         # incarnation; it does not prove OS exit or authorize a replacement PID.
-        if self._released_same_owner(snapshot, thread, admission_generation):
+        if self._released_same_owner(snapshot, thread, claimed_generation):
             return
         try:
-            snapshot.require_stopping_owner(thread, admission_generation)
+            snapshot.require_stopping_owner(thread, claimed_generation)
         except RelationViolationError as error:
             raise RelationViolationError(
                 f"Owner changed while stopping {thread.name!r}; refusing a stale signal."
             ) from error
 
     def _released_same_owner(
-        self, snapshot: RegistrySnapshot, thread: Thread, admission_generation: int
+        self, snapshot: RegistrySnapshot, thread: Thread, claimed_generation: int
     ) -> bool:
         receipt = self.releases.read().get(thread.name)
         return (
-            receipt.current(snapshot, thread, admission_generation)
+            receipt.current(snapshot, thread, claimed_generation)
             if receipt is not None
             else False
         )
 
-    def _finish_stopped_owner(self, thread: Thread, admission_generation: int) -> None:
+    def _finish_stopped_owner(self, thread: Thread, claimed_generation: int) -> None:
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            if self._released_same_owner(snapshot, thread, admission_generation):
+            if self._released_same_owner(snapshot, thread, claimed_generation):
                 return  # An exact, durably attested release of the signaled owner.
-            self._require_same_stop_owner(thread, admission_generation)
-            self._retire_owner_unlocked(thread, admission_generation)
+            self._require_same_stop_owner(thread, claimed_generation)
+            self._retire_owner_unlocked(thread, claimed_generation)
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
@@ -514,13 +514,13 @@ class OwnerLifecycle:
             and owner.process_identity != ProcessIdentity.capture(os.getpid())
         ):
             raise RelationViolationError("Only the registered owner may release itself.")
-        before = snapshot.admission_generations[canonical]
+        before = snapshot.claimed_generations[canonical]
         self._retire_owner_unlocked(owner, before)
 
     def _retire_owner_unlocked(self, thread: Thread, before: int) -> None:
         """Share retirement only after the caller's distinct identity checks."""
         self.registry.unregister(thread.name)
         after = self.registry.snapshot()
-        receipt = OwnerReleaseReceipt(before, after.admission_generations[thread.name],
+        receipt = OwnerReleaseReceipt(before, after.claimed_generations[thread.name],
                                       after.threads[thread.name])
         self.releases.update(lambda receipts: {**receipts, thread.name: receipt})

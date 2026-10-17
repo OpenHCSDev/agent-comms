@@ -91,13 +91,13 @@ class OwnerFollowingInputs(FollowingInputs):
             session_id=self.session_id,
             thread=thread,
             turn=TurnId(lease.turn_id),
-            admission=lease.admission_generation,
+            admission=lease.claimed_generation,
             original=original,
             goal_permit=None,
         )
         self.scope = QueueScope(
             self.session_id,
-            AdmissionIdentity(lease.identity.incarnation, lease.admission_generation),
+            AdmissionIdentity(lease.identity.incarnation, lease.claimed_generation),
             thread.pid,
         )
         inputs.original_sources[self.session_id] = original

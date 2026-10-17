@@ -70,7 +70,7 @@ def _verify_selected_wake_state(
     admission: WakeAdmission,
 ) -> None:
     """Check an already locked bus/owner snapshot against one SQL state."""
-    registry_owner = RegistryOwner(thread=owner, admission_generation=generation)
+    registry_owner = RegistryOwner(thread=owner, claimed_generation=generation)
     try:
         turn = registry_owner.require_active_turn()
     except StaleFence as error:
@@ -149,7 +149,7 @@ def _selected_claim_boundary(
             captured.require_active_turn()
         except StaleFence as error:
             raise IdentityConflict("Selected wake owner stopped or changed") from error
-        owner, generation = captured.thread, captured.admission_generation
+        owner, generation = captured.thread, captured.claimed_generation
         _require_no_private_owner_rename(comms.root)
         metadata = bus.log._private_marker_unlocked()
         if metadata.root_id != admission.wire_root_id:
@@ -321,7 +321,7 @@ def write_selected_claimed_file(
             captured.require_active_turn()
         except StaleFence as error:
             raise IdentityConflict("Selected write owner stopped or changed") from error
-        owner, generation = captured.thread, captured.admission_generation
+        owner, generation = captured.thread, captured.claimed_generation
         _require_no_private_owner_rename(comms.root)
         marker = bus.log._private_marker_unlocked()
         if marker.root_id != admission.wire_root_id:

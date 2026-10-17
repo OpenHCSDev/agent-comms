@@ -70,7 +70,7 @@ class Goals:
         """Caller holds wire; recover only this owner's original unused READY grant."""
         try:
             owner.require_active_goal(generation.goal_id).require_order(self, owner.incarnation)
-            GoalLaunchOwner(thread=owner, admission_generation=admission).require_ready(
+            GoalLaunchOwner(thread=owner, claimed_generation=admission).require_ready(
                 self.registry.snapshot(), generation.goal_id,
             )
         except (RelationViolationError, ValueError, StaleFence) as error:
@@ -172,7 +172,7 @@ class Goals:
                     key,
                     message.seq,
                     thread.name,
-                    snapshot.admission_generations[thread.name],
+                    snapshot.claimed_generations[thread.name],
                     message.target,
                     message.body,
                 )
@@ -257,7 +257,7 @@ class Goals:
             canonical = snapshot.canonical_name(fence.identity.incarnation.name)
             source = snapshot.threads.get(canonical)
             observed = (
-                source.observed_turn(snapshot.admission_generations.get(canonical, 0))
+                source.observed_turn(snapshot.claimed_generations.get(canonical, 0))
                 if source is not None
                 else None
             )

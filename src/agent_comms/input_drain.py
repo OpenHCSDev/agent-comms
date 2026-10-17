@@ -449,14 +449,14 @@ class InputObservation:
         physical replacement still can. Silent context records consume bytes,
         not the message cut used to select delivery.
         """
-        owner = RegistryOwner(thread=entry.thread, admission_generation=entry.admission_generation)
+        owner = RegistryOwner(thread=entry.thread, claimed_generation=entry.claimed_generation)
         with store.session.read():
             participant = store.participants.get(owner.thread.incarnation.lookup)
             pending = next_sealed_assignment(
                 store, participant.lookup, owner.thread.name, after_seq=wire[-1],
             )
             cursor = CursorOwner(
-                thread=owner.thread, admission_generation=owner.admission_generation,
+                thread=owner.thread, claimed_generation=owner.claimed_generation,
                 wire_root_id=root_id, generation=participant.participant_generation,
             ).cursor(store.session._connection)
             original = store.session.path.stat()
@@ -816,7 +816,7 @@ class InputDrain(InputObservation):
         row = document.lookup(started_keys[0] if len(started_keys) == 1 else None)
         if input_id is None and original.notice_keys:
             row = document.lookup(original.notice_keys[0])
-        row = row.require_started(source_scope.admission_generation)
+        row = row.require_started(source_scope.claimed_generation)
         if input_id is None and original.notice_keys:
             input_id = row.public_id
         item = self.queued_inputs.get(session_id, {}).get(input_id or "")

@@ -518,7 +518,7 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
     comms.registry.unregister("alpha")
     comms.registry.heartbeat("alpha")
     owner = comms.registry.require("alpha")
-    admission_generation = comms.registry.snapshot().admission_generations["alpha"]
+    claimed_generation = comms.registry.snapshot().claimed_generations["alpha"]
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         generation = store.participants.get(lookup).participant_generation
@@ -529,7 +529,7 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
         assert (
             NativeSourceCursor(comms.bus, store, wire_root_id=root_id).advance(
                 owner=owner,
-                owner_admission_generation=admission_generation,
+                owner_admission_generation=claimed_generation,
                 owner_generation=generation,
                 committed_input_id=turn.input_id,
             )
@@ -543,12 +543,12 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
             "SELECT sent_owner_admission_generation FROM native_runtime_input WHERE input_id=?",
             (turn.input_id,),
         ).fetchone()[0]
-        assert old_generation != admission_generation
+        assert old_generation != claimed_generation
         with pytest.raises(sqlite3.IntegrityError, match="input identity is frozen"):
             store.session._connection.execute(
                 "UPDATE native_runtime_input SET sent_owner_admission_generation=? "
                 "WHERE input_id=?",
-                (admission_generation, turn.input_id),
+                (claimed_generation, turn.input_id),
             )
         assert (
             store.session._connection.execute(
