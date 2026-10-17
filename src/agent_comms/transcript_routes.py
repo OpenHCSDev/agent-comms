@@ -217,12 +217,12 @@ class TranscriptRoutes:
         if revision is None:
             raise RelationViolationError("Native publication has no retained session")
         reader = NativeTranscript(path)
-        floor = checkpoint.offset if str(path) == checkpoint.session_file else 0
+        floor = checkpoint.offset if thread.runtime.read_key == checkpoint.session_file else 0
         try:
             final, user = reader.publication_input(after=floor, through=revision.size)
         except (ValueError, TypeError) as error:
             raise RelationViolationError("Native publication evidence is invalid") from error
-        ids = routing.annotation_ids(reader, checkpoint, str(path), final.end)
+        ids = routing.annotation_ids(reader, checkpoint, thread.runtime, final.end)
         inputs = InputDispositions(log.path.parent)
         lookup = incarnation.lookup
         with log.certified_read() as source, registry.store.reading() as document:
@@ -231,7 +231,7 @@ class TranscriptRoutes:
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
             if current.turn_lease != lease.renamed(incarnation.name):
                 raise RelationViolationError("Native publication turn lease changed")
-            if current.session_file != str(path) or FileRevision.capture(path) != revision:
+            if current.runtime.read_key != thread.runtime.read_key or FileRevision.capture(path) != revision:
                 raise RelationViolationError("Native publication session changed")
             if not inputs.in_turn(lease.turn_id).started_for_native(
                     lease, user.input_id, user.message.text, snapshot=snapshot):
@@ -247,7 +247,7 @@ class TranscriptRoutes:
             routing.require_publications(
                 tuple(item for item in originals if item.message.reference in published), lookup
             )
-            self._record_publication(str(path), ids, final.entry.id, routing, published)
+            self._record_publication(thread.runtime.read_key, ids, final.entry.id, routing, published)
 
     def _record_publication(self, session_file, entry_ids, final_id, routing, published):
         self._ensure_database(create=True)
