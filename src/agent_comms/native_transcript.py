@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from abc import abstractmethod
 from collections.abc import Generator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from .thread_identity import RecordedThreadIncarnation
 
 from .declared_family import DeclaredFamily
-from .coordination_errors import StaleRevision
 from .native_entries import NativeEntry, SessionEntry, TranscriptProjection
 from .transcript_events import TurnDigest
 from .private_path import FileRevision
@@ -106,10 +105,11 @@ class NativeRecord:
         entry = NativeEntry.read(raw) if complete else None
         return cls(start, end, entry, complete)
 
-    @property
-    def turn_id(self):
+    def completed_turn(self, records):
         entry = self.entry
-        return entry.require_entry_id() if entry is not None and entry.input_boundary else None
+        if entry is not None and entry.input_boundary:
+            return (TurnDigest.from_records(entry.require_entry_id(), records),)
+        return ()
 
     @property
     def turn_events(self):

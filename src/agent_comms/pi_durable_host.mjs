@@ -107,7 +107,7 @@ const handlers = {
   async entries(request) {
     requireOpen();
     const page = await root.entries(request.query ?? {}, request.limit, request.cursor ?? undefined, context);
-    return { items: page.items.map(entry => ({ id: String(entry.id), order: entry.id, kind: ({ 'pi.user': 'user', 'pi.assistant': 'assistant', 'pi.tool-result': 'tool_result', 'pi.compaction': 'compaction', 'pi.reset': 'reset' })[entry.kind] ?? 'system', text: text(entry) })), cursor: page.cursor };
+    return { items: page.items.map(entry => ({ order: entry.id, kind: ({ 'pi.user': 'user', 'pi.assistant': 'assistant', 'pi.tool-result': 'tool_result', 'pi.compaction': 'compaction', 'pi.reset': 'reset' })[entry.kind] ?? 'system', text: text(entry) })), cursor: page.cursor };
   },
   async context_usage() {
     requireOpen();

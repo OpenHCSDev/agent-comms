@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
 from .bus_publication import CommittedDelivery
+from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
@@ -275,9 +276,6 @@ class TranscriptSource:
     """
 
     def turns(self, last):
-        from .coordination_errors import StaleRevision
-        from .transcript_events import TurnDigest
-
         turns, pending = [], []
         with self.reading() as reader:
             cut = reader.cut()
@@ -286,9 +284,9 @@ class TranscriptSource:
             with closing(reader.reverse(cut.offset)) as records:
                 for record in records:
                     pending.append(record)
-                    if record.turn_id is not None:
-                        turns.append(TurnDigest(record.turn_id, tuple(
-                            event for item in reversed(pending) for event in item.turn_events)))
+                    completed = record.completed_turn(pending)
+                    if completed:
+                        turns.extend(completed)
                         pending.clear()
                         if len(turns) >= last:
                             break
@@ -304,7 +302,7 @@ class TranscriptSource:
         return PublishedReplyRevision(0, 0)
 
     @contextmanager
-    def projection(self, receipts, routes):
+    def projection(self, source, routes):
         def project(records, *, max_records, max_bytes):
             return ((record, record.events) for record in records)
         yield project

@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest

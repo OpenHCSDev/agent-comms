@@ -73,7 +73,7 @@ const harness = await Harness.open(await openNodeSqliteStorage(process.argv[1]),
 try {
   const root = await harness.root(context);
   await harness.commit(async tx => {
-    for (let index = 0; index < 4; index++) {
+    for (let index = 0; index < 260; index++) {
       const role = index % 2 ? 'assistant' : 'user';
       await tx.appendEntry(root.id, {kind: `pi.${role}`, data: null,
         model: [{role, content: `entry ${index}`} ]});
@@ -100,14 +100,15 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path):
                 with source.reading() as reader:
                     cut = reader.cut()
                     records = tuple(reader.reverse(cut.offset))
-                    assert [r.events[0].text for r in records] == ['entry 3', 'entry 2', 'entry 1', 'entry 0']
+                    assert len(records) == 260
+                    assert [r.events[0].text for r in records[:4]] == ['entry 259', 'entry 258', 'entry 257', 'entry 256']
                     forward = tuple(reader.forward(0, cut.offset))
                     assert forward == tuple(reversed(records))
                     with reader.projection(None, None) as project:
                         assert tuple(project(iter(forward), max_records=10, max_bytes=1024))
                 turns = source.turns(1)
                 assert len(turns) == 1
-                assert [event.text for event in turns[0].events] == ['entry 2', 'entry 3']
+                assert [event.text for event in turns[0].events] == ['entry 258', 'entry 259']
             await asyncio.to_thread(read)
             assert await host.request('inspect') == interrupted
         finally:

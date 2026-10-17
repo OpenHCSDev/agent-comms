@@ -12,6 +12,9 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
+from uuid import uuid4
+
+from .agent_events import Chunk, Thinking, ToolStart, Error
 
 from .agent_backend import (
     AgentBackend, Compacts, ConfiguresModel, ContextUsage,
@@ -20,9 +23,10 @@ from .agent_backend import (
 )
 from .child_process import AttachedChild
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .external_transcript import ExternalRecord, ExternalCut
 from .transcript_receipts import TranscriptSource
-from .transcript_events import UserTranscript, AssistantTranscript, NoticeTranscript
+from .transcript_events import UserTranscript, AssistantTranscript, NoticeTranscript, TurnDigest
 from .unstarted_runtime import UnstartedRuntime
 from .native_session_files import NativeSessionFiles
 from .selected_session import SelectedSession
@@ -83,11 +87,17 @@ class DurableDatabaseFiles(NativeSessionFiles):
 
 @dataclass(frozen=True)
 class DurableRecord(ExternalRecord):
-    turn_id: str | None
-
     @property
     def turn_events(self):
         return self.events
+
+    def completed_turn(self, records):
+        return ()
+
+
+class DurableInputRecord(DurableRecord):
+    def completed_turn(self, records):
+        return (TurnDigest.from_records(str(self.seq), records),)
 
 
 @dataclass(frozen=True)
@@ -95,16 +105,15 @@ class DurableEntry(DeclaredFamily, affix='DurableEntry'):
     order: int
     text: str
     transcript_type: ClassVar = NoticeTranscript
-    input_boundary: ClassVar[bool] = False
+    record_type: ClassVar = DurableRecord
 
     def record(self):
-        return DurableRecord(self.order, (self.transcript_type(self.text),),
-                             str(self.order) if self.input_boundary else None)
+        return self.record_type(self.order, (self.transcript_type(self.text),))
 
 
 class UserDurableEntry(DurableEntry):
     transcript_type = UserTranscript
-    input_boundary = True
+    record_type = DurableInputRecord
 
 
 class AssistantDurableEntry(DurableEntry):
@@ -117,11 +126,22 @@ class CompactionDurableEntry(DurableEntry): pass
 class ResetDurableEntry(DurableEntry): pass
 
 
+@dataclass(frozen=True)
+class DurableHistoryPage:
+    items: tuple[DurableEntry, ...]
+    cursor: str | None = None
+
+    @classmethod
+    def read(cls, loop, host, *, limit=128, cursor=None, query=None):
+        return FieldCodec.decode(cls, loop.run(host.request(
+            'entries', limit=limit, cursor=cursor, query=query or {})))
+
+
 class DurableTranscriptRead(TranscriptSource):
     def __init__(self, loop, host):
         self.loop, self.host = loop, host
-        page = loop.run(host.request('entries', limit=1)) if host is not None else {'items': []}
-        self.through = max((item['order'] for item in page['items']), default=0)
+        page = DurableHistoryPage.read(loop, host, limit=1) if host is not None else DurableHistoryPage(())
+        self.through = max((item.order for item in page.items), default=0)
 
     def cut(self):
         return ExternalCut(self.through)
@@ -131,11 +151,11 @@ class DurableTranscriptRead(TranscriptSource):
             return
         cursor = None
         while True:
-            page = self.loop.run(self.host.request('entries', limit=128, cursor=cursor,
-                query={'minEntryId': minimum, 'maxEntryId': min(maximum, self.through), 'order': order}))
-            for item in page['items']:
-                yield DurableEntry.decode(item['kind'])(item['order'], item['text']).record()
-            cursor = page.get('cursor')
+            page = DurableHistoryPage.read(self.loop, self.host, cursor=cursor,
+                query={'minEntryId': minimum, 'maxEntryId': min(maximum, self.through), 'order': order})
+            for item in page.items:
+                yield item.record()
+            cursor = page.cursor
             if cursor is None:
                 return
 
@@ -191,7 +211,6 @@ class TurnEndDurableEvent(DurableEvent): pass
 class MessageStartDurableEvent(DurableEvent): pass
 class MessageUpdateDurableEvent(DurableEvent):
     def convert(self):
-        from .agent_events import Chunk, Thinking
         result = []
         for change in self.payload['changes']:
             if change['type'] == 'text_delta':
@@ -202,7 +221,6 @@ class MessageUpdateDurableEvent(DurableEvent):
 class MessageEndDurableEvent(DurableEvent): pass
 class ToolExecutionStartDurableEvent(DurableEvent):
     def convert(self):
-        from .agent_events import ToolStart
         return (ToolStart(id=self.payload['toolCallId'], name=self.payload['toolName'], args=self.payload['args']),)
 class ToolExecutionUpdateDurableEvent(DurableEvent): pass
 class ToolExecutionEndDurableEvent(DurableEvent): pass
@@ -216,7 +234,6 @@ class AgentChangedDurableEvent(DurableEvent): pass
 class UsageChangedDurableEvent(DurableEvent): pass
 class TaskFailedDurableEvent(DurableEvent):
     def convert(self):
-        from .agent_events import Error
         return (Error(self.payload['message']),)
 class CompactionStartDurableEvent(DurableEvent): pass
 class CompactionEndDurableEvent(DurableEvent): pass
@@ -340,8 +357,8 @@ class DurableHost:
             yield turn
         finally:
             try:
-                # The stop receipt follows every event of this watch on stdout.
-                # Keep its turn attached until the reader has passed that receipt.
+                # The stop reply follows every event of this watch on stdout.
+                # Keep its turn attached until the reader has passed that reply.
                 await self.request('unwatch')
             finally:
                 self.deliver_event = _event_without_turn
@@ -357,8 +374,8 @@ class DurableHost:
             await self.child.write((json.dumps(dict(id=identity, command=command, **payload)) + '\n').encode())
             return await future
         except BaseException:
-            # A cancelled wait never erases a possibly admitted host request.
-            # The reader owns its receipt until it arrives or this child closes.
+            # A cancelled wait never erases a possibly submitted host request.
+            # The reader owns its reply until it arrives or this child closes.
             if not future.done():
                 future.cancel()
             raise
@@ -381,7 +398,7 @@ class DurableHost:
 class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, ConfiguresModel):
     """Explicitly selected only; PiNativeBackend remains the new-thread default.
 
-    This draft checkpoint intentionally refuses turns until Core's admission
+    This draft checkpoint intentionally refuses turns until Core's input
     owner supplies the initial InputId and generic send disposition. No provider
     call can slip through an unfinished worker integration.
     """
@@ -399,7 +416,6 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
 
     @classmethod
     def new_location(cls, root, worktree):
-        from uuid import uuid4
         return DurableDatabase(str(Path(root).absolute() / 'durable-sessions' / f'{uuid4().hex}.sqlite3'))
 
     async def open(self, thread):
@@ -426,8 +442,8 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
                     yield event
 
     async def submit_turn(self, content, delivery):
-        # Admission must be connected before any provider submission is enabled.
-        raise RuntimeError('Durable worker admission is unfinished: initial Core InputId and send-disposition integration required')
+        # Input ownership must be connected before provider submission is enabled.
+        raise RuntimeError('Durable worker integration is unfinished: initial Core InputId and send-disposition integration required')
 
     async def abort(self, owner):
         # Closing never resumes interrupted work or replays an uncertain input.
