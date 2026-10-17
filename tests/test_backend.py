@@ -55,7 +55,7 @@ def _stub(tmp_path: Path, body: str, name: str = "pi-stub") -> str:
     return str(stub)
 
 
-def _replay_stub(tmp_path: Path, lines: str) -> str:
+def _replay_stub(tmp_path: Path, lines: str, *, startup: str = "") -> str:
     """Replay recorded RPC lines, answering each ``agent-comms-prompt`` reply with
     the id of the request it names, as Pi does for an owned turn's prompt."""
     return _stub(
@@ -67,7 +67,7 @@ from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import PiMessage
 initial_state = True
 prompt_request = None
-for line in {lines.splitlines()!r}:
+{startup}for line in {lines.splitlines()!r}:
     record = json.loads(line)
     message = record.get("message", {{}})
     if message.get("role") == "assistant":

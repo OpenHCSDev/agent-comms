@@ -1,7 +1,6 @@
 """Canonical bus setup for owner lifecycle tests with no automatic model work."""
+from agent_comms.native_package import pinned_native_package
 
-import os
-from pathlib import Path
 
 from agent_comms.comms import Comms
 
@@ -23,5 +22,5 @@ def activate_empty_source(agent):
     root_id = (metadata.root_id if metadata.private
                else issuer.messaging.initialize_private_initial_protocol())
     agent._private_nk_wire_root_id = root_id
-    agent._private_nk_native_package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    agent._private_nk_native_package = pinned_native_package()
     agent.inputs.auto_wake = False

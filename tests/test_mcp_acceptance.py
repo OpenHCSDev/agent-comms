@@ -7,6 +7,7 @@ Without that adapter these tests prove the Pi/ACP path, NOT Toad rendering.
 """
 
 from __future__ import annotations
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import importlib.util
@@ -43,7 +44,7 @@ TIMEOUT = 40
 
 
 def _node_run(node, env, script, cwd, artifact):
-    native_package = Path(env["PI_COMPACTION_TEST_PACKAGE"])
+    native_package = pinned_native_package()
     command = [
         node, "--no-global-search-paths",
         "--import", str(native_package / "dist/agent-comms-import-fence.mjs"),
@@ -82,7 +83,7 @@ def _node_run(node, env, script, cwd, artifact):
 
 def _qualify_origin(node, env, project, artifact):
     """Reach the actual SDK cause before dispatch, using only loopback addresses."""
-    native_package = Path(env["PI_COMPACTION_TEST_PACKAGE"])
+    native_package = pinned_native_package()
     allowed = env["AGENT_COMMS_NATIVE_ORIGIN"]
     # A different scheme is outside the exact allowed origin. Even a broken
     # guard must not send this authored control toward an external network.
@@ -178,7 +179,6 @@ def _prepare(root, native_package):
         "CI": "true",
         "NO_COLOR": "1",
         "PI_OFFLINE": "1",
-        "PI_COMPACTION_TEST_PACKAGE": str(native_package),
         "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
     }
     api = native_package / "dist" / "index.js"
@@ -406,7 +406,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
     if not binary:
         pytest.skip("Set AC_MCP_NATIVE_BIN to an explicitly prepared native Pi launcher")
     assert binary == "pi" or (Path(binary).is_absolute() and os.access(binary, os.X_OK))
-    native_package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    native_package = pinned_native_package()
     package, node, agent, project, digest, starts, calls, env = _prepare(
         tmp_path, native_package
     )
@@ -422,7 +422,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
         json.dumps(
             {
                 "launcher": binary,
-                "nativePackage": env["PI_COMPACTION_TEST_PACKAGE"],
+                "nativePackage": str(pinned_native_package()),
                 "package": str(package),
                 "case": case,
             }
@@ -479,7 +479,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 env.update(
                     AGENT_COMMS_ROOT=str(owner._comms.root),
                     AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=owner._private_nk_wire_root_id,
-                    AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=env["PI_COMPACTION_TEST_PACKAGE"],
+                    AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(pinned_native_package()),
                     AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
                 )
 

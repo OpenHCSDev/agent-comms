@@ -1,4 +1,5 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
+from agent_comms.native_package import pinned_native_package
 
 import os
 import signal
@@ -49,7 +50,7 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
         comms = Comms(native.root)
         comms.owners.pin_private_nk_launch(native.root,
             os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'],
-            Path(os.environ['PI_COMPACTION_TEST_PACKAGE']))
+            pinned_native_package())
 
         async def retire_owned_worker():
             selected = comms.registry.snapshot().threads.get(name)
@@ -76,8 +77,8 @@ from agent_comms.launch_runtime import RestartEnvironment
 service = Comms(Path(os.environ['AGENT_COMMS_ROOT']))
 with service.bus.log.locked(): root_id = service.bus.log._private_marker_unlocked().root_id
 service.owners.pin_private_nk_launch(service.root, root_id,
-    Path(os.environ['PI_COMPACTION_TEST_PACKAGE']))
-name, project, session = sys.argv[1:]
+    Path(sys.argv[4]))
+name, project, session = sys.argv[1:4]
 service.registry.declare(Thread(name, frozenset(), project, session_file=session,
     model='response-local/fixture'))
 service.threads.restore_stopped(service.registry.snapshot(), (name,))
@@ -89,7 +90,7 @@ arguments = ('--provider','response-local','--model','fixture','--thinking','off
 result = service.owners.start(name,
     agent_bin=str(Path(sys.executable).with_name('pi-comms-native')), agent_args=arguments)
 print(json.dumps(FieldCodec.encode(result)), flush=True)
-''', name, str(native.project), str(native.session)), timeout=20,
+''', name, str(native.project), str(native.session), str(pinned_native_package())), timeout=20,
             cwd=native.project, env=environment)
         assert setup.outcome.successful, setup.stderr.decode()
         InputDispositions(native.root).replace(original_document)

@@ -1,4 +1,5 @@
 """Existing real native/ACP owner; inspect through its original Unix socket."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import os
@@ -49,7 +50,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
     from agent_comms.goal_actions import ClearGoalAction
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     started = time.monotonic()
     seed = await asyncio.create_subprocess_exec(
         "node", str(Path(__file__).with_name("native_turn_context_contract.mjs")),
