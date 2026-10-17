@@ -33,9 +33,9 @@ class ToolDiff:
     @classmethod
     def from_versions(cls, path: str, before: str, after: str, *,
                       before_path: str | None = None, after_path: str | None = None) -> ToolDiff | None:
-        lines = tuple(unified_diff(before.splitlines(), after.splitlines(),
-            fromfile=before_path or path, tofile=after_path or path, lineterm=''))
-        return cls('\n'.join(lines) + '\n') if lines else None
+        lines = tuple(unified_diff(before.splitlines(keepends=True), after.splitlines(keepends=True),
+            fromfile=before_path or path, tofile=after_path or path))
+        return cls(''.join(line if line.endswith('\n') else line + '\n\\ No newline at end of file\n' for line in lines)) if lines else None
 
     @property
     def mime_type(self) -> str:

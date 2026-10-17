@@ -7,9 +7,9 @@ from agent_comms.cli_bridges.claude_protocol import ClaudeSession, TimedRecord, 
     ('Bash', {'command':'echo hello'}, 'bash', 'echo hello', None),
     ('Read', {'file_path':'a.py'}, 'read', 'a.py', None),
     ('Grep', {'pattern':'needle'}, 'grep', 'needle', None),
-    ('Edit', {'file_path':'a.py','old_string':'old','new_string':'new'}, 'edit', 'a.py', '-old\n+new\n'),
-    ('Write', {'file_path':'a.py','content':'new'}, 'write', 'a.py', '+new\n'),
-    ('MultiEdit', {'file_path':'a.py','edits':[{'old_string':'a','new_string':'b'},{'old_string':'c','new_string':'d'}]}, 'edit', 'a.py', '-c\n+d\n'),
+    ('Edit', {'file_path':'a.py','old_string':'old\n','new_string':'new\n'}, 'edit', 'a.py', '-old\n+new\n'),
+    ('Write', {'file_path':'a.py','content':'new\n'}, 'write', 'a.py', '+new\n'),
+    ('MultiEdit', {'file_path':'a.py','edits':[{'old_string':'a\n','new_string':'b\n'},{'old_string':'c\n','new_string':'d\n'}]}, 'edit', 'a.py', '-c\n+d\n'),
     ('mcp__opaque', {'custom':['untouched']}, 'mcp__opaque', '', None),
 ])
 def test_claude_tool_names_arguments_and_diff_reach_shared_events(name, arguments, native, detail, patch):
@@ -31,6 +31,12 @@ def test_claude_tool_names_arguments_and_diff_reach_shared_events(name, argument
         if name=='Write':
             assert 'previous content not supplied' in ended.diff.text
     assert not session.tools
+
+
+def test_diff_constructor_preserves_a_newline_only_change():
+    from agent_comms.tool_results import ToolDiff
+    patch = ToolDiff.from_versions('a.py', 'old', 'old\n')
+    assert '-old\n\\ No newline at end of file\n+old\n' in patch.text
 
 
 def test_known_claude_tool_requires_its_actual_caption_input():

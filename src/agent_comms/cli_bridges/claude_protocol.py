@@ -267,7 +267,7 @@ class ClaudeWriteArguments(ClaudePathArguments):
     claude_names, declaration = ('Write',), WriteTool
     content: str
 
-    def diff(self) -> ToolDiff:
+    def diff(self) -> ToolDiff | None:
         return ToolDiff.from_versions(self.detail, '', self.content,
                                      before_path=self.detail + ' (previous content not supplied)')
 
