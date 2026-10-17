@@ -124,6 +124,7 @@ class OwnerReleaseReceipt:
 
 
 class OwnerReleaseStore(ThreadOwnedState, LockedStore[dict[str, OwnerReleaseReceipt]]):
+    lock_rank = 6
     @property
     def record_type(self):
         return dict[str, OwnerReleaseReceipt]
