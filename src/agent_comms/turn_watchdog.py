@@ -246,7 +246,7 @@ class ProgressWatchdog:
             return self.preflight_wait
         if session.stats.requested:
             return self.poll_wait
-        if session.admission.awaiting_start and not self.phase.pauses_input_clock:
+        if session.prompt_state.awaiting_start and not self.phase.pauses_input_clock:
             return self.input_wait
         if session.active_tools:
             return self.unbounded_wait
