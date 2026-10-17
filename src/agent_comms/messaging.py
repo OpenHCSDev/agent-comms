@@ -138,7 +138,7 @@ class Messaging:
         name, suffix = "user", 2
         while self.registry.name_reserved(name):
             name, suffix = f"user-{suffix}", suffix + 1
-        thread = Thread(name, frozenset(), worktree, role=ThreadRole.USER)
+        thread = Thread.create(name, frozenset(), worktree, role=ThreadRole.USER, storage_rule=self.registry.storage_rule)
         self.registry.register(thread)
         return thread
 

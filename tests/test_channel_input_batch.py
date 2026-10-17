@@ -1,4 +1,5 @@
 """Channel batch identity is proved by actual durable authorized inputs."""
+from agent_comms.storage_rules import StorageRule
 
 from contextlib import AsyncExitStack
 from dataclasses import replace
@@ -19,7 +20,7 @@ from stored_inputs import stored_inputs
 
 
 def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
-    owner = Thread("owner", frozenset(), str(tmp_path))
+    owner = Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule())
     ledger = InputDispositions(tmp_path)
     origins = tuple(
         Message("peer", "#comms", f"text {seq}", InfoKind, seq=seq) for seq in (1, 2)

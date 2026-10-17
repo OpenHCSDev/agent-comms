@@ -1,4 +1,5 @@
 """Direct input state survives a process exit without replaying an attempt."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 import multiprocessing
@@ -59,12 +60,12 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
 
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             name="kid",
             tags=frozenset(),
             worktree=str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     store = InputDispositions(comms.root)
     store.record("bus:7", seq=7, owner="kid", claim_scope=1, target="#review", text="exact source")

@@ -1,4 +1,5 @@
 """Registry persistence retains identity and goal behavior, never synthesizes authority."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -26,7 +27,7 @@ def test_goal_family_survives_registry_and_history_reopen(tmp_path):
             if state_type is BlockedGoal else state_type()
         )
         goal = Goal("Keep the objective", name, published_seq=0, state=state)
-        owner = Thread(name, frozenset(), str(tmp_path), goal=goal)
+        owner = Thread.create(name, frozenset(), str(tmp_path), goal=goal, storage_rule=StorageRule())
         registry.register(owner)
         assert FieldCodec.decode(Goal, goal.to_wire()) == goal
         reopened = Registration(registry.store.path)
@@ -57,7 +58,7 @@ for name in GoalState.names():
 def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
     path = tmp_path / "registry.json"
     registry = Registration(path)
-    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
     raw = json.loads(path.read_text())
     for field in ("owners", "claims"):
         incomplete = dict(raw)
@@ -76,8 +77,8 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
 def test_retained_colliding_creation_dates_remain_readable(tmp_path):
     path = tmp_path / "registry.json"
     registry = Registration(path)
-    registry.register(Thread("one", frozenset(), str(tmp_path)))
-    registry.register(Thread("two", frozenset(), str(tmp_path)))
+    registry.register(Thread.create("one", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    registry.register(Thread.create("two", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     raw = json.loads(path.read_text())
     raw["threads"]["two"]["created_at"] = raw["threads"]["one"]["created_at"]
     path.write_text(json.dumps(raw))

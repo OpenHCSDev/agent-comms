@@ -1,6 +1,7 @@
 """Saved Pi incoming routes require owner-recorded entry provenance, not prompt similarity."""
 
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 
 import json
 from datetime import UTC, datetime, timedelta
@@ -38,12 +39,12 @@ def _case(tmp_path):
     comms = wire(root)
     for name in ("peer", "owner", "other"):
         comms.registry.declare(
-            Thread(
+            Thread.create(
                 name,
                 frozenset(),
                 str(tmp_path),
                 session_file=(str(session) if name == "owner" else None),
-            )
+            storage_rule=StorageRule())
         )
     return comms, session
 
@@ -76,19 +77,19 @@ def test_attached_foreign_session_with_identical_message_never_infers_local_from
     source = wire(source_root)
     for name in ("peer", "owner"):
         source.registry.declare(
-            Thread(
+            Thread.create(
                 name,
                 frozenset(),
                 str(tmp_path),
                 session_file=(str(source_session) if name == "owner" else None),
-            )
+            storage_rule=StorageRule())
         )
     foreign = source.messaging.send_message("peer", "owner", "the same routine message")
     _session(source_session, _entry(foreign))
 
     viewer = wire(tmp_path / "A")
     for name in ("peer", "owner"):
-        viewer.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+        viewer.registry.declare(Thread.create(name, frozenset(), str(tmp_path), storage_rule=StorageRule()))
     local = viewer.messaging.send_message("peer", "owner", "the same routine message")
     assert local.message_id != foreign.message_id
     assert ScheduledTurn.incoming(local).prompt == ScheduledTurn.incoming(foreign).prompt
@@ -116,7 +117,7 @@ def test_imported_and_inherited_sessions_never_gain_legacy_route(tmp_path):
     comms, session = _case(tmp_path)
     message = comms.messaging.send_message("peer", "owner", "hello")
     _session(session, _entry(message))
-    comms.registry.declare(Thread("child", frozenset(), str(tmp_path), parent="owner"))
+    comms.registry.declare(Thread.create("child", frozenset(), str(tmp_path), parent="owner", storage_rule=StorageRule()))
     inherited = comms.transcripts.thread_transcript_page("child")
     assert inherited.events[0].routing is None
     imported = comms.root / "imported_sessions" / "historical.jsonl"

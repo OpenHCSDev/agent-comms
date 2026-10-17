@@ -1,4 +1,5 @@
 """Target families never disguise a broken binding as an unavailable command."""
+from agent_comms.storage_rules import StorageRule
 
 import pytest
 
@@ -18,7 +19,7 @@ def test_catalog_binding_failure_propagates_for_each_target_family(
 ):
     for name in ("selected", "other"):
         comms.registry.declare(
-            Thread(name, frozenset({"team"}), str(tmp_path)), StoppedThreadStatus(),
+            Thread.create(name, frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()), StoppedThreadStatus(),
         )
     target = target_type(
         str(tmp_path) if target_type is ProjectTarget else

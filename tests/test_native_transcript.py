@@ -1,4 +1,5 @@
 """Saved Pi boundary, bounded readers and presentation roundtrips."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 from dataclasses import fields
@@ -71,7 +72,7 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
         )
     )
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
+    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), session_file=str(path), storage_rule=StorageRule()))
     decoded = []
     original = NativeEntry.read
 
@@ -164,7 +165,7 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
 
     root = tmp_path / "wire"
     comms = wire(root)
-    thread = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+    thread = comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     lookup = RecordedThreadIncarnation("fixture", thread.created_at).lookup
     database = root / "coordination.sqlite3"
     with Coordination(str(database)) as store:

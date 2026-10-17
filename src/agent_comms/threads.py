@@ -17,7 +17,7 @@ from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
-from .storage_rules import StorageRoots
+from .storage_rules import StorageRoots, StorageRule
 from .thread_identity import (
     ThreadProvenance,
     ThreadRole,
@@ -60,11 +60,8 @@ class Thread(ThreadProvenance):
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
                               metadata={"wire_required": True})
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
-    storage_roots: StorageRoots | None = field(default=None, kw_only=True,
-        metadata={"wire_omit_default": True, "registration_inheritance": InheritMissing})
-    previous_worktrees: tuple[str, ...] = field(
-        default=(), metadata={"registration_inheritance": InheritEmpty}
-    )
+    storage_roots: StorageRoots = field(kw_only=True,
+        metadata={"registration_inheritance": InheritPrevious})
     auto_title_pending: bool = field(
         default=False, metadata={"registration_inheritance": InheritPrevious}
     )
@@ -88,6 +85,12 @@ class Thread(ThreadProvenance):
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
 
+    @classmethod
+    def create(cls, name, tags, worktree, *args, storage_rule: StorageRule, **values):
+        """A fresh declaration derives required storage from its rule, never a legacy row."""
+        return cls(name, tags, worktree, *args,
+            storage_roots=storage_rule.initial_roots(name, worktree), **values)
+
     def inherited_history(self, registry, visited):
         if self.name in visited:
             return
@@ -100,15 +103,13 @@ class Thread(ThreadProvenance):
     def contains_worktree(self, worktree: str) -> bool:
         """This conversation's current and retained project directories."""
         selected = str(Path(worktree).expanduser().resolve())
-        return any(selected == str(Path(path).expanduser().resolve())
-                   for path in (self.worktree, *self.previous_worktrees))
+        return Path(selected) in self.storage_roots.checkouts
 
-    def moved_to_project(self, previous: str, project: str) -> Thread:
+    def moved_to_project(self, project: str) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
         return replace(
             self, worktree=project,
-            storage_roots=self.storage_roots.adding(Path(project).resolve()) if self.storage_roots else None,
-            previous_worktrees=tuple(dict.fromkeys((*self.previous_worktrees, previous))),
+            storage_roots=self.storage_roots.adding(Path(project).resolve()),
             project_resume_due=self.project_resume_due or self.executing,
         )
 
@@ -410,6 +411,7 @@ class Thread(ThreadProvenance):
                 if (policy := declared.metadata.get("registration_inheritance")) is not None
             }
         resolved = replace(self, name=canonical_name, **inherited)
+        resolved = replace(resolved, storage_roots=resolved.storage_roots.adding(Path(resolved.worktree).resolve()))
         return self if resolved == self else resolved
 
     @property
@@ -485,18 +487,19 @@ class Thread(ThreadProvenance):
         return FieldCodec.encode(self)
 
 
-def current_thread() -> Thread:
+def current_thread(storage_rule: StorageRule) -> Thread:
     """Declare the current thread from its owner launch environment."""
     from .launch_runtime import RestartEnvironment
 
     name = RestartEnvironment.calling_thread()
     tag_env = os.environ.get("PI_AGENT_TAGS") or os.environ.get("AGENT_COMMS_TAGS", "")
     tags = frozenset(t.strip() for t in tag_env.split(",") if t.strip())
-    return Thread(
+    return Thread.create(
         name=name,
         tags=tags,
         worktree=os.environ.get("PI_WORKTREE", os.getcwd()),
         parent=os.environ.get("PI_PARENT_ID"),
         task=os.environ.get("PI_TASK"),
         process_identity=ProcessIdentity.capture(os.getpid()),
+        storage_rule=storage_rule,
     )

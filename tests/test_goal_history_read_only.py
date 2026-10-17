@@ -1,4 +1,5 @@
 """Authored journal acquisition; no original retained root or runtime operation."""
+from agent_comms.storage_rules import StorageRule
 from dataclasses import replace
 from pathlib import Path
 import sqlite3
@@ -14,7 +15,7 @@ from agent_comms.threads import Thread
 def authored_history(root):
     root.mkdir(mode=0o700)
     registry = Registration(root / 'registry.json')
-    thread = Thread('author', frozenset(), str(root))
+    thread = Thread.create('author', frozenset(), str(root), storage_rule=StorageRule())
     registry.register(thread)
     registry.register(replace(thread, goal=Goal('Authored acquisition', 'first', published_seq=0)))
     return registry

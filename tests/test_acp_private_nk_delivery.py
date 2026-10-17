@@ -5,6 +5,7 @@ activate private processing for existing public sessions.
 """
 
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 from agent_comms.tool_caller import NoThreadCaller
 
 import asyncio
@@ -51,20 +52,20 @@ def _session(tmp_path, *, package=True):
     root = tmp_path / "wire"
     comms = Comms(root)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "sender",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
-    owner = Thread(
+    owner = Thread.create(
         "beta",
         frozenset({"team"}),
         str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
         model="test/model",
-    )
+    storage_rule=StorageRule())
     comms.registry.declare(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -102,12 +103,12 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     project.mkdir()
     comms = Comms(root)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "sender",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     root_id = comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(
@@ -350,12 +351,12 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
     # delivery journey enables the real owner policy, with its observer stopped.
     agent.inputs.auto_wake = True
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "sender",
             frozenset(),
             str(native.project),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     chunks = native.provider.response_chunks
 
@@ -688,12 +689,12 @@ async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_
 
 async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
-    alpha = Thread(
+    alpha = Thread.create(
         "alpha",
         frozenset({"team"}),
         str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
-    )
+    storage_rule=StorageRule())
     comms.registry.declare(alpha)
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(

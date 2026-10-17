@@ -4,6 +4,7 @@ Reuse the existing application/native journey. Only the localhost provider HTTP
 status is controlled; UI, registry, source, ACP and native processes remain real. The application runs
 under Textual Pilot; external st/Linux entrypoint acceptance is a separate gate.
 """
+from agent_comms.storage_rules import StorageRule
 import argparse
 import asyncio
 from http.server import BaseHTTPRequestHandler
@@ -46,8 +47,8 @@ class InstalledApp(ToadApp):
     CSS_PATH = files('toad').joinpath('toad.tcss')
 
 async def prepare(comms, project, *_):
-    comms.registry.declare(Thread('history-sender', frozenset(), str(project)))
-    comms.registry.declare(Thread('history-recipient', frozenset(), str(project)))
+    comms.registry.declare(Thread.create('history-sender', frozenset(), str(project), storage_rule=StorageRule()))
+    comms.registry.declare(Thread.create('history-recipient', frozenset(), str(project), storage_rule=StorageRule()))
     for index in range(220):
         comms.messaging.send_initial_cohort('history-sender', 'history-recipient',
             f'Original retained source {index}: ' + 'history '*250)

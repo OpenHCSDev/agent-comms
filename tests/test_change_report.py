@@ -1,4 +1,5 @@
 """The change-report kind and its declared evidence, through the real send path."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -41,7 +42,7 @@ def reporter_repo(tmp_path):
 
 @pytest.fixture
 def reporter(wired, reporter_repo):
-    wired.registry.declare(Thread(name="reporter", tags=frozenset(), worktree=str(reporter_repo)))
+    wired.registry.declare(Thread.create(name="reporter", tags=frozenset(), worktree=str(reporter_repo), storage_rule=StorageRule()))
     return wired
 
 

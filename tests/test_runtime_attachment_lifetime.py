@@ -1,4 +1,5 @@
 """An unsent socket attachment ends with its real owner/root/caller lifetime."""
+from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import os
@@ -27,7 +28,7 @@ async def test_unsent_attachment_ends_with_actual_lifetime(tmp_path, ending):
     process = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     comms = Comms(tmp_path / "wire")
     comms.registry.declare(
-        Thread("cold", frozenset(), str(tmp_path), process_identity=process.identity)
+        Thread.create("cold", frozenset(), str(tmp_path), process_identity=process.identity, storage_rule=StorageRule())
     )
     proxy = RuntimeProxy(
         SimpleNamespace(_comms=comms), "cold", socket_path(comms.root, process.pid)
@@ -88,8 +89,8 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
     from acp import RequestError
 
     comms = Comms(tmp_path / "wire")
-    thread = Thread("owner", frozenset(), str(tmp_path),
-                    process_identity=ProcessIdentity.capture(os.getpid()))
+    thread = Thread.create("owner", frozenset(), str(tmp_path),
+                    process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
     comms.registry.declare(thread)
     path = socket_path(comms.root, os.getpid())
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -333,12 +333,17 @@ class FieldCodec(Sealed):
             return value.declared_name
         if isinstance(value, Enum):
             return cls.encode(value.value)
-        if isinstance(value, frozenset):
-            return [cls.encode(item) for item in sorted(value)]
-        if isinstance(value, (list, tuple)):
-            return [cls.encode(item) for item in value]
+        if isinstance(value, (list, tuple, frozenset)):
+            target, _ = cls._representation(annotation)
+            arguments = get_args(target)
+            items = sorted(value) if isinstance(value, frozenset) else value
+            if get_origin(target) is tuple and arguments and arguments[-1] is not Ellipsis:
+                return [cls.encode(item, expected) for item, expected in zip(items, arguments, strict=True)]
+            element = arguments[0] if arguments else None
+            return [cls.encode(item, element) for item in items]
         if isinstance(value, dict):
-            key_type, value_type = get_args(annotation) if get_origin(annotation) is dict else (None, None)
+            target, _ = cls._representation(annotation)
+            key_type, value_type = get_args(target) if get_origin(target) is dict else (None, None)
             if key_type is str or (key_type is None and all(type(key) is str for key in value)):
                 return {key: cls.encode(item, value_type) for key, item in value.items()}
             return [[cls.encode(key, key_type), cls.encode(item, value_type)] for key, item in value.items()]

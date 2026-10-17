@@ -1,3 +1,4 @@
+from agent_comms.storage_rules import StorageRule
 import os
 import time
 from agent_comms.activity import (
@@ -18,16 +19,16 @@ from agent_comms.turn_phase import (
 def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "worker",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     first = comms.agents.begin_turn("worker", "first", "Long-running work").turn_lease
     before = comms.registry.snapshot()
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     after = comms.registry.snapshot()
     assert after.owner_generations == before.owner_generations
     assert after.claimed_generations == before.claimed_generations

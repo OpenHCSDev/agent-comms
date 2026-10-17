@@ -1,4 +1,5 @@
 """Run the existing continuous context case without source/conftest substitutes."""
+from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import argparse
@@ -47,7 +48,7 @@ async def configured_terminal(owner, thread, output, acknowledgement, marker):
             lease = service.registry.require(thread.name).turn_lease
 
             def wait_on_original():
-                service.registry.declare(Thread('terminal-waiter', frozenset(), thread.worktree))
+                service.registry.declare(Thread.create('terminal-waiter', frozenset(), thread.worktree, storage_rule=StorageRule()))
                 goal = service.goals.update_goal('terminal-waiter', SetGoalAction(text='Wait for the original configured turn'))
                 service.goals.update_goal('terminal-waiter', StandbyGoalAction(
                     expect=GoalPrecondition(goal_id=goal.id), wait_for=(thread.name,)))
@@ -236,11 +237,11 @@ async def run_configured(options):
         owner = canonical_agent(service, agent_bin=str(runtime / 'pi-comms-native'),
             agent_args=list(retained.arguments or ()), auto_wake=False,
             runtime_enabled=True)
-        thread = Thread('configured-source', frozenset(), str(project),
+        thread = Thread.create('configured-source', frozenset(), str(project),
             process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=identity.session_file, model=source.model,
             thinking_level=source.thinking_level,
-            task='Bounded acceptance only. Do not resume inherited work or use tools.')
+            task='Bounded acceptance only. Do not resume inherited work or use tools.', storage_rule=StorageRule())
         service.registry.declare(thread)
         if options.terminal_only or options.recorded_publication:
             # The original stopped-source owner populates private participant
@@ -454,8 +455,8 @@ def complete_history_controls(root):
     wire = root / 'wire'
     wire.mkdir(mode=0o700)
     service = Comms(wire)
-    owner = Thread('history-original', frozenset(), str(root),
-                   process_identity=ProcessIdentity.capture(os.getpid()), created_at=18002.0)
+    owner = Thread.create('history-original', frozenset(), str(root),
+                   process_identity=ProcessIdentity.capture(os.getpid()), created_at=18002.0, storage_rule=StorageRule())
     service.registry.register(owner)
     service.messaging.initialize_private_initial_protocol()
     originals = []

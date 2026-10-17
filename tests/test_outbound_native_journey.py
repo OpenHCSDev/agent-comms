@@ -1,4 +1,5 @@
 """Retained actual Pi -> comms_send CLI -> original source -> ACP cold replay."""
+from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -44,13 +45,13 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
         ],
     )
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "receiver",
             frozenset(),
             str(native.project),
             model="response-local/fixture",
             thinking_level="off",
-        )
+        storage_rule=StorageRule())
     )
     snapshots = asyncio.Queue()
     updates = []

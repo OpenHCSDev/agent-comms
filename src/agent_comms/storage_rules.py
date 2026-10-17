@@ -53,6 +53,7 @@ class StorageRule:
     max_checkouts: int = 2
     volume: StoragePath = Path.home()
     scratch_base: StoragePath = Path.home() / '.cache' / 'agent-scratch'
+    checkout_base: StoragePath = Path.home() / 'wt'
 
     def __post_init__(self):
         if not all(math.isfinite(n) for n in (self.floor_gib, self.unit_cap_gib)):
@@ -65,9 +66,8 @@ class StorageRule:
         path = root / 'storage.json'
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
 
-    def initial_roots(self, thread: Thread):
-        return StorageRoots(tuple(dict.fromkeys(Path(p).resolve() for p in
-            (*thread.previous_worktrees, thread.worktree))), self.scratch_base / thread.name)
+    def initial_roots(self, name, worktree):
+        return StorageRoots((Path(worktree).expanduser().resolve(),), self.scratch_base / name)
 
     def deny(self, reason):
         raise SelectedToolDenied(f'StorageRule: {reason}')
@@ -137,6 +137,8 @@ class CheckoutStorageEffect(AllocateStorageEffect):
 
     def admit(self, rule, roots):
         rule.require_path(roots, self.path)
+        if self.path.parent != rule.checkout_base.resolve() or not re.fullmatch(re.escape(roots.scratch.name) + r'--P[1-9][0-9]*', self.path.name):
+            rule.deny(f'checkout destination must be {rule.checkout_base}/{roots.scratch.name}--P<number>')
         proposed = roots.adding(self.path)
         rule.require_allocation(proposed)
         return proposed
@@ -147,7 +149,7 @@ class RemoveCheckoutStorageEffect(StorageEffect):
     path: Path
 
     def admit(self, rule, roots):
-        if self.path not in roots.checkouts or self.path == roots.checkouts[0]:
+        if self.path not in roots.checkouts[1:]:
             rule.deny('only a registered extra checkout can be removed')
         return roots
 
@@ -164,14 +166,17 @@ class StorageDecision:
     def complete(self, is_error):
         if is_error or not self.removed:
             return
+        gone = tuple(path for path in self.removed if not path.exists())
+        if not gone:
+            return
         with self.registry.store.editing() as edit:
             current = edit.document.require(self.actor.name)
             if current.incarnation != self.actor:
                 raise SelectedToolDenied('StorageRule: checkout removal owner changed')
-            gone = tuple(path for path in self.removed if not path.exists())
-            edit.document.threads[current.name] = replace(current,
-                storage_roots=current.storage_roots.removing(gone))
-            edit.commit()
+            proposed = current.storage_roots.removing(gone)
+            if proposed != current.storage_roots:
+                edit.document.threads[current.name] = replace(current, storage_roots=proposed)
+                edit.commit()
 
 
 def physical_path(value, cwd):
