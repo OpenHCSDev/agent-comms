@@ -11,22 +11,18 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from inspect import isabstract
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .field_codec import FieldCodec
-from .store_files import _store_lock
+from .store_files import StoreLock, _store_lock
 
 T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)
 class JsonDocument(ABC, Generic[T]):
-    """Declared JSON decoding and durable atomic file I/O, not transaction custody.
-
-    Atomic reads see one complete file. Writers supply their own serialization
-    and source authority; authoritative documents add those through LockedStore,
-    while disposable append projections use their checked-prefix publisher.
-    """
+    """Declared JSON codec and atomic file I/O; LockedStore owns transactions."""
 
     path: Path
     json_indent: ClassVar[int | None] = None
@@ -141,14 +137,15 @@ class JsonDocument(ABC, Generic[T]):
 
 @dataclass(frozen=True, slots=True)
 class LockedStore(JsonDocument[T]):
-    """One document's transactions, composed with its declared file codec.
+    """Ordered document transactions; callbacks never mutate or reenter."""
 
-    Update callbacks return a replacement value, or the original object to skip
-    writing. They must not mutate the original or call this store recursively.
-    No public method may be called while holding this document's canonical lock
-    on another descriptor. Distinct outer locks (for example wire) are allowed.
-    The append-only wire is not a document and must not use this abstraction.
-    """
+    lock_rank: ClassVar[int]
+
+    def __init_subclass__(cls, **kwargs):
+        super(LockedStore, cls).__init_subclass__(**kwargs)
+        rank = vars(cls).get("lock_rank")
+        if not isabstract(cls) and rank is None:
+            raise TypeError(f"{cls.__name__} must declare its own lock_rank")
 
     @contextmanager
     def locked(self, *, shared: bool = False, blocking: bool = True) -> Iterator[int]:
@@ -157,9 +154,9 @@ class LockedStore(JsonDocument[T]):
             yield lock.descriptor
 
     @contextmanager
-    def reading(self, *, blocking: bool = True) -> Iterator[T]:
-        """Keep a shared lock through a dependent projection or source check."""
-        with self.locked(shared=True, blocking=blocking):
+    def reading(self, *sources, blocking: bool = True) -> Iterator[T]:
+        """Retain dependent source owners before this document's shared lock."""
+        with StoreLock.ordered(dict.fromkeys((*sources, self), True), blocking=blocking):
             yield self._read_unlocked()
 
     def read(self) -> T:

@@ -156,9 +156,6 @@ class QueuedProgress(SentProgress):
     label = "Queued"
     priority = 1
 
-    def selected_notification(self, notification, *, busy):
-        return replace(notification, state=self)
-
 
 @dataclass(frozen=True)
 class ShownToModelProgress(ReadDelivery, AssignmentProgress):

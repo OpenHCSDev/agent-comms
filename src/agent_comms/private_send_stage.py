@@ -29,7 +29,7 @@ from .native_entries import NativeEntry
 from .native_prompt_binding import (
     PromptBinding,
     expected_prompt_matches_journal,
-    expected_prompt_binding,
+    expected_prompt_bindings,
 )
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import native_request_digest
@@ -200,7 +200,8 @@ class NativeSendStage(ABC):
         self, store: Coordination, input_id: str, owner: ParticipantOwner,
         wire_root_id: str, prompt: str, *, blocking: bool = False,
     ) -> Iterator[PromptBinding]:
-        with expected_prompt_binding(store, input_id, blocking=blocking) as binding:
+        with expected_prompt_bindings(store, (input_id,), blocking=blocking) as bindings:
+            binding = bindings.get(input_id)
             self.require_bound_prompt(binding, owner, wire_root_id, prompt)
             yield binding
 

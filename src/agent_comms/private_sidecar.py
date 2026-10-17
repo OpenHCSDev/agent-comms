@@ -339,7 +339,7 @@ def create_sidecar_file(path: Path, row_type: type[TypedTable]) -> None:
 
 @contextmanager
 def sidecar_connection(
-    path: Path, row_type: type[TypedTable], *, blocking: bool = True
+    path: Path, row_type: type[TypedTable], *, blocking: bool = True, read_only: bool = False
 ) -> Iterator[sqlite3.Connection]:
     """Verify and use one exact snapshot, committing only on successful scope exit.
 
@@ -355,10 +355,12 @@ def sidecar_connection(
         try:
             _verify_schema(connection, row_type)
             changes = connection.total_changes
+            connection.execute(f"PRAGMA query_only={int(read_only)}")
             yield connection
             if connection.in_transaction:
                 raise IdentityConflict("Sidecar scope left an unfinished transaction.")
-            _verify_schema(connection, row_type)
+            if not read_only:
+                _verify_schema(connection, row_type)
             directory.unchanged(path.name, identity)
             if connection.total_changes != changes:
                 _publish(directory, path.name, identity, connection.serialize())

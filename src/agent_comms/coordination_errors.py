@@ -1,6 +1,8 @@
 """Shared durable coordination errors, independent of record store_files."""
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Never
 
 
@@ -10,6 +12,15 @@ class CoordinationError(RuntimeError):
 
 class CoordinationReadUnavailable(CoordinationError):
     """No committed SQLite snapshot was acquired; no absence is established."""
+
+    @classmethod
+    @contextmanager
+    def checking(cls) -> Iterator[None]:
+        """Handle SQLite read errors."""
+        try:
+            yield
+        except sqlite3.OperationalError as error:
+            cls.raise_from(error)
 
     @classmethod
     def raise_from(cls, error: sqlite3.OperationalError) -> Never:

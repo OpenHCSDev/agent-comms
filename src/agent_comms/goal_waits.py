@@ -190,6 +190,7 @@ class GoalInputReview:
 
 @dataclass(frozen=True, slots=True)
 class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
+    lock_rank = 9
     filename: ClassVar[str] = "goal_waits.json"
 
     @property
