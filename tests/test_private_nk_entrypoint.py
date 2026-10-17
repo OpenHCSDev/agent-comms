@@ -309,7 +309,7 @@ def test_client_custody_explicit_published_root_and_cross_thread_retirement(tmp_
     descriptor = os.open(route_file.parent, os.O_RDONLY | os.O_DIRECTORY)
     try:
         with ThreadPoolExecutor(max_workers=1) as executor:
-            custody = client.admit_client()
+            custody = client.hold_client_route()
             executor.submit(custody.__enter__).result(timeout=5)
             with pytest.raises(BlockingIOError):
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -317,10 +317,10 @@ def test_client_custody_explicit_published_root_and_cross_thread_retirement(tmp_
             # where its compatible nested acquisition ran.
             custody.__exit__(None, None, None)
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            with pytest.raises(BlockingIOError), client.admit_client():
+            with pytest.raises(BlockingIOError), client.hold_client_route():
                 raise AssertionError("Published-root client entered publication")
             independent = active_route.LocalRoute(tmp_path / "independent")
-            with independent.admit_client():
+            with independent.hold_client_route():
                 pass
     finally:
         os.close(descriptor)

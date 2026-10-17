@@ -1,4 +1,5 @@
 """SelectedExecution with pinned native Pi, local deterministic coding provider."""
+from binding_reads import binding_rows
 
 import asyncio
 import json
@@ -20,7 +21,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.native_pi import read_tracked_input_digest
-from agent_comms.native_prompt_binding import read_expected_prompt_binding
+
 from agent_comms.messages import Message, InfoKind
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.selected_tool_broker import SelectedToolIntent
@@ -253,7 +254,7 @@ async def test_native_full_four_tools_publish_and_release(
             )
             for proof in proofs:
                 assert proof.expected_prompt_equality_established
-                binding = read_expected_prompt_binding(store, proof.input_id)
+                binding = binding_rows(store, (proof.input_id,)).get(proof.input_id)
                 assert binding is not None
                 assert (
                     read_tracked_input_digest(proof.context.session_file, proof.input_id)

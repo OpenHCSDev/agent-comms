@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from difflib import unified_diff
 from typing import Annotated, ClassVar, Generic, Literal, TypeVar
 
 from metaclass_registry import RegistryConfig
@@ -600,58 +599,29 @@ class PatchChange(TaggedWire, ABC):
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
 
     @abstractmethod
-    def paths(self, path: str) -> tuple[str, str]: ...
-
-    @abstractmethod
     def patch(self, path: str, content: str) -> ToolDiff | None: ...
 
 
-class WholeFileChange(PatchChange, ABC):
-    """Codex supplies the complete file for additions and deletions."""
-
-    @abstractmethod
-    def versions(self, content: str) -> tuple[str, str]: ...
-
-    def patch(self, path: str, content: str) -> ToolDiff | None:
-        before, after = self.versions(content)
-        before_path, after_path = self.paths(path)
-        patch = ''.join(unified_diff(
-            before.splitlines(keepends=True), after.splitlines(keepends=True),
-            fromfile=before_path, tofile=after_path,
-        ))
-        # An empty file still has a creation/deletion event, but no changed lines.
-        return ToolDiff(patch) if patch else None
-
-
-class AddedFile(WholeFileChange):
+class AddedFile(PatchChange):
     wire_tag = 'add'
 
-    def paths(self, path: str) -> tuple[str, str]:
-        return '/dev/null', path
-
-    def versions(self, content: str) -> tuple[str, str]:
-        return '', content
+    def patch(self, path: str, content: str) -> ToolDiff | None:
+        return ToolDiff.from_versions(path, '', content, before_path='/dev/null')
 
 
-class DeletedFile(WholeFileChange):
+class DeletedFile(PatchChange):
     wire_tag = 'delete'
 
-    def paths(self, path: str) -> tuple[str, str]:
-        return path, '/dev/null'
-
-    def versions(self, content: str) -> tuple[str, str]:
-        return content, ''
+    def patch(self, path: str, content: str) -> ToolDiff | None:
+        return ToolDiff.from_versions(path, content, '', after_path='/dev/null')
 
 
 class UpdatedFile(PatchChange):
     wire_tag = 'update'
     move_path: str | None = None
 
-    def paths(self, path: str) -> tuple[str, str]:
-        return path, path if self.move_path is None else self.move_path
-
     def patch(self, path: str, content: str) -> ToolDiff:
-        before, after = self.paths(path)
+        before, after = path, path if self.move_path is None else self.move_path
         if self.move_path is not None:
             # Codex appends the destination outside its unified hunk text.
             content = content.removesuffix(f'\n\nMoved to: {self.move_path}')

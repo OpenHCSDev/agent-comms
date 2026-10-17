@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 import pytest
 
@@ -70,3 +72,37 @@ def test_page_queries_prepare_owned_offsets_and_leave_archives_unchanged(tmp_pat
     with pytest.raises(RelationViolationError, match='read-only'):
         archive.incoming_page('b', after=6)
     assert (path.read_bytes(), archive.log.path.read_bytes()) == original
+
+
+def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
+    bus = retained_source(tmp_path / 'race', 9, access=WritableAccess())
+    with bus.log._opened_wire_snapshot(need_sequence=False) as opened:
+        message, _ = next(opened.public_records())
+    with BusPageIndex(bus.log.path) as index:
+        index.invalidate()
+    readers_ready = threading.Barrier(3)
+    captured = threading.Semaphore(0)
+
+    def read_reference():
+        with bus.log._opened_wire_snapshot(need_sequence=False) as opened:
+            with BusPageIndex(bus.log.path) as index:
+                assert not index.covers(opened)
+            captured.release()
+            readers_ready.wait(timeout=5)
+            return opened.messages_for_references((message.reference,))
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        readers = (executor.submit(read_reference), executor.submit(read_reference))
+        # Both readers must capture their stale source before the bus owner
+        # blocks preparation; neither may become an independent SQLite writer.
+        for _ in readers:
+            assert captured.acquire(timeout=5)
+        with bus.log.locked():
+            readers_ready.wait(timeout=5)
+            for reader in readers:
+                with pytest.raises(TimeoutError):
+                    reader.result(timeout=0.05)
+        assert [reader.result(timeout=5) for reader in readers] == [(message,), (message,)]
+    with BusPageIndex(bus.log.path) as index:
+        with bus.log._opened_wire_snapshot(need_sequence=False) as opened:
+            assert index.covers(opened)
