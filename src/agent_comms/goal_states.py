@@ -100,8 +100,8 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def open_orders(self, reference):
         return ()
 
-    def commander_update(self, deadline, activity) -> str | None:
-        return None
+    def commander_updates(self, deadline, activity) -> tuple[str, ...]:
+        return ()
 
     def delivery_complete(self, delivery_time) -> bool:
         return False
@@ -150,12 +150,12 @@ class UnfinishedGoal(GoalState):
     def open_orders(self, reference):
         return (reference,)
 
-    def commander_update(self, deadline, activity) -> str | None:
+    def commander_updates(self, deadline, activity) -> tuple[str, ...]:
         if deadline.before(time()):
-            return "Deadline passed without accepted delivery"
+            return ("Deadline passed without accepted delivery",)
         if activity is not None and activity.state.busy:
-            return None
-        return "Idle with an open goal"
+            return ()
+        return ("Idle with an open goal",)
 
 
 class OpenGoal(BlockingOnFailure, UnfinishedGoal):
