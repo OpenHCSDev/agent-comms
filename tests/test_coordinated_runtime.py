@@ -1811,7 +1811,7 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
             task="Bootstrap: wait for a concrete task; do not modify files yet.",
             title="Channel delivery implementation",
             goal=Goal(
-                text="Restore channel subscribers", id="current-goal", progress="Routing fixed"
+                text="Restore channel subscribers", id="current-goal", published_seq=0, progress="Routing fixed"
             ),
         )
     )

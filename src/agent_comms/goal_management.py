@@ -132,7 +132,7 @@ class Goals:
     def _goal_input_review(
         self, thread: Thread, goal_id: str, wait_for: Sequence[str]
     ) -> GoalInputReview:
-        thread.require_active_goal(goal_id)
+        goal = thread.require_active_goal(goal_id)
         if not wait_for:
             raise ValueError("Standby requires explicit wait_for thread names.")
         resolved = tuple(self.registry.require(target.removeprefix("@")) for target in wait_for)
@@ -148,7 +148,7 @@ class Goals:
         eligible = set()
         lookup = thread.incarnation.lookup
         after_seq = self.goal_wait(thread.name).review_after_seq(
-            thread.incarnation.require_recorded(), targets
+            goal, thread.incarnation.require_recorded(), targets
         )
         sequences = tuple({
             sequence for row in unknown.values()

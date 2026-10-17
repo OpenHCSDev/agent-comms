@@ -404,7 +404,7 @@ def test_exhausted_goal_revision_refuses_transition_without_write(comms):
             name="owner",
             tags=frozenset(),
             worktree="/wt",
-            goal=Goal("work", "goal-id", revision=(1 << 63) - 1),
+            goal=Goal("work", "goal-id", published_seq=0, revision=(1 << 63) - 1),
         )
     )
     before = (comms.root / "registry.json").read_bytes()
