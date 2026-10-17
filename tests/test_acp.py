@@ -27,7 +27,6 @@ from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import (
     ClearQueueRequest,
-    ContextUsage,
     CoordinationChangedUpdate,
     GoalChangedUpdate,
     InputDeliveryChangedUpdate,
@@ -41,6 +40,7 @@ from agent_comms.acp_extension import (
     encode_request,
 )
 from agent_comms.activity import ActivityState
+from agent_comms.context_reading import ContextUsage
 from agent_comms.agent_backend import FailedCompaction
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -92,9 +92,7 @@ def _update_text(update) -> str:
 
 class TestHandlers:
     def _agent(self, tmp_path: Path) -> CommsAgent:
-        return canonical_agent(
-            wire(tmp_path / "wire"), reply_window=0.1, no_reply_window=0.1, reply_quiet=0.05
-        )
+        return canonical_agent(wire(tmp_path / "wire"))
 
     async def test_initialize_echoes_protocol_version(self, tmp_path):
         agent = self._agent(tmp_path)
@@ -366,7 +364,7 @@ class TestHandlers:
             await agent.shutdown()
 
     async def test_new_session_starts_after_existing_wire_history(self, tmp_path):
-        agent = canonical_agent(wire(tmp_path / "wire"), no_reply_window=0.1)
+        agent = canonical_agent(wire(tmp_path / "wire"))
         agent._comms.registry.declare(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         agent._comms.messaging.send("peer", "#all", "old message")
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
@@ -465,12 +463,13 @@ class TestHandlers:
         ]
 
     async def test_prompt_broadcasts_to_global_channel(self, tmp_path):
-        agent = canonical_agent(wire(tmp_path / "wire"), no_reply_window=0.1)
+        agent = canonical_agent(wire(tmp_path / "wire"))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         response = await agent.prompt(
             session_id="proj", prompt=[{"type": "text", "text": "!relay hello all"}]
         )
         assert response.stop_reason == "end_turn"
+        assert not agent.turns.turn_state("proj").busy
         history = list(agent._comms.views.channel_history_page("#all").messages)
         assert [m.body for m in history] == ["hello all"]
 
@@ -493,27 +492,6 @@ class TestHandlers:
         agent._comms.messaging.send("peer", "proj", "hello")
         await agent.cancel(session_id="proj")
         assert agent._comms.bus.pending_count("proj") == 1
-
-    async def test_cancel_ends_active_relay_turn(self, tmp_path):
-        agent = canonical_agent(
-            wire(tmp_path / "wire"), reply_window=30, no_reply_window=30, reply_quiet=30
-        )
-        await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        prompt = asyncio.create_task(
-            agent.prompt(
-                session_id="proj", prompt=[{"type": "text", "text": "!relay wait for a reply"}]
-            )
-        )
-        for _ in range(20):
-            if "proj" in agent.turns.turn_tasks:
-                break
-            await asyncio.sleep(0)
-        await agent.cancel(session_id="proj")
-        assert (await asyncio.wait_for(prompt, timeout=1)).stop_reason == "cancelled"
-        assert "proj" not in agent.turns.turn_tasks
-        assert not agent.inputs.drain_tasks["proj"].done()
-        await agent.shutdown()
-
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
@@ -1496,9 +1474,7 @@ class TestWireProtocol:
 
 class TestLiveDrain:
     async def test_cancel_keeps_background_drain_live(self, tmp_path):
-        agent = canonical_agent(
-            wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
-        )
+        agent = canonical_agent(wire(tmp_path / "wire"))
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "!relay hi"}])
         assert "proj" in agent.inputs.drain_tasks
@@ -1681,7 +1657,7 @@ class TestTargetPrefix:
         assert parse_target("@fixer")[0] == "#all"
 
     async def test_dm_prompt_reaches_only_target(self, wired):
-        agent = canonical_agent(wired, reply_window=0.1, no_reply_window=0.05, reply_quiet=0.02)
+        agent = canonical_agent(wired)
         wired.registry.declare(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])
