@@ -8,7 +8,7 @@ from agent_comms.coordination_errors import StaleRevision
 from agent_comms.assignment_states import IgnoredAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.notification_progress import IgnoredProgress, SentProgress, UnrecordedProgress
+from agent_comms.notification_progress import ContextualProgress, SentProgress, UnrecordedProgress
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
@@ -93,7 +93,8 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     wire_before = comms.bus.log.path.read_bytes()
     notices = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
-    assert type(beta.state) is UnrecordedProgress and beta.state.detail == ''
+    assert beta.state == ContextualProgress(UnrecordedProgress())
+    assert beta.state.detail == ''
     assert beta.recipient_identity.recipient_lookup==RecordedThreadIncarnation("fixture", comms.registry.require('beta').created_at).lookup
     with Coordination(str(root/'coordination.sqlite3')) as store:
         assert WakeAssignment.select(store.session._connection)==before
@@ -204,6 +205,16 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
     assert beta.message.reference == message.reference
     assert type(beta.state) is SentProgress
+    outcomes = comms.views.message_notifications_for_references((message.reference,))[
+        message.seq, message.message_id
+    ]
+    with pytest.raises(RelationViolationError):
+        comms.views.message_notifications_for_references(
+            (MessageReference(message.seq + 1, message.message_id),)
+        )
+    assert comms.views.message_notifications_for_references(
+        (message.reference,) * (MessageNotification.window_limit + 1)
+    ) == {(message.seq, message.message_id): outcomes}
     original = next(
         row.assignment for row in NotificationAssignment.read(root, (initial,)).resolve(root)
         if row.assignment.recipient_lookup == lookup
@@ -246,19 +257,10 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     assert sender.read_identity != open_sender.read_identity
     assert recipient.read_identity != open_recipient.read_identity
     assert sender.read_identity == after.identity
-    outcomes = comms.views.message_notifications_for_references((message.reference,))[message.seq, message.message_id]
-    with pytest.raises(RelationViolationError):
-        comms.views.message_notifications_for_references(
-            (MessageReference(message.seq + 1, message.message_id),)
-        )
-    assert comms.views.message_notifications_for_references(
-        (message.reference,) * (MessageNotification.window_limit + 1)
-    ) == {(message.seq, message.message_id): outcomes}
-    target_outcome = next(
-        item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
-    )
-    assert type(target_outcome.state) is IgnoredProgress
-    assert target_outcome.state.detail == ""
+    # This direct SQL transition has no native context commit. It must not
+    # fabricate a model-read state from the ignored decision alone.
+    with pytest.raises(ValueError, match="^Read notification has no model-context proof$"):
+        comms.views.message_notifications_for_references((message.reference,))
 
 
 def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa: F811
