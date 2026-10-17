@@ -185,7 +185,7 @@ def test_callback_and_encoding_fail_before_publication(tmp_path):
 
     with pytest.raises(RuntimeError, match="change failed"):
         store.update(fail)
-    with pytest.raises(ValueError, match="Thread incarnation requires a positive recorded birth"):
+    with pytest.raises(ValueError, match="Expected <class 'float'>, received float"):
         store.record(replace(wait(), owner=RecordedThreadIncarnation("owner", float("nan"))))
     # The failed callback/encoder released the lock.
     store.record(replace(wait(), revision=3))
