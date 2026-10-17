@@ -161,12 +161,12 @@ def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> Non
         comms.registry.declare(owner)
         comms.registry.declare(peer)
         targets = (GoalWaitTarget(peer.incarnation.require_recorded()),)
-        assert GoalWaits.closed_wait_group(owner.name, targets, {}, comms.registry.snapshot()) == ()
+        assert GoalWaits.closed_wait_group(owner.name, targets, {}, comms.registry.snapshot(), comms.agents) == ()
         stale = replace(
             peer, process_identity=replace(child.identity, start_time=child.identity.start_time + 1)
         )
         comms.registry.register(stale)
-        assert GoalWaits.closed_wait_group(owner.name, targets, {}, comms.registry.snapshot()) == (
+        assert GoalWaits.closed_wait_group(owner.name, targets, {}, comms.registry.snapshot(), comms.agents) == (
             owner.name,
         )
         assert child.alive()
