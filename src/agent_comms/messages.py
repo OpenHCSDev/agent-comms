@@ -287,6 +287,8 @@ class Message:
         ).hexdigest()[:12]
         return digest
 
+    history_source = None
+
     @property
     def display_metadata(self) -> dict:
         """Live messages carry no historical provenance decoration."""
