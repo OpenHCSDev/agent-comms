@@ -25,7 +25,6 @@ if TYPE_CHECKING:
 class PiSessionChild:
     proc: AttachedChild
     reader: PiRpcChannel
-    stderr_task: asyncio.Task[str]
     key: tuple[NativePiRpcLaunch, tuple[int, int]]
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
@@ -48,11 +47,10 @@ class PiSessionChild:
                 ))
                 environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
             proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=environment)
-            assert proc.stdout is not None and proc.stderr is not None
+            assert proc.stdout is not None
             return cls(
                 proc,
                 PiRpcChannel(proc.stdout),
-                asyncio.create_task(proc.stderr_tail()),
                 key,
                 attestation,
                 resources=resources.pop_all(),
@@ -112,23 +110,17 @@ class PiSessionChild:
                 except BaseException as error:
                     if self.proc.retired:
                         try:
-                            await self._release_resources()
+                            self.resources.close()
                         except asyncio.CancelledError:
                             raise
                         except BaseException as cleanup_error:
                             raise error from cleanup_error
                     raise
                 else:
-                    await self._release_resources()
+                    self.resources.close()
         except BaseException as error:
             return error
         return outcome
-
-    async def _release_resources(self) -> None:
-        try:
-            await asyncio.gather(self.stderr_task, return_exceptions=True)
-        finally:
-            self.resources.close()
 
     @asynccontextmanager
     async def failures(self):
@@ -137,7 +129,7 @@ class PiSessionChild:
             yield
         except BaseException as error:
             await self.shutdown()
-            stderr = await self.stderr_task
+            stderr = await self.proc.stderr_tail()
             error.add_note(f"Original native child stderr:\n{stderr or '(empty)'}")
             if isinstance(error, NativePiUnavailable):
                 error.native_stderr = stderr
