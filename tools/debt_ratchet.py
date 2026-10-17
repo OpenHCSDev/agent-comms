@@ -204,7 +204,7 @@ class FrozenFieldWrite(CleanChangedLines, PerFileOccurrenceMeasure):
 
 
 class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
-    words: typing.ClassVar[tuple[str, ...]] = ("claim_scope", "admit", "custody", "receipt")
+    words: typing.ClassVar[tuple[str, ...]] = ("admission", "admit", "custody", "receipt")
 
     @classmethod
     def occurrences(cls, node: ast.AST) -> int:
