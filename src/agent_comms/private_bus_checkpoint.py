@@ -25,7 +25,7 @@ from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
-from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
+from .checkpoint_seals import CheckpointSeal, FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import (
@@ -88,6 +88,19 @@ class PrefixWitness(PrefixSeal):
     def require_marker(self, marker: WireMetadata) -> None:
         if self.root_id != marker.root_id or self.through_seq != marker.last_seq:
             raise RelationViolationError("Original certificate differs from its durable marker.")
+
+    def require_source(self, marker: WireMetadata, stream: BinaryIO) -> os.stat_result:
+        """Content corruption is fatal; physical relocation needs exclusive repair."""
+        info = os.fstat(stream.fileno())
+        if self.root_id != marker.root_id or info.st_size < self.offset:
+            raise RelationViolationError("Private bus checkpoint root/size changed.")
+        if _tail(stream, self.offset) != self.tail:
+            raise RelationViolationError("Private bus checkpoint prefix tail changed.")
+        if self.through_seq > marker.last_seq:
+            raise RelationViolationError("Private bus checkpoint exceeds the durable sequence marker.")
+        if self.revision.identity != FileIdentity.from_stat(info):
+            raise CheckpointNeedsRepair("Private bus source was relocated.")
+        return info
 
     def require_append(self, marker: WireMetadata, info: os.stat_result,
                        offset: int, sequence: int) -> None:
@@ -1210,16 +1223,17 @@ def certificate_enabled(bus_path: Path) -> bool:
     return path.exists() or path.is_symlink()
 
 
-def _recover_pending_unlocked(
+def _rebuild_checkpoint_unlocked(
     bus: WireLog,
     marker: WireMetadata,
     db: sqlite3.Connection,
     db_path: Path,
     info: os.stat_result,
-    seal: PendingSeal,
+    seal: CheckpointSeal,
 ) -> PrefixWitness:
-    """Repair only a durable writer intent after a COMPLETE canonical bus scan."""
-    prior = seal.prior
+    """Rebuild the derived index from complete canonical history under its lock."""
+    saved = _saved(db)
+    prior = saved.seal()
     digest = _SEED
     prior_seen = prior.revision.size == 0
     prior_seq = 0
@@ -1261,10 +1275,11 @@ def _recover_pending_unlocked(
                 digest.hex(),
                 _tail(stream, info.st_size),
             )
-        if expected.seal() != seal.expected or last_seq > marker.last_seq:
-            raise RelationViolationError(
-                "Private bus checkpoint pending suffix differs from intent."
-            )
+        if last_seq > marker.last_seq:
+            raise RelationViolationError("Private bus checkpoint exceeds the durable sequence marker.")
+        seal.require_rebuilt(saved, expected)
+        marker.seal_with(PendingSeal.capture(saved, expected, db_path))
+        bus.write_metadata_unlocked(marker)
         PrefixCertificate.capture(expected.root_id, info, last_seq, digest, expected.tail).upsert(
             db
         )
@@ -1286,20 +1301,8 @@ class CheckpointNeedsRepair(Exception):  # noqa: N818 - names a state
 def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWitness:
     """Check a final, up-to-date checkpoint under the shared bus lock; never writes."""
     saved = _saved(db)
-    info = os.fstat(stream.fileno())
-    if (
-        saved.root_id != marker.root_id
-        or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
-        or info.st_size < saved.offset
-    ):
-        raise RelationViolationError("Private bus checkpoint root/inode/size changed.")
+    info = saved.require_source(marker, stream)
     marker.seal.require_final(saved, path)
-    if _tail(stream, saved.offset) != saved.tail:
-        raise RelationViolationError("Private bus checkpoint prefix tail changed.")
-    if saved.through_seq > marker.last_seq:
-        raise RelationViolationError(
-            "Private bus checkpoint exceeds the durable sequence marker."
-        )
     if FileRevision.from_stat(info) != saved.revision:
         raise CheckpointNeedsRepair("Bus has rows the checkpoint does not cover yet.")
     return saved
@@ -1313,21 +1316,14 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
     _directory_sync(bus.path)
     saved = _saved(db)
     info = os.fstat(stream.fileno())
-    if (
-        saved.root_id != marker.root_id
-        or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
-        or info.st_size < saved.offset
-    ):
-        raise RelationViolationError("Private bus checkpoint root/inode/size changed.")
+    try:
+        saved.require_source(marker, stream)
+    except CheckpointNeedsRepair:
+        # Rebuild copied index rows; their old physical seal is not authority.
+        return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, marker.seal)
     recovered = marker.seal.recover(bus, marker, db, path, saved, info)
     if recovered is not None:
         return recovered
-    if _tail(stream, saved.offset) != saved.tail:
-        raise RelationViolationError("Private bus checkpoint prefix tail changed.")
-    if saved.through_seq > marker.last_seq:
-        raise RelationViolationError(
-            "Private bus checkpoint exceeds the durable sequence marker."
-        )
     if FileRevision.from_stat(info) == saved.revision:
         return saved
     # Changed revision: a suffix alone cannot rule out an earlier in-place edit.

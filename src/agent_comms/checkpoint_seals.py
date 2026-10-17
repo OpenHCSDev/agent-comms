@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -75,6 +75,10 @@ class CheckpointSeal(DeclaredFamily, affix="Seal"):
         raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
 
     @abstractmethod
+    def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
+        """Bind a complete canonical rebuild to this retained durable intent."""
+
+    @abstractmethod
     def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
         """Readers holding the shared lock accept only a final seal; repair needs the exclusive lock."""
 
@@ -102,6 +106,10 @@ class FinalSeal(CheckpointSeal):
     ) -> None:
         self.check_final(saved, path)
 
+    def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
+        if self.witness != saved.seal():
+            raise RelationViolationError("Private bus checkpoint certificate differs from its seal.")
+
     def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
         self.check_final(saved, db_path)
 
@@ -124,7 +132,7 @@ class PendingSeal(CheckpointSeal):
         saved: PrefixWitness,
         info: os.stat_result,
     ) -> PrefixWitness:
-        from .private_bus_checkpoint import _recover_pending_unlocked
+        from .private_bus_checkpoint import _rebuild_checkpoint_unlocked
 
         if (
             saved.seal() not in (self.prior, self.expected)
@@ -132,7 +140,15 @@ class PendingSeal(CheckpointSeal):
             or self.prior.root_id != marker.root_id
         ):
             raise RelationViolationError("Private bus checkpoint pending intent is inconsistent.")
-        return _recover_pending_unlocked(bus, marker, db, path, info, self)
+        return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, self)
+
+    def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
+        if (
+            saved.seal() not in (self.prior, self.expected)
+            or rebuilt.offset != self.expected.revision.size
+            or replace(rebuilt.seal(), revision=self.expected.revision) != self.expected
+        ):
+            raise RelationViolationError("Private bus checkpoint pending suffix differs from intent.")
 
     def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
         from .private_bus_checkpoint import CheckpointNeedsRepair
