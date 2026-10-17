@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
 
-from .agent_backend import RuntimeLocation, UnstartedRuntime
+from .agent_backend import AgentBackend
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
@@ -44,9 +44,8 @@ class Thread(ThreadProvenance):
     parent: str | None = None
     task: str | None = None
     process_identity: ProcessIdentity | None = None
-    runtime: RuntimeLocation = field(
-        default_factory=UnstartedRuntime.default, kw_only=True,
-        metadata={"registration_inheritance": RuntimeLocation, "wire_name": "session_file"},
+    session_file: str | None = field(
+        default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
     )
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     thinking_level: type[ThinkingLevel] | None = field(
@@ -77,6 +76,10 @@ class Thread(ThreadProvenance):
     role: ThreadRole = ThreadRole.AGENT
     execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
                                             metadata={"wire_omit_default": True})
+    backend: type[AgentBackend] = field(
+        default_factory=AgentBackend.for_new_threads, kw_only=True,
+        metadata={"wire_omit_default": True, "registration_inheritance": InheritPrevious},
+    )
     active_turn: ActiveTurn | None = None
     channel_scope_generation: int = 0
     turn_generation: int = 0

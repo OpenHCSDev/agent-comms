@@ -42,7 +42,6 @@ from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
 from .agent_backend import RuntimeLocation
-from .pi_native_backend import PiSessionFile
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
@@ -70,7 +69,7 @@ class NewThreadSpec:
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
         with _store_lock(threads._wire_lock_path):
-            yield replace(thread, runtime=location)
+            yield replace(thread, session_file=location.read_key)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -87,7 +86,8 @@ class ForkSpec(NewThreadSpec):
 
     def child(self, parent: Thread, runtime: RuntimeLocation) -> Thread:
         return replace(self.declaration(self.project), parent=parent.name,
-                       tags=parent.tags if self.tags is None else self.tags, runtime=runtime)
+                       tags=parent.tags if self.tags is None else self.tags,
+                       backend=parent.backend, session_file=runtime.read_key)
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
@@ -173,7 +173,7 @@ class ThreadManagement:
             name,
             tags,
             str(project),
-            runtime=PiSessionFile(str(session_path)),
+            session_file=str(session_path),
             title=snapshot.title,
             model=model,
         )
@@ -524,7 +524,7 @@ class ThreadManagement:
                     if pid > 0
                     else None
                 ),
-                runtime=location,
+                session_file=location.read_key,
             )
             self.registry.register(attached)
             return attached

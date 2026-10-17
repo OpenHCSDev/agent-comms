@@ -1,5 +1,3 @@
-from agent_comms.agent_backend import UnstartedRuntime
-from agent_comms.pi_native_backend import PiSessionFile
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -88,7 +86,7 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread("pi", frozenset(), str(tmp_path),
-                                  runtime=PiSessionFile(str(tmp_path / "session.jsonl"))))
+                                  session_file=str(tmp_path / "session.jsonl")))
     with pytest.raises(ValueError, match="native session"):
         comms.transcripts.external("pi")
 

@@ -27,7 +27,6 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, WireValue
 from .send_outcome import SendBoundary
 
 if TYPE_CHECKING:
@@ -42,35 +41,8 @@ class BackendDeclarationError(TypeError):
     """A backend declaration is incomplete; the message names every missing piece."""
 
 
-class RuntimeLocation(DeclaredFamily, WireValue, affix="Runtime"):
-    """Backend behavior, with the existing path/null wire contract."""
-
-    accepts_null = True
-    external_json_shape = True
-
-    def to_wire(self):
-        return self.read_key
-
-    @classmethod
-    def from_wire(cls, data):
-        raise TypeError("Decode a runtime location through its record's stored backend")
-
-    @classmethod
-    def schema(cls):
-        return {"type": ["string", "null"]}
-
-    @staticmethod
-    def choose(incoming, previous):
-        return incoming.inherited(previous)
-
-    def inherited(self, previous):
-        return self
-
-    @property
-    def backend(self) -> type[AgentBackend]:
-        (owner,) = (backend for backend in AgentBackend.members_with(AgentBackend)
-                    if backend.location_type is type(self))
-        return owner
+class RuntimeLocation(DeclaredFamily, affix="Runtime"):
+    """Runtime behavior derived once by the owning thread record."""
 
     def require_forkable(self):
         pass
@@ -121,20 +93,8 @@ class RuntimeLocation(DeclaredFamily, WireValue, affix="Runtime"):
 class UnstartedRuntime(RuntimeLocation):
     owner: type[AgentBackend]
 
-    def to_wire(self):
-        return None
-
-    def inherited(self, previous):
-        return previous
-
-    @property
-    def backend(self) -> type[AgentBackend]:
-        return self.owner
-
     def require_forkable(self):
-        from .errors import RelationViolationError
-
-        raise RelationViolationError("An unstarted runtime has no saved history to fork")
+        raise ValueError("Canonical saved session required")
 
     async def compact(self, operation):
         return FailedCompaction("This thread has no saved session to compact.")
@@ -163,9 +123,6 @@ class UnstartedRuntime(RuntimeLocation):
 
     def external_records(self, root, incarnation):
         return self.history_source(root, incarnation)
-    @classmethod
-    def default(cls) -> UnstartedRuntime:
-        return cls(AgentBackend.for_new_threads())
 
     def select_session(self, directory, execution):
         from .selected_session import SelectedSession
@@ -181,8 +138,8 @@ class UnstartedRuntime(RuntimeLocation):
         return ()
 
     @property
-    def read_key(self) -> str:
-        raise ValueError("This operation requires a started runtime")
+    def read_key(self) -> str | None:
+        return None
 
 
 # ---------------------------------------------------------------------------

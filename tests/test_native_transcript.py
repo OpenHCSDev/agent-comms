@@ -1,5 +1,3 @@
-from agent_comms.agent_backend import UnstartedRuntime
-from agent_comms.pi_native_backend import PiSessionFile
 """Saved Pi boundary, bounded readers and presentation roundtrips."""
 
 import json
@@ -73,7 +71,7 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
         )
     )
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), runtime=PiSessionFile(str(path))))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
     decoded = []
     original = NativeEntry.read
 

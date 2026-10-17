@@ -518,7 +518,7 @@ class RegistryDocument(RegistryPresence):
 
     def _native_source_publication(self, current: Thread, session_file: str) -> NativeSourcePublication:
         return NativeSourcePublication(
-            thread=replace(current, runtime=current.backend.location_type(session_file)),
+            thread=replace(current, session_file=session_file),
             status=self.statuses[current.name],
             previous=current, previous_status=self.statuses[current.name],
         )

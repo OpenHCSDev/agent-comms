@@ -1,5 +1,3 @@
-from agent_comms.agent_backend import UnstartedRuntime
-from agent_comms.pi_native_backend import PiSessionFile
 from agent_comms.coordination_errors import TranscriptChanged
 import json
 from dataclasses import replace
@@ -29,7 +27,7 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     path = tmp_path / "session.jsonl"
     transcript(path, 105)
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), runtime=PiSessionFile(str(path))))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=10)
     through = page.after
     seen = [event.text for event in page.events]
@@ -63,18 +61,18 @@ def test_oversized_message_and_file_identity(tmp_path):
         json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}) + "\n"
     )
     comms = wire(tmp_path / "wire")
-    thread = Thread("worker", frozenset(), str(tmp_path), runtime=PiSessionFile(str(path)))
+    thread = Thread("worker", frozenset(), str(tmp_path), session_file=str(path))
     comms.registry.declare(thread)
     page = comms.transcripts.thread_transcript_page("worker", max_bytes=100)
     assert page.events[0].text == text
     assert not page.has_older
-    comms.registry.declare(replace(thread, runtime=PiSessionFile(str(tmp_path / "other.jsonl"))))
+    comms.registry.declare(replace(thread, session_file=str(tmp_path / "other.jsonl")))
     with pytest.raises(TranscriptChanged):
         comms.transcripts.thread_transcript_page("worker", before=page.before)
     with pytest.raises(ValueError):
         comms.transcripts.thread_transcript_page("worker", max_messages=0)
     with pytest.raises(TranscriptChanged):
-        comms.transcripts.thread_transcript_page("worker", before=NativeTranscriptCursor(PiSessionFile(str(path)), -1))
+        comms.transcripts.thread_transcript_page("worker", before=NativeTranscriptCursor(str(path), -1))
 
 
 def test_empty_transcript_and_non_message_records(tmp_path):
@@ -89,14 +87,14 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
     transcript(parent_path, 3)
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
-        Thread("parent", frozenset(), str(tmp_path), runtime=PiSessionFile(str(parent_path)))
+        Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path))
     )
     comms.registry.declare(
         Thread("child", frozenset(), str(tmp_path), parent="parent", task="Inspect the renderer")
     )
 
     page = comms.transcripts.thread_transcript_page("child")
-    assert page.after.runtime.read_key == str(parent_path)
+    assert page.after.session_file == str(parent_path)
     assert [event.text for event in page.events] == [
         "Record 0",
         "Record 1",
@@ -123,7 +121,7 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     transcript(parent_path, 35)
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
-        Thread("parent", frozenset(), str(tmp_path), runtime=PiSessionFile(str(parent_path)))
+        Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path))
     )
     comms.registry.declare(
         Thread("child", frozenset(), str(tmp_path), parent="parent", task="Child task")
@@ -140,12 +138,12 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
         )
         seen[:0] = [event.text for event in page.events if event.declared_name == "assistant"]
     assert seen == [f"Record {i}" for i in range(35)]
-    assert comms.transcripts.thread_transcript_page("child").after.runtime.read_key == str(own_path)
+    assert comms.transcripts.thread_transcript_page("child").after.session_file == str(own_path)
     unrelated = tmp_path / "unrelated.jsonl"
     transcript(unrelated, 1)
     with pytest.raises(TranscriptChanged):
         comms.transcripts.thread_transcript_page(
-            "child", through=NativeTranscriptCursor(PiSessionFile(str(unrelated)), unrelated.stat().st_size)
+            "child", through=NativeTranscriptCursor(str(unrelated), unrelated.stat().st_size)
         )
 
 
@@ -153,9 +151,9 @@ def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
     from agent_comms.transcript_receipts import AssignedSourceCursor
 
     wire_at = AssignedSourceCursor("root", "recipient", 5).at
-    cursor = WireTranscriptCursor(PiSessionFile("a.jsonl"), 900, wire_at(5))
-    committed = (WireTranscriptCursor(PiSessionFile("a.jsonl"), 40, wire_at(2)), WireTranscriptCursor(PiSessionFile("a.jsonl"), 70, wire_at(5)),
-                 WireTranscriptCursor(PiSessionFile("a.jsonl"), 99, wire_at(6)), WireTranscriptCursor(PiSessionFile("b.jsonl"), 500, wire_at(1)))
-    assert cursor.over_native(committed) == WireTranscriptCursor(PiSessionFile("a.jsonl"), 70, wire_at(5))
-    assert cursor.over_native(committed[3:]) == WireTranscriptCursor(PiSessionFile("b.jsonl"), 500, wire_at(5))
-    assert cursor.over_native(()) == WireTranscriptCursor(PiSessionFile("a.jsonl"), 0, wire_at(5))
+    cursor = WireTranscriptCursor("a.jsonl", 900, wire_at(5))
+    committed = (WireTranscriptCursor("a.jsonl", 40, wire_at(2)), WireTranscriptCursor("a.jsonl", 70, wire_at(5)),
+                 WireTranscriptCursor("a.jsonl", 99, wire_at(6)), WireTranscriptCursor("b.jsonl", 500, wire_at(1)))
+    assert cursor.over_native(committed) == WireTranscriptCursor("a.jsonl", 70, wire_at(5))
+    assert cursor.over_native(committed[3:]) == WireTranscriptCursor("b.jsonl", 500, wire_at(5))
+    assert cursor.over_native(()) == WireTranscriptCursor("a.jsonl", 0, wire_at(5))

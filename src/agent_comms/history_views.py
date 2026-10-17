@@ -408,9 +408,9 @@ class HistoryViews:
         """Acknowledge only the native transcript boundary actually displayed."""
         viewer = self.messaging.user_identity(worktree).name
         thread = self.registry.require(name)
-        if through.runtime != thread.runtime:
+        if through.session_file != thread.runtime.read_key:
             raise ValueError("Transcript changed; refresh before marking it read.")
-        for key in through.runtime.read_keys():
+        for key in thread.runtime.read_keys():
             self.transcript_reads.mark_read(viewer, key, through.offset)
 
     def mark_channel_view_read(
@@ -456,7 +456,7 @@ class HistoryViews:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(target)
             checkpoint = self.transcripts.transcript_checkpoint(thread.name)
-            for key in checkpoint.runtime.read_keys():
+            for key in thread.runtime.read_keys():
                 self.transcript_reads.mark_read(viewer, key, checkpoint.offset)
             messages = self.bus.inbox(viewer, thread.name)
             self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))

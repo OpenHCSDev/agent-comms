@@ -53,7 +53,7 @@ _LOG = logging.getLogger(__name__)
 class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     """A native transcript position; WireTranscriptCursor adds an assigned wire source."""
 
-    runtime: RuntimeLocation = field(metadata={"wire_name": "session_file"})
+    session_file: str | None
     offset: int
     wire: ClassVar[WireFrontier] = NoWireFrontier()
 
@@ -61,10 +61,10 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
         return replace(self, offset=offset)
 
     def at_sequence(self, sequence: int) -> TranscriptCursor:
-        return self.wire.at(sequence).cursor(self.runtime, self.offset)
+        return self.wire.at(sequence).cursor(self.session_file, self.offset)
 
     def contains(self, other: TranscriptCursor) -> bool:
-        return (self.runtime == other.runtime and other.offset <= self.offset
+        return (self.session_file == other.session_file and other.offset <= self.offset
                 and other.wire.within(self.wire))
 
     def covers_incoming(self, sequence: int) -> bool:
@@ -75,9 +75,9 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
         """This wire position over the furthest committed native prefix within it: wire
         assignment can advance without transferring anonymous native output."""
         within = tuple(prefix for prefix in prefixes if prefix.wire.within(self.wire))
-        prefix = max((prefix for prefix in within if prefix.runtime == self.runtime),
+        prefix = max((prefix for prefix in within if prefix.session_file == self.session_file),
                      key=lambda prefix: prefix.offset, default=next(iter(within), self.at_offset(0)))
-        return replace(self, runtime=prefix.runtime, offset=prefix.offset)
+        return replace(self, session_file=prefix.session_file, offset=prefix.offset)
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +134,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     root: str
     requested_name: str
     thread: ThreadProvenance = field(metadata={"content_exclude": True})
-    runtime: RuntimeLocation = field(metadata={"wire_name": "session_file"})
+    session_file: str | None
     records_cut: RecordsCut = field(metadata={"content_exclude": True})
     route_revision: TranscriptRouteRevision
     bus_revision: FileRevision | None = field(metadata={"content_exclude": True})
@@ -198,7 +198,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     @property
     def page_bound(self) -> TranscriptCursor:
         """The original witnessed byte/receipt bound owns page preparation."""
-        return self.through or self.wire_frontier.cursor(self.runtime, self.records_cut.offset)
+        return self.through or self.wire_frontier.cursor(self.session_file, self.records_cut.offset)
 
     def contains_records_cut(self, other: TranscriptReadIdentity) -> bool:
         """Whether ``other`` still contains the thread records this read captured."""
@@ -269,7 +269,7 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
         source = HistorySource.require(owner.bus.history.sources(), historical_source)
         thread = source.provenance.require(name)
         runtime = thread.runtime
-        if source_runtime is not None and source_runtime != runtime:
+        if source_runtime is not None and source_runtime != runtime.read_key:
             raise TranscriptChanged()
         root = Path(source.root)
         log = WireLog(root / "bus.jsonl")
@@ -472,7 +472,7 @@ class Transcripts:
             str(self.root),
             name,
             thread,
-            page.runtime,
+            page.runtime.read_key,
             records_cut,
             page.routes.revision(),
             FileRevision.capture(page.log.path),
@@ -498,16 +498,16 @@ class Transcripts:
         member = (LiveTranscriptReadIdentity if historical_source is None
                   else RecordedTranscriptReadIdentity)
         return member.resolve_source(
-            self, name, through.runtime if through is not None else None, historical_source,
+            self, name, through.session_file if through is not None else None, historical_source,
         )
 
     def _thread_transcript_source(
-        self, name: str, source_runtime: RuntimeLocation | None = None, *, registry
+        self, name: str, source_runtime: str | None = None, *, registry
     ) -> tuple[Thread, RuntimeLocation, bool]:
         """Resolve a temporary inherited view without changing runtime ownership."""
         thread = registry.require(name)
         for location, inherited in thread.runtime.history_locations(thread, registry, set()):
-            if source_runtime is None or source_runtime == location:
+            if source_runtime is None or source_runtime == location.read_key:
                 return thread, location, inherited
         raise TranscriptChanged()
 
@@ -563,7 +563,7 @@ class Transcripts:
         self.page_reads += 1
         thread, runtime = page.thread, page.runtime
         cursor = before or after
-        if cursor and (cursor.runtime != runtime or cursor.offset < 0):
+        if cursor and (cursor.session_file != runtime.read_key or cursor.offset < 0):
             raise TranscriptChanged()
         source = page.projection
         with page.records.reading() as reader:
@@ -571,12 +571,12 @@ class Transcripts:
             if cursor and cursor.offset > size:
                 raise TranscriptChanged()
             if through is not None:
-                if through.runtime != runtime or not 0 <= through.offset <= size:
+                if through.session_file != runtime.read_key or not 0 <= through.offset <= size:
                     raise TranscriptChanged()
                 size = through.offset
                 if cursor and cursor.offset > size:
                     raise ValueError("Cursor is outside the transcript window.")
-            frontier = through or source.frontier.cursor(runtime, size)
+            frontier = through or source.frontier.cursor(runtime.read_key, size)
             source.require_cursor(frontier)
             if frontier.wire.sequence < 0 or (cursor is not None and not frontier.contains(cursor)):
                 raise ValueError("Cursor is outside the combined transcript source")
@@ -607,7 +607,7 @@ class Transcripts:
         with thread.runtime.history_source(self.root, thread.incarnation).reading() as source:
             offset = source.cut().offset
         return AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier.cursor(
-            thread.runtime, offset,
+            thread.runtime.read_key, offset,
         )
 
     def record_turn_publication(
