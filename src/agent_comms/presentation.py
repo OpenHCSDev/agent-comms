@@ -436,7 +436,7 @@ class BusPresentation:
                 with DisplaySelection.reading(
                     self.registry, self.catalog, self.bus.reads, viewer
                 ) as basis:
-                    scope = basis.scope(target)
+                    scope = basis.scope(target.name)
             # Identity capture does not grant custody over page preparation. Both
             # DM and channel pages borrow the same original reader and source cut.
             page = ConversationMessagePageRequest.capture(

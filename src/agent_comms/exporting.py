@@ -145,10 +145,7 @@ class ChannelScope(WireExportScope):
 
     def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
         channel = catalog.read().resolve(self.channel)
-        if channel.view is not None:
-            raise RelationViolationError(
-                f"Saved view {self.channel!r} has no authoritative wire history."
-            )
+        channel.require_routable()
         targets = channel.history_targets
         if targets is None:
             raise RelationViolationError(

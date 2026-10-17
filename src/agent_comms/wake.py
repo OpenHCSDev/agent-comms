@@ -116,7 +116,10 @@ def _member_decision(
 ) -> WakeDecision | NoWakeDecision:
     if not message.type.conversation_message:
         return NoWakeDecision(recipient.recipient_lookup)
-    mode = target.wake_policy(message, recipient, control, effective_mentions)
+    if message.notice or message.membership is not None or control.passive:
+        mode = PassiveWake()
+    else:
+        mode = target.wake_policy(recipient, effective_mentions)
     if mode is None:
         return NoWakeDecision(recipient.recipient_lookup)
     return WakeDecision(recipient.recipient_lookup, target.wake_audience(effective_mentions), mode)

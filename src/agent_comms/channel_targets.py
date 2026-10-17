@@ -7,8 +7,8 @@ from typing import ClassVar
 from enum import StrEnum
 
 from .errors import RelationViolationError, UnregisteredThreadError
-from .response_policy import CollectivePolicy, DirectPolicy, MentionedOnlyPolicy
-from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, PassiveWake
+from .response_policy import CollectivePolicy, DirectPolicy, InformationalPolicy, MentionedOnlyPolicy
+from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
 
 
 class BuiltinChannel(StrEnum):
@@ -114,17 +114,13 @@ class NamedTarget(CommandTarget):
         return frozenset()
 
     def require_frozen_recipients(self, message, audience):
-        if not self.direct_names or (message.notice and not audience.recipients):
+        size = len(audience.recipients)
+        if not self.direct_names or (message.notice and size == 0):
             return
-        if len(audience.recipients) != len(self.direct_names):
+        if size != len(self.direct_names):
             raise ValueError("a direct message must have exactly one frozen eligible recipient.")
         if tuple(member.canonical_thread for member in audience.recipients) != self.direct_names:
             raise ValueError("direct frozen recipient must match the exact stored target.")
-
-    def wake_policy(self, message, recipient, control, mentions):
-        if message.notice or message.membership is not None or control.passive:
-            return PassiveWake()
-        return self.ordinary_wake_policy(recipient, mentions)
 
 
 class ThreadTarget(NamedTarget):
@@ -162,7 +158,7 @@ class ThreadTarget(NamedTarget):
     def reply_target(self, sender):
         return sender
 
-    def ordinary_wake_policy(self, recipient, mentions):
+    def wake_policy(self, recipient, mentions):
         return FullWake()
 
     def require_publication(self, message, snapshot, catalog):
@@ -175,19 +171,19 @@ class ThreadTarget(NamedTarget):
     def initial_delivery(self, sender, message, snapshot, catalog):
         target = self.canonical_name(snapshot.canonical_name)
         recipient = snapshot.threads.get(target)
-        if recipient is None or not snapshot.statuses[target].visible:
-            raise RelationViolationError("Initial direct target must be visible.")
-        if target == sender:
-            raise RelationViolationError("A thread cannot message itself.")
-        if not recipient.role.executable:
+        if recipient is not None and snapshot.statuses[target].visible:
+            if target == sender:
+                raise RelationViolationError("A thread cannot message itself.")
+            if recipient.role.executable:
+                return ThreadTarget(target), message, [target]
             return ThreadTarget(target), replace(message, notice=True), []
-        return ThreadTarget(target), message, [target]
+        raise RelationViolationError("Initial direct target must be visible.")
 
     def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
         return direct_scope.capture(viewer, snapshot.require(self.name).name, snapshot)
 
     def conversation_key(self, sender, snapshot, constructor):
-        names = sorted({snapshot.canonical_name(sender), self.canonical_name(snapshot)})
+        names = sorted({snapshot.canonical_name(sender), self.canonical_name(snapshot.canonical_name)})
         return constructor(participants=tuple(snapshot.participant(name).incarnation for name in names))
 
     def changed_threads(self, names, snapshot, catalog):
@@ -222,12 +218,12 @@ class ChannelTarget(NamedTarget):
 
     def validate(self, sender=None):
         if BuiltinChannel.lookup(self.name) is None:
-            Tag.validate(self.name[1:])
+            Tag.validate(self.name[1:], label=f"Channel {self.name!r}")
 
     def response_policy(self, message):
         if message.mentions:
             return MentionedOnlyPolicy.instance()
-        return CollectivePolicy.instance() if not message.sender_role.executable else InformationalPolicy.instance()
+        return InformationalPolicy.instance() if message.sender_role.executable else CollectivePolicy.instance()
 
     def reply_target(self, sender):
         return self.name
@@ -235,24 +231,21 @@ class ChannelTarget(NamedTarget):
     def effective_mentions(self, message, audience):
         return frozenset(mention.thread for mention in message.mentions).intersection(audience.canonical_members)
 
-    def ordinary_wake_policy(self, recipient, mentions):
+    def wake_policy(self, recipient, mentions):
         if mentions:
             return FullWake() if recipient.canonical_thread in mentions else None
         return BoundedTriageWake()
 
     def require_publication(self, message, snapshot, catalog):
-        channel = catalog().resolve(self.name)
-        if channel.aggregate or channel.view is not None:
-            raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
+        catalog().resolve(self.name).require_routable()
 
     def initial_delivery(self, sender, message, snapshot, catalog):
         channel = catalog.resolve(self.name)
         names = []
         for name, thread in snapshot.threads.items():
-            if name == sender or not thread.role.executable:
-                continue
-            if snapshot.statuses[name].visible and channel.matches(thread.tags):
-                names.append(name)
+            if name != sender and thread.role.executable:
+                if snapshot.statuses[name].visible and channel.matches(thread.tags):
+                    names.append(name)
         return self, message, names
 
     def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
@@ -300,6 +293,6 @@ class Tag:
         self.validate(self.name)
 
     @staticmethod
-    def validate(name: str) -> None:
+    def validate(name: str, *, label: str = "Tags") -> None:
         if not name or not set(name) <= _TAG_CHARS or BuiltinChannel.lookup(f"#{name}"):
-            raise ValueError("Tags must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")
+            raise ValueError(f"{label} must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")

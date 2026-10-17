@@ -79,6 +79,10 @@ class Channel:
         builtin = self.builtin
         return builtin is not None and builtin.aggregate
 
+    def require_routable(self) -> None:
+        if self.aggregate or self.view is not None:
+            raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
+
     @property
     def exact(self) -> bool:
         return self.view is None and self.builtin is None
