@@ -18,6 +18,7 @@ from .locked_store import LockedStore
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
 from .registry_document import RegistryDocument, RegistryEntry
+from .thread_identity import ThreadRole
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,16 @@ class RegistryRevision:
     revision: FileRevision | None
     document: RegistryDocument
     raw: dict
+    user_name: str | None
+
+    @classmethod
+    def capture(cls, revision: FileRevision | None, document: RegistryDocument, raw: dict):
+        user_name = next((name for name, thread in document.threads.items() if thread.role is ThreadRole.USER), None)
+        return cls(revision, document, raw, user_name)
+
+    @property
+    def user(self):
+        return self.document.threads[self.user_name] if self.user_name is not None else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +107,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
         self.private_guard_unlocked()  # before even a cache hit
         revision = FileRevision.capture(self.path)
         if revision is None:
+            self.cache.entry = None
             return self.empty()
         entry = self.cache.entry
         if entry is not None and entry.revision == revision:
@@ -109,7 +121,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
                 document = RegistryDocument.from_wire(raw)
             else:
                 document = RegistryDocument.from_wire(raw, (entry.raw, entry.document))
-            self.cache.entry = RegistryRevision(revision, document, raw)
+            self.cache.entry = RegistryRevision.capture(revision, document, raw)
             return document
 
     @property
@@ -120,23 +132,16 @@ class RegistryStore(LockedStore[RegistryDocument]):
         """The registry file and its owner guard, which every write replaces together."""
         return FileRevision.capture(self.path), FileRevision.capture(self.guard_path)
 
-    def read_entry(self, name: str) -> RegistryEntryRevision:
-        """One thread's entry from the current file, without decoding the other threads.
-
-        The revision is taken under the same lock, so it is the one the entry
-        was read from, not an earlier stat taken while a write was in flight.
-        A decoded revision already in this process's cache answers directly.
-        """
-        with self.locked(shared=True):
-            self.private_guard_unlocked()
-            revision = self.revision_unlocked()
-            if revision[0] is None:
-                return RegistryEntryRevision(revision, self.empty().entry(name))
+    def read_user(self):
+        with self.reading():
             entry = self.cache.entry
-            if entry is not None and entry.revision == revision[0]:
-                return RegistryEntryRevision(revision, entry.document.entry(name))
-            raw = json.loads(self.path.read_text())
-            return RegistryEntryRevision(revision, RegistryDocument.entry_from_wire(raw, name))
+            return entry.user if entry is not None else None
+
+    def read_entry(self, name: str) -> RegistryEntryRevision:
+        """A point lookup from the same decoded revision every registry reader takes."""
+        with self.locked(shared=True):
+            document = self._read_unlocked()
+            return RegistryEntryRevision(self.revision_unlocked(), document.entry(name))
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
@@ -155,7 +160,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.
         if (revision := FileRevision.capture(self.path)) is not None:
-            self.cache.entry = RegistryRevision(revision, document.copy(), raw)
+            self.cache.entry = RegistryRevision.capture(revision, document.copy(), raw)
 
     def _write_unlocked(self, text: str) -> None:
         # The two-file private guard protocol cannot use A8's rollback writer:

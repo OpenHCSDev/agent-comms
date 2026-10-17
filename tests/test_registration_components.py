@@ -56,7 +56,7 @@ def test_store_owns_document_and_failed_edit_cannot_leak_into_cache(tmp_path):
     assert not {"_threads", "_owners", "_admissions", "_statuses"} & vars(registration).keys()
 
 
-def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_path):
+def test_point_readers_preserve_registry_alias_and_validation_boundaries(tmp_path):
     registration = Registration(tmp_path / "registry.json")
     registration.register(owner(tmp_path))
     registration.register(replace(owner(tmp_path), name="other", created_at=11.0))
@@ -64,19 +64,14 @@ def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_
     document = registration.store.read()
     raw = json.loads(registration.store.path.read_text())
     for name in ("renamed", "owner", "other"):
-        assert RegistryDocument.entry_from_wire(raw, name) == document.entry(name)
-    # Another process's write leaves this process without a decoded revision.
-    registration.store.cache.entry = None
-    read = registration.entry("owner")
-    assert read.entry == document.entry("renamed") and read.entry.thread.name == "renamed"
-    assert read.revision == registration.store.revision_unlocked()
-    # Another thread's malformed declaration is not this thread's entry.
-    raw["threads"]["other"]["created_at"] = "not a time"
-    assert RegistryDocument.entry_from_wire(raw, "renamed") == document.entry("renamed")
-    with pytest.raises(RelationViolationError):
-        RegistryDocument.entry_from_wire(raw, "other")
+        assert registration.entry(name).entry == document.entry(name)
+    assert registration.entry("owner").revision == registration.store.revision_unlocked()
     with pytest.raises(UnregisteredThreadError):
-        RegistryDocument.entry_from_wire(raw, "missing")
+        registration.entry("missing")
+    raw["threads"]["other"]["created_at"] = "not a time"
+    registration.store.path.write_text(json.dumps(raw))
+    with pytest.raises(RelationViolationError):
+        registration.entry("renamed")
 
 
 def test_registry_update_persists_across_reopen(tmp_path):
