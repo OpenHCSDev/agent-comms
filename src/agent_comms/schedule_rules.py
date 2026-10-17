@@ -149,7 +149,7 @@ class SelectedWakeCheck(SessionScheduleCheck):
         effects = inputs.effects
         root_id = effects.configured_root_id
         # Selection may have been scheduled just before maintenance began.
-        # A deferred admission is not a successful drain or diagnostic recovery.
+        # A deferred selection is not a successful drain or diagnostic recovery.
         hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
         if hold.turn_pending:
             return hold

@@ -376,24 +376,25 @@ class InputObservation:
                         await self.effects.turns.goals.schedule_goal(session_id)
                         current = await Coordination.run_worker(partial(self.comms.registry.require, thread))
                         if (
-                            not current.executing
-                            and session_id not in self.effects.turns.turn_tasks
-                            and session_id not in self.backend_inboxes
+                            current.executing
+                            or session_id in self.effects.turns.turn_tasks
+                            or session_id in self.backend_inboxes
                         ):
-                            if not current.executing and self._quiescent(session_id):
-                                marker = await Coordination.run_worker(self._bus_marker)
-                                settled = SettledTick(
-                                    revision, entry, marker.admission_after_seq, marker.last_seq,
-                                )
-                            elif self._repeat_observation_ready(session_id, drained):
-                                # The first empty private observation may advance its
-                                # own durable cursor. Re-read that transition now;
-                                # healthy file notification remains event-driven.
-                                watcher.notify()
-                            elif self.effects.cursors.delivery(session_id).needs_refresh:
-                                # Cursor publication has process-local work even when
-                                # no wake task exists to produce another file change.
-                                watcher.notify()
+                            continue
+                        if self._quiescent(session_id):
+                            marker = await Coordination.run_worker(self._bus_marker)
+                            settled = SettledTick(
+                                revision, entry, marker.admission_after_seq, marker.last_seq,
+                            )
+                        elif self._repeat_observation_ready(session_id, drained):
+                            # The first empty private observation may advance its
+                            # own durable cursor. Re-read that transition now;
+                            # healthy file notification remains event-driven.
+                            watcher.notify()
+                        elif self.effects.cursors.delivery(session_id).needs_refresh:
+                            # Cursor publication has process-local work even when
+                            # no wake task exists to produce another file change.
+                            watcher.notify()
                 except DEFERRED_DRAIN_ERRORS:
                     continue
 
@@ -433,7 +434,7 @@ class InputObservation:
             if revision.coordination != settled.revision.coordination:
                 if not await self._own_coordination_unchanged(session_id, entry):
                     return None
-        except (*UNAVAILABLE_DRAIN_ERRORS, RelationViolationError):
+        except UNAVAILABLE_DRAIN_ERRORS:
             return None
         return SettledTick(revision, entry, admission_after_seq, through_seq)
 

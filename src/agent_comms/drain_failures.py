@@ -18,9 +18,10 @@ from .activity import (
 )
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
+from .errors import RelationViolationError
 from .native_pi import NativePiUnavailable
 
-UNAVAILABLE_DRAIN_ERRORS = (OSError, sqlite3.Error, CoordinationError, RequestError)
+UNAVAILABLE_DRAIN_ERRORS = (OSError, sqlite3.Error, CoordinationError, RequestError, RelationViolationError)
 DEFERRED_DRAIN_ERRORS = (NativePiUnavailable, *UNAVAILABLE_DRAIN_ERRORS)
 
 if TYPE_CHECKING:
