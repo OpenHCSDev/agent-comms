@@ -174,7 +174,7 @@ class Prompt(PiCommand):
         if response.id == session.prompt_id:
             session.watchdog.progress()
             if response.success:
-                session.admission = session.admission.acknowledge(response)
+                session.prompt_state = session.prompt_state.acknowledge(response)
                 session.watchdog.prompt_accepted = True
                 session.watchdog.phase = phases.ModelWaitPhase()
             else:

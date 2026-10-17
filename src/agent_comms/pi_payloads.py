@@ -684,11 +684,11 @@ class UserMessage(PiMessage):
     user = True
     transcript_kind = pivot.UserEntry
 
-    def matches_input(self, text, native_id, require_id):
-        return self.text == text and (not require_id or self.input_id == native_id)
+    def matches_input(self, text, native_id):
+        return self.text == text and self.input_id == native_id
 
     async def tracked_start(self, session, event) -> None:
-        if not self.matches_input(session.command.message, session.command.input_id, True):
+        if not self.matches_input(session.command.message, session.command.input_id):
             await session.later_input_started(event)
 
     async def apply_start(self, session, event):

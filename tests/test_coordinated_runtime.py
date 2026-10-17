@@ -105,6 +105,7 @@ def _root(
     (dist / "agent-comms-import-fence.mjs").write_bytes(import_fence.read_bytes())
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
+    (root / "runtime").mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
         Thread(
@@ -1187,6 +1188,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
 ) -> None:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
+    (root / "runtime").mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.registry.declare(
         Thread(

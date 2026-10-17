@@ -55,7 +55,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             from .active_route import resolve_comms_route
 
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
-            route_guard.enter_context(route.admit_client())
+            route_guard.enter_context(route.hold_client_route())
             comms = wire(route)
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:

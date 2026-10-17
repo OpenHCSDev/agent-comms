@@ -281,7 +281,7 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
     session = SimpleNamespace(
         awaiting_native_attestation=False,
         stats=SimpleNamespace(requested=False),
-        admission=SimpleNamespace(awaiting_start=True),
+        prompt_state=SimpleNamespace(awaiting_start=True),
         active_tools=set(),
     )
     watchdog.phase = ModelWaitPhase()

@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import pi_commands as commands
-from . import turn_failure as failures
-from .agent_backend import ClearQueue, InputId, InputRequest, SendNow, UseSettings, WhenBusy, TurnInboxItem
+from .maintenance_barrier import MaintenanceBarrier
+from .agent_backend import ClearQueue, InputId, InputRequest, SendNow, UseSettings, WhenBusy, TurnInbox, TurnInboxItem
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -28,30 +28,29 @@ _PI_STREAMING_BEHAVIOR = {WhenBusy.STEER: "steer", WhenBusy.FOLLOW_UP: "followUp
 
 @dataclass
 class InputForwarding:
-    queue: asyncio.Queue[TurnInboxItem] | None = None
+    queue: TurnInbox = field(default_factory=TurnInbox)
     pending: dict[str, commands.Prompt] = field(default_factory=dict)
     accepted: set[str] = field(default_factory=set)
     changed: asyncio.Event = field(default_factory=asyncio.Event)
+    current: TurnInboxItem | None = None
     generation: int = 0
     started: bool = False
     uncertain: bool = False
 
     @property
-    def permits_admission(self) -> bool:
-        """Only confirmed input delivery permits a fresh native interaction."""
+    def permits_interaction(self) -> bool:
+        """Observed authority loss blocks another native interaction."""
         return not self.uncertain
-
-    def can_forward(self, writer):
-        return self.queue is not None and writer is not None
 
     @property
     def unresolved(self) -> bool:
-        return bool(self.pending) or (self.queue is not None and not self.queue.empty())
+        return self.current is not None or bool(self.pending) or not self.queue.empty()
 
     @property
     def all_written_started(self) -> bool:
         """The child holds no input it has not started yet."""
-        return not self.pending
+        return (not self.pending and not (self.current and self.current.carried_inputs)
+                and self.queue.all_written_started)
 
     @property
     def settled(self) -> bool:
@@ -73,8 +72,13 @@ class InputForwarding:
         # Inputs that wait through one tool batch reach the model together,
         # not one model call apiece.
         await self.write(session, commands.SetSteeringMode(mode="all"))
-        while await (await self.queue.get()).deliver_to(self, session):
-            pass
+        while True:
+            self.current = await self.queue.get()
+            try:
+                if not await self.current.deliver_to(self, session):
+                    return
+            finally:
+                self.current = None
 
     async def write(self, session: TurnSession, *written: commands.PiCommand) -> None:
         for command in written:
@@ -122,35 +126,14 @@ class InputForwarding:
         if not candidates:
             return True
         first = self.pending[candidates[0]]
-        from .backend import _maintenance_send_boundary
-
-        boundary = _maintenance_send_boundary(
-            session.startup.root,
-            session.interrupt_boundary,
-            first.id,
-            candidates[0],
-            first.message,
-        )
-        async with boundary as authorized:
-            if authorized:
-                session.stdin.write(
-                    session.native.reader.encode(
-                        commands.InterruptSteering(input_ids=list(candidates))
-                    )
-                )
-        if not authorized:
-            self.uncertain = True
-            session.output.final_assistant_stop = False
-            session.output.record_failure(
-                failures.AuthorityChanged("Input authority changed before immediate steering.")
-            )
-            return False
-        await session.stdin.drain()
-        return True
+        async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
+            with status.phase.send(session.interrupt_boundary, first.id, candidates[0], first.message) as outcome:
+                completion = outcome.dispatch(self, session, item, lambda: session.stdin.write(
+                    session.native.reader.encode(commands.InterruptSteering(input_ids=list(candidates)))
+                ))
+        return await completion
 
     async def place(self, session: TurnSession, item: InputRequest) -> bool:
-        from .backend import _maintenance_send_boundary
-
         public_id = item.input_id.value
         native_id = secrets.token_hex(16)
         text = item.content.text
@@ -162,35 +145,22 @@ class InputForwarding:
             context_contributions=item.content.contributions,
             streaming_behavior=_PI_STREAMING_BEHAVIOR[item.when_busy],
         )
-        self.pending[native_id] = command
-        boundary = _maintenance_send_boundary(
-            session.startup.root,
-            session.send_boundary,
-            public_id,
-            native_id,
-            text,
-        )
-        async with boundary as authorized:
-            if authorized:
-                if command.images:
-                    session.output.sensitive = True
-                self.generation += 1
-                session.stdin.write(session.native.reader.encode(command))
-        if authorized:
-            await session.stdin.drain()
-            return True
-        if authorized is False:
-            self.uncertain = True
-            session.output.final_assistant_stop = False
-            session.output.record_failure(
-                failures.AuthorityChanged("Input authority changed before Pi prompt send.")
-            )
-            return False
-        # None means never sent; preserve the owner's UNKNOWN, not a replay.
-        self.retire(native_id)
-        session.rejected_commands.append(events.InputRefused(id=public_id))
-        session.rejected_signal.set()
-        return True
+        def write():
+            if command.images:
+                session.output.sensitive = True
+            session.stdin.write(session.native.reader.encode(command))
+            self.pending[native_id] = command
+            self.generation += 1
+
+        async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
+            with status.phase.send(session.send_boundary, public_id, native_id, text) as outcome:
+                completion = outcome.dispatch(self, session, item, write)
+        return await completion
+
+    def refuse(self, session: TurnSession, input_ids: tuple[InputId, ...]) -> None:
+        for input_id in input_ids:
+            session.rejected_commands.append(events.InputRefused(id=input_id.value))
+            session.rejected_signal.set()
 
     def mark_started(self, session: TurnSession, payload: MessageStart) -> tuple[bool, str | None]:
         message = payload.message

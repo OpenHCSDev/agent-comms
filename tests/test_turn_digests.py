@@ -99,8 +99,8 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
     state = tmp_path / 'state'
     store = Binding.open(state)
     db = store.__enter__()
-    bridge = ClaudeBridge(Options(Watch(), str(comms.root), 'claude', 'session', state),
-                          Binding(str(comms.root), 'claude', 'session'), db)
+    binding = Binding(str(comms.root), 'claude', 'session')
+    bridge = ClaudeBridge(Options(Watch(), binding, state), binding, db)
 
     async def publish():
         task = asyncio.create_task(bridge.publish_transcript())

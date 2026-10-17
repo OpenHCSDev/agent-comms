@@ -31,7 +31,7 @@ class ExtensionUiSession:
 
     async def choose(self, request: DialogUiRequest, session: TurnSession) -> ExtensionUiChoice:
         key = request.require_id()
-        if not session.admission.permits_extension_ui(session):
+        if not session.prompt_state.permits_extension_ui(session):
             return CancelledUiChoice()
         if self.controller is None:
             return CancelledUiChoice()
@@ -57,7 +57,7 @@ class ExtensionUiSession:
             return
         # Input forwarding may become uncertain while the controller is awaiting
         # the user. Admission must still hold when its answer reaches Pi.
-        if not session.admission.permits_extension_ui(session):
+        if not session.prompt_state.permits_extension_ui(session):
             choice = CancelledUiChoice()
         response = choice.response(request)
         try:

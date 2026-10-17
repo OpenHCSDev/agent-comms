@@ -96,7 +96,7 @@ class InputMissing(TerminalFailure):
 
     @classmethod
     def detected(cls, session: TurnSession, transport_ok: bool) -> bool:
-        return not session.admission.started and bool(
+        return not session.prompt_state.started and bool(
             transport_ok or session.inputs.uncertain or session.output.failure_text
         )
 
