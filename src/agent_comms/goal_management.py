@@ -418,7 +418,7 @@ class Goals:
         *,
         actor: type = RuntimeInvocable,
     ) -> Goal | None:
-        """Prepare outside custody, then recheck the captured goal at publication."""
+        """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
         action = action.prepare(self, name, actor)
         with _store_lock(self._wire_lock_path):
