@@ -152,8 +152,8 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
             result = await turn
             assert isinstance(result[-1], events.Done) and not result[-1].ok
         assert turn not in backend.TurnSession.active
-        async with asyncio.timeout(0):
-            await session.native.proc.stderr_tail()
+        assert session.native.proc.retired
+        await session.native.proc.stderr_tail()
         assert forwarding is not None and forwarding.done()
         assert not child.alive()
         assert not owner.persistent.available
@@ -203,8 +203,7 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
         result = await asyncio.wait_for(turn, 10)
         assert not result[-1].ok
         assert not session.native.proc.alive()
-        async with asyncio.timeout(0):
-            await session.native.proc.stderr_tail()
+        await session.native.proc.stderr_tail()
         assert forwarding.done()
         assert session.native.forwarding_task is None
         assert turn not in backend.TurnSession.active

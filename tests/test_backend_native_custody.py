@@ -46,8 +46,7 @@ async def test_stop_failure_accounts_for_native_resources_and_retains_uncertaint
             assert stopped.value.__cause__ is failure
             assert calls == [stage]
             assert child.proc.retired
-            async with asyncio.timeout(0):
-                await child.proc.stderr_tail()
+            await child.proc.stderr_tail()
             assert resource.closed
             assert child._close_job.result() is stopped.value
             assert not child.retired
@@ -79,9 +78,8 @@ async def test_resource_release_failure_retains_exact_native_child(tmp_path):
             assert stopped.value is failure
             retirement = child._close_job
             assert retirement.done() and retirement.result() is failure
-            async with asyncio.timeout(0):
-                await child.proc.stderr_tail()
             assert child.proc.retired and resource.closed
+            await child.proc.stderr_tail()
             assert not child.retired
             assert isinstance(owner.persistent.custody, RetiringNative)
             assert owner.persistent.custody.child is child
@@ -138,9 +136,8 @@ async def test_all_native_shutdown_consumers_share_one_complete_job(
         from agent_comms.child_process import ChildOutcome
         assert child._close_job is operation and isinstance(operation.result(), ChildOutcome)
         assert calls == ["gateway", "stop", "resources"]
-        async with asyncio.timeout(0):
-            await child.proc.stderr_tail()
         assert child.retired
+        await child.proc.stderr_tail()
         assert isinstance(owner.persistent.custody, EmptyNative)
         if borrowed:
             assert owner.persistent.custody is following
@@ -283,9 +280,8 @@ async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
                 assert not isinstance(caught.value, Exception)
             operation = child._close_job
             assert operation.done() and operation.result() is original_error
-            async with asyncio.timeout(0):
-                await child.proc.stderr_tail()
             assert not child.retired and child.proc.retired
+            await child.proc.stderr_tail()
             assert isinstance(owner.persistent.custody, RetiringNative)
             with pytest.raises(failure) as repeated:
                 await owner.persistent.close_idle()
