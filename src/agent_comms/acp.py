@@ -144,9 +144,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             self,
             agent_bin=agent_bin,
             agent_args=agent_args,
-            reply_window=reply_window,
-            no_reply_window=no_reply_window,
-            reply_quiet=reply_quiet,
+            reply_timing=comms.configuration.reply_timing.overridden(
+                reply_window=reply_window, no_reply_window=no_reply_window, reply_quiet=reply_quiet,
+            ),
         )
         self.sessions = self.session_lifecycle_class(
             comms, self.turns.agent_bin, self.turns.agent_args, self._runtime, runtime_enabled, self
