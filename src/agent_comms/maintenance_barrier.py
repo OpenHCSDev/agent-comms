@@ -308,7 +308,7 @@ class MaintenanceBarrier:
             yield self.assert_open_unlocked()
 
     @asynccontextmanager
-    async def admit_ingress_async(self):
+    async def ingress_async(self):
         """Acquire the same ingress gate without blocking a native event loop.
 
         The borrower writes synchronously, then releases before waiting for

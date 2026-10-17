@@ -108,21 +108,17 @@ class TurnInbox(asyncio.Queue):
         return await super().get()
 
     @property
-    def unstarted_inputs(self):
-        return any(item.carried_inputs for item in self._queue)
+    def all_written_started(self):
+        return not any(item.carried_inputs for item in self._queue)
 
     def begin(self, item):
         self._queue.appendleft(item)
         self._wakeup_next(self._getters)
 
     def hold(self, item):
-        # Called inside shared wire custody, before READY can be published.
+        # Park under the shared wire lock, before READY can be published.
         self.ready.clear()
         self.begin(item)
-
-    def maintenance_changed(self, status):
-        if not status.turn_pending:
-            self.ready.set()
 
 
 class TurnInboxItem(ABC):
@@ -132,8 +128,8 @@ class TurnInboxItem(ABC):
     def carried_inputs(self) -> tuple[InputId, ...]:
         return ()
 
-    def refuse(self, turn):
-        pass
+    def refuse(self, inputs, turn):
+        inputs.refuse(turn, self.carried_inputs)
 
     @abstractmethod
     def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]: ...
@@ -153,11 +149,6 @@ class InputRequest(TurnInboxItem):
     @property
     def carried_inputs(self) -> tuple[InputId, ...]:
         return (self.input_id,)
-
-    def refuse(self, turn):
-        from .agent_events import InputRefused
-        turn.rejected_commands.append(InputRefused(id=self.input_id.value))
-        turn.rejected_signal.set()
 
     def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
         """Hand this input to the running turn's receiver; False ends forwarding."""

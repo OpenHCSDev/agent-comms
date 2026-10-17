@@ -722,8 +722,9 @@ class InputDrain(InputObservation):
         # the checkpoint, so no separate exclusive bus read is needed here.
         inbox = self.backend_inboxes.get(session_id)
         if inbox is not None:
-            async with self.comms.owners.maintenance.admit_ingress_async() as status:
-                inbox.maintenance_changed(status)
+            async with self.comms.owners.maintenance.ingress_async() as status:
+                with status.phase.send(None) as outcome:
+                    outcome.resume(inbox)
         private_root = self.effects.configured_root_id
         pushed = await self._drain_private_if_changed(session_id, private_root)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()

@@ -48,7 +48,7 @@ class PreparedSession(UnwrittenPrompt):
 
 class NativeSessionPreparation(backend.TurnSession):
     """Share native launch/attestation with turns; retain an idle child, send no prompt."""
-    admission_type = PreparedSession
+    prompt_type = PreparedSession
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
         if not self.native_session.custody.retained:

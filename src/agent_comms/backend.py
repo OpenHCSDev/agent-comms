@@ -172,7 +172,7 @@ class TurnSession:
     """One Pi turn: owns input admission, native identity, settlement and child lifetime."""
 
     active: ClassVar[dict[asyncio.Task[Any], TurnSession]] = {}
-    admission_type = UnwrittenPrompt
+    prompt_type = UnwrittenPrompt
 
     def __init__(
         self,
@@ -216,7 +216,7 @@ class TurnSession:
         self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup if startup is not None else NativeStartup.for_launch(launch)
         self.inputs = InputForwarding(steering_queue if steering_queue is not None else TurnInbox())
-        self.prompt_state = self.admission_type()
+        self.prompt_state = self.prompt_type()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
         self.output = TurnOutput(sensitive=bool(images))

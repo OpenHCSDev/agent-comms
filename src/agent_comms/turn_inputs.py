@@ -50,7 +50,7 @@ class InputForwarding:
     def all_written_started(self) -> bool:
         """The child holds no input it has not started yet."""
         return (not self.pending and not (self.current and self.current.carried_inputs)
-                and not self.queue.unstarted_inputs)
+                and self.queue.all_written_started)
 
     @property
     def settled(self) -> bool:
@@ -126,7 +126,7 @@ class InputForwarding:
         if not candidates:
             return True
         first = self.pending[candidates[0]]
-        async with MaintenanceBarrier(session.startup.root / "registry.json").admit_ingress_async() as status:
+        async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
             with status.phase.send(session.interrupt_boundary, first.id, candidates[0], first.message) as outcome:
                 completion = outcome.dispatch(self, session, item, lambda: session.stdin.write(
                     session.native.reader.encode(commands.InterruptSteering(input_ids=list(candidates)))
@@ -152,10 +152,15 @@ class InputForwarding:
             self.pending[native_id] = command
             self.generation += 1
 
-        async with MaintenanceBarrier(session.startup.root / "registry.json").admit_ingress_async() as status:
+        async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
             with status.phase.send(session.send_boundary, public_id, native_id, text) as outcome:
                 completion = outcome.dispatch(self, session, item, write)
         return await completion
+
+    def refuse(self, session: TurnSession, input_ids: tuple[InputId, ...]) -> None:
+        for input_id in input_ids:
+            session.rejected_commands.append(events.InputRefused(id=input_id.value))
+            session.rejected_signal.set()
 
     def mark_started(self, session: TurnSession, payload: MessageStart) -> tuple[bool, str | None]:
         message = payload.message

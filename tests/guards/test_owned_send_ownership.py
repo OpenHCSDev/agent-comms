@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.owned_send_admission import OwnedSendAdmission
+from agent_comms.owned_send_admission import OwnedSend
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_goal_permission import TurnGoalPermission
 from agent_comms.input_disposition import InputDispositions
@@ -38,7 +38,7 @@ def test_owned_turn_no_longer_owns_send_authority_or_native_binding():
 def test_admission_components_own_state_without_capturing_runner():
     for path in {
         Path(inspect.getfile(owner))
-        for owner in (OwnedSendAdmission, TurnGoalPermission, InputDispositions, TurnInputSource)
+        for owner in (OwnedSend, TurnGoalPermission, InputDispositions, TurnInputSource)
     }:
         source = path.read_text()
         assert len(source.splitlines()) <= 1000, path
@@ -52,7 +52,7 @@ def test_admission_components_own_state_without_capturing_runner():
 
 
 def test_ordinary_admission_preserves_named_rule_dispatch_until_callback():
-    tree = ast.parse(inspect.getsource(OwnedSendAdmission))
+    tree = ast.parse(inspect.getsource(OwnedSend))
     assert not any(
         isinstance(node, ast.FunctionDef) and node.name in {"_current_owner", "_accepted"}
         for node in ast.walk(tree)
@@ -86,7 +86,7 @@ def test_input_drain_does_not_restore_parallel_admission_maps():
         "turn_original_input_keys",
         "turn_input_text",
     }
-    for owner in (InputDrain, TurnRunner, OwnedTurn, OwnedSendAdmission, AcpEventConsumer):
+    for owner in (InputDrain, TurnRunner, OwnedTurn, OwnedSend, AcpEventConsumer):
         tree = ast.parse(inspect.getsource(owner))
         assert not any(
             isinstance(node, ast.Attribute) and node.attr in removed for node in ast.walk(tree)

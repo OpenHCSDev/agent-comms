@@ -335,7 +335,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
     proc.join(10)
     assert proc.exitcode == 0
     assert q.get(timeout=2)[0] == "denied"
-    async with MaintenanceBarrier(root / "registry.json").admit_ingress_async() as status:
+    async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
         with status.phase.send(None, None, "native", "original") as outcome:
             assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
@@ -461,9 +461,8 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
     entered = asyncio.Event()
 
     async def native_write():
-        async with MaintenanceBarrier(root / "registry.json").admit_ingress_async() as status:
-            with status.phase.send(None, None, "native", "original") as allowed:
-                assert allowed
+        async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
+            with status.phase.send(None, None, "native", "original"):
                 entered.set()
 
     async with _async_store_lock(root / "wire"):
@@ -493,9 +492,8 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     changed = threading.Event()
 
     async def fake_send() -> None:
-        async with MaintenanceBarrier(root / "registry.json").admit_ingress_async() as status:
-            with status.phase.send(None, None, "id", "text") as allowed:
-                assert allowed
+        async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
+            with status.phase.send(None, None, "id", "text"):
                 entered.set()
                 assert release.wait(5)
 

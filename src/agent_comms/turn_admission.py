@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from .pi_events import AgentSettled, InputCommitted, MessageStart, Response
 
 
-class PromptAdmission(ABC):
+class PromptState(ABC):
     @property
     @abstractmethod
     def acknowledged(self) -> bool: ...
@@ -25,19 +25,19 @@ class PromptAdmission(ABC):
     settled = False
     dispatched = True
 
-    def dispatch(self) -> PromptAdmission:
+    def dispatch(self) -> PromptState:
         return self
 
     def raise_native_failure(self, error, attestation) -> Never:
         raise error
 
-    def acknowledge(self, response: Response) -> PromptAdmission:
+    def acknowledge(self, response: Response) -> PromptState:
         return self
 
-    def start(self, event: MessageStart | InputCommitted) -> PromptAdmission:
+    def start(self, event: MessageStart | InputCommitted) -> PromptState:
         return self
 
-    def settle(self, event: AgentSettled) -> PromptAdmission:
+    def settle(self, event: AgentSettled) -> PromptState:
         return self
 
     def permits_extension_ui(self, session: TurnSession) -> bool:
@@ -47,15 +47,15 @@ class PromptAdmission(ABC):
         return False
 
 
-class UnacknowledgedPrompt(PromptAdmission):
+class UnacknowledgedPrompt(PromptState):
     acknowledged = False
 
     def acknowledge(self, response):
         return AcknowledgedPrompt(response)
 
 
-class UnwrittenPrompt(PromptAdmission, TurnInboxItem):
-    """The owning send seam has not yet admitted this prompt to its writer."""
+class UnwrittenPrompt(PromptState, TurnInboxItem):
+    """The owning send seam has not yet written this prompt."""
 
     acknowledged = False
     dispatched = False
@@ -67,12 +67,12 @@ class UnwrittenPrompt(PromptAdmission, TurnInboxItem):
         def write():
             session.grant_prompt()
             session.stdin.write(session.native.reader.encode(session.command))
-        async with MaintenanceBarrier(session.startup.root / "registry.json").admit_ingress_async() as status:
+        async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
             with status.phase.send(session.send_boundary, None, session.command.input_id, session.command.message) as outcome:
                 completion = outcome.dispatch(inputs, session, self, write)
         return await completion
 
-    def refuse(self, session):
+    def refuse(self, inputs, session):
         session.output.record_failure(failures.InputMissing("Original input was cleared before send."))
         session.finished = True
         session.rejected_signal.set()
@@ -84,7 +84,7 @@ class UnwrittenPrompt(PromptAdmission, TurnInboxItem):
 
 
 @dataclass(frozen=True)
-class AcknowledgedPrompt(PromptAdmission):
+class AcknowledgedPrompt(PromptState):
     response: Response
     acknowledged = True
     awaiting_start = True

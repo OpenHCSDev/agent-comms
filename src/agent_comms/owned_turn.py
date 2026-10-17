@@ -19,7 +19,7 @@ from .goal_attempts import LaunchPermit
 from .messages import Message
 from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
-from .owned_send_admission import OwnedSendAdmission
+from .owned_send_admission import OwnedSend
 from .native_input_owner import RegistryOwner
 from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
@@ -356,7 +356,7 @@ class OwnedTurn:
     async def stream(self):
         await self.runner.transition_turn(self.session_id, self.turn_lease, PromptAcceptancePhase())
         rendered = self.context.render(images=self.images)
-        admission = OwnedSendAdmission(
+        sender = OwnedSend(
             comms=self.runner.comms,
             inputs=self.runner.inputs,
             goal_store=await Coordination.run_worker(self.runner.comms.goals.open_goal_store),
@@ -372,11 +372,11 @@ class OwnedTurn:
             environment=self.env_extra,
             inbox=self.backend_inbox,
             finish_event=self.finish_event,
-            send_boundary=admission,
-            interrupt_boundary=lambda public_id, native_id, text: admission(
+            send_boundary=sender,
+            interrupt_boundary=lambda public_id, native_id, text: sender(
                 public_id, native_id, text, already_bound=True
             ),
-            input_started=admission.native_start,
+            input_started=sender.native_start,
             request_progress=self.progress.record_request_progress,
             ui_request=lambda request: self.runner.extension_ui_permission(
                 self.session_id, self.turn_id, self.controller, request

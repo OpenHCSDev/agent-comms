@@ -42,7 +42,7 @@ _LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
-class OwnedSendAdmission:
+class OwnedSend:
     comms: Comms
     inputs: InputDrain
     goal_store: GoalAttemptStore

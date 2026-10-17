@@ -8,11 +8,17 @@ from . import turn_failure as failures
 
 
 class SendOutcome(ABC):
+    def resume(self, inbox):
+        pass
+
     @abstractmethod
     def dispatch(self, inputs, session, item, write) -> Awaitable[bool]: ...
 
 
 class GrantedSend(SendOutcome):
+    def resume(self, inbox):
+        inbox.ready.set()
+
     def dispatch(self, inputs, session, item, write):
         write()
         return self._drain(session)
@@ -30,7 +36,7 @@ class HeldSend(SendOutcome):
 
 class RefusedSend(SendOutcome):
     def dispatch(self, inputs, session, item, write):
-        item.refuse(session)
+        item.refuse(inputs, session)
         return asyncio.sleep(0, result=True)
 
 

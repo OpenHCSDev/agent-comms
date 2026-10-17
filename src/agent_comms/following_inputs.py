@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from .acp_extension import QueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
-from .owned_send_admission import OwnedSendAdmission
+from .owned_send_admission import OwnedSend
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .thread_identity import AdmissionIdentity, TurnId
 from .turn_input_source import AcceptedFollowingInput, SelectedOriginalInput
@@ -84,7 +84,7 @@ class OwnerFollowingInputs(FollowingInputs):
         thread = await Coordination.run_worker(partial(inputs.comms.registry.require, self.owner.name))
         lease = thread.require_turn_lease()
         original = SelectedOriginalInput.answering(session.command.message)
-        admission = OwnedSendAdmission(
+        sender = OwnedSend(
             comms=inputs.comms,
             inputs=inputs,
             goal_store=await Coordination.run_worker(inputs.comms.goals.open_goal_store),
@@ -101,7 +101,7 @@ class OwnerFollowingInputs(FollowingInputs):
             thread.pid,
         )
         inputs.original_sources[self.session_id] = original
-        session.forward_inbox(self.inbox, admission)
+        session.forward_inbox(self.inbox, sender)
         await self.ready(
             inputs, self.session_id,
             after_seq=session.prompt_send_boundary.following_after_seq,  # type: ignore[union-attr]

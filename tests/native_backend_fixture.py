@@ -10,14 +10,13 @@ from unittest.mock import patch
 
 from agent_comms import agent_events as events
 from agent_comms import backend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
 from agent_comms.comms import Comms
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_native_backend import PersistentPiSession
-from agent_comms.agent_backend import TurnInbox
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput
 from delivery_owner_fixture import canonical_agent

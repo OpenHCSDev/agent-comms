@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
     from .agent_backend import TurnInbox
     from .coordinated_runtime import SelectedExecution
-    from .owned_send_admission import OwnedSendAdmission
+    from .owned_send_admission import OwnedSend
     from .private_send_admission import PrivateSendAdmission
 
 
@@ -405,7 +405,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             try:
                 async with MaintenanceBarrier(
                     self.maintenance_root / "registry.json"
-                ).admit_ingress_async() as status:
+                ).ingress_async() as status:
                     status.require_open()
                     self.write(command, payload)
             except RelationViolationError as error:
@@ -503,12 +503,12 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             await Coordination.run_worker(self.evidence.observe)
             await self.following.open(self)
 
-    def forward_inbox(self, inbox: TurnInbox, admission: OwnedSendAdmission) -> None:
+    def forward_inbox(self, inbox: TurnInbox, sender: OwnedSend) -> None:
         """Later inputs go to the running child under the owner's write checks."""
         self.inputs.queue = inbox
-        self.send_boundary = admission
-        self.interrupt_boundary = partial(admission, already_bound=True)
-        self.native_start = admission.native_start
+        self.send_boundary = sender
+        self.interrupt_boundary = partial(sender, already_bound=True)
+        self.native_start = sender.native_start
         self.ensure_input_forwarding()
 
     @handles(pi.MessageStart)
