@@ -25,6 +25,7 @@ from .owner_protocol import OwnerAnnouncement
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
 from .thread_identity import ThreadIncarnation
+from .thread_management import ForkSpec
 from .working_memory_labels import ClassifierVersion, ModelLabel
 from .working_memory_questions import SpanAnswer
 
@@ -134,6 +135,19 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
         ))).entry
         current = self.require_original(entry)
         return {"worktree": current.worktree}
+
+
+@dataclass(frozen=True, kw_only=True)
+class ValidateForkRuntimeRequest(ResultRuntimeRequest):
+    spec: ForkSpec
+
+    async def result(self, ctx):
+        agent = ctx.server.agent
+        parent = await Coordination.run_worker(partial(self.spec.source_parent, agent._comms.threads))
+        if parent.name != ctx.name:
+            raise ValueError("Fork validation names another source owner")
+        await agent.sessions.config.validate(self.spec)
+        return {}
 
 
 @dataclass(frozen=True, kw_only=True)

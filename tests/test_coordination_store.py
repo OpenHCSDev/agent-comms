@@ -25,9 +25,6 @@ from agent_comms.assignment_states import (
     TriagePendingAssignment,
 )
 from agent_comms.attempt_recovery import (
-    _MONITOR_GRANT,
-    MonitorEvidence,
-    RecoveryMonitorCapability,
     VerifiedOwnerLoss,
 )
 from agent_comms.attempt_start import AttemptStart
@@ -184,18 +181,6 @@ def _concurrent_registration(
         output.put(type(exc).__name__)
 
 
-def monitor_evidence(
-    backend_done: bool,
-    *,
-    subprocess_dead: bool = True,
-) -> MonitorEvidence:
-    return MonitorEvidence(
-        subprocess_dead=subprocess_dead,
-        backend_done=backend_done,
-        reason_code="process_died",
-        observed_at_ms=1_000,
-        outcome=UnknownOutcomeAttempt(),
-    )
 
 
 
@@ -1032,39 +1017,6 @@ def test_recovered_audit_rejects_prior_attempt_incident_and_terminal(db_path: Pa
             )
 
 
-def test_monitor_requires_owner_loss_separate_from_child_exit(
-    db_path: Path
-) -> None:
-    with ready(db_path) as db:
-        _, fence = started(db)
-        monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
-        for evidence, owner_loss, error in (
-            (monitor_evidence(True), None, RecoveryBlocked),
-            (
-                monitor_evidence(True, subprocess_dead=False),
-                object.__new__(VerifiedOwnerLoss),
-                RecoveryBlocked,
-            ),
-            (monitor_evidence(True), object.__new__(VerifiedOwnerLoss), AttributeError),
-        ):
-            with pytest.raises(error):
-                monitor.terminalize_dead_attempt(
-                    "exec",
-                    1,
-                    1,
-                    expected_attempt_revision=1,
-                    expected_execution_revision=3,
-                    expected_pointer_revision=1,
-                    evidence=evidence,
-                    owner_loss=owner_loss,
-                )
-            snapshot = db.snapshots.get("exec")
-            assert snapshot.is_current
-            assert snapshot.attempt is not None
-            assert snapshot.attempt.revision == fence.revision
-            assert not snapshot.attempt.lifecycle.process_dead
-            assert not snapshot.attempt.lifecycle.backend_done
-            assert snapshot.replay is None
 
 
 def test_monitor_production_verifier_remains_closed(db_path: Path) -> None:
@@ -1072,18 +1024,6 @@ def test_monitor_production_verifier_remains_closed(db_path: Path) -> None:
         _, fence = started(db)
         with pytest.raises(RecoveryBlocked):
             VerifiedOwnerLoss(execution_id="exec")
-        monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
-        with pytest.raises(AttributeError):
-            monitor.terminalize_dead_attempt(
-                "exec",
-                1,
-                1,
-                expected_attempt_revision=1,
-                expected_execution_revision=3,
-                expected_pointer_revision=1,
-                evidence=monitor_evidence(True),
-                owner_loss=object.__new__(VerifiedOwnerLoss),
-            )
         snapshot = db.snapshots.get("exec")
         assert snapshot.is_current
         assert snapshot.attempt is not None and snapshot.attempt.revision == fence.revision

@@ -45,24 +45,26 @@ class RestartState(DeclaredFamily, affix="Restart"):
     reason: str = field(default="", metadata={"wire_omit_default": True})
     pending: ClassVar[bool] = False
     attempting: ClassVar[bool] = False
-    active: ClassVar[bool] = False
+    @property
+    def active(self) -> bool:
+        return self.pending or self.attempting
 
     def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
                 target: RestartTarget) -> QueuedRestart:
+        if self.attempting:
+            raise RestartAlreadyAttemptingError(
+                f"Restart {previous.id} for {previous.name} is already attempting"
+            )
+        if self.pending and (previous.selection != selection or previous.target != target):
+            return previous.transition(StaleRestart(
+                reason=f"Superseded pending target {previous.target.interpreter} by {target.interpreter}"
+            ))
         # A terminal write interrupted before its move is still settled.
         return previous
 
 
 class PendingRestart(RestartState):
-    pending = active = True
-
-    def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
-                target: RestartTarget) -> QueuedRestart:
-        if previous.selection == selection and previous.target == target:
-            return previous
-        return previous.transition(StaleRestart(
-            reason=f"Superseded pending target {previous.target.interpreter} by {target.interpreter}"
-        ))
+    pending = True
 
 
 class RestartAlreadyAttemptingError(RelationViolationError):
@@ -70,13 +72,7 @@ class RestartAlreadyAttemptingError(RelationViolationError):
 
 
 class AttemptingRestart(RestartState):
-    attempting = active = True
-
-    def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
-                target: RestartTarget) -> QueuedRestart:
-        raise RestartAlreadyAttemptingError(
-            f"Restart {previous.id} for {previous.name} is already attempting"
-        )
+    attempting = True
 
 
 class CancelledRestart(RestartState):

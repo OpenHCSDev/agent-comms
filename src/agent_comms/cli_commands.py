@@ -31,6 +31,7 @@ from .command import Command
 from .cli_protocol import ArrivedMessage
 from .field_codec import FieldCodec
 from .comms import Comms
+from .runtime import RuntimeConnection, socket_path
 from .config_options import (
     CatalogConfigOption, CatalogSelection, ConfigOptions,
     ModelConfigOption, ThinkingLevelConfigOption,
@@ -1409,9 +1410,12 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
         spec = self.spec_type(**{item.name: getattr(self, item.name)
                                  for item in fields(self.spec_type)})
-        asyncio.run(ConfigOptions.configured().validate(self))
+        asyncio.run(self.validate(ctx, spec))
         child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.pid)
+
+    async def validate(self, ctx: Comms, spec: NewThreadSpec) -> None:
+        await ConfigOptions.configured().validate(spec)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1419,6 +1423,17 @@ class ForkCliCommand(NewThreadCliCommand):
     help = "Fork a child pi thread"
     spec_type = ForkSpec
     parent: str = option("--parent", target_bound=True)
+
+    async def validate(self, ctx: Comms, spec: ForkSpec) -> None:
+        parent = spec.source_parent(ctx.threads)
+        if ctx.registry.entry(parent.name).entry.status.active:
+            connection = RuntimeConnection(ctx, parent.name, socket_path(ctx.root, parent.require_process().pid))
+            try:
+                await connection.request("validate_fork", spec=spec)
+            finally:
+                await connection.close()
+        else:
+            await super().validate(ctx, spec)
 
     @classmethod
     def project_bindings(cls, comms, project):

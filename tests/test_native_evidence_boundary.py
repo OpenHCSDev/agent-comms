@@ -77,16 +77,18 @@ def test_non_user_tracked_identity_cannot_disappear_into_display_fallback(role):
 
 
 
-def test_duplicate_input_ids_are_not_silently_projected_away():
+def test_duplicate_input_ids_are_not_silently_projected_away(tmp_path):
     entries = tuple(
-        NativeEntry.from_evidence(
-            {
-                "type": "message",
-                "id": entry_id,
-                "message": {"role": "user", "inputId": "a" * 32, "inputDigest": "b" * 64},
-            }
-        )
+        {"type": "message", "id": entry_id,
+         "message": {"role": "user", "inputId": "a" * 32, "inputDigest": "b" * 64}}
         for entry_id in ("first", "second")
     )
-    with pytest.raises(NativePiUnavailable, match="ambiguous"):
-        NativeEntry.tracked_users(entries)
+    file = tmp_path / "duplicate.jsonl"
+    header = {"type": "session", "version": 3, "id": "duplicate-session",
+              "timestamp": "2026-10-01T00:00:00.000Z", "cwd": str(tmp_path)}
+    file.write_text("".join(json.dumps(row) + "\n" for row in (header, *entries)))
+    file.chmod(0o600)
+    with NativeEntry.open_evidence(file) as evidence:
+        evidence.observe()
+        with pytest.raises(NativePiUnavailable, match="ambiguous"):
+            evidence.tracked_user("a" * 32)

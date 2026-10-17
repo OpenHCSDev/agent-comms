@@ -11,9 +11,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.attempt_states import UnknownOutcomeAttempt, UnsuccessfulTerminal
-from agent_comms.coordination_contracts import (
-    MAX_REASON_CODE_CHARS,
-)
 from agent_comms.errors import RelationViolationError
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -169,45 +166,70 @@ class VerifiedOwnerLoss:
                     raise RecoveryBlocked("native session subprocess is still running")
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class MonitorEvidence:
-    """Observed Pi RPC child exit and backend finality, NOT owner-loss proof."""
+    def finish(
+        self,
+        expected: RecoverySnapshot,
+        *,
+        outcome: UnsuccessfulTerminal,
+        reason_code: str,
+        replay_facts: ReplayFact = ReplayFact.NONE,
+    ) -> Applied[RecoverySnapshot]:
+        """The acquired release owns local exit checks and exact-attempt settlement."""
+        self.require_native_exit()
+        store = self._store
+        execution_id = expected.execution.execution_id
+        expected_attempt = expected.require_current_attempt()
+        with store.session.settlement(self.boundary) as boundary:
+            db = store.session._connection
+            snapshot = store.snapshots.get(execution_id)
+            attempt = snapshot.attempt
+            if (
+                not snapshot.is_current
+                or attempt is None
+                or (attempt.attempt_ordinal, attempt.owner_generation)
+                != (expected_attempt.attempt_ordinal, expected_attempt.owner_generation)
+            ):
+                raise StaleFence("recovery must name the exact old active attempt")
+            if (attempt.revision, snapshot.execution.revision, snapshot.pointer_revision) != (
+                expected_attempt.revision, expected.execution.revision, expected.pointer_revision
+            ):
+                raise StaleRevision("recovery CAS is stale")
+            if not self.owns(store, attempt):
+                raise RecoveryBlocked("recovery requires an observed release of this exact owner")
+            now = store.session.now(max(attempt.updated_at_ms, int(time.time() * 1000)))
+            ReplayAssessments.accumulate(
+                db, execution_id, ReplayFact(replay_facts) | outcome.replay_contribution
+            )
+            AttemptRecord.update(
+                db,
+                where="execution_id=? AND attempt_ordinal=?",
+                parameters=(execution_id, attempt.attempt_ordinal),
+                lifecycle=replace(attempt.lifecycle, process_dead=True, backend_done=True),
+                revision=attempt.revision + 1,
+                updated_at_ms=now,
+                reason_code=reason_code,
+            )
+            if not snapshot.publication_intents:
+                store.snapshots.get(execution_id).settle(
+                    store.session, outcome, reason_code, boundary
+                )
+                settled = store.snapshots.get(execution_id)
+                RecoveryAudit(
+                    execution_id=execution_id,
+                    kind=DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery,
+                    reason_code=reason_code,
+                    sanitized_detail=None,
+                    attempt=attempt.attempt_ordinal,
+                    elapsed_ms=0,
+                    observed_at_ms=now,
+                ).insert(db)
+                return Applied(settled)
+        # Local exit commits; unresolved publication still requires its original bus proof.
+        raise PublicationUncertain("frozen publication requires bus-keyed proof")
 
-    subprocess_dead: bool
-    backend_done: bool
-    reason_code: str
-    observed_at_ms: int
-    outcome: UnsuccessfulTerminal
 
-    def __post_init__(self) -> None:
-        if any(
-            type(value) is not bool
-            for value in (self.subprocess_dead, self.backend_done)
-        ):
-            raise ValueError("monitor observations must be explicit booleans")
-        if not isinstance(self.outcome, UnsuccessfulTerminal):
-            raise TypeError("monitor outcome must be an unsuccessful terminal attempt")
-        if not 1 <= len(self.reason_code) <= MAX_REASON_CODE_CHARS:
-            raise ValueError("monitor reason must be bounded and nonempty")
-        if self.observed_at_ms < 0:
-            raise ValueError("negative evidence timestamp")
-
-
-_MONITOR_GRANT = object()
-
-
-class RecoveryMonitorCapability:
-    """Separate attested dead-attempt authority; never a live owner fence.
-
-    Construction is deliberately unavailable from Coordination's public API.
-    Recovery entry points observe owner release and local backend finality
-    themselves. Registration, tokens and snapshots cannot mint that grant.
-    """
-
-    def __init__(self, store: Coordination, *, _grant: object) -> None:
-        if _grant is not _MONITOR_GRANT:
-            raise PermissionError("recovery monitor requires trusted construction")
-        self._store = store
+class AttemptRecovery:
+    """Resolve released owners without reconstructing acceptance or replaying effects."""
 
     @classmethod
     def settle_stopped_owner(cls, root: Path, owner) -> None:
@@ -295,26 +317,13 @@ class RecoveryMonitorCapability:
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
             if loss.native_input != source:
                 raise StaleRevision("native input changed during recovery")
-            loss.require_native_exit()
             if revision is not None and FileRevision.capture(session.path) != revision:
                 raise StaleRevision("native journal changed during recovery")
             current = store.snapshots.get(execution_id)
-            attempt = current.require_current_attempt()
             outcome, replay_facts = terminal.unpublished_attempt()
-            return cls(store, _grant=_MONITOR_GRANT).terminalize_dead_attempt(
-                execution_id, attempt.attempt_ordinal, attempt.owner_generation,
-                expected_attempt_revision=attempt.revision,
-                expected_execution_revision=current.execution.revision,
-                expected_pointer_revision=current.pointer_revision,
-                owner_loss=loss,
-                # A recorded terminal is still not permission to replay effects.
-                replay_facts=replay_facts,
-                evidence=MonitorEvidence(
-                    subprocess_dead=True, backend_done=True,
-                    outcome=outcome,
-                    reason_code="released_native_" + terminal.declared_name,
-                    observed_at_ms=int(time.time() * 1000),
-                ),
+            return loss.finish(
+                current, outcome=outcome, replay_facts=replay_facts,
+                reason_code="released_native_" + terminal.declared_name,
             )
 
     @classmethod
@@ -335,177 +344,8 @@ class RecoveryMonitorCapability:
         """
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
             snapshot = store.snapshots.get(execution_id)
-            attempt = snapshot.attempt
-            assert attempt is not None  # Required by the release observer.
             if bool(snapshot.publication_intents):
                 raise PublicationUncertain("UNKNOWN abandonment cannot resolve frozen publication")
-            loss.require_native_exit()
-            return cls(store, _grant=_MONITOR_GRANT).terminalize_dead_attempt(
-                execution_id,
-                attempt.attempt_ordinal,
-                attempt.owner_generation,
-                expected_attempt_revision=attempt.revision,
-                expected_execution_revision=snapshot.execution.revision,
-                expected_pointer_revision=snapshot.pointer_revision,
-                owner_loss=loss,
-                evidence=MonitorEvidence(
-                    subprocess_dead=True,
-                    # Explicitly abandon the fenced, exited LOCAL backend.
-                    # This is not evidence of a provider response or its effects.
-                    backend_done=True,
-                    outcome=UnknownOutcomeAttempt(),
-                    reason_code="released_native_unknown",
-                    observed_at_ms=int(time.time() * 1000),
-                ),
+            return loss.finish(
+                snapshot, outcome=UnknownOutcomeAttempt(), reason_code="released_native_unknown"
             )
-
-    @classmethod
-    def recover_native_failure(
-        cls, store: Coordination, execution_id: str, session_file: Path
-    ) -> Applied[RecoverySnapshot]:
-        """Retire a released owner's failed native input without recovering acceptance.
-
-        A saved error is evidence of failure only: no live context receipt is
-        reconstructed, no cursor advances, and UNKNOWN effects remain unsafe
-        to replay. An unfinished journal or unresolved publication is refused.
-        """
-        from agent_comms.native_entries import MessageEntry, NativeEntry
-        from agent_comms.native_pi import NativeContextProof
-        from agent_comms.native_prompt_binding import (
-            expected_prompt_matches_journal,
-            read_expected_prompt_binding,
-        )
-
-        with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
-            snapshot = store.snapshots.get(execution_id)
-            attempt = snapshot.attempt
-            assert attempt is not None  # The release observer requires an attempt.
-            if bool(snapshot.publication_intents):
-                raise PublicationUncertain("native failure cannot resolve frozen publication")
-            reserved = loss.native_input
-            original_session = reserved.require_session_identity()
-            session_file = Path(session_file).absolute()
-            original_session.require_session(str(session_file))
-            binding = read_expected_prompt_binding(store, reserved.input_id)
-            if binding is None or binding.identity != reserved.identity:
-                raise RecoveryBlocked("native failure lacks its bound original input")
-            with NativeEntry.open_evidence(session_file) as evidence:
-                if not expected_prompt_matches_journal(session_file, binding, evidence=evidence):
-                    raise RecoveryBlocked("native failure lacks its bound original input")
-                proof = NativeContextProof.read_evidence(
-                    session_file, reserved.input_id, evidence=evidence
-                )
-                original_session.require_context(proof)
-                _header, entries = evidence.observe()
-                user_index = next(
-                    index for index, entry in enumerate(entries) if entry.id == proof.session_entry_id
-                )
-                following = entries[user_index + 1 :]
-                if len(following) != 1:
-                    raise RecoveryBlocked("native failure has unfinished or additional session work")
-                terminal = following[0]
-                if not isinstance(terminal, MessageEntry):
-                    raise RecoveryBlocked("native recovery requires an unambiguous failed terminal")
-                try:
-                    terminal.require_failed_terminal(proof.session_entry_id)
-                except ValueError as error:
-                    raise RecoveryBlocked(str(error)) from error
-                loss.require_native_exit()
-                monitor = cls(store, _grant=_MONITOR_GRANT)
-                return monitor.terminalize_dead_attempt(
-                    execution_id,
-                    attempt.attempt_ordinal,
-                    attempt.owner_generation,
-                    expected_attempt_revision=attempt.revision,
-                    expected_execution_revision=snapshot.execution.revision,
-                    expected_pointer_revision=snapshot.pointer_revision,
-                    owner_loss=loss,
-                    evidence=MonitorEvidence(
-                        subprocess_dead=True,
-                        backend_done=True,
-                        outcome=UnknownOutcomeAttempt(),
-                        reason_code="released_native_failure",
-                        observed_at_ms=int(time.time() * 1000),
-                    ),
-                )
-
-    def terminalize_dead_attempt(
-        self,
-        execution_id: str,
-        ordinal: int,
-        owner_generation: int,
-        *,
-        expected_attempt_revision: int,
-        expected_execution_revision: int,
-        expected_pointer_revision: int,
-        evidence: MonitorEvidence,
-        owner_loss: VerifiedOwnerLoss | None = None,
-        replay_facts: ReplayFact = ReplayFact.NONE,
-    ) -> Applied[RecoverySnapshot]:
-        if not evidence.subprocess_dead:
-            raise RecoveryBlocked("monitor cannot record a live Pi RPC subprocess as dead")
-        store = self._store
-        replay_facts = ReplayFact(replay_facts)
-        if (
-            not isinstance(owner_loss, VerifiedOwnerLoss)
-            or not owner_loss.issued_for(store)
-        ):
-            raise RecoveryBlocked("monitor requires an observed release of this exact owner")
-        with store.session.settlement(owner_loss.boundary) as boundary:
-            db = store.session._connection
-            snapshot = store.snapshots.get(execution_id)
-            attempt = snapshot.attempt
-            if (
-                not snapshot.is_current
-                or attempt is None
-                or attempt.attempt_ordinal != ordinal
-                or attempt.owner_generation != owner_generation
-            ):
-                raise StaleFence("monitor must name the exact old active attempt")
-            if (attempt.revision, snapshot.execution.revision, snapshot.pointer_revision) != (
-                expected_attempt_revision,
-                expected_execution_revision,
-                expected_pointer_revision,
-            ):
-                raise StaleRevision("monitor CAS is stale")
-            if not owner_loss.owns(store, attempt):
-                raise RecoveryBlocked("monitor requires an observed release of this exact owner")
-            now = store.session.now(max(attempt.updated_at_ms, evidence.observed_at_ms))
-            ReplayAssessments.accumulate(
-                db, execution_id, replay_facts | evidence.outcome.replay_contribution
-            )
-            AttemptRecord.update(
-                db,
-                where="execution_id=? AND attempt_ordinal=?",
-                parameters=(execution_id, ordinal),
-                lifecycle=replace(
-                    attempt.lifecycle,
-                    process_dead=True,
-                    backend_done=attempt.lifecycle.backend_done or evidence.backend_done,
-                ),
-                revision=attempt.revision + 1,
-                updated_at_ms=now,
-                reason_code=evidence.reason_code,
-            )
-            unresolved = bool(snapshot.publication_intents)
-            if (attempt.lifecycle.backend_done or evidence.backend_done) and not unresolved:
-                store.snapshots.get(execution_id).settle(
-                    store.session, evidence.outcome, evidence.reason_code, boundary
-                )
-                settled = store.snapshots.get(execution_id)
-                kind = DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery
-                RecoveryAudit(
-                    execution_id=execution_id,
-                    kind=kind,
-                    reason_code=evidence.reason_code,
-                    sanitized_detail=None,
-                    attempt=ordinal,
-                    elapsed_ms=0,
-                    observed_at_ms=now,
-                ).insert(db)
-                return Applied(store.snapshots.get(execution_id))
-            # Death and genuinely observed backend completion commit even when
-            # publication remains unresolved.  Neither state clears the pointer.
-        if unresolved and (attempt.lifecycle.backend_done or evidence.backend_done):
-            raise PublicationUncertain("frozen publication requires bus-keyed receipt")
-        raise RecoveryBlocked("process death alone is not backend-final proof")

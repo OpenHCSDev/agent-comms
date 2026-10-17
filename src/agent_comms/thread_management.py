@@ -115,7 +115,7 @@ class ForkSpec(NewThreadSpec):
             thinking_level=self.thinking_level,
         )
 
-    def _parent(self, threads: ThreadManagement) -> Thread:
+    def source_parent(self, threads: ThreadManagement) -> Thread:
         parent = threads.registry.require(self.parent)
         parent.execution.require_native()
         if threads.registry.name_reserved(self.name):
@@ -129,7 +129,7 @@ class ForkSpec(NewThreadSpec):
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         # Copy saved history outside the wire lock, retaining writer→wire order.
-        parent = self._parent(threads)
+        parent = self.source_parent(threads)
         threads.registry.require_declaration_available(self.child(parent, parent.require_saved_session()))
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
         with _store_lock(threads._wire_lock_path):

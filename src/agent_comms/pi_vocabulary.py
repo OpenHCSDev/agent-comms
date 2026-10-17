@@ -58,12 +58,6 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     def tracked(cls, session, message):
         session.output.record_failure(cls.declared_failure(message))
 
-    @classmethod
-    def require_failed_terminal(cls):
-        # A saved tool round cannot establish whether the live owner accepted it.
-        if cls.successful or cls.tool_round:
-            raise ValueError("Saved assistant message did not end its turn as a failure")
-
 
 class PendingStopReason(PiStopReason):
     pass

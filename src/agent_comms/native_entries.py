@@ -113,25 +113,6 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
         with NativeInputEvidenceRead.open(session_file) as evidence:
             yield evidence
 
-    @staticmethod
-    def tracked_users(entries):
-        from .native_pi import NativePiUnavailable
-
-        tracked = {}
-        try:
-            for entry in entries:
-                user = entry.tracked_user
-                if user is None:
-                    continue
-                if user.input_id in tracked:
-                    raise ValueError("duplicate tracked input")
-                tracked[user.input_id] = user
-        except (ValueError, TypeError) as error:
-            raise NativePiUnavailable(
-                "Native Pi session has ambiguous tracked user input"
-            ) from error
-        return tracked
-
     @property
     def tracked_user(self) -> MessageEntry | None:
         return None
@@ -204,7 +185,21 @@ class NativeEvidenceRead:
 
     def __init__(self, source):
         self.source = source
+        self._reset_entries()
+
+    def _reset_entries(self):
         self.entries: tuple[NativeEntry, ...] = ()
+        self._input_positions: dict[str, int] | RuntimeError = {}
+
+    def input_position(self, input_id: str) -> int | None:
+        """Look up an input in the observed cut; malformed input still fails closed."""
+        if isinstance(self._input_positions, RuntimeError):
+            raise self._input_positions
+        return self._input_positions.get(input_id)
+
+    def tracked_user(self, input_id: str) -> MessageEntry | None:
+        position = self.input_position(input_id)
+        return None if position is None else self.entries[position]
 
     def require_path(self, session_file):
         from .native_pi import NativePiUnavailable
@@ -249,7 +244,7 @@ class NativeEvidenceRead:
 
     def close(self):
         self.source.close()
-        self.entries = ()
+        self._reset_entries()
 
     def observe(self):
         """Decode the captured cut."""
@@ -264,14 +259,17 @@ class NativeEvidenceRead:
         from .pi_vocabulary import PendingStopReason
 
         _header, entries = self.observe()
-        user = NativeEntry.tracked_users(entries).get(input_id)
-        if user is None:
+        position = self.input_position(input_id)
+        if position is None:
             return PendingStopReason
-        last = user
-        for entry in entries[entries.index(user) + 1:]:
+        last = entries[position]
+        for index in range(position + 1, len(entries)):
+            entry = entries[index]
             if entry.input_boundary:
                 break
             if entry.parent_id != last.id:
+                return PendingStopReason
+            if isinstance(entry, MessageEntry) and entry.message.tool_calls:
                 return PendingStopReason
             last = entry
         if isinstance(last, MessageEntry) and last.assistant_message:
@@ -279,7 +277,7 @@ class NativeEvidenceRead:
         return PendingStopReason
 
     def _reverify(self):
-        self.entries = ()
+        self._reset_entries()
         self.source.reverify_from_start()
         return self._observe(reverified=True)
 
@@ -312,6 +310,18 @@ class NativeEvidenceRead:
         except (ValueError, TypeError, KeyError) as error:
             self.close()
             raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
+        if isinstance(self._input_positions, dict):
+            try:
+                for position, entry in enumerate(appended, len(self.entries)):
+                    user = entry.tracked_user
+                    if user is not None:
+                        if user.input_id in self._input_positions:
+                            raise ValueError("duplicate tracked input")
+                        self._input_positions[user.input_id] = position
+            except (ValueError, TypeError) as error:
+                failure = NativePiUnavailable("Native Pi session has ambiguous tracked user input")
+                failure.__cause__ = error
+                self._input_positions = failure
         self.entries = entries
         return entries[0], entries
 
@@ -449,11 +459,6 @@ class MessageEntry(NativeEntry):
         ):
             raise ValueError("Native Pi session has ambiguous tracked user input")
         return self
-
-    def require_failed_terminal(self, parent_id: str) -> None:
-        if self.parent_id != parent_id:
-            raise ValueError("Native recovery requires an unambiguous failed terminal")
-        self.message.require_failed_terminal()
 
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         return self.message.transcript_events(context)

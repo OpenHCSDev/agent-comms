@@ -15,7 +15,7 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms.assignment_states import CompletedAssignment, FailedAssignment
-from agent_comms.attempt_recovery import RecoveryMonitorCapability
+from agent_comms.attempt_recovery import AttemptRecovery
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort
@@ -110,7 +110,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
     before_bus = (root / "bus.jsonl").read_bytes()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before = input_evidence(store)
-        result = RecoveryMonitorCapability.abandon_released_native_attempt(
+        result = AttemptRecovery.abandon_released_native_attempt(
             store, execution_id
         ).value
         assert type(result.execution.lifecycle) is FailedExecution
@@ -124,7 +124,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
         assert input_evidence(store) == before
         assert (root / "bus.jsonl").read_bytes() == before_bus
         with pytest.raises(RecoveryBlocked):
-            RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
+            AttemptRecovery.abandon_released_native_attempt(store, execution_id)
 
     # Real registry, private bus/cohort, slot acquisition and publication; only
     # the native model is fake. A different input must run, never the old one.
@@ -183,7 +183,7 @@ def test_abandon_refuses_released_but_live_owner(released_unknown):
     _process, _exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RecoveryBlocked, match="release does not prove loss"):
-            RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
+            AttemptRecovery.abandon_released_native_attempt(store, execution_id)
         assert store.snapshots.get(execution_id).is_current
 
 
@@ -199,7 +199,7 @@ def test_abandon_refuses_live_native_process(released_unknown):
         )
         try:
             with pytest.raises(RecoveryBlocked, match="subprocess is still running"):
-                RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
+                AttemptRecovery.abandon_released_native_attempt(store, execution_id)
             assert store.snapshots.get(execution_id).is_current
         finally:
             child.terminate()
@@ -227,7 +227,7 @@ def test_abandon_requires_real_release(released_unknown, damage):
     path.write_text(json.dumps(receipts))
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RecoveryBlocked):
-            RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
+            AttemptRecovery.abandon_released_native_attempt(store, execution_id)
         assert store.snapshots.get(execution_id).is_current
 
 
@@ -251,7 +251,7 @@ def test_missing_admission_cannot_borrow_a_live_successor_release(released_unkno
             new_owner=True,
         )
         with pytest.raises(RecoveryBlocked, match="release does not prove loss"):
-            RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
+            AttemptRecovery.abandon_released_native_attempt(store, execution_id)
         assert store.snapshots.get(execution_id).is_current
 
 
