@@ -48,17 +48,34 @@ class OriginalGoalPublication(PublishRetainedSummary):
             raise ValueError('Original Goal stopping changed source decoder')
         self.cohort.require_artifacts()
 
+    def recover(self, stopped):
+        if self.receipt.with_suffix('.goal-formats').exists():
+            raise RuntimeError('Goal carry preimages exist; remain stopped without an original decoder')
+        return super().recover(stopped)
+
     def complete(self, stopped):
         self.acquire_stopped_route()
-        # Called only after the ORIGINAL batch validates every stop and retains
-        # the original wire OFD. No original registry decoder runs after this.
+        environment = dict(os.environ)
+        environment.pop('PYTHONPATH', None)
+        prepared = run_cutover_child(
+            [str(self.cohort.target / 'bin/python'),
+             str(Path(__file__).with_name('native_schema_carry.py')),
+             '--goal-format-candidate', str(self.runtime_installation.candidate),
+             '--source-root', str(self.cohort.root),
+             '--source-python', str(self.runtime_installation.source_python)],
+            environment=environment, packet='',
+        )
+        plan = FieldCodec.decode(GoalFormatCarryPlan, json.loads(prepared.stdout))
+        # Only the original, validated stopped owner publishes. The target
+        # codec prepared the candidate without opening a target Registration.
+        installed = plan.install(stopped, self.receipt.with_suffix('.goal-formats'))
+        self.note('goal-formats-installed-before-target-registry-read',
+                  goal_format_installation=installed)
         packet = StoppedGoalPublication(
             GoalPublicationReview(self.cohort, self.runtime_installation, self.receipt),
             self.audience, tuple(FieldCodec.encode(thread) for thread in self.originals),
-            stopped.handoff,
+            stopped.handoff, plan,
         )
-        environment = dict(os.environ)
-        environment.pop('PYTHONPATH', None)
         result = run_cutover_child(
             [str(self.cohort.target / 'bin/python'),
              str(Path(__file__).with_name('finish_goal_publication.py')),
@@ -75,6 +92,7 @@ class StoppedGoalPublication:
     audience: tuple[OwnerRestartSelection, ...]
     originals: tuple[dict[str, JsonValue], ...]
     handoff: OwnerRestartHandoff
+    plan: GoalFormatCarryPlan
 
     def finish(self, wire_descriptor: int, route_descriptor: int):
         from agent_comms.active_route import active_route_path, acquire_exclusive_route_lock
@@ -88,21 +106,17 @@ class StoppedGoalPublication:
         if (opened.st_dev, opened.st_ino, opened.st_uid) != (named.st_dev, named.st_ino, os.geteuid()):
             raise ValueError('Inherited route descriptor differs from the reviewed route')
         acquire_exclusive_route_lock(route_descriptor)
-        # These existing owners construct without decoding a Thread or creating
-        # the target Todo store. Target Comms before conversion would be wrong.
+        self.plan.verify_installed(self.review.receipt.with_suffix('.goal-formats'))
+        # Registration decodes every retained Goal, so it comes after carry.
         registry = Registration(cohort.root / 'registry.json')
         lifecycle = OwnerLifecycle(cohort.root, registry, MessageBus(cohort.root / 'bus.jsonl', registry))
         stopped = StoppedOwnerBatch.accept(lifecycle, wire_descriptor, self.handoff)
-        plan = GoalFormatCarryPlan.prepare(cohort.root, installation.candidate, installation.source_python)
-        installed = plan.install(stopped, self.review.receipt.with_suffix('.goal-formats'))
         for thread in self.originals:
-            plan.source.goal(thread['goal'])
+            self.plan.source.goal(thread['goal'])
         originals = tuple(FieldCodec.decode(Thread, thread) for thread in self.originals)
         operation = PublishRetainedSummary(cohort, self.audience, originals,
                                           PreserveOwnerRuntime(), installation,
                                           route_descriptor, self.review.receipt)
-        operation.note('goal-formats-installed-before-target-registry-read',
-                       goal_format_installation=installed)
         # The original parent owns failure disposition. Converted bytes cannot
         # be restored through an original decoder or an implicit rollback.
         return operation.complete(stopped)

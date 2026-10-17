@@ -670,9 +670,9 @@ class GoalJsonNativeStore(GoalDocumentNativeStore):
     def convert(cls, path, conversion):
         from agent_comms.bus_publication import unique_wire_object
         document = json.loads(path.read_bytes(), object_pairs_hook=unique_wire_object)
-        for goal in cls.slots(document):
-            conversion.goal(goal)
+        authors_converted = sum(conversion.goal(goal) for goal in cls.slots(document))
         path.write_text(json.dumps(document, indent=2, allow_nan=False) + '\n')
+        return authors_converted
 
 
 class GoalRegistryNativeStore(GoalJsonNativeStore):
@@ -719,11 +719,12 @@ class GoalHistoryNativeStore(GoalDocumentNativeStore):
         with closing(sqlite3.connect(path)) as db:
             original = inventory(db)
             table = GoalHistoryEntry.declared_name
+            authors_converted = 0
             for sequence, before, after in db.execute(f'SELECT sequence,"before","after" FROM {quoted(table)}').fetchall():
                 converted = []
                 for value in (before, after):
                     goal = json.loads(value) if value is not None else None
-                    conversion.goal(goal)
+                    authors_converted += conversion.goal(goal)
                     converted.append(FieldCodec.decode(Goal | None, goal))
                 GoalHistoryEntry.update(db, where='sequence=?', parameters=(sequence,),
                                         before=converted[0], after=converted[1])
@@ -735,6 +736,7 @@ class GoalHistoryNativeStore(GoalDocumentNativeStore):
                 raise ValueError('Goal history carry changed a non-Goal fact')
             GoalHistoryEntry.select(db)
             db.commit()
+            return authors_converted
 
 
 @dataclass(frozen=True)
@@ -757,7 +759,7 @@ class GoalFormatDeclaration:
         """One conversion, shared by current, historical and retired Goals."""
         from agent_comms.goals import Goal, UncommandedGoalAuthor
         if raw is None:
-            return
+            return 0
         before = json.loads(json.dumps(raw, allow_nan=False))
         target = type(self).observe()
         if set(self.goal_fields) - set(target.goal_fields):
@@ -766,18 +768,21 @@ class GoalFormatDeclaration:
         if set(self.mention_fields) - set(target.mention_fields) or difference not in (set(), {'author'}):
             raise ValueError('Unreviewed Goal mention declaration conversion')
         source = raw.get('mention_source')
+        authors_converted = 0
         if source is not None and difference:
             if 'author' in source:
                 raise ValueError('Original declaration did not declare the stored author')
             # Pre-P107 had no commanded Goals. Absence of a mention source is
             # NOT permission to manufacture a source, bindings or author proof.
             source['author'] = FieldCodec.encode(UncommandedGoalAuthor())
+            authors_converted = 1
         FieldCodec.decode(Goal, raw)
         restored = json.loads(json.dumps(raw, allow_nan=False))
         if source is not None and difference:
             del restored['mention_source']['author']
         if restored != before:
             raise ValueError('Goal carry changed an original Goal fact')
+        return authors_converted
 
 
 def original_goal_formats(root):
@@ -871,10 +876,11 @@ class GoalFormatCarryPlan:
             original = packet['originals'][member.name]
             if digest(path) != original or digest(root / member.name) != original:
                 raise ValueError('Original Goal document changed during capture')
-            member.convert(path, source)
+            authors_converted = member.convert(path, source)
             with path.open('rb') as opened:
                 os.fsync(opened.fileno())
-            stores.append(member(original, digest(path), {'original_facts_preserved': True}))
+            stores.append(member(original, digest(path), {
+                'original_facts_preserved': True, 'authors_converted': authors_converted}))
         fsync_directory(candidate)
         plan = cls(root, candidate, source, tuple(stores))
         write_original(candidate / 'goal-format-plan.json',
@@ -901,6 +907,12 @@ class GoalFormatCarryPlan:
             changed = {self.root / store.name for store in self.stores}
             changed.add(self.root / '.registry-owner-guard')
             acquired.unchanged_by(changed).require_original()
+        from agent_comms.registry_store import RegistryStore
+        RegistryStore(self.root / 'registry.json').private_guard_unlocked()
+        return result
+
+    def verify_installed(self, destination):
+        """Target codec verifies bytes installed by the original stopped owner."""
         # Check installed semantics against the actual retained preimages, not
         # a regenerated history or a claim inferred from successful replacement.
         members = {member.name: member for member in
@@ -915,9 +927,6 @@ class GoalFormatCarryPlan:
                 self.source.goal(original)
                 if original != installed:
                     raise ValueError('Installed Goal differs from its retained original')
-        from agent_comms.registry_store import RegistryStore
-        RegistryStore(self.root / 'registry.json').private_guard_unlocked()
-        return result
 
 
 class CoordinationNativeStore(NativeReleaseStore):
