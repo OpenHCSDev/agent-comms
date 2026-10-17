@@ -45,11 +45,43 @@ class GitMeasure(Measure):
     def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
         return base, head
 
+    @staticmethod
+    def sources(repo: Path, ref: str, selected: set[str]) -> list[tuple[str, bytes]]:
+        """Read the selected Git blobs with one batch command."""
+        if not selected:
+            return []
+        tree = git(repo, "--literal-pathspecs", "ls-tree", "-rz", ref, "--", *sorted(selected))
+        identities = {}
+        for entry in tree.split(b"\0"):
+            if entry:
+                metadata, path = entry.split(b"\t", 1)
+                _, kind, identity = metadata.split()
+                if kind != b"blob":
+                    raise ValueError(f"Expected a source blob at {path!r}")
+                identities[path.decode()] = identity
+        if identities.keys() != selected:
+            raise ValueError("Git omitted a selected path")
+        objects = dict.fromkeys(identities.values())
+        stream = io.BytesIO(git(repo, "cat-file", "--batch", input=b"\n".join(objects) + b"\n"))
+        blobs = {}
+        for identity in objects:
+            recorded, kind, size = stream.readline().split()
+            if recorded != identity or kind != b"blob":
+                raise ValueError("Git returned an unrelated object")
+            length = int(size)
+            content = stream.read(length)
+            if len(content) != length or stream.read(1) != b"\n":
+                raise ValueError("Git returned an incomplete object")
+            blobs[identity] = content
+        if stream.read(1):
+            raise ValueError("Git returned unrequested objects")
+        return [(path, blobs[identities[path]]) for path in sorted(selected)]
+
     @classmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         def snapshot(ref: str) -> dict[str, int]:
             selected = cls.scope(changed, python_paths(repo, ref, root))
-            return cls.snapshot([(path, git(repo, "show", f"{ref}:{path}")) for path in sorted(selected)])
+            return cls.snapshot(cls.sources(repo, ref, selected))
         return cls.align(snapshot(base), snapshot(head))
 
 
@@ -867,8 +899,8 @@ class AnyAnnotation(PerFileMeasure):
         return len(cls.uses(source, filename))
 
 
-def git(repo: Path, *args: str) -> bytes:
-    return subprocess.check_output(["git", "-C", str(repo), *args], timeout=20)
+def git(repo: Path, *args: str, input: bytes = b"") -> bytes:
+    return subprocess.check_output(["git", "-C", str(repo), *args], input=input, timeout=20)
 
 
 def revision(repo: Path, ref: str) -> str:

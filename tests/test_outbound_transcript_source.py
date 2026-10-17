@@ -311,7 +311,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     with pytest.raises(StaleRevision, match="page window"):
         comms.transcripts.bind_page_read(
             "beta", identity,
-            before=TranscriptCursor.at(identity.session_file, 0, identity.wire_frontier),
+            before=identity.wire_frontier.cursor(identity.session_file, 0),
         )
     comms.registry.rename("beta", "renamed")
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity

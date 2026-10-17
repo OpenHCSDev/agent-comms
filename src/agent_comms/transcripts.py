@@ -35,8 +35,8 @@ from .turn_digests import ThreadTurns, TurnDigestRead
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_receipts import (
-    AssignedSourceCursor, AssignedSourceIdentity, AssignedTranscriptSource, EarlierTranscript,
-    LaterTranscript, LiveAssignedTranscriptSource, TranscriptSource,
+    AssignedSourceCursor, AssignedTranscriptSource, EarlierTranscript, NoWireFrontier,
+    LaterTranscript, LiveAssignedTranscriptSource, TranscriptSource, WireFrontier,
 )
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .coordination_database import CoordinationStore
@@ -54,47 +54,26 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
 
     session_file: str
     offset: int
-    source_identity: ClassVar[AssignedSourceIdentity | None] = None
-    wire_seq: ClassVar[int] = 0
-
-    @staticmethod
-    def at(session_file: str, offset: int, wire: AssignedSourceCursor | None) -> TranscriptCursor:
-        """A source's optional wire frontier selects the cursor member here, once."""
-        if wire is None:
-            return NativeTranscriptCursor(session_file, offset)
-        return WireTranscriptCursor(session_file, offset, wire)
+    wire: ClassVar[WireFrontier] = NoWireFrontier()
 
     def at_offset(self, offset: int) -> TranscriptCursor:
         return replace(self, offset=offset)
 
     def at_sequence(self, sequence: int) -> TranscriptCursor:
-        if sequence:
-            raise ValueError("Native-only cursor cannot advance an assigned wire source")
-        return self
+        return self.wire.at(sequence).cursor(self.session_file, self.offset)
 
     def contains(self, other: TranscriptCursor) -> bool:
-        return other.native_within(self) and other.wire_within(self)
-
-    def native_within(self, parent: TranscriptCursor) -> bool:
-        return self.session_file == parent.session_file and self.offset <= parent.offset
-
-    def wire_within(self, parent: TranscriptCursor) -> bool:
-        return True
-
-    def require_source(self, identity: AssignedSourceIdentity) -> None:
-        """A native-only cursor fits every source."""
-
-    def require_native(self) -> None:
-        """A native-only cursor is what recorded items carry."""
+        return (self.session_file == other.session_file and other.offset <= self.offset
+                and other.wire.within(self.wire))
 
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
-        return 0 < sequence <= self.wire_seq
+        return 0 < sequence <= self.wire.sequence
 
     def over_native(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
         """This wire position over the furthest committed native prefix within it: wire
         assignment can advance without transferring anonymous native output."""
-        within = tuple(prefix for prefix in prefixes if prefix.wire_within(self))
+        within = tuple(prefix for prefix in prefixes if prefix.wire.within(self.wire))
         prefix = max((prefix for prefix in within if prefix.session_file == self.session_file),
                      key=lambda prefix: prefix.offset, default=next(iter(within), self.at_offset(0)))
         return replace(self, session_file=prefix.session_file, offset=prefix.offset)
@@ -107,27 +86,7 @@ class NativeTranscriptCursor(TranscriptCursor):
 
 @dataclass(frozen=True, slots=True)
 class WireTranscriptCursor(TranscriptCursor):
-    wire: AssignedSourceCursor
-
-    @property
-    def source_identity(self) -> AssignedSourceIdentity:
-        return self.wire.identity
-
-    @property
-    def wire_seq(self) -> int:
-        return self.wire.sequence
-
-    def at_sequence(self, sequence: int) -> TranscriptCursor:
-        return replace(self, wire=self.wire.at(sequence))
-
-    def wire_within(self, parent: TranscriptCursor) -> bool:
-        return parent.source_identity == self.source_identity and self.wire_seq <= parent.wire_seq
-
-    def require_source(self, identity: AssignedSourceIdentity) -> None:
-        self.wire.require_source(identity)
-
-    def require_native(self) -> None:
-        raise ValueError("Recorded items cannot acquire an assigned wire cursor")
+    wire: AssignedSourceCursor = field()
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,9 +100,7 @@ class TranscriptPage:
     def resolve_sent_messages(self, reports):
         """Prove bounded full reports without replacing their input objects."""
         reports = tuple(reports)
-        scope = self.after.source_identity
-        resolved = (AssignedTranscriptSource.open(scope).resolve_sent(reports)
-                    if scope is not None else reports)
+        resolved = self.after.wire.resolve_sent(reports)
         return dict(zip(map(id, reports), resolved))
 
     def metadata(self) -> dict[str, object]:
@@ -188,7 +145,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     )
     reply_revision: PublishedReplyRevision
     read_revision: FileRevision | None = field(metadata={"content_exclude": True})
-    wire_frontier: AssignedSourceCursor | None
+    wire_frontier: WireFrontier
     before: TranscriptCursor | None
     after: TranscriptCursor | None
     through: TranscriptCursor | None
@@ -240,8 +197,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     @property
     def page_bound(self) -> TranscriptCursor:
         """The original witnessed byte/receipt bound owns page preparation."""
-        return self.through or TranscriptCursor.at(
-            self.session_file, self.records_cut.offset, self.wire_frontier)
+        return self.through or self.wire_frontier.cursor(self.session_file, self.records_cut.offset)
 
     def contains_records_cut(self, other: TranscriptReadIdentity) -> bool:
         """Whether ``other`` still contains the thread records this read captured."""
@@ -504,7 +460,7 @@ class Transcripts:
         self,
         page: PageSource,
         name: str,
-        wire_frontier: AssignedSourceCursor | None,
+        wire_frontier: WireFrontier,
         *,
         before: TranscriptCursor | None,
         after: TranscriptCursor | None,
@@ -635,9 +591,9 @@ class Transcripts:
                 size = through.offset
                 if cursor and cursor.offset > size:
                     raise ValueError("Cursor is outside the transcript window.")
-            frontier = through or TranscriptCursor.at(session_file, size, source.frontier)
+            frontier = through or source.frontier.cursor(session_file, size)
             source.require_cursor(frontier)
-            if frontier.wire_seq < 0 or (cursor is not None and not frontier.contains(cursor)):
+            if frontier.wire.sequence < 0 or (cursor is not None and not frontier.contains(cursor)):
                 raise ValueError("Cursor is outside the combined transcript source")
             traversal = LaterTranscript() if after is not None else EarlierTranscript()
             initial = cursor or frontier
@@ -654,7 +610,7 @@ class Transcripts:
         return (
             TranscriptPage(
                 events, start, end,
-                start.offset > 0 or start.wire_seq > 0,
+                start.offset > 0 or start.wire.sequence > 0,
                 end != frontier,
             ),
             draft,
@@ -665,10 +621,8 @@ class Transcripts:
         thread = registry.require(name)
         session_file = thread.session_file or ""
         path = Path(session_file)
-        return TranscriptCursor.at(
-            session_file,
-            path.stat().st_size if session_file and path.is_file() else 0,
-            AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier,
+        return AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier.cursor(
+            session_file, path.stat().st_size if session_file and path.is_file() else 0,
         )
 
     def record_turn_publication(

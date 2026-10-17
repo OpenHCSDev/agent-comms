@@ -8,23 +8,22 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
 from .bus_publication import CommittedDelivery
+from .declared_family import DeclaredFamily
+from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, UserTranscript
 
-from .wire_log import ConversationSourceWindowRequest
-
-if TYPE_CHECKING:
-    from .wire_log import WireLog
+from .wire_log import ConversationSourceWindowRequest, WireLog
 
 
 @dataclass(frozen=True)
@@ -41,11 +40,60 @@ class AssignedSourceIdentity:
         return self.root == other.root and self.recipient.same_publication_birth(other.recipient)
 
 
+class WireFrontier(DeclaredFamily, affix="WireFrontier"):
+    """The wire coordinate owns cursor construction, bounds and source authority."""
+
+    sequence: ClassVar[int] = 0
+
+    def cursor(self, session_file, offset):
+        from .transcripts import NativeTranscriptCursor
+        return NativeTranscriptCursor(session_file, offset)
+
+    def at(self, sequence):
+        if sequence:
+            raise ValueError("Native-only cursor cannot advance an assigned wire source")
+        return self
+
+    def within(self, parent):
+        return True
+
+    def contains(self, other):
+        return False
+
+    def require_source(self, identity):
+        """An unassigned position does not claim a particular wire source."""
+
+    def require_native(self):
+        """An unassigned position carries only the native coordinate."""
+
+    def resolve_sent(self, messages):
+        return tuple(messages)
+
+
 @dataclass(frozen=True)
-class AssignedSourceCursor:
-    root: str
-    recipient: ThreadIncarnation
-    sequence: int
+class NoWireFrontier(WireFrontier):
+    pass
+
+
+@dataclass(frozen=True)
+class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
+    sequence: int = field()
+
+    def cursor(self, session_file, offset):
+        from .transcripts import WireTranscriptCursor
+        return WireTranscriptCursor(session_file, offset, self)
+
+    def within(self, parent):
+        return parent.contains(self)
+
+    def contains(self, other):
+        return self.identity == other.identity and other.sequence <= self.sequence
+
+    def require_native(self):
+        raise ValueError("Recorded items cannot acquire an assigned wire cursor")
+
+    def resolve_sent(self, messages):
+        return AssignedTranscriptSource.open(self.identity).resolve_sent(messages)
 
     @property
     def identity(self) -> AssignedSourceIdentity:
@@ -63,7 +111,7 @@ class AssignedSourceCursor:
 class AssignedSourceWindow:
     """Conversation and sent sources captured with one receipt frontier."""
 
-    cursor: AssignedSourceCursor | None
+    cursor: WireFrontier
     sources: tuple[CommittedDelivery, ...]
     sent_sources: tuple[CommittedDelivery, ...]
 
@@ -120,7 +168,7 @@ class TranscriptTraversal(ABC):
             record, events = next(projected, (None, ()))
             source_rows = iter(
                 receipts.page_rows(
-                    self, consumed.wire_seq, frontier, limit=max_messages + 1
+                    self, consumed.wire.sequence, frontier, limit=max_messages + 1
                 )
             )
             message = next(source_rows, None)
@@ -157,7 +205,7 @@ class TranscriptTraversal(ABC):
             if record is None:
                 consumed = consumed.at_offset(frontier.offset if self.ascending else 0)
             if message is None:
-                consumed = consumed.at_sequence(frontier.wire_seq if self.ascending else 0)
+                consumed = consumed.at_sequence(frontier.wire.sequence if self.ascending else 0)
             return consumed, records
         finally:
             projected.close()
@@ -200,7 +248,7 @@ class LaterTranscript(TranscriptTraversal):
         return reader.forward(cursor.offset, through.offset)
 
     def predicate(self, sequence, through):
-        return "w.seq>? AND w.seq<=?", (sequence, through.wire_seq)
+        return "w.seq>? AND w.seq<=?", (sequence, through.wire.sequence)
 
     def chooses_native(self, native_time, receipt_time):
         return native_time is None or native_time <= receipt_time
@@ -227,24 +275,22 @@ class TranscriptSource:
 
     def resolve_sent(self, messages):
         """Records without a sender assignment cannot qualify Send reports."""
-        return tuple(messages)
+        return self.frontier.resolve_sent(messages)
 
     @property
-    def frontier(self) -> AssignedSourceCursor | None:
-        return None
+    def frontier(self) -> WireFrontier:
+        return NoWireFrontier()
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
-        return AssignedSourceWindow(None, (), ())
+        return AssignedSourceWindow(self.frontier, (), ())
 
     def require_cursor(self, cursor):
-        cursor.require_native()
+        cursor.wire.require_native()
 
     def page_rows(self, traversal, sequence, through, *, limit):
         return iter(())
 
     def reply_revision(self, records):
-        from .native_runtime_input import PublishedReplyRevision
-
         return PublishedReplyRevision(0, 0)
 
     def native_records(self, fragments, routes, reader):
@@ -276,8 +322,6 @@ class AssignedTranscriptSource(TranscriptSource):
     @classmethod
     def open(cls, identity: AssignedSourceIdentity):
         """Open only the recorded wire, without current registry or SQL authority."""
-        from .wire_log import WireLog
-
         root = Path(identity.root)
         return identity.recipient.recorded_or(
             lambda recorded: cls(root, recorded, WireLog(root / "bus.jsonl")),
@@ -315,7 +359,7 @@ class AssignedTranscriptSource(TranscriptSource):
         )
 
     def require_cursor(self, cursor):
-        cursor.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
+        cursor.wire.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
 
     @classmethod
     def for_recorded(cls, root, thread, log, records):
@@ -444,7 +488,6 @@ class LiveAssignedTranscriptSource(AssignedTranscriptSource):
 
     def native_records(self, fragments, routes, reader):
         """Native ancestry precedes one atomic SQL read per bounded fragment."""
-        from .native_runtime_input import NativeRuntimeInput
         from .transcripts import TranscriptRead
 
         lookup = self.recipient.lookup

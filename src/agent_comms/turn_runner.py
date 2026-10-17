@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any
@@ -42,6 +41,7 @@ from .runtime import (
     SocketClient,
 )
 from .pi_payloads import StateData
+from .thread_configuration import ReplyTiming
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
@@ -57,9 +57,6 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
-NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
-REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
-REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
 REPLY_POLL = 0.25
 ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
 IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
@@ -93,13 +90,12 @@ class TurnRunner:
         *,
         agent_bin: str | None,
         agent_args: list[str] | None,
-        reply_window: float | None,
-        no_reply_window: float | None,
-        reply_quiet: float | None,
+        reply_timing: ReplyTiming,
     ):
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
+        self.reply_timing = reply_timing
         self.agent_bin = NativeArguments.configured_binary(agent_bin)
         self.agent_args = NativeArguments.configured(agent_args)
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
@@ -107,21 +103,6 @@ class TurnRunner:
         self.persistent_backends: dict[str, AgentBackend] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
         self.goals = GoalScheduler(comms, effects)
-        self.reply_window = (
-            reply_window
-            if reply_window is not None
-            else float(os.environ.get("AGENT_COMMS_REPLY_WINDOW", str(REPLY_WINDOW)))
-        )
-        self.no_reply_window = (
-            no_reply_window
-            if no_reply_window is not None
-            else float(os.environ.get("AGENT_COMMS_NO_REPLY_WINDOW", str(NO_REPLY_WINDOW)))
-        )
-        self.reply_quiet = (
-            reply_quiet
-            if reply_quiet is not None
-            else float(os.environ.get("AGENT_COMMS_REPLY_QUIET", str(REPLY_QUIET)))
-        )
 
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
         self.sessions = sessions
@@ -268,6 +249,7 @@ class TurnRunner:
         marker past our message), the turn stays open — the client shows
         its spinner, and replies drain the moment they land.
         """
+        timing = self.reply_timing
         waited = 0.0
         quiet = 0.0
         got_reply = False
@@ -282,14 +264,14 @@ class TurnRunner:
                 quiet = 0.0
                 idle_for = 0.0
             if got_reply:
-                if quiet >= self.reply_quiet or waited >= self.reply_window:
+                if quiet >= timing.reply_quiet or waited >= timing.reply_window:
                     self.effects._debug_log(f"collect:break got_reply waited={waited}")
                     break
                 continue
             # No reply yet: keep waiting while a peer is on it.
             peer_progress = await Coordination.run_worker(partial(self.peer_progress, thread_name, sent_seq))
             idle_for = 0.0 if peer_progress else idle_for + REPLY_POLL
-            if idle_for >= IDLE_GRACE and waited >= self.no_reply_window:
+            if idle_for >= IDLE_GRACE and waited >= timing.no_reply_window:
                 break
             if waited >= ACTIVITY_WINDOW:
                 break
