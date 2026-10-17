@@ -8,6 +8,8 @@ from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
 from agent_comms.pi_durable_backend import (
     AgentChangedDurableEvent, DurableHost, MessageUpdateDurableEvent,
     SnapshotDurableEvent, TaskFailedDurableEvent, ToolExecutionStartDurableEvent,
+    ConfigureHostCommand, DurableAgent, InspectHostCommand, WatchHostCommand,
+    TextDeltaDurableChange, ThinkingDeltaDurableChange,
 )
 
 
@@ -24,18 +26,18 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
         try:
             async with host.open_turn() as turn:
                 assert isinstance(await turn.next_event(), SnapshotDurableEvent)
-                await host.request('configure', agent={'instructions': 'turn-owned event'})
+                await host.request(ConfigureHostCommand(DurableAgent(instructions='turn-owned event')))
                 changed = await asyncio.wait_for(turn.next_event(), 5)
                 assert isinstance(changed, AgentChangedDurableEvent)
-                assert changed.payload['agent']['instructions'] == 'turn-owned event'
+                assert changed.agent.instructions == 'turn-owned event'
                 # Same turn delivers Core-visible records, not a host-side sink.
                 for event in (
-                    MessageUpdateDurableEvent({'changes': [
-                        {'type': 'text_delta', 'delta': 'visible'},
-                        {'type': 'thinking_delta', 'delta': 'reasoning'},
-                    ]}),
-                    ToolExecutionStartDurableEvent({'toolCallId': 'call', 'toolName': 'read', 'args': {}}),
-                    TaskFailedDurableEvent({'message': 'visible failure'}),
+                    MessageUpdateDurableEvent(usage=None, changes=(
+                        TextDeltaDurableChange(0, 'visible'),
+                        ThinkingDeltaDurableChange(1, 'reasoning'),
+                    )),
+                    ToolExecutionStartDurableEvent(tool_call_id='call', tool_name='read', args={}),
+                    TaskFailedDurableEvent(task_id=1, kind='tool', message='visible failure'),
                 ):
                     turn.receive(event)
                 stream = turn.converted()
@@ -50,9 +52,9 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
             # turn receives its own snapshot and subsequent real host update.
             async with host.open_turn() as next_turn:
                 assert isinstance(await next_turn.next_event(), SnapshotDurableEvent)
-                await host.request('configure', agent={'instructions': 'next turn'})
+                await host.request(ConfigureHostCommand(DurableAgent(instructions='next turn')))
                 changed = await asyncio.wait_for(next_turn.next_event(), 5)
-                assert changed.payload['agent']['instructions'] == 'next turn'
+                assert changed.agent.instructions == 'next turn'
         finally:
             await host.close()
     asyncio.run(journey())
@@ -64,10 +66,10 @@ def test_real_host_event_without_turn_fails_reader(tmp_path):
         try:
             # Deliberately violate ownership through the actual JSONL protocol.
             with pytest.raises(RuntimeError, match='no open turn'):
-                await host.request('watch')
+                await host.request(WatchHostCommand())
                 await asyncio.wait_for(asyncio.shield(host.reader), 5)
             with pytest.raises(RuntimeError, match='no open turn'):
-                await host.request('inspect')
+                await host.request(InspectHostCommand())
         finally:
             await host.close()
     asyncio.run(journey())

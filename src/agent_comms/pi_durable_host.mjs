@@ -16,6 +16,7 @@ const Recovery = defineDoc({ kind: 'core.recovery', version: 1, scope: 'session'
 let harness, root, stream, models;
 let resumed = false;
 const emit = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
+const ack = Object.freeze({ kind: 'ack', result: null });
 const requireOpen = () => { if (!harness) throw new Error('Host is not open'); };
 const requireResumed = () => { requireOpen(); if (!resumed) throw new Error('Interrupted work must be explicitly abandoned before resume'); };
 const workItems = (inspection) => [
@@ -42,9 +43,7 @@ const handlers = {
       onReport: error => process.stderr.write(`${error.stack ?? error}\n`),
     }, context);
     root = await harness.root(context, { agent: { cwd: request.cwd, ...(request.agent ?? {}) } });
-    const initial = await watchEvents(harness, root.id, context);
-    await initial.stop();
-    return { snapshot: initial.snapshot, interrupted: workItems(await harness.inspect(context)) };
+    return { kind: 'opened', result: { interrupted: workItems(await harness.inspect(context)) } };
   },
   async open_history(request) {
     if (harness) throw new Error('Host already open');
@@ -56,24 +55,24 @@ const handlers = {
     }, context);
     root = await harness.conversation(ROOT_CONVERSATION_ID, context);
     if (!root) throw new Error('Durable database has no root conversation');
-    return null;
+    return ack;
   },
   async watch() {
     requireOpen();
     if (stream) throw new Error('A durable turn watch is already open');
     stream = await watchEvents(harness, root.id, context);
-    emit({ event: stream.snapshot });
-    stream.start(async events => { for (const event of events) emit({ event }); });
-    return null;
+    emit({ kind: 'event', event: stream.snapshot });
+    stream.start(async events => { for (const event of events) emit({ kind: 'event', event }); });
+    return ack;
   },
   async unwatch() {
     requireOpen();
     if (!stream) throw new Error('No durable turn watch is open');
     await stream.stop();
     stream = undefined;
-    return null;
+    return ack;
   },
-  async inspect() { requireOpen(); return workItems(await harness.inspect(context)); },
+  async inspect() { requireOpen(); return { kind: 'inspection', result: workItems(await harness.inspect(context)) }; },
   async settle(request) {
     requireOpen();
     if (resumed) throw new Error('Recovery is only available before resume');
@@ -84,72 +83,72 @@ const handlers = {
     const [kind, id] = work.id.split(':');
     if (kind === 'task') await harness.abortTask(Number(id), context);
     else await harness.abortSubmission(Number(id), context);
-    return { id: work.id, disposition: 'ABANDON' };
+    return { kind: 'settlement', result: { id: work.id, disposition: 'ABANDON' } };
   },
   async resume() {
     requireOpen();
-    if (resumed) return null;
+    if (resumed) return ack;
     const inspection = await harness.inspect(context);
     const decisions = (await harness.snapshot(Recovery, context))?.decisions ?? {};
     if (workItems(inspection).some(work => decisions[work.id] !== 'ABANDON')) throw new Error('Interrupted work has no recorded disposition');
     if (inspection.tasks.some(({ record }) => !record.abortRequested)) throw new Error('Interrupted task was not abort-marked');
     harness.resume();
     resumed = true;
-    return null;
+    return ack;
   },
   async submit(request) {
     requireResumed();
     if (typeof request.requestId !== 'string' || !request.requestId) throw new Error('Core InputId is required as requestId');
     const submission = await root.submit({ type: 'input', content: request.content, requestId: request.requestId, whenBusy: request.whenBusy }, context);
-    return { id: submission.id };
+    return { kind: 'submission', result: { id: submission.id } };
   },
-  async abort() { requireResumed(); await root.abort(context); return null; },
+  async abort() { requireResumed(); await root.abort(context); return ack; },
   async entries(request) {
     requireOpen();
     const page = await root.entries(request.query ?? {}, request.limit, request.cursor ?? undefined, context);
-    return { items: page.items.map(entry => ({ order: entry.id, kind: ({ 'pi.user': 'user', 'pi.assistant': 'assistant', 'pi.tool-result': 'tool_result', 'pi.compaction': 'compaction', 'pi.reset': 'reset' })[entry.kind] ?? 'system', text: text(entry) })), cursor: page.next };
+    return { kind: 'history', result: { items: page.items.map(entry => ({ order: entry.id, kind: ({ 'pi.user': 'user', 'pi.assistant': 'assistant', 'pi.tool-result': 'tool_result', 'pi.compaction': 'compaction', 'pi.reset': 'reset' })[entry.kind] ?? 'system', text: text(entry) })), cursor: page.next } };
   },
   async context_usage() {
     requireOpen();
     const agent = await root.agent(context);
     const model = agent.model && models.getModel(agent.model.provider, agent.model.modelId);
-    return { tokens: estimateContext(await root.context(context), []), window: model?.contextWindow ?? null };
+    return { kind: 'context', result: { tokens: estimateContext(await root.context(context), []), window: model?.contextWindow ?? null } };
   },
   async configure(request) {
     requireOpen();
     if (request.agent) await root.configure(request.agent, context);
     const agent = await root.agent(context);
-    return { model: agent.model, thinking: agent.thinkingLevel, models: (await models.getAvailable()).map(model => `${model.provider}/${model.id}`) };
+    return { kind: 'configuration', result: { model: agent.model, thinking: agent.thinkingLevel, models: (await models.getAvailable()).map(model => `${model.provider}/${model.id}`) } };
   },
   async compact(request) {
     requireResumed();
     const task = await harness.waitForTask(await root.compact(request.instructions, context), context);
     const outcome = task.state.outcome;
-    if (outcome.status !== 'completed') return { status: 'failed', message: JSON.stringify(outcome) };
-    if (!outcome.result.submissionId) return { status: 'nothing' };
+    if (outcome.status !== 'completed') return { kind: 'compaction', result: { kind: 'failed', message: JSON.stringify(outcome) } };
+    if (!outcome.result.submissionId) return { kind: 'compaction', result: { kind: 'nothing_to' } };
     const placed = await (await harness.submission(outcome.result.submissionId, context)).wait(context);
-    if (placed.status !== 'done') return { status: placed.reason === 'stale' ? 'stale' : 'failed', message: JSON.stringify(placed) };
+    if (placed.status !== 'done') return { kind: 'compaction', result: placed.reason === 'stale' ? { kind: 'stale' } : { kind: 'failed', message: JSON.stringify(placed) } };
     const entry = await root.commit(tx => tx.entry(placed.entry), context);
-    return { status: 'placed', summary: text(entry), first_kept: String(entry.head), tokens_before: null };
+    return { kind: 'compaction', result: { kind: 'placed', summary: text(entry), first_kept: String(entry.head), tokens_before: null } };
   },
   async close() {
     if (stream) await stream.stop();
     if (harness) await harness.close(context);
     harness = undefined;
-    return null;
+    return ack;
   },
 };
 const lines = createInterface({ input: process.stdin });
 // Commands may wait for work while abort/steering must remain deliverable.
 for await (const line of lines) {
   let request;
-  try { request = JSON.parse(line); } catch (error) { emit({ error: String(error) }); continue; }
+  try { request = JSON.parse(line); } catch (error) { emit({ kind: 'fault', error: String(error) }); continue; }
   void (async () => {
     try {
-      const handler = handlers[request.command];
-      if (!handler) throw new Error(`Unknown durable command: ${request.command}`);
-      emit({ id: request.id, result: await handler(request) });
-    } catch (error) { emit({ id: request.id, error: error.stack ?? String(error) }); }
+      const handler = handlers[request.operation.command];
+      if (!handler) throw new Error(`Unknown durable command: ${request.operation.command}`);
+      emit({ id: request.id, ...await handler(request.operation) });
+    } catch (error) { emit({ kind: 'error', id: request.id, error: error.stack ?? String(error) }); }
   })();
 }
 if (stream) await stream.stop();

@@ -9,9 +9,10 @@ import asyncio
 import fcntl
 import json
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass
+from abc import abstractmethod
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Literal
 from uuid import uuid4
 
 from pydantic import JsonValue
@@ -19,8 +20,7 @@ from pydantic import JsonValue
 from .agent_events import Chunk, Thinking, ToolStart, Error
 
 from .agent_backend import (
-    AgentBackend, Compacts, ConfiguresModel, ContextUsage,
-    FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction, ReportsContext,
+    AgentBackend, Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext,
     RuntimeLocation, Steers,
 )
 from .child_process import AttachedChild
@@ -129,32 +129,37 @@ class ResetDurableEntry(DurableEntry): pass
 
 
 @dataclass(frozen=True)
+class DurableEntryQuery:
+    min_entry_id: int | None = field(default=None, metadata={'wire_name': 'minEntryId', 'wire_omit_default': True})
+    max_entry_id: int | None = field(default=None, metadata={'wire_name': 'maxEntryId', 'wire_omit_default': True})
+    order: Literal['ascending', 'descending'] = 'descending'
+
+
+@dataclass(frozen=True)
 class DurableHistoryPage:
     items: tuple[DurableEntry, ...]
     cursor: dict[str, JsonValue] | None = None
-
-    @classmethod
-    def read(cls, loop, host, *, limit=128, cursor=None, query=None):
-        return FieldCodec.decode(cls, loop.run(host.request(
-            'entries', limit=limit, cursor=cursor, query=query or {})))
 
 
 class DurableTranscriptRead(TranscriptSource):
     def __init__(self, loop, host):
         self.loop, self.host = loop, host
-        page = DurableHistoryPage.read(loop, host, limit=1) if host is not None else DurableHistoryPage(())
+        page = self.page(limit=1) if host is not None else DurableHistoryPage(())
         self.through = max((item.order for item in page.items), default=0)
 
     def cut(self):
         return ExternalCut(self.through)
+
+    def page(self, *, limit=128, cursor=None, query=DurableEntryQuery()):
+        return self.loop.run(self.host.request(EntriesHostCommand(limit, cursor, query)))
 
     def records(self, minimum, maximum, order):
         if self.host is None or maximum < minimum:
             return
         cursor = None
         while True:
-            page = DurableHistoryPage.read(self.loop, self.host, cursor=cursor,
-                query={'minEntryId': minimum, 'maxEntryId': min(maximum, self.through), 'order': order})
+            page = self.page(cursor=cursor,
+                query=DurableEntryQuery(minimum, min(maximum, self.through), order))
             for item in page.items:
                 yield item.record()
             cursor = page.cursor
@@ -190,12 +195,128 @@ class DurableTranscript(TranscriptSource):
             return reader.cut()
 
 
-class DurableEvent(DeclaredFamily, affix='DurableEvent'):
-    """One converter family for the pinned 1.3.0 watchEvents vocabulary."""
-    unknown_kind = False
+@dataclass(frozen=True)
+class DurableModel:
+    provider: str
+    model_id: str = field(metadata={'wire_name': 'modelId'})
 
-    def __init__(self, payload):
-        self.payload = payload
+    @classmethod
+    def selected(cls, name):
+        return cls(*name.split('/', 1)) if name is not None else None
+
+    @property
+    def name(self):
+        return f'{self.provider}/{self.model_id}'
+
+
+@dataclass(frozen=True)
+class DurableSelectionEdits:
+    add: tuple[str, ...] = ()
+    remove: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DurableAgent:
+    model: DurableModel | None = field(default=None, metadata={'wire_omit_default': True})
+    thinking_level: str | None = field(default=None, metadata={'wire_name': 'thinkingLevel', 'wire_omit_default': True})
+    instructions: str | None = field(default=None, metadata={'wire_omit_default': True})
+    cwd: str | None = field(default=None, metadata={'wire_omit_default': True})
+    extensions: tuple[str, ...] | DurableSelectionEdits | None = field(default=None, metadata={'wire_omit_default': True})
+    tools: tuple[str, ...] | DurableSelectionEdits | None = field(default=None, metadata={'wire_omit_default': True})
+    model_tools: tuple[str, ...] | DurableSelectionEdits | None = field(default=None, metadata={'wire_name': 'modelTools', 'wire_omit_default': True})
+
+
+@dataclass(frozen=True)
+class DurableConfiguration:
+    models: tuple[str, ...]
+    model: DurableModel | None = None
+    thinking: str | None = None
+
+    def selected(self):
+        if self.model is None:
+            raise ValueError('Durable session has no configured model')
+        return self.model.name, self.thinking
+
+
+@dataclass(frozen=True)
+class InterruptedDurableWork:
+    id: str
+    kind: str
+
+
+@dataclass(frozen=True)
+class DurableSettlement:
+    id: str
+    disposition: Literal["ABANDON"]
+
+
+@dataclass(frozen=True)
+class DurableSubmission:
+    id: int
+
+
+@dataclass(frozen=True)
+class DurableChange(DeclaredFamily, affix='DurableChange'):
+    family_discriminator = 'type'
+
+    def convert(self):
+        return ()
+
+
+@dataclass(frozen=True)
+class IndexedDurableChange(DurableChange):
+    declared_name = None
+    content_index: int = field(metadata={'wire_name': 'contentIndex'})
+
+
+@dataclass(frozen=True)
+class DeltaDurableChange(IndexedDurableChange):
+    declared_name = None
+    delta: str
+    event_type: ClassVar
+
+    def convert(self):
+        return (self.event_type(self.delta),)
+
+
+class TextDeltaDurableChange(DeltaDurableChange):
+    event_type = Chunk
+
+
+class ThinkingDeltaDurableChange(DeltaDurableChange):
+    event_type = Thinking
+
+
+@dataclass(frozen=True)
+class BlockDurableChange(IndexedDurableChange):
+    block: JsonValue
+
+
+class TextStartDurableChange(BlockDurableChange): pass
+class ThinkingStartDurableChange(BlockDurableChange): pass
+class ToolcallStartDurableChange(BlockDurableChange): pass
+
+
+@dataclass(frozen=True)
+class ToolcallDeltaDurableChange(IndexedDurableChange):
+    path: tuple[str | int, ...]
+    delta: str
+
+
+@dataclass(frozen=True)
+class MessageDurableChange(DurableChange):
+    message: JsonValue
+
+
+@dataclass(frozen=True)
+class DurableEvent(DeclaredFamily, affix='DurableEvent'):
+    """Decode the pinned SDK event vocabulary once at the host boundary.
+
+    SDK-defined JSON data (tool arguments, stored messages and extension data)
+    stays opaque. No consumer recovers protocol fields from those values.
+    """
+    family_discriminator = 'type'
+    unknown_kind = False
 
     @classmethod
     def wire_kind(cls):
@@ -205,40 +326,336 @@ class DurableEvent(DeclaredFamily, affix='DurableEvent'):
         return ()
 
 
-class SnapshotDurableEvent(DurableEvent): pass
-class RunStartDurableEvent(DurableEvent): pass
-class RunEndDurableEvent(DurableEvent): pass
+@dataclass(frozen=True)
+class SnapshotDurableEvent(DurableEvent):
+    entries: tuple[JsonValue, ...]
+    tools: tuple[JsonValue, ...]
+    nested_tools: tuple[JsonValue, ...] = field(metadata={'wire_name': 'nestedTools'})
+    compactions: tuple[JsonValue, ...]
+    inbox: tuple[JsonValue, ...]
+    agent: DurableAgent
+    usage: JsonValue
+    run: JsonValue = None
+    generation: JsonValue = None
+    compaction_failure: JsonValue = field(default=None, metadata={'wire_name': 'compactionFailure'})
+
+
+@dataclass(frozen=True)
+class RunDurableEvent(DurableEvent):
+    declared_name = None
+    inputs: tuple[int, ...]
+
+
+class RunStartDurableEvent(RunDurableEvent): pass
+class RunEndDurableEvent(RunDurableEvent): pass
 class TurnStartDurableEvent(DurableEvent): pass
 class TurnEndDurableEvent(DurableEvent): pass
-class MessageStartDurableEvent(DurableEvent): pass
+
+
+@dataclass(frozen=True)
+class MessageStartDurableEvent(DurableEvent):
+    message: JsonValue
+
+
+@dataclass(frozen=True)
 class MessageUpdateDurableEvent(DurableEvent):
+    usage: JsonValue
+    changes: tuple[DurableChange, ...]
+
     def convert(self):
-        result = []
-        for change in self.payload['changes']:
-            if change['type'] == 'text_delta':
-                result.append(Chunk(change['delta']))
-            elif change['type'] == 'thinking_delta':
-                result.append(Thinking(change['delta']))
-        return tuple(result)
-class MessageEndDurableEvent(DurableEvent): pass
-class ToolExecutionStartDurableEvent(DurableEvent):
+        return tuple(event for change in self.changes for event in change.convert())
+
+
+@dataclass(frozen=True)
+class MessageEndDurableEvent(DurableEvent):
+    entry: JsonValue
+
+
+@dataclass(frozen=True, kw_only=True)
+class ToolCallDurableEvent(DurableEvent):
+    declared_name = None
+    tool_call_id: str = field(metadata={'wire_name': 'toolCallId'})
+    tool_name: str = field(metadata={'wire_name': 'toolName'})
+    task_id: int | None = field(default=None, metadata={'wire_name': 'taskId'})
+    parent_tool_call_id: str | None = field(default=None, metadata={'wire_name': 'parentToolCallId'})
+    parent_task_id: int | None = field(default=None, metadata={'wire_name': 'parentTaskId'})
+
+
+@dataclass(frozen=True)
+class ToolExecutionStartDurableEvent(ToolCallDurableEvent):
+    args: dict[str, JsonValue]
+
     def convert(self):
-        return (ToolStart(id=self.payload['toolCallId'], name=self.payload['toolName'], args=self.payload['args']),)
-class ToolExecutionUpdateDurableEvent(DurableEvent): pass
-class ToolExecutionEndDurableEvent(DurableEvent): pass
-class InboxUpdateDurableEvent(DurableEvent): pass
-class SubmissionDurableEvent(DurableEvent): pass
-class AutoRetryStartDurableEvent(DurableEvent): pass
-class AutoRetryEndDurableEvent(DurableEvent): pass
-class DeferredPollDurableEvent(DurableEvent): pass
-class EntryAppendedDurableEvent(DurableEvent): pass
-class AgentChangedDurableEvent(DurableEvent): pass
-class UsageChangedDurableEvent(DurableEvent): pass
+        return (ToolStart(id=self.tool_call_id, name=self.tool_name, args=self.args),)
+
+
+@dataclass(frozen=True)
+class ToolExecutionUpdateDurableEvent(ToolCallDurableEvent):
+    output: JsonValue = None
+    details: JsonValue = None
+    diagnostics: tuple[JsonValue, ...] = ()
+
+
+@dataclass(frozen=True)
+class ToolExecutionEndDurableEvent(ToolCallDurableEvent):
+    entry: JsonValue = None
+    result: JsonValue = None
+
+
+@dataclass(frozen=True)
+class InboxUpdateDurableEvent(DurableEvent):
+    items: tuple[JsonValue, ...]
+
+
+@dataclass(frozen=True)
+class SubmissionDurableEvent(DurableEvent):
+    record: JsonValue
+
+
+@dataclass(frozen=True)
+class AutoRetryStartDurableEvent(DurableEvent):
+    attempt: int
+    at: float
+    error_message: str = field(metadata={'wire_name': 'errorMessage'})
+
+
+@dataclass(frozen=True)
+class AutoRetryEndDurableEvent(DurableEvent):
+    attempt: int
+
+
+@dataclass(frozen=True)
+class DeferredPollDurableEvent(DurableEvent):
+    poll_at: float = field(metadata={'wire_name': 'pollAt'})
+
+
+@dataclass(frozen=True)
+class EntryAppendedDurableEvent(DurableEvent):
+    entry: JsonValue
+
+
+@dataclass(frozen=True)
+class AgentChangedDurableEvent(DurableEvent):
+    agent: DurableAgent
+
+
+@dataclass(frozen=True)
+class UsageChangedDurableEvent(DurableEvent):
+    usage: JsonValue
+
+
+@dataclass(frozen=True)
 class TaskFailedDurableEvent(DurableEvent):
+    task_id: int = field(metadata={'wire_name': 'taskId'})
+    kind: str
+    message: str
+
     def convert(self):
-        return (Error(self.payload['message']),)
-class CompactionStartDurableEvent(DurableEvent): pass
-class CompactionEndDurableEvent(DurableEvent): pass
+        return (Error(self.message),)
+
+
+@dataclass(frozen=True)
+class CompactionStartDurableEvent(DurableEvent):
+    task_id: int = field(metadata={'wire_name': 'taskId'})
+    reason: str
+    blocking: bool
+
+
+@dataclass(frozen=True)
+class CompactionEndDurableEvent(DurableEvent):
+    task_id: int = field(metadata={'wire_name': 'taskId'})
+    reason: str
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class OpenedDurable:
+    interrupted: tuple[InterruptedDurableWork, ...]
+
+
+class HostMessage(DeclaredFamily, affix='HostMessage'):
+    @abstractmethod
+    def deliver(self, host): ...
+
+
+@dataclass(frozen=True)
+class EventHostMessage(HostMessage):
+    event: DurableEvent
+
+    def deliver(self, host):
+        host.deliver_event(self.event)
+
+
+@dataclass(frozen=True)
+class ReplyHostMessage(HostMessage):
+    id: int
+
+    @abstractmethod
+    def complete(self, pending): ...
+
+    def deliver(self, host):
+        self.complete(host.pending[self.id])
+        del host.pending[self.id]
+
+
+class ResultHostMessage(ReplyHostMessage):
+    declared_name = None
+
+    def complete(self, pending):
+        if not isinstance(self, pending.operation.reply_type):
+            raise ValueError(f'Wrong reply to {pending.operation.declared_name}: {self.declared_name}')
+        pending.succeed(self.result)
+
+
+@dataclass(frozen=True)
+class ErrorHostMessage(ReplyHostMessage):
+    error: str
+
+    def complete(self, pending):
+        pending.fail(RuntimeError(self.error))
+
+
+@dataclass(frozen=True)
+class FaultHostMessage(HostMessage):
+    error: str
+
+    def deliver(self, host):
+        raise RuntimeError(self.error)
+
+
+@dataclass(frozen=True)
+class AckHostMessage(ResultHostMessage):
+    result: None
+
+
+@dataclass(frozen=True)
+class OpenedHostMessage(ResultHostMessage):
+    result: OpenedDurable
+
+
+@dataclass(frozen=True)
+class HistoryHostMessage(ResultHostMessage):
+    result: DurableHistoryPage
+
+
+@dataclass(frozen=True)
+class ContextHostMessage(ResultHostMessage):
+    result: ContextUsage
+
+
+@dataclass(frozen=True)
+class ConfigurationHostMessage(ResultHostMessage):
+    result: DurableConfiguration
+
+
+@dataclass(frozen=True)
+class InspectionHostMessage(ResultHostMessage):
+    result: tuple[InterruptedDurableWork, ...]
+
+
+@dataclass(frozen=True)
+class SettlementHostMessage(ResultHostMessage):
+    result: DurableSettlement
+
+
+@dataclass(frozen=True)
+class SubmissionHostMessage(ResultHostMessage):
+    result: DurableSubmission
+
+
+@dataclass(frozen=True)
+class CompactionHostMessage(ResultHostMessage):
+    result: CompactionOutcome
+
+
+@dataclass(frozen=True)
+class HostCommand(DeclaredFamily, affix='HostCommand'):
+    family_discriminator = 'command'
+    reply_type: ClassVar = AckHostMessage
+
+
+@dataclass(frozen=True)
+class OpenHostCommand(HostCommand):
+    path: str
+    cwd: str
+    agent: DurableAgent
+    auth_path: str = field(metadata={'wire_name': 'authPath'})
+    reply_type = OpenedHostMessage
+
+
+@dataclass(frozen=True)
+class OpenHistoryHostCommand(HostCommand):
+    path: str
+
+
+class WatchHostCommand(HostCommand): pass
+class UnwatchHostCommand(HostCommand): pass
+class ResumeHostCommand(HostCommand): pass
+class AbortHostCommand(HostCommand): pass
+class CloseHostCommand(HostCommand): pass
+
+
+class InspectHostCommand(HostCommand):
+    reply_type = InspectionHostMessage
+
+
+class ContextUsageHostCommand(HostCommand):
+    reply_type = ContextHostMessage
+
+
+@dataclass(frozen=True)
+class SettleHostCommand(HostCommand):
+    work: str
+    disposition: Literal["ABANDON"]
+    reply_type = SettlementHostMessage
+
+
+@dataclass(frozen=True)
+class EntriesHostCommand(HostCommand):
+    limit: int
+    cursor: dict[str, JsonValue] | None = None
+    query: DurableEntryQuery = DurableEntryQuery()
+    reply_type = HistoryHostMessage
+
+
+@dataclass(frozen=True)
+class ConfigureHostCommand(HostCommand):
+    agent: DurableAgent | None = field(default=None, metadata={'wire_omit_default': True})
+    reply_type = ConfigurationHostMessage
+
+
+@dataclass(frozen=True)
+class CompactHostCommand(HostCommand):
+    instructions: str | None
+    reply_type = CompactionHostMessage
+
+
+@dataclass(frozen=True)
+class SubmitHostCommand(HostCommand):
+    content: JsonValue
+    request_id: str = field(metadata={'wire_name': 'requestId'})
+    when_busy: str = field(metadata={'wire_name': 'whenBusy'})
+    reply_type = SubmissionHostMessage
+
+
+@dataclass(frozen=True)
+class HostRequest:
+    id: int
+    operation: HostCommand
+
+
+@dataclass(frozen=True)
+class PendingHostRequest:
+    operation: HostCommand
+    future: asyncio.Future
+
+    def succeed(self, result):
+        if not self.future.done():
+            self.future.set_result(result)
+
+    def fail(self, error):
+        if not self.future.done():
+            self.future.set_exception(error)
 
 
 def _event_without_turn(event):
@@ -294,14 +711,9 @@ class DurableHost:
         try:
             fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
             await self.start(thread.worktree, (self.lock_file.fileno(),))
-            agent = {}
-            if thread.model:
-                provider, model = thread.model.split('/', 1)
-                agent['model'] = {'provider': provider, 'modelId': model}
-            if thread.thinking_level:
-                agent['thinkingLevel'] = thread.thinking_level
-            await self.request('open', path=str(path), cwd=thread.worktree, agent=agent,
-                               authPath=str(Path.home() / '.pi/agent/auth.json'))
+            await self.request(OpenHostCommand(str(path), thread.worktree,
+                DurableAgent(DurableModel.selected(thread.model), thread.thinking_level),
+                str(Path.home() / '.pi/agent/auth.json')))
         except BaseException:
             await self.close()
             raise
@@ -312,7 +724,7 @@ class DurableHost:
         host = cls()
         try:
             await host.start(str(Path(location.path).parent))
-            await host.request('open_history', path=location.path)
+            await host.request(OpenHistoryHostCommand(location.path))
             yield host
         finally:
             await host.close()
@@ -328,23 +740,11 @@ class DurableHost:
     async def read(self):
         try:
             while line := await self.child.stdout.readline():
-                message = json.loads(line)
-                if 'event' in message:
-                    payload = message['event']
-                    event = DurableEvent.decode(payload['type'])(payload)
-                    self.deliver_event(event)
-                else:
-                    future = self.pending.pop(message['id'])
-                    if not future.done():
-                        if 'error' in message:
-                            future.set_exception(RuntimeError(message['error']))
-                        else:
-                            future.set_result(message['result'])
+                FieldCodec.decode(HostMessage, json.loads(line)).deliver(self)
             raise EOFError(f'Durable host closed its protocol stream: {await self.stderr}')
         except BaseException as error:
-            for future in self.pending.values():
-                if not future.done():
-                    future.set_exception(error)
+            for pending in self.pending.values():
+                pending.fail(error)
             self.pending.clear()
             raise
 
@@ -355,25 +755,26 @@ class DurableHost:
         turn = DurableTurn(self)
         self.deliver_event = turn.receive
         try:
-            await self.request('watch')
+            await self.request(WatchHostCommand())
             yield turn
         finally:
             try:
                 # The stop reply follows every event of this watch on stdout.
                 # Keep its turn attached until the reader has passed that reply.
-                await self.request('unwatch')
+                await self.request(UnwatchHostCommand())
             finally:
                 self.deliver_event = _event_without_turn
 
-    async def request(self, command, **payload):
+    async def request(self, command: HostCommand):
         if self.reader.done():
             self.reader.result()
         self.sequence += 1
         identity = self.sequence
         future = asyncio.get_running_loop().create_future()
-        self.pending[identity] = future
+        self.pending[identity] = PendingHostRequest(command, future)
         try:
-            await self.child.write((json.dumps(dict(id=identity, command=command, **payload)) + '\n').encode())
+            request = FieldCodec.encode(HostRequest(identity, command))
+            await self.child.write((json.dumps(request) + '\n').encode())
             return await future
         except BaseException:
             # A cancelled wait never erases a possibly submitted host request.
@@ -425,15 +826,15 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
 
     async def interrupted(self, thread):
         await self.open(thread)
-        return tuple(await self.host.request('inspect'))
+        return await self.host.request(InspectHostCommand())
 
     async def settle(self, thread, work, disposition):
         await self.open(thread)
-        await self.host.request('settle', work=work, disposition=disposition)
+        await self.host.request(SettleHostCommand(work, disposition))
 
     async def resume(self, thread):
         await self.open(thread)
-        await self.host.request('resume')
+        await self.host.request(ResumeHostCommand())
 
     async def run_turn(self, thread, content, delivery):
         async with self.lock:
@@ -457,32 +858,18 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
 
     async def context_usage(self, thread):
         await self.open(thread)
-        value = await self.host.request('context_usage')
-        return ContextUsage(value['tokens'], value['window'])
+        return await self.host.request(ContextUsageHostCommand())
 
     async def compact(self, thread, instructions):
         await self.open(thread)
-        result = await self.host.request('compact', instructions=instructions)
-        if result['status'] == 'nothing':
-            return NothingToCompaction()
-        if result['status'] == 'placed':
-            return PlacedCompaction(result['summary'], result['first_kept'], result['tokens_before'])
-        if result['status'] == 'stale':
-            return StaleCompaction()
-        return FailedCompaction(result['message'])
+        return await self.host.request(CompactHostCommand(instructions))
 
     async def models(self, thread):
         await self.open(thread)
-        return tuple((await self.host.request('configure'))['models'])
+        return (await self.host.request(ConfigureHostCommand())).models
 
     async def configure(self, thread, model, thinking):
         await self.open(thread)
-        agent = {}
-        if model is not None:
-            provider, model_id = model.split('/', 1)
-            agent['model'] = {'provider': provider, 'modelId': model_id}
-        if thinking is not None:
-            agent['thinkingLevel'] = thinking
-        value = await self.host.request('configure', agent=agent)
-        selected = value['model']
-        return f"{selected['provider']}/{selected['modelId']}", value['thinking']
+        value = await self.host.request(ConfigureHostCommand(
+            DurableAgent(DurableModel.selected(model), thinking)))
+        return value.selected()
