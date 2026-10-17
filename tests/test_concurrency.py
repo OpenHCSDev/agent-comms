@@ -1,7 +1,6 @@
 """Multiprocess and crash-recovery tests for the shared wire stores."""
 
 from __future__ import annotations
-from agent_comms.registration import Registration
 
 import multiprocessing
 from collections.abc import Callable, Sequence
@@ -29,17 +28,17 @@ def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
 
 
 def _register_thread(root: str, name: str, start: Event) -> None:
-    thread_registration = Registration(Path(root) / "registry.json")
     start.wait()
-    wire(root).registry.declare(thread_registration.new_thread(name=name, tags=frozenset({'worker'}), worktree='/tmp'))
+    comms = wire(root)
+    comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset({'worker'}), worktree='/tmp'))
 
 
 def _register_thread_same_tick(root: str, name: str, start: Event) -> None:
-    thread_registration = Registration(Path(root) / "registry.json")
     start.wait()
 
     store_files.time.time = lambda: 1_700_000_000.0
-    wire(root).registry.declare(thread_registration.new_thread(name=name, tags=frozenset({'worker'}), worktree='/tmp'))
+    comms = wire(root)
+    comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset({'worker'}), worktree='/tmp'))
 
 
 def _claim_thread(root: str, result_queue: Any, start: Event) -> None:
