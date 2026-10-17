@@ -21,7 +21,7 @@ from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest
-from .transcript_receipts import TranscriptSource
+from .transcript_wire import TranscriptRecords
 from .typed_table import Column, TypedRow, TypedStore, TypedTable
 
 
@@ -163,7 +163,7 @@ class ExternalTranscriptRead:
 
 
 @dataclass(frozen=True, slots=True)
-class ExternalTranscript(TranscriptSource, TypedStore):
+class ExternalTranscript(TranscriptRecords, TypedStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path

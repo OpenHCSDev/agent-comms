@@ -18,7 +18,7 @@ from .coordination_errors import StaleRevision
 from .native_entries import NativeEntry, SessionEntry, TranscriptProjection
 from .transcript_events import TurnDigest
 from .private_path import FileRevision
-from .transcript_receipts import TranscriptSource
+from .transcript_wire import TranscriptRecords
 
 
 def _reverse_records(
@@ -131,7 +131,7 @@ class NativeRecord:
         return None
 
 
-class NativeTranscript(TranscriptSource):
+class NativeTranscript(TranscriptRecords):
     def __init__(self, path: Path):
         self.path = path
 

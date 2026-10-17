@@ -25,9 +25,9 @@ from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.acp import CommsAgent, CommsClient
+from agent_comms.context_reading import ContextUsage
 from agent_comms.acp_extension import (
     ClearQueueRequest,
-    ContextUsage,
     CoordinationChangedUpdate,
     GoalChangedUpdate,
     InputDeliveryChangedUpdate,

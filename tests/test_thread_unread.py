@@ -11,7 +11,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
-from agent_comms.transcripts import NativeTranscriptCursor
+from agent_comms.transcript_wire import NativeTranscriptCursor
 from agent_comms.view_unread import ReplyIndex, TranscriptReadState, TranscriptReply
 from native_unread_fixture import completed_counts, completed_snapshot
 

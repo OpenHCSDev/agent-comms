@@ -30,7 +30,8 @@ from .routing import MessageRoute
 from .thread_identity import AdmissionIdentity, ThreadIncarnation
 from .turn_lease import TurnState
 from .wire_metadata import WireRootIdText
-from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
+from .transcript_wire import TranscriptCursor
+from .transcripts import TranscriptPage, TranscriptReadIdentity
 from .external_transcript import ExternalDraftRow
 from .turn_context import ContextManifest
 from .working_memory_labels import ModelLabel

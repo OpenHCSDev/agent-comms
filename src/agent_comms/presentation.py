@@ -298,7 +298,7 @@ class MessageNotification:
         if not 1 <= limit <= cls.window_limit:
             raise ValueError("Sent notification limit must fit one bounded window")
         owner = registry.require(name)
-        from .transcript_receipts import AssignedTranscriptSource
+        from .transcript_wire import AssignedTranscriptSource
 
         captured = AssignedTranscriptSource.for_thread(root, owner, log).window(
             limit=0, sent_limit=limit
@@ -789,7 +789,7 @@ class WireRevision:
     def changed_threads(self, previous: ThreadsObserved, comms: Comms) -> frozenset[str]:
         """Attribute changes using the retained view's originals and existing route rows."""
         earlier = previous.revision
-        names = previous.presentations.keys() | previous.unavailable.keys() | previous.busy
+        names = previous.changed_since(None)
         if (self.registry != earlier.registry or self.bus_source_changed_since(earlier)
                 or not any(view is not None for view in previous.presentations.values())):
             return frozenset(names)
