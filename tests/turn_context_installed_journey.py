@@ -182,7 +182,8 @@ async def run_configured(options):
     from agent_comms.native_package import verify_native_package
     from agent_comms.threads import Thread
     from delivery_owner_fixture import canonical_agent
-    from original_owner_capture import CurrentTypedCapture
+    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.owner_lifecycle import OwnerRestartSelection
 
     started = time.monotonic()
     root = options.root.resolve()
@@ -194,9 +195,11 @@ async def run_configured(options):
         'fixture': str(root), 'public_inputs': 0, 'original_inputs_retried': 0}
     owner = None
     try:
-        captured = CurrentTypedCapture(options.configured_source_root,
-            options.original_python).read(options.configured_source_name)
-        source = captured.require_current()
+        original_service = Comms(options.configured_source_root)
+        original_snapshot = original_service.registry.snapshot()
+        selection = OwnerRestartSelection.capture(original_snapshot, options.configured_source_name)
+        source = selection.require_current(original_snapshot)
+        retained = RetainedOwnerLaunch.capture(source, original_snapshot)
         original_file = Path(source.require_saved_session())
         original_digest = hashlib.sha256(original_file.read_bytes()).hexdigest()
         acknowledgement.update(model=source.model, thinking=source.thinking_level.declared_name,
@@ -208,12 +211,12 @@ async def run_configured(options):
         verify_native_package(package)
         project = root / 'project'
         project.mkdir(mode=0o700)
-        environment = dict(captured.retained.environment)
+        environment = dict(retained.environment)
         service = Comms(root / 'wire')
         identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
             str(original_file), str(project), str(root / 'native-forks')), cwd=project, env=environment)
         assert Path(identity.session_file).is_relative_to(root)
-        captured.require_current()
+        selection.require_current(original_service.registry.snapshot())
         root_id = service.messaging.initialize_private_initial_protocol()
         runtime = Path(sys.executable).parent
         environment.update(AGENT_COMMS_ROOT=str(service.root),
@@ -231,7 +234,7 @@ async def run_configured(options):
         os.environ.clear()
         os.environ.update(environment)
         owner = canonical_agent(service, agent_bin=str(runtime / 'pi-comms-native'),
-            agent_args=list(captured.retained.arguments or ()), auto_wake=False,
+            agent_args=list(retained.arguments or ()), auto_wake=False,
             runtime_enabled=True)
         thread = Thread('configured-source', frozenset(), str(project),
             process_identity=ProcessIdentity.capture(os.getpid()),
@@ -292,7 +295,7 @@ async def run_configured(options):
             assert selected.read_bytes() == before
             assert not stored_inputs(service.root).rows
             assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
-            captured.require_current()
+            selection.require_current(original_service.registry.snapshot())
             acknowledgement.update(state='SCOPED_COLD_CONFIGURED_SAVED_CONTEXT_PASS',
                 priming_calls=0, native_prompts=0, provider_requests=0,
                 private_root=str(service.root), fork_file=str(selected),
@@ -327,7 +330,7 @@ async def run_configured(options):
         assert service.bus.log.latest_sequence() == baseline
         assert selected.read_bytes().startswith(before)
         assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
-        captured.require_current()
+        selection.require_current(original_service.registry.snapshot())
         acknowledgement.update(state='SCOPED_CONFIGURED_SAVED_FORK_TOAD_ACP_NATIVE_CONTEXT_PASS',
             original_inputs=FieldCodec.encode(tuple(stored.rows.values())),
             manifests=len(manifests), source_unchanged=True, query_preserved_journal=True,
@@ -521,7 +524,6 @@ if __name__ == "__main__":
     parser.add_argument("--test-support-site", type=Path)
     parser.add_argument("--toad-driver-dir", type=Path)
     parser.add_argument('--configured-source-root', type=Path)
-    parser.add_argument('--original-python', type=Path)
     parser.add_argument('--configured-source-name', default='nra-architecture')
     parser.add_argument('--context-only', action='store_true')
     parser.add_argument('--terminal-only', action='store_true')
@@ -543,7 +545,6 @@ if __name__ == "__main__":
         sys.path.append(str(options.test_support_site))
     if options.toad_driver_dir is not None:
         sys.path.append(str(options.toad_driver_dir))
-    sys.path.append(str(Path(__file__).resolve().parents[1] / 'tools' / 'cutover'))
     os.environ['PATH'] = os.pathsep.join((str(Path(sys.executable).parent), os.environ.get('PATH', os.defpath)))
     if options.complete_history_controls:
         complete_history_controls(options.root)
