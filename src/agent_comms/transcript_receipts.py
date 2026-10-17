@@ -273,13 +273,14 @@ class TranscriptSource:
     source adds the separately acquired wire/publication capability below.
     """
 
+    def sent_messages(self, references):
+        return {}
+
     def resolve_sent(self, messages):
         """Records without a sender assignment cannot qualify Send reports."""
         return self.frontier.resolve_sent(messages)
 
-    @property
-    def frontier(self) -> WireFrontier:
-        return NoWireFrontier()
+    frontier = NoWireFrontier()
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
         return AssignedSourceWindow(self.frontier, (), ())
@@ -328,6 +329,21 @@ class AssignedTranscriptSource(TranscriptSource):
             TranscriptSource,
         )
 
+    def assignments(self, references):
+        references = tuple(references)
+        if not references:
+            return {}
+        marks = ",".join("?" for _ in references)
+        return {original.message.reference: original for original in self.rows(
+            f"w.seq IN ({marks})", tuple(reference.seq for reference in references),
+            limit=len(references),
+        )}
+
+    def sent_messages(self, references):
+        return {reference: original.message
+                for reference, original in self.assignments(references).items()
+                if original.audience.sender_lookup == self.recipient.lookup}
+
     def resolve_sent(self, messages):
         """Qualify reports against exact full rows in one bounded wire read.
 
@@ -338,23 +354,12 @@ class AssignedTranscriptSource(TranscriptSource):
         from .sent_message import PublishedSentMessage
 
         messages = tuple(messages)
-        if not messages:
-            return messages
-        lookup = self.recipient.lookup
-        marks = ",".join("?" for _ in messages)
-        originals = {
-            original.message.reference: original.message
-            for original in self.rows(
-                f"w.seq IN ({marks}) AND w.sender_lookup=?",
-                (*[message.source.seq for message in messages], lookup),
-                limit=len(messages),
-            )
-        }
+        originals = self.sent_messages(message.source for message in messages)
         scope = AssignedSourceIdentity(str(self.root), self.recipient)
         return tuple(
             PublishedSentMessage(message, scope)
             if (original := originals.get(message.source)) is not None
-            and SentTranscript.from_message(original) == message else message
+            and message.matches(original) else message
             for message in messages
         )
 
@@ -409,32 +414,12 @@ class AssignedTranscriptSource(TranscriptSource):
 
     def native_events(self, record, routes, project_events, references):
         entry = record.entry
-        published = False
         routing = routes.get(entry.id)
-        lookup = self.recipient.lookup
         events = super().native_events(record, routes, project_events, references)
-        if entry.final_reply:
-            if routing is not None and routing.publications:
-                marks = ",".join("?" for _ in routing.publications)
-                originals = tuple(self.rows(
-                    f"w.seq IN ({marks})", tuple(ref.seq for ref in routing.publications),
-                    limit=len(routing.publications),
-                ))
-                published = all(
-                    any(original.message.reference == ref
-                        and original.audience.sender_lookup == lookup for original in originals)
-                    for ref in routing.publications
-                )
-            if not published and references:
-                marks = ",".join("?" for _ in references)
-                originals = tuple(self.rows(
-                    f"w.seq IN ({marks})", tuple(ref.seq for ref in references), limit=len(references),
-                ))
-                published = all(
-                    any(original.message.reference == ref
-                        and original.audience.sender_lookup == lookup for original in originals)
-                    for ref in references
-                )
+        published = entry.final_reply and any(
+            refs and self.sent_messages(refs).keys() >= set(refs)
+            for refs in (routing.publications if routing is not None else (), references)
+        )
 
         result = []
         for event in events:
@@ -444,19 +429,8 @@ class AssignedTranscriptSource(TranscriptSource):
             # Its native prompt is a consumer of that record, not another input.
             if isinstance(event, UserTranscript) and event.routed:
                 requests = event.routing.requests
-                marks = ",".join("?" for _ in requests)
-                originals = tuple(self.rows(
-                    f"w.seq IN ({marks})",
-                    tuple(reference.seq for reference in requests),
-                    limit=len(requests),
-                ))
-                remaining = tuple(
-                    reference
-                    for reference in requests
-                    if not any(
-                        original.message.reference == reference for original in originals
-                    )
-                )
+                originals = self.assignments(requests)
+                remaining = tuple(reference for reference in requests if reference not in originals)
                 if not remaining:
                     continue
                 event = replace(event, routing=TurnRouting(remaining, event.routing.reply))
@@ -470,13 +444,7 @@ class AssignedTranscriptSource(TranscriptSource):
                 SentTranscript.from_message(message),
             )
         return (
-            IncomingTranscript(
-                message.body,
-                timestamp=message.timestamp,
-                source=message.reference,
-                route=MessageRoute(message.sender, (message.target,)),
-                routing=TurnRouting((message.reference,)),
-            ),
+            IncomingTranscript(message=message, reader=self.recipient.name),
         )
 
 
