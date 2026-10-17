@@ -564,21 +564,22 @@ class ThreadReading(Observation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
         self.observed: ThreadsObserved | None = None
+        self.initial = request.names
 
     def for_interest(self, previous: Self | None) -> Self:
-        # A new view may join unchanged names. Its turn/read fence needs an
-        # initial presentation, not the previous readers' delta.
+        if previous is not None:
+            self.observed = previous.observed
+            if self.observed is not None:
+                self.initial = self.request.names - self.observed.changed_since(None) or self.request.names
         return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         previous = self.observed
-        if previous is not None and previous.current_at(revision):
-            return
         presentations, unavailable, busy = {}, {}, set()
         names = self.request.names
         try:
             if previous is not None:
-                names = revision.changed_threads(previous, comms) & names
+                names = (revision.changed_threads(previous, comms) | names - previous.changed_since(None)) & names
             if names:
                 batch = comms.views.thread_presentations(names)
         except UnreadableHistory.DEFERRED_READS:
@@ -601,9 +602,13 @@ class ThreadReading(Observation[ObserveThreads]):
                                if name in self.request.names and name not in names)
             busy.update(previous.busy & self.request.names - names)
         observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset())
-        self.observed = replace(observed, changed=observed.changed_since(previous))
-        if previous is None or self.observed.changed:
-            yield self.observed
+        self.observed = observed
+        changed = observed.changed_since(previous) | self.initial
+        self.initial = frozenset()
+        if changed:
+            yield replace(observed, changed=changed,
+                          presentations={name: value for name, value in presentations.items() if name in changed},
+                          unavailable={name: value for name, value in unavailable.items() if name in changed})
 
 
 class ViewReading(Observation[ObserveViews]):
@@ -724,11 +729,6 @@ class ThreadsObserved(Observed):
     busy: frozenset[str]
     changed: frozenset[str]
 
-    def current_at(self, revision: WireRevision) -> bool:
-        """A busy result stays pending; a successful cut owns its read frontier."""
-        return (not self.busy and not revision.status_changed_since(self.revision)
-                and revision.expiry_period == self.revision.expiry_period)
-
     def changed_since(self, previous: ThreadsObserved | None) -> frozenset[str]:
         """Read-state transitions and source-owned changes, independent of store churn."""
         if previous is None:
@@ -740,9 +740,8 @@ class ThreadsObserved(Observed):
             current, before = self.presentations[name], previous.presentations[name]
             if current is not before and (current is None or not current.same_observation(before)):
                 changed.add(name)
-        for name in self.unavailable.keys() & previous.unavailable.keys():
-            if self.unavailable[name] != previous.unavailable[name]:
-                changed.add(name)
+        changed.update(name for name in self.unavailable.keys() & previous.unavailable.keys()
+                       if self.unavailable[name] != previous.unavailable[name])
         return frozenset(changed)
 
 
