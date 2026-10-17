@@ -1,4 +1,5 @@
 """One query contract over the original native and external record owners."""
+from agent_comms.storage_rules import StorageRule
 
 import asyncio
 from contextlib import aclosing, suppress
@@ -34,7 +35,7 @@ def endpoint(comms, name, last):
 
 def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_path):
     comms = prepared(tmp_path)
-    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread.create('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution, storage_rule=StorageRule()))
     source = comms.transcripts.external('cli')
     for turn, item, text in [('old', 'a', 'older'), ('one', 'b', 'first'),
                              ('two', 'c', 'other'), ('one', 'd', 'continued')]:
@@ -65,7 +66,7 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     ]
     source.write_text(''.join(json.dumps(row) + '\n' for row in rows))
     source.chmod(0o600)
-    comms.registry.declare(Thread('native', frozenset(), str(tmp_path), session_file=str(source)))
+    comms.registry.declare(Thread.create('native', frozenset(), str(tmp_path), session_file=str(source), storage_rule=StorageRule()))
     answer = endpoint(comms, 'native', 1)
     turn, = answer['turns']
     assert turn['turn_id'] == 'u2'
@@ -95,7 +96,7 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
                  message=dict(content=[dict(type='text', text='done')]))
     path.write_text(''.join(json.dumps(row) + '\n' for row in (prompt, call, result, final)))
     comms = prepared(tmp_path / 'wire')
-    comms.registry.declare(Thread('claude', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread.create('claude', frozenset(), str(tmp_path), execution=ExternalThreadExecution, storage_rule=StorageRule()))
     state = tmp_path / 'state'
     store = Binding.open(state)
     db = store.__enter__()
@@ -132,7 +133,7 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
 
 def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_path):
     comms = prepared(tmp_path)
-    comms.registry.declare(Thread('new', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create('new', frozenset(), str(tmp_path), storage_rule=StorageRule()))
     assert not comms.transcripts.turns('new').turns
     with pytest.raises(ValueError, match='positive'):
         comms.transcripts.turns('new', last=0)

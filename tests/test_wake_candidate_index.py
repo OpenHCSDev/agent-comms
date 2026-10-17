@@ -1,6 +1,7 @@
 """Bounded, disposable N/K candidate pages are never claim_scope evidences."""
 
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 
 import json
 import multiprocessing
@@ -66,13 +67,13 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     created = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
     for name, identity in created.items():
         comms.registry.declare(
-            Thread(
+            Thread.create(
                 name,
                 frozenset({"team"}),
                 str(tmp_path),
                 process_identity=ProcessIdentity.capture(os.getpid()),
                 created_at=identity,
-            )
+            storage_rule=StorageRule())
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     lookup = {name: RecordedThreadIncarnation("fixture", identity).lookup for name, identity in created.items()}

@@ -1,4 +1,5 @@
 """Explicit human Mark read never acknowledges a persistent agent's inbox."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 
@@ -22,8 +23,8 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     source = tmp_path / "sender.jsonl"
     source.touch()
     answer(source, "Saved reply")
-    comms.registry.declare(Thread("sender", frozenset({"ci"}), str(tmp_path), session_file=str(source)))
-    comms.registry.declare(Thread("receiver", frozenset({"ci"}), str(tmp_path)))
+    comms.registry.declare(Thread.create("sender", frozenset({"ci"}), str(tmp_path), session_file=str(source), storage_rule=StorageRule()))
+    comms.registry.declare(Thread.create("receiver", frozenset({"ci"}), str(tmp_path), storage_rule=StorageRule()))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("sender", "receiver", "Agent inbox remains unread")
     comms.messaging.send("sender", viewer, "Human DM")
@@ -71,8 +72,8 @@ def bytes_read() -> int:
 
 def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread("sender", frozenset({"ci"}), str(tmp_path)))
-    comms.registry.declare(Thread("archivist", frozenset({"bulk"}), str(tmp_path)))
+    comms.registry.declare(Thread.create("sender", frozenset({"ci"}), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread.create("archivist", frozenset({"bulk"}), str(tmp_path), storage_rule=StorageRule()))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for _ in range(20):
         comms.messaging.send("archivist", "#bulk", "x" * 200_000)

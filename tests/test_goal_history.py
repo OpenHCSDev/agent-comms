@@ -1,6 +1,7 @@
 """Goal history uses the current registry goal as its readback authority."""
 
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 
 import json
 from dataclasses import replace
@@ -25,7 +26,7 @@ from agent_comms.tool_caller import ThreadCaller
 
 def _wire(tmp_path) -> Comms:
     comms = Comms(tmp_path / "wire")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     return comms
 
 

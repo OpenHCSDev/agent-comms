@@ -1,4 +1,5 @@
 """External contracts and adding commands without editing any consumer catalog."""
+from agent_comms.storage_rules import StorageRule
 
 import argparse
 import asyncio
@@ -159,7 +160,7 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
             return {"amount": self.amount + 1, "session": ctx.session_id, "owner": ctx.name}
 
     comms = Comms(tmp_path)
-    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
     def require_owned_session(entry):
         assert entry.thread.name == "owner"
         assert entry.matches_name("owner")
@@ -223,7 +224,7 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
     for comms in (old, live):
         for name in ("alice", "bob"):
-            comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
+            comms.registry.declare(Thread.create(name, frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
         comms.messaging.send("alice", "#team", f"{comms.root.name} channel")
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct")
     source = live.views.attach_history(old.root)

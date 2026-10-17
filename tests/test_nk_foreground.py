@@ -4,6 +4,7 @@ These tests do not prove a provider spend ceiling, copied-Pi trust or release.
 """
 
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import multiprocessing
@@ -36,11 +37,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _configured_thread(*args, **kwargs):
-    """Offline foreground owners still have an explicit saved selection."""
-    return Thread(*args, **kwargs, model="openai-codex/gpt-6-sol")
-
-
 def _fake_package(package):
     """Supply the actual extension bytes; only the provider boundary is faked."""
     dist = Path(package) / "dist"
@@ -51,7 +47,12 @@ def _fake_package(package):
 
 @pytest.fixture(autouse=True)
 def configured_foreground(monkeypatch):
-    monkeypatch.setattr(foreground, "Thread", _configured_thread)
+    create = Thread.create
+
+    def configured(*args, **kwargs):
+        return create(*args, **kwargs, model="openai-codex/gpt-6-sol")
+
+    monkeypatch.setattr(Thread, "create", configured)
 
 
 @pytest.fixture
@@ -68,12 +69,12 @@ def _private_root(tmp_path: Path):
     (root / "work").mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "sender",
             frozenset(),
             str(root / "work"),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     return root, comms, comms.messaging.initialize_private_initial_protocol()
 
@@ -222,12 +223,12 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
             opt_in=True,
         )
         comms.registry.declare(
-            Thread(
+            Thread.create(
                 "alpha",
                 frozenset({"team"}),
                 str(root / "work"),
                 process_identity=ProcessIdentity.capture(os.getpid()),
-            )
+            storage_rule=StorageRule())
         )
         message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
         _accept(root, root_id, comms, message)
@@ -266,12 +267,12 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
 ) -> None:
     root, comms, root_id = _private_root(tmp_path)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "alpha",
             frozenset({"team"}),
             str(root / "work"),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     fake, calls = _fake_model()
     monkeypatch.setattr(foreground, "_trusted_package", _fake_package)

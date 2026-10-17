@@ -1,3 +1,4 @@
+from agent_comms.storage_rules import StorageRule
 import json
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
@@ -34,7 +35,7 @@ def change_shared_peer(root, instruction):
 def setup_wire(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name, parent in (("origin", None), ("owner", "origin"), ("peer", None), ("child", "owner")):
-        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path), parent=parent))
+        comms.registry.declare(Thread.create(name, frozenset({"team"}), str(tmp_path), parent=parent, storage_rule=StorageRule()))
     return comms
 
 
@@ -117,7 +118,7 @@ def test_concurrent_declaring_agents_do_not_lose_updates(tmp_path):
     comms = setup_wire(tmp_path)
     names = [f"worker-{index}" for index in range(8)]
     for name in names:
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread.create(name, frozenset(), str(tmp_path), storage_rule=StorageRule()))
     with ProcessPoolExecutor(max_workers=4) as pool:
         list(pool.map(add_peer, [comms.root] * len(names), names))
     assert {edge.peer for edge in comms.relationships.collaborations("owner")} == set(names)
@@ -230,7 +231,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     comms.owners.stop("peer")
     comms.registry.remove("peer")
     comms.registry.declare(
-        Thread("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1)
+        Thread.create("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1, storage_rule=StorageRule())
     )
 
     row = collaboration_rows(comms)[0]
@@ -263,7 +264,7 @@ def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
     comms.registry.remove("owner")
     comms.relationships.edit("origin", RelationshipEdit.decode("add"), "peer", "Independent work")
     comms.registry.declare(
-        Thread("owner", frozenset(), str(tmp_path), created_at=original.owner_created + 1)
+        Thread.create("owner", frozenset(), str(tmp_path), created_at=original.owner_created + 1, storage_rule=StorageRule())
     )
     assert comms.relationships.collaborations("owner") == ()
     assert collaboration_rows(comms) == ()

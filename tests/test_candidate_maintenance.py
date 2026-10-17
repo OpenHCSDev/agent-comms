@@ -1,6 +1,7 @@
 """Private candidate maintenance is post-commit, optional, and never authority."""
 
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 
 import os
 import threading
@@ -28,17 +29,17 @@ def _wire(base: Path) -> tuple[Comms, str]:
     root.mkdir(mode=0o700)
     comms = Comms(root)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "sender", frozenset(), str(base), process_identity=ProcessIdentity.capture(os.getpid())
-        )
+        , storage_rule=StorageRule())
     )
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "beta",
             frozenset({"team"}),
             str(base),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     return comms, comms.messaging.initialize_private_initial_protocol()
 

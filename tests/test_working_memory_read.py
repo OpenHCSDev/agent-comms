@@ -1,4 +1,5 @@
 """Read/correct original annotation addresses without reader-side installation."""
+from agent_comms.storage_rules import StorageRule
 from dataclasses import replace
 import hashlib
 import sqlite3
@@ -53,7 +54,7 @@ def test_original_answers_human_correction_and_readonly_calibration(tmp_path, mo
         (AnswerProbability(RuleSpan, .7), AnswerProbability(CommitmentSpan, .2),
          AnswerProbability(OtherSpan, .1)), .8, "local-controlled-answer", classifier.pin)
     registry = Registration(tmp_path / "registry.json")
-    user = registry.declare(Thread("human", frozenset(), str(tmp_path), role=ThreadRole.USER))
+    user = registry.declare(Thread.create("human", frozenset(), str(tmp_path), role=ThreadRole.USER, storage_rule=StorageRule()))
     with Coordination(str(path)) as store:
         with store.session.transaction() as db:
             SpanAnnotationsRow(label=original, created_at_ms=1).insert(db)

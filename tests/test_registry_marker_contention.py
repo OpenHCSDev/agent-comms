@@ -1,4 +1,5 @@
 """Actual atomic marker publication versus independent registry readers."""
+from agent_comms.storage_rules import StorageRule
 
 import multiprocessing as mp
 import os
@@ -29,7 +30,7 @@ def _read_registry(root, ready, stop, result):
 def test_concurrent_canonical_marker_publication_keeps_registry_readable(tmp_path):
     comms = Comms(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     context = mp.get_context("spawn")
     ready, result, stop = context.Queue(), context.Queue(), context.Event()
     workers = [context.Process(target=_read_registry, args=(comms.root, ready, stop, result))
@@ -92,8 +93,8 @@ def _redirect(path):
 def test_marker_ownership_failures_still_block_real_read_and_send(tmp_path, damage):
     comms = Comms(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
-    comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread.create("peer", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     bus = comms.bus.log.path.read_bytes()
     damage(comms.bus.log.metadata_path)
     with pytest.raises(RelationViolationError):

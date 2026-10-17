@@ -1,4 +1,5 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 import secrets
@@ -29,7 +30,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         work.mkdir()
         c = Comms(root)
         for name, created in [("a", 21.0), ("b", 22.0)]:
-            c.registry.declare(Thread(name, frozenset({"team"}), str(work), created_at=created))
+            c.registry.declare(Thread.create(name, frozenset({"team"}), str(work), created_at=created, storage_rule=StorageRule()))
         c.messaging.initialize_private_initial_protocol()
         resource = WritableFileClaim(Path("new/nested/file.py"))
         committed = c.messaging.send_message("a", "#team", "Claim before create", claims=[resource])

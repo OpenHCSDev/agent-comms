@@ -1,4 +1,5 @@
 """Real Pi RPC publishes committed channel progress before the final turn."""
+from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -134,7 +135,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             project = root / "worker"
             project.mkdir()
             await agent.new_session(str(project))
-            comms.registry.declare(Thread("member", frozenset({"team"}), str(project)))
+            comms.registry.declare(Thread.create("member", frozenset({"team"}), str(project), storage_rule=StorageRule()))
             human = comms.messaging.user_identity(str(project))
             origin = Message(human.name, "#team", "Please help", InfoKind)
             await asyncio.wait_for(

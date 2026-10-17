@@ -1,4 +1,5 @@
 """An idle owner wakes for durable wire changes without a 20 Hz scan."""
+from agent_comms.storage_rules import StorageRule
 
 from unittest.mock import AsyncMock
 
@@ -111,12 +112,12 @@ async def test_relevant_write_burst_cannot_postpone_owner_wake(tmp_path):
 async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
     comms = Comms(tmp_path)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "owner",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     root_id = comms.messaging.initialize_private_initial_protocol()
     guard = PrivateRegistryGuard(comms.registry.store.path, root_id)
@@ -149,20 +150,20 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
 
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "owner",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "sender",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(comms, runtime_enabled=False)
@@ -226,10 +227,10 @@ async def test_recoverable_drain_failure_waits_for_dependency_change(
     config.mkdir()
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(
+    comms.registry.declare(Thread.create(
         "owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
-    ))
+    storage_rule=StorageRule()))
     agent = CommsAgent(comms, runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     attempts = 0
@@ -265,10 +266,10 @@ async def test_recoverable_drain_failure_waits_for_dependency_change(
 @pytest.mark.asyncio
 async def test_failed_cursor_publish_retries_without_a_wake_task(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(
+    comms.registry.declare(Thread.create(
         "owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
-    ))
+    storage_rule=StorageRule()))
     agent = CommsAgent(comms, runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     attempts = 0
@@ -341,12 +342,12 @@ async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
 
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "owner",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     agent = CommsAgent(comms, runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"

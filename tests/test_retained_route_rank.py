@@ -1,4 +1,5 @@
 """A retained original cut is independent of later routes and timestamp history."""
+from agent_comms.storage_rules import StorageRule
 
 from unittest.mock import patch
 
@@ -28,7 +29,7 @@ def measure(index, actor, seen):
 
 def test_original_empty_cut_cannot_clear_a_later_index(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create('sender', frozenset(), str(tmp_path), storage_rule=StorageRule()))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     with comms.bus.snapshot(viewer=viewer) as (basis, source):
         assert source.through == 0
@@ -46,7 +47,7 @@ def test_original_empty_cut_cannot_clear_a_later_index(tmp_path):
 
 def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create('sender', frozenset(), str(tmp_path), storage_rule=StorageRule()))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     birth = comms.registry.require(viewer).created_at
     originals = [comms.bus.publisher.publish_ordinary(Message(
@@ -85,7 +86,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
                 ))
             for number in range(8):
                 sender = f'later-{phase}-{number}'
-                comms.registry.declare(Thread(sender, frozenset(), str(tmp_path)))
+                comms.registry.declare(Thread.create(sender, frozenset(), str(tmp_path), storage_rule=StorageRule()))
                 comms.messaging.send_message(sender, viewer, 'a route absent at capture')
             observer = wire(tmp_path)
             with observer.bus.snapshot(viewer=viewer) as (pending_basis, pending_source):

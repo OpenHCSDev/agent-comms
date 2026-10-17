@@ -1,4 +1,5 @@
 """Persistent goal ownership, continuation, and stale-worker protection."""
+from agent_comms.storage_rules import StorageRule
 
 import pytest
 
@@ -24,10 +25,10 @@ from agent_comms.tool_caller import ThreadCaller
 
 def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread.create(name="worker", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule()))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Verify the release"))
     comms.threads.set_thread_configuration(comms.registry.require('worker'), model='test/model')
-    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread.create(name="worker", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule()))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
     restored = wire(tmp_path).registry.require("worker")
@@ -58,7 +59,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
 
 def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread.create(name="worker", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule()))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish the release"))
     comms.goals.update_goal("worker", PausedGoalAction(progress="Paused after an uncertain turn"))
@@ -103,7 +104,7 @@ def test_goal_control_distinguishes_resume_retry_and_completion(state, action, l
 
 def test_agent_can_set_its_own_persistent_goal(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread.create(name="worker", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule()))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     tool = next(
         tool

@@ -1,4 +1,5 @@
 """Ownership and protocol experiments for the Registration/A8 document boundary."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -21,7 +22,7 @@ from agent_comms.threads import Thread
 
 
 def owner(path):
-    return Thread("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
+    return Thread.create("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0, storage_rule=StorageRule())
 
 
 def test_document_owns_lifecycle_without_registration_or_io(tmp_path):
@@ -137,8 +138,8 @@ def capture():
         if thread.get('active_turn'): thread['active_turn']['started_at'] = '<clock>'
     assert Registration(r.store.path).snapshot() == r.snapshot()
     steps.append(row)
-r.register(Thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
-r.register(Thread('child', frozenset(), str(root), parent='owner', created_at=20.0));capture()
+r.register(Thread.create('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
+r.register(Thread.create('child', frozenset(), str(root), parent='owner', created_at=20.0));capture()
 r.register(replace(r.require('owner'), title='metadata'));capture()
 r.lease_local_turn('owner','first');capture()
 r.release_turn(r.require('owner').turn_lease);capture()

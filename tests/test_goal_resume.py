@@ -1,4 +1,5 @@
 """Same-ID, explicitly requested goal resume through the public tool boundary."""
+from agent_comms.storage_rules import StorageRule
 
 import os
 
@@ -30,7 +31,7 @@ invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
 
 def _goal(comms, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-    comms.registry.declare(Thread(name="owner", tags=frozenset(), worktree="/wt"))
+    comms.registry.declare(Thread.create(name="owner", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
     return invoke_tool(comms, "comms_set_goal", {"text": "keep working"})["goal"]
 
 
@@ -55,12 +56,12 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "owner",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     goal = invoke_tool(comms, "comms_set_goal", {"text": "finish this"})["goal"]
     comms.agents.begin_turn("owner", "same-assistant-turn")
@@ -83,12 +84,12 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
 def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkeypatch, tmp_path):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "owner",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     first = invoke_tool(comms, "comms_set_goal", {"text": "first"})["goal"]
     comms.agents.begin_turn("owner", "same-assistant-turn")
@@ -400,12 +401,12 @@ def test_automatic_failure_block_preserves_existing_goal_progress(comms, monkeyp
 
 def test_exhausted_goal_revision_refuses_transition_without_write(comms):
     comms.registry.declare(
-        Thread(
+        Thread.create(
             name="owner",
             tags=frozenset(),
             worktree="/wt",
             goal=Goal("work", "goal-id", published_seq=0, revision=(1 << 63) - 1),
-        )
+        storage_rule=StorageRule())
     )
     before = (comms.root / "registry.json").read_bytes()
     with pytest.raises(ValueError, match="revision"):

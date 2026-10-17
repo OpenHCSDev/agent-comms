@@ -2,6 +2,7 @@
 
 No root, writer, child, native package or process launch is acquired here.
 """
+from agent_comms.storage_rules import StorageRule
 
 from dataclasses import replace
 import os
@@ -87,8 +88,8 @@ def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, ex
 
 def stopped():
     # A declared absent synthetic process, never a borrowed original identity.
-    thread = Thread("authored", frozenset(), "/authored",
-                    process_identity=ProcessIdentity(2147483647, 1), created_at=1.0)
+    thread = Thread.create("authored", frozenset(), "/authored",
+                    process_identity=ProcessIdentity(2147483647, 1), created_at=1.0, storage_rule=StorageRule())
     snapshot = RegistrySnapshot(
         threads={thread.name: thread}, statuses={thread.name: StoppedThreadStatus()},
         last_seen={thread.name: 1.0}, aliases={},

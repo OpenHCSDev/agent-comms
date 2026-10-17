@@ -1,3 +1,4 @@
+from agent_comms.storage_rules import StorageRule
 from agent_comms.coordination_errors import TranscriptChanged
 import json
 from dataclasses import replace
@@ -27,7 +28,7 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     path = tmp_path / "session.jsonl"
     transcript(path, 105)
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
+    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), session_file=str(path), storage_rule=StorageRule()))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=10)
     through = page.after
     seen = [event.text for event in page.events]
@@ -61,7 +62,7 @@ def test_oversized_message_and_file_identity(tmp_path):
         json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}) + "\n"
     )
     comms = wire(tmp_path / "wire")
-    thread = Thread("worker", frozenset(), str(tmp_path), session_file=str(path))
+    thread = Thread.create("worker", frozenset(), str(tmp_path), session_file=str(path), storage_rule=StorageRule())
     comms.registry.declare(thread)
     page = comms.transcripts.thread_transcript_page("worker", max_bytes=100)
     assert page.events[0].text == text
@@ -77,7 +78,7 @@ def test_oversized_message_and_file_identity(tmp_path):
 
 def test_empty_transcript_and_non_message_records(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     page = comms.transcripts.thread_transcript_page("worker")
     assert not page.events and not page.has_older and not page.has_newer
 
@@ -87,10 +88,10 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
     transcript(parent_path, 3)
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
-        Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path))
+        Thread.create("parent", frozenset(), str(tmp_path), session_file=str(parent_path), storage_rule=StorageRule())
     )
     comms.registry.declare(
-        Thread("child", frozenset(), str(tmp_path), parent="parent", task="Inspect the renderer")
+        Thread.create("child", frozenset(), str(tmp_path), parent="parent", task="Inspect the renderer", storage_rule=StorageRule())
     )
 
     page = comms.transcripts.thread_transcript_page("child")
@@ -121,10 +122,10 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     transcript(parent_path, 35)
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
-        Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path))
+        Thread.create("parent", frozenset(), str(tmp_path), session_file=str(parent_path), storage_rule=StorageRule())
     )
     comms.registry.declare(
-        Thread("child", frozenset(), str(tmp_path), parent="parent", task="Child task")
+        Thread.create("child", frozenset(), str(tmp_path), parent="parent", task="Child task", storage_rule=StorageRule())
     )
     page = comms.transcripts.thread_transcript_page("child", max_messages=5)
     through = page.after

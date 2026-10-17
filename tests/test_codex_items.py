@@ -1,3 +1,4 @@
+from agent_comms.storage_rules import StorageRule
 from agent_comms.cli_bridges.codex_protocol import BusInput, ItemsPage
 from agent_comms.transcript_events import UserTranscript
 
@@ -9,7 +10,7 @@ def _output(tmp_path):
     from agent_comms.threads import Thread
 
     comms = Comms(tmp_path)
-    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    comms.registry.declare(Thread.create('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution, storage_rule=StorageRule()))
     return ThreadOutput(comms.transcripts.external('cli'), comms.agents)
 
 

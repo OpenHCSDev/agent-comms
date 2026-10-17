@@ -1,4 +1,5 @@
 """Existing real native/ACP owner; inspect through its original Unix socket."""
+from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -85,19 +86,19 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                             if isinstance(fact, (InputFailedUpdate, RequestFailedUpdate)))
 
     owner.on_connect(View())
-    thread = Thread("context-source", frozenset({'team'}), str(project),
+    thread = Thread.create("context-source", frozenset({'team'}), str(project),
         process_identity=ProcessIdentity.capture(os.getpid()),
-        session_file=str(fixture.session), model="response-local/fixture", thinking_level="off")
+        session_file=str(fixture.session), model="response-local/fixture", thinking_level="off", storage_rule=StorageRule())
     owner._comms.registry.declare(thread)
-    peer = Thread("context-peer", frozenset({'team'}), str(project),
-                  process_identity=ProcessIdentity.capture(os.getpid()))
+    peer = Thread.create("context-peer", frozenset({'team'}), str(project),
+                  process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
     owner._comms.registry.declare(peer)
     c_identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
         str(fixture.session), str(project), str(fixture.root.parent / 'c-native-fork')),
         cwd=project, env=dict(os.environ))
-    receiver = Thread('context-receiver', frozenset({'team'}), str(project),
+    receiver = Thread.create('context-receiver', frozenset({'team'}), str(project),
         process_identity=ProcessIdentity.capture(os.getpid()),
-        session_file=c_identity.session_file, model='response-local/fixture', thinking_level='off')
+        session_file=c_identity.session_file, model='response-local/fixture', thinking_level='off', storage_rule=StorageRule())
     owner._comms.registry.declare(receiver)
     peer_lease = owner._comms.agents.begin_turn(peer.name, "context-fixture-peer", "Independent context fixture").turn_lease
     output = fixture.root.parent / "context-journey"

@@ -1,4 +1,5 @@
 """Presence behavior across persisted lifecycle changes and current UI consumers."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -30,8 +31,8 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
     comms = wire(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
-        thread = Thread("owner", frozenset(), str(tmp_path),
-                        process_identity=ProcessIdentity.capture(child.pid))
+        thread = Thread.create("owner", frozenset(), str(tmp_path),
+                        process_identity=ProcessIdentity.capture(child.pid), storage_rule=StorageRule())
         comms.registry.register(thread, RunningThreadStatus())
         view, = comms.views.thread_views()
         displayed = view.presentation
@@ -54,7 +55,7 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])
 def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status):
     comms = wire(tmp_path)
-    thread = Thread(
+    thread = Thread.create(
         "owner",
         frozenset({"team"}),
         str(tmp_path),
@@ -62,7 +63,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
         title="Retained title",
         session_file="/retained/session.jsonl",
         created_at=12.5,
-    )
+    storage_rule=StorageRule())
     comms.registry.register(thread, status)
     before = comms.registry.snapshot()
     raw = json.loads(comms.registry.store.path.read_text())
@@ -93,12 +94,12 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
 def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
     registry.register(
-        Thread(
+        Thread.create(
             "owner",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        ),
+        storage_rule=StorageRule()),
         status,
     )
     before = registry.snapshot()
@@ -116,12 +117,12 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
 def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
     registry.register(
-        Thread(
+        Thread.create(
             "owner",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        ),
+        storage_rule=StorageRule()),
         status,
     )
     before = registry.snapshot()
@@ -135,7 +136,7 @@ def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path
 
 def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_path):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread("owner", frozenset(), str(tmp_path)), StoppedThreadStatus())
+    registry.register(Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule()), StoppedThreadStatus())
     registry.begin_delete("owner")
     before = registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError, match="permanently deleted"):
@@ -169,7 +170,7 @@ def test_batch_source_rename_keeps_the_original_registry_fence(comms):
     from agent_comms.coordination_errors import StaleRevision
 
     comms.registry.register(
-        Thread("alpha", frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread.create("alpha", frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()),
         RunningThreadStatus(),
     )
     batch = comms.views.thread_presentations(("alpha",))

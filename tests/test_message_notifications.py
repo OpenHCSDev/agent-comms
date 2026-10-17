@@ -1,4 +1,5 @@
 """Read real persisted notification assignments without scheduling a model."""
+from agent_comms.storage_rules import StorageRule
 from dataclasses import replace
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
@@ -23,7 +24,7 @@ def test_legacy_bus_has_no_fabricated_receipts(tmp_path):  # noqa: F811
 
     root = tmp_path / 'legacy'
     comms = Comms(root)
-    comms.registry.declare(Thread('reader', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create('reader', frozenset(), str(tmp_path), storage_rule=StorageRule()))
     assert comms.views.thread_presentation('reader').notifications == ()
     assert not (root / 'coordination.sqlite3').exists()
 

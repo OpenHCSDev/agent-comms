@@ -1,4 +1,5 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
+from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import os
@@ -79,7 +80,7 @@ with service.bus.log.locked(): root_id = service.bus.log._private_marker_unlocke
 service.owners.pin_private_nk_launch(service.root, root_id,
     Path(sys.argv[4]))
 name, project, session = sys.argv[1:4]
-service.registry.declare(Thread(name, frozenset(), project, session_file=session,
+service.registry.declare(Thread.create(name, frozenset(), project, session_file=session,
     model='response-local/fixture'))
 service.threads.restore_stopped(service.registry.snapshot(), (name,))
 service.goals.update_goal(name, SetGoalAction(text='Preserve this blocked private task'))
@@ -206,7 +207,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     from agent_comms.threads import Thread
 
     comms = Comms(tmp_path / "wire")
-    declared = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+    declared = comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     generation = comms.registry.snapshot().claimed_generations[declared.name]
     comms.owners.stop(declared.name)
     snapshot = comms.registry.snapshot()
@@ -214,7 +215,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     assert snapshot.threads[declared.name].process_identity is None
     assert comms.owners.releases.read()[declared.name].current(snapshot, declared, generation)
 
-    waiting = comms.registry.declare(Thread("waiting", frozenset(), str(tmp_path)))
+    waiting = comms.registry.declare(Thread.create("waiting", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     before = comms.registry.snapshot().claimed_generations[waiting.name]
     comms.registry.register(
         replace(waiting, process_identity=ProcessIdentity.capture(os.getpid())),
@@ -327,8 +328,8 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
 
     comms = Comms(tmp_path, private_initial_writes=True)
     comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path),
-                                  process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path),
+                                  process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     assert comms.registry.status("worker").running
     agent = CommsAgent(comms, runtime_enabled=True)

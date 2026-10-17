@@ -1,4 +1,5 @@
 """Source-owned history predicates and sound use of the existing offset index."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 from dataclasses import replace
@@ -15,9 +16,9 @@ from agent_comms.threads import Thread
 @pytest.fixture
 def history(tmp_path):
     old = Comms(tmp_path / "old")
-    old.registry.declare(Thread("alice-old", frozenset({"api"}), str(old.root), created_at=10))
+    old.registry.declare(Thread.create("alice-old", frozenset({"api"}), str(old.root), created_at=10, storage_rule=StorageRule()))
     for created, name in enumerate(("bob", "carol"), start=11):
-        old.registry.declare(Thread(name, frozenset({"ops"}), str(old.root), created_at=created))
+        old.registry.declare(Thread.create(name, frozenset({"ops"}), str(old.root), created_at=created, storage_rule=StorageRule()))
     old.registry.rename("alice-old", "alice")
     old.messaging.initialize_private_initial_protocol()
     rows = []
@@ -50,8 +51,8 @@ def history(tmp_path):
     old.bus.log.write_metadata_unlocked(marker)
     live = Comms(tmp_path / "live")
     # Deliberately different membership: source scope must not use live tags.
-    live.registry.declare(Thread("alice", frozenset({"ops"}), str(live.root), created_at=500))
-    live.registry.declare(Thread("alice-old", frozenset({"api"}), str(live.root), created_at=501))
+    live.registry.declare(Thread.create("alice", frozenset({"ops"}), str(live.root), created_at=500, storage_rule=StorageRule()))
+    live.registry.declare(Thread.create("alice-old", frozenset({"api"}), str(live.root), created_at=501, storage_rule=StorageRule()))
     live.registry.rename("alice-old", "carol")
     source = live.views.attach_history(old.root)
     return live, source, rows

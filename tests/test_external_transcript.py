@@ -1,3 +1,4 @@
+from agent_comms.storage_rules import StorageRule
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -13,7 +14,7 @@ from agent_comms.transcripts import TranscriptReadIdentity
 
 def test_finished_cli_items_append_once_and_page(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("codex", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("codex", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     transcript = comms.transcripts.external("codex")
     transcript.finish(turn_id="t1", item_id="compaction",
                       events=(NoticeTranscript("Compacting context…", timestamp=2.0),))
@@ -48,7 +49,7 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
 
 def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("codex", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("codex", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     transcript = comms.transcripts.external("codex")
     transcript.draft(
         turn_id="turn", item_id="reply", events=(AssistantTranscript("Writing"),)
@@ -85,8 +86,8 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("pi", frozenset(), str(tmp_path),
-                                  session_file=str(tmp_path / "session.jsonl")))
+    comms.registry.declare(Thread.create("pi", frozenset(), str(tmp_path),
+                                  session_file=str(tmp_path / "session.jsonl"), storage_rule=StorageRule()))
     with pytest.raises(ValueError, match="native session"):
         comms.transcripts.external("pi")
 
@@ -95,7 +96,7 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     from agent_comms.acp_extension import TranscriptSnapshotUpdate, encode_updates, decode_updates
     from agent_comms.coordination_errors import StaleRevision
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("codex", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("codex", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     transcript = comms.transcripts.external("codex")
     transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hel"),))
     assert transcript.current_draft().events[0].text == "Hel"
