@@ -95,18 +95,15 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
 
     async def continue_turn(self, participant, session, input_id, execution, settled):
         from .coordination_tables.executions import ExecutionOrigin
-        from .selected_turn import SelectedAttempt
 
         await participant.require_current()
         created = participant.store.executions.create_after_triage(
             participant.batch.execution_id, ExecutionOrigin.WIRE,
             participant.lookup, participant.owner.thread.name,
-            SelectedAttempt.max_attempts,
+            execution.max_attempts,
             sources=participant.batch.sources, settled=settled,
         ).value
-        attempt = await SelectedAttempt.engage(participant, created)
-        return await attempt.run(execution, session,
-                                 execution.action(), execution.write_authority)
+        return await execution.full(participant, session, created)
 
 
 class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
