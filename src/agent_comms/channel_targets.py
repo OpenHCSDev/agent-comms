@@ -191,7 +191,7 @@ class ThreadTarget(NamedTarget):
         return (self.canonical_name(snapshot.canonical_name),)
 
     def mark_view_read(self, views, worktree):
-        views.mark_thread_view_read(self.name, worktree=worktree)
+        views.mark_thread_user_read(self.name, worktree=worktree)
 
 
 class ChannelTarget(NamedTarget):
