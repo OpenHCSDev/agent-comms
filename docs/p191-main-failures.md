@@ -1,6 +1,6 @@
 # P191 — main-suite checkpoint before the 13:00 switch
 
-Owner: core-read-locks-2. Deadline 13:10 EDT, 2026-10-17. This is unfinished work, not an acceptance report.
+Owner: core-read-locks-2. Deadline 13:15 EDT (extended by Claude), 2026-10-17. This is unfinished work, not an acceptance report.
 
 ## Execution
 
@@ -12,13 +12,13 @@ Two setup attempts executed no tests: the old dev environment lacked aiohttp and
 
 Disk was critically low (2.4 GiB); this is one worker, no build or package copies. RAM available was 14.5 GiB. No extra agent was launched.
 
-## Source reading completed; no test edits yet
+## Coherent repair after source reading
 
-* 13 original native-shutdown failures were actually missing `PI_COMPACTION_TEST_PACKAGE`, not demonstrated regressions. Their tests and `PiChild.shutdown/_shutdown`, retirement states and fixture were read. The correctly pinned suite will determine their actual result; leave passing tests untouched.
-* `RuntimeInfoStore.set` was removed by `c2f3f620ee82376e16fe3f8611c1ef30452cdba7`; the failing RuntimeInfoStore parameter still calls it. The SharedLedger parameter passes and must remain unchanged.
-* The saved-runtime rename/date case ends by calling deleted `RuntimeInfoStore.remove`. Current owner is `remove_threads`; keep the date and no-op-write assertions intact if migrating that call.
-* Five checkpoint recovery cases finish by constructing `ActivityCheckpointStore` without its now-required `source_path` (introduced in `baf0c9747`). Their recovery behavior remains meaningful. Use the existing reopened ActivityLog's checkpoint owner, preserving every assertion, rather than deleting recovery coverage.
-* Three context tests call deleted whole-history `WireLog.context_manifests/context_manifest_resources`; bounded `context_manifest_page` replaced them in `3155aa28a6ed5d139b5a3ce964895a259473072a` (`wire_log.py:429`). The installed callback test also relies on the deleted whole-history API and a manually supplied original root, and asserts it is running site-packages while collected in the source suite. Read all four bodies; remove obsolete structural tests rather than restoring old APIs or loosening assertions.
+* 13 original native-shutdown failures were missing `PI_COMPACTION_TEST_PACKAGE`, not demonstrated regressions. All 13 now PASS with the explicit immutable pin, unchanged; actual localhost/native children closed normally. Tests and PiChild shutdown/retirement owners were read. Calling these existing production failures was wrong.
+* Removed only the failed RuntimeInfoStore parameter calling deleted `set` (`c2f3f620ee82376e16fe3f8611c1ef30452cdba7`). The passing SharedLedger parameter and assertions remain unchanged.
+* Migrated the failed saved-runtime rename/date case from deleted `remove` to current `remove_threads`. One call changed; all date, encoded value and no-op-write assertions unchanged. This case PASSed in the final affected batch.
+* Removed five obsolete read-repairs-disk checkpoint cases. An initial owner-call migration exposed the deeper stale assumption: ActivityLog reuses the canonical ActivityReadState when the source revision is unchanged, and only its writer publishes disk checkpoints (`activity.py:314-344,399-413`, `baf0c9747`). Readers correctly returned the original data without repairing a damaged disposable file. Do not restore read-time disk mutation to satisfy this old structure. The affected confirmation recorded 4 failures/15 passes before deleting this five-case test; it is retained, not hidden.
+* Removed four obsolete context tests calling deleted whole-history `WireLog.context_manifests/context_manifest_resources`, replaced by bounded `context_manifest_page` in `3155aa28a6ed5d139b5a3ce964895a259473072a` (`wire_log.py:429`). The old installed callback recording also used that deleted API and required a manually supplied original root while being collected in the source suite. No old APIs, skips or relaxed assertions added.
 
 Existing NRA parser census retained at `.artifacts/p191/before.json` in the implementation checkout; covers these tests and their production owners, no second scanner.
 
@@ -55,4 +55,4 @@ tests/test_turn_context_wire.py::test_recorded_context_history_retains_rename_an
 
 `test_active_turn.py:10` imports deleted FailedPreparingDrainReadiness; `test_detached_owner.py:12`, `test_image_inputs.py:20`, `test_runtime.py:14` import deleted TurnStarted/TurnSettled protocol facts (removed in `4f0758854`); `test_configured_installed_source_arguments.py:12` imports removed publish_retained_summary; `test_native_context_inspection.py:30` gives a parametrized recorded_readers argument a default, rejected by pytest. Do not delete unexamined passing functions in these modules. Report them separately if outside the bounded 24-case repair.
 
-Next after switch: inspect retained suite outcome (never launch it again as investigation); implement the coherent obsolete-test deletion/current-owner call migration, confirm affected cases once, merge with ratchet 0, remove the pristine suite worktree only after the process and children have finished. No implementation or merge is claimed at this checkpoint.
+Original 24: 10 obsolete cases removed; 14 retained cases PASS (13 correctly configured native cases, one current-owner call migration). No production behavior regression demonstrated among these 24. No passing test body or assertion changed. Full baseline remains running and has six collection errors plus further failures beyond this assigned set; no green-suite claim. Do not rerun it as investigation. Merge with ratchet 0 and remove the pristine suite worktree only after its process and children have finished; active borrower prevents removal meanwhile.
