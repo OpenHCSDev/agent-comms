@@ -5,6 +5,7 @@ import threading
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.historical_views import DMDisplayHistory
 from agent_comms.store_files import StoreLock
@@ -15,6 +16,15 @@ def test_undeclared_store_rank_is_rejected_before_acquisition():
     with pytest.raises(AttributeError, match="lock_rank"):
         with StoreLock.ordered({object(): True}):
             pytest.fail("Unranked owner was admitted")
+
+
+def test_concrete_store_cannot_inherit_or_omit_its_rank():
+    with pytest.raises(TypeError, match="own lock_rank"):
+        class UnrankedCatalog(ChannelCatalog):
+            pass
+    with pytest.raises(TypeError, match="own lock_rank"):
+        class MissingRankCatalog(ChannelCatalog):
+            lock_rank = None
 
 
 def test_conversation_read_and_native_write_share_declared_order(tmp_path):
