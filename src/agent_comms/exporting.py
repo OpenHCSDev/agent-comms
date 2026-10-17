@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from .bus_publication import reject_private_wire_fields
-from .channel_targets import BuiltinChannel
 from .catalog_store import ChannelCatalog
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError

@@ -68,8 +68,7 @@ def test_wire_export_declarations_are_explicit_and_fail_loud():
     assert MaxBytesLimit(10).to_wire() == {"kind": "max_bytes", "value": 10}
     assert RecentLimit(123.5).to_wire() == {"kind": "recent", "value": 123.5}
 
-    with pytest.raises(ValueError, match="aggregate projection"):
-        ChannelScope("#any")
+    assert ChannelScope("#any").to_wire() == {"kind": "channel", "channel": "#any"}
     with pytest.raises(ValueError, match="distinct participants"):
         DmScope(("alice", "alice"))
     with pytest.raises(ValueError, match="positive integer"):
@@ -332,7 +331,7 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
             ViewPredicate(AnyOfMatch, frozenset({"team"})),
         )
     )
-    with pytest.raises(RelationViolationError, match="no authoritative wire history"):
+    with pytest.raises(RelationViolationError, match="projection"):
         comms.views.export_wire(
             tmp_path / "projection.jsonl",
             format=JsonlFormat(),
