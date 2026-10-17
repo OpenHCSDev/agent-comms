@@ -19,7 +19,7 @@ from contextlib import aclosing
 from dataclasses import Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, TextIO, Type, TypedDict, Unpack, TYPE_CHECKING, get_args, get_origin, get_type_hints
+from typing import ClassVar, Literal, Self, TextIO, Type, TypedDict, Unpack, TYPE_CHECKING, get_args, get_origin, get_type_hints
 from pydantic import JsonValue
 
 from .activity import ActivityState
@@ -48,10 +48,10 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .importing import ImportFormat, ImportLimits
+from .importing import ImportFormat, ImportLimits, ImportedSessionMetadata
 from .historical_views import HistoryCursor
 from .launch_runtime import RestartEnvironment
-from .turn_context import ContextSegment
+from .turn_context import ContextSegment, NextContextTurn, TurnContext
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
@@ -85,21 +85,12 @@ def _json_object(value: str) -> dict[str, JsonValue]:
     return result
 
 
-def _report_fields(value: str | None) -> dict[str, JsonValue] | None:
-    """The report JSON stays a raw object; its declared record decodes once."""
-    return None if value is None else _json_object(value)
-
-
 def _tags(value: str) -> list[str]:
     return [tag.strip() for tag in value.split(",") if tag.strip()]
 
 
 def _tag_text(value: frozenset[str] | None) -> str:
     return ', '.join(sorted(value or ()))
-
-
-def _shell_words(value: str | None) -> list[str] | None:
-    return shlex.split(value) if value is not None else None
 
 
 def _message_reference(value: str) -> dict[str, object]:
@@ -645,7 +636,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             key = declared.metadata.get("wire_name", declared.name)
             value = getattr(args, key)
             normalize = declared.metadata["normalize"]
-            if normalize is not None:
+            if normalize is not None and value is not None:
                 value = normalize(value)
             elif isinstance(hints[declared.name], type) and issubclass(
                 hints[declared.name], DeclaredFamily
@@ -739,7 +730,7 @@ class SendCliCommand(CliCommand):
     )
     report: dict[str, JsonValue] | None = option(
         "--report", help="Change report fields as a JSON object", default=None,
-        normalize=_report_fields,
+        normalize=_json_object,
     )
 
     def apply(self, ctx: Comms) -> dict[str, str]:
@@ -1017,7 +1008,7 @@ class HistoryCliCommand(CliCommand):
     limit: int = option("--limit", help="Maximum messages in this page", default=20)
     before: int | HistoryCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         if sum(bool(x) for x in (self.with_thread, self.channel, self.everything)) > 1:
             raise ValueError("history takes at most one of --with, --channel, --everything")
         paging = {"before": self.before, "limit": self.limit}
@@ -1027,11 +1018,11 @@ class HistoryCliCommand(CliCommand):
             page = ctx.views.channel_history_page(self.channel, **paging)
         else:
             page = ctx.views.full_history_page(**paging)
-        return {
+        return FieldCodec.encode({
             "messages": [{**m.to_wire(), **m.display_metadata} for m in reversed(page.messages)],
             "before": page.oldest_cursor,
             "has_older": page.has_older,
-        }
+        })
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1293,7 +1284,7 @@ class RestartCliCommand(CliCommand):
     agent_args: list[str] | None = option(
         "--agent-args",
         default=None,
-        normalize=_shell_words,
+        normalize=shlex.split,
     )
 
     @property
@@ -1457,15 +1448,13 @@ class ContextCliCommand(CliCommand):
     imported: bool = option("--imported", default=False, action="store_true",
                             help="Original imported instruction references, not current context")
 
-    def apply(self, ctx: Comms) -> Any:
-        from .importing import ImportedSessionMetadata
-
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         if self.imported:
             if self.turn is not None or self.diff:
                 raise ValueError("Imported source references are not recorded native turns")
             owner = ctx.registry.require(self.thread)
-            return {"scope": "historical-imported-instructions; not current or recorded native context",
-                    "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)}
+            return FieldCodec.encode({"scope": "historical-imported-instructions; not current or recorded native context",
+                    "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)})
         if self.turn is not None or self.diff:
             selected = []
             cursor = None
@@ -1475,7 +1464,7 @@ class ContextCliCommand(CliCommand):
                     manifest = resource.value
                     if self.diff and selected:
                         if not selected[0].turn.same_recording(manifest.turn):
-                            return selected[0].changed_since(manifest)
+                            return FieldCodec.encode(selected[0].changed_since(manifest))
                     elif self.turn is None or manifest.turn.matches_generation(self.turn):
                         selected.append(manifest)
                 if not page.has_older():
@@ -1485,12 +1474,10 @@ class ContextCliCommand(CliCommand):
                 raise ValueError("No original context manifest exists for the requested turn")
             if self.diff:
                 raise ValueError("No preceding recorded turn exists for comparison")
-            return {"manifests": tuple(reversed(selected)),
-                    "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
-        from .field_codec import FieldCodec
+            return FieldCodec.encode({"manifests": tuple(reversed(selected)),
+                    "text_recorded": all(manifest.public_text_recorded for manifest in selected)})
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
-        from .turn_context import NextContextTurn, TurnContext
         from acp.exceptions import RequestError
 
         owner = ctx.registry.require(self.thread)
@@ -1520,9 +1507,9 @@ class ContextCliCommand(CliCommand):
                               text=segment.text()) for segment in context.segments],
         }
         if native is None:
-            return {**result, "native_error": native_error}
+            return FieldCodec.encode({**result, "native_error": native_error})
         native_context = native.for_turn(owner, NextContextTurn())
-        return {
+        return FieldCodec.encode({
             **result,
             "scope": "next-native-base-and-core-contributors; before future input and provider hooks",
             "input_supplied": False,
@@ -1533,7 +1520,7 @@ class ContextCliCommand(CliCommand):
                  "spans": FieldCodec.encode(segment.source_ranges())}
                 for position, segment in enumerate(native.segments)
             ],
-        }
+        })
 
 
 @dataclass(frozen=True, kw_only=True)
