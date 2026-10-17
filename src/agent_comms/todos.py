@@ -79,6 +79,59 @@ class OperationDelivery(OrderDelivery):
         return EventTime.capture(time.time())
 
 
+@dataclass(frozen=True)
+class FirstCall(DeclaredFamily, affix="FirstCall"):
+    started = False
+    notified = False
+
+    def observe(self):
+        return self
+
+    def notify(self):
+        return self
+
+
+class AwaitingFirstCall(FirstCall):
+    def observe(self):
+        return ObservedFirstCall()
+
+    def notify(self):
+        return NotifiedFirstCall()
+
+
+class ObservedFirstCall(FirstCall):
+    started = True
+
+
+class NotifiedFirstCall(FirstCall):
+    notified = True
+
+    def observe(self):
+        return LateObservedFirstCall()
+
+
+class LateObservedFirstCall(ObservedFirstCall, NotifiedFirstCall):
+    pass
+
+
+class FirstCallEvent(DeclaredFamily, affix="FirstCallEvent"):
+    @classmethod
+    @abstractmethod
+    def apply(cls, current): ...
+
+
+class ObservedFirstCallEvent(FirstCallEvent):
+    @classmethod
+    def apply(cls, current):
+        return current.observe()
+
+
+class NotifiedFirstCallEvent(FirstCallEvent):
+    @classmethod
+    def apply(cls, current):
+        return current.notify()
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """One checked order lives on its Todo, independently of the unit's Goal."""
@@ -91,11 +144,12 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     report: str
     at: EventTime
     first_call_deadline: EventTime
+    first_call: FirstCall = field(default_factory=AwaitingFirstCall)
 
     def __post_init__(self):
-        if not self.id.strip() or not self.report.strip() or not self.edits or not self.banned:
-            raise ValueError("An order requires identity, edits, banned actions and report.")
-        if any(not text.strip() for text in (*self.edits, *self.banned)):
+        if not self.edits or not self.banned:
+            raise ValueError("An order requires edits and banned actions.")
+        if any(not text.strip() for text in (self.id, self.report, *self.edits, *self.banned)):
             raise ValueError("Order text cannot be empty.")
         self.at.require_recorded("An order")
         self.first_call_deadline.require_deadline()
@@ -331,7 +385,7 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
 class AssignTodo(TodoOperation):
     proposed: Assignment
     deadline: EventTime
-    order: ProblemOrder
+    order: PendingProblemOrder
 
     def apply(self, current):
         self.deadline.require_deadline()
@@ -356,6 +410,18 @@ class StrikeTodo(TodoOperation):
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class RecordFirstCallTodo(TodoOperation):
+    actor: ThreadIncarnation
+    event: type[FirstCallEvent]
+
+    def apply(self, current):
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        order = replace(current.order, first_call=self.event.apply(current.order.first_call))
+        return current if order == current.order else replace(current, order=order, revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -622,7 +688,7 @@ class TodoStore:
         owner: Thread,
         generation: str,
         deadline: EventTime,
-        order: ProblemOrder,
+        order: PendingProblemOrder,
         goal: GoalRef | None = None,
     ) -> Todo:
         _text(todo_id, "Todo ID", 128)
@@ -671,7 +737,7 @@ class TodoStore:
         parent: Thread,
         generation: str,
         deadline: EventTime,
-        order: ProblemOrder,
+        order: PendingProblemOrder,
     ) -> Todo:
         identity, parent_identity = _thread(owner), _thread(parent)
         proposed = Assignment(

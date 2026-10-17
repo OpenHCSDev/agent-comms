@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-import asyncio
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
-from .child_process import BoundedRun, ExitedOutcome, ProcessIdentity
+from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
 from .goal_mentions import bind_goal_mentions
@@ -28,7 +26,7 @@ from .goal_waits import GoalWaits, RecordedGoalWait
 from .goals import Goal, GoalOrder, ProblemGoalOrder, UnorderedGoalOrder
 from .threads import Thread
 from .recorded_time import EventTime
-from .todos import DeliverTodo, OrderDelivery, ProblemOrder
+from .todos import DeliverTodo, PendingProblemOrder
 
 if TYPE_CHECKING:
     from .goal_presentation import GoalSnapshot
@@ -440,7 +438,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
     problem: str
-    order: ProblemOrder
+    order: PendingProblemOrder
     goal_id: str
     deadline: EventTime
     commander: str

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
-from .change_report import FileLine
 from abc import abstractmethod
+import re
+
+from .child_process import ExitedOutcome
 
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -203,8 +205,6 @@ class CheckResult(DeclaredFamily, affix="CheckResult"):
 @dataclass(frozen=True)
 class SilentCheckResult(CheckResult):
     def require(self, result):
-        from .child_process import ExitedOutcome
-
         if result.outcome != ExitedOutcome(0) or result.stdout:
             raise ValueError("The order check must print nothing and exit zero.")
 
@@ -218,9 +218,6 @@ class CountCheckResult(CheckResult):
             raise ValueError("An expected count must be nonnegative.")
 
     def require(self, result):
-        import re
-        from .child_process import ExitedOutcome
-
         counts = re.findall(r"\d+", result.stdout.decode(errors="replace"))
         if not isinstance(result.outcome, ExitedOutcome) or not counts or int(counts[-1]) != self.expected:
             raise ValueError(f"The order check did not print its expected last integer {self.expected}.")

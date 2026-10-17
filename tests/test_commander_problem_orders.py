@@ -1,6 +1,5 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
-from dataclasses import replace
-from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -11,13 +10,13 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, S
 from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
-from agent_comms.todos import (CleanHunt, Hunt, OperationDelivery, OrderedHunt,
-    PendingProblemOrder, RecordHuntTodo, StrikeTodo, Todo, TodoConflict)
+from agent_comms.todos import (CleanHunt, CommitDelivery, FirstCall, Hunt, OperationDelivery, OrderedHunt,
+    NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
+    RecordHuntTodo, StrikeTodo, Todo)
 
 
 @pytest.fixture
@@ -138,8 +137,41 @@ def test_close_records_evidence_once_and_does_not_depend_on_artifact_lifetime(co
         artifact=str(artifact)).apply(comms, caller)
     closed = comms.goals.todos.get('P1')
     assert closed.assignment is None and closed.state.declared_name == 'done'
+    assert closed.order.delivery.at.at > 0
     artifact.unlink()
     assert comms.goals.todos.get('P1') == closed
+
+
+def test_first_call_receipt_preserves_started_and_prior_alarm_without_json_flags(commander):
+    comms, caller = commander
+    todo = create(commander, 'P1')
+    assert not todo.order.first_call.started and not todo.order.first_call.notified
+    for event in (NotifiedFirstCallEvent, ObservedFirstCallEvent):
+        todo = comms.goals.todos.get('P1')
+        CommsTodoTool(id='P1', operation=RecordFirstCallTodo(todo.revision,
+            comms.registry.require('lead').incarnation, event)).apply(comms, caller)
+    call = comms.goals.todos.get('P1').order.first_call
+    assert call.started and call.notified
+    assert FieldCodec.decode(FirstCall, FieldCodec.encode(call)) == call
+    assert call.observe() == call and call.notify() == call
+
+
+def test_commit_delivery_records_the_actual_clean_commit_time(commander):
+    comms, caller = commander
+    def git(*args):
+        return subprocess.check_output(('git', '-C', str(comms.root), *args), stderr=subprocess.DEVNULL).decode().strip()
+    git('init', '-q')
+    git('config', 'user.name', 'Isolated acceptance')
+    git('config', 'user.email', 'acceptance@example.invalid')
+    (comms.root / 'source.txt').write_text('delivered source')
+    git('add', 'source.txt')
+    git('commit', '-qm', 'Delivered fixture')
+    commit = git('rev-parse', 'HEAD')
+    create(commander, 'P1')
+    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=commit)).apply(comms, caller)
+    delivery = comms.goals.todos.get('P1').order.delivery
+    assert delivery.commit == commit
+    assert delivery.at == RecordedEventTime(float(git('show', '-s', '--format=%ct', 'HEAD')))
 
 
 def test_delivery_time_has_its_own_named_requirement():
