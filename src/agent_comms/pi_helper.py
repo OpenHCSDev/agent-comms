@@ -12,6 +12,7 @@ from typing import ClassVar
 from .child_process import BoundedRun, ChildResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .launch_runtime import RestartEnvironment
 
 
 class PiHelperError(ValueError):
@@ -69,27 +70,28 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         return PiHelperFailed(cls.declared_name, result)
 
     @classmethod
-    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
-        from .launch_runtime import RestartEnvironment
-
+    def launch(cls, request, environment: dict[str, str]):
         node = shutil.which("node")
         if node is None:
             raise PiHelperError("Pi helper needs Node")
-        environment = dict(os.environ if env is None else env)
         configuration = RestartEnvironment.inherit(environment)
         environment.update(configuration.encode_native())
         for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
             environment.pop(key, None)
         environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
         environment["PI_OFFLINE"] = "1"
-        package = Path(request.package)
         command = (node, "--no-global-search-paths")
         # Every current caller supplies the verified native deployment.
-        fence = package / "dist/agent-comms-import-fence.mjs"
+        fence = Path(request.package) / "dist/agent-comms-import-fence.mjs"
         command += ("--import", str(fence))
+        return (*command, "--input-type=module", "--eval", cls.script.read_text()), environment
+
+    @classmethod
+    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
+        command, environment = cls.launch(request, dict(os.environ if env is None else env))
         payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
         outcome = await BoundedRun.run(
-            (*command, "--input-type=module", "--eval", cls.script.read_text()),
+            command,
             input=payload.encode(),
             timeout=cls.timeout_for(request),
             cwd=cwd,

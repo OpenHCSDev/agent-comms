@@ -89,3 +89,39 @@ def test_direct_pinned_cli_uses_same_package_authority(tmp_path, monkeypatch):
     monkeypatch.setattr(native_pi, "_trusted_package", verified.append)
     assert NativePiRpcLaunch.package_for_command(str(cli), LaunchRuntime.running()) == package
     assert verified == [package]
+
+
+async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch):
+    import os
+    import site
+    import venv
+    from pathlib import Path
+
+    from agent_comms.fresh_private_session import create_fresh_private_session
+    from agent_comms.pi_native_backend import PiNativeBackend
+    from agent_comms.threads import Thread
+
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    selected = tmp_path / "selected-core"
+    venv.EnvBuilder(with_pip=False, symlinks=True).create(selected)
+    (selected / "bin/pi-comms-native").symlink_to(LaunchRuntime.running().native_entrypoint)
+    library = next(selected.glob("lib/python*/site-packages"))
+    marker = tmp_path / "selected-python"
+    source = Path(__file__).resolve().parents[1] / "src"
+    (library / "core-source.pth").write_text("\n".join([
+        str(source), *site.getsitepackages(),
+        f"import pathlib, sys; pathlib.Path({str(marker)!r}).write_text(sys.prefix)",
+    ]) + "\n")
+    configuration = tmp_path / "native-config"
+    configuration.mkdir(mode=0o700)
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(configuration))
+    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(configuration))
+    parent = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
+    original = parent.path.read_bytes()
+    copied = await PiNativeBackend.fork(
+        Thread("parent", tags=frozenset(), worktree=str(tmp_path), session_file=parent.session_file),
+        str(package / "dist/cli.js"), LaunchRuntime(selected / "bin/python"),
+    )
+    assert marker.read_text() == str(selected)
+    assert Path(copied.path).is_file() and copied.path != parent.session_file
+    assert parent.path.read_bytes() == original

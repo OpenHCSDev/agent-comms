@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-import asyncio
+import json
 import os
+import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
 from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
 from .native_session_reopen import NativeSessionIdentity
-from .native_pi import NativePiRpcLaunch
+from .field_codec import FieldCodec
 from .launch_runtime import LaunchRuntime
 from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
 
@@ -57,16 +59,27 @@ class ForkSessionHelper(PiHelper):
         )
 
 
-def fork_native_session(
-    file: str, worktree: str, launcher: str, runtime: LaunchRuntime,
-) -> NativeSessionIdentity:
-    """Copy the parent's history once under the native writer locks, before any wire lock.
+@dataclass(frozen=True, kw_only=True)
+class RuntimeForkRequest(ForkSessionRequest):
+    runtime: LaunchRuntime
 
-    The native owner fsyncs the new history. An uncertain helper outcome is not
-    retried or inferred from an orphan file, and no input is sent.
-    """
-    package = NativePiRpcLaunch.package_for_command(launcher, runtime)
-    return asyncio.run(ForkSessionHelper.run(
-        ForkSessionRequest(str(package), file, worktree), cwd=Path(worktree),
-        env=runtime.environment(os.environ),
-    ))
+
+class RuntimeForkHelper(ForkSessionHelper):
+    request = RuntimeForkRequest
+
+    @classmethod
+    def launch(cls, request, environment):
+        return ((str(request.runtime.interpreter), "-I", "-c",
+                 "from agent_comms.native_fork import main; main()"),
+                request.runtime.environment(environment))
+
+
+def main():
+    with tempfile.TemporaryFile() as incoming:
+        incoming.write(sys.stdin.buffer.read())
+        incoming.seek(0)
+        request = FieldCodec.decode(RuntimeForkRequest, json.load(incoming))
+        command, environment = ForkSessionHelper.launch(request, dict(os.environ))
+        incoming.seek(0)
+        os.dup2(incoming.fileno(), sys.stdin.fileno())
+        os.execvpe(command[0], command, environment)
