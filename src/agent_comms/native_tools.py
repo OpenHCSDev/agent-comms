@@ -56,13 +56,15 @@ class ArgumentTool(ToolDeclaration):
         super().__init_subclass__(**kwargs)
         hints = get_type_hints(cls, include_extras=True)
         for owner in cls.__mro__:
-            for name in owner.__dict__.get('__annotations__', {}):
-                hint = hints[name]
-                if get_origin(hint) is Annotated and any(isinstance(item, Caption) for item in get_args(hint)[1:]):
-                    read = attrgetter(name)
-                    validate = TypeAdapter(hint, config=ConfigDict(strict=True)).validate_python
-                    cls.caption_reader = staticmethod(lambda value: validate(read(value)))
-                    return
+            marked = [(name, hints[name]) for name in owner.__dict__.get('__annotations__', {})
+                      if get_origin(hints[name]) is Annotated
+                      and any(isinstance(item, Caption) for item in get_args(hints[name])[1:])]
+            if marked:
+                (name, hint), = marked
+                read = attrgetter(name)
+                validate = TypeAdapter(hint, config=ConfigDict(strict=True)).validate_python
+                cls.caption_reader = staticmethod(lambda value: validate(read(value)))
+                return
 
     @classmethod
     def recorded_arguments(cls, schema, raw):
