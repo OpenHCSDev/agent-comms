@@ -378,6 +378,13 @@ class TypedRow:
         return tuple(cls.column_projection().values())
 
     @classmethod
+    def _select_list(cls, table: type[TypedTable]) -> str:
+        return ", ".join(
+            (table._sql(item.column.generated) if item.column.generated is not None
+             else table._column_list((item.name,))) + f" AS {_identifier(item.wire_name)}"
+            for item in cls._fields())
+
+    @classmethod
     def _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:
         """Resolve a declared field subset, including an unfiltered query."""
         declared = {item.name: item for item in cls._fields()}
@@ -516,6 +523,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return ", ".join(_identifier(item.wire_name) for item in cls._fields_named(names))
 
     @classmethod
+    def _select_list(cls, table: type[TypedTable]) -> str:
+        return cls._column_list(tuple(cls.column_projection()))
+
+    @classmethod
     def _sql(cls, expression: str) -> str:
         for item in cls._fields():
             expression = expression.replace("{" + item.name + "}", item.wire_name)
@@ -604,17 +615,18 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def _query(
         cls, db: sqlite3.Connection, where: str, parameters: tuple,
-        order_by: tuple[str, ...], descending: bool, key: dict[str, object]
-    ) -> sqlite3.Cursor:
+        order_by: tuple[str, ...], descending: bool, key: dict[str, object],
+        row_type: type[RelatedRow] | None, limit: int | None,
+    ) -> Generator[Self | RelatedRow, None, None]:
         condition, parameters = cls._condition(where, parameters, key)
-        direction = " DESC" if descending else ""
-        return db.execute(
-            f"SELECT {cls._column_list(tuple(cls.column_projection()))} FROM {_identifier(cls.declared_name)} "
+        direction, selected = " DESC" if descending else "", row_type or cls
+        return selected.iterate(db.execute(
+            f"SELECT {selected._select_list(cls)} FROM {_identifier(cls.declared_name)} "
             f"WHERE {condition}"
             + (" ORDER BY " + ", ".join(cls._column_list((name,)) + direction for name in order_by)
-               if order_by else ""),
-            parameters,
-        )
+               if order_by else "") + (" LIMIT ?" if limit is not None else ""),
+            parameters + ((limit,) if limit is not None else ()),
+        ))
 
     @classmethod
     def select(
@@ -625,9 +637,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
         descending: bool = False,
+        row_type: type[RelatedRow] | None = None, limit: int | None = None,
         **key: object,
-    ) -> list[Self]:
-        return cls.read(cls._query(db, where, parameters, order_by, descending, key))
+    ) -> list[Self | RelatedRow]:
+        return list(cls._query(db, where, parameters, order_by, descending, key, row_type, limit))
 
     @classmethod
     def stream(
@@ -638,10 +651,11 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
         descending: bool = False,
+        row_type: type[RelatedRow] | None = None, limit: int | None = None,
         **key: object,
-    ) -> Generator[Self, None, None]:
+    ) -> Generator[Self | RelatedRow, None, None]:
         """Rows decoded as the caller consumes them; close it to release the query."""
-        return cls.iterate(cls._query(db, where, parameters, order_by, descending, key))
+        return cls._query(db, where, parameters, order_by, descending, key, row_type, limit)
 
     @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
