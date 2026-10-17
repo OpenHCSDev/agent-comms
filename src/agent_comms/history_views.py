@@ -358,25 +358,6 @@ class HistoryViews:
             raise UnregisteredThreadError(f"Thread presentation unavailable: {name}")
         return presentation
 
-    def coordination_snapshot(
-        self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False
-    ) -> CoordinationSnapshot:
-        registry = self.registry.snapshot()
-        catalog = self.channels.catalog.read()
-        declarations = catalog.views(registry.threads)
-        sent = self.last_sent_timestamps()
-        unread = (
-            self.bus.pending_counts(actor)
-            if registry.canonical_name(actor) in registry.threads else {}
-        )
-        channel_unread = {name: channel.pending_count(unread) for name, channel in declarations.items()}
-        return CoordinationSnapshot.capture(
-            self.root, registry, catalog, self.agents, declarations, sent,
-            ChannelActivity.for_views(declarations, self.bus.channel_activity()),
-            unread=unread, channel_unread=channel_unread,
-            show_stopped=show_stopped, show_archived=show_archived,
-        )
-
     def viewer_snapshot(
         self, worktree: str, *, show_stopped: bool = True, show_archived: bool = False
     ) -> CoordinationSnapshot:
