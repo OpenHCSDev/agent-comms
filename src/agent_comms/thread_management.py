@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
@@ -36,7 +36,7 @@ from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .native_session_files import NativeSessionFiles
 from .launch_runtime import LaunchRuntime
-from .owner_lifecycle import IdleLaunchInput, OwnerLifecycle
+from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
@@ -62,29 +62,22 @@ def _session_model(session_file: Path) -> tuple[str, str] | None:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class NewThreadSpec(IdleLaunchInput):
+class NewThreadSpec:
     """Prepares the session outside the wire lock, then registers the thread under it."""
 
     name: str
     project: str
     model: str
     thinking_level: type[ThinkingLevel]
-    task: ClassVar[str] = ""
+    task: LaunchInput = field(default_factory=LaunchInput)
     tags: frozenset[str] | None = None
 
     @classmethod
     def from_task(cls, *, task: str = "", **values) -> NewThreadSpec:
-        return cls.with_task(task, **values) if task else cls(**values)
-
-    @classmethod
-    def with_task(cls, task: str, **values) -> NewThreadSpec:
-        return TaskNewThreadSpec(task=task, **values)
-
-    def record_first_input(self, record) -> None:
-        pass
+        return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
     def declaration(self, project: str) -> Thread:
-        return Thread(name=self.name, task=self.task, tags=self.tags or frozenset(),
+        return Thread(name=self.name, task=self.task.text, tags=self.tags or frozenset(),
                       worktree=project, model=self.model, thinking_level=self.thinking_level)
 
     def __post_init__(self) -> None:
@@ -115,28 +108,19 @@ class ForkSpec(NewThreadSpec):
 
     parent: str
 
-    @classmethod
-    def with_task(cls, task: str, **values) -> ForkSpec:
-        return TaskForkSpec(task=task, **values)
-
-    def child(self, parent: Thread, session_file: str) -> Thread:
-        """Derive the child declaration from the exact parent and fork result."""
-        return replace(self.declaration(self.project), parent=parent.name,
-                       tags=parent.tags if self.tags is None else self.tags,
-                       session_file=session_file)
-
     def _parent(self, threads: ThreadManagement) -> Thread:
         parent = threads.registry.require(self.parent)
         parent.execution.require_native()
-        if not parent.session_file:
-            raise RelationViolationError(f"Parent thread {self.parent!r} has no session file to fork.")
         return parent
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         # Copy saved history outside the wire lock, retaining writer→wire order.
         parent = self._parent(threads)
-        threads.registry.require_declaration_available(self.child(parent, parent.require_saved_session()))
+        child = replace(self.declaration(self.project), parent=parent.name,
+                        tags=parent.tags if self.tags is None else self.tags,
+                        session_file=parent.require_saved_session())
+        threads.registry.require_declaration_available(child)
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
         with _store_lock(threads._wire_lock_path):
             current = self._parent(threads)
@@ -145,24 +129,7 @@ class ForkSpec(NewThreadSpec):
                     f"Parent thread {self.parent!r} changed its saved session during the fork; "
                     f"the created fork {location.path} was not registered."
                 )
-            yield self.child(current, location.path)
-
-
-@dataclass(frozen=True, kw_only=True)
-class TaskNewThreadSpec(NewThreadSpec):
-    task: str = field()
-    input_key: str = field(default_factory=lambda: f"acp:{uuid4().hex}", init=False)
-
-    def apply_environment(self, environment: dict[str, str]) -> None:
-        environment[self.environment_key] = self.input_key
-
-    def record_first_input(self, record) -> None:
-        record(self.input_key, seq=None, text=self.task)
-
-
-@dataclass(frozen=True, kw_only=True)
-class TaskForkSpec(ForkSpec, TaskNewThreadSpec):
-    task: str = field()
+            yield replace(child, session_file=location.path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -660,9 +627,9 @@ class ThreadManagement:
             child = self.registry._declare_unlocked(child)
             try:
                 owned = self.owners._launch_owner_unlocked(
-                    child, resolved_bin, initial_input=spec, launch_runtime=runtime,
+                    child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
                 )
-                spec.record_first_input(
+                spec.task.record_first_input(
                     partial(
                         InputDispositions(self.root).record, owner=owned.name, target=owned.name,
                         admission=self.registry.snapshot().admission_generations[owned.name],

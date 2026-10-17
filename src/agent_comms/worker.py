@@ -12,7 +12,7 @@ from .acp import CommsAgent
 from .comms import wire
 from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
 from .native_arguments import NativeArguments
-from .owner_lifecycle import IdleLaunchInput
+from .owner_lifecycle import LaunchInput
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 
 
@@ -45,7 +45,7 @@ async def run() -> None:
     initial: asyncio.Task | None = None
     try:
         await agent.sessions.start_owner(thread.worktree, name)
-        if key := os.environ.pop(IdleLaunchInput.environment_key, None):
+        if key := os.environ.pop(LaunchInput.environment_key, None):
             initial = asyncio.create_task(run_startup_input(agent, name, key))
         await stopped.wait()
     finally:

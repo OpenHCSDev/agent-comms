@@ -8,8 +8,9 @@ import shlex
 import shutil
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from uuid import uuid4
 
 from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity
 from .coordination_errors import PublicationActivationBlocked
@@ -35,11 +36,27 @@ from .threads import Thread
 _LOG = logging.getLogger(__name__)
 
 
-class IdleLaunchInput:
+class LaunchInput:
     environment_key = "AGENT_COMMS_STARTUP_INPUT_KEY"
+    text = ""
 
     def apply_environment(self, environment: dict[str, str]) -> None:
         pass
+
+    def record_first_input(self, record) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class TaskLaunchInput(LaunchInput):
+    text: str = field()
+    input_key: str = field(default_factory=lambda: f"acp:{uuid4().hex}", init=False)
+
+    def apply_environment(self, environment: dict[str, str]) -> None:
+        environment[self.environment_key] = self.input_key
+
+    def record_first_input(self, record) -> None:
+        record(self.input_key, seq=None, text=self.text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,7 +387,7 @@ class OwnerLifecycle:
         agent_args: Sequence[str] | None = None,
         *,
         launch_runtime: LaunchRuntime,
-        initial_input: IdleLaunchInput = IdleLaunchInput(),
+        initial_input: LaunchInput = LaunchInput(),
         environment: Mapping[str, str] | None = None,
     ) -> Thread:
         # Callers hold the wire lock; a phase change takes wire then registry.
@@ -382,7 +399,7 @@ class OwnerLifecycle:
             "PI_PROMPT",
             "PI_PARENT_ID",
             "PI_TASK",
-            IdleLaunchInput.environment_key,
+            LaunchInput.environment_key,
             ROOT_ID_ENV,
             PACKAGE_ENV,
         ):
