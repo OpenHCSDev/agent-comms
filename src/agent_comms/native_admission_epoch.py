@@ -73,8 +73,7 @@ class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
         # Selection can launch before get_state/send admission records a session.
         # The exact stopped declaration still owns an existing saved selection;
         # an unopened owner instead has only its allocated session directory.
-        saved = receipt.thread.runtime.path if receipt.thread.runtime.available else None
-        return () if saved is None else (Path(saved),)
+        return tuple(files.session for files in receipt.thread.runtime.storage_files())
 
 
 @dataclass(frozen=True)

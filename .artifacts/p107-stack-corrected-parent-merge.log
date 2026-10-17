@@ -1,0 +1,9 @@
+Auto-merging src/agent_comms/goal_actions.py
+Auto-merging src/agent_comms/goals.py
+Auto-merging src/agent_comms/todos.py
+Auto-merging tests/test_goal_block_reason.py
+Auto-merging tests/test_goal_resume.py
+Merge made by the 'ort' strategy.
+ tests/test_goal_block_reason.py | 4 ++--
+ tests/test_goal_resume.py       | 2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)

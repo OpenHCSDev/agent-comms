@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/core-commander-2/.artifacts/p107-installed-proof.py", line 36, in <module>
+    with sqlite3.connect(ledger, isolation_level=None) as db:
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: unable to open database file

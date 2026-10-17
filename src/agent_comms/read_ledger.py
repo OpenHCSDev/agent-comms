@@ -195,9 +195,9 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         """
         viewers = {thread.incarnation for thread in threads}
         viewer_names = {thread.name for thread in threads}
-        sources = {
-            str(Path(thread.runtime.read_key).resolve()) for thread in threads if thread.runtime.read_key
-        }
+        sources = set()
+        for thread in threads:
+            thread.runtime.collect_read_keys(sources)
 
         def remove(document: ReadDocument) -> ReadDocument:
             messages = {k: v for k, v in document.messages.items() if k not in viewers}

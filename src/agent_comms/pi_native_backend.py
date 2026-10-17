@@ -81,22 +81,15 @@ class PiSessionFile(RuntimeLocation):
 
     path: str
 
-    @classmethod
-    def from_wire(cls, data) -> Self:
-        from .field_codec import FieldCodec
-
-        return cls(FieldCodec.decode(str, data["path"]))
-
-    def location_payload(self) -> dict[str, str]:
-        return {"path": self.path}
-
     def history_source(self, root, incarnation):
         from .native_transcript import NativeTranscript
 
         return NativeTranscript(Path(self.path))
 
     def imported_sources(self):
-        return self.history_source(None, None).imported_sources()
+        from .native_transcript import NativeTranscript
+
+        return NativeTranscript(Path(self.path)).imported_sources()
 
     @property
     def read_key(self) -> str:
@@ -109,7 +102,9 @@ class PiSessionFile(RuntimeLocation):
 
     @property
     def model_choice(self):
-        for entry in self.history_source(None, None).tail():
+        from .native_transcript import NativeTranscript
+
+        for entry in NativeTranscript(Path(self.path)).tail():
             if entry.model_choice is not None:
                 return entry.model_choice
         return None
@@ -235,8 +230,6 @@ class PiNativeBackend(
         from .coordinator import Coordination
         from .native_session_prepare import NativeSessionPreparation
 
-        if not thread.runtime.available:
-            raise ValueError("Native preparation requires a saved session")
         if open_native is None:
             open_native = NativeSessionPreparation.open
         environment = await Coordination.run_worker(lambda: thread.native_environment(
@@ -248,7 +241,7 @@ class PiNativeBackend(
             self.arguments(thread),
             worktree=thread.worktree,
             environment=environment,
-            source_path=thread.runtime.path,
+            source_path=thread.runtime.read_key,
             observe=partial(self.observe, thread),
         )
 
@@ -272,7 +265,7 @@ class PiNativeBackend(
             delivery.environment,
             **images,
             context_contributions=content.contributions,
-            source_path=thread.runtime.path if thread.runtime.available else None,
+            **thread.runtime.arguments(),
             steering_queue=delivery.inbox,
             finish_event=delivery.finish_event,
             send_boundary=delivery.send_boundary,

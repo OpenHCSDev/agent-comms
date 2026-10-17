@@ -536,9 +536,7 @@ class Transcripts:
     def external(self, name: str) -> ExternalTranscript:
         """Where a CLI bridge publishes the items of its sessionless bus thread."""
         page = self._page_source(name, None, None)
-        if page.runtime.available:
-            raise ValueError(f"@{name} reads a native session; a CLI cannot publish its transcript")
-        return page.records
+        return page.runtime.external_records(page.root, page.thread.incarnation)
 
     def _page_source(self, name, through, historical_source):
         member = (LiveTranscriptReadIdentity if historical_source is None
@@ -552,22 +550,10 @@ class Transcripts:
     ) -> tuple[Thread, RuntimeLocation, bool]:
         """Resolve a temporary inherited view without changing runtime ownership."""
         thread = registry.require(name)
-        if thread.runtime.available and (source_runtime is None or source_runtime == thread.runtime):
-            return thread, thread.runtime, False
-        ancestor = thread
-        visited = {thread.name}
-        while ancestor.parent is not None:
-            ancestor = registry.require(ancestor.parent)
-            if ancestor.name in visited:
-                break
-            visited.add(ancestor.name)
-            if ancestor.runtime.available and (
-                source_runtime is None or source_runtime == ancestor.runtime
-            ):
-                return thread, ancestor.runtime, True
-        if source_runtime:
-            raise TranscriptChanged()
-        return thread, thread.runtime, bool(thread.parent)
+        for location, inherited in thread.runtime.history_locations(thread, registry, set()):
+            if source_runtime is None or source_runtime == location:
+                return thread, location, inherited
+        raise TranscriptChanged()
 
     @staticmethod
     def _fork_start_events(thread: Thread) -> tuple[TranscriptEvent, ...]:

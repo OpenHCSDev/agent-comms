@@ -72,8 +72,6 @@ async def compact_context(
         if await Coordination.run_worker(partial(runner.session_busy, session_id)):
             return FailedCompaction("Wait for the current response before compacting.")
         thread = await Coordination.run_worker(partial(runner.comms.registry.require, thread_name))
-        if not thread.runtime.available:
-            return FailedCompaction("This thread has no saved session to compact.")
         task = asyncio.current_task()
         assert task is not None
         async with AsyncExitStack() as resources:

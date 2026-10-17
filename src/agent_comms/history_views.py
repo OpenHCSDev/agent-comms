@@ -398,11 +398,10 @@ class HistoryViews:
                 read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
-        unread = self.transcript_reads.counts(
-            captured_viewer,
-            {name: view.thread.runtime.read_key for name, view in snapshot.threads.items()},
-            document=basis.document,
-        )
+        sources = {}
+        for name, view in snapshot.threads.items():
+            view.thread.runtime.index_read_source(name, sources)
+        unread = self.transcript_reads.counts(captured_viewer, sources, document=basis.document)
         return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
@@ -411,7 +410,7 @@ class HistoryViews:
         thread = self.registry.require(name)
         if through.runtime != thread.runtime:
             raise ValueError("Transcript changed; refresh before marking it read.")
-        self.transcript_reads.mark_read(viewer, through.runtime.read_key, through.offset)
+        through.runtime.mark_read(self.transcript_reads, viewer, through.offset)
 
     def mark_channel_view_read(
         self,
@@ -456,8 +455,7 @@ class HistoryViews:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(target)
             checkpoint = self.transcripts.transcript_checkpoint(thread.name)
-            if checkpoint.runtime.available:
-                self.transcript_reads.mark_read(viewer, checkpoint.runtime.read_key, checkpoint.offset)
+            checkpoint.runtime.mark_read(self.transcript_reads, viewer, checkpoint.offset)
             messages = self.bus.inbox(viewer, thread.name)
             self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 

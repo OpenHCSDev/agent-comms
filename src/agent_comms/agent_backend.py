@@ -44,13 +44,12 @@ class BackendDeclarationError(TypeError):
     """A backend declaration is incomplete; the message names every missing piece."""
 
 
-class RuntimeLocation(WireValue):
-    """Backend-owned storage, decoded once at the thread boundary."""
+class UnstartedRuntimeError(ValueError):
+    """This operation needs a runtime that has started."""
 
-    available = True
 
-    def __bool__(self) -> bool:
-        return self.available
+class RuntimeLocation(DeclaredFamily, affix="Runtime"):
+    """Backend-owned storage and behavior, decoded once at the thread boundary."""
 
     @property
     def backend(self) -> type[AgentBackend]:
@@ -58,17 +57,26 @@ class RuntimeLocation(WireValue):
                     if backend.location_type is type(self))
         return owner
 
-    def to_wire(self) -> dict[str, object]:
-        return {"backend": self.backend.declared_name, "location": self.location_payload()}
+    def new_location(self, root, worktree):
+        return self
 
-    @classmethod
-    def from_wire(cls, data) -> RuntimeLocation:
-        owner = FieldCodec.decode(type[AgentBackend], data["backend"])
-        payload = data["location"]
-        return UnstartedRuntime(owner) if payload is None else owner.location_type.from_wire(payload)
+    def arguments(self):
+        return {"source_path": self.read_key}
 
-    @abstractmethod
-    def location_payload(self) -> object: ...
+    def mark_read(self, ledger, viewer, offset):
+        ledger.mark_read(viewer, self.read_key, offset)
+
+    def index_read_source(self, name, sources):
+        sources[name] = self.read_key
+
+    def collect_read_keys(self, keys):
+        keys.add(self.read_key)
+
+    def history_locations(self, thread, registry, visited):
+        yield self, False
+
+    def external_records(self, root, incarnation):
+        raise ValueError("A saved runtime cannot publish an external transcript")
 
     @abstractmethod
     def history_source(self, root, incarnation): ...
@@ -91,15 +99,37 @@ class RuntimeLocation(WireValue):
 @dataclass(frozen=True)
 class UnstartedRuntime(RuntimeLocation):
     owner: type[AgentBackend]
-    available = False
-
     @property
     def backend(self) -> type[AgentBackend]:
         return self.owner
 
-    def location_payload(self) -> None:
-        return None
+    def new_location(self, root, worktree):
+        return self.owner.new_location(root, worktree)
 
+    def arguments(self):
+        return {}
+
+    def mark_read(self, ledger, viewer, offset):
+        pass
+
+    def index_read_source(self, name, sources):
+        pass
+
+    def collect_read_keys(self, keys):
+        pass
+
+    def history_locations(self, thread, registry, visited):
+        if thread.name in visited:
+            return
+        visited.add(thread.name)
+        if thread.parent is not None:
+            parent = registry.require(thread.parent)
+            for location, _ in parent.runtime.history_locations(parent, registry, visited):
+                yield location, True
+        yield self, bool(thread.parent)
+
+    def external_records(self, root, incarnation):
+        return self.history_source(root, incarnation)
     @classmethod
     def default(cls) -> UnstartedRuntime:
         return cls(AgentBackend.for_new_threads())
@@ -114,7 +144,7 @@ class UnstartedRuntime(RuntimeLocation):
 
     @property
     def read_key(self) -> str:
-        return ""
+        raise UnstartedRuntimeError("This operation requires a started runtime")
 
 
 # ---------------------------------------------------------------------------

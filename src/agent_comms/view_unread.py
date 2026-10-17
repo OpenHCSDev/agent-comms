@@ -348,7 +348,9 @@ class TranscriptReadState(ThreadOwnedState):
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """Drop the reply projection of each deleted thread's transcript."""
-        sources = tuple(thread.runtime.read_key for thread in threads if thread.runtime.read_key)
+        sources = set()
+        for thread in threads:
+            thread.runtime.collect_read_keys(sources)
         if not sources:
             return
         with self._lock:

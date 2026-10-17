@@ -107,8 +107,7 @@ class ForkSpec(NewThreadSpec):
             raise RelationViolationError(
                 f"Thread {self.name!r} already exists; reuse it instead of creating it again."
             )
-        if not parent.runtime.available:
-            raise RelationViolationError(f"Parent thread {self.parent!r} has no session file to fork.")
+        parent.runtime.read_key
         return parent
 
     @contextmanager
@@ -528,7 +527,7 @@ class ThreadManagement:
     def attach_session(self, original: Thread, source_path: str, *, pid: int | None = None) -> Thread:
         """Attach Pi state and retain its model once, outside the wire lock."""
         path = Path(source_path).expanduser().resolve()
-        location = original.backend.location_type.from_wire({"path": str(path)})
+        location = original.backend.location_type(str(path))
         saved_model = None
         if original.needs_model_observation() and path.is_file():
             choice = location.model_choice
