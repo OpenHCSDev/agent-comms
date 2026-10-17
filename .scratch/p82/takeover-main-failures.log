@@ -1,0 +1,231 @@
+..FFF                                                                    [100%]
+=================================== FAILURES ===================================
+___________ test_duplicate_valid_response_key_denied_by_cold_reader ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4897/test_duplicate_valid_response_0')
+
+    def test_duplicate_valid_response_key_denied_by_cold_reader(tmp_path):
+        import json
+        from dataclasses import replace
+    
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
+        from agent_comms.response_conversation import ResponseConversation
+    
+        case = _ready(tmp_path, direct=True)
+        try:
+            intent = prepare_fenced_response(
+                case.store, case.bus, case.fence, "answer", exact_target=case.reply_target, owner_witness=case.witness
+            ).value
+            publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
+            response = case.bus.log.read_keyed_response(intent)
+            with case.bus.log.locked():
+                snapshot = case.store.snapshots.get("exec")
+                conversation = ResponseConversation.capture(
+                    case.bus, snapshot, snapshot.require_wire_response(case.reply_target)
+                )
+                duplicate = conversation.record(
+                    case.root_id, replace(response, seq=response.seq + 1), intent
+                )
+                marker = case.bus.log._private_marker_unlocked()
+            with case.bus.log.path.open("a") as stream:
+                stream.write(json.dumps(duplicate) + "\n")
+            (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+            marker.last_seq = response.seq + 1
+            marker.checkpoint_version = None
+            marker.checkpoint_seal = None
+            case.bus.log.write_metadata_unlocked(marker)
+>           with pytest.raises(RelationViolationError, match="Malformed public bus row"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'Malformed public bus row'
+E             Actual message: 'Private bus checkpoint is missing or redirected.'
+
+tests/test_keyed_response_delivery.py:172: AssertionError
+______ test_new_policy_declaration_uses_full_and_certified_record_readers ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4897/test_new_policy_declaration_us0')
+
+    def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path):
+        import json
+    
+        from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
+        from agent_comms.delivery_policy import DeliveryPolicy, InitialDeliveryPolicy
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.private_bus_checkpoint import (
+            install_private_bus_checkpoint,
+        )
+    
+        class ExtendedDeliveryPolicy(InitialDeliveryPolicy):
+            pass
+    
+        case = _ready(tmp_path, direct=True)
+        try:
+            marker = case.bus.log._private_marker_unlocked()
+            raw = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
+            policy = FieldCodec.decode(DeliveryPolicy, raw[PRIVATE_WIRE_FIELD])
+            raw[PRIVATE_WIRE_FIELD] = FieldCodec.encode(
+                ExtendedDeliveryPolicy(version=policy.version, initial=policy.initial)
+            )
+            # Explicit cold setup on this disposable root. No old seal is claimed
+            # for changed bytes; the real installation scans and certifies them.
+            (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+            marker.checkpoint_version = None
+            marker.checkpoint_seal = None
+            case.bus.log.write_metadata_unlocked(marker)
+            case.bus.log.path.write_text(json.dumps(raw) + "\n")
+>           public = list(case.bus.full_history_page().messages)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_keyed_response_delivery.py:230: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.scratch/p82/main-source/src/agent_comms/message_bus.py:397: in full_history_page
+    return self.display_page(
+.scratch/p82/main-source/src/agent_comms/message_bus.py:361: in display_page
+    ).read(self.log)
+      ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/message_page.py:197: in read
+    with log._opened_wire_snapshot(need_sequence=False) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/wire_log.py:643: in _opened_wire_snapshot
+    with _store_read_lock(self.path) as lock:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/store_files.py:236: in _store_read_lock
+    lock = resources.enter_context(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/store_files.py:219: in _store_lock
+    with _held_store_source(store_path, lock_file, platform, max_bus_bytes,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/store_files.py:195: in _held_store_source
+    with WireLog(store_path).verify_before_read_unlocked(shared=shared) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/wire_log.py:775: in verify_before_read_unlocked
+    with opened_private_checkpoint_unlocked(self, private_marker, shared=shared) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/private_bus_checkpoint.py:1410: in opened_private_checkpoint_unlocked
+    db = resources.enter_context(closing(marker.access.open_checkpoint(path, shared=shared)))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/wire_metadata.py:59: in open_checkpoint
+    return _connect(path, readonly=shared)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/tmp/pytest-of-ts/pytest-4897/test_new_policy_declaration_us0/wire/private_bus_checkpoint.sqlite3')
+readonly = True
+
+    def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
+        if path.is_symlink() or not path.exists():
+>           raise RelationViolationError("Private bus checkpoint is missing or redirected.")
+E           agent_comms.errors.RelationViolationError: Private bus checkpoint is missing or redirected.
+
+.scratch/p82/main-source/src/agent_comms/private_bus_checkpoint.py:1127: RelationViolationError
+______ test_duplicate_json_key_is_typed_and_never_enters_uncertified_read ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4897/test_duplicate_json_key_is_typ0')
+
+    def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path):
+        import json
+    
+        from agent_comms.bus_publication import DuplicateWireKeyError
+        from agent_comms.errors import StoredHistoryUnreadable
+    
+        case = _ready(tmp_path, direct=True)
+        try:
+            marker = case.bus.log._private_marker_unlocked()
+            row = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
+            (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+            marker.checkpoint_version = None
+            marker.checkpoint_seal = None
+            case.bus.log.write_metadata_unlocked(marker)
+            raw = '{"seq":' + str(row["seq"]) + ',' + json.dumps(row)[1:] + '\n'
+            case.bus.log.path.write_text(raw)
+            before = case.bus.log.path.read_bytes()
+            with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as raised:
+>               list(case.bus.full_history_page().messages)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_keyed_response_delivery.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.scratch/p82/main-source/src/agent_comms/message_bus.py:397: in full_history_page
+    return self.display_page(
+.scratch/p82/main-source/src/agent_comms/message_bus.py:361: in display_page
+    ).read(self.log)
+      ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/message_page.py:197: in read
+    with log._opened_wire_snapshot(need_sequence=False) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/wire_log.py:643: in _opened_wire_snapshot
+    with _store_read_lock(self.path) as lock:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/store_files.py:236: in _store_read_lock
+    lock = resources.enter_context(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/store_files.py:219: in _store_lock
+    with _held_store_source(store_path, lock_file, platform, max_bus_bytes,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/store_files.py:195: in _held_store_source
+    with WireLog(store_path).verify_before_read_unlocked(shared=shared) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/wire_log.py:775: in verify_before_read_unlocked
+    with opened_private_checkpoint_unlocked(self, private_marker, shared=shared) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/private_bus_checkpoint.py:1410: in opened_private_checkpoint_unlocked
+    db = resources.enter_context(closing(marker.access.open_checkpoint(path, shared=shared)))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/p82/main-source/src/agent_comms/wire_metadata.py:59: in open_checkpoint
+    return _connect(path, readonly=shared)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/tmp/pytest-of-ts/pytest-4897/test_duplicate_json_key_is_typ0/wire/private_bus_checkpoint.sqlite3')
+readonly = True
+
+    def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
+        if path.is_symlink() or not path.exists():
+>           raise RelationViolationError("Private bus checkpoint is missing or redirected.")
+E           agent_comms.errors.RelationViolationError: Private bus checkpoint is missing or redirected.
+
+.scratch/p82/main-source/src/agent_comms/private_bus_checkpoint.py:1127: RelationViolationError
+=========================== short test summary info ============================
+FAILED tests/test_keyed_response_delivery.py::test_duplicate_valid_response_key_denied_by_cold_reader
+FAILED tests/test_keyed_response_delivery.py::test_new_policy_declaration_uses_full_and_certified_record_readers
+FAILED tests/test_keyed_response_delivery.py::test_duplicate_json_key_is_typed_and_never_enters_uncertified_read
+3 failed, 2 passed, 20 deselected in 3.62s

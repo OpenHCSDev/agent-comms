@@ -1,0 +1,352 @@
+....................................................FF.................. [ 87%]
+F..FF....s                                                               [100%]
+=================================== FAILURES ===================================
+______ test_reply_has_frozen_awareness_and_selected_native_barrier[False] ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4893/test_reply_has_frozen_awarenes0')
+direct = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("direct", [False, True])
+    async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, direct: bool):
+        case = _ready(tmp_path, direct=direct)
+        try:
+            # A subscriber arriving after the original is not a historical recipient.
+            case.comms.registry.declare(Thread("late", frozenset({"team"}), worktree=str(tmp_path)))
+            sender = case.comms.registry.require("sender")
+            lookup = RecordedThreadIncarnation("fixture", sender.created_at).lookup
+            intent = prepare_fenced_response(
+                case.store,
+                case.bus,
+                case.fence,
+                "Here is the answer @sender",
+                exact_target=case.reply_target, owner_witness=case.witness,
+            ).value
+            publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
+            response = case.bus.log.read_keyed_response(intent)
+            delivery = case.bus.log.read_delivery_cohort(case.root_id, response.seq)
+            assert delivery.audience.canonical_members == {"sender"}
+            assert delivery.decisions[0].wake_mode.triage
+            coverage = SourceCoverage(
+                case.bus, case.store, wire_root_id=case.root_id, recipient_lookup=lookup
+            )
+            assert coverage.read().blocked_seq == response.seq
+            cursor = await _accept_visible_deliveries(
+                case.bus, case.root_id, case.store.session.path, lookup, 0, owner_name="sender"
+            )
+            assert cursor == response.seq
+            assignments = sealed_cohort_assignments(case.store, lookup)
+            assert [a.wire_seq for a in assignments] == [response.seq]
+            # Acceptance does not pretend the model saw the reply.
+            assert coverage.read().blocked_seq == response.seq
+            assert coverage.read().injected_source_seqs == ()
+            with case.bus.log.locked():
+                marker = case.bus.log._private_marker_unlocked()
+                pointers = addressed_source_pointers_unlocked(case.bus.log, marker, lookup)
+            assert [p.seq for p in pointers] == [response.seq]
+            assert str(response.seq) in "".join(segment.text() for segment in case.bus.awareness_segments(sender, ()))
+            # Optional scheduling hints consume the same canonical reply declaration.
+            from agent_comms.wake_candidate_index import WakeCandidateIndex
+    
+            candidates = WakeCandidateIndex(case.bus.log)
+            assert candidates.maintain(rebuild=True)
+            page = candidates.page(
+                root_id=case.root_id, recipient_lookup=lookup, after_seq=0,
+                required_through_seq=response.seq,
+            )
+            assert [entry.source_seq for entry in page.entries] == [response.seq]
+>           assert page.entries[0].wake_mode is BoundedTriageWake
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'Candidate' object has no attribute 'wake_mode'
+
+tests/test_keyed_response_delivery.py:68: AttributeError
+______ test_reply_has_frozen_awareness_and_selected_native_barrier[True] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4893/test_reply_has_frozen_awarenes1')
+direct = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("direct", [False, True])
+    async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, direct: bool):
+        case = _ready(tmp_path, direct=direct)
+        try:
+            # A subscriber arriving after the original is not a historical recipient.
+            case.comms.registry.declare(Thread("late", frozenset({"team"}), worktree=str(tmp_path)))
+            sender = case.comms.registry.require("sender")
+            lookup = RecordedThreadIncarnation("fixture", sender.created_at).lookup
+            intent = prepare_fenced_response(
+                case.store,
+                case.bus,
+                case.fence,
+                "Here is the answer @sender",
+                exact_target=case.reply_target, owner_witness=case.witness,
+            ).value
+            publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
+            response = case.bus.log.read_keyed_response(intent)
+            delivery = case.bus.log.read_delivery_cohort(case.root_id, response.seq)
+            assert delivery.audience.canonical_members == {"sender"}
+            assert delivery.decisions[0].wake_mode.triage
+            coverage = SourceCoverage(
+                case.bus, case.store, wire_root_id=case.root_id, recipient_lookup=lookup
+            )
+            assert coverage.read().blocked_seq == response.seq
+            cursor = await _accept_visible_deliveries(
+                case.bus, case.root_id, case.store.session.path, lookup, 0, owner_name="sender"
+            )
+            assert cursor == response.seq
+            assignments = sealed_cohort_assignments(case.store, lookup)
+            assert [a.wire_seq for a in assignments] == [response.seq]
+            # Acceptance does not pretend the model saw the reply.
+            assert coverage.read().blocked_seq == response.seq
+            assert coverage.read().injected_source_seqs == ()
+            with case.bus.log.locked():
+                marker = case.bus.log._private_marker_unlocked()
+                pointers = addressed_source_pointers_unlocked(case.bus.log, marker, lookup)
+            assert [p.seq for p in pointers] == [response.seq]
+            assert str(response.seq) in "".join(segment.text() for segment in case.bus.awareness_segments(sender, ()))
+            # Optional scheduling hints consume the same canonical reply declaration.
+            from agent_comms.wake_candidate_index import WakeCandidateIndex
+    
+            candidates = WakeCandidateIndex(case.bus.log)
+            assert candidates.maintain(rebuild=True)
+            page = candidates.page(
+                root_id=case.root_id, recipient_lookup=lookup, after_seq=0,
+                required_through_seq=response.seq,
+            )
+            assert [entry.source_seq for entry in page.entries] == [response.seq]
+>           assert page.entries[0].wake_mode is BoundedTriageWake
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'Candidate' object has no attribute 'wake_mode'
+
+tests/test_keyed_response_delivery.py:68: AttributeError
+___________ test_duplicate_valid_response_key_denied_by_cold_reader ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4893/test_duplicate_valid_response_0')
+
+    def test_duplicate_valid_response_key_denied_by_cold_reader(tmp_path):
+        import json
+        from dataclasses import replace
+    
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
+        from agent_comms.response_conversation import ResponseConversation
+    
+        case = _ready(tmp_path, direct=True)
+        try:
+            intent = prepare_fenced_response(
+                case.store, case.bus, case.fence, "answer", exact_target=case.reply_target, owner_witness=case.witness
+            ).value
+            publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
+            response = case.bus.log.read_keyed_response(intent)
+            with case.bus.log.locked():
+                snapshot = case.store.snapshots.get("exec")
+                conversation = ResponseConversation.capture(
+                    case.bus, snapshot, snapshot.require_wire_response(case.reply_target)
+                )
+                duplicate = conversation.record(
+                    case.root_id, replace(response, seq=response.seq + 1), intent
+                )
+                marker = case.bus.log._private_marker_unlocked()
+            with case.bus.log.path.open("a") as stream:
+                stream.write(json.dumps(duplicate) + "\n")
+            (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+            marker.last_seq = response.seq + 1
+            marker.checkpoint_version = None
+            marker.checkpoint_seal = None
+            case.bus.log.write_metadata_unlocked(marker)
+>           with pytest.raises(RelationViolationError, match="Malformed public bus row"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'Malformed public bus row'
+E             Actual message: 'Private bus checkpoint is missing or redirected.'
+
+tests/test_keyed_response_delivery.py:172: AssertionError
+______ test_new_policy_declaration_uses_full_and_certified_record_readers ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4893/test_new_policy_declaration_us0')
+
+    def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path):
+        import json
+    
+        from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
+        from agent_comms.delivery_policy import DeliveryPolicy, InitialDeliveryPolicy
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.private_bus_checkpoint import (
+            install_private_bus_checkpoint,
+        )
+    
+        class ExtendedDeliveryPolicy(InitialDeliveryPolicy):
+            pass
+    
+        case = _ready(tmp_path, direct=True)
+        try:
+            marker = case.bus.log._private_marker_unlocked()
+            raw = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
+            policy = FieldCodec.decode(DeliveryPolicy, raw[PRIVATE_WIRE_FIELD])
+            raw[PRIVATE_WIRE_FIELD] = FieldCodec.encode(
+                ExtendedDeliveryPolicy(version=policy.version, initial=policy.initial)
+            )
+            # Explicit cold setup on this disposable root. No old seal is claimed
+            # for changed bytes; the real installation scans and certifies them.
+            (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+            marker.checkpoint_version = None
+            marker.checkpoint_seal = None
+            case.bus.log.write_metadata_unlocked(marker)
+            case.bus.log.path.write_text(json.dumps(raw) + "\n")
+>           public = list(case.bus.full_history_page().messages)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_keyed_response_delivery.py:230: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/message_bus.py:397: in full_history_page
+    return self.display_page(
+src/agent_comms/message_bus.py:361: in display_page
+    ).read(self.log)
+      ^^^^^^^^^^^^^^
+src/agent_comms/message_page.py:197: in read
+    with log._opened_wire_snapshot(need_sequence=False) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:643: in _opened_wire_snapshot
+    with _store_read_lock(self.path) as lock:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:236: in _store_read_lock
+    lock = resources.enter_context(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:219: in _store_lock
+    with _held_store_source(store_path, lock_file, platform, max_bus_bytes,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:195: in _held_store_source
+    with WireLog(store_path).verify_before_read_unlocked(shared=shared) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:775: in verify_before_read_unlocked
+    with opened_private_checkpoint_unlocked(self, private_marker, shared=shared) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/private_bus_checkpoint.py:1460: in opened_private_checkpoint_unlocked
+    db = resources.enter_context(closing(marker.access.open_checkpoint(path, shared=shared)))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/wire_metadata.py:59: in open_checkpoint
+    return _connect(path, readonly=shared)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/tmp/pytest-of-ts/pytest-4893/test_new_policy_declaration_us0/wire/private_bus_checkpoint.sqlite3')
+readonly = True
+
+    def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
+        if path.is_symlink() or not path.exists():
+>           raise RelationViolationError("Private bus checkpoint is missing or redirected.")
+E           agent_comms.errors.RelationViolationError: Private bus checkpoint is missing or redirected.
+
+src/agent_comms/private_bus_checkpoint.py:1177: RelationViolationError
+______ test_duplicate_json_key_is_typed_and_never_enters_uncertified_read ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4893/test_duplicate_json_key_is_typ0')
+
+    def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path):
+        import json
+    
+        from agent_comms.bus_publication import DuplicateWireKeyError
+        from agent_comms.errors import StoredHistoryUnreadable
+    
+        case = _ready(tmp_path, direct=True)
+        try:
+            marker = case.bus.log._private_marker_unlocked()
+            row = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
+            (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+            marker.checkpoint_version = None
+            marker.checkpoint_seal = None
+            case.bus.log.write_metadata_unlocked(marker)
+            raw = '{"seq":' + str(row["seq"]) + ',' + json.dumps(row)[1:] + '\n'
+            case.bus.log.path.write_text(raw)
+            before = case.bus.log.path.read_bytes()
+            with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as raised:
+>               list(case.bus.full_history_page().messages)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_keyed_response_delivery.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/message_bus.py:397: in full_history_page
+    return self.display_page(
+src/agent_comms/message_bus.py:361: in display_page
+    ).read(self.log)
+      ^^^^^^^^^^^^^^
+src/agent_comms/message_page.py:197: in read
+    with log._opened_wire_snapshot(need_sequence=False) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:643: in _opened_wire_snapshot
+    with _store_read_lock(self.path) as lock:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:236: in _store_read_lock
+    lock = resources.enter_context(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:530: in enter_context
+    result = _enter(cm)
+             ^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:219: in _store_lock
+    with _held_store_source(store_path, lock_file, platform, max_bus_bytes,
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/store_files.py:195: in _held_store_source
+    with WireLog(store_path).verify_before_read_unlocked(shared=shared) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:775: in verify_before_read_unlocked
+    with opened_private_checkpoint_unlocked(self, private_marker, shared=shared) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/private_bus_checkpoint.py:1460: in opened_private_checkpoint_unlocked
+    db = resources.enter_context(closing(marker.access.open_checkpoint(path, shared=shared)))
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/wire_metadata.py:59: in open_checkpoint
+    return _connect(path, readonly=shared)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/tmp/pytest-of-ts/pytest-4893/test_duplicate_json_key_is_typ0/wire/private_bus_checkpoint.sqlite3')
+readonly = True
+
+    def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
+        if path.is_symlink() or not path.exists():
+>           raise RelationViolationError("Private bus checkpoint is missing or redirected.")
+E           agent_comms.errors.RelationViolationError: Private bus checkpoint is missing or redirected.
+
+src/agent_comms/private_bus_checkpoint.py:1177: RelationViolationError
+=========================== short test summary info ============================
+FAILED tests/test_keyed_response_delivery.py::test_reply_has_frozen_awareness_and_selected_native_barrier[False]
+FAILED tests/test_keyed_response_delivery.py::test_reply_has_frozen_awareness_and_selected_native_barrier[True]
+FAILED tests/test_keyed_response_delivery.py::test_duplicate_valid_response_key_denied_by_cold_reader
+FAILED tests/test_keyed_response_delivery.py::test_new_policy_declaration_uses_full_and_certified_record_readers
+FAILED tests/test_keyed_response_delivery.py::test_duplicate_json_key_is_typed_and_never_enters_uncertified_read
+5 failed, 76 passed, 1 skipped in 18.09s

@@ -1,0 +1,18 @@
+..F....                                                                  [100%]
+=================================== FAILURES ===================================
+___ test_large_transition_reopens_and_exports_without_a_second_parser_limit ____
+tests/test_envelope_bus_integration.py:558: in test_large_transition_reopens_and_exports_without_a_second_parser_limit
+    assert comms.bus.log.messages_for_references((committed.reference,)) == (committed,)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:699: in messages_for_references
+    return tuple(source.message for source in self.deliveries_for_references(references))
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:706: in deliveries_for_references
+    originals = source.references(references)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/private_bus_checkpoint.py:338: in references
+    raise RelationViolationError("Notification reference is not its original source")
+E   agent_comms.errors.RelationViolationError: Notification reference is not its original source
+=========================== short test summary info ============================
+FAILED tests/test_envelope_bus_integration.py::test_large_transition_reopens_and_exports_without_a_second_parser_limit
+1 failed, 6 passed, 42 deselected in 3.10s

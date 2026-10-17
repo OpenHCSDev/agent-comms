@@ -1,0 +1,10 @@
+........................................F............................... [ 66%]
+.....................................                                    [100%]
+=================================== FAILURES ===================================
+________________ test_new_response_state_roundtrips_real_store _________________
+tests/test_coordination_nominal.py:229: in test_new_response_state_roundtrips_real_store
+    db.execute(
+E   sqlite3.IntegrityError: obligation target does not match wire execution
+=========================== short test summary info ============================
+FAILED tests/test_coordination_nominal.py::test_new_response_state_roundtrips_real_store
+1 failed, 108 passed in 26.46s

@@ -1,0 +1,34 @@
+.......................................FF...................F........... [ 68%]
+.................................                                        [100%]
+=================================== FAILURES ===================================
+__________ test_durable_turn_records_native_phases_before_completion ___________
+tests/test_coordination_nominal.py:202: in test_durable_turn_records_native_phases_before_completion
+    store.attempts.settle_nonpublication(
+src/agent_comms/attempt_store.py:320: in settle_nonpublication
+    snapshot.settle(self.session, outcome, reason_code, acquired)
+src/agent_comms/coordination_snapshot.py:240: in settle
+    session.release_resources(self, outcome, boundary)
+src/agent_comms/coordination_session.py:167: in release_resources
+    snapshot.release_resources(boundary, outcome)
+src/agent_comms/coordination_snapshot.py:345: in release_resources
+    metadata = bus.log._private_marker_unlocked()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:504: in _private_marker_unlocked
+    raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E   agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+________________ test_new_response_state_roundtrips_real_store _________________
+tests/test_coordination_nominal.py:222: in test_new_response_state_roundtrips_real_store
+    db.execute(
+E   sqlite3.OperationalError: table executions has no column named exact_target
+__________ test_two_processes_serialize_checkpoint_replay_and_commit ___________
+tests/test_wake_candidate_index.py:117: in test_two_processes_serialize_checkpoint_replay_and_commit
+    assert checkpoint == (expected_seq, expected_bytes)
+E   assert (125, 677159) == (129, 698967)
+E     
+E     At index 0 diff: 125 != 129
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/test_coordination_nominal.py::test_durable_turn_records_native_phases_before_completion
+FAILED tests/test_coordination_nominal.py::test_new_response_state_roundtrips_real_store
+FAILED tests/test_wake_candidate_index.py::test_two_processes_serialize_checkpoint_replay_and_commit
+3 failed, 102 passed in 19.29s

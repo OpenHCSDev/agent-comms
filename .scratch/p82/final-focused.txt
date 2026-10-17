@@ -1,0 +1,31 @@
+........................................................................ [ 88%]
+....F.FF.                                                                [100%]
+=================================== FAILURES ===================================
+_____________ test_channel_assignments_are_visible_from_agent_view _____________
+tests/test_message_notifications.py:16: in test_channel_assignments_are_visible_from_agent_view
+    assert receipt.label == 'Sent'
+E   AssertionError: assert 'Sent 23:49' == 'Sent'
+E     
+E     - Sent
+E     + Sent 23:49
+_________ test_live_turn_never_presents_ready_between_activity_events __________
+tests/test_message_notifications.py:41: in test_live_turn_never_presents_ready_between_activity_events
+    assert state.activity in view.presentation.summary
+E   AssertionError: assert 'Preparing input' in 'Thinking'
+E    +  where 'Preparing input' = TurnState(active=ActiveTurn(id='test-active-turn', owner_pid=2477171, started_at=1792209000.633469, routing=None, admission_generation=3, turn_generation=1, phase=PreparingPhase(detail='')), finished_turn_id=None).activity
+E    +  and   'Thinking' = ThreadPresentation(title='beta', marker='⌛', summary='Thinking', status=WorkingThreadPresentationStatus(), notificatio...ss=ProcessIdentity(pid=2477171, start_time=168462371)), read_identity=None, incoming_references=(), sent_references=()).summary
+E    +    where ThreadPresentation(title='beta', marker='⌛', summary='Thinking', status=WorkingThreadPresentationStatus(), notificatio...ss=ProcessIdentity(pid=2477171, start_time=168462371)), read_identity=None, incoming_references=(), sent_references=()) = ThreadView(thread=Thread(name='beta', tags=frozenset({'team'}), worktree='/var/tmp/ac-sealed-test-iem3l92n', created_a...ame='beta', created_at=1792208999.4327414), generation=3), process=ProcessIdentity(pid=2477171, start_time=168462371))).presentation
+_______ test_individual_view_keeps_alias_goal_and_active_owner_semantics _______
+tests/test_message_notifications.py:66: in test_individual_view_keeps_alias_goal_and_active_owner_semantics
+    assert state.activity in comms.views.thread_presentation('beta').summary
+E   AssertionError: assert 'Preparing input' in 'Thinking'
+E    +  where 'Preparing input' = TurnState(active=ActiveTurn(id='individual-active-turn', owner_pid=2477171, started_at=1792209001.9270525, routing=None, admission_generation=3, turn_generation=1, phase=PreparingPhase(detail='')), finished_turn_id=None).activity
+E    +  and   'Thinking' = ThreadPresentation(title='renamed', marker='⌛', summary='Thinking', status=WorkingThreadPresentationStatus(), notifica...ter=None, through=None), incoming_references=(MessageReference(seq=1, message_id='333e0beee7a8'),), sent_references=()).summary
+E    +    where ThreadPresentation(title='renamed', marker='⌛', summary='Thinking', status=WorkingThreadPresentationStatus(), notifica...ter=None, through=None), incoming_references=(MessageReference(seq=1, message_id='333e0beee7a8'),), sent_references=()) = thread_presentation('beta')
+E    +      where thread_presentation = <agent_comms.history_views.HistoryViews object at 0x7f35481392e0>.thread_presentation
+E    +        where <agent_comms.history_views.HistoryViews object at 0x7f35481392e0> = <agent_comms.comms.Comms object at 0x7f354bdde410>.views
+=========================== short test summary info ============================
+FAILED tests/test_message_notifications.py::test_channel_assignments_are_visible_from_agent_view
+FAILED tests/test_message_notifications.py::test_live_turn_never_presents_ready_between_activity_events
+FAILED tests/test_message_notifications.py::test_individual_view_keeps_alias_goal_and_active_owner_semantics
+3 failed, 78 passed in 15.44s
