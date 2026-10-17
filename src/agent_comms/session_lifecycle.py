@@ -150,7 +150,7 @@ class SessionLifecycle:
             )
 
     def declare_thread(self, cwd: str) -> Thread:
-        """Publish the participant before this lifecycle resolves execution custody."""
+        """Register the participant before choosing which process executes it."""
         thread = self.comms.threads.claim_thread(
             self.thread_name_for(cwd),
             tags=frozenset({"acp"}),
@@ -347,7 +347,7 @@ class SessionLifecycle:
         )
 
     async def retire_proxy(self, session_id: str) -> None:
-        """Keep custody until the original reader is closed and joined."""
+        """Keep the proxy registered until its reader is closed and awaited."""
         proxy = self.proxies.get(session_id)
         if proxy is not None:
             retirement = asyncio.create_task(proxy.close())

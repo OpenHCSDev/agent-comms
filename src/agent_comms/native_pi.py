@@ -270,7 +270,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
             except (OSError, sqlite3.Error, ValueError, TypeError) as error:
                 raise NativePiUnavailable("Native proof indexed evidence is unavailable") from error
             # Consumer exceptions retain their original boundary and disposition.
-            # Custody closes the database/descriptor without classifying callers.
+            # The ExitStack closes the database and descriptor without handling caller errors.
             yield db
             try:
                 if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
@@ -549,7 +549,7 @@ class NativePiRpcLaunch:
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
 
-        Only original child custody may consume it after comparing the complete
+        Only the session that owns the child may reuse it after comparing the complete
         launch/auth key and checking its actual saved-source revision/liveness.
         A different package or selected file needs its own fresh acquisition.
         """
@@ -745,7 +745,7 @@ class VerifiedNativeEvidencePrefix:
 class PrivateEvidenceRead:
     """Pinned private source with one owned verified-prefix state.
 
-    Resource custody lasts until close. Initial acquisition verifies the full
+    This reader holds its descriptor until close. The first read verifies the full
     prefix. Later observations trust an unchanged pinned revision and extend
     its running digest only across appended bytes; non-growth revision changes
     reverify the retained prefix before it can be reused.

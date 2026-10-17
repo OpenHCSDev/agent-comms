@@ -341,7 +341,7 @@ class WakeCandidateIndex(TypedStore):
                 stat = os.fstat(stream.fileno())
                 with self.writing() as db:
                     # TypedStore installs schema atomically. Capture the stored
-                    # row, then release SQL custody before reading or decoding.
+                    # row, then close the SQL connection before reading or decoding.
                     recorded = CandidateCheckpoint.current(db)
                 checkpoint = self._checkpoint_start(
                     recorded, stream, stat, root_id,
@@ -357,8 +357,8 @@ class WakeCandidateIndex(TypedStore):
                         tail = self._source_end(stream, batch.next_offset)
                         self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
                         return batch.next_offset >= source.boundary
-                # Another writer's committed row owns progress. Release SQL
-                # custody before validating its source; never replay a batch.
+                # Another writer's committed row owns progress. Close the SQL
+                # connection before validating its source; never replay a batch.
                 advanced = self._checkpoint_start(
                     current, stream, os.fstat(stream.fileno()), root_id,
                     rebuild=False,

@@ -500,7 +500,7 @@ class InputObservation:
     async def _observe_coordination(
         self, session_id: str, root_id: str, wire: tuple, entry: RegistryEntry,
     ) -> PrivateObservation:
-        # No physical bus custody survives into registry/SQL consumer work.
+        # Release all bus locks before starting registry/SQL consumer work.
         # The original coordinator owns its bounded read acquisition policy;
         # the observation must not replace it with a zero-wait failure.
         return await Coordination.run_read_async(

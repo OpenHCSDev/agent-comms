@@ -333,7 +333,7 @@ class DisplaySelection:
     ) -> Iterator[DisplaySelection]:
         """Borrow the original identity resources and read the ledger once.
 
-        Read-ledger custody ends before yielding: painted acknowledgement may
+        Finish reading the ledger before yielding: painted acknowledgement may
         write that same ledger while identity and membership remain acquired.
         """
         with registry.store.reading() as document, catalog.reading() as channels:
@@ -437,7 +437,7 @@ class BusPresentation:
                     self.registry, self.catalog, self.bus.reads, viewer
                 ) as basis:
                     scope = basis.scope(target.name)
-            # Identity capture does not grant custody over page preparation. Both
+            # Reading identity is separate from preparing pages. Both
             # DM and channel pages borrow the same original reader and source cut.
             page = ConversationMessagePageRequest.capture(
                 scope, before=before, after=after, limit=limit, max_bytes=max_bytes

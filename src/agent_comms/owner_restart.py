@@ -96,7 +96,7 @@ class RetiredOwnerLaunch:
 
 @dataclass(frozen=True)
 class OwnerRestartHandoff:
-    """Bounded original custody, transferred once; never persisted credentials."""
+    """Captured owner launches passed to the next phase once; never saved credentials."""
 
     root: str
     owners: tuple[RetiredOwnerLaunch, ...]
@@ -172,7 +172,7 @@ class StoppedOwnerBatch:
         return self.handoff.launch(self.lifecycle, runtime)
 
     def close(self) -> None:
-        """Explicitly release physical custody; never launch or retry inputs."""
+        """Release held locks and descriptors; never launch or retry inputs."""
         self.custody.close()
 
     def recover(self, operation: OwnerCutover) -> tuple[OwnerRestartResult, ...]:

@@ -50,7 +50,7 @@ class SessionRevision(SessionObservation):
     """One native-file revision and its separately observed input-proof resource.
 
     A retained child is current while both are unchanged. None of these
-    observations acquires native custody.
+    observations takes ownership of the native child.
     """
 
     native: FileRevision

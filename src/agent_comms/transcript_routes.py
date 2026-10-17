@@ -197,7 +197,7 @@ class TranscriptRoutes:
     def record_turn_publication(self, registry, log, lease, checkpoint, routing, published):
         """Join a completed native producer to its original committed wire rows.
 
-        Native traversal closes before taking source custody. Existing wire,
+        Finish reading native history before locking the sources. Existing wire,
         registry and input owners remain held until durable annotations commit.
         A partial successful send subset remains published if a later send fails.
         """

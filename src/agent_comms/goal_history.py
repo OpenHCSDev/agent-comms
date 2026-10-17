@@ -67,7 +67,7 @@ class GoalHistoryStore:
 
     @classmethod
     def acquire_read_only(cls, registry_path: Path) -> tuple[GoalHistoryEntry, ...]:
-        """Acquire full original rows; caller holds original registry custody.
+        """Read the full stored rows while the caller holds the registry lock.
 
         This boundary never constructs a store, initializes a database, observes
         current goals or reconciles pending writes. Missing/foreign storage is a

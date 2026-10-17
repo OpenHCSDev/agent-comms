@@ -92,7 +92,7 @@ class WireInputOrigin(InputOrigin):
 class HumanInputOrigin(InputOrigin):
     """Same cooperative local USER contract as the original wire publisher.
 
-    The attached controller proves only transport custody. This original USER
+    The attached controller proves only who holds the transport. This USER
     declaration supplies authorship, not executable or tool authority.
     """
 

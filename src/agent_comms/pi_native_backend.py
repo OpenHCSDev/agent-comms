@@ -3,10 +3,10 @@
 ``PiNativeBackend`` is the only entry point Core uses for this runtime. It owns
 the per-session child (``PersistentPiSession``), its launch command, and the
 conversions from Pi's RPC, session file and settings vocabulary to Core's
-records. The transport and turn machinery stay in their modules (``backend``,
-``native_custody``, ``pi_commands``, ``pi_events``, ``native_entries``) as this
-backend's private implementation and are imported lazily: this module is
-declared while ``threads`` is still importing.
+records. The transport, child lifecycle and turn machinery stay in private
+implementation modules (``backend``, ``pi_commands``, ``pi_events``,
+``native_entries``) and are imported lazily: this module is declared while
+``threads`` is still importing.
 """
 
 from __future__ import annotations
@@ -182,7 +182,7 @@ class PiNativeBackend(
 ):
     """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
 
-    The instance is the session's child custody. Its launch command (``agent_bin``
+    The instance owns the session's child. Its launch command (``agent_bin``
     plus ``agent_args``) and the publisher of attested session info are fixed
     when the worker creates it.
     """

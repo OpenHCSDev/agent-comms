@@ -283,7 +283,7 @@ class SelectedConsideration:
             settled = outcome.settle(participant, stage, request.admission, result.context)
             continued = session.continued(result.context)
         # The FULL request owns its own failure boundary. Never report its
-        # failure through the already-proved triage input's request custody.
+        # failure through the already-completed triage request's error handler.
         return await outcome.continue_turn(
             participant, continued, request.admission.input_id, execution, settled
         )

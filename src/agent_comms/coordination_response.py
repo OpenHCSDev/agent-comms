@@ -318,7 +318,7 @@ class LiveResponseOwner(RegistryOwner):
         self, store_path: Path, bus: MessageBus, fence: OwnerFence,
         replies: tuple[Message, ...],
     ) -> RecoverySnapshot:
-        """Join all original route publications before releasing turn custody.
+        """Wait for every route write before releasing the turn's resources.
 
         The worker owns its connection and each original ordered write fence.
         Only frozen proposals and the original owner/fence cross into it; no
