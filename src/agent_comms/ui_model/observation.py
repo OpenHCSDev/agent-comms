@@ -578,8 +578,10 @@ class ThreadReading(Observation[ObserveThreads]):
         names = self.request.names
         try:
             snapshot = comms.registry.snapshot()
-            activity = comms.agents.all_activity(snapshot.visible_threads(
+            captured = comms.agents.all_activity(snapshot.visible_threads(
                 names=names, show_stopped=True, show_archived=False), snapshot=snapshot)
+            activity = {name: captured[canonical] for name in names
+                        if (canonical := snapshot.canonical_name(name)) in captured}
             if previous is not None:
                 names = (revision.changed_threads(previous, comms, activity) | names - previous.changed_since(None)) & names
             if names:
