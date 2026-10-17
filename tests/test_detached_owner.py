@@ -85,7 +85,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
             if any(
                 isinstance(fact, TurnChangedUpdate)
                 and fact.state.active is None and fact.state.finished_turn_id is not None
-                for fact in decode_updates(update.get("_meta"))
+                for fact in decode_updates(update.field_meta)
             ):
                 settled.set()
 
