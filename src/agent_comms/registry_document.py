@@ -102,7 +102,7 @@ class RegistryDocument(RegistryPresence):
             last_seen=self.last_seen[thread.name],
             owner_generation=self.owners.generations[thread.name],
             admission_generation=self.admissions.generations[thread.name],
-            names=RegistryEntry.names_for(thread, self.aliases),
+            names=self.names_for(thread.name),
         )
 
     @classmethod
@@ -526,12 +526,6 @@ class RegistryEntry:
     owner_generation: int
     admission_generation: int
     names: frozenset[str]
-
-    @staticmethod
-    def names_for(thread: Thread, aliases: Mapping[str, str]) -> frozenset[str]:
-        return frozenset({thread.name, *(
-            alias for alias, target in aliases.items() if target == thread.name
-        )})
 
     def matches_name(self, name: str) -> bool:
         return name in self.names

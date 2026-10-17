@@ -312,16 +312,6 @@ class Registration:
         with self.store.reading() as document:
             return document.canonical_name(name)
 
-    def aliases_for(self, name: str) -> frozenset[str]:
-        with self.store.reading() as document:
-            canonical = document.canonical_name(name)
-            return frozenset(
-                {
-                    canonical,
-                    *(alias for alias, target in document.aliases.items() if target == canonical),
-                }
-            )
-
     def goal_history(
         self, name: str, *, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
