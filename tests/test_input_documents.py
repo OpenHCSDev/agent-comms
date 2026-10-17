@@ -25,7 +25,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import insert_inputs, stored_inputs
 
 
-def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custody(tmp_path):
+def test_original_batch_publication_preserves_prior_rows_and_reserves_only_new_inputs(tmp_path):
     store = InputDispositions(tmp_path)
     args = dict(seq=None, owner="worker", claim_scope=1, target="worker", text="Prior input")
     assert store.record("prior", **args)

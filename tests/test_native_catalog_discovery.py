@@ -22,7 +22,7 @@ from delivery_owner_fixture import canonical_agent
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
-async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_backend, monkeypatch):
+async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, monkeypatch):
     """Actual SDK fork/two fresh children; lend artifact, never input readiness."""
     import hashlib
     import os
@@ -35,7 +35,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.coordination_errors import IdentityConflict
     from agent_comms.coordinator import Coordination
-    from agent_comms.native_custody import PiSessionChild
+    from agent_comms.native_child import PiSessionChild
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_entries import NativeEntry
     from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -146,7 +146,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
         await asyncio.gather(observing, return_exceptions=True)
 
     assert hashlib.sha256(source.read_bytes()).hexdigest() == before
-    print("actual_selected_launch_custody", json.dumps({
+    print("actual_selected_launch_child", json.dumps({
         "preclaim_and_first_verifications": 1, "borrowed_verifications": 0,
         "independent_verifications": 1, "auth_changed": True,
         "children_retired": [child.proc.retired for child in children],

@@ -295,7 +295,7 @@ def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_
     assert (root / "read-marker").read_text() == "new write completed"
 
 
-def test_client_custody_explicit_published_root_and_cross_thread_retirement(tmp_path, monkeypatch):
+def test_client_cleanup_explicit_published_root_and_cross_thread_retirement(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
     route_file = tmp_path / "route-state" / "active-route.json"
     route_file.parent.mkdir(mode=0o700)

@@ -138,7 +138,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
     def started(self, public_id, native_id, text):
         self.starts.append((public_id, native_id, text))
         child = backend.TurnSession.active[asyncio.current_task()].native.proc
-        # Custody is already with the saved-session owner at native input start;
+        # Cleanup already belongs to the saved-session owner at native input start;
         # there is no later copy from transient TurnSession process fields.
         assert self.persistent.child_state.child.proc is child
         assert self.persistent.child_state.child.reader is not None

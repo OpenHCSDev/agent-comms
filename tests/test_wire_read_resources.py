@@ -104,7 +104,7 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
         )] == [first.seq, second.seq]
 
 
-def test_relationship_tail_decode_does_not_retain_publication_custody(tmp_path, monkeypatch):
+def test_relationship_tail_decode_does_not_hold_publication_resources(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))

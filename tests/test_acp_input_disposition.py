@@ -184,7 +184,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
                for child in native.children)
 
 
-async def test_native_steer_keeps_original_input_and_turn_custody(native_backend):
+async def test_native_steer_keeps_original_input_and_turn_cleanup(native_backend):
     native = native_backend
     await native.author_history()
     saved = native.session.read_bytes()

@@ -220,10 +220,10 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
         await asyncio.gather(turn, return_exceptions=True)
 
 
-async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
+async def test_actual_native_cancelled_owner_stop_keeps_cleanup_resources(
     native_backend, monkeypatch
 ):
-    from agent_comms.native_custody import PiSessionChild, RetiringNative
+    from agent_comms.native_child import PiSessionChild, RetiringNative
 
     owner = native_backend
     owner.provider.status = 0
