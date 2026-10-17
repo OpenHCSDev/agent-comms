@@ -148,7 +148,7 @@ class AssignmentActivityEvidence(TypedRow):
     response: AssignmentResponse
 
     @classmethod
-    def projection(cls) -> dict[str, str]:
+    def column_projection(cls) -> dict[str, str]:
         return {
             "triage_inflight": "triage_inflight",
             "current_execution_id": "current_execution_id",
