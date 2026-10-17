@@ -15,7 +15,7 @@ from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .native_admission_rules import (
+from .private_send_rules import (
     GoalRegistryClaimCheck,
     GoalRegistryIdentityCheck,
     RegistryIdentityCheck,

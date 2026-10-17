@@ -19,7 +19,7 @@ from .goal_attempts import LaunchPermit
 from .messages import Message
 from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
-from .owned_send_admission import OwnedSend
+from .owned_send import OwnedSend
 from .native_input_owner import RegistryOwner
 from .native_pi import NativePiUnavailable
 from .coordinator import Coordination

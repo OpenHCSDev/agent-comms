@@ -27,7 +27,7 @@ from typing import Generic, TypeVar
 
 from agent_comms.coordinator import Coordination
 
-from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
+from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import CoordinationReadUnavailable

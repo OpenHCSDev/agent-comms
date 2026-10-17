@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import native_admission_rules as rules
+from agent_comms import private_send_rules as rules
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage

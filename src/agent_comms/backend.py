@@ -46,7 +46,7 @@ from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import SelectedToolDenied
-from .turn_admission import UnwrittenPrompt
+from .prompt_state import UnwrittenPrompt
 from .turn_inputs import InputForwarding
 from .turn_output import TurnOutput
 from .turn_phase import ShutdownPhase, TurnPhase
