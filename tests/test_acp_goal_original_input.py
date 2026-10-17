@@ -17,6 +17,7 @@ from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
 
@@ -38,7 +39,7 @@ async def owner(tmp_path, monkeypatch):
     await agent.new_session(str(tmp_path / "project"))
     session = tmp_path / "session.jsonl"
     session.touch()
-    comms.threads.attach_session("project", str(session))
+    comms.threads.attach_session(comms.registry.require("project"), str(session))
     return agent, comms, session, updates
 
 
@@ -56,7 +57,7 @@ async def test_idle_owner_original_input_preserves_autonomous_goal_grant(tmp_pat
     async def events(*args, **kwargs):
         native_id = "a" * 32
         with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
-            assert allowed is True
+            assert isinstance(allowed, GrantedSend)
         session.write_text(
             json.dumps(
                 {
@@ -125,7 +126,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         assert backend_calls == 0
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0].unresolved
-        assert not hasattr(rows[0], "native_id")
+        assert not rows[0].has_native_binding
         current = comms.registry.require("project").goal
         assert current.id == replacement.id and current.state.active
         generation = store.snapshot(replacement.id)
@@ -147,16 +148,17 @@ async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monke
     async def events(*args, **kwargs):
         comms.registry.unregister("project")
         with kwargs["send_boundary"](None, "b" * 32, args[2]) as allowed:
-            boundaries.append(allowed)
+            boundaries.append(type(allowed))
         yield ae.Done(ok=False, text="Owner stopped before send")
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await InitialInput.run(agent.inputs, "project", "project", "do not send after stop")
-        assert boundaries == [False]
+        with pytest.raises(RequestError, match="Internal error"):
+            await InitialInput.run(agent.inputs, "project", "project", "do not send after stop")
+        assert boundaries == [AuthorityChangedSend]
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0].unresolved
-        assert not hasattr(rows[0], "native_id")
+        assert not rows[0].has_native_binding
         # A refused owner input cannot spend an unrelated autonomous grant.
         assert store.snapshot(goal.id) == prior_generation
     finally:
