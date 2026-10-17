@@ -13,6 +13,10 @@ from .selected_session import SelectedSession
 class UnstartedRuntime(RuntimeLocation):
     owner: type[AgentBackend]
 
+    @property
+    def path(self) -> str:
+        raise ValueError("Canonical saved session required")
+
     def require_forkable(self):
         raise ValueError("Canonical saved session required")
 

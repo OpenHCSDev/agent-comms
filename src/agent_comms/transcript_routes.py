@@ -212,7 +212,7 @@ class TranscriptRoutes:
         thread = RegistryOwner.capture_local(initial, incarnation.name).thread
         if thread.turn_lease != lease.renamed(incarnation.name):
             raise RelationViolationError("Native publication has no current original turn")
-        path = Path(thread.require_saved_session())
+        path = Path(thread.runtime.path)
         revision = FileRevision.capture(path)
         if revision is None:
             raise RelationViolationError("Native publication has no retained session")

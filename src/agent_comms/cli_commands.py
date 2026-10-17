@@ -1516,7 +1516,7 @@ class ContextCliCommand(CliCommand):
                 try:
                     payload = await connection.request("context")
                     native = FieldCodec.decode(NativeContextData, payload).require_session_file(
-                        owner.require_saved_session())
+                        owner.runtime.path)
                 except (OSError, ValueError, RuntimeError, RequestError) as error:
                     return context, None, str(error)
                 return context, native, None
