@@ -274,7 +274,7 @@ class CatalogQuery(NativeQuery):
             async with BoundedRun.session(
                 launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
             ) as child:
-                stderr = asyncio.create_task(child.discard_stderr())
+                stderr = asyncio.create_task(child.stderr_tail())
                 try:
                     yield PiRpcChannel(child.stdout), child.stdin
                 finally:
