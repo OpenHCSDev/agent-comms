@@ -259,7 +259,7 @@ class RecoveryMonitorCapability:
         """Settle the old input without re-running it or fabricating delivery."""
         from .native_entries import NativeEntry
         from .native_pi import NativeContextProof, NativePiUnavailable
-        from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
+        from .native_prompt_binding import expected_prompt_matches_journal, expected_prompt_bindings
         from .pi_vocabulary import PendingStopReason
         from .private_path import FileRevision
 
@@ -275,9 +275,10 @@ class RecoveryMonitorCapability:
         revision = None
         session = source.selected_session
         if session is not None:
-            binding = read_expected_prompt_binding(store, source.input_id)
-            if binding is None or binding.identity != source.identity:
-                raise RecoveryBlocked("native recovery lacks its bound original input")
+            with expected_prompt_bindings(store, (source.input_id,)) as bindings:
+                binding = bindings.get(source.input_id)
+                if binding is None or binding.identity != source.identity:
+                    raise RecoveryBlocked("native recovery lacks its bound original input")
             revision = FileRevision.capture(session.path)
             with NativeEntry.open_evidence(session.path) as evidence:
                 if not expected_prompt_matches_journal(session.path, binding, evidence=evidence):
@@ -373,7 +374,7 @@ class RecoveryMonitorCapability:
         from agent_comms.native_pi import NativeContextProof
         from agent_comms.native_prompt_binding import (
             expected_prompt_matches_journal,
-            read_expected_prompt_binding,
+            expected_prompt_bindings,
         )
 
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
@@ -386,9 +387,10 @@ class RecoveryMonitorCapability:
             original_session = reserved.require_session_identity()
             session_file = Path(session_file).absolute()
             original_session.require_session(str(session_file))
-            binding = read_expected_prompt_binding(store, reserved.input_id)
-            if binding is None or binding.identity != reserved.identity:
-                raise RecoveryBlocked("native failure lacks its bound original input")
+            with expected_prompt_bindings(store, (reserved.input_id,)) as bindings:
+                binding = bindings.get(reserved.input_id)
+                if binding is None or binding.identity != reserved.identity:
+                    raise RecoveryBlocked("native failure lacks its bound original input")
             with NativeEntry.open_evidence(session_file) as evidence:
                 if not expected_prompt_matches_journal(session_file, binding, evidence=evidence):
                     raise RecoveryBlocked("native failure lacks its bound original input")

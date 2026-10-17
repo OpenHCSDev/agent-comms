@@ -138,14 +138,12 @@ class ExternalThreadExecution(ThreadExecution):
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        # Its inbox state is the bridge's registration: connected or no bridge.
         if not status.active:
             return ordinary
-        # A stale busy report cannot keep a known-dead CLI working.
         if thread.has_process and not thread.process_alive:
             return replace(ordinary, marker="○", summary="CLI offline",
                            status=ordinary.status.without_work())
-        return ordinary.status.live_cli_presentation(ordinary)
+        return ordinary
 
     @classmethod
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):

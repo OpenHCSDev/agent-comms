@@ -51,6 +51,7 @@ class ToolCall:
     name: str
     arguments: JsonValue
     detail: str = ""
+    diff: ToolDiff | None = None
 
     @property
     def title(self) -> str:
@@ -60,7 +61,7 @@ class ToolCall:
         return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
                                     raw_input=self.arguments, detail=self.detail),
                 ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
-                                  text=text, ok=ok, diff=diff))
+                                  text=text, ok=ok, diff=diff if diff is not None else self.diff))
 
 
 @dataclass(frozen=True)
