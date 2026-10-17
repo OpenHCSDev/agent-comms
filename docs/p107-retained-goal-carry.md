@@ -73,18 +73,41 @@ active turns in the NEW root; that deliberate cold-import change is recorded.
 Only `p107-copy-worker` is running. No provider input was submitted. The original
 sessions, public data and shared pointer remain untouched.
 
-## Exact private acceptance command (Codex only; one attempt)
+## Operation 5 and approved fresh operation 6
 
-```bash
-env -u PYTHONPATH -u AGENT_COMMS_ROOT -u AGENT_COMMS_THREAD \
-  -u AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID -u AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE \
-  HOME=/home/ts/.cache/agent-scratch/gr107/stopped-proof-1/home \
-  /home/ts/.local/share/agent-comms/runtimes/toad-58d65de58-core-c8c4eb53f-native-70f0512abbcfa4e0-20261017T061350Z/bin/python -I -c \
-  'import sys; sys.path.insert(0,"/home/ts/wt/core-goal-retry/tools/cutover"); from publish_runtime import main; main()' \
-  --carry-goals \
-  --candidate /home/ts/.cache/agent-scratch/gr107/stopped-proof-1/candidate4 \
-  --receipt /home/ts/.cache/agent-scratch/gr107/stopped-proof-1/operation4.json
-```
+Operation5 failed after fencing: target Registration decoded old mention sources
+before conversion. The original process3121930 was retired and source worker
+3545709/start170180763 restored. Owner generation13811→13813 and admission
+16254→16257; private current/route remained original. All six recorded originals
+still match (native session, bus, bus metadata, coordination, Goal history and
+prompt bindings). Candidate5 and operation5.goal-formats were never created.
+Never replay operation5 or the earlier example commands.
+
+Claude approved one fresh operation6 from that restored worker, with candidate6
+and operation6.json, after another six-hash check. Codex owns execution. The
+frozen16a archive stays immutable; operation6 uses the reviewed current tool.
+
+The existing target CLI prepares/strictly checks the candidate without opening
+Registration. The original stopped batch installs it with its held wire and
+RegistryStore writer. Only then does target verification build Registration and
+launch. Recovery refuses an original decoder once Goal carry preimages exist;
+a partial carry remains stopped rather than guessing rollback.
+
+Actual current-store preparation converted1045 author fields:25 registry,
+21 release-receipt and999 history cells (488 before/511 after, across529 rows).
+The conversion owner derives these counts. Source-less Goals stay source-less;
+old source-format ordinary semantics become UncommandedGoalAuthor, never an
+invented commander identity. The authentic source interpreter decodes the
+prepared plan. All six original hashes matched again after qualification.
+Evidence: `.artifacts/p107-operation6-qualified-plan.json` and
+`.artifacts/p107-operation6-owner-sites.txt`. The owned disposable candidate is
+`/home/ts/.cache/agent-scratch/gr107/operation6-qualification`; keep it until the
+fresh result is accepted, then retire through normal borrower checks.
+
+Full source parsing covered1336 modules with zero omissions; verbose traversal
+timed out. A focused before/after NRA owner/consumer traversal completed against
+the immutable16a tools, current tools and actual target owner classes. This is
+syntax evidence, not a stopped launch result. Operation6 has not yet run.
 
 Do not repeat a failed attempt. Inspect its original receipt, preimages, process
 and current pointer before disposition. Any changed/uncertain result stays
