@@ -129,18 +129,9 @@ class TargetField:
             'help', self.name.replace('_', ' ').capitalize())
 
     @property
-    def editor_annotation(self):
-        return compile_decoder(self.annotation).editor_annotation
-
-    @property
     def editor_default(self):
         formatter = self.declaration.metadata['editor_format']
-        return FieldCodec.encode_editor(self.annotation, formatter(self.value) if formatter else self.value)
-
-    @staticmethod
-    def decode_editor(declaration, annotation, value):
-        normalize = declaration.metadata['normalize']
-        return normalize(value) if normalize else FieldCodec.decode_editor(annotation, value)
+        return formatter(self.value) if formatter else compile_decoder(self.annotation).encode_editor(self.value)
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
         """An unrestricted field does not declare a finite-choice editor."""
@@ -172,10 +163,10 @@ class ChoiceTargetField(TargetField):
 
     @property
     def choices(self) -> tuple[tuple[str, str | None], ...]:
-        return compile_decoder(self.annotation).editor_options(tuple((choice.name, choice.value) for choice in self.options))
+        return tuple((choice.name, choice.value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
-        options = (SessionConfigSelectOption(name=label, value=FieldCodec.encode_editor(self.annotation, value))
+        options = (SessionConfigSelectOption(name=label, value=compile_decoder(self.annotation).encode_editor(value))
                    for label, value in compile_decoder(self.annotation).editor_choices())
         return replace(self, options=tuple(options))
 
@@ -195,7 +186,7 @@ class CatalogTargetField(ChoiceTargetField):
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
         options = await catalogs.catalog_for(self.catalog).choices(selection)
         return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
-            value=FieldCodec.encode_editor(self.annotation, item.value)) for item in options))
+            value=compile_decoder(self.annotation).encode_editor(item.value)) for item in options))
 
     def value_schema(self) -> dict[str, object]:
         return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
@@ -525,7 +516,8 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         result = {}
         for key, text in values.items():
             item = declared[key]
-            result[key] = item.metadata[TargetField].decode_editor(item, hints[item.name], text)
+            normalize = item.metadata['normalize']
+            result[key] = normalize(text) if normalize else compile_decoder(hints[item.name]).decode_editor(text)
         return result
 
     def confirmation(self) -> str:

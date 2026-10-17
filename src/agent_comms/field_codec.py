@@ -344,14 +344,6 @@ class FieldCodec(Sealed):
         return cast(T, compile_decoder(target).decode(data))
 
     @classmethod
-    def encode_editor(cls, annotation, value):
-        return compile_decoder(annotation).encode_editor(value)
-
-    @classmethod
-    def decode_editor(cls, annotation, value):
-        return compile_decoder(annotation).decode_editor(value)
-
-    @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
         """Instance values carry their selector inside the encoded object."""
         alternatives = []
@@ -542,13 +534,10 @@ class ValueDecoder(ABC):
 
     def encode_editor(self, value):
         encoded = FieldCodec.encode(value)
-        return encoded if encoded is None or isinstance(encoded, str) else json.dumps(encoded)
+        return None if encoded is None else json.dumps(encoded)
 
     def decode_editor(self, value):
-        return value
-
-    def editor_options(self, options):
-        return options
+        return None if value is None else json.loads(value)
 
     def editor_choices(self) -> tuple[tuple[str, object], ...]:
         raise TypeError("The declared decoder does not offer finite choices")
@@ -565,24 +554,17 @@ class _ScalarDecoder(ValueDecoder):
             return data
         raise ValueError(f"Expected {target}, received {type(data).__name__}")
 
-class _JsonEditor:
-    def decode_editor(self, value):
-        return json.loads(value)
+    def encode_editor(self, value):
+        return value if self.target is str else super(_ScalarDecoder, self).encode_editor(value)
 
-class _JsonScalarDecoder(_JsonEditor, _ScalarDecoder):
-    pass
+    def decode_editor(self, value):
+        return value if self.target is str else super(_ScalarDecoder, self).decode_editor(value)
 
 class _NullDecoder(_ScalarDecoder):
     editor_annotation = type(None)
 
-    def decode_editor(self, value):
-        return self.decode(value)
-
-    def editor_options(self, options):
-        return (("Not set", None),)
-
 @dataclass(frozen=True, slots=True)
-class _RepresentedDecoder(_JsonEditor, ValueDecoder):
+class _RepresentedDecoder(ValueDecoder):
     """A declared representation capability; null without one decodes structurally."""
 
     representation: type[FieldRepresentation]
@@ -659,21 +641,12 @@ class _UnionDecoder(ValueDecoder):
     def editor_annotation(self):
         return Union[tuple(item.editor_annotation for item in self.alternatives)]
 
-    def editor_options(self, options):
-        return tuple(dict.fromkeys(choice for item in self.alternatives for choice in item.editor_options(options)))
-
-    def decode_editor(self, value):
-        return self._read(lambda item: item.decode_editor(value))
-
     def decode(self, data):
-        return self._read(lambda item: item.decode(data))
-
-    def _read(self, read):
         first_error = None
         try:
             for alternative in self.alternatives:
                 try:
-                    return read(alternative)
+                    return alternative.decode(data)
                 except (TypeError, ValueError) as error:
                     if first_error is None:
                         first_error = error
@@ -688,7 +661,7 @@ class _UnionDecoder(ValueDecoder):
             first_error = None
 
 @dataclass(frozen=True, slots=True)
-class _FrozenSetDecoder(_JsonEditor, ValueDecoder):
+class _FrozenSetDecoder(ValueDecoder):
     item: ValueDecoder
 
     def decode(self, data):
@@ -697,7 +670,7 @@ class _FrozenSetDecoder(_JsonEditor, ValueDecoder):
         return frozenset(self.item.decode(value) for value in data)
 
 @dataclass(frozen=True, slots=True)
-class _ListDecoder(_JsonEditor, ValueDecoder):
+class _ListDecoder(ValueDecoder):
     item: ValueDecoder
 
     def decode(self, data):
@@ -706,7 +679,7 @@ class _ListDecoder(_JsonEditor, ValueDecoder):
         return [self.item.decode(value) for value in data]
 
 @dataclass(frozen=True, slots=True)
-class _VariadicTupleDecoder(_JsonEditor, ValueDecoder):
+class _VariadicTupleDecoder(ValueDecoder):
     item: ValueDecoder
 
     def decode(self, data):
@@ -715,7 +688,7 @@ class _VariadicTupleDecoder(_JsonEditor, ValueDecoder):
         return tuple(self.item.decode(value) for value in data)
 
 @dataclass(frozen=True, slots=True)
-class _FixedTupleDecoder(_JsonEditor, ValueDecoder):
+class _FixedTupleDecoder(ValueDecoder):
     items: tuple[ValueDecoder, ...]
 
     def decode(self, data):
@@ -726,7 +699,7 @@ class _FixedTupleDecoder(_JsonEditor, ValueDecoder):
         return tuple(item.decode(value) for item, value in zip(self.items, data, strict=True))
 
 @dataclass(frozen=True, slots=True)
-class _DictDecoder(_JsonEditor, ValueDecoder):
+class _DictDecoder(ValueDecoder):
     key: ValueDecoder
     value: ValueDecoder
 
@@ -742,13 +715,8 @@ class _FamilyRecordDecoder(ValueDecoder):
     family: type[DeclaredFamily]
 
     def editor_choices(self):
-        return tuple((member.label, member) for member in self.family.members_with(self.family))
-
-    def encode_editor(self, value):
-        return value.declared_name
-
-    def decode_editor(self, value):
-        return {self.family.family_discriminator: value}
+        return tuple((member.label, {self.family.family_discriminator: member.declared_name})
+                     for member in self.family.members_with(self.family))
 
     def decode(self, data):
         if not isinstance(data, dict):
@@ -763,7 +731,7 @@ class _FamilyRecordDecoder(ValueDecoder):
         )
 
 @dataclass(frozen=True, slots=True)
-class _RecordDecoder(_JsonEditor, ValueDecoder):
+class _RecordDecoder(ValueDecoder):
     """A dataclass record. Its plan is looked up at decode time, so a
     record that contains itself compiles without recursion."""
 
@@ -828,10 +796,8 @@ def compile_decoder(annotation: object) -> ValueDecoder:
 def _structural_decoder(target: object) -> ValueDecoder:
     if target is type(None):
         return _NullDecoder(target)
-    if target is str:
+    if target in (str, int, bool, float):
         return _ScalarDecoder(target)
-    if target is int or target is bool or target is float:
-        return _JsonScalarDecoder(target)
     if target is Any:
         return _AnyDecoder()
     origin, args = get_origin(target), get_args(target)
