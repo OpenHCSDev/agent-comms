@@ -30,10 +30,10 @@ from agent_comms.goal_waits import NoGoalWait
 def selected_goal(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     for name in ("worker", "peer", "other"):
-        comms.registry.declare(Thread.create(
+        comms.registry.declare(Thread(
             name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule()))
+        storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Original objective"))
     return comms, goal
 

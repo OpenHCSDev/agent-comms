@@ -18,8 +18,8 @@ from agent_comms.unstarted_runtime import UnstartedRuntime
 @pytest.mark.parametrize('saved', [False, True])
 def test_durable_thread_roundtrip_and_worker_selection(tmp_path, saved):
     location = DurableDatabase(str(tmp_path / 'session.sqlite3'))
-    thread = Thread.create('durable', frozenset(), str(tmp_path), backend=PiDurableBackend,
-                    session_file=location.read_key if saved else None, storage_rule=StorageRule())
+    thread = Thread('durable', frozenset(), str(tmp_path), backend=PiDurableBackend,
+                    session_file=location.read_key if saved else None, storage_roots=StorageRule().initial_roots('durable', str(tmp_path)))
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
     assert restored.runtime == (location if saved else UnstartedRuntime(PiDurableBackend))
     assert restored.runtime.backend is PiDurableBackend
@@ -88,8 +88,8 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path):
                    capture_output=True, timeout=20)
     async def journey():
         backend = PiDurableBackend()
-        thread = Thread.create('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
-                        session_file=location.path, storage_rule=StorageRule())
+        thread = Thread('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
+                        session_file=location.path, storage_roots=StorageRule().initial_roots('history', str(tmp_path)))
         host = await backend.open(thread)
         try:
             interrupted = await host.request(Inspect())

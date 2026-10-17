@@ -122,15 +122,15 @@ def comms(root: Path) -> Comms:
 @pytest.fixture
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
-    comms.registry.declare(Thread.create(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1", storage_rule=StorageRule()))
+    comms.registry.declare(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1", storage_roots=StorageRule().initial_roots('PR111', '/tmp/wt1')))
     comms.registry.declare(
-        Thread.create(
+        Thread(
             name="fixer",
             tags=frozenset({"auth"}),
             worktree="/tmp/wt1",
             parent="PR111",
             task="fix auth",
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('fixer', '/tmp/wt1'))
     )
     return comms
 

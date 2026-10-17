@@ -17,7 +17,7 @@ from agent_comms.goal_waits import RecordedGoalWait
 def test_graph_uses_only_wait_for_original_owner_goal(tmp_path, change):
     comms = canonical_goal_wire(tmp_path / "wire")
     for name in ("owner", "peer", "leaf"):
-        comms.registry.declare(Thread.create(name, frozenset(), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
         comms.goals.update_goal(name, SetGoalAction(text=f"Work for {name}"))
     peer = comms.registry.require("peer")
     leaf = comms.registry.require("leaf")

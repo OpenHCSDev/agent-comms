@@ -26,7 +26,7 @@ from agent_comms.tool_caller import ThreadCaller
 
 def _wire(tmp_path) -> Comms:
     comms = Comms(tmp_path / "wire")
-    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     return comms
 
 

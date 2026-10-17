@@ -248,9 +248,9 @@ async def test_actual_catalog_larger_than_stream_buffer(catalog_owner, native_ba
     models = document["providers"]["response-local"]["models"]
     models.extend({"id": f"large-{i}-" + "x" * 2048, "name": str(i)} for i in range(70))
     path.write_text(json.dumps(document))
-    thread = Thread.create(
+    thread = Thread(
         "catalog", frozenset(), str(native_backend.project), model="response-local/fixture"
-    , storage_rule=StorageRule())
+    , storage_roots=StorageRule().initial_roots('catalog', str(native_backend.project)))
     result = await owner.sessions.config.catalog_for(ModelConfigOption).choices(thread)
     assert len([model for model in result if model.value.startswith("response-local/")]) == 71
     assert sum(len(model.value) for model in result) > 2 * 65536
@@ -269,7 +269,7 @@ async def test_actual_catalog_cancellation_reaps_child(catalog_owner, native_bac
         return await receive(channel, **options)
 
     monkeypatch.setattr(PiRpcChannel, "receive", pause_read)
-    thread = Thread.create("catalog", frozenset(), str(native_backend.project), storage_rule=StorageRule())
+    thread = Thread("catalog", frozenset(), str(native_backend.project), storage_roots=StorageRule().initial_roots('catalog', str(native_backend.project)))
     task = asyncio.create_task(owner.sessions.config.catalog_for(ModelConfigOption).choices(thread))
     try:
         await asyncio.wait_for(reading.wait(), 10)

@@ -54,7 +54,7 @@ def test_original_answers_human_correction_and_readonly_calibration(tmp_path, mo
         (AnswerProbability(RuleSpan, .7), AnswerProbability(CommitmentSpan, .2),
          AnswerProbability(OtherSpan, .1)), .8, "local-controlled-answer", classifier.pin)
     registry = Registration(tmp_path / "registry.json")
-    user = registry.declare(Thread.create("human", frozenset(), str(tmp_path), role=ThreadRole.USER, storage_rule=StorageRule()))
+    user = registry.declare(Thread("human", frozenset(), str(tmp_path), role=ThreadRole.USER, storage_roots=StorageRule().initial_roots('human', str(tmp_path))))
     with Coordination(str(path)) as store:
         with store.session.transaction() as db:
             SpanAnnotationsRow(label=original, created_at_ms=1).insert(db)

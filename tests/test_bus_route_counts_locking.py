@@ -33,8 +33,8 @@ def _case(tmp_path, monkeypatch):
         "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
     )
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("sender", frozenset(), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("recipient", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('sender', str(tmp_path))))
+    comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('recipient', str(tmp_path))))
     comms.messaging.send_message("sender", "recipient", "first")
     assert _sync(comms).complete
     return comms

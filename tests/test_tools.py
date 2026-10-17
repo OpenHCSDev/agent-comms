@@ -11,8 +11,8 @@ from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_
 class TestToolCatalog:
     def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        comms.registry.declare(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
-        comms.registry.declare(Thread.create(name="b", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
+        comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('b', '/wt')))
         before = comms.registry.snapshot()
         result = invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b"}, caller=ThreadCaller("a"))
         assert result["collaboration"]["owner"] == "a"
@@ -82,8 +82,8 @@ class TestToolCatalog:
         assert actions[0]["context_bindings"] == {"parent": "subject"}
 
     def test_inbox_ack_behavior_is_owned_by_declared_tool(self, comms):
-        comms.registry.declare(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
-        comms.registry.declare(Thread.create(name="b", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
+        comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('b', '/wt')))
         comms.messaging.send("a", "b", "hello")
 
         result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
@@ -107,7 +107,7 @@ class TestToolCatalog:
         from agent_comms.launch_runtime import CallingThreadUnavailable
 
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
-        comms.registry.declare(Thread.create(name="listed", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="listed", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('listed', '/wt')))
         result = invoke_tool(comms, "comms_threads", {"active_only": True}, caller=NoThreadCaller())
         assert [thread["name"] for thread in result["threads"]] == ["listed"]
         assert result["sent_notifications"] == []
@@ -117,8 +117,8 @@ class TestToolCatalog:
     def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):
         # A tool consumes its bound caller, never a subsequently changed environment.
         monkeypatch.setenv("AGENT_COMMS_THREAD", "not-the-invoker")
-        comms.registry.declare(Thread.create(name="sender", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
-        comms.registry.declare(Thread.create(name="recipient", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="sender", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('sender', '/wt')))
+        comms.registry.declare(Thread(name="recipient", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('recipient', '/wt')))
         sent = comms.messaging.send_message("sender", "recipient", "track me")
         for index in range(6):
             comms.messaging.send_message("recipient", "sender", f"incoming {index}")
@@ -139,9 +139,9 @@ class TestToolCatalog:
         ] == [(sent.seq, "track me", "recipient", "Sent")]
 
     def test_inbox_ack_can_target_one_conversation(self, comms):
-        comms.registry.declare(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
-        comms.registry.declare(Thread.create(name="b", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
-        comms.registry.declare(Thread.create(name="c", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
+        comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('b', '/wt')))
+        comms.registry.declare(Thread(name="c", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('c', '/wt')))
         comms.messaging.send("a", "b", "from a")
         comms.messaging.send("c", "b", "from c")
 
@@ -182,7 +182,7 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
             }
 
     for name in ("a", "b"):
-        comms.registry.declare(Thread.create(name=name, tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots(name, '/wt')))
     comms.messaging.send("a", "b", "Actual inbox source")
     schema = next(row for row in tool_catalog() if row["name"] == InspectInboxTool.declared_name)
     assert schema["parameters"]["required"] == ["target", "viewer"]

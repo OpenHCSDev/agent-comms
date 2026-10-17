@@ -54,7 +54,7 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
         "goal": None, "goalExecution": None,
         "_meta": encode_updates(TurnChangedUpdate(comms.registry.require(session).turn_state)),
     }
-    comms.registry.declare(Thread.create("child", frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("child", frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('child', str(comms.root))))
     comms.agents.begin_turn("child", "child-work-in-flight")
     goal = comms.goals.update_goal(session, SetGoalAction(text="Review child output"))
     comms.goals.update_goal(

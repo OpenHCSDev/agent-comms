@@ -45,13 +45,13 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
         ],
     )
     comms.registry.declare(
-        Thread.create(
+        Thread(
             "receiver",
             frozenset(),
             str(native.project),
             model="response-local/fixture",
             thinking_level="off",
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('receiver', str(native.project)))
     )
     snapshots = asyncio.Queue()
     updates = []

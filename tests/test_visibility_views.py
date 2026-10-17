@@ -11,11 +11,11 @@ def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
     comms = wire(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     for name in ("active", "stopped", "archived"):
-        comms.registry.declare(Thread.create(name, frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
     comms.owners.stop("stopped")
     comms.owners.stop("archived")
     comms.threads.archive("archived")
-    comms.registry.declare(Thread.create("human", frozenset({"team"}), str(tmp_path), role=ThreadRole.USER, storage_rule=StorageRule()))
+    comms.registry.declare(Thread("human", frozenset({"team"}), str(tmp_path), role=ThreadRole.USER, storage_roots=StorageRule().initial_roots('human', str(tmp_path))))
 
     def names(snapshot):
         return set(snapshot.threads)

@@ -58,8 +58,8 @@ def test_projection_preserves_source_identity_and_strict_record_validation(activ
 
 
 def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
-    thread = comms.registry.declare(Thread.create("worker", frozenset(), str(comms.root),
-        process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    thread = comms.registry.declare(Thread("worker", frozenset(), str(comms.root),
+        process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('worker', str(comms.root))))
     detail = "preparing_" + "p" * Activity.detail_limit
     lease = comms.agents.begin_turn(thread.name, "long-status", detail).turn_lease
     try:
@@ -81,10 +81,10 @@ def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
 
 
 def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phases(comms):
-    native = comms.registry.declare(Thread.create("native-clock", frozenset({"clock"}), str(comms.root),
-        process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
-    cli = comms.registry.declare(Thread.create("cli-clock", frozenset({"clock"}), str(comms.root),
-        execution=ExternalThreadExecution, storage_rule=StorageRule()))
+    native = comms.registry.declare(Thread("native-clock", frozenset({"clock"}), str(comms.root),
+        process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('native-clock', str(comms.root))))
+    cli = comms.registry.declare(Thread("cli-clock", frozenset({"clock"}), str(comms.root),
+        execution=ExternalThreadExecution, storage_roots=StorageRule().initial_roots('cli-clock', str(comms.root))))
     comms.channels.set_channel_sort("#clock", LastActivityThreadSort)
     output = ThreadOutput(ExternalTranscript(comms.root, cli.incarnation), comms.agents)
     request = ObserveSidebar(str(comms.root), True, False)
@@ -123,9 +123,9 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
 
 
 def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
-    thread = comms.registry.declare(Thread.create("cli-worker", frozenset(), str(comms.root),
+    thread = comms.registry.declare(Thread("cli-worker", frozenset(), str(comms.root),
                                           execution=ExternalThreadExecution,
-                                          process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+                                          process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('cli-worker', str(comms.root))))
     output = ThreadOutput(ExternalTranscript(comms.root, thread.incarnation), comms.agents)
     output.status(ActivityState.WORKING, "  tool:\n\t" + "x" * Activity.detail_limit)
     activity = comms.agents.activity_of(thread.name)

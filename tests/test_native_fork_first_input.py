@@ -182,14 +182,14 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     monkeypatch.setenv("AGENT_COMMS_DEBUG_LOG", str(debug_log))
     comms = Comms(native.root)
     comms.registry.declare(
-        Thread.create(
+        Thread(
             "physical-parent",
             frozenset(),
             str(native.project),
             session_file=str(native.session),
             model="response-local/fixture",
             thinking_level="off",
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('physical-parent', str(native.project)))
     )
     package = pinned_native_package()
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]

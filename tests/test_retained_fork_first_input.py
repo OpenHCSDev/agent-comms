@@ -57,14 +57,14 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
     comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
     comms.registry.declare(
-        Thread.create(
+        Thread(
             "retained-parent",
             frozenset(),
             str(fixture.project),
             session_file=str(source),
             model="response-local/fixture",
             thinking_level="off",
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('retained-parent', str(fixture.project)))
     )
     attachment = CommsClient(
         comms,

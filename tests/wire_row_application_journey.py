@@ -27,10 +27,10 @@ def main(root: Path) -> None:
     comms = Comms(root / "wire")
     births = {"sender": 17001.0, "Alice": 17002.0}
     for name, birth in births.items():
-        comms.registry.declare(Thread.create(
+        comms.registry.declare(Thread(
             name, frozenset({"team"}), str(root), created_at=birth,
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule()))
+        storage_roots=StorageRule().initial_roots(name, str(root))))
     root_id = comms.messaging.initialize_private_initial_protocol()
     message = comms.messaging.send_initial_cohort("sender", "Alice", "physical row " * 1024)
     # Record the completed effect before any subsequent check can fail.

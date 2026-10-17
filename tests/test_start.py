@@ -14,7 +14,7 @@ from agent_comms.tool_caller import NoThreadCaller
 def test_attachment_does_not_implicitly_start_a_stopped_or_archived_thread(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread.create("worker", frozenset(), str(tmp_path), session_file="/saved.jsonl", storage_rule=StorageRule())
+        Thread("worker", frozenset(), str(tmp_path), session_file="/saved.jsonl", storage_roots=StorageRule().initial_roots('worker', str(tmp_path)))
     )
     comms.registry.unregister("worker")
     monkeypatch.setattr(
@@ -42,7 +42,7 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     comms.owners.pin_private_nk_launch(
         comms.root, root_id, pinned_native_package()
     )
-    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), session_file=str(source), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(source), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     comms.registry.unregister("worker")
     try:
         result = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"}, caller=NoThreadCaller())

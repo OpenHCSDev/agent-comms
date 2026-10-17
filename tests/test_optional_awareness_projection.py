@@ -43,22 +43,22 @@ def _root(
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.registry.declare(
-        Thread.create(
+        Thread(
             "sender",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('sender', str(tmp_path)))
     )
     for number in range(recipients):
         comms.registry.declare(
-            Thread.create(
+            Thread(
                 f"member{number:03}",
                 frozenset({"team"}),
                 str(tmp_path),
                 process_identity=ProcessIdentity.capture(os.getpid()),
                 model="openai-codex/gpt-6-sol",
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots(f'member{number:03}', str(tmp_path)))
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     store = Coordination(str(root / "coordination.sqlite3"))

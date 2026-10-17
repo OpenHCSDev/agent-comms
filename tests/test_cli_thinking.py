@@ -20,10 +20,10 @@ def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, m
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/reasoning,fixture/plain")
     else:
         monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
-    comms.registry.declare(Thread.create(
+    comms.registry.declare(Thread(
         name="worker", tags=frozenset(), worktree=str(tmp_path),
         model="fixture/reasoning", thinking_level="high",
-    storage_rule=StorageRule()))
+    storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     comms.registry.unregister("worker")
     original = comms.registry.require("worker")
     queried = []
@@ -51,10 +51,10 @@ def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, m
 
 def test_configure_refuses_model_outside_catalog_without_writing(comms, tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/reasoning")
-    comms.registry.declare(Thread.create(
+    comms.registry.declare(Thread(
         name="worker", tags=frozenset(), worktree=str(tmp_path),
         model="fixture/reasoning", thinking_level="high",
-    storage_rule=StorageRule()))
+    storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     comms.registry.unregister("worker")
     original = comms.registry.require("worker")
 
@@ -65,7 +65,7 @@ def test_configure_refuses_model_outside_catalog_without_writing(comms, tmp_path
 
 def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
-    comms.registry.declare(Thread.create(name="worker", tags=frozenset(), worktree=str(tmp_path), model="fixture/reasoning", storage_rule=StorageRule()))
+    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path), model="fixture/reasoning", storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     comms.registry.unregister("worker")
 
     async def discover_models(self, binary, arguments):
@@ -110,7 +110,7 @@ async def test_session_description_and_change_share_refusal(tmp_path, monkeypatc
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/plain")
     else:
         monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
-    thread = Thread.create(name="worker", tags=frozenset(), worktree=str(tmp_path), model="fixture/plain", thinking_level="high", storage_rule=StorageRule())
+    thread = Thread(name="worker", tags=frozenset(), worktree=str(tmp_path), model="fixture/plain", thinking_level="high", storage_roots=StorageRule().initial_roots('worker', str(tmp_path)))
     option = ThinkingLevelConfigOption("unused", NativeArguments.parse([]), RestartEnvironment.inherit(os.environ))
 
     async def discover(self, binary, arguments):

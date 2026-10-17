@@ -21,7 +21,7 @@ def _page(field, nodes, after=None):
 
 
 def test_branches_off_main_carry_only_their_own_pr_issue_and_checkout(comms, tmp_path, monkeypatch):
-    comms.registry.declare(Thread.create(name="unit", tags=frozenset(), worktree=str(tmp_path / "unit"), storage_rule=StorageRule()))
+    comms.registry.declare(Thread(name="unit", tags=frozenset(), worktree=str(tmp_path / "unit"), storage_roots=StorageRule().initial_roots('unit', str(tmp_path / 'unit'))))
     (tmp_path / "unit").mkdir()
     answers = {
         "repo": "Org/repo\n",

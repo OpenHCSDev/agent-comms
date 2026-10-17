@@ -38,13 +38,13 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
         ("outsider", {"else"}, 17004.0),
     ):
         comms.registry.register(
-            Thread.create(
+            Thread(
                 name,
                 frozenset(tags),
                 str(tmp_path),
                 process_identity=ProcessIdentity.capture(os.getpid()),
                 created_at=stamp,
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     return comms, root_id

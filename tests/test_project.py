@@ -30,7 +30,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     new.mkdir()
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
-        Thread.create(
+        Thread(
             name="worker",
             tags=frozenset({"test"}),
             worktree=str(old),
@@ -38,7 +38,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
             session_file=str(old / "session.jsonl"),
             model="test/model",
             created_at=123,
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('worker', str(old)))
     )
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep this objective"))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")

@@ -21,7 +21,7 @@ from agent_comms.todos import (
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
-    return Thread.create(name, frozenset(), str(root), created_at=created, storage_rule=StorageRule())
+    return Thread(name, frozenset(), str(root), created_at=created, storage_roots=StorageRule().initial_roots(name, str(root)))
 
 
 def order(root: Path):

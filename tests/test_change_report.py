@@ -42,7 +42,7 @@ def reporter_repo(tmp_path):
 
 @pytest.fixture
 def reporter(wired, reporter_repo):
-    wired.registry.declare(Thread.create(name="reporter", tags=frozenset(), worktree=str(reporter_repo), storage_rule=StorageRule()))
+    wired.registry.declare(Thread(name="reporter", tags=frozenset(), worktree=str(reporter_repo), storage_roots=StorageRule().initial_roots('reporter', str(reporter_repo))))
     return wired
 
 

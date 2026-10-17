@@ -19,7 +19,7 @@ def test_catalog_binding_failure_propagates_for_each_target_family(
 ):
     for name in ("selected", "other"):
         comms.registry.declare(
-            Thread.create(name, frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()), StoppedThreadStatus(),
+            Thread(name, frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))), StoppedThreadStatus(),
         )
     target = target_type(
         str(tmp_path) if target_type is ProjectTarget else

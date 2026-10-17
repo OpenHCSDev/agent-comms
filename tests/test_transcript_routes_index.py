@@ -32,7 +32,7 @@ def test_tail_page_decodes_only_its_routing_entries(tmp_path, monkeypatch) -> No
     session = tmp_path / "session.jsonl"
     _session(session, 10_000)
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), session_file=str(session), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     routing = TurnRouting(reply=MessageRoute("worker", ("#team",)))
     comms.transcripts.routes.record(
         str(session), tuple(f"entry-{index}" for index in range(10_000)), routing

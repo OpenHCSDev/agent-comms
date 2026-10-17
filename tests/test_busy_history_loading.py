@@ -27,7 +27,7 @@ def saved_history(tmp_path):
         "type": "message", "id": "saved-answer", "parentId": None,
         "message": {"role": "assistant", "content": [{"type": "text", "text": "Saved answer"}]},
     }) + "\n")
-    comms.registry.declare(Thread.create("saved", frozenset(), str(tmp_path), session_file=str(session), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("saved", frozenset(), str(tmp_path), session_file=str(session), storage_roots=StorageRule().initial_roots('saved', str(tmp_path))))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.install_private_runtime()
     return comms, session

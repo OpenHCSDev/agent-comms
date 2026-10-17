@@ -71,9 +71,9 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
 
 def _thread(comms, name, worktree):
     comms.registry.declare(
-        Thread.create(
+        Thread(
             name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
-        , storage_rule=StorageRule())
+        , storage_roots=StorageRule().initial_roots(name, str(worktree)))
     )
 
 

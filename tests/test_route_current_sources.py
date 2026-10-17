@@ -17,7 +17,7 @@ from agent_comms.wire_record import PublicWireRecord
 @pytest.mark.parametrize('rebound', [False, True])
 def test_discovery_ignores_retired_source_history(tmp_path, rebound):
     c = wire(tmp_path)
-    c.registry.declare(Thread.create('sender', frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    c.registry.declare(Thread('sender', frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('sender', str(tmp_path))))
     viewer = c.messaging.user_identity(str(tmp_path)).name
     original = c.messaging.send_message('sender', viewer, 'current source')
 
@@ -44,7 +44,7 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound):
             if rebound:
                 c.registry.unregister(name)
                 c.registry.remove(name)
-            c.registry.declare(Thread.create(name, frozenset(), str(tmp_path), storage_rule=StorageRule()))
+            c.registry.declare(Thread(name, frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
             published = c.messaging.send_message(name, viewer, 'current source')
             if rebound:
                 original = published
@@ -56,7 +56,7 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound):
 
 def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
     c = wire(tmp_path)
-    c.registry.declare(Thread.create('sender', frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    c.registry.declare(Thread('sender', frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('sender', str(tmp_path))))
     viewer = c.messaging.user_identity(str(tmp_path)).name
     original = c.messaging.send_message('sender', viewer, 'assigned source')
     with c.bus.snapshot(viewer=viewer) as (basis, source):

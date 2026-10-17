@@ -69,20 +69,20 @@ def _root(tmp_path: Path):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread.create(
+        Thread(
             "sender",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule()),
-        Thread.create(
+        storage_roots=StorageRule().initial_roots('sender', str(tmp_path))),
+        Thread(
             "alpha",
             frozenset({"team"}),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
             task="math answers",
             model="openai-codex/gpt-6-sol",
-        storage_rule=StorageRule()),
+        storage_roots=StorageRule().initial_roots('alpha', str(tmp_path))),
     ]
     for person in people:
         comms.registry.declare(person)
@@ -421,12 +421,12 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
     root, root_id, comms, first, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    beta = Thread.create(
+    beta = Thread(
         "beta",
         frozenset({"team"}),
         str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
-    storage_rule=StorageRule())
+    storage_roots=StorageRule().initial_roots('beta', str(tmp_path)))
     comms.registry.declare(beta)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(

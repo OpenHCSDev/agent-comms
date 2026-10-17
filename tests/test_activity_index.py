@@ -137,7 +137,7 @@ def test_replacement_truncation_rename_delete_and_missing_file_reset_index(tmp_p
     assert set(reader.all_current()) == {"a", "b"}
     writer.rename_thread("a", "renamed")
     assert set(reader.all_current()) == {"renamed", "b"}
-    writer.remove_threads((Thread.create("b", frozenset(), str(tmp_path), storage_rule=StorageRule()),))
+    writer.remove_threads((Thread("b", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('b', str(tmp_path))),))
     assert set(reader.all_current()) == {"renamed"}
     path.write_text(encoded("c") + "\n")
     assert set(reader.all_current()) == {"c"}

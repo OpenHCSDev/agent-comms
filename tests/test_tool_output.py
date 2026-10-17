@@ -47,7 +47,7 @@ def seed_unknown(comms, count, text):
 @pytest.fixture
 def inbox_comms(comms):
     for name in ("a", "b"):
-        comms.registry.declare(Thread.create(name=name, tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots(name, '/wt')))
     return comms
 
 

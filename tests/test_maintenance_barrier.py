@@ -230,12 +230,12 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     gate = comms.owners.maintenance
     assert gate.read().phase is ReadyPhase
     comms.registry.declare(
-        Thread.create(
+        Thread(
             name="owner",
             tags=frozenset(),
             worktree=str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('owner', str(tmp_path)))
     )
     assert comms.agents.begin_turn("owner", "before")
     comms.agents.finish_turn(comms.registry.require("owner").turn_lease)
@@ -324,12 +324,12 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
     proc.start()
     assert proc.pid is not None
     comms.registry.declare(
-        Thread.create(
+        Thread(
             name="owner",
             tags=frozenset(),
             worktree=str(tmp_path),
             process_identity=ProcessIdentity.capture(proc.pid),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('owner', str(tmp_path)))
     )
     hold = comms.owners.maintenance.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
     ready.set()
@@ -375,12 +375,12 @@ def test_unknown_parent_fsync_does_not_reopen_claim(
 
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:
     comms = Comms(tmp_path / "wire")
-    owner = Thread.create(
+    owner = Thread(
         name="owner",
         tags=frozenset(),
         worktree=str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
-    storage_rule=StorageRule())
+    storage_roots=StorageRule().initial_roots('owner', str(tmp_path)))
     comms.registry.declare(owner)
     comms.registry.rename("owner", "renamed")
     comms.registry.unregister("renamed")
@@ -401,12 +401,12 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     child.start()
     assert child.pid is not None
     comms.registry.declare(
-        Thread.create(
+        Thread(
             name="owner",
             tags=frozenset(),
             worktree=str(tmp_path),
             process_identity=ProcessIdentity.capture(child.pid),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('owner', str(tmp_path)))
     )
     ready.set()
     hold = comms.owners.maintenance.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))

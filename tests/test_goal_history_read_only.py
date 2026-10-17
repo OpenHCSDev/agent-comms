@@ -15,7 +15,7 @@ from agent_comms.threads import Thread
 def authored_history(root):
     root.mkdir(mode=0o700)
     registry = Registration(root / 'registry.json')
-    thread = Thread.create('author', frozenset(), str(root), storage_rule=StorageRule())
+    thread = Thread('author', frozenset(), str(root), storage_roots=StorageRule().initial_roots('author', str(root)))
     registry.register(thread)
     registry.register(replace(thread, goal=Goal('Authored acquisition', 'first', published_seq=0)))
     return registry

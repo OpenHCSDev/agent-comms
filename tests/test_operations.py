@@ -144,12 +144,12 @@ class TestThreadOps:
         ]
         session_file.write_text("\n".join(json.dumps(record) for record in records) + "\n")
         wired.registry.declare(
-            Thread.create(
+            Thread(
                 name="transcript-thread",
                 tags=frozenset(),
                 worktree=str(tmp_path),
                 session_file=str(session_file),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('transcript-thread', str(tmp_path)))
         )
 
         events = wired.transcripts.thread_transcript_page("transcript-thread").events
@@ -179,12 +179,12 @@ class TestThreadOps:
             + "\n"
         )
         wired.registry.declare(
-            Thread.create(
+            Thread(
                 name="compacted-thread",
                 tags=frozenset(),
                 worktree=str(tmp_path),
                 session_file=str(session_file),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('compacted-thread', str(tmp_path)))
         )
 
         events = wired.transcripts.thread_transcript_page("compacted-thread").events
@@ -394,12 +394,12 @@ class TestThreadOps:
 
     def test_managed_rename_normalizes_title_and_proves_owner(self, wired):
         wired.registry.declare(
-            Thread.create(
+            Thread(
                 name="generated-7",
                 tags=frozenset({"acp"}),
                 worktree="/tmp/project",
                 process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('generated-7', '/tmp/project'))
         )
 
         result = wired.threads.rename_managed_thread(
@@ -414,20 +414,20 @@ class TestThreadOps:
 
     def test_managed_rename_disambiguates_duplicate_titles(self, wired):
         wired.registry.declare(
-            Thread.create(
+            Thread(
                 name="testing-123",
                 tags=frozenset(),
                 worktree="/tmp/other",
                 process_identity=ProcessIdentity.capture(os.getppid()),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('testing-123', '/tmp/other'))
         )
         wired.registry.declare(
-            Thread.create(
+            Thread(
                 name="generated-7",
                 tags=frozenset({"acp"}),
                 worktree="/tmp/project",
                 process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('generated-7', '/tmp/project'))
         )
 
         result = wired.threads.rename_managed_thread("generated-7", "testing 123", owner_pid=os.getpid())
@@ -436,7 +436,7 @@ class TestThreadOps:
 
     def test_managed_rename_reclaims_own_alias(self, wired):
         wired.registry.declare(
-            Thread.create(name="generated-7", tags=frozenset(), worktree="/tmp/project", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
+            Thread(name="generated-7", tags=frozenset(), worktree="/tmp/project", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('generated-7', '/tmp/project'))
         )
         assert wired.threads.rename_managed_thread(
             "generated-7", "chosen", owner_pid=os.getpid()
@@ -450,7 +450,7 @@ class TestThreadOps:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         wired.threads.rename_self("reviewer", caller=ThreadCaller("fixer"))
         with pytest.raises(RelationViolationError, match="permanent alias"):
-            wired.registry.register(Thread.create(name="fixer", tags=frozenset(), worktree="/tmp/other", storage_rule=StorageRule()))
+            wired.registry.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/other", storage_roots=StorageRule().initial_roots('fixer', '/tmp/other')))
 
     @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="uses /proc")
     def test_stop_terminates_real_process(self, wired):
@@ -465,12 +465,12 @@ class TestThreadOps:
             env=env,
         )
         wired.registry.declare(
-            Thread.create(
+            Thread(
                 name="live-process",
                 tags=frozenset(),
                 worktree="/tmp",
                 process_identity=ProcessIdentity.capture(process.pid),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('live-process', '/tmp'))
         )
         try:
             wired.owners.stop("live-process")
@@ -530,7 +530,7 @@ class TestLedgerOps:
                     + "\n"
                 )
         wired.registry.declare(
-            Thread.create(name="large", tags=frozenset(), worktree=str(tmp_path), session_file=str(path), storage_rule=StorageRule())
+            Thread(name="large", tags=frozenset(), worktree=str(tmp_path), session_file=str(path), storage_roots=StorageRule().initial_roots('large', str(tmp_path)))
         )
         page = wired.transcripts.thread_transcript_page("large")
         assert page.has_older
@@ -584,7 +584,7 @@ class TestPollAndWire:
 
     def test_runtime_files_created_on_demand(self, tmp_path):
         comms = wire(tmp_path / "fresh")
-        comms.registry.declare(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
         assert (tmp_path / "fresh" / "registry.json").exists()
 
 
@@ -592,7 +592,7 @@ class TestCrossWireIsolation:
     def test_two_wires_do_not_leak(self, tmp_path):
         a = wire(tmp_path / "a")
         b = wire(tmp_path / "b")
-        a.registry.declare(Thread.create(name="only-in-a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        a.registry.declare(Thread(name="only-in-a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('only-in-a', '/wt')))
         assert "only-in-a" in a.registry
         with pytest.raises(UnregisteredThreadError):
             b.registry.require("only-in-a")
@@ -603,31 +603,31 @@ class TestReDeclarationPreservesProvenance:
     the tags its fork declared, or it silently loses channel access."""
 
     def test_empty_tags_inherit_previous(self, wired):
-        wired.registry.declare(Thread.create(name="fixer", tags=frozenset(), worktree="/tmp/wt1", storage_rule=StorageRule()))
+        wired.registry.declare(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1", storage_roots=StorageRule().initial_roots('fixer', '/tmp/wt1')))
         assert wired.registry.require("fixer").tags == frozenset({"auth"})
 
     def test_explicit_tags_replace_previous(self, wired):
-        wired.registry.declare(Thread.create(name="fixer", tags=frozenset({"docs"}), worktree="/tmp/wt1", storage_rule=StorageRule()))
+        wired.registry.declare(Thread(name="fixer", tags=frozenset({"docs"}), worktree="/tmp/wt1", storage_roots=StorageRule().initial_roots('fixer', '/tmp/wt1')))
         assert wired.registry.require("fixer").tags == frozenset({"docs"})
 
     def test_missing_session_file_inherits_previous(self, wired, tmp_path):
         wired.registry.declare(
-            Thread.create(
+            Thread(
                 name="PR111",
                 tags=frozenset({"base"}),
                 worktree="/tmp/wt1",
                 session_file=str(tmp_path / "s.json"),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('PR111', '/tmp/wt1'))
         )
-        wired.registry.declare(Thread.create(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1", storage_rule=StorageRule()))
+        wired.registry.declare(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1", storage_roots=StorageRule().initial_roots('PR111', '/tmp/wt1')))
         assert wired.registry.require("PR111").session_file == str(tmp_path / "s.json")
 
     def test_fresh_declaration_is_unaffected(self, wired):
-        wired.registry.declare(Thread.create(name="fresh", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        wired.registry.declare(Thread(name="fresh", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('fresh', '/wt')))
         assert wired.registry.require("fresh").tags == frozenset()
 
     def test_tagless_child_keeps_channel_after_reregister(self, wired):
-        wired.registry.declare(Thread.create(name="fixer", tags=frozenset(), worktree="/tmp/wt1", storage_rule=StorageRule()))
+        wired.registry.declare(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1", storage_roots=StorageRule().initial_roots('fixer', '/tmp/wt1')))
         wired.messaging.send("PR111", "#auth", "only tagged fixer sees this")
         assert wired.bus.pending_count("fixer") == 1
 
@@ -637,4 +637,4 @@ class TestReDeclarationPreservesProvenance:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
         monkeypatch.setenv("AGENT_COMMS_TAGS", "ci, docs")
         monkeypatch.chdir(tmp_path)
-        assert current_thread(storage_rule=StorageRule()).tags == frozenset({"ci", "docs"})
+        assert current_thread(wire(tmp_path).registry).tags == frozenset({"ci", "docs"})

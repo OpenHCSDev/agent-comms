@@ -243,10 +243,10 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
 
         def prepare():
             comms.registry.register(
-                Thread.create(
+                Thread(
                     name="sender", tags=frozenset(), worktree=str(native.project),
                     created_at=61001.0,
-                storage_rule=StorageRule())
+                storage_roots=StorageRule().initial_roots('sender', str(native.project)))
             )
             with Coordination(str(native.root / "coordination.sqlite3")) as store:
                 install_private_cohort_schema(store)
@@ -342,10 +342,10 @@ async def test_waiting_message_is_drained_when_following_input_opens(
 
         def prepare():
             comms.registry.register(
-                Thread.create(
+                Thread(
                     name="sender", tags=frozenset(), worktree=str(native.project),
                     created_at=61002.0,
-                storage_rule=StorageRule())
+                storage_roots=StorageRule().initial_roots('sender', str(native.project)))
             )
             with Coordination(str(native.root / "coordination.sqlite3")) as store:
                 install_private_cohort_schema(store)
@@ -428,10 +428,10 @@ async def test_waiting_messages_follow_the_original_on_the_changed_model(
 
         def prepare():
             comms.registry.register(
-                Thread.create(
+                Thread(
                     name="sender", tags=frozenset(), worktree=str(native.project),
                     created_at=61001.0,
-                storage_rule=StorageRule())
+                storage_roots=StorageRule().initial_roots('sender', str(native.project)))
             )
             with Coordination(str(native.root / "coordination.sqlite3")) as store:
                 install_private_cohort_schema(store)

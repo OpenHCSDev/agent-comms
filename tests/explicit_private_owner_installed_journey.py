@@ -68,8 +68,8 @@ async def main(package, evidence):
             project.mkdir(mode=0o700)
             comms = Comms(stage / 'wire')
             root_id = comms.messaging.initialize_private_initial_protocol()
-            comms.registry.declare(Thread.create('recipient', frozenset({'team'}), str(project),
-                                          model='selected-offline/fixture', thinking_level='off', storage_rule=StorageRule()))
+            comms.registry.declare(Thread('recipient', frozenset({'team'}), str(project),
+                                          model='selected-offline/fixture', thinking_level='off', storage_roots=StorageRule().initial_roots('recipient', str(project))))
             env = {key: value for key, value in os.environ.items()
                    if not key.startswith(('PI_', 'AGENT_COMMS_')) and key != 'PYTHONPATH'}
             env.update({ROOT_ID_ENV: root_id, PACKAGE_ENV: str(package),

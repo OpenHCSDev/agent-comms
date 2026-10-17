@@ -104,13 +104,13 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "recipient"):
         comms.registry.declare(
-            Thread.create(
+            Thread(
                 name,
                 frozenset(),
                 str(tmp_path),
                 model="selected-offline/fixture",
                 thinking_level="off",
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
         )
     # Ordinary publication must reach the same bootstrap as explicit protocol install.
     first = comms.messaging.send_message("sender", "recipient", "BOOTSTRAP_FIRST")

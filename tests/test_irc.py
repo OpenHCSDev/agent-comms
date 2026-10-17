@@ -18,25 +18,25 @@ def chat(wired):
     pr111 = comms.registry.require("PR111")
     fixer = comms.registry.require("fixer")
     comms.registry.declare(
-        Thread.create(
+        Thread(
             name="PR111",
             tags=frozenset({"ci"}),
             worktree=pr111.worktree,
             process_identity=pr111.process_identity,
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('PR111', pr111.worktree))
     )
     comms.registry.declare(
-        Thread.create(
+        Thread(
             name="fixer",
             tags=frozenset({"ci"}),
             worktree=fixer.worktree,
             parent="PR111",
             task=fixer.task,
             process_identity=fixer.process_identity,
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('fixer', fixer.worktree))
     )
     comms.registry.declare(
-        Thread.create(name="PR112", tags=frozenset({"docs"}), worktree="/tmp/wt2", process_identity=None, storage_rule=StorageRule())
+        Thread(name="PR112", tags=frozenset({"docs"}), worktree="/tmp/wt2", process_identity=None, storage_roots=StorageRule().initial_roots('PR112', '/tmp/wt2'))
     )
     return comms
 
@@ -96,7 +96,7 @@ class TestChannelDelivery:
 
     def test_untagged_thread_does_not_receive_tag_channel(self, chat):
         # A thread with no tags receives only DMs and the global channel.
-        chat.registry.declare(Thread.create(name="loner", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        chat.registry.declare(Thread(name="loner", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('loner', '/wt')))
         chat.messaging.send("PR111", "#ci", "only tagged see this")
         assert chat.bus.pending_count("loner") == 0
 
@@ -142,12 +142,12 @@ class TestChannelsDerived:
 class TestPresence:
     def test_register_sets_last_seen(self, tmp_path):
         registry = Registration(tmp_path / "r.json")
-        registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
         assert registry.last_seen("a") > 0
 
     def test_heartbeat_updates_last_seen(self, tmp_path):
         registry = Registration(tmp_path / "r.json")
-        registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
         before = registry.last_seen("a")
         import time
 
@@ -163,7 +163,7 @@ class TestPresence:
     def test_last_seen_persists(self, tmp_path):
         path = tmp_path / "r.json"
         registry = Registration(path)
-        registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
         seen = registry.last_seen("a")
         assert Registration(path).last_seen("a") == seen
 
@@ -181,4 +181,4 @@ class TestCurrentThreadEnvironment:
         monkeypatch.chdir(tmp_path)
         from agent_comms.threads import current_thread
 
-        assert current_thread(storage_rule=StorageRule()).name == "me"
+        assert current_thread(wire(tmp_path).registry).name == "me"

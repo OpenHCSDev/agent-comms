@@ -20,7 +20,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     comms = wire(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, pinned_native_package())
-    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), session_file=str(session), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     comms.agents.observe_runtime_info(
         "worker", AgentInfo(model="test/model", session_name="preserved", context_used=23, context_size=100)
     )

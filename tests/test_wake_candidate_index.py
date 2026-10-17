@@ -67,13 +67,13 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     created = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
     for name, identity in created.items():
         comms.registry.declare(
-            Thread.create(
+            Thread(
                 name,
                 frozenset({"team"}),
                 str(tmp_path),
                 process_identity=ProcessIdentity.capture(os.getpid()),
                 created_at=identity,
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     lookup = {name: RecordedThreadIncarnation("fixture", identity).lookup for name, identity in created.items()}

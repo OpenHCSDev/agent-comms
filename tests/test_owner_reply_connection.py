@@ -36,10 +36,10 @@ class Writer:
 
 def owner_read(tmp_path):
     comms = Comms(tmp_path)
-    thread = Thread.create(
+    thread = Thread(
         "worker", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
-    storage_rule=StorageRule())
+    storage_roots=StorageRule().initial_roots('worker', str(tmp_path)))
     comms.registry.declare(thread)
     return comms, GoalRead(str(tmp_path), thread.incarnation)
 

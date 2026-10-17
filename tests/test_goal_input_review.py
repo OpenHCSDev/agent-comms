@@ -27,12 +27,12 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     comms = wire(tmp_path / "wire")
     for name in ("worker", "parent", "other"):
         comms.registry.declare(
-            Thread.create(
+            Thread(
                 name,
                 frozenset(),
                 str(tmp_path),
                 process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
         )
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
@@ -132,23 +132,23 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     comms = wire(tmp_path)
     for name in ("worker", "parent"):
         comms.registry.declare(
-            Thread.create(
+            Thread(
                 name,
                 frozenset(),
                 str(tmp_path),
                 process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
         )
     old = comms.messaging.send_message("parent", "worker", "Old incarnation")
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
     comms.registry.declare(
-        Thread.create(
+        Thread(
             rebound,
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots(rebound, str(tmp_path)))
     )
     comms.agents.begin_turn("parent", "new-turn")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Current goal"))

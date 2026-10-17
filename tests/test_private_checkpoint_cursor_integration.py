@@ -44,25 +44,25 @@ def _root(tmp_path: Path):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread.create(
+        Thread(
             "sender",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule()),
-        Thread.create(
+        storage_roots=StorageRule().initial_roots('sender', str(tmp_path))),
+        Thread(
             "alpha",
             frozenset({"team"}),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
             model="openai-codex/gpt-6-sol",
-        storage_rule=StorageRule()),
-        Thread.create(
+        storage_roots=StorageRule().initial_roots('alpha', str(tmp_path))),
+        Thread(
             "other",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule()),
+        storage_roots=StorageRule().initial_roots('other', str(tmp_path))),
     ]
     for person in people:
         comms.registry.declare(person)

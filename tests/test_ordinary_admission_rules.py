@@ -124,8 +124,8 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     from goal_owner_fixture import canonical_goal_wire
 
     comms = canonical_goal_wire(tmp_path / "wire")
-    comms.registry.declare(Thread.create(name="owner", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule()))
-    peer = Thread.create(name="peer", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule())
+    comms.registry.declare(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path), storage_roots=StorageRule().initial_roots('owner', str(tmp_path))))
+    peer = Thread(name="peer", tags=frozenset(), worktree=str(tmp_path), storage_roots=StorageRule().initial_roots('peer', str(tmp_path)))
     comms.registry.declare(peer)
     peer = comms.registry.require("peer")
     goal = Goal("Wait for peer", "goal", published_seq=0)

@@ -23,7 +23,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
     case = _ready(tmp_path, direct=direct)
     try:
         # A subscriber arriving after the original is not a historical recipient.
-        case.comms.registry.declare(Thread.create("late", frozenset({"team"}), worktree=str(tmp_path), storage_rule=StorageRule()))
+        case.comms.registry.declare(Thread("late", frozenset({"team"}), worktree=str(tmp_path), storage_roots=StorageRule().initial_roots('late', str(tmp_path))))
         sender = case.comms.registry.require("sender")
         lookup = RecordedThreadIncarnation("fixture", sender.created_at).lookup
         intent = prepare_fenced_response(

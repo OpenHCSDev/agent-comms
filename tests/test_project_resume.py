@@ -30,9 +30,9 @@ def declared_owner(tmp_path):
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread.create(
+    comms.registry.declare(Thread(
         "owner", frozenset(), str(old), process_identity=ProcessIdentity.capture(os.getpid()),
-    storage_rule=StorageRule()))
+    storage_roots=StorageRule().initial_roots('owner', str(old))))
     return comms, old, new
 
 
@@ -50,9 +50,9 @@ def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_p
     assert comms.agents.finish_turn(turn.turn_lease)
     # The turn ended and nothing ran afterwards: the registry still says so,
     # also for an owner that registers this thread again later.
-    comms.registry.declare(Thread.create(
+    comms.registry.declare(Thread(
         "owner", frozenset(), str(new), process_identity=ProcessIdentity.capture(os.getpid()),
-    storage_rule=StorageRule()))
+    storage_roots=StorageRule().initial_roots('owner', str(new))))
     current = comms.registry.require("owner")
     assert current.project_resume_due and current.worktree == str(new)
     assert json.loads(comms.registry.store.path.read_text())["threads"]["owner"]["project_resume_due"]

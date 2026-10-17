@@ -16,7 +16,7 @@ from agent_comms.read_basis import ReadCursor
 def prepared(root):
     comms = wire(root)
     for name, tags in (("alice", {"team"}), ("bob", set())):
-        comms.registry.declare(Thread.create(name, frozenset(tags), str(root), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset(tags), str(root), storage_roots=StorageRule().initial_roots(name, str(root))))
     return comms
 
 
@@ -73,7 +73,7 @@ def test_displayed_message_is_read_in_every_projection(tmp_path):
 
 def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp_path):
     comms = prepared(tmp_path)
-    comms.registry.declare(Thread.create("carol", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("carol", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('carol', str(tmp_path))))
     hidden = comms.messaging.send_message("bob", "carol", "no member mentioned")
     shown = comms.messaging.send_message("bob", "carol", "@alice shown by mention")
     comms.channels.set_channel_any_mode("#team", True)
@@ -103,7 +103,7 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     comms.registry.lease_local_turn("alice", "ordinary-turn")
     fresh = comms.views.dm_display_page("alice", worktree=str(tmp_path))
     assert fresh.display_basis.peer_created_at == page.display_basis.peer_created_at
-    comms.registry.register(Thread.create("unrelated", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.register(Thread("unrelated", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('unrelated', str(tmp_path))))
     comms.views.mark_dm_view_read(
         "alice",
         worktree=str(tmp_path),
@@ -117,7 +117,7 @@ def test_agent_sent_dm_includes_independent_human_read(tmp_path):
     from agent_comms.thread_identity import ThreadRole
 
     comms = prepared(tmp_path)
-    comms.registry.declare(Thread.create("reader", frozenset(), str(tmp_path), role=ThreadRole.USER, storage_rule=StorageRule()))
+    comms.registry.declare(Thread("reader", frozenset(), str(tmp_path), role=ThreadRole.USER, storage_roots=StorageRule().initial_roots('reader', str(tmp_path))))
     message = comms.messaging.send_message("alice", "reader", "painted agent DM")
     snapshot = comms.registry.snapshot()
     displayed = comms.bus.reads.capture(
@@ -173,7 +173,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     assert comms.bus.pending_count(viewer, "alice") == 0
     comms.registry.unregister("alice")
     comms.registry.remove("alice")
-    comms.registry.declare(Thread.create("alice", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('alice', str(tmp_path))))
     fresh = comms.messaging.send_message("alice", viewer, "new incarnation unseen")
     assert old.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     assert comms.bus.pending_count(viewer, "alice") == 1
@@ -271,7 +271,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
         )
         # Unrelated registry changes and previous ACKs do not invalidate the
         # remaining captured proof; participant identity still does.
-        comms.registry.register(Thread.create("unrelated", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.register(Thread("unrelated", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('unrelated', str(tmp_path))))
     reopened = wire(tmp_path)
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
     assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor(exceptions=(messages[2].seq, messages[4].seq))
@@ -367,7 +367,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
         elif operation == "rebind":
             comms.registry.unregister("alice")
             comms.registry.remove("alice")
-            comms.registry.declare(Thread.create("alice", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
+            comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('alice', str(tmp_path))))
         elif operation == "crash":
             # The child loads the actual durable store, then exits without
             # Python cleanup. No synthetic read document or mocked reopen.

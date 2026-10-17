@@ -101,8 +101,8 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
 @pytest.mark.asyncio
 async def test_close_joins_unsent_request_and_capability_requires_claim(tmp_path):
     comms = wire(tmp_path / "w")
-    comms.registry.declare(Thread.create("cold", frozenset(), str(tmp_path),
-                                 process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("cold", frozenset(), str(tmp_path),
+                                 process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('cold', str(tmp_path))))
     client = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)
     proxy = RuntimeProxy(client, "cold", socket_path(comms.root, os.getpid()))
     client.sessions.proxies["cold"] = proxy

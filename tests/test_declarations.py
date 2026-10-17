@@ -77,7 +77,7 @@ class TestGoalRevision:
         path = tmp_path / "registry.json"
         registry = Registration(path)
         registry.register(
-            Thread.create(name="owner", tags=frozenset(), worktree="/wt", goal=Goal("work", "old-id", published_seq=0), storage_rule=StorageRule())
+            Thread(name="owner", tags=frozenset(), worktree="/wt", goal=Goal("work", "old-id", published_seq=0), storage_roots=StorageRule().initial_roots('owner', '/wt'))
         )
         raw = json.loads(path.read_text())
         del raw["threads"]["owner"]["goal"]["revision"]
@@ -88,33 +88,33 @@ class TestGoalRevision:
 
 class TestThreadDeclaration:
     def test_constructing_declares(self):
-        thread = Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule())
+        thread = Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt'))
         assert thread.name == "a"
         assert thread.is_fork is False
 
     def test_rejects_bad_name_characters(self):
         with pytest.raises(ValueError, match="alphanumeric"):
-            Thread.create(name="bad name!", tags=frozenset(), worktree="/wt", storage_rule=StorageRule())
+            Thread(name="bad name!", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('bad name!', '/wt'))
 
     def test_rejects_empty_name(self):
         with pytest.raises(ValueError):
-            Thread.create(name="", tags=frozenset(), worktree="/wt", storage_rule=StorageRule())
+            Thread(name="", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('', '/wt'))
 
     def test_rejects_empty_worktree(self):
         with pytest.raises(ValueError, match="worktree"):
-            Thread.create(name="a", tags=frozenset(), worktree="", storage_rule=StorageRule())
+            Thread(name="a", tags=frozenset(), worktree="", storage_roots=StorageRule().initial_roots('a', ''))
 
     def test_rejects_self_parent(self):
         with pytest.raises(RelationViolationError, match="own parent"):
-            Thread.create(name="a", tags=frozenset(), worktree="/wt", parent="a", storage_rule=StorageRule())
+            Thread(name="a", tags=frozenset(), worktree="/wt", parent="a", storage_roots=StorageRule().initial_roots('a', '/wt'))
 
     def test_fork_provenance(self):
-        fork = Thread.create(name="b", tags=frozenset(), worktree="/wt", parent="a", storage_rule=StorageRule())
+        fork = Thread(name="b", tags=frozenset(), worktree="/wt", parent="a", storage_roots=StorageRule().initial_roots('b', '/wt'))
         assert fork.is_fork is True
         assert fork.parent == "a"
 
     def test_frozen(self):
-        thread = Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule())
+        thread = Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt'))
         with pytest.raises(AttributeError):
             thread.name = "b"  # type: ignore[misc]
 
@@ -160,7 +160,7 @@ class TestMessageDeclaration:
 class TestRegistration:
     def test_register_and_require(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        thread = Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule())
+        thread = Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt'))
         registry.register(thread)
         assert registry.require("a") is not None
         assert "a" in registry
@@ -172,7 +172,7 @@ class TestRegistration:
 
     def test_status_transitions(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
         assert registry.status("a") == RunningThreadStatus()
         registry.unregister("a")
         assert registry.status("a") == StoppedThreadStatus()
@@ -185,7 +185,7 @@ class TestRegistration:
 
     def test_stop_then_heartbeat_cannot_reclaim_initial_owner_generation(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('a', '/wt')))
         snapshot = registry.snapshot()
         expected = RegistryOwner.capture_local(snapshot, "a").thread
         claimed_generation = snapshot.owner_identity("a").generation
@@ -204,7 +204,7 @@ class TestRegistration:
         self, tmp_path: Path
     ) -> None:
         registry = Registration(tmp_path / "registry.json")
-        owner = Thread.create(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
+        owner = Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('a', '/wt'))
         registry.register(owner)
         before = registry.snapshot().claimed_generations["a"]
         registry.register(replace(owner, session_file=str(tmp_path / "session.jsonl")))
@@ -216,7 +216,7 @@ class TestRegistration:
 
     def test_owner_claim_follows_same_owner_rename(self, tmp_path: Path) -> None:
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('a', '/wt')))
         before = registry.snapshot().claimed_generations["a"]
         registry.rename("a", "renamed-a")
         snapshot = Registration(registry.store.path).snapshot()
@@ -226,16 +226,16 @@ class TestRegistration:
     def test_rename_reclaims_own_alias_without_losing_owner_or_turn(self, tmp_path: Path) -> None:
         registry = Registration(tmp_path / "registry.json")
         registry.register(
-            Thread.create(
+            Thread(
                 name="agent-comms-ux",
                 tags=frozenset(),
                 worktree="/wt",
                 process_identity=ProcessIdentity.capture(os.getpid()),
                 goal=Goal("Finish the goal", "goal-1", published_seq=0),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('agent-comms-ux', '/wt'))
         )
         registry.register(
-            Thread.create(name="child", tags=frozenset(), worktree="/wt", parent="agent-comms-ux", storage_rule=StorageRule())
+            Thread(name="child", tags=frozenset(), worktree="/wt", parent="agent-comms-ux", storage_roots=StorageRule().initial_roots('child', '/wt'))
         )
         original = registry.require("agent-comms-ux")
         registry.rename("agent-comms-ux", "pr17")
@@ -259,7 +259,7 @@ class TestRegistration:
     def test_other_owner_writes_do_not_invalidate_private_generation(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
         for name in ("a", "b"):
-            registry.register(Thread.create(name=name, tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+            registry.register(Thread(name=name, tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots(name, '/wt')))
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
         claimed_generation = snapshot.owner_identity("a").generation
@@ -286,7 +286,7 @@ class TestRegistration:
         self, tmp_path: Path, revocation: str
     ) -> None:
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('a', '/wt')))
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
         claimed_generation = snapshot.owner_identity("a").generation
@@ -314,7 +314,7 @@ class TestRegistration:
 
     def test_comms_begin_turn_cannot_revive_stopped_owner(self, tmp_path: Path) -> None:
         comms = Comms(tmp_path / "wire")
-        comms.registry.declare(Thread.create(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('a', '/wt')))
         comms.registry.unregister("a")
         with pytest.raises(RelationViolationError, match="stopped or unavailable"):
             comms.agents.begin_turn("a", "revived")
@@ -329,7 +329,7 @@ class TestRegistration:
         comms = Comms(root, private_initial_writes=True)
         comms.messaging.initialize_private_initial_protocol()
         reopened = Comms(root)
-        reopened.registry.declare(Thread.create(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+        reopened.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('a', '/wt')))
         assert reopened.registry.snapshot().owner_identity("a").generation > 0
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -339,7 +339,7 @@ class TestRegistration:
         root = tmp_path / "private-wire"
         root.mkdir(mode=0o700)
         comms = Comms(root, private_initial_writes=True)
-        comms.registry.declare(Thread.create(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('a', '/wt')))
         comms.messaging.initialize_private_initial_protocol()
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
@@ -349,7 +349,7 @@ class TestRegistration:
         with pytest.raises(RelationViolationError, match="guard does not match"):
             comms.agents.begin_turn("a", "must-not-claim")
         with pytest.raises(RelationViolationError, match="guard does not match"):
-            comms.registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+            comms.registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
         assert json.loads(registry_path.read_text())["threads"]["a"].get("active_turn") is None
 
     @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
@@ -361,7 +361,7 @@ class TestRegistration:
 
         root = tmp_path / "isolated-private-root"
         comms = Comms(root, private_initial_writes=True)
-        comms.registry.declare(Thread.create(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('a', '/wt')))
         root_id = comms.messaging.initialize_private_initial_protocol()
         assert len(root_id) == 32
         cold = Registration(root / "registry.json")
@@ -392,7 +392,7 @@ class TestRegistration:
         monkeypatch.setattr(store_files, "_atomic_write_text", write)
         with pytest.raises((OSError, RelationViolationError), match="injected|guard"):
             comms.registry.register(
-                Thread.create(name="b", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
+                Thread(name="b", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('b', '/wt'))
             )
         monkeypatch.undo()
         # Failed COMMITTED fsync follows successful directory fsync. Complete
@@ -406,7 +406,7 @@ class TestRegistration:
             assert cold.require("a").name == "a"
             assert Registration(root / "registry.json").require("a").name == "a"
             comms.registry.register(
-                Thread.create(name="b", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
+                Thread(name="b", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('b', '/wt'))
             )
             assert Registration(root / "registry.json").require("b").name == "b"
         else:
@@ -437,7 +437,7 @@ class TestRegistration:
     ) -> None:
         root = tmp_path / "new-private"
         comms = Comms(root, private_initial_writes=True)
-        comms.registry.declare(Thread.create(name="sender", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="sender", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('sender', '/wt')))
         original_fsync = os.fsync
         def fsync(fd: int) -> None:
             # Target the actual marker publication rather than an ordinal:
@@ -465,7 +465,7 @@ class TestRegistration:
     ) -> None:
         root = tmp_path / "private"
         comms = Comms(root, private_initial_writes=True)
-        comms.registry.declare(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
         comms.messaging.initialize_private_initial_protocol()
         original_pwrite = os.pwrite
         guard_calls = 0
@@ -482,7 +482,7 @@ class TestRegistration:
 
         monkeypatch.setattr(os, "pwrite", pwrite)
         with pytest.raises(RelationViolationError, match="slot write was incomplete"):
-            comms.registry.register(Thread.create(name="b", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+            comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('b', '/wt')))
         monkeypatch.undo()
         with pytest.raises(RelationViolationError, match="slot checksum"):
             Registration(root / "registry.json")
@@ -494,7 +494,7 @@ class TestRegistration:
     ) -> None:
         root = tmp_path / "guarded"
         comms = Comms(root, private_initial_writes=True)
-        comms.registry.declare(Thread.create(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('a', '/wt')))
         comms.messaging.initialize_private_initial_protocol()
         cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"
@@ -516,14 +516,14 @@ class TestRegistration:
         with pytest.raises(RelationViolationError, match="Private registry guard"):
             cold.require("a")
         with pytest.raises(RelationViolationError, match="Private registry guard"):
-            comms.registry.register(Thread.create(name="b", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+            comms.registry.register(Thread(name="b", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('b', '/wt')))
         # A refused read leaves no cached document; none may carry guard state.
         entry = comms.registry.store.cache.entry
         assert entry is None or "registry_guard" not in entry.document.threads["a"].to_wire()
 
     def test_release_turn_resolves_retained_alias_only_for_exact_lease(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('a', '/wt')))
         registry.rename("a", "b")
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
@@ -541,7 +541,7 @@ class TestRegistration:
 
     def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        thread = Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule())
+        thread = Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt'))
         registry.register(thread)
         registry.unregister("a")
         registry.begin_delete("a")
@@ -553,15 +553,15 @@ class TestRegistration:
 
     def test_active_threads_excludes_stopped(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
-        registry.register(Thread.create(name="b", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
+        registry.register(Thread(name="b", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('b', '/wt')))
         registry.unregister("a")
         assert set(registry.active_threads()) == {"b"}
         assert set(registry.all_threads()) == {"a", "b"}
 
     def test_remove_drops_declaration_entirely(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
-        registry.register(Thread.create(name="a", tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots('a', '/wt')))
         registry.remove("a")
         assert "a" not in registry
         with pytest.raises(UnregisteredThreadError):
@@ -574,14 +574,14 @@ class TestRegistration:
         path = tmp_path / "registry.json"
         registry = Registration(path)
         registry.register(
-            Thread.create(
+            Thread(
                 name="a",
                 tags=frozenset({"x", "y"}),
                 worktree="/wt",
                 parent="p",
                 task="t",
                 process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('a', '/wt'))
         )
         registry.unregister("a")
         reloaded = Registration(path)
@@ -593,14 +593,14 @@ class TestRegistration:
     def test_peers_excludes_self(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
         for name in ("a", "b", "c"):
-            registry.register(Thread.create(name=name, tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+            registry.register(Thread(name=name, tags=frozenset(), worktree="/wt", storage_roots=StorageRule().initial_roots(name, '/wt')))
         assert set(registry.peers("b")) == {"a", "c"}
 
 
 def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tmp_path, monkeypatch):
     comms = Comms(tmp_path)
     for name in ("a", "b"):
-        comms.registry.declare(Thread.create(name, frozenset(), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
     for sender, target in (("missing", "b"), ("a", "missing")):
         with pytest.raises(ValueError):
             comms.messaging.send_message(sender, target, "invalid")
@@ -656,13 +656,13 @@ class TestCurrentThread:
     def test_fail_closed_without_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
         with pytest.raises(CallingThreadUnavailable, match="AGENT_COMMS_THREAD"):
-            current_thread(storage_rule=StorageRule())
+            current_thread(None)
 
     def test_declares_from_env(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
         monkeypatch.setenv("PI_AGENT_TAGS", "a, b")
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("PI_PARENT_ID", raising=False)
-        thread = current_thread(storage_rule=StorageRule())
+        thread = current_thread(Comms(tmp_path).registry)
         assert thread.name == "worker"
         assert thread.tags == frozenset({"a", "b"})

@@ -40,7 +40,7 @@ def bound(tmp_path):
     root.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(root)
     goal = Goal("private goal prose", "goal", published_seq=0, revision=2)
-    owner = Thread.create(
+    owner = Thread(
         "owner",
         frozenset(),
         "/private-worktree",
@@ -49,7 +49,7 @@ def bound(tmp_path):
         goal=goal,
         turn_generation=7,
         last_finished_turn_id="a" * 32,
-    storage_rule=StorageRule())
+    storage_roots=StorageRule().initial_roots('owner', '/private-worktree'))
     store.create_goal(goal.id)
     permit = store.claim_launch(store.reserve(goal.id, 1))
     lease = TurnLeaseFence(TurnIdentity(owner.incarnation, 7), "a" * 32, 3)

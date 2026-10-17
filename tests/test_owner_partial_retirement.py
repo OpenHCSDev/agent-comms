@@ -26,10 +26,10 @@ class AuthoredRetirement(OwnerLifecycle):
         comms = Comms(root)
         super().__init__(comms.root, comms.registry, comms.bus)
         self.mode = mode
-        self.originals = tuple(Thread.create(
+        self.originals = tuple(Thread(
             name, frozenset(), '/authored', created_at=float(index + 1),
             process_identity=ProcessIdentity(2147483647 - index, 1),
-        storage_rule=StorageRule()) for index, name in enumerate(('first', 'second')))
+        storage_roots=StorageRule().initial_roots(name, '/authored')) for index, name in enumerate(('first', 'second')))
         for thread in self.originals:
             self.registry.register(thread, StoppedThreadStatus())
         self.alive = {t.require_process(): True for t in self.originals}

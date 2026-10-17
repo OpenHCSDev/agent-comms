@@ -14,7 +14,7 @@ from test_thread_unread import append
 
 def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("worker", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("worker", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send_message("worker", "#team", "painted")
     page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
@@ -45,9 +45,9 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     comms = wire(tmp_path / "wire")
     source = tmp_path / "native.jsonl"
     append(source, content="painted reply")
-    comms.registry.declare(Thread.create("worker", frozenset({"team"}), str(tmp_path),
-                                 session_file=str(source), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("receiver", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("worker", frozenset({"team"}), str(tmp_path),
+                                 session_file=str(source), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    comms.registry.declare(Thread("receiver", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('receiver', str(tmp_path))))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     shown = comms.transcripts.transcript_checkpoint("worker")
     append(source, content="unpainted reply")

@@ -84,7 +84,7 @@ class TestEndToEndLifecycle:
         comms = wire_root(root)
         parent = comms.registry.require("PR111")
         comms.registry.declare(
-            Thread.create(
+            Thread(
                 name=parent.name,
                 tags=parent.tags,
                 worktree=parent.worktree,
@@ -92,7 +92,7 @@ class TestEndToEndLifecycle:
                 task=parent.task,
                 process_identity=parent.process_identity,
                 session_file=str(session),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots(parent.name, parent.worktree))
         )
 
         # 2. Parent forks a child (pi binary faked with a live stub script).

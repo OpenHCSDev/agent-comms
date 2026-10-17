@@ -23,7 +23,7 @@ class ReviewScope(MessageDisplayScope):
 def test_new_scope_preserves_indexed_progress_and_edges(tmp_path, direction):
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread.create(name, frozenset({"review"}), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset({"review"}), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
     messages = [
         comms.messaging.send_message("sender", "recipient", body)
         for body in ("noise", "review first", "review " + "x" * 3000,

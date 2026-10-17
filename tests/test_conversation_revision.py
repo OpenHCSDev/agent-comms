@@ -14,7 +14,7 @@ from agent_comms.threads import Thread
 
 def declared_wire(root):
     comms = wire(root)
-    comms.registry.declare(Thread.create(name="peer", tags=frozenset({"comms"}), worktree=str(root), storage_rule=StorageRule()))
+    comms.registry.declare(Thread(name="peer", tags=frozenset({"comms"}), worktree=str(root), storage_roots=StorageRule().initial_roots('peer', str(root))))
     return comms
 
 
@@ -22,7 +22,7 @@ def declared_wire(root):
 def test_unrelated_registration_does_not_replace_display(tmp_path, view, target):
     comms = declared_wire(tmp_path)
     before = view.revision(comms.views, target, worktree=str(tmp_path))
-    comms.registry.declare(Thread.create(name="unrelated", tags=frozenset({"other"}), worktree=str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread(name="unrelated", tags=frozenset({"other"}), worktree=str(tmp_path), storage_roots=StorageRule().initial_roots('unrelated', str(tmp_path))))
     after = view.revision(comms.views, target, worktree=str(tmp_path))
 
     assert before.stores.registry != after.stores.registry

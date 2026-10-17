@@ -285,7 +285,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
         owner = comms.registry.require(session)
 
         def declare_sender():
-            comms.registry.declare(Thread.create("sender", frozenset(), str(native.project), storage_rule=StorageRule()))
+            comms.registry.declare(Thread("sender", frozenset(), str(native.project), storage_roots=StorageRule().initial_roots('sender', str(native.project))))
             with Coordination(str(native.root / "coordination.sqlite3")) as store:
                 install_private_cohort_schema(store)
                 store.participants.register(owner.incarnation.lookup, session, session, committed=True)

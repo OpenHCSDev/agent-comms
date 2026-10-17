@@ -79,9 +79,9 @@ async def run(stage, package):
         environment.pop(key, None)
     os.environ.clear()
     os.environ.update(environment)
-    child = Thread.create('reply505', source.tags, source.worktree, parent=source.name,
+    child = Thread('reply505', source.tags, source.worktree, parent=source.name,
         task=source.task, session_file=fork.session_file, model=source.model,
-        thinking_level=source.thinking_level, execution=source.execution, storage_rule=StorageRule())
+        thinking_level=source.thinking_level, execution=source.execution, storage_roots=StorageRule().initial_roots('reply505', source.worktree))
     service.registry.declare(child)
     assert 'openhcs' in child.tags
     packets = []

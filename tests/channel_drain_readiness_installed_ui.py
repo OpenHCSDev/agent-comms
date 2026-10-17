@@ -47,8 +47,8 @@ class InstalledApp(ToadApp):
     CSS_PATH = files('toad').joinpath('toad.tcss')
 
 async def prepare(comms, project, *_):
-    comms.registry.declare(Thread.create('history-sender', frozenset(), str(project), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create('history-recipient', frozenset(), str(project), storage_rule=StorageRule()))
+    comms.registry.declare(Thread('history-sender', frozenset(), str(project), storage_roots=StorageRule().initial_roots('history-sender', str(project))))
+    comms.registry.declare(Thread('history-recipient', frozenset(), str(project), storage_roots=StorageRule().initial_roots('history-recipient', str(project))))
     for index in range(220):
         comms.messaging.send_initial_cohort('history-sender', 'history-recipient',
             f'Original retained source {index}: ' + 'history '*250)

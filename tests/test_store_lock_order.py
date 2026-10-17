@@ -30,7 +30,7 @@ def test_concrete_store_cannot_inherit_or_omit_its_rank():
 
 def test_conversation_read_and_native_write_share_declared_order(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread.create("peer", frozenset({"comms"}), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("peer", frozenset({"comms"}), str(tmp_path), storage_roots=StorageRule().initial_roots('peer', str(tmp_path))))
     comms.messaging.user_identity(str(tmp_path))
     reader_has_bus, writer_at_bus = threading.Event(), threading.Event()
     failures, events = [], []

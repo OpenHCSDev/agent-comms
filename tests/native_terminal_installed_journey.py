@@ -51,7 +51,7 @@ async def main(output, package, launcher, provider, model, thinking):
     try:
         await agent._runtime.start()
         opened = await agent.new_session(cwd=str(project), mcp_servers=[])
-        comms.registry.declare(Thread.create('verifier', frozenset(), str(project), storage_rule=StorageRule()))
+        comms.registry.declare(Thread('verifier', frozenset(), str(project), storage_roots=StorageRule().initial_roots('verifier', str(project))))
         instruction = (
             "Isolated native terminal verification. Use bash exactly once to run this "
             "command in the current directory: printf 'effect\\n' >> one-effect.txt . "

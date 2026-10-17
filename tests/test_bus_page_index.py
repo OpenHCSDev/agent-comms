@@ -24,7 +24,7 @@ from agent_comms.wire_metadata import ArchivedAccess, WritableAccess
 def retained_source(root, count, *, access=ArchivedAccess()):
     comms = Comms(root)
     for name in ("a", "b", "c"):
-        comms.registry.declare(Thread.create(name, frozenset(), str(root), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset(), str(root), storage_roots=StorageRule().initial_roots(name, str(root))))
     comms.messaging.initialize_private_initial_protocol()
     with _store_lock(comms.root / 'wire'), comms.bus.log.locked():
         with comms.bus.log.path.open("w") as output:

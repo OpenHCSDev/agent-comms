@@ -81,10 +81,10 @@ def selected_turn():
         resource.write_text("value = 1\n")
         comms = Comms(root)
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
-            comms.registry.declare(Thread.create(
+            comms.registry.declare(Thread(
                 name, frozenset({"team"}), str(worktree),
                 process_identity=ProcessIdentity.capture(os.getpid()), created_at=created,
-            storage_rule=StorageRule()))
+            storage_roots=StorageRule().initial_roots(name, str(worktree))))
         root_id = comms.messaging.initialize_private_initial_protocol()
         record_context(comms, "Alice", 1)
         message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")

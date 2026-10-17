@@ -115,8 +115,8 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
         target = native.project / "module.py"
         target.write_text("value = 1\n")
         comms = Comms(native.root)
-        comms.registry.declare(Thread.create("worker", frozenset(), str(native.project),
-                                      session_file=str(native.session), model="response-local/fixture", storage_rule=StorageRule()))
+        comms.registry.declare(Thread("worker", frozenset(), str(native.project),
+                                      session_file=str(native.session), model="response-local/fixture", storage_roots=StorageRule().initial_roots('worker', str(native.project))))
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
         comms.owners.pin_private_nk_launch(
             native.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],

@@ -10,7 +10,7 @@ def _output(tmp_path):
     from agent_comms.threads import Thread
 
     comms = Comms(tmp_path)
-    comms.registry.declare(Thread.create('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution, storage_rule=StorageRule()))
+    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution, storage_roots=StorageRule().initial_roots('cli', str(tmp_path))))
     return ThreadOutput(comms.transcripts.external('cli'), comms.agents)
 
 

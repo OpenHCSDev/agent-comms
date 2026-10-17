@@ -26,12 +26,12 @@ from agent_comms.wake_policy import FullWake
 def archived_notification(tmp_path):
     old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
     for comms in (old, live):
-        comms.registry.declare(Thread.create("sender", frozenset(), str(tmp_path), created_at=10.0, storage_rule=StorageRule()))
-        comms.registry.declare(Thread.create("reader", frozenset(), str(tmp_path),
+        comms.registry.declare(Thread("sender", frozenset(), str(tmp_path), created_at=10.0, storage_roots=StorageRule().initial_roots('sender', str(tmp_path))))
+        comms.registry.declare(Thread("reader", frozenset(), str(tmp_path),
                                      created_at=11.0,
-                                     role=ThreadRole.AGENT if comms is old else ThreadRole.USER, storage_rule=StorageRule()))
-        comms.registry.declare(Thread.create("agent", frozenset(), str(tmp_path),
-                                     created_at=12.0 if comms is old else 212.0, storage_rule=StorageRule()))
+                                     role=ThreadRole.AGENT if comms is old else ThreadRole.USER, storage_roots=StorageRule().initial_roots('reader', str(tmp_path))))
+        comms.registry.declare(Thread("agent", frozenset(), str(tmp_path),
+                                     created_at=12.0 if comms is old else 212.0, storage_roots=StorageRule().initial_roots('agent', str(tmp_path))))
     root_id = old.messaging.initialize_private_initial_protocol()
     messages = (
         old.messaging.send_initial_cohort("sender", "agent", "authored pending delivery"),

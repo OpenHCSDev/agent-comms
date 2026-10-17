@@ -23,7 +23,7 @@ from agent_comms.pi_payloads import PublishedMessageToolDetails
 
 def register(comms, name):
     comms.registry.declare(
-        Thread.create(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
+        Thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots(name, str(comms.root)))
     )
     return comms.registry.require(name)
 

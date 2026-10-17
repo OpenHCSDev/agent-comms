@@ -16,10 +16,10 @@ from agent_comms.threads import Thread
 
 def registered(root):
     comms = wire(root)
-    comms.registry.register(Thread.create(
+    comms.registry.register(Thread(
         'owner', frozenset({'team'}), str(root),
         process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g', published_seq=0),
-    storage_rule=StorageRule()))
+    storage_roots=StorageRule().initial_roots('owner', str(root))))
     return comms.registry
 
 

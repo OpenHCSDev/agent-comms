@@ -21,7 +21,7 @@ from agent_comms.threads import Thread
 
 def registry_with_owner(tmp_path):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('owner', str(tmp_path))))
     return registry
 
 
@@ -75,7 +75,7 @@ def test_delete_and_rebind_changes_identity_and_keeps_counter_tombstone(tmp_path
     before = registry.snapshot().owner_identity("owner")
     registry.unregister("owner")
     registry.remove("owner")
-    registry.register(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('owner', str(tmp_path))))
     after = registry.snapshot().owner_identity("owner")
     assert after.incarnation != before.incarnation
     assert after.generation > before.generation
@@ -93,7 +93,7 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
 
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     comms = Comms(tmp_path)
-    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('owner', str(tmp_path))))
     first = comms.agents.begin_turn("owner", "reused").turn_lease
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
@@ -131,7 +131,7 @@ def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
     assert conversation.current(registry.snapshot())
     registry.unregister("owner")
     registry.remove("owner")
-    registry.register(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('owner', str(tmp_path))))
     assert not conversation.current(registry.snapshot())
 
 
@@ -200,7 +200,7 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
 
 def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     comms = Comms(tmp_path)
-    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('owner', str(tmp_path))))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send_message("owner", viewer, "already painted")
     page = comms.views.dm_display_page("owner", worktree=str(tmp_path))
@@ -246,8 +246,8 @@ def test_stopped_status_changes_do_not_invent_another_owner(tmp_path):
 
 def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_path):
     process = ProcessIdentity.capture(os.getpid())
-    thread = Thread.create("owner", frozenset(), str(tmp_path), process_identity=process,
-                    session_file=str(tmp_path / "a.jsonl"), model="model-a", created_at=1.0, storage_rule=StorageRule())
+    thread = Thread("owner", frozenset(), str(tmp_path), process_identity=process,
+                    session_file=str(tmp_path / "a.jsonl"), model="model-a", created_at=1.0, storage_roots=StorageRule().initial_roots('owner', str(tmp_path)))
 
     assert thread.same_launch(replace(thread, title="Renamed", tags=frozenset({"team"}), turn_generation=3))
     for changed in (

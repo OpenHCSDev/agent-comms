@@ -75,7 +75,7 @@ def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monk
     from agent_comms import wire_log
 
     comms = Comms(tmp_path / "wire")
-    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('owner', str(tmp_path))))
     write = wire_log._atomic_write_text
 
     def fail_seal(path, contents, **kwargs):

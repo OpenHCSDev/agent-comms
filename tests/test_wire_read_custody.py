@@ -15,8 +15,8 @@ def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture
     tmp_path, monkeypatch
 ):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("sender", frozenset(), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("recipient", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('sender', str(tmp_path))))
+    comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('recipient', str(tmp_path))))
     first = comms.messaging.send_message("sender", "recipient", "first")
     log = comms.bus.log
 
@@ -68,7 +68,7 @@ def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture
 def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path):
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread.create(name, frozenset(), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
     first = comms.messaging.send_message("sender", "recipient", "first")
     with BusPageIndex(comms.bus.log.path) as prepared:
         assert prepared.sync()
@@ -108,7 +108,7 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
 def test_relationship_tail_decode_does_not_retain_publication_custody(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread.create(name, frozenset(), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
     comms.messaging.send_message("sender", "recipient", "first")
     decoding = threading.Event()
     release = threading.Event()

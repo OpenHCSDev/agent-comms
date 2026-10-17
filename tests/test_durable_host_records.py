@@ -86,8 +86,8 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path):
     async def journey():
         backend = PiDurableBackend()
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
-        thread = Thread.create('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
-                        session_file=location.path, storage_rule=StorageRule())
+        thread = Thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
+                        session_file=location.path, storage_roots=StorageRule().initial_roots('records', str(tmp_path)))
         try:
             outcome = await backend.compact(thread, 'retain the empty plan')
             assert isinstance(outcome, FailedCompaction)

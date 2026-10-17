@@ -193,12 +193,12 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             project.mkdir()
             await agent.new_session(str(project))
             comms.registry.declare(
-                Thread.create(
+                Thread(
                     "child",
                     frozenset(),
                     str(project),
                     process_identity=ProcessIdentity.capture(os.getpid()),
-                storage_rule=StorageRule())
+                storage_roots=StorageRule().initial_roots('child', str(project)))
             )
             comms.agents.begin_turn("child", "child-report-in-flight")
             goal = comms.goals.update_goal(

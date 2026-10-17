@@ -29,17 +29,17 @@ def _wire(base: Path) -> tuple[Comms, str]:
     root.mkdir(mode=0o700)
     comms = Comms(root)
     comms.registry.declare(
-        Thread.create(
+        Thread(
             "sender", frozenset(), str(base), process_identity=ProcessIdentity.capture(os.getpid())
-        , storage_rule=StorageRule())
+        , storage_roots=StorageRule().initial_roots('sender', str(base)))
     )
     comms.registry.declare(
-        Thread.create(
+        Thread(
             "beta",
             frozenset({"team"}),
             str(base),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('beta', str(base)))
     )
     return comms, comms.messaging.initialize_private_initial_protocol()
 

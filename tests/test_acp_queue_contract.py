@@ -38,9 +38,9 @@ from stored_inputs import stored_inputs
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
     comms = Comms(tmp_path / "wire")
-    thread = Thread.create(
+    thread = Thread(
         "beta", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
-    , storage_rule=StorageRule())
+    , storage_roots=StorageRule().initial_roots('beta', str(tmp_path)))
     comms.registry.declare(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"

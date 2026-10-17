@@ -19,7 +19,7 @@ from agent_comms.threads import Thread
 
 
 def _thread(root: Path, name: str) -> Thread:
-    return Thread.create(name, frozenset({"talk"}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
+    return Thread(name, frozenset({"talk"}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots(name, str(root)))
 
 
 def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_path: Path):

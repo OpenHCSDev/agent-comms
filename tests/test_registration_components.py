@@ -22,7 +22,7 @@ from agent_comms.threads import Thread
 
 
 def owner(path):
-    return Thread.create("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0, storage_rule=StorageRule())
+    return Thread("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0, storage_roots=StorageRule().initial_roots('owner', str(path)))
 
 
 def test_document_owns_lifecycle_without_registration_or_io(tmp_path):
@@ -138,8 +138,8 @@ def capture():
         if thread.get('active_turn'): thread['active_turn']['started_at'] = '<clock>'
     assert Registration(r.store.path).snapshot() == r.snapshot()
     steps.append(row)
-r.register(Thread.create('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
-r.register(Thread.create('child', frozenset(), str(root), parent='owner', created_at=20.0));capture()
+r.register(r.new_thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
+r.register(r.new_thread('child', frozenset(), str(root), parent='owner', created_at=20.0));capture()
 r.register(replace(r.require('owner'), title='metadata'));capture()
 r.lease_local_turn('owner','first');capture()
 r.release_turn(r.require('owner').turn_lease);capture()

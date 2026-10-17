@@ -35,10 +35,10 @@ def saved_source(path):
 
 
 def admit(comms, name):
-    comms.registry.declare(Thread.create(
+    comms.registry.declare(Thread(
         name, frozenset({"team"}), str(comms.root),
         process_identity=ProcessIdentity.capture(os.getpid()),
-    storage_rule=StorageRule()))
+    storage_roots=StorageRule().initial_roots(name, str(comms.root))))
     owner, claim_scope = comms.registry.live_owner_with_claim(name)
     owner, _ = comms.registry.lease_live_turn_with_claim(
         owner, name + "-turn", expected_generation=claim_scope
@@ -54,8 +54,8 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     )
 
     comms.messaging.initialize_private_initial_protocol()
-    owner = comms.registry.declare(Thread.create("recipient", frozenset({"team"}), str(comms.root), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("unaddressed", frozenset(), str(comms.root), storage_rule=StorageRule()))
+    owner = comms.registry.declare(Thread("recipient", frozenset({"team"}), str(comms.root), storage_roots=StorageRule().initial_roots('recipient', str(comms.root))))
+    comms.registry.declare(Thread("unaddressed", frozenset(), str(comms.root), storage_roots=StorageRule().initial_roots('unaddressed', str(comms.root))))
     exact = "Never replay UNKNOWN.\nUse original λ /artifacts/source; no substitute."
     subject = comms.messaging.send_user_message("recipient", exact, worktree=owner.worktree)
     original_bytes = (comms.root / "bus.jsonl").read_bytes()
@@ -86,7 +86,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     with pytest.raises(RelationViolationError, match="model turn scope"):
         comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree,
             scope=ExplicitTaskScopeSelection(TurnTaskScope(project=owner.worktree)))
-    comms.registry.declare(Thread.create("peer", frozenset(), str(comms.root), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("peer", frozenset(), str(comms.root), storage_roots=StorageRule().initial_roots('peer', str(comms.root))))
     with pytest.raises(RelationViolationError, match="author"):
         comms.messaging.send_message("peer", owner.name, "claim human source", task=pin.task)
     assert (comms.root / "bus.jsonl").read_bytes() == before
@@ -117,8 +117,8 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     from agent_comms.task_sources import CorrectionTaskChange, GoalTaskScope
 
     comms.messaging.initialize_private_initial_protocol()
-    owner = comms.registry.declare(Thread.create("recipient", frozenset(), str(comms.root),
-                                         goal=Goal("Original goal", "goal-one", published_seq=0), storage_rule=StorageRule()))
+    owner = comms.registry.declare(Thread("recipient", frozenset(), str(comms.root),
+                                         goal=Goal("Original goal", "goal-one", published_seq=0), storage_roots=StorageRule().initial_roots('recipient', str(comms.root))))
     subject = comms.messaging.send_user_message(owner.name, "Use the original coordinates.",
                                                 worktree=owner.worktree)
     pin = comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree)

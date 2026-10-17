@@ -14,8 +14,8 @@ from agent_comms.threads import Thread
 
 def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("sender", frozenset({"ci"}), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("receiver", frozenset({"ci", "docs"}), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("sender", frozenset({"ci"}), str(tmp_path), storage_roots=StorageRule().initial_roots('sender', str(tmp_path))))
+    comms.registry.declare(Thread("receiver", frozenset({"ci", "docs"}), str(tmp_path), storage_roots=StorageRule().initial_roots('receiver', str(tmp_path))))
     comms.messaging.send("sender", "#ci", "first")
     messages = comms.bus.inbox("receiver")
     comms.messaging.acknowledge("receiver", tuple(message.reference for message in messages))
@@ -42,8 +42,8 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
 
 def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("alice", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("bob", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('alice', str(tmp_path))))
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('bob', str(tmp_path))))
     comms.messaging.send("alice", "bob", "hidden until any-mode")
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 0
     comms.views.mark_channel_view_read("#team", worktree=str(tmp_path))
@@ -54,10 +54,10 @@ def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
 
 def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("alice", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("bob", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("carol", frozenset(), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("dave", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('alice', str(tmp_path))))
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('bob', str(tmp_path))))
+    comms.registry.declare(Thread("carol", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('carol', str(tmp_path))))
+    comms.registry.declare(Thread("dave", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('dave', str(tmp_path))))
     comms.channels.set_channel_any_mode("#team", True)
     comms.messaging.send_message("carol", "dave", "unpainted older DM")
     comms.messaging.send_message("alice", "bob", "painted DM")
@@ -73,10 +73,10 @@ def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
 
 def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("alice", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("bob", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("carol", frozenset(), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("dave", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('alice', str(tmp_path))))
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('bob', str(tmp_path))))
+    comms.registry.declare(Thread("carol", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('carol', str(tmp_path))))
+    comms.registry.declare(Thread("dave", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('dave', str(tmp_path))))
     comms.channels.set_channel_any_mode("#team", True)
     comms.messaging.send_message("carol", "dave", "hidden old DM")
     comms.messaging.send_message("alice", "bob", "painted DM")
@@ -103,8 +103,8 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
     with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
         root = Path(directory)
         comms = wire(root)
-        comms.registry.declare(Thread.create("alice", frozenset({"team"}), str(root), storage_rule=StorageRule()))
-        comms.registry.declare(Thread.create("bob", frozenset({"team"}), str(root), storage_rule=StorageRule()))
+        comms.registry.declare(Thread("alice", frozenset({"team"}), str(root), storage_roots=StorageRule().initial_roots('alice', str(root))))
+        comms.registry.declare(Thread("bob", frozenset({"team"}), str(root), storage_roots=StorageRule().initial_roots('bob', str(root))))
         comms.messaging.send_message("alice", "bob", "hidden before crash")
         comms.views.mark_channel_view_read("#team", worktree=str(root))
         child = subprocess.run(

@@ -36,12 +36,12 @@ from stored_inputs import stored_inputs
 
 def register(comms, name):
     comms.registry.declare(
-        Thread.create(
+        Thread(
             name,
             frozenset(),
             str(comms.root),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots(name, str(comms.root)))
     )
 
 

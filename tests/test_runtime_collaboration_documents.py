@@ -92,7 +92,7 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path):
     reopened = RuntimeInfoStore(store.path).read()
     assert FieldCodec.encode(reopened["new"]) == {**saved["old"], "thread": "new"}
     before = store.path.stat()
-    store.remove_threads((Thread.create("absent", frozenset(), str(tmp_path), storage_rule=StorageRule()),))
+    store.remove_threads((Thread("absent", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('absent', str(tmp_path))),))
     assert store.path.stat() == before
 
 
@@ -123,7 +123,7 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path):
     SharedLedger(store.path).merge({"other": [1, 2]}, "other")
     assert store.rename_thread("old", "new") == 2
     assert store.read()["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
-    store.remove_threads((Thread.create("new", frozenset(), str(tmp_path), storage_rule=StorageRule()),))
+    store.remove_threads((Thread("new", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('new', str(tmp_path))),))
     assert store.read() == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
 
 

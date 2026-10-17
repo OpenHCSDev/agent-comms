@@ -33,7 +33,7 @@ def saved_row(native_id, text, *, images=False, role="user"):
 
 def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     # These annotations are committed before sending, before Pi creates its first file.
     comms.transcripts.routes.record_input_display("a" * 32, None)
     comms.transcripts.routes.record_input_display(
@@ -98,7 +98,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
             ]
         )
     )
-    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), session_file=str(session), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     comms.transcripts.routes.record_input_display("a" * 32, None)
     comms.transcripts.routes.record_input_display("b" * 32, "test2")
     agent = CommsAgent(wire(comms.root))

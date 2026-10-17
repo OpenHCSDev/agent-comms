@@ -80,14 +80,14 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
         for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
             comms.registry.declare(
-                Thread.create(
+                Thread(
                     name,
                     frozenset({"team"}),
                     str(work),
                     process_identity=ProcessIdentity.capture(os.getpid()),
                     created_at=incarnation,
                     model="test/fake",
-                storage_rule=StorageRule())
+                storage_roots=StorageRule().initial_roots(name, str(work)))
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
         with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -268,23 +268,23 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
         sender_pid = os.getpid()
         comms.registry.declare(
-            Thread.create(
+            Thread(
                 "sender",
                 frozenset(),
                 str(work),
                 process_identity=ProcessIdentity.capture(sender_pid),
                 created_at=61001.0,
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('sender', str(work)))
         )
         comms.registry.declare(
-            Thread.create(
+            Thread(
                 "alpha",
                 frozenset({"team"}),
                 str(work),
                 process_identity=ProcessIdentity.capture(sender_pid),
                 created_at=61002.0,
                 model="test/fake",
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('alpha', str(work)))
         )
         root_id = comms.messaging.initialize_private_initial_protocol()
         with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -320,14 +320,14 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         try:
             assert process.pid != sender_pid
             comms.registry.declare(
-                Thread.create(
+                Thread(
                     "beta",
                     frozenset({"team"}),
                     str(work),
                     process_identity=ProcessIdentity.capture(process.pid),
                     created_at=61003.0,
                     model="test/fake",
-                storage_rule=StorageRule())
+                storage_roots=StorageRule().initial_roots('beta', str(work)))
             )
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 store.participants.register(

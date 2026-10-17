@@ -55,13 +55,13 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         comms = Comms(root)
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.registry.declare(
-                Thread.create(
+                Thread(
                     name,
                     frozenset({"team"}),
                     str(worktree),
                     process_identity=ProcessIdentity.capture(os.getpid()),
                     created_at=created,
-                storage_rule=StorageRule())
+                storage_roots=StorageRule().initial_roots(name, str(worktree)))
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
         message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")

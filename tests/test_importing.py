@@ -32,7 +32,7 @@ def comms(comms):
 def test_thread_display_title_is_inherited_without_copying_the_name(
     tmp_path, title, display, renamed_display
 ):
-    thread = Thread.create("original", frozenset(), str(tmp_path), title=title, storage_rule=StorageRule())
+    thread = Thread("original", frozenset(), str(tmp_path), title=title, storage_roots=StorageRule().initial_roots('original', str(tmp_path)))
     captured = ThreadProvenance.capture(thread)
     assert thread.title == captured.title == title
     assert thread.display_title == captured.display_title == display

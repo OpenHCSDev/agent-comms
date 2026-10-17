@@ -50,7 +50,7 @@ def saved_catalog(root):
 def test_saved_projection_preserves_preferences_history_and_has_no_writable_alias(tmp_path):
     comms = wire(tmp_path)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
-        comms.registry.declare(Thread.create(name, frozenset(tags), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
     original = saved_catalog(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     rows = [

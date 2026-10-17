@@ -46,8 +46,8 @@ def prepare_physical_fixture():
     (profile/'auth.json').write_text('{}')
     (profile/'settings.json').write_text(json.dumps({'retry':{'enabled':False,'maxRetries':0}}))
     comms=wire(destination/'wire');root_id=comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(Thread.create('archive-review',frozenset({'comms'}),str(project),
-                                  model='selected-offline/fixture',thinking_level='off', storage_rule=StorageRule()))
+    comms.registry.declare(Thread('archive-review',frozenset({'comms'}),str(project),
+                                  model='selected-offline/fixture',thinking_level='off', storage_roots=StorageRule().initial_roots('archive-review', str(project))))
     reference_actual_history(comms.root,Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
     index=next(i for i,item in enumerate(comms.views.historical_threads()) if item.thread.name=='nra-architecture')
     acknowledgement={'owner':'Mendel477/268','root':str(comms.root),'wire_root_id':root_id,
@@ -68,8 +68,8 @@ async def main():
         comms=wire(root/'wire')
         comms.messaging.initialize_private_initial_protocol()
         for name, parent in [('openhcs-architecture-memory',None),('openhcs-pr159-viewer-bind-owner','openhcs-architecture-memory')]:
-            comms.registry.declare(Thread.create(name,frozenset({'openhcs','comms'}),str(root),parent=parent,
-                                          process_identity=None, storage_rule=StorageRule()))
+            comms.registry.declare(Thread(name,frozenset({'openhcs','comms'}),str(root),parent=parent,
+                                          process_identity=None, storage_roots=StorageRule().initial_roots(name, str(root))))
         originals=reference_actual_history(comms.root,live)
         sources=comms.bus.history.sources()
         assert [len(source.provenance.threads) for source in sources]==[104,7]

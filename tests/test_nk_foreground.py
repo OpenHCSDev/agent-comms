@@ -47,12 +47,13 @@ def _fake_package(package):
 
 @pytest.fixture(autouse=True)
 def configured_foreground(monkeypatch):
-    create = Thread.create
+    from agent_comms.registration import Registration
+    create = Registration.new_thread
 
     def configured(*args, **kwargs):
         return create(*args, **kwargs, model="openai-codex/gpt-6-sol")
 
-    monkeypatch.setattr(Thread, "create", configured)
+    monkeypatch.setattr(Registration, "new_thread", configured)
 
 
 @pytest.fixture
@@ -69,12 +70,12 @@ def _private_root(tmp_path: Path):
     (root / "work").mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.registry.declare(
-        Thread.create(
+        Thread(
             "sender",
             frozenset(),
             str(root / "work"),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('sender', str(root / 'work')))
     )
     return root, comms, comms.messaging.initialize_private_initial_protocol()
 
@@ -223,12 +224,12 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
             opt_in=True,
         )
         comms.registry.declare(
-            Thread.create(
+            Thread(
                 "alpha",
                 frozenset({"team"}),
                 str(root / "work"),
                 process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots('alpha', str(root / 'work')))
         )
         message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
         _accept(root, root_id, comms, message)
@@ -267,12 +268,12 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
 ) -> None:
     root, comms, root_id = _private_root(tmp_path)
     comms.registry.declare(
-        Thread.create(
+        Thread(
             "alpha",
             frozenset({"team"}),
             str(root / "work"),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('alpha', str(root / 'work')))
     )
     fake, calls = _fake_model()
     monkeypatch.setattr(foreground, "_trusted_package", _fake_package)

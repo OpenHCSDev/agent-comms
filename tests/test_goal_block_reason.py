@@ -28,7 +28,7 @@ from agent_comms.tool_caller import ThreadCaller
 
 def _owner(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create(name="worker", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish selected work"))
     assert goal is not None
     return comms, goal

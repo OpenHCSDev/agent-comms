@@ -60,12 +60,12 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
 
     comms = wire(tmp_path)
     comms.registry.declare(
-        Thread.create(
+        Thread(
             name="kid",
             tags=frozenset(),
             worktree=str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('kid', str(tmp_path)))
     )
     store = InputDispositions(comms.root)
     store.record("bus:7", seq=7, owner="kid", claim_scope=1, target="#review", text="exact source")

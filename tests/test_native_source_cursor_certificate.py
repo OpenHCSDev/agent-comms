@@ -42,23 +42,23 @@ def _fresh(tmp_path: Path, count: int = 2):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.registry.declare(
-        Thread.create(
+        Thread(
             "sender",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        storage_roots=StorageRule().initial_roots('sender', str(tmp_path)))
     )
     for n in range(count):
         name = "alpha" if n == 0 else f"other{n:03}"
         comms.registry.declare(
-            Thread.create(
+            Thread(
                 name,
                 frozenset({"team"}),
                 str(tmp_path),
                 process_identity=ProcessIdentity.capture(os.getpid()),
                 model="fake/fake",
-            storage_rule=StorageRule())
+            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(root / "coordination.sqlite3")) as store:

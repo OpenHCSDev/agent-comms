@@ -55,9 +55,9 @@ async def read_original_context(
     # This fixture owns the root; the existing owner launch and RPC reader remain real.
     try:
         await owner._runtime.start()
-        thread = Thread.create("context-source", frozenset(), str(fixture.project),
+        thread = Thread("context-source", frozenset(), str(fixture.project),
             process_identity=ProcessIdentity.capture(os.getpid()),
-            session_file=str(fixture.session), model="response-local/fixture", storage_rule=StorageRule())
+            session_file=str(fixture.session), model="response-local/fixture", storage_roots=StorageRule().initial_roots('context-source', str(fixture.project)))
         owner._comms.registry.declare(thread)
         from agent_comms.coordinator import Coordination
 

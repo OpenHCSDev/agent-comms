@@ -21,7 +21,7 @@ class ReviewHistory(HistoryView):
 def test_new_history_case_owns_both_source_interpretations_without_reader_dispatch(tmp_path):
     roots = [Comms(tmp_path / name) for name in ("prior", "current")]
     for comms in roots:
-        comms.registry.declare(Thread.create("writer", frozenset({"review", "other"}), str(comms.root), storage_rule=StorageRule()))
+        comms.registry.declare(Thread("writer", frozenset({"review", "other"}), str(comms.root), storage_roots=StorageRule().initial_roots('writer', str(comms.root))))
         for number in range(3):
             comms.messaging.send("writer", "#review", f"{comms.root.name} {number}")
             comms.messaging.send("writer", "#other", f"excluded {number}")

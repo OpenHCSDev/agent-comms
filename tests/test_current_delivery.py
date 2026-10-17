@@ -34,12 +34,12 @@ def consistent(comms, *names):
 def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, rebound):
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread.create(name, frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
     old = comms.messaging.send_message("sender", "recipient", "retained history")
     comms.messaging.send("sender", "#team", "old channel row")
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
-    comms.registry.declare(Thread.create(rebound, frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread(rebound, frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots(rebound, str(tmp_path))))
     new = comms.messaging.send_message("sender", "recipient", "current input")
     comms.messaging.send("sender", "#team", "current channel input")
     current = wire(tmp_path)
@@ -57,7 +57,7 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, rebound)
 def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
-        comms.registry.declare(Thread.create(name, frozenset(), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
     birth = comms.registry.require("recipient").created_at
     messages = [
         comms.bus.publisher.publish_ordinary(
@@ -90,7 +90,7 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
     without decoding or regressing the recorded projection.
     """
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("sender", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('sender', str(tmp_path))))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for number in range(5):
         comms.messaging.send_message("sender", viewer, f"row {number}")
@@ -126,7 +126,7 @@ def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
     rebuilds, the same way a replaced source does.
     """
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("sender", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('sender', str(tmp_path))))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for number in range(5):
         comms.messaging.send_message("sender", viewer, f"row {number}")
@@ -198,7 +198,7 @@ def test_new_route_table_is_created_and_reset_with_its_scope(tmp_path):
 @pytest.mark.parametrize("birth_crossing", [False, True])
 def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_crossing):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("sender", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('sender', str(tmp_path))))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     birth = comms.registry.require(viewer).created_at
     first = comms.bus.publisher.publish_ordinary(
@@ -230,7 +230,7 @@ def test_retained_source_uses_its_ledger_identity_after_path_replacement(tmp_pat
     from shutil import copyfile
 
     comms = wire(tmp_path)
-    comms.registry.declare(Thread.create("sender", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('sender', str(tmp_path))))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send_message("sender", viewer, "already read")
     comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
