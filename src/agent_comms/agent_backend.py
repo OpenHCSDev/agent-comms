@@ -43,6 +43,8 @@ class BackendDeclarationError(TypeError):
 class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     """Runtime behavior derived once by the owning thread record."""
 
+    path: str
+
     def require_forkable(self):
         pass
 
