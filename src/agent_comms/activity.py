@@ -165,8 +165,7 @@ class DiagnosticDrainReadiness(DrainReadiness):
         return self.diagnostic
 
     def presentation(self, ordinary):
-        attended = replace(ordinary, status=ordinary.status.with_attention(self.diagnostic.summary))
-        return attended.status.when_idle(attended, lambda shown: replace(shown, marker="!"))
+        return ordinary.status.with_attention(self.diagnostic.summary).present_attention(ordinary)
 
 
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
