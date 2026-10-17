@@ -183,10 +183,6 @@ class MessageBus:
             selected = CommandTarget.named(BuiltinChannel.ANY.value if target is None else target)
             return selected.pending_count(counts, basis.registry, basis.catalog)
 
-    def pending_counts(self, name: str) -> Mapping[str, int]:
-        with self.snapshot() as (basis, source):
-            return self._pending_projection(source, basis, [name])[name]
-
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
         if not names:
             return {}

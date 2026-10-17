@@ -50,18 +50,18 @@ def test_new_history_case_owns_both_source_interpretations_without_reader_dispat
     assert not (prior.root / "read_ledger.json").exists()
 
 
-def test_ordinary_coordination_snapshot_exposes_actual_active_channel_participant(tmp_path):
+def test_viewer_snapshot_exposes_actual_active_channel_participant(tmp_path):
     from test_coordinated_runtime import _root
 
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     lease = comms.agents.begin_turn("beta", "ordinary-snapshot-active-participant").turn_lease
     try:
-        snapshot = comms.views.coordination_snapshot()
+        snapshot = comms.views.viewer_snapshot(str(comms.root))
         assert [person.thread.name for person in snapshot.participants("#team")] == ["beta"]
         assert snapshot.participants("#team")[0].presentation.status.working
     finally:
         comms.agents.finish_turn(lease)
-    assert comms.views.coordination_snapshot().participants("#team") == ()
+    assert comms.views.viewer_snapshot(str(comms.root)).participants("#team") == ()
 
 
 def test_joined_declarations_decode_one_sql_snapshot_and_reject_foreign_columns():
