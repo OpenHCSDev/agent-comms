@@ -162,5 +162,7 @@ class GrepTool(ToolDeclaration):
     preview_fields = ('pattern',)
 
 
-class GlobTool(GrepTool):
+class GlobTool(ToolDeclaration):
+    acp_kind = "search"
     label = "Find"
+    preview_fields = ('pattern',)

@@ -626,8 +626,7 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return ToolCall(call_id, 'edit', {'path': self.path}).finished(
-            '', ok, diff=self.kind.patch(self.path, self.diff))
+        return ToolCall(call_id, 'edit', {'path': self.path}, self.kind.patch(self.path, self.diff)).finished('', ok)
 
 
 class FileChangeItem(Item):
