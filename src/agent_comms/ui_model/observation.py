@@ -563,37 +563,49 @@ class ThreadReading(Observation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
         self.observed: ThreadsObserved | None = None
+        self.initial = request.names
 
     def for_interest(self, previous: Self | None) -> Self:
-        # A new view may join unchanged names. Its turn/read fence needs an
-        # initial presentation, not the previous readers' delta.
+        if previous is not None:
+            self.observed = previous.observed
         return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         previous = self.observed
-        if previous is not None and previous.current_at(revision):
-            return
         presentations, unavailable, busy = {}, {}, set()
-        if self.request.names:
-            try:
-                batch = comms.views.thread_presentations(self.request.names)
-            except UnreadableHistory.DEFERRED_READS:
-                busy.update(self.request.names)
-            except StoredHistoryUnreadable as error:
-                unavailable.update(dict.fromkeys(self.request.names, UnreadableHistory.capture(error)))
-            else:
-                for name in self.request.names:
-                    try:
-                        presentations[name] = batch.read(name)
-                    except UnreadableHistory.DEFERRED_READS:
-                        busy.add(name)
-                    except StoredHistoryUnreadable as error:
-                        unavailable[name] = UnreadableHistory.capture(error)
-                    yield None
+        names = self.request.names
+        try:
+            if previous is not None:
+                names = (revision.changed_threads(previous, comms) | names - previous.changed_since(None)) & names
+            if names:
+                batch = comms.views.thread_presentations(names)
+        except UnreadableHistory.DEFERRED_READS:
+            busy.update(names)
+        except StoredHistoryUnreadable as error:
+            unavailable.update(dict.fromkeys(names, UnreadableHistory.capture(error)))
+        else:
+            for name in names:
+                try:
+                    presentations[name] = batch.read(name)
+                except UnreadableHistory.DEFERRED_READS:
+                    busy.add(name)
+                except StoredHistoryUnreadable as error:
+                    unavailable[name] = UnreadableHistory.capture(error)
+                yield None
+        if previous is not None:
+            presentations.update((name, value) for name, value in previous.presentations.items()
+                                 if name in self.request.names and name not in names)
+            unavailable.update((name, value) for name, value in previous.unavailable.items()
+                               if name in self.request.names and name not in names)
+            busy.update(previous.busy & self.request.names - names)
         observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset())
-        self.observed = replace(observed, changed=observed.changed_since(previous))
-        if previous is None or self.observed.changed:
-            yield self.observed
+        self.observed = observed
+        changed = observed.changed_since(previous) | self.initial
+        self.initial = frozenset()
+        if changed:
+            yield replace(observed, changed=changed,
+                          presentations={name: value for name, value in presentations.items() if name in changed},
+                          unavailable={name: value for name, value in unavailable.items() if name in changed})
 
 
 class ViewReading(Observation[ObserveViews]):
@@ -714,10 +726,6 @@ class ThreadsObserved(Observed):
     busy: frozenset[str]
     changed: frozenset[str]
 
-    def current_at(self, revision: WireRevision) -> bool:
-        """A busy result stays pending; a successful cut owns its read frontier."""
-        return not self.busy and not revision.status_changed_since(self.revision)
-
     def changed_since(self, previous: ThreadsObserved | None) -> frozenset[str]:
         """Read-state transitions and source-owned changes, independent of store churn."""
         if previous is None:
@@ -729,9 +737,8 @@ class ThreadsObserved(Observed):
             current, before = self.presentations[name], previous.presentations[name]
             if current is not before and (current is None or not current.same_observation(before)):
                 changed.add(name)
-        for name in self.unavailable.keys() & previous.unavailable.keys():
-            if self.unavailable[name] != previous.unavailable[name]:
-                changed.add(name)
+        changed.update(name for name in self.unavailable.keys() & previous.unavailable.keys()
+                       if self.unavailable[name] != previous.unavailable[name])
         return frozenset(changed)
 
 
@@ -827,11 +834,8 @@ class ObservationService:
             request.receive(self)
 
     def store_names(self) -> frozenset[bytes]:
-        def paths(value) -> Iterator[Path]:
-            yield from value if isinstance(value, tuple) else (value,)
-
-        return frozenset(os.fsencode(path.name) for value in self.comms.views.revision_paths().values()
-                         for path in paths(value) if path.parent == self.comms.root)
+        return frozenset(os.fsencode(path.name) for group in self.comms.views.revision_paths().values()
+                         for path in group if path.parent == self.comms.root)
 
     async def watch(self) -> None:
         from agent_comms.wire_watch import ModifiedWatchSource, WireWatch

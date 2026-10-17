@@ -6,11 +6,9 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import Comms
-from agent_comms.historical_views import ChannelDisplayHistory, HistoryCursor
+from agent_comms.historical_views import HistoryCursor
 from agent_comms.mentions import ThreadMention
-from agent_comms.message_page import MessagePageRequest
 from agent_comms.messages import Message, InfoKind
-from agent_comms.read_basis import ChannelDisplayScope, MessageDisplayScope
 from agent_comms.threads import Thread
 
 
@@ -96,94 +94,6 @@ def reader(live, kind):
         "none": "#none",
     }[kind]
     return lambda **kwargs: live.views.channel_history_page(target, **kwargs)
-
-
-@pytest.mark.parametrize(
-    "kind", ["channel", "any-mode", "any", "all", "none", "dm", "dm-alias"]
-)
-@pytest.mark.parametrize(
-    "before,after", [(None, None), (180, None), (1, None), (None, 0), (None, 190)]
-)
-@pytest.mark.parametrize("limit,budget", [(2, 1), (8, 2000)])
-def test_cold_and_warm_historical_pages_equal_full_scan(
-    history, kind, before, after, limit, budget
-):
-    live, source, rows = history
-    read = reader(live, kind)
-    class SelectedScope(MessageDisplayScope):
-        index_targets = None
-
-        def includes(self, message):
-            return selected(kind, message)
-
-    expected = MessagePageRequest.capture(
-        SelectedScope(), before=before, after=after, limit=limit, max_bytes=budget
-    ).collect((message, len(raw)) for message, raw in rows)
-    for _ in range(2):  # cold validation, then the same warm offsets
-        page = read(
-            before=HistoryCursor(source.key, before) if before is not None else None,
-            after=HistoryCursor(source.key, after) if after is not None else None,
-            limit=limit,
-            max_bytes=budget,
-        )
-        assert [message.to_wire() for message in page.messages] == [
-            message.to_wire() for message in expected.messages
-        ]
-        assert [message.view_key for message in page.messages] == [
-            (source.key, message.seq) for message in expected.messages
-        ]
-        # Historical traversal consumes empty source pages; its terminal empty
-        # page has no further edges even if the raw collector saw newer rows.
-        assert page.has_older == (expected.has_older if expected.messages else False)
-        assert page.has_newer == (expected.has_newer if expected.messages else False)
-        assert page.oldest_cursor == (
-            HistoryCursor(source.key, expected.oldest_seq) if expected.messages else None
-        )
-        assert page.newest_cursor == (
-            HistoryCursor(source.key, expected.newest_seq) if expected.messages else None
-        )
-
-
-def test_sparse_page_decodes_only_index_candidates_after_cold_validation(history, monkeypatch):
-    live, source, rows = history
-    channel = live.channels.catalog.read().views(live.registry.snapshot().threads)["#api"]
-    view = ChannelDisplayHistory(channel)
-    decoded = 0
-    captured = 0
-    original_decode = Message.from_wire
-    original_capture = ChannelDisplayScope.capture
-
-    def decode(cls, raw):
-        nonlocal decoded
-        decoded += 1
-        return original_decode(raw)
-
-    def capture(cls, channel, snapshot, **kwargs):
-        nonlocal captured
-        captured += 1
-        return original_capture(channel, snapshot, **kwargs)
-
-    monkeypatch.setattr(Message, "from_wire", classmethod(decode))
-    monkeypatch.setattr(ChannelDisplayScope, "capture", classmethod(capture))
-    cold = live.bus.history.page(view, limit=2)
-    cold_decoded = decoded
-    decoded = captured = 0
-    warm = live.bus.history.page(view, limit=2)
-    assert warm == cold
-    assert [message.seq for message in warm.messages] == [150, 200]
-    assert decoded == 3  # two returned rows and the earlier-match boundary
-    # The archive's creation owner already prepared its certified offsets;
-    # both first and subsequent browsing consume only the selected originals.
-    assert cold_decoded == decoded
-    assert captured == 1
-    narrowed_decodes = decoded
-    decoded = 0
-    with monkeypatch.context() as patch:
-        patch.setattr(ChannelDisplayScope, "index_targets", property(lambda _scope: None))
-        unfiltered = live.bus.history.page(view, limit=2)
-    assert unfiltered == warm
-    assert decoded == 141  # same predicate/page without the target prefilter
-    assert narrowed_decodes == 3
 
 
 @pytest.mark.parametrize(

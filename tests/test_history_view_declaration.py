@@ -28,12 +28,13 @@ def test_new_history_case_owns_both_source_interpretations_without_reader_dispat
     original = prior.bus.log.path.read_bytes()
     current.views.attach_history(prior.root)
     view = ReviewHistory()
-    backwards = view.full_history(current.views.presentation)
-    assert [message.body for message in backwards] == [
-        f"{name} {number}" for name in ("prior", "current") for number in range(3)
-    ]
     page = view.page(current.views.presentation, limit=2)
     assert [m.body for m in page.messages] == ["current 1", "current 2"]
+    backwards = list(page.messages)
+    while page.has_older:
+        page = view.page(current.views.presentation, before=page.oldest_cursor, limit=2)
+        backwards[0:0] = page.messages
+    assert len(backwards) == 6
     forward = []
     cursor = backwards[0].view_cursor
     while True:

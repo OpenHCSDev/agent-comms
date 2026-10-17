@@ -167,7 +167,7 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
         "from": "sender", "to": "recipient", "body": "Original private publication"}, caller=NoThreadCaller())
     raw = {"content": [{"type": "text", "text": json.dumps(published)}], "details": published}
     result = PiToolResult.from_wire(raw)
-    message, = comms.views.full_history()
+    message, = list(comms.views.full_history_page().messages)
     assert result.sent_message(True) == SentTranscript.from_message(message)
     assert result.sent_message(False) is None
     saved = ToolResultMessage.from_wire({

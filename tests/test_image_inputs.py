@@ -290,7 +290,7 @@ async def test_routed_image_rejected_before_bus_side_effects(tmp_path, monkeypat
     try:
         with pytest.raises(RequestError):
             await agent.prompt("project", [{"type": "text", "text": "#all look"}, IMAGE])
-        assert not agent._comms.views.full_history()
+        assert not list(agent._comms.views.full_history_page().messages)
 
     finally:
         agent.sessions.proxies.clear()
