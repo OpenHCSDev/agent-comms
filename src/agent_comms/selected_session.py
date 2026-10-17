@@ -14,7 +14,6 @@ from .native_pi import _session_location
 from .launch_runtime import RestartEnvironment
 
 if TYPE_CHECKING:
-    from .coordinated_runtime import SelectedExecution
     from .selected_participant import SelectedParticipant
 
 
@@ -87,7 +86,7 @@ class SelectedSession:
         cls,
         participant: SelectedParticipant,
         path: Path | None,
-        execution: SelectedExecution,
+        execution,
     ) -> SelectedSession:
         """Borrow the original execution's acquired artifact for its header read.
 
