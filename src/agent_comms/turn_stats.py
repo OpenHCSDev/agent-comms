@@ -72,18 +72,15 @@ class StatsRequest:
             ),
         )
         self._pending = tuple(session.native.reader.track(command) for command in requests)
-        try:
-            for command in requests:
-                session.native.proc.stdin.write(session.native.reader.command_bytes(command))
-            await session.native.proc.stdin.drain()
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+        for command in requests:
+            session.native.proc.stdin.write(session.native.reader.command_bytes(command))
+        await session.native.proc.stdin.drain()
 
     async def settle(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if session.persistent_session is None or not (self.complete or self.failed):
             return
         await asyncio.sleep(0)
-        queued = session.inputs.queue is not None and not session.inputs.queue.empty()
+        queued = session.inputs.queue.has_ready_work
         if not self.failed and (
             self.busy
             or session.inputs.pending

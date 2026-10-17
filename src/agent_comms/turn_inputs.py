@@ -44,7 +44,7 @@ class InputForwarding:
 
     @property
     def unresolved(self) -> bool:
-        return self.current is not None or bool(self.pending) or not self.queue.empty()
+        return self.current is not None or bool(self.pending) or self.queue.has_ready_work
 
     @property
     def all_written_started(self) -> bool:
