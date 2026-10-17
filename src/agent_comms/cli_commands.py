@@ -1437,13 +1437,14 @@ class ForkCliCommand(NewThreadCliCommand):
 
     async def validate(self, ctx: Comms, spec: ForkSpec) -> None:
         parent = spec.source_parent(ctx.threads)
-        if not parent.process_alive:
-            return await super().validate(ctx, spec)
-        connection = RuntimeConnection(ctx, parent.name, socket_path(ctx.root, parent.pid))
-        try:
-            await connection.request("validate_fork", spec=spec)
-        finally:
-            await connection.close()
+        if ctx.registry.entry(parent.name).entry.status.active:
+            connection = RuntimeConnection(ctx, parent.name, socket_path(ctx.root, parent.require_process().pid))
+            try:
+                await connection.request("validate_fork", spec=spec)
+            finally:
+                await connection.close()
+        else:
+            await super().validate(ctx, spec)
 
     @classmethod
     def project_bindings(cls, comms, project):
