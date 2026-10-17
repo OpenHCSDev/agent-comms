@@ -224,7 +224,8 @@ class HistoryViews:
     ) -> MessagePage:
         """Bounded channel history for any client adapter."""
         selected = CommandTarget.named(target).require_channel()
-        return ChannelHistory(selected.name, selected.history_targets(self.channels.catalog.read())).page(
+        channel = self.channels.catalog.read().resolve(selected.name)
+        return ChannelHistory(channel.name, channel.history_targets).page(
             self.presentation,
             before=before,
             after=after,

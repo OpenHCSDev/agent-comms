@@ -155,13 +155,13 @@ class ChannelManagement:
         self, name: str, *, add: frozenset[str] = frozenset(), remove: frozenset[str] = frozenset()
     ) -> Thread:
         for tag in add | remove:
-            Tag(tag)
+            Tag.validate(tag)
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             return self._update_tags_locked(name, add=add, remove=remove)
 
     def replace_tags(self, name: str, tags: frozenset[str]) -> Thread:
         for tag in tags:
-            Tag(tag)
+            Tag.validate(tag)
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             return self._update_tags_locked(thread.name, add=tags - thread.tags,
@@ -269,7 +269,7 @@ class ChannelManagement:
                 document.set_thread_pinned(canonical_channel, thread.name, pinned)
 
     def rename_tag(self, name: str, new_name: str) -> None:
-        Tag(new_name)
+        Tag.validate(new_name)
         if name == new_name:
             if name not in self.catalog.read().all_tags(self.registry.all_threads()):
                 raise ValueError(f"Unknown tag: {name!r}")
@@ -278,7 +278,7 @@ class ChannelManagement:
 
     def delete_tag(self, name: str, *, disposition: TagDisposition = KeepThreadsTagDisposition(),
                    confirmed: bool = False) -> TagChangeResult:
-        Tag(name)
+        Tag.validate(name)
         if disposition.requires_confirmation and not confirmed:
             raise ValueError(disposition.confirmation(name))
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
@@ -289,7 +289,7 @@ class ChannelManagement:
             return disposition.apply(self, name, cohort)
 
     def _change_tag(self, name: str, replacement: str | None) -> None:
-        Tag(name)
+        Tag.validate(name)
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             if name not in self.catalog.read().all_tags(self.registry.all_threads()):
                 raise ValueError(f"Unknown tag: {name!r}")

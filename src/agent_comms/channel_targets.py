@@ -7,7 +7,7 @@ from typing import ClassVar
 from enum import StrEnum
 
 from .errors import RelationViolationError, UnregisteredThreadError
-from .response_policy import CollectivePolicy, DirectPolicy, InformationalPolicy, MentionedOnlyPolicy
+from .response_policy import CollectivePolicy, DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, PassiveWake
 
 
@@ -76,12 +76,13 @@ class NamedTarget(CommandTarget):
     batchable = False
     direct_names = ()
     guidance_scope = ""
+    default_audience = MessageAudience.DIRECT
 
     @property
     def names(self) -> tuple[str, ...]:
         return (self.name,)
 
-    def canonical_name(self, snapshot):
+    def canonical_name(self, canonical):
         return self.name
 
     def require_channel(self):
@@ -91,24 +92,34 @@ class NamedTarget(CommandTarget):
         raise ValueError("A DM page requires a registered peer.")
 
     def direct_peer(self, snapshot):
-        return None
+        return next((snapshot.threads.get(snapshot.canonical_name(name)) for name in self.direct_names), None)
 
     def inbound_relations(self, sender):
-        return (sender,)
+        return (sender, *(name for name in self.names if name not in self.direct_names))
 
     def response_recipients(self, recipients):
-        return recipients
+        return tuple(member for member in recipients if not self.direct_names or member.canonical_thread in self.direct_names)
 
     def response_policy(self, message):
-        if message.notice or message.membership is not None:
-            return InformationalPolicy.instance()
-        return self.ordinary_response_policy(message)
+        return DirectPolicy.instance()
+
+    def conversation(self, sender, viewer, canonical):
+        target = self.canonical_name(canonical)
+        return self.reply_target(canonical(sender)) if target == viewer else target
+
+    def wake_audience(self, mentions):
+        return MessageAudience.MENTIONED if mentions else self.default_audience
 
     def effective_mentions(self, message, audience):
         return frozenset()
 
     def require_frozen_recipients(self, message, audience):
-        pass
+        if not self.direct_names or (message.notice and not audience.recipients):
+            return
+        if len(audience.recipients) != len(self.direct_names):
+            raise ValueError("a direct message must have exactly one frozen eligible recipient.")
+        if tuple(member.canonical_thread for member in audience.recipients) != self.direct_names:
+            raise ValueError("direct frozen recipient must match the exact stored target.")
 
     def wake_policy(self, message, recipient, control, mentions):
         if message.notice or message.membership is not None or control.passive:
@@ -122,19 +133,16 @@ class ThreadTarget(NamedTarget):
 
     @property
     def direct_names(self):
-        return (self.name,)
+        return self.names
 
-    def canonical_name(self, snapshot):
-        return snapshot.canonical_name(self.name)
+    def canonical_name(self, canonical):
+        return canonical(self.name)
 
     def require_dm_peer(self):
         return self.name
 
-    def direct_peer(self, snapshot):
-        return snapshot.threads.get(self.canonical_name(snapshot))
-
     def available(self, snapshot) -> bool:
-        return self.canonical_name(snapshot) in snapshot.threads
+        return self.canonical_name(snapshot.canonical_name) in snapshot.threads
 
     def pending_count(self, counts, snapshot, catalog):
         return counts.get(snapshot.require(self.name).name, 0)
@@ -151,41 +159,21 @@ class ThreadTarget(NamedTarget):
         if not set(self.name) <= allowed:
             raise ValueError(f"Message target {self.name!r} is not a thread name or #channel.")
 
-    def ordinary_response_policy(self, message):
-        return DirectPolicy.instance()
-
-    def starts_turn_for(self, message, name, aliases):
-        return self.response_policy(message).starts_turn
-
     def reply_target(self, sender):
         return sender
-
-    def response_recipients(self, recipients):
-        return tuple(member for member in recipients if member.canonical_thread == self.name)
-
-    def require_frozen_recipients(self, message, audience):
-        if message.notice and not audience.recipients:
-            return
-        if len(audience.recipients) != 1:
-            raise ValueError("a direct message must have exactly one frozen eligible recipient.")
-        if audience.recipients[0].canonical_thread != self.name:
-            raise ValueError("direct frozen recipient must match the exact stored target.")
-
-    def wake_audience(self, mentions):
-        return MessageAudience.DIRECT
 
     def ordinary_wake_policy(self, recipient, mentions):
         return FullWake()
 
     def require_publication(self, sender, snapshot, catalog):
-        target = self.canonical_name(snapshot)
+        target = self.canonical_name(snapshot.canonical_name)
         if target not in snapshot.threads:
             raise UnregisteredThreadError(f"Target {self.name!r} is not a registered thread.")
         if target == sender:
             raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
 
     def initial_delivery(self, sender, message, snapshot, catalog):
-        target = self.canonical_name(snapshot)
+        target = self.canonical_name(snapshot.canonical_name)
         recipient = snapshot.threads.get(target)
         if recipient is None or not snapshot.statuses[target].visible:
             raise RelationViolationError("Initial direct target must be visible.")
@@ -198,16 +186,12 @@ class ThreadTarget(NamedTarget):
     def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
         return direct_scope.capture(viewer, snapshot.require(self.name).name, snapshot)
 
-    def conversation(self, sender, viewer, canonical):
-        sender, target = canonical(sender), canonical(self.name)
-        return sender if target == viewer else target
-
     def conversation_key(self, sender, snapshot, constructor):
         names = sorted({snapshot.canonical_name(sender), self.canonical_name(snapshot)})
         return constructor(participants=tuple(snapshot.participant(name).incarnation for name in names))
 
     def changed_threads(self, names, snapshot, catalog):
-        return (self.canonical_name(snapshot),)
+        return (self.canonical_name(snapshot.canonical_name),)
 
     def mark_view_read(self, views, worktree):
         views.mark_thread_view_read(self.name, worktree=worktree)
@@ -217,6 +201,7 @@ class ChannelTarget(NamedTarget):
     needs_catalog = True
     batchable = True
     kind = "channel"
+    default_audience = MessageAudience.COLLECTIVE
 
     @property
     def incoming_scope(self):
@@ -229,9 +214,6 @@ class ChannelTarget(NamedTarget):
     def require_channel(self):
         return self
 
-    def history_targets(self, catalog):
-        return catalog.resolve(self.name).history_targets
-
     def pending_count(self, counts, snapshot, catalog):
         return catalog.resolve(self.name).pending_count(counts)
 
@@ -240,24 +222,18 @@ class ChannelTarget(NamedTarget):
 
     def validate(self, sender=None):
         if BuiltinChannel.lookup(self.name) is None:
-            Tag(self.name[1:])
+            Tag.validate(self.name[1:])
 
-    def ordinary_response_policy(self, message):
+    def response_policy(self, message):
         if message.mentions:
             return MentionedOnlyPolicy.instance()
         return CollectivePolicy.instance() if not message.sender_role.executable else InformationalPolicy.instance()
-
-    def starts_turn_for(self, message, name, aliases):
-        return name in self.response_policy(message).recipients(message, (name,), aliases=aliases)
 
     def reply_target(self, sender):
         return self.name
 
     def effective_mentions(self, message, audience):
         return frozenset(mention.thread for mention in message.mentions).intersection(audience.canonical_members)
-
-    def wake_audience(self, mentions):
-        return MessageAudience.MENTIONED if mentions else MessageAudience.COLLECTIVE
 
     def ordinary_wake_policy(self, recipient, mentions):
         if mentions:
@@ -280,16 +256,10 @@ class ChannelTarget(NamedTarget):
         return self, message, names
 
     def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
-        return channel_scope(self.name, self.history_targets(catalog))
-
-    def conversation(self, sender, viewer, canonical):
-        return self.name
+        return channel_scope(self.name, catalog.resolve(self.name).history_targets)
 
     def conversation_key(self, sender, snapshot, constructor):
         return constructor(target=self.name)
-
-    def inbound_relations(self, sender):
-        return sender, self.name
 
     def changed_threads(self, names, snapshot, catalog):
         channel = catalog.resolve(self.name)
@@ -327,12 +297,9 @@ class Tag:
     name: str
 
     def __post_init__(self) -> None:
-        if (
-            not self.name
-            or not set(self.name) <= _TAG_CHARS
-            or BuiltinChannel.lookup(f"#{self.name}")
-        ):
-            raise ValueError(
-                "Tags must be lowercase alphanumeric with hyphens/underscores; "
-                "built-in channel names are reserved."
-            )
+        self.validate(self.name)
+
+    @staticmethod
+    def validate(name: str) -> None:
+        if not name or not set(name) <= _TAG_CHARS or BuiltinChannel.lookup(f"#{name}"):
+            raise ValueError("Tags must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")

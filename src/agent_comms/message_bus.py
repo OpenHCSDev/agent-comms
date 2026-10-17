@@ -335,8 +335,9 @@ class MessageBus:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Return one bounded page from a channel in ascending order."""
+        channel = self._channels.read().resolve(target.name)
         return self.display_page(
-            ChannelDisplayScope(target.name, target.history_targets(self._channels.read())),
+            ChannelDisplayScope(channel.name, channel.history_targets),
             before=before,
             after=after,
             limit=limit,

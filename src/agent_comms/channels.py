@@ -135,7 +135,7 @@ class ViewPredicate:
         if not self.tags:
             raise ValueError("A view predicate requires at least one tag.")
         for tag in self.tags:
-            Tag(tag)
+            Tag.validate(tag)
 
     def matches(self, tags: frozenset[str]) -> bool:
         return self.match.matches(self.tags, tags)
@@ -158,4 +158,4 @@ class SavedView:
         return self.original_targets | frozenset(f"#{tag}" for tag in self.predicate.tags)
 
     def __post_init__(self) -> None:
-        Tag(self.name)
+        Tag.validate(self.name)

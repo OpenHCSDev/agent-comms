@@ -48,7 +48,7 @@ class CatalogDocument:
 
     def validate(self) -> None:
         for tag in self.tags:
-            Tag(tag)
+            Tag.validate(tag)
         if any(name != view.name for name, view in self.saved_views.items()):
             raise ValueError("Saved view key must match its declared name")
         self.validate_parents()

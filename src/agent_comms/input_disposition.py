@@ -114,7 +114,7 @@ class InputDocument:
             for row in sorted(self.rows.values(), key=lambda item: item.order)
             if (reference := row.delivered_in(lease, source.marker.root_id, snapshot)) is not None
         )
-        route = CommandTarget.named(target).canonical_name(snapshot)
+        route = CommandTarget.named(target).canonical_name(snapshot.canonical_name)
         return tuple(
             original.message.reference
             for original in source.references(delivered)

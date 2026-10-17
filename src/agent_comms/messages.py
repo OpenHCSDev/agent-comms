@@ -19,10 +19,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
-from .response_policy import (
-    ResponseEligibility,
-    ResponsePolicy,
-)
+from .response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from .thread_identity import ThreadRole
 from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 
@@ -314,6 +311,8 @@ class Message:
     @property
     def response_policy(self) -> ResponsePolicy:
         """Typed response semantics without changing the stored target."""
+        if self.notice or self.membership is not None:
+            return InformationalPolicy.instance()
         return CommandTarget.named(self.target).response_policy(self)
 
     def response_eligibility(
@@ -335,7 +334,7 @@ class Message:
 
     def starts_turn_for(self, name: str, *, aliases: Mapping[str, str] | None = None) -> bool:
         """Whether this message enters one canonical recipient's model context."""
-        return CommandTarget.named(self.target).starts_turn_for(self, name, aliases)
+        return self.response_policy.starts_turn_for(self, name, aliases)
 
     @property
     def exact_reply_target(self) -> str:

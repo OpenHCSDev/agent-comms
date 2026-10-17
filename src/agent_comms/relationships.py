@@ -325,7 +325,7 @@ class OutboundRelationshipGroup(RecentRelationshipGroup):
     def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
         if context.registry.canonical_name(message.sender) != context.thread.name:
             return ()
-        return (CommandTarget.named(message.target).canonical_name(context.registry),)
+        return (CommandTarget.named(message.target).canonical_name(context.registry.canonical_name),)
 
 
 class ParentRelationshipGroup(RelationshipGroup):
@@ -422,7 +422,7 @@ class RelationshipContext:
     def entry(self, name: str, *, message: Message | None = None,
               detail: str = "") -> RelationshipEntry:
         target = CommandTarget.named(name)
-        name = target.canonical_name(self.registry)
+        name = target.canonical_name(self.registry.canonical_name)
         return RelationshipEntry(
             name, target.kind, self.people.get(name),
             message.seq if message else 0, message.timestamp if message else 0, detail,

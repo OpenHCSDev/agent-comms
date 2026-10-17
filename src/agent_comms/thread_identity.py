@@ -236,7 +236,7 @@ class ThreadProvenance:
         if not self.worktree:
             raise ValueError("Thread worktree cannot be empty.")
         for tag in self.tags:
-            Tag(tag)
+            Tag.validate(tag)
 
     @staticmethod
     def capture(thread: ThreadProvenance) -> ThreadProvenance:
