@@ -7,9 +7,10 @@ from contextlib import suppress
 from pathlib import Path
 
 import pytest
+from acp.schema import SessionNotification
 
 from agent_comms.acp import CommsClient
-from agent_comms.acp_extension import CoordinationChangedUpdate, TurnSettledUpdate, decode_updates
+from agent_comms.acp_extension import CoordinationChangedUpdate, TurnChangedUpdate, decode_updates
 from agent_comms.child_process import ParentedProcess
 from agent_comms.comms import wire
 from compaction_loopback import LoopbackProvider
@@ -59,6 +60,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         path = profile / name
         path.write_text(json.dumps(content))
         path.chmod(0o600)
+    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(profile))
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(profile))
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/fake-compact")
     monkeypatch.setenv("PI_OFFLINE", "1")
@@ -82,8 +84,11 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
 
     class Client:
         async def session_update(self, session_id, update):
+            observation = SessionNotification(session_id=session_id, update=update)
             if any(
-                isinstance(fact, TurnSettledUpdate) for fact in decode_updates(update.get("_meta"))
+                isinstance(fact, TurnChangedUpdate)
+                and not fact.state.busy and fact.state.finished_turn_id is not None
+                for fact in decode_updates(observation.update.field_meta)
             ):
                 settled.set()
 
