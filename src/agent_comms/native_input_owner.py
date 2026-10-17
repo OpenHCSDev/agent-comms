@@ -26,6 +26,7 @@ from .threads import Thread
 from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
+    from .goals import Goal
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .turn_lease import TurnLeaseFence
@@ -170,13 +171,13 @@ class GoalLaunchOwner(RegistryOwner):
 
     check_type = RegistryIdentityCheck
 
-    def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> None:
+    def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> Goal:
         name = snapshot.canonical_name(self.thread.name)
         canonical = replace(self, thread=replace(self.thread, name=name))
         canonical.require_snapshot(snapshot, "Goal launch owner changed")
         current = snapshot.require_active(name)
         snapshot.statuses[current.name].require_running()
-        current.require_active_goal(goal_id)
+        return current.require_active_goal(goal_id)
 
 
 @dataclass(frozen=True)
