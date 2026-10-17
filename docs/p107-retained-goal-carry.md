@@ -39,7 +39,16 @@ Before AST: 1068 modules, no omissions. After: 1072 modules, no omissions,
 including actual paired installed Toad. Syntax cannot resolve arbitrary dynamic
 MRO/callbacks. Both installed codecs round-trip the new review packet and validate
 the private source route/launchers. Focused restored Core checks: 21 passed.
-The new stopped conversion/target-launch path is NOT YET accepted.
+The new stopped conversion/target-launch path is NOT YET accepted. The first
+operator attempt blocked BEFORE stopping: the publisher requested an exclusive
+route lock while the running worker's observation child held its lifetime shared
+lease. Codex interrupted only the waiting publisher and verified all four saved
+files and both pointers unchanged; no candidate or operation record was created.
+Evidence: `stopped-proof-1/operator-result.json` and `operator-blocker.json`.
+The repair keeps a shared route lease during stopping and upgrades through the
+existing publisher only AFTER all-stopped ownership. Both normal and cross-codec
+publication paths use that owner. Original route/pointer facts are rechecked
+under exclusive access. A new attempt requires Codex's explicit review/execution.
 
 Fresh private root and real idle SDK-fork worker are prepared under
 `/home/ts/.cache/agent-scratch/gr107/stopped-proof-1`; source worker receipt is
@@ -58,8 +67,8 @@ env -u PYTHONPATH -u AGENT_COMMS_ROOT -u AGENT_COMMS_THREAD \
   /home/ts/.local/share/agent-comms/runtimes/toad-58d65de58-core-c8c4eb53f-native-70f0512abbcfa4e0-20261017T061350Z/bin/python -I -c \
   'import sys; sys.path.insert(0,"/home/ts/wt/core-goal-retry/tools/cutover"); from publish_runtime import main; main()' \
   --carry-goals \
-  --candidate /home/ts/.cache/agent-scratch/gr107/stopped-proof-1/candidate \
-  --receipt /home/ts/.cache/agent-scratch/gr107/stopped-proof-1/operation.json
+  --candidate /home/ts/.cache/agent-scratch/gr107/stopped-proof-1/candidate2 \
+  --receipt /home/ts/.cache/agent-scratch/gr107/stopped-proof-1/operation2.json
 ```
 
 Do not repeat a failed attempt. Inspect its original receipt, preimages, process

@@ -740,7 +740,14 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                      if path.exists() or path.is_symlink())
         return frozenset(paths)
 
+    def acquire_stopped_route(self):
+        # Observation children keep shared route leases while their owners run.
+        # Exclusivity belongs AFTER the original batch proves every owner exit.
+        acquire_exclusive_route_lock(self.route_directory)
+        self.cohort.require_publication_originals()
+
     def after_stopped(self, lifecycle):
+        self.acquire_stopped_route()
         self.cohort.require_original()
         require_no_clients(self.audience, self.cohort.root)
         snapshot = lifecycle.registry.snapshot()
@@ -856,7 +863,9 @@ def publish_original(cohort, task_carry, runtime_installation, receipt,
         RetainedOwnerLaunch.capture(original, snapshot)
     directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        acquire_exclusive_route_lock(directory)
+        # Hold the original route against migration during stopping, but do not
+        # wait for running owners' shared observation leases before stopping.
+        fcntl.flock(directory, fcntl.LOCK_SH)
         operation = operation_type(cohort, audience, owners, task_carry,
                                           runtime_installation, directory, receipt)
         operation.require_selection(snapshot, owners)

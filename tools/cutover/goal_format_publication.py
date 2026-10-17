@@ -49,6 +49,7 @@ class OriginalGoalPublication(PublishRetainedSummary):
         self.cohort.require_artifacts()
 
     def complete(self, stopped):
+        self.acquire_stopped_route()
         # Called only after the ORIGINAL batch validates every stop and retains
         # the original wire OFD. No original registry decoder runs after this.
         packet = StoppedGoalPublication(
