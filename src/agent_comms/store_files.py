@@ -10,7 +10,7 @@ import stat
 import tempfile
 import time
 from collections.abc import Iterator, Mapping
-from contextlib import ExitStack, asynccontextmanager, contextmanager
+from contextlib import ExitStack, asynccontextmanager, contextmanager, nullcontext
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -92,6 +92,23 @@ class StoreLock:
 
     descriptor: int
     source: CertifiedSourceRead | None
+    order: ClassVar[tuple[str, ...]] = ("wire", "bus.jsonl", "registry.json")
+
+    @classmethod
+    @contextmanager
+    def ordered(cls, requests: Mapping[Path, bool], *, blocking=True, contention=None,
+                operation=nullcontext):
+        """Acquire a declared resource set in the canonical order; True means shared."""
+        def priority(path):
+            return (cls.order.index(path.name) if path.name in cls.order else len(cls.order), str(path))
+
+        with ExitStack() as resources:
+            locks = {}
+            for path in sorted(requests, key=priority):
+                with operation(path):
+                    locks[path] = resources.enter_context(_store_lock(
+                        path, shared=requests[path], blocking=blocking, contention=contention))
+            yield locks
     _releases: ClassVar[ContextVar[StoreLockRelease]] = ContextVar(
         "store_lock_release", default=StoreLockRelease(active=False)
     )
@@ -209,39 +226,24 @@ def _store_lock(
 ) -> Iterator[StoreLock]:
     """Canonical synchronous acquisition; inherited POSIX custody ends at last close."""
     from .child_process import Platform
-
-    platform = Platform.current()
-    with _store_lock_file(store_path) as lock_file:
-        if contention is None:
-            platform.acquire_store_lock(lock_file.fileno(), shared=shared, blocking=blocking)
-        else:
-            contention.acquire(lock_file.fileno(), platform, shared=shared)
-        with _held_store_source(store_path, lock_file, platform, max_bus_bytes,
-                                shared=shared) as lock:
-            yield lock
-
-
-@contextmanager
-def _store_read_lock(
-    store_path: Path,
-    *,
-    blocking: bool = True,
-    contention: StoreLockContention | None = None,
-) -> Iterator[StoreLock]:
-    """Share source custody, escalating only when its checkpoint needs repair."""
     from .private_bus_checkpoint import CheckpointNeedsRepair
 
-    with ExitStack() as resources:
+    platform = Platform.current()
+    with _store_lock_file(store_path) as lock_file, ExitStack() as resources:
+        def acquire(shared):
+            if contention is None:
+                platform.acquire_store_lock(lock_file.fileno(), shared=shared, blocking=blocking)
+            else:
+                contention.acquire(lock_file.fileno(), platform, shared=shared)
+            return resources.enter_context(_held_store_source(
+                store_path, lock_file, platform, max_bus_bytes, shared=shared))
+
         try:
-            lock = resources.enter_context(
-                _store_lock(
-                    store_path, blocking=blocking, shared=True, contention=contention
-                )
-            )
+            lock = acquire(shared)
         except CheckpointNeedsRepair:
-            lock = resources.enter_context(
-                _store_lock(store_path, blocking=blocking, contention=contention)
-            )
+            if not shared:
+                raise
+            lock = acquire(False)
         yield lock
 
 
