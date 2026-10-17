@@ -47,7 +47,7 @@ class NativeRequestTools:
         return package / "agent-comms-extensions/global-agent-comms/index.mjs"
 
 
-class ArgumentTool(ToolDeclaration):
+class ArgumentTool:
     """One declared execution record supplies validation and native serialization."""
 
     @classmethod
