@@ -32,7 +32,6 @@ from .store_files import _store_lock
 from .thread_identity import AdmissionIdentity, OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
-from .input_disposition import InputDispositions
 
 _LOG = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class LaunchInput:
     def apply_environment(self, environment: dict[str, str]) -> None:
         pass
 
-    def record_first_input(self, lifecycle: OwnerLifecycle, thread: Thread) -> None:
+    def record_first_input(self, record) -> None:
         pass
 
 
@@ -55,10 +54,8 @@ class TaskLaunchInput(LaunchInput):
     def apply_environment(self, environment: dict[str, str]) -> None:
         environment[RestartEnvironment.initial_input_key] = self.input_key
 
-    def record_first_input(self, lifecycle: OwnerLifecycle, thread: Thread) -> None:
-        InputDispositions(lifecycle.root).record(
-            self.input_key, seq=None, owner=thread.name, target=thread.name,
-            admission=lifecycle.registry.snapshot().admission_generations[thread.name], text=self.text)
+    def record_first_input(self, record) -> None:
+        record(self.input_key, seq=None, text=self.text)
 
 
 @dataclass(frozen=True, slots=True)

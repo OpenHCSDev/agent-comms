@@ -11,6 +11,7 @@ import stat
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -29,6 +30,7 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportFormat, ImportLimits, ImportReceipt
+from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
@@ -77,10 +79,6 @@ class NewThreadSpec:
     def declaration(self, project: str) -> Thread:
         return Thread(name=self.name, task=self.task.text, tags=self.tags or frozenset(),
                       worktree=project, model=self.model, thinking_level=self.thinking_level)
-
-    def __post_init__(self) -> None:
-        if not all(self.model.partition("/")):
-            raise ValueError("Choose a provider-qualified model for the new thread")
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
@@ -622,7 +620,10 @@ class ThreadManagement:
                 owned = self.owners._launch_owner_unlocked(
                     child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
                 )
-                spec.task.record_first_input(self.owners, owned)
+                spec.task.record_first_input(
+                    partial(InputDispositions(self.root).record, owner=owned.name, target=owned.name,
+                        admission=self.registry.snapshot().admission_generations[owned.name],
+                    ))
                 return owned
             except OSError:
                 self.registry.remove(spec.name)
