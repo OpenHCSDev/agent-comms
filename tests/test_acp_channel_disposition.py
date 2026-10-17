@@ -15,6 +15,8 @@ from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDia
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
 from agent_comms.selected_triage import FullSelectedTriage, IgnoreSelectedTriage
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_errors import StaleFence
+from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.historical_native_inputs import read_historical_native_inputs
@@ -114,7 +116,8 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
     monkeypatch.setattr(TrackedTurnSession, "execute", model)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, message, root_id):
         assert await owner.inputs.drain_inbox("alpha") == 1
-        await reply_turn_finished(owner, "alpha")
+        with pytest.raises(NativePiUnavailable, match="fake backend process died"):
+            await reply_turn_finished(owner, "alpha")
         failure = drain_diagnostic(comms, "alpha")
         assert isinstance(failure, NativeInputDrainDiagnostic)
         assert failure.error_type == "NativePiUnavailable" and "died" in failure.reason
@@ -173,7 +176,8 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
             else:
                 comms.registry.unregister("beta")
             release.set()
-            await asyncio.wait_for(turn, 5)
+            with pytest.raises(StaleFence, match="recipient registry owner changed before native send"):
+                await asyncio.wait_for(turn, 5)
             failure = drain_diagnostic(comms, "beta")
             if revocation == "stop":
                 assert failure is None  # The stopped owner has no remaining activity view.
