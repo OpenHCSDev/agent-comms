@@ -19,7 +19,9 @@ from contextlib import aclosing
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, TextIO, Type, TYPE_CHECKING, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
+
+from acp.schema import SessionConfigSelectOption
 
 from .activity import ActivityState
 from .channels import Channel
@@ -29,7 +31,7 @@ from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
 from .cli_protocol import ArrivedMessage
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, compile_decoder
 from .comms import Comms
 from .config_options import (
     CatalogConfigOption, CatalogSelection, ConfigOptions,
@@ -62,9 +64,6 @@ from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
 from .owner_lifecycle import OwnerStartResult
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
-
-if TYPE_CHECKING:
-    from acp.schema import SessionConfigSelectOption
 
 
 def _duration_seconds(value: str) -> float:
@@ -109,40 +108,6 @@ def _message_reference(value: str) -> dict[str, object]:
     return {"seq": int(sequence), "message_id": message_id}
 
 
-def option(
-    *flags: str,
-    default: Any = MISSING,
-    default_factory: Any = MISSING,
-    group: str | None = None,
-    normalize: Callable[..., Any] | None = None,
-    wire_name: str | None = None,
-    parser_default: Any = MISSING,
-    parser_default_factory: Any = MISSING,
-    multiline: bool = False,
-    target_bound: bool = False,
-    editor_format: Callable[[Any], str] | None = None,
-    catalog: type[CatalogConfigOption] | None = None,
-    **parser_options: Any,
-) -> Any:
-    """One field owns both its CLI projection and JSON boundary conversion."""
-    metadata = {
-        "multiline": multiline,
-        "target_bound": target_bound,
-        "editor_format": editor_format,
-        "flags": flags,
-        "parser_options": parser_options,
-        "group": group,
-        "normalize": normalize,
-        "parser_default": parser_default,
-        "parser_default_factory": parser_default_factory,
-    }
-    if wire_name is not None:
-        metadata["wire_name"] = wire_name
-    if catalog is not None:
-        metadata[CatalogConfigOption] = catalog
-    return field(default=default, default_factory=default_factory, metadata=metadata)
-
-
 @dataclass(frozen=True)
 class TargetField:
     """The original command field owns parsing, editor hints and requiredness."""
@@ -175,45 +140,99 @@ class TargetField:
         encoded = FieldCodec.encode(self.value)
         return encoded if isinstance(encoded, str) else json.dumps(encoded)
 
-    @property
-    def catalog(self) -> type[CatalogConfigOption] | None:
-        return self.declaration.metadata.get(CatalogConfigOption)
-
-    @property
-    def choices(self) -> tuple[tuple[str, str], ...] | None:
-        if self.catalog is not None:
-            return ()
-        if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
-            return tuple((member.label, FieldCodec.encode(member))
-                         for member in self.annotation.members_with(self.annotation))
-        values = FieldCodec.value_schema(self.annotation).get('enum')
-        return None if values is None else tuple((str(value), str(value)) for value in values)
+    def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
+        """An unrestricted field does not declare a finite-choice editor."""
+        return ()
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> TargetField:
-        if (member := self.catalog) is None:
-            return self
-        options = await catalogs.catalog_for(member).choices(selection)
-        return CatalogTargetField(self.declaration, self.annotation, self.value, tuple(options))
+        return self
 
     @property
     def required(self) -> bool:
         return self.declaration.default is MISSING and self.declaration.default_factory is MISSING
 
+    def value_schema(self) -> dict[str, object]:
+        return FieldCodec.value_schema(self.annotation)
+
     def json_schema(self) -> dict[str, object]:
-        schema = (FieldCodec.value_schema(self.annotation) if self.catalog is None
-                  else {'type': 'string', 'configuration': FieldCodec.encode(self.catalog)})
-        return {**schema, 'multiline': self.multiline,
+        return {**self.value_schema(), 'multiline': self.multiline,
                 'description': self.description, 'editor_default': self.editor_default}
 
 
 @dataclass(frozen=True)
-class CatalogTargetField(TargetField):
-    """A form projects the choices supplied by its declared configuration owner."""
-    options: tuple[SessionConfigSelectOption, ...]
+class ChoiceTargetField(TargetField):
+    """A prepared finite declaration, from its annotation or configuration catalog."""
+    options: tuple[SessionConfigSelectOption, ...] = ()
+
+    @property
+    def editor_declarations(self) -> tuple[object, ...]:
+        return ()
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
         return tuple((choice.name, choice.value) for choice in self.options)
+
+    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
+        options = (SessionConfigSelectOption(name=label, value=str(FieldCodec.encode(value)))
+                   for label, value in compile_decoder(self.annotation).editor_choices())
+        return replace(self, options=tuple(options))
+
+    def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
+        return (choices(self),)
+
+
+class CatalogTargetField(ChoiceTargetField):
+    @property
+    def catalog(self) -> type[CatalogConfigOption]:
+        return self.declaration.metadata[CatalogConfigOption]
+
+    @property
+    def editor_declarations(self) -> tuple[object, ...]:
+        return (self.catalog,)
+
+    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
+        options = await catalogs.catalog_for(self.catalog).choices(selection)
+        return replace(self, options=tuple(options))
+
+    def value_schema(self) -> dict[str, object]:
+        return {'type': 'string', 'configuration': FieldCodec.encode(self.catalog)}
+
+
+def option(
+    *flags: str,
+    default: Any = MISSING,
+    default_factory: Any = MISSING,
+    group: str | None = None,
+    normalize: Callable[..., Any] | None = None,
+    wire_name: str | None = None,
+    parser_default: Any = MISSING,
+    parser_default_factory: Any = MISSING,
+    multiline: bool = False,
+    target_bound: bool = False,
+    editor_format: Callable[[Any], str] | None = None,
+    editor: type[TargetField] = TargetField,
+    catalog: type[CatalogConfigOption] | None = None,
+    **parser_options: Any,
+) -> Any:
+    """One field owns both its CLI projection and JSON boundary conversion."""
+    metadata = {
+        TargetField: editor,
+        "multiline": multiline,
+        "target_bound": target_bound,
+        "editor_format": editor_format,
+        "flags": flags,
+        "parser_options": parser_options,
+        "group": group,
+        "normalize": normalize,
+        "parser_default": parser_default,
+        "parser_default_factory": parser_default_factory,
+    }
+    if wire_name is not None:
+        metadata["wire_name"] = wire_name
+    if catalog is not None:
+        metadata[CatalogConfigOption] = catalog
+        metadata[TargetField] = CatalogTargetField
+    return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
 @dataclass(frozen=True)
@@ -463,7 +482,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     def editable_fields(self) -> tuple[TargetField, ...]:
         """The command owns the parameters offered by its target action."""
         hints = get_type_hints(type(self))
-        return tuple(TargetField(item, hints[item.name], getattr(self, item.name))
+        return tuple(item.metadata[TargetField](item, hints[item.name], getattr(self, item.name))
                      for item in fields(self) if not item.metadata['target_bound'])
 
     async def prepare_fields(self) -> tuple[TargetField, ...]:
@@ -682,7 +701,7 @@ class ToolsCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
     help = "Import an OpenCode/Codex context snapshot"
-    format: ImportFormat = option("--format")
+    format: ImportFormat = option("--format", editor=ChoiceTargetField)
     source: str = option("--source", help="OpenCode export JSON/database or Codex rollout JSONL")
     session_id: str | None = option(
         "--session-id", help="Required for OpenCode database imports", default=None
@@ -749,7 +768,7 @@ class SendCliCommand(CliCommand):
     target: str = option("--to")
     body: str = option("--body")
     type: Type[MessageKind] = option(
-        "--type", default=InfoKind, choices=MessageKind.sendable_names()
+        "--type", default=InfoKind, choices=MessageKind.sendable_names(), editor=ChoiceTargetField
     )
     report: dict[str, Any] | None = option(
         "--report", help="Change report fields as a JSON object", default=None,
@@ -868,7 +887,7 @@ class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="appro
 class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"):
     help = "Correct one original stored model answer through the human identity owner"
     label: ModelLabel = option("--label", normalize=json.loads)
-    answer: type[SpanAnswer] = option("--answer")
+    answer: type[SpanAnswer] = option("--answer", editor=ChoiceTargetField)
     worktree: str = option("--worktree", default_factory=os.getcwd)
 
     def apply(self, ctx: Comms):
@@ -883,7 +902,7 @@ class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"
 @dataclass(frozen=True, kw_only=True)
 class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
     help = "Report human-reviewed accuracy and probability frequencies for exact annotation versions"
-    operation: Literal["calibration"] = option("operation", help="calibration")
+    operation: Literal["calibration"] = option("operation", help="calibration", editor=ChoiceTargetField)
     question: QuestionVersion = option("--question", normalize=json.loads,
         help="JSON of the original question member and version digest")
     classifier: ClassifierVersion = option("--classifier", normalize=json.loads,
@@ -958,7 +977,7 @@ class InboxCliCommand(CliCommand):
 class WatchCliCommand(CliCommand, declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
     thread: str = option("--thread")
-    acknowledgment: type[WatchAcknowledgment] = option("--acknowledgment", default=OnReadWatchAcknowledgment)
+    acknowledgment: type[WatchAcknowledgment] = option("--acknowledgment", default=OnReadWatchAcknowledgment, editor=ChoiceTargetField)
 
     def apply(self, ctx: Comms) -> AsyncIterator[Message]:
         return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
@@ -1052,7 +1071,7 @@ class HistoryCliCommand(CliCommand):
 class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
     help = "Export durable IRC/wire message history"
     output: str = option("--output", help="Destination file")
-    format: SelectableWireExportFormat = option("--format", default=JsonlFormat())
+    format: SelectableWireExportFormat = option("--format", default=JsonlFormat(), editor=ChoiceTargetField)
     everything: bool = option(
         "--everything", help="Every wire message", group="scope", default=False
     )
@@ -1148,7 +1167,7 @@ class RegisterCliCommand(CliCommand):
     parent: str | None = option("--parent", default=None)
     task: str | None = option("--task", default=None)
     pid: int = option("--pid", default=0)
-    execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution,
+    execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution, editor=ChoiceTargetField,
                                             parser_default=FieldCodec.encode(ExternalThreadExecution))
 
     def apply(self, ctx: Comms) -> Any:
@@ -1255,7 +1274,7 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
 class ActivityCliCommand(CliCommand):
     help = "Publish current thread activity"
     name: str = option("--name")
-    state: ActivityState = option("--state")
+    state: ActivityState = option("--state", editor=ChoiceTargetField)
     detail: str = option("--detail", default="")
 
     def apply(self, ctx: Comms) -> Any:
@@ -1654,7 +1673,7 @@ class RenameTagCliCommand(ExactTagCliCommand, declared_name='rename-tag'):
 class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
     help = 'Remove tag, archive tagged threads, or delete tagged threads'
     multiple_targets = True
-    disposition: TagDisposition = option('--disposition', default_factory=KeepThreadsTagDisposition,
+    disposition: TagDisposition = option('--disposition', default_factory=KeepThreadsTagDisposition, editor=ChoiceTargetField,
                                         help='Choose what happens to tagged threads')
     confirmed: bool = option('--confirmed', default=False, target_bound=True)
 
