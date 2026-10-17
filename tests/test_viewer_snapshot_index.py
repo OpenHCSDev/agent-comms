@@ -358,11 +358,19 @@ def test_display_index_rebuilds_after_bus_replacement(tmp_path):
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
 
     bus_path = comms.bus.log.path
+    two = bus_path.read_bytes()
+    comms.messaging.send("bob", "#team", "third")
+    three = bus_path.read_bytes()
     replacement = bus_path.with_name("replacement.jsonl")
-    replacement.write_bytes(bus_path.read_bytes())
+    replacement.write_bytes(two)
     replacement.chmod(0o600)
     os.replace(replacement, bus_path)
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+    with pytest.raises(RelationViolationError, match="root/size changed"):
+        wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    replacement.write_bytes(three)
+    replacement.chmod(0o600)
+    os.replace(replacement, bus_path)
+    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
 
 
 def test_display_read_progress_aggregates_sparse_cursor_without_decoding(tmp_path):

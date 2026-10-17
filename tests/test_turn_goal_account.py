@@ -79,11 +79,23 @@ async def test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["begin", "prepare", "reserve", "receipt_capture", "goal_retirement"])
+@pytest.mark.parametrize(
+    "failure, expected_state",
+    [
+        pytest.param(failure, state, id=failure)
+        for failure, state in (
+            ("begin", ReadyGeneration()),
+            ("prepare", BlockedGeneration()),
+            ("reserve", BlockedGeneration()),
+            ("receipt_capture", BlockedGeneration()),
+            ("goal_retirement", BlockedGeneration()),
+        )
+    ],
+)
 async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
-    comms, tmp_path, monkeypatch, failure
+    comms, tmp_path, monkeypatch, failure, expected_state
 ):
-    """Inject resource faults while all registry, journal and input owners stay real."""
+    """Keep unstarted goals ready; retire only resources already acquired."""
     owner = CommsAgent(
         comms, agent_bin="unused",
         private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
@@ -94,6 +106,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
     goal = await owner.turns.goals.set_goal(session.session_id, "preserve failed original")
     execution = OwnedTurn(owner.turns, session.session_id, name, "work", autonomous_goal=True)
     store = comms.goals.open_goal_store()
+    generation_before = store.snapshot(goal.id)
     pending_before = tuple(owner.inputs.pending_turns.get(session.session_id, ()))
 
     def fail(*args, **kwargs):
@@ -123,7 +136,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
     try:
         with pytest.raises(RuntimeError, match="injected acquired resource failure"):
             await execution.run()
-        assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
+        assert store.snapshot(goal.id).lifecycle == expected_state
         assert comms.registry.require(name).active_turn is None
         assert session.session_id not in owner.inputs.backend_inboxes
         assert session.session_id not in owner.inputs.original_sources
@@ -133,8 +146,11 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
             originals = tuple(stored_inputs(owner.inputs.dispositions.root).rows.values())
             assert len(originals) == 1
             assert isinstance(originals[0], NotSentInput)
-        with pytest.raises(GoalAttemptError):
-            store.ready_grant(goal.id, store.snapshot(goal.id).number)
+        if expected_state.ready:
+            assert store.snapshot(goal.id) == generation_before
+        else:
+            with pytest.raises(GoalAttemptError):
+                store.ready_grant(goal.id, store.snapshot(goal.id).number)
     finally:
         await owner.shutdown()
 
