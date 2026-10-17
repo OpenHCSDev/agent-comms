@@ -296,9 +296,8 @@ def verify_sent_full_input(
     refusal of the call and not as an unknown outcome.
     """
     try:
-        with CoordinationReadUnavailable.checking():
-            with Coordination(str(store.session.path)) as scoped, scoped.session.read():
-                _require_sent_full_input(scoped, admission, owner_name, input_id)
+        with CoordinationReadUnavailable.checking(), Coordination(str(store.session.path)) as scoped, scoped.session.read():
+            _require_sent_full_input(scoped, admission, owner_name, input_id)
     except CoordinationReadUnavailable as unavailable:
         raise CoordinationBusy() from unavailable
 
