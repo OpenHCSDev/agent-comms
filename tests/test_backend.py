@@ -108,23 +108,17 @@ prompt_request = None
 
 
 _NATIVE_PROMPT_START = f"""\
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import answer_state, next_prompt
 _raw_emit = emit
 def emit(value):
     message = value.get("message", {{}})
     if message.get("role") == "assistant":
         message.setdefault("content", [])
     _raw_emit(value)
-def read_prompt():
-    while True:
-        request = json.loads(sys.stdin.readline())
-        if request["type"] == "prompt":
-            return request
-        response = {{"id": request["id"], "type": "response",
-                    "command": request["type"], "success": True}}
-        if request["type"] == "get_state":
-            response["data"] = {{"nativeInputProofCapability": {json.dumps(CAPABILITY)}}}
-        emit(response)
-prompt = read_prompt()
+answer_state({{"nativeInputProofCapability": {json.dumps(CAPABILITY)}}})
+prompt = next_prompt()
 emit({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
 emit({{"type": "message_start", "message": {{"role": "user",
       "content": prompt["message"], "inputId": prompt["inputId"]}}}})
@@ -476,15 +470,19 @@ for line in sys.stdin:
         pid_file = tmp_path / "child.pid"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + "import json, os, pathlib, sys, time\n"
-            + "from agent_comms.native_pi import CAPABILITY\n"
-            + f"pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))\n"
-            + "state = json.loads(sys.stdin.readline())\n"
-            + "print(json.dumps({'id': state['id'], 'type': 'response', 'command': 'get_state', "
-              "'success': True, 'data': {'nativeInputProofCapability': CAPABILITY}}), flush=True)\n"
-            + "json.loads(sys.stdin.readline())\n"
-            + "print('[]', flush=True)\ntime.sleep(60)\n",
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+import json, os, pathlib, sys, time
+from agent_comms.native_pi import CAPABILITY
+pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))
+
+answer_state({{'nativeInputProofCapability': CAPABILITY}})
+next_prompt()
+print('[]', flush=True)
+time.sleep(60)
+''',
         )
         owner = asyncio.current_task()
         with pytest.raises(ValueError, match="Pi RPC record has wrong type"):
@@ -584,22 +582,20 @@ for line in sys.stdin:
         # assistant message must not escape as human-visible progress.
         stub = _stub(
             tmp_path,
-            "#!/usr/bin/env python3\n"
-            "import json, sys\n"
-            "def emit(row): print(json.dumps(row), flush=True)\n"
-            "state=json.loads(sys.stdin.readline())\n"
-            "emit({'type':'response','command':'get_state','id':state['id'],"
-            "'success':True,'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only'}})\n"
-            "prompt=json.loads(sys.stdin.readline())\n"
-            "emit({'type':'response','command':'prompt','id':prompt['id'],'success':True})\n"
-            "emit({'type':'message_start','message':{'role':'assistant','content':[]}})\n"
-            "emit({'type':'message_update','assistantMessageEvent':"
-            "{'type':'text_delta','delta':'foreign earlier turn'}})\n"
-            "emit({'type':'message_end','message':{'role':'assistant',"
-            "'stopReason':'toolUse','content':[{'type':'text',"
-            "'text':'foreign earlier turn'}]}})\n"
-            "emit({'type':'message_start','message':{'role':'user',"
-            "'content':'foreign later turn','inputId':'foreign'}})\n",
+            f'''#!/usr/bin/env python3
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+import json, sys
+
+answer_state({{'nativeInputProofCapability':'pi-native-input-v1-live-only'}})
+prompt=next_prompt()
+send({{'type':'response','command':'prompt','id':prompt['id'],'success':True}})
+send({{'type':'message_start','message':{{'role':'assistant','content':[]}}}})
+send({{'type':'message_update','assistantMessageEvent':{{'type':'text_delta','delta':'foreign earlier turn'}}}})
+send({{'type':'message_end','message':{{'role':'assistant','stopReason':'toolUse','content':[{{'type':'text','text':'foreign earlier turn'}}]}}}})
+send({{'type':'message_start','message':{{'role':'user','content':'foreign later turn','inputId':'foreign'}}}})
+''',
         )
         events = [
             event
@@ -1127,68 +1123,57 @@ for line in sys.stdin:
     ):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + """\
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
 import json, sys
 
-def emit(value):
-    print(json.dumps(value), flush=True)
+initial = {{"sessionId": "first", "sessionFile": "/tmp/first.jsonl",
+           "sessionName": "A", "model": {{"provider": "test", "id": "A", "contextWindow": 1000}},
+           "nativeInputProofCapability": "pi-native-input-v1-live-only"}}
+changed = {{"sessionId": "second", "sessionFile": "/tmp/second.jsonl",
+           "sessionName": "B", "model": {{"provider": "test", "id": "B", "contextWindow": 9000}}}}
 
-def next_prompt():
-    while True:
-        request = json.loads(sys.stdin.readline())
-        if request["type"] == "prompt":
-            return request
-        emit({"id": request["id"], "type": "response",
-              "command": request["type"], "success": True})
-
-initial = {"sessionId": "first", "sessionFile": "/tmp/first.jsonl",
-           "sessionName": "A", "model": {"provider": "test", "id": "A", "contextWindow": 1000},
-           "nativeInputProofCapability": "pi-native-input-v1-live-only"}
-changed = {"sessionId": "second", "sessionFile": "/tmp/second.jsonl",
-           "sessionName": "B", "model": {"provider": "test", "id": "B", "contextWindow": 9000}}
-state = json.loads(sys.stdin.readline())
-assert state["type"] == "get_state"
-emit({"id": state["id"], "type": "response", "command": "get_state",
-      "success": True, "data": initial})
+answer_state(initial)
 prompt = next_prompt()
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
-emit({"type": "message_start", "message": {"role": "user",
-      "content": prompt["message"], "inputId": prompt["inputId"]}})
-emit({"type": "message_update", "assistantMessageEvent":
-      {"type": "text_delta", "delta": "A-before"}})
-emit({"type": "message_end", "message": {"role": "assistant", "content": [],
-      "stopReason": "stop", "usage": {"totalTokens": 250}}})
+send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
+send({{"type": "message_start", "message": {{"role": "user",
+      "content": prompt["message"], "inputId": prompt["inputId"]}}}})
+send({{"type": "message_update", "assistantMessageEvent":
+      {{"type": "text_delta", "delta": "A-before"}}}})
+send({{"type": "message_end", "message": {{"role": "assistant", "content": [],
+      "stopReason": "stop", "usage": {{"totalTokens": 250}}}}}})
 pending = next_prompt()
 assert pending["message"] == "[peer] pending"
-evidence = __EVIDENCE__
-if evidence in {"get_state", "get_session_stats"}:
-    emit({"id": "unsolicited", "type": "response", "command": evidence,
-          "success": True, "data": {**changed, "contextUsage": {"tokens": 9999}}})
+evidence = {repr(evidence)}
+if evidence in {{"get_state", "get_session_stats"}}:
+    send({{"id": "unsolicited", "type": "response", "command": evidence,
+          "success": True, "data": {{**changed, "contextUsage": {{"tokens": 9999}}}}}})
 else:
-    emit({"id": "unsolicited", "type": "response", "command": evidence.split('_')[0],
+    send({{"id": "unsolicited", "type": "response", "command": evidence.split('_')[0],
           "success": evidence.endswith("cancelled"),
-          "data": {"cancelled": evidence.endswith("cancelled")}})
-emit({"type": "message_start", "message": {"role": "user",
-      "content": pending["message"], "inputId": pending["inputId"]}})
-emit({"type": "message_update", "assistantMessageEvent":
-      {"type": "text_delta", "delta": "B-secret"}})
-emit({"type": "message_update", "assistantMessageEvent":
-      {"type": "thinking_delta", "delta": "B-secret"}})
-emit({"type": "tool_execution_start", "toolCallId": "B-secret", "toolName": "bash",
-      "args": {"command": "B-secret"}})
-emit({"type": "tool_execution_update", "toolCallId": "B-secret", "partialResult": "B-secret"})
-emit({"type": "tool_execution_end", "toolCallId": "B-secret", "toolName": "bash",
-      "result": {"content": [{"type": "text", "text": "B-secret"}]}})
-emit({"type": "message_end", "message": {"role": "assistant", "content": [],
-      "stopReason": "error", "errorMessage": "B-secret"}})
-emit({"type": "auto_retry_start", "attempt": 2, "maxAttempts": 3})
-emit({"type": "agent_settled"})
+          "data": {{"cancelled": evidence.endswith("cancelled")}}}})
+send({{"type": "message_start", "message": {{"role": "user",
+      "content": pending["message"], "inputId": pending["inputId"]}}}})
+send({{"type": "message_update", "assistantMessageEvent":
+      {{"type": "text_delta", "delta": "B-secret"}}}})
+send({{"type": "message_update", "assistantMessageEvent":
+      {{"type": "thinking_delta", "delta": "B-secret"}}}})
+send({{"type": "tool_execution_start", "toolCallId": "B-secret", "toolName": "bash",
+      "args": {{"command": "B-secret"}}}})
+send({{"type": "tool_execution_update", "toolCallId": "B-secret", "partialResult": "B-secret"}})
+send({{"type": "tool_execution_end", "toolCallId": "B-secret", "toolName": "bash",
+      "result": {{"content": [{{"type": "text", "text": "B-secret"}}]}}}})
+send({{"type": "message_end", "message": {{"role": "assistant", "content": [],
+      "stopReason": "error", "errorMessage": "B-secret"}}}})
+send({{"type": "auto_retry_start", "attempt": 2, "maxAttempts": 3}})
+send({{"type": "agent_settled"}})
 for line in sys.stdin:
     if json.loads(line)["type"] == "abort":
-        emit({"type": "response", "command": "abort", "success": True})
+        send({{"type": "response", "command": "abort", "success": True}})
         break
-""".replace("__EVIDENCE__", repr(evidence)),
+''',
         )
         abort_write_failed = False
         if abort_pipe_closed:
@@ -1383,31 +1368,30 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
     async def test_input_start_deadline_owns_wait_after_prompt_acceptance(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + """\
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
 import json, sys, time
-def emit(value):
-    print(json.dumps(value), flush=True)
-state = json.loads(sys.stdin.readline())
-emit({"id": state["id"], "type": "response", "command": "get_state", "success": True,
-      "data": {"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
-prompt = json.loads(sys.stdin.readline())
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
+
+answer_state({{"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
+prompt = next_prompt()
+send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
 time.sleep(0.2)
-emit({"type": "message_start", "message": {"role": "user", "content": prompt["message"],
-      "inputId": prompt["inputId"]}})
-emit({"type": "message_start", "message": {"role": "assistant", "content": []}})
-emit({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": "ok"}})
-emit({"type": "message_end", "message": {"role": "assistant", "content": [],
-      "stopReason": "stop"}})
-emit({"type": "agent_settled"})
+send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
+      "inputId": prompt["inputId"]}}}})
+send({{"type": "message_start", "message": {{"role": "assistant", "content": []}}}})
+send({{"type": "message_update", "assistantMessageEvent": {{"type": "text_delta", "delta": "ok"}}}})
+send({{"type": "message_end", "message": {{"role": "assistant", "content": [],
+      "stopReason": "stop"}}}})
+send({{"type": "agent_settled"}})
 for line in sys.stdin:
     stats = json.loads(line)
     if stats["type"] == "get_session_stats":
-        emit({"id": stats["id"], "type": "response", "command": "get_session_stats",
-              "success": True, "data": {"contextUsage": {}}})
+        send({{"id": stats["id"], "type": "response", "command": "get_session_stats",
+              "success": True, "data": {{"contextUsage": {{}}}}}})
         break
-""",
+''',
         )
         events = [
             event
@@ -1666,29 +1650,28 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
         monkeypatch.setattr(backend, "PROMPT_START_TIMEOUT_SECONDS", 0.1)
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + """\
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
 import json, sys, time
-def emit(value):
-    print(json.dumps(value), flush=True)
-state = json.loads(sys.stdin.readline())
-emit({"id": state["id"], "type": "response", "command": "get_state", "success": True,
-      "data": {"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
-prompt = json.loads(sys.stdin.readline())
-emit({"type": "compaction_start", "reason": "threshold"})
+
+answer_state({{"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
+prompt = next_prompt()
+send({{"type": "compaction_start", "reason": "threshold"}})
 time.sleep(0.25)
-emit({"type": "compaction_end", "reason": "threshold", "result": {"summary": "saved"},
-      "aborted": False, "willRetry": False})
-emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
-emit({"type": "message_start", "message": {"role": "user", "content": prompt["message"],
-      "inputId": prompt["inputId"]}})
-emit({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": "ok"}})
-emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop",
-      "content": [{"type": "text", "text": "ok"}]}})
-emit({"type": "agent_settled"})
-emit({"type": "response", "command": "get_session_stats", "success": True,
-      "data": {"contextUsage": {}}})
-""",
+send({{"type": "compaction_end", "reason": "threshold", "result": {{"summary": "saved"}},
+      "aborted": False, "willRetry": False}})
+send({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
+send({{"type": "message_start", "message": {{"role": "user", "content": prompt["message"],
+      "inputId": prompt["inputId"]}}}})
+send({{"type": "message_update", "assistantMessageEvent": {{"type": "text_delta", "delta": "ok"}}}})
+send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop",
+      "content": [{{"type": "text", "text": "ok"}}]}}}})
+send({{"type": "agent_settled"}})
+send({{"type": "response", "command": "get_session_stats", "success": True,
+      "data": {{"contextUsage": {{}}}}}})
+''',
         )
         events = [
             event
@@ -1826,7 +1809,7 @@ def keep_model_live_until_steering():
         emit({{"type": "message_update", "assistantMessageEvent":
               {{"type": "thinking_delta", "delta": "."}}}})
 threading.Thread(target=keep_model_live_until_steering, daemon=True).start()
-steering = read_prompt()
+steering = next_prompt()
 steering_received.set()
 pathlib.Path({str(steering_log)!r}).write_text(json.dumps(steering, sort_keys=True))
 emit({{"id": steering["id"], "type": "response", "command": "prompt", "success": True}})
@@ -2000,29 +1983,31 @@ class TestNativeInputBinding:
         assert pending.accept(response(pending.request.id)).observed
 
     async def test_preflight_consumes_unsolicited_event_before_correlated_response(self, tmp_path):
-        stub = _stub(tmp_path, f'#!{sys.executable}\n' + '''
+        stub = _stub(tmp_path, f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, sys
-send = lambda event: print(json.dumps(event), flush=True)
-state = json.loads(sys.stdin.readline())
-send({'type':'extension_ui_request', 'method':'setStatus', 'id':'startup-status',
-      'statusKey':'startup', 'statusText':'Extension initialized'})
-send({'type':'agent_settled'})
-send({'type':'response','command':'get_state','id':'unrelated-query',
-      'success':True,'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only'}})
-send({'type':'response','command':'get_state','id':state['id'],
-      'success':True,'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only'}})
-prompt = json.loads(sys.stdin.readline())
-assert prompt['type'] == 'prompt'
-send({'type':'response','command':'prompt','id':prompt['id'],'success':True})
-send({'type':'message_start','message':{'role':'user','content':prompt['message'],
-                                      'inputId':prompt['inputId']}})
-send({'type':'message_end','message':{'role':'assistant','content':[], 'stopReason':'stop'}})
-send({'type':'agent_settled'})
+
+state = read_state()
+send({{'type':'extension_ui_request', 'method':'setStatus', 'id':'startup-status',
+      'statusKey':'startup', 'statusText':'Extension initialized'}})
+send({{'type':'agent_settled'}})
+send(state_response(state, {{'nativeInputProofCapability':'pi-native-input-v1-live-only'}}) | {{"id": 'unrelated-query'}})
+send(state_response(state, {{'nativeInputProofCapability':'pi-native-input-v1-live-only'}}))
+prompt = next_prompt()
+
+send({{'type':'response','command':'prompt','id':prompt['id'],'success':True}})
+send({{'type':'message_start','message':{{'role':'user','content':prompt['message'],
+                                      'inputId':prompt['inputId']}}}})
+send({{'type':'message_end','message':{{'role':'assistant','content':[], 'stopReason':'stop'}}}})
+send({{'type':'agent_settled'}})
 for line in sys.stdin:
     request = json.loads(line)
     if request['type'] == 'get_session_stats':
-        send({'type':'response','command':'get_session_stats','id':request.get('id'),
-              'success':True,'data':{}})
+        send({{'type':'response','command':'get_session_stats','id':request.get('id'),
+              'success':True,'data':{{}}}})
         break
 ''')
         async with asyncio.timeout(4):
@@ -2034,18 +2019,20 @@ for line in sys.stdin:
         received = tmp_path / "received-prompt"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, select, sys
-state = json.loads(sys.stdin.readline())
-print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
-                  "success":True, "data":{{
+
+answer_state({{
                       "nativeInputProofCapability":"pi-native-input-v1-live-only"
-                  }}}}), flush=True)
+                  }})
 if select.select([sys.stdin], [], [], 0.3)[0]:
     line = sys.stdin.readline()
     if line: open({str(received)!r}, "w").write(line)
-""",
+''',
         )
         checks = []
 
@@ -2069,14 +2056,16 @@ if select.select([sys.stdin], [], [], 0.3)[0]:
         pid_file = tmp_path / "pi.pid"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, os, signal, sys, time
-state = json.loads(sys.stdin.readline())
-print(json.dumps({{"type":"response","command":"get_state","id":state["id"],
-                  "success":True,"data":{{"nativeInputProofCapability":
-                  "pi-native-input-v1-live-only"}}}}), flush=True)
-prompt = json.loads(sys.stdin.readline())
+
+answer_state({{"nativeInputProofCapability":
+                  "pi-native-input-v1-live-only"}})
+prompt = next_prompt()
 print(json.dumps({{"type":"response","command":"prompt","id":prompt["id"],
                   "success":True}}), flush=True)
 print(json.dumps({{"type":"message_start","message":{{"role":"user",
@@ -2085,7 +2074,7 @@ print(json.dumps({{"type":"message_start","message":{{"role":"user",
 open({str(pid_file)!r}, 'w').write(str(os.getpid()))
 signal.signal(signal.SIGTERM, lambda *_: None)
 while True: time.sleep(0.1)
-""",
+''',
         )
         observed = []
         with pytest.raises(ValueError):
@@ -2104,14 +2093,16 @@ while True: time.sleep(0.1)
         pid_file = tmp_path / "pi.pid"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, os, signal, sys, time
-state = json.loads(sys.stdin.readline())
-print(json.dumps({{"type":"response","command":"get_state","id":state["id"],
-                  "success":True,"data":{{"nativeInputProofCapability":
-                  "pi-native-input-v1-live-only"}}}}), flush=True)
-prompt = json.loads(sys.stdin.readline())
+
+answer_state({{"nativeInputProofCapability":
+                  "pi-native-input-v1-live-only"}})
+prompt = next_prompt()
 print(json.dumps({{"type":"response","command":"prompt","id":prompt["id"],
                   "success":True}}), flush=True)
 print(json.dumps({{"type":"message_start","message":{{"role":"user",
@@ -2126,7 +2117,7 @@ else:
           flush=True)
 signal.signal(signal.SIGTERM, lambda *_: None)
 while True: time.sleep(0.1)
-""",
+''',
         )
         queue = TurnInbox()
         stream = one_turn_events(stub, [], "work", str(tmp_path), steering_queue=queue)
@@ -2163,20 +2154,21 @@ while True: time.sleep(0.1)
     ):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, sys
-state = json.loads(sys.stdin.readline())
-assert state["type"] == "get_state"
+state = read_state()
+
 case = {preflight!r}
 if case != "eof":
     data = "not-a-dict" if case == "invalid_data" else {{
         "nativeInputProofCapability":"pi-native-input-v1-live-only"
     }}
-    print(json.dumps({{"type":"response","command":"get_state",
-                      "id":state["id"] if case != "wrong_id" else "foreign",
-                      "success":True,"data":data}}), flush=True)
-""",
+    send(state_response(state, data) | {{"id": state["id"] if case != "wrong_id" else "foreign"}})
+''',
         )
         events = [
             event async for event in one_turn_events(stub, [], "work", str(tmp_path))
@@ -2203,20 +2195,20 @@ if case != "eof":
         """An original-only final/stats cannot settle an ACP-acknowledged queued input."""
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, sys
-send = lambda event: print(json.dumps(event), flush=True)
-state = json.loads(sys.stdin.readline())
-send({{"type":"response", "command":"get_state", "id":state["id"],
-       "success":True, "data":{{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}}})
-prompt = json.loads(sys.stdin.readline())
+
+answer_state({{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+prompt = next_prompt()
 send({{"type":"response", "command":"prompt", "id":prompt["id"], "success":True}})
 send({{"type":"message_start", "message":{{"role":"user", "content":prompt["message"],
        "inputId":prompt["inputId"]}}}})
-mode = json.loads(sys.stdin.readline())
-assert mode["type"] == "set_steering_mode"
-steer = json.loads(sys.stdin.readline())
+
+steer = next_prompt()
 assert steer["streamingBehavior"] == "steer" and steer["message"] == "inbox update"
 case = {case!r}
 if case != "unacknowledged":
@@ -2236,7 +2228,7 @@ send({{"type":"message_end", "message":{{
 send({{"type":"agent_settled"}})
 send({{"type":"response", "command":"get_session_stats", "success":True,
        "data":{{"contextUsage":{{"tokens":33}}}}}})
-""",
+''',
         )
         queue = TurnInbox()
         queue.put_nowait(steer("inbox update"))
@@ -2259,27 +2251,28 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
     async def test_inbox_queued_after_settled_stays_outside_completed_turn(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + """
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, sys
-send = lambda event: print(json.dumps(event), flush=True)
-state = json.loads(sys.stdin.readline())
-send({"type":"response","command":"get_state","id":state["id"],
-      "success":True,"data":{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
-prompt = json.loads(sys.stdin.readline())
-send({"type":"response","command":"prompt","id":prompt["id"],"success":True})
-send({"type":"message_start","message":{"role":"user", "content":prompt["message"],
-      "inputId":prompt["inputId"]}})
-send({"type":"message_end","message":{
+
+answer_state({{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+prompt = next_prompt()
+send({{"type":"response","command":"prompt","id":prompt["id"],"success":True}})
+send({{"type":"message_start","message":{{"role":"user", "content":prompt["message"],
+      "inputId":prompt["inputId"]}}}})
+send({{"type":"message_end","message":{{
     "role":"assistant", "content":[], "stopReason":"stop",
-}})
-send({"type":"agent_settled"})
+}}}})
+send({{"type":"agent_settled"}})
 for line in sys.stdin:
     request = json.loads(line)
     if request["type"] == "get_session_stats":
-        send({"type":"response","command":"get_session_stats","success":True,"data":{}})
+        send({{"type":"response","command":"get_session_stats","success":True,"data":{{}}}})
         break
-""",
+''',
         )
         queue = TurnInbox()
         finish = asyncio.Event()
@@ -2300,17 +2293,18 @@ for line in sys.stdin:
         received = tmp_path / "received-prompt"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, select, sys
-state = json.loads(sys.stdin.readline())
-assert state["type"] == "get_state"
-print(json.dumps({{"type":"response","command":"get_state","id":state["id"],
-                  "success":True,"data":{{}}}}), flush=True)
+
+answer_state({{}})
 if select.select([sys.stdin], [], [], 0.2)[0]:
     line = sys.stdin.readline()
     if line: open({str(received)!r}, "w").write(line)
-""",
+''',
         )
         events = [
             event async for event in one_turn_events(stub, [], "work", str(tmp_path))
@@ -2328,17 +2322,20 @@ if select.select([sys.stdin], [], [], 0.2)[0]:
         )
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, select, sys
-state = json.loads(sys.stdin.readline())
-assert state["type"] == "get_state"
+state = read_state()
+
 print({cause!r}, file=sys.stderr, flush=True)
 if select.select([sys.stdin], [], [], 0.1)[0]:
     line = sys.stdin.readline()
     if line: open({str(received)!r}, "w").write(line)
 sys.exit(1)
-""",
+''',
         )
         events = [
             event
@@ -2368,17 +2365,20 @@ sys.exit(1)
         received = tmp_path / "received-prompt"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, select, sys, time
-state = json.loads(sys.stdin.readline())
-assert state["type"] == "get_state"
+state = read_state()
+
 print("Native startup timeout witness", file=sys.stderr, flush=True)
 time.sleep(0.3)
 if select.select([sys.stdin], [], [], 0)[0]:
     line = sys.stdin.readline()
     if line: open({str(received)!r}, "w").write(line)
-""",
+''',
         )
         monkeypatch.setattr(backend, "CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS", 0.05)
         events = [
@@ -2424,20 +2424,22 @@ if select.select([sys.stdin], [], [], 0)[0]:
         received = tmp_path / "received-prompt"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, select, sys, time
-state = json.loads(sys.stdin.readline())
-assert state["type"] == "get_state"
+state = read_state()
+
 time.sleep(0.12)
-print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
-                  "success":True, "data":{{"nativeInputProofCapability":
+send(state_response(state, {{"nativeInputProofCapability":
                   {CAPABILITY!r}, "sessionId":"saved",
-                  "sessionFile":{str(session)!r}}}}}), flush=True)
+                  "sessionFile":{str(session)!r}}}))
 if select.select([sys.stdin], [], [], 0.15)[0]:
     line = sys.stdin.readline()
     if line: open({str(received)!r}, "w").write(line)
-""",
+''',
         )
         small = [
             event
@@ -2460,19 +2462,20 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
         # The send-boundary probe must not inherit the deliberate timeout delay.
         fast_stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, select, sys
-state = json.loads(sys.stdin.readline())
-assert state["type"] == "get_state"
-print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
-                  "success":True, "data":{{"nativeInputProofCapability":
+
+answer_state({{"nativeInputProofCapability":
                   {CAPABILITY!r}, "sessionId":"saved",
-                  "sessionFile":{str(session)!r}}}}}), flush=True)
+                  "sessionFile":{str(session)!r}}})
 if select.select([sys.stdin], [], [], 0.15)[0]:
     line = sys.stdin.readline()
     if line: open({str(received)!r}, "w").write(line)
-""",
+''',
             name="pi-fast-stub",
         )
         large = [
@@ -2770,15 +2773,15 @@ for line in sys.stdin:
     async def test_rpc_user_start_binds_native_input_id(self, tmp_path, case, expected_ok):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, sys
-send = lambda event: print(json.dumps(event), flush=True)
-state = json.loads(sys.stdin.readline())
-assert state["type"] == "get_state"
-send({{"type":"response","command":"get_state","id":state["id"],
-       "success":True,"data":{{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}}})
-prompt = json.loads(sys.stdin.readline())
+
+answer_state({{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+prompt = next_prompt()
 assert len(prompt["inputId"]) == 32
 send({{"type":"response","command":"prompt","id":prompt["id"],"success":True}})
 first_id = prompt["inputId"] if {case!r} != "wrong_initial_id" else "0" * 32
@@ -2786,9 +2789,8 @@ initial = {{"type":"message_start","message":{{"role":"user","content":"same tex
 if {case!r} != "foreign_identical_initial": initial["message"]["inputId"] = first_id
 send(initial)
 if {case!r} in ("valid_steer", "wrong_steer_id"):
-    mode = json.loads(sys.stdin.readline())
-    assert mode["type"] == "set_steering_mode"
-    steer = json.loads(sys.stdin.readline())
+
+    steer = next_prompt()
     assert steer["message"] == "peer" and len(steer["inputId"]) == 32
     send({{"type":"response","command":"prompt","id":steer["id"],"success":True}})
     steer_id = steer["inputId"] if {case!r} == "valid_steer" else "0" * 32
@@ -2797,7 +2799,7 @@ send({{"type":"message_end","message":{{
     "role":"assistant","content":[],"stopReason":"stop",
 }}}})
 send({{"type":"agent_settled"}})
-""",
+''',
         )
         queue = TurnInbox() if "steer" in case else None
         if queue is not None:
@@ -2819,33 +2821,33 @@ send({{"type":"agent_settled"}})
     async def test_native_steer_start_before_prompt_ack_is_authoritative(self, tmp_path):
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + """
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, sys
-send = lambda event: print(json.dumps(event), flush=True)
-state = json.loads(sys.stdin.readline())
-send({"type":"response","command":"get_state","id":state["id"],
-      "success":True,"data":{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
-prompt = json.loads(sys.stdin.readline())
-send({"type":"response","command":"prompt","id":prompt["id"],"success":True})
-send({"type":"message_start","message":{"role":"user","content":prompt["message"],
-      "inputId":prompt["inputId"]}})
-mode = json.loads(sys.stdin.readline())
-assert mode["type"] == "set_steering_mode"
-steer = json.loads(sys.stdin.readline())
-send({"type":"message_start","message":{"role":"user","content":steer["message"],
-      "inputId":steer["inputId"]}})
-send({"type":"response","command":"prompt","id":steer["id"],"success":True})
-send({"type":"message_end","message":{
+
+answer_state({{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+prompt = next_prompt()
+send({{"type":"response","command":"prompt","id":prompt["id"],"success":True}})
+send({{"type":"message_start","message":{{"role":"user","content":prompt["message"],
+      "inputId":prompt["inputId"]}}}})
+
+steer = next_prompt()
+send({{"type":"message_start","message":{{"role":"user","content":steer["message"],
+      "inputId":steer["inputId"]}}}})
+send({{"type":"response","command":"prompt","id":steer["id"],"success":True}})
+send({{"type":"message_end","message":{{
     "role":"assistant","content":[],"stopReason":"stop",
-}})
-send({"type":"agent_settled"})
+}}}})
+send({{"type":"agent_settled"}})
 for line in sys.stdin:
     if json.loads(line)["type"] == "get_session_stats":
-        send({"type":"response","command":"get_session_stats","success":True,
-              "data":{"contextUsage":{}}})
+        send({{"type":"response","command":"get_session_stats","success":True,
+              "data":{{"contextUsage":{{}}}}}})
         break
-""",
+''',
         )
         queue = TurnInbox()
         queue.put_nowait(steer("channel mention"))
@@ -2875,14 +2877,15 @@ for line in sys.stdin:
         checked = tmp_path / "send-boundary-checked"
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + f"""
+            f'''#!{sys.executable}
+import sys
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response
+
 import json, pathlib, sys, time
-send = lambda event: print(json.dumps(event), flush=True)
-state = json.loads(sys.stdin.readline())
-send({{"type":"response","command":"get_state","id":state["id"],
-      "success":True,"data":{{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}}})
-prompt = json.loads(sys.stdin.readline())
+
+answer_state({{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+prompt = next_prompt()
 send({{"type":"response","command":"prompt","id":prompt["id"],"success":True}})
 send({{"type":"message_start","message":{{"role":"user","content":prompt["message"],
       "inputId":prompt["inputId"]}}}})
@@ -2900,7 +2903,7 @@ for line in sys.stdin:
         send({{"type":"response","command":"get_session_stats","success":True,
               "data":{{"contextUsage":{{}}}}}})
         break
-""",
+''',
         )
         queue = TurnInbox()
         queue.put_nowait(steer("late direct", "bus-42"))
