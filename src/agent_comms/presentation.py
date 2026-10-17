@@ -784,7 +784,8 @@ class WireRevision:
             earlier.goal_waits, earlier.expiry_period) else ()
         if not status_names and self.activity != earlier.activity:
             snapshot = comms.registry.snapshot()
-            activity = comms.agents.all_activity(snapshot.visible_threads(names=names), snapshot=snapshot)
+            activity = comms.agents.all_activity(snapshot.visible_threads(
+                names=names, show_stopped=True, show_archived=False), snapshot=snapshot)
             status_names = tuple(name for name in names if (before := previous.presentations.get(name)) is None
                                  or before.view is None or before.view.activity != activity.get(snapshot.canonical_name(name)))
         if status_names:
