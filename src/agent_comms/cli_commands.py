@@ -78,7 +78,7 @@ def _duration_seconds(value: str) -> float:
 
 
 def _json_object(value: str) -> dict[str, Any]:
-    result = json.loads(value) if isinstance(value, str) else value
+    result = json.loads(value)
     if not isinstance(result, dict):
         raise ValueError("invoke --arguments must be a JSON object")
     return result
@@ -184,7 +184,7 @@ class TargetField:
         if self.catalog is not None:
             return ()
         if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
-            return tuple((member.declared_name, FieldCodec.encode(member))
+            return tuple((member.label, FieldCodec.encode(member))
                          for member in self.annotation.members_with(self.annotation))
         values = FieldCodec.value_schema(self.annotation).get('enum')
         return None if values is None else tuple((str(value), str(value)) for value in values)
@@ -510,7 +510,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif normalize is not None:
                 result[key] = normalize(text)
             elif isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-                result[key] = {annotation.family_discriminator: text}
+                result[key] = {'kind': text}
             elif FieldCodec.value_schema(annotation).get('type') == 'string' or str in get_args(annotation):
                 result[key] = text
             else:
@@ -597,7 +597,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
     @classmethod
-    def add_parser(cls, subparsers: Any) -> argparse.ArgumentParser:
+    def add_parser(cls, subparsers: Any) -> None:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls)
@@ -649,7 +649,6 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             else:
                 options.pop("required", None)
             owner.add_argument(*metadata["flags"], **options)
-        return parser
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
@@ -665,7 +664,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif isinstance(hints[declared.name], type) and issubclass(
                 hints[declared.name], DeclaredFamily
             ):
-                value = {hints[declared.name].family_discriminator: value}
+                value = {"kind": value}
             payload[key] = value
         return member.from_payload(payload)
 
@@ -723,11 +722,10 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
-
     caller: str | None = option(
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )
-    tool: str = option("--tool", default="")
+    tool: str = option("--tool")
     arguments: dict[str, Any] = option(
         "--arguments",
         help="Tool arguments as a JSON object",

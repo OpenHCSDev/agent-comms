@@ -11,7 +11,6 @@ import re
 
 from .goals import (
     GoalMentionBinding,
-    GoalAuthor,
     GoalMentionSource,
     LimitExceededMentionBinding,
     MalformedMentionBinding,
@@ -34,8 +33,7 @@ _MAX_TOKEN_CHARS = 512
 
 
 def bind_goal_mentions(
-    text: str, goal_id: str, revision: int, owner: Thread, registry: RegistrySnapshot,
-    *, author: GoalAuthor,
+    text: str, goal_id: str, revision: int, owner: Thread, registry: RegistrySnapshot
 ) -> GoalMentionSource:
     """Freeze exact registered executable incarnations in the same Goal row."""
     bindings: list[GoalMentionBinding] = []
@@ -76,5 +74,4 @@ def bind_goal_mentions(
         owner.name,
         owner.created_at,
         tuple(bindings),
-        author=author,
     )

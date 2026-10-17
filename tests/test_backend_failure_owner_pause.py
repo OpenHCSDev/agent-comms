@@ -1,6 +1,5 @@
 """Owner intent survives failed execution; private attempt fences still fail closed."""
 
-from agent_comms.goals import TextGoalProgress
 import json
 
 import pytest
@@ -50,7 +49,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
             "project",
             PausedGoalAction(
                 expect=GoalPrecondition(goal_id=goal.id),
-                progress=TextGoalProgress("Explicit owner pause during backend execution"),
+                progress="Explicit owner pause during backend execution",
             ),
             actor=OwnerInvocable,
         )
