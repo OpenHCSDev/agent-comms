@@ -18,6 +18,7 @@ from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.native_startup import NativeStartup
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.session_fence import session_writer_fence
+from agent_comms.selected_session import SelectedSession
 from agent_comms.tracked_turn import TrackedTurnSession
 
 pytest_plugins = ("test_backend_native_lifecycle",)
@@ -66,7 +67,6 @@ async def prepare(owner, preparation_type, monkeypatch):
     preparation = preparation_type(
         launch,
         "",
-        session_file=str(owner.session),
         persistent_session=owner.persistent,
         startup=admission,
     )
@@ -130,8 +130,7 @@ async def test_actual_tracked_ready_pipe_survives_busy_owner(native_backend, mon
         input_id="48acac7a89e0442b95c21cbe26cdc965",
         prompt="Controlled tracked initialization input, sent exactly once",
         worktree=owner.project,
-        session_dir=owner.session.parent,
-        session_file=owner.session,
+        session=SelectedSession.for_launch(owner.session.parent, owner.session, owner.package),
         provider="response-local",
         model="fixture",
         thinking_level="off",
@@ -163,8 +162,7 @@ async def test_actual_tracked_unresponsive_native_owns_not_sent_witness(
             input_id="ba2b5029200e49eea84bf0db17d2316c",
             prompt="Private unadmitted input, never replay",
             worktree=owner.project,
-            session_dir=owner.session.parent,
-            session_file=owner.session,
+            session=SelectedSession.for_launch(owner.session.parent, owner.session, owner.package),
             provider="response-local",
             model="fixture",
             thinking_level="off",

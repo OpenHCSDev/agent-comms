@@ -204,7 +204,7 @@ class PrivateSendAdmission:
     def commit(self, store: Coordination, context: NativeContextProof) -> None:
         self.stage.commit(store, self.participant, self.input_id, self.token_digest, context)
 
-    def _admit_once(self, identity: NativeSessionIdentity) -> None:
+    def _start_once(self, identity: NativeSessionIdentity) -> None:
         """Commit the exact grant under original fences, then release them.
 
         Stop, rename and maintenance before this grant refuse admission. After
@@ -281,5 +281,5 @@ class PrivateSendAdmission:
             pass
         else:
             raise IdentityConflict("native send admission requires the isolated raw writer")
-        self._admit_once(identity)
+        self._start_once(identity)
         yield

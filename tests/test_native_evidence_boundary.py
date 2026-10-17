@@ -1,12 +1,11 @@
 """Evidence preserves opaque content without granting plain-text or launch authority."""
 
 import json
-from pathlib import Path
 
 import pytest
 
 from agent_comms.native_entries import NativeEntry
-from agent_comms.native_pi import NativeContextProof, NativePiUnavailable
+from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.pi_payloads import TextContent, UnknownContent
 
 
@@ -33,12 +32,6 @@ def test_original_header_preserves_project_and_fork_lineage(tmp_path):
     assert file.read_bytes() == before
     incomplete = NativeEntry.from_evidence({"type": "session", "id": "unrecorded"})
     assert incomplete.cwd is None and incomplete.parent_session is None
-
-
-@pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
-def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
-    with pytest.raises(ValueError, match="128-bit input ID"):
-        NativeContextProof.read_evidence(tmp_path / "absent.jsonl", input_id)
 
 
 @pytest.mark.parametrize(

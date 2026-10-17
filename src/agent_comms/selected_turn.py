@@ -238,7 +238,7 @@ class SelectedAttempt:
                 participant.store.session.path, participant.bus, self.stage.fence, replies
             )
             return await CoordinatedTurn.capture(
-                participant, request.admission.input_id, CompletedAssignment,
+                participant, result.context.input_id, CompletedAssignment,
                 published.publication_receipts,
             )
 
