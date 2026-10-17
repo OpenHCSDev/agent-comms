@@ -9,6 +9,7 @@ import pytest
 from agent_comms import HistoricalMessage, HistoryCursor
 from agent_comms.comms import Comms
 from agent_comms.historical_views import HistoryArchive
+from agent_comms.read_basis import ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
@@ -113,10 +114,11 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
         "#team", before=HistoryCursor(source.key, 100), worktree=str(live.root), limit=3
     )
     live.views.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
-    assert list(ReadLedger(Path(source.root) / ReadLedger.filename).read().messages.values()) == [
-        (page.messages[1].seq,)
-    ]
-    assert not live.bus.reads.seen_sequences(viewer.name, live.registry.snapshot())
+    snapshot = live.registry.snapshot()
+    assert ReadLedger(Path(source.root) / ReadLedger.filename).cursor(
+        viewer.name, snapshot
+    ) == ReadCursor(exceptions=(page.messages[1].seq,))
+    assert live.bus.reads.cursor(viewer.name, snapshot) == ReadCursor()
     assert live.bus.pending_count("bob", "#team") == 2
     with pytest.raises(ValueError):
         live.views.mark_historical_view_read(
@@ -249,8 +251,10 @@ def test_original_recorded_projection_is_strict_and_attaches_before_destination_
 
     old, live = setup(tmp_path / "old", 0), setup(tmp_path / "live", 0)
     original = (old.root / "registry.json").read_bytes()
+    request = FieldCodec.record_schema(RegistryProvenance)
+    request['properties']['threads']['additionalProperties']['properties'].pop('backend')
     packet = json.loads(json.dumps(FieldCodec.encode(RecordedRegistryProjection.read(
-        old.registry, old.root, "", FieldCodec.record_schema(RegistryProvenance)
+        old.registry, old.root, "", request
     ))))
     observed = FieldCodec.decode(HistorySource, packet)
     assert observed.provenance == RegistryProvenance.capture(old.registry.snapshot())
@@ -264,7 +268,7 @@ def test_original_recorded_projection_is_strict_and_attaches_before_destination_
         FieldCodec.decode(HistorySource, invalid)
     (old.root / "registry.json").write_bytes(original + b" ")
     with pytest.raises(RelationViolationError, match="guard"):
-        RecordedRegistryProjection.read(old.registry, old.root, "", FieldCodec.record_schema(RegistryProvenance))
+        RecordedRegistryProjection.read(old.registry, old.root, "", request)
 
 
 def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrated):
@@ -345,7 +349,7 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     assert type(recorded) is ThreadProvenance
     assert recorded.incarnation == old.registry.require("alice").incarnation
     assert set(FieldCodec.encode(recorded)) == {
-        item.name for item in fields(ThreadProvenance) if item.init
+        item.name for item in fields(ThreadProvenance) if item.init and item.name != 'backend'
     }
     assert not hasattr(recorded, "process_identity")
     assert not hasattr(recorded, "active_turn")
