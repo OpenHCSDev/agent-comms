@@ -90,7 +90,7 @@ class PrefixWitness(PrefixSeal):
             raise RelationViolationError("Original certificate differs from its durable marker.")
 
     def require_source(self, marker: WireMetadata, info: os.stat_result, stream: BinaryIO) -> None:
-        """Content corruption is fatal; physical relocation needs exclusive repair."""
+        """Reject changed bytes; a copied file needs rebuilding under the write lock."""
         if self.root_id != marker.root_id or info.st_size < self.offset:
             raise RelationViolationError("Private bus checkpoint root/size changed.")
         if _tail(stream, self.offset) != self.tail:
@@ -1229,7 +1229,7 @@ def _rebuild_checkpoint_unlocked(
     info: os.stat_result,
     seal: CheckpointSeal,
 ) -> PrefixWitness:
-    """Rebuild the derived index from complete canonical history under its lock."""
+    """Read the whole bus and rebuild its index while holding the write lock."""
     saved = _saved(db)
     digest = _SEED
     prior_seen = saved.offset == 0
@@ -1315,7 +1315,7 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
     try:
         saved.require_source(marker, info, stream)
     except CheckpointNeedsRepair:
-        # Rebuild copied index rows; their old physical seal is not authority.
+        # The copied index rows point at the old file; rebuild them.
         return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, marker.seal)
     recovered = marker.seal.recover(bus, marker, db, path, saved, info)
     if recovered is not None:

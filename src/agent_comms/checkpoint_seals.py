@@ -76,7 +76,7 @@ class CheckpointSeal(DeclaredFamily, affix="Seal"):
 
     @abstractmethod
     def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
-        """Bind a complete canonical rebuild to this retained durable intent."""
+        """Check the rebuilt index matches what this write said it would be."""
 
     @abstractmethod
     def require_final(self, saved: PrefixWitness, db_path: Path) -> None:

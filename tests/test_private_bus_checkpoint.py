@@ -515,7 +515,7 @@ def test_reopened_root_preserves_certified_source_and_supports_append(
 
 
 @pytest.mark.parametrize("copy_root", [False, True])
-def test_copied_source_requires_exclusive_recertification(tmp_path: Path, copy_root: bool) -> None:
+def test_copied_root_rebuilds_its_index(tmp_path: Path, copy_root: bool) -> None:
     from agent_comms.child_process import Platform
     from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair
     from agent_comms.store_files import _store_lock_file
