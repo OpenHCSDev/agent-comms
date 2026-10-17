@@ -624,7 +624,7 @@ class Transcripts:
         cursor = before or after
         if cursor and (cursor.session_file != session_file or cursor.offset < 0):
             raise TranscriptChanged()
-        receipts = page.projection
+        source = page.projection
         with page.records.reading() as reader:
             size = reader.cut().offset
             if cursor and cursor.offset > size:
@@ -635,15 +635,15 @@ class Transcripts:
                 size = through.offset
                 if cursor and cursor.offset > size:
                     raise ValueError("Cursor is outside the transcript window.")
-            frontier = through or TranscriptCursor.at(session_file, size, receipts.frontier)
-            receipts.require_cursor(frontier)
+            frontier = through or TranscriptCursor.at(session_file, size, source.frontier)
+            source.require_cursor(frontier)
             if frontier.wire_seq < 0 or (cursor is not None and not frontier.contains(cursor)):
                 raise ValueError("Cursor is outside the combined transcript source")
             traversal = LaterTranscript() if after is not None else EarlierTranscript()
             initial = cursor or frontier
-            with reader.projection(receipts, page.routes) as project:
+            with reader.projection(source, page.routes) as project:
                 consumed, records = traversal.read_records(
-                    reader, project, receipts, initial, frontier,
+                    reader, project, source, initial, frontier,
                     max_messages=max_messages, max_bytes=max_bytes,
                 )
             draft = reader.current_draft()
