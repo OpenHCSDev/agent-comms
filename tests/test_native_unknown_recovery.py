@@ -120,7 +120,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
         assert not result.replay.replay_safe and result.replay.side_effects_possible
         assert all(type(row.lifecycle) is FailedAssignment for row in result.assignments)
         assert result.execution.reason_code == "released_native_unknown"
-        assert result.publication_intents == result.publication_receipts == ()
+        assert result.publication_intents == result.publication_evidence == ()
         assert input_evidence(store) == before
         assert (root / "bus.jsonl").read_bytes() == before_bus
         with pytest.raises(RecoveryBlocked):

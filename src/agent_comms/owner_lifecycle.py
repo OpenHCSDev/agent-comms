@@ -159,10 +159,10 @@ class OwnerReleaseStore(ThreadOwnedState, LockedStore[dict[str, OwnerReleaseEvid
         """A acknowledgement attests one declared owner; it ends with the declaration."""
         names = {thread.name for thread in threads}
         self.update(
-            lambda receipts: (
-                {name: acknowledgement for name, acknowledgement in receipts.items() if name not in names}
-                if names & receipts.keys()
-                else receipts
+            lambda evidence: (
+                {name: acknowledgement for name, acknowledgement in evidence.items() if name not in names}
+                if names & evidence.keys()
+                else evidence
             )
         )
 
@@ -523,4 +523,4 @@ class OwnerLifecycle:
         after = self.registry.snapshot()
         acknowledgement = OwnerReleaseEvidence(before, after.claimed_generations[thread.name],
                                       after.threads[thread.name])
-        self.releases.update(lambda receipts: {**receipts, thread.name: acknowledgement})
+        self.releases.update(lambda evidence: {**evidence, thread.name: acknowledgement})

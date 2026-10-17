@@ -12,7 +12,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import Comms, wire
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.publications import PublicationReceipts
+from agent_comms.coordination_tables.publications import PublicationEvidence
 from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
@@ -129,7 +129,7 @@ async def run(stage, package):
                             db = store.session._connection
                             claims = WakeAssignment.select(db, where='wire_seq=?', parameters=(original.seq,))
                             inputs = NativeRuntimeInput.select(db)
-                            publications = PublicationReceipts.select(db)
+                            publications = PublicationEvidence.select(db)
                         if len(claims) == 1 and claims[0].lifecycle.completed:
                             triage = tuple(row for row in inputs if row.reference_stage is TriageNativeExecution)
                             full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)

@@ -66,7 +66,7 @@ class CohortSchemaMeta(CohortTable, TypedTable, PrivateRuntimeSchema):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimBatchReceipts(CohortTable, TypedTable):
+class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_batch_receipts"):
     wire_root_id: str = field(
         metadata={
             "sql": Column(
@@ -239,7 +239,7 @@ class ClaimBatchMembers(CohortTable, TypedTable):
             ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq"), ClaimBatchReceipts, ("wire_root_id", "wire_seq")
+                ("wire_root_id", "wire_seq"), ClaimBatchAcknowledgements, ("wire_root_id", "wire_seq")
             ),
         )
 
@@ -343,7 +343,7 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq"), ClaimBatchReceipts, ("wire_root_id", "wire_seq")
+                ("wire_root_id", "wire_seq"), ClaimBatchAcknowledgements, ("wire_root_id", "wire_seq")
             ),
         )
 
@@ -453,7 +453,7 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
             generation=self.owner_generation,
         )
 
-    def require_selection(self, assignment: WakeAssignment, acknowledgement: ClaimBatchReceipts) -> None:
+    def require_selection(self, assignment: WakeAssignment, acknowledgement: ClaimBatchAcknowledgements) -> None:
         """Verify this immutable acceptance capture against its original claim."""
         from .wake_candidate_index import ProjectionUnavailableError
 

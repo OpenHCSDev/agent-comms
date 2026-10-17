@@ -19,7 +19,7 @@ from .goal_attempts import LaunchPermit
 from .messages import Message
 from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
-from .owned_send_claim import OwnedSend
+from .owned_send_admission import OwnedSend
 from .native_input_owner import RegistryOwner
 from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting

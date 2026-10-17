@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .ordinary_claim_rules import (
+from .ordinary_admission_rules import (
     AcceptedInputCheck,
     InputKeysCheck,
     MissingAcceptedInputCheck,

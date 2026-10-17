@@ -4,7 +4,7 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from agent_comms.acp_extension import McpClientReceiptUpdate, decode_updates
+from agent_comms.acp_extension import McpClientAcknowledgementUpdate, decode_updates
 from agent_comms.comms import Comms
 from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
@@ -95,7 +95,7 @@ async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_bac
             "edited": None,
         }
         assert len(permissions) == 2
-        receipts = [update for update in updates if isinstance(update, McpClientReceiptUpdate)]
+        receipts = [update for update in updates if isinstance(update, McpClientAcknowledgementUpdate)]
         assert len(receipts) == 1 and receipts[0].acknowledgement.input_id == rows[0]["inputId"]
         assert owner._comms.registry.require("project").session_file == saved
         await proxy.close()

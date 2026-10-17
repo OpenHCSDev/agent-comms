@@ -17,7 +17,7 @@ from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink,
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.responses import ResponseObligation
 
-from ..cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts
+from ..cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchAcknowledgements, CohortDeliveryReceipts
 from ..field_codec import FieldCodec
 from ..turn_context import ContextSegment, InstructionFile, InstructionSegment, TurnContext
 from ..wake_candidate_index import ProjectionUnavailableError
@@ -27,13 +27,13 @@ from ..wake_candidate_index import ProjectionUnavailableError
 class _SelectedDecision:
     generation: AwarenessClaimGenerations
     assignment: WakeAssignment
-    acknowledgement: ClaimBatchReceipts
+    acknowledgement: ClaimBatchAcknowledgements
 
     @classmethod
     def capture(
         cls,
         assignment: WakeAssignment,
-        acknowledgement: ClaimBatchReceipts,
+        acknowledgement: ClaimBatchAcknowledgements,
         member: ClaimBatchMembers,
         delivery: CohortDeliveryReceipts,
         generation: AwarenessClaimGenerations,

@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp_extension import (
-    McpClientReceiptUpdate,
+    McpClientAcknowledgementUpdate,
     TurnChangedUpdate,
     decode_updates,
 )
@@ -497,7 +497,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         if observer:
                             await observer.session_update(session_id=session_id, update=update)
                         for fact in decode_updates(update.get("_meta")):
-                            if isinstance(fact, McpClientReceiptUpdate):
+                            if isinstance(fact, McpClientAcknowledgementUpdate):
                                 # The original response gate belongs to this
                                 # attachment, after any mounted observer has
                                 # consumed the acknowledgement. Passive owner logging
@@ -624,7 +624,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                                 assert fact.state.matches(active.managed_id)
                                 settlements.append(fact.state)
                                 active = None
-                        if isinstance(fact, McpClientReceiptUpdate):
+                        if isinstance(fact, McpClientAcknowledgementUpdate):
                             assert active is not None and active.matches(fact.turn_id)
                             receipts.append(fact.acknowledgement)
                 assert active is None and len(settlements) == len(receipts) == 1, updates

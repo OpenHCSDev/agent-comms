@@ -15,7 +15,7 @@ from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .native_claim_rules import (
+from .native_admission_rules import (
     GoalRegistryClaimCheck,
     GoalRegistryIdentityCheck,
     RegistryIdentityCheck,
@@ -128,7 +128,7 @@ class RegistryOwner:
         return actual
 
     def require_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:
-        """Observe this authorized turn's source without admitting another input.
+        """Observe this authorized turn's source without allowing another input.
 
         Check the goal when accepting input. A legitimate goal change
         during this turn does not revoke its source observation; the exact

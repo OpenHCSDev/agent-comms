@@ -38,7 +38,7 @@ from .cohort_schema import (
     COHORT_SCHEMA_VERSION,
     AwarenessClaimGenerations,
     ClaimBatchMembers,
-    ClaimBatchReceipts,
+    ClaimBatchAcknowledgements,
     CohortDeliveryReceipts,
     assert_cohort_schema,
     assert_optional_awareness_schema,
@@ -383,7 +383,7 @@ class OptionalAwarenessProjection:
         marks = ",".join("?" for _ in assignments)
         receipts = {
             row.wire_seq: row
-            for row in ClaimBatchReceipts.select(
+            for row in ClaimBatchAcknowledgements.select(
                 db,
                 where=f"wire_root_id=? AND wire_seq IN ({marks})",
                 parameters=(root_id, *sequences),

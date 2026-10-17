@@ -16,7 +16,7 @@ from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .durable_turn import DurableTurn
-from .native_claim_rules import (
+from .native_admission_rules import (
     NativeBindingCheck,
     NativeClaimCheck,
     NativeIdentityCheck,

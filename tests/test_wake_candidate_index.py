@@ -565,7 +565,7 @@ def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_p
 def _as_response(row, root_id, execution_id):
     """Build current declared response shape for raw-writer corruption tests."""
     from agent_comms.bus_publication import CommittedDelivery, initial_sideband
-    from agent_comms.delivery_policy import KeyedResponseReceipt, ResponseDeliveryPolicy
+    from agent_comms.delivery_policy import KeyedResponseAcknowledgement, ResponseDeliveryPolicy
     from agent_comms.field_codec import FieldCodec
     from agent_comms.wake import ControlClassification
 
@@ -580,7 +580,7 @@ def _as_response(row, root_id, execution_id):
             ),
             control=ControlClassification.ORDINARY.value,
         ),
-        response=KeyedResponseReceipt(
+        response=KeyedResponseAcknowledgement(
             root_id, execution_id,
             canonical_publication_key(execution_id, delivery.message.target),
             public_envelope_digest(public),

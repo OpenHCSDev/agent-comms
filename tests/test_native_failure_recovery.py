@@ -170,7 +170,7 @@ def test_restart_recovery_preserves_native_outcome_without_replaying(released_fa
         assert not result.is_current
         assert not result.can_retry
         assert NativeRuntimeInput.one(store.session._connection, input_id=input_id) == before
-        assert not result.publication_receipts
+        assert not result.publication_evidence
         assert not result.publication_intents
     comms.owners.require_restart_idle(owner)
     # Startup after settlement is a read, not another recovery or a replay.

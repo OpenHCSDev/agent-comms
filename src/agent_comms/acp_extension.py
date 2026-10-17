@@ -25,7 +25,7 @@ from .field_codec import FieldCodec
 from .goal_presentation import GoalSnapshot
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
-from .pi_payloads import McpLiveReceipt
+from .pi_payloads import McpLiveAcknowledgement
 from .routing import MessageRoute
 from .thread_identity import ClaimedIdentity, ThreadIncarnation
 from .turn_lease import TurnState
@@ -530,9 +530,9 @@ class InputDeliveryChangedUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
-class McpClientReceiptUpdate(AgentCommsUpdate):
+class McpClientAcknowledgementUpdate(AgentCommsUpdate, declared_name="mcp_client_receipt"):
     turn_id: str
-    acknowledgement: McpLiveReceipt = field(metadata={"wire_name": 'receipt'})
+    acknowledgement: McpLiveAcknowledgement = field(metadata={"wire_name": 'receipt'})
 
 
 class CommsRequest(DeclaredFamily, affix="Request"):

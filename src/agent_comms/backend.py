@@ -46,7 +46,7 @@ from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import SelectedToolDenied
-from .turn_claim import UnwrittenPrompt
+from .turn_admission import UnwrittenPrompt
 from .turn_inputs import InputForwarding
 from .turn_output import TurnOutput
 from .turn_phase import ShutdownPhase, TurnPhase
@@ -331,7 +331,7 @@ class TurnSession:
             self.finished = True
             return
 
-    def permits_live_receipt(self) -> bool:
+    def permits_live_status(self) -> bool:
         """Only tracked, live input may publish an informational package acknowledgement."""
         if self.stats.requested:
             return False

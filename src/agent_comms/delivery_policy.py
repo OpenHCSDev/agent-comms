@@ -15,7 +15,7 @@ from .wake_policy import BoundedTriageWake, PassiveWake
 
 
 @dataclass(frozen=True)
-class KeyedResponseReceipt:
+class KeyedResponseAcknowledgement:
     wire_root_id: str
     execution_id: str
     publication_key: str
@@ -61,7 +61,7 @@ class DeliveryPolicy(DeclaredFamily, affix="DeliveryPolicy"):
     @abstractmethod
     def resolve(message, audience, control): ...
 
-    def require_receipt(self, root_id, message) -> KeyedResponseReceipt | None:
+    def require_acknowledgement(self, root_id, message) -> KeyedResponseAcknowledgement | None:
         return None
 
 
@@ -73,9 +73,9 @@ class InitialDeliveryPolicy(DeliveryPolicy):
 
 @dataclass(frozen=True, kw_only=True)
 class ResponseDeliveryPolicy(DeliveryPolicy):
-    response: KeyedResponseReceipt
+    response: KeyedResponseAcknowledgement
 
-    def require_receipt(self, root_id, message) -> KeyedResponseReceipt:
+    def require_acknowledgement(self, root_id, message) -> KeyedResponseAcknowledgement:
         return self.response.require(root_id, message)
 
     @staticmethod

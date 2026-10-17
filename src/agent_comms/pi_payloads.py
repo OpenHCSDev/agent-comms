@@ -1311,7 +1311,7 @@ class McpServerReceipt:
 
 
 @dataclass(frozen=True)
-class McpLiveReceipt:
+class McpLiveAcknowledgement:
     version: Literal[1]
     source: Literal["pi-mcp-client"]
     input_id: str = field(metadata={"wire_name": "inputId"})
@@ -1320,7 +1320,7 @@ class McpLiveReceipt:
     servers: tuple[McpServerReceipt, ...]
 
     @classmethod
-    def from_status(cls, text: str | None, input_id: str) -> McpLiveReceipt | None:
+    def from_status(cls, text: str | None, input_id: str) -> McpLiveAcknowledgement | None:
         """Decode the package's external status claim once at its boundary.
 
         Same-user extensions can imitate this claim. It is never a package

@@ -1,7 +1,7 @@
 """POSIX observations and private path roles, never enrollment authority.
 
 These values describe the observed filesystem. Possessing one cannot mint a
-fresh native session, admit an input or replace a returned durable acknowledgement.
+fresh native session, accept an input or replace a returned durable acknowledgement.
 """
 
 from __future__ import annotations

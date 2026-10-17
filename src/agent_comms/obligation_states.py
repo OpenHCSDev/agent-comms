@@ -61,11 +61,11 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
             raise IntegrityViolationError("publication intent is invalid for obligation state")
         if intent is None and self.requires_intent:
             raise IntegrityViolationError("publishing and published obligations require intent")
-        self.validate_receipt(acknowledgement)
+        self.validate_acknowledgement(acknowledgement)
         if acknowledgement is not None:
-            intent.validate_receipt(acknowledgement)
+            intent.validate_acknowledgement(acknowledgement)
 
-    def validate_receipt(self, acknowledgement) -> None:
+    def validate_acknowledgement(self, acknowledgement) -> None:
         if acknowledgement is not None:
             raise IntegrityViolationError("publication acknowledgement exists iff published")
 
@@ -130,7 +130,7 @@ class PublishedResponse(ResponseState):
     def receipt_seq(self):
         return self.seq
 
-    def validate_receipt(self, acknowledgement) -> None:
+    def validate_acknowledgement(self, acknowledgement) -> None:
         if acknowledgement is None:
             raise IntegrityViolationError("publication acknowledgement exists iff published")
         if (acknowledgement.message_id, acknowledgement.seq) != (self.message_id, self.seq):

@@ -14,7 +14,7 @@ from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFa
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    PublicationReceipts,
+    PublicationEvidence,
     canonical_publication_key,
 )
 from agent_comms.execution_states import (
@@ -137,7 +137,7 @@ def test_replay_bits_revision_and_ambiguity(pending):
 def test_response_receipt_and_publication_constraints(owner, pending):
     publication = published_snapshot(pending)
     intent = publication.publication_intents[0]
-    acknowledgement = publication.publication_receipts[0]
+    acknowledgement = publication.publication_evidence[0]
     if owner.published:
         state = owner.load(acknowledgement.message_id, acknowledgement.seq)
         for message_id, seq in (
@@ -331,7 +331,7 @@ def published_snapshot(pending):
         canonical_publication_key("exec", "owner"),
         message.message_id,
     )
-    acknowledgement = PublicationReceipts(
+    acknowledgement = PublicationEvidence(
         execution_id="exec", exact_target="owner", seq=1,
         message_id=message.message_id, received_at_ms=0,
     )
@@ -339,7 +339,7 @@ def published_snapshot(pending):
         pending,
         obligations=(replace(pending.obligations[0], lifecycle=PublishedResponse(message.message_id, 1)),),
         publication_intents=(intent,),
-        publication_receipts=(acknowledgement,),
+        publication_evidence=(acknowledgement,),
     )
 
 
@@ -350,7 +350,7 @@ def test_snapshot_publication_parent_receipt_and_frozen_envelope(pending):
     rejected(
         value, "publication intent is invalid for obligation state", obligations=pending.obligations
     )
-    rejected(value, "acknowledgement exists iff published", publication_receipts=())
+    rejected(value, "acknowledgement exists iff published", publication_evidence=())
     # Claimless targets reject a parentless publication before acknowledgement validation.
     rejected(
         value,

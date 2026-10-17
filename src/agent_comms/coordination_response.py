@@ -36,7 +36,7 @@ from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    PublicationReceipts,
+    PublicationEvidence,
     canonical_publication_key,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
@@ -44,7 +44,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import InfoKind, Message, MessageKind
-from agent_comms.native_claim_rules import RunningTurnRegistryCheck
+from agent_comms.native_admission_rules import RunningTurnRegistryCheck
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence
@@ -159,7 +159,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
                 raise StaleFence("retained response belongs to another owner")
             for frozen in snapshot.publication_intents:
                 if ResponseObligation.response_record(
-                    snapshot.publication_receipts, frozen.exact_target
+                    snapshot.publication_evidence, frozen.exact_target
                 ) is not None:
                     continue
                 with store.session.transaction() as db:
@@ -197,7 +197,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
         ):
             raise IdentityConflict("response dispatch belongs to another root or owner")
         now = store.session.now(max(snapshot.execution.updated_at_ms, attempt.updated_at_ms))
-        PublicationReceipts(
+        PublicationEvidence(
             execution_id=intent.execution_id,
             exact_target=intent.exact_target,
             seq=matched.seq,
@@ -573,7 +573,7 @@ def _terminal_replay(
 ) -> AlreadyApplied[RecoverySnapshot] | None:
     """A finished immutable acknowledgement may be re-read, never re-published."""
     snapshot = store.snapshots.get(fence.execution_id)
-    if ResponseObligation.response_record(snapshot.publication_receipts, exact_target) is None:
+    if ResponseObligation.response_record(snapshot.publication_evidence, exact_target) is None:
         return None
     if snapshot.execution.owner_lookup != owner_witness.recipient_lookup:
         raise StaleFence("finished response belongs to a different SQL recipient")

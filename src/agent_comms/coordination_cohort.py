@@ -17,7 +17,7 @@ from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchMembers,
-    ClaimBatchReceipts,
+    ClaimBatchAcknowledgements,
     CohortDeliveryReceipts,
     assert_cohort_schema,
     assert_optional_awareness_schema,
@@ -106,7 +106,7 @@ def _immutable_assignment_matches(current: WakeAssignment, expected: WakeAssignm
 def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:
     message = initial.message
     audience = initial.audience
-    row = ClaimBatchReceipts.one(db, wire_root_id=initial.wire_root_id, wire_seq=message.seq)
+    row = ClaimBatchAcknowledgements.one(db, wire_root_id=initial.wire_root_id, wire_seq=message.seq)
     if row is None or not row.sealed:
         raise IdentityConflict("cohort acknowledgement is absent or unsealed")
     expected_count = sum(type(decision) is WakeDecision for decision in initial.decisions)
@@ -249,19 +249,19 @@ def accept_delivery_cohort(
             raise IdentityConflict("historical source precedes the current claim_scope floor")
         initial = source.delivery(wire_seq)
         assert_cohort_schema(db)
-        acknowledgement = ClaimBatchReceipts.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
+        acknowledgement = ClaimBatchAcknowledgements.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
         if acknowledgement is not None:
             return AlreadyApplied(_claim_record(db, initial))
         if WakeAssignment.select(db, where="wire_seq=?", parameters=(wire_seq,)):
             raise IdentityConflict("singleton claim cannot be adopted by a cohort")
-        if ClaimBatchReceipts.select(db, where="wire_seq=?", parameters=(wire_seq,)):
+        if ClaimBatchAcknowledgements.select(db, where="wire_seq=?", parameters=(wire_seq,)):
             raise IdentityConflict("wire sequence already belongs to another cohort root")
         for recipient in initial.audience.recipients:
             if Participants.one(db, participant_lookup=recipient.recipient_lookup) is None:
                 raise IdentityConflict("frozen recipient has no durable participant identity")
         accepted_at = store.session.now()
         expected = _expected_assignments(initial, accepted_at)
-        ClaimBatchReceipts(
+        ClaimBatchAcknowledgements(
             wire_root_id=wire_root_id,
             wire_seq=wire_seq,
             message_id=initial.message.message_id,
@@ -300,7 +300,7 @@ def accept_delivery_cohort(
                 claim_id=assignment_id,
             ).insert(db)
         _record_optional_owner_generations(db, expected, wire_root_id, wire_seq)
-        ClaimBatchReceipts.update(
+        ClaimBatchAcknowledgements.update(
             db,
             where="wire_root_id=? AND wire_seq=?",
             parameters=(wire_root_id, wire_seq),

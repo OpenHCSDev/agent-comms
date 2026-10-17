@@ -19,14 +19,14 @@ from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .delivery_policy import KeyedResponseReceipt
+    from .delivery_policy import KeyedResponseAcknowledgement
     from .messages import Message
     from .wire_metadata import WireMetadata
 
 
 class WireRecord(ABC):
     __slots__ = ()
-    acknowledgement: KeyedResponseReceipt | None = None
+    acknowledgement: KeyedResponseAcknowledgement | None = None
     max_row_bytes: ClassVar[int] = 8 * 1024 * 1024
 
     @classmethod
@@ -248,5 +248,5 @@ class WireScan:
 
 
 from .turn_context import ContextEntryManifest, RecordedContextManifest
-from .delivery_policy import KeyedResponseReceipt
+from .delivery_policy import KeyedResponseAcknowledgement
 from .messages import Message

@@ -17,7 +17,7 @@ from .jsonl_stream import unique_fields
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
-    from .delivery_policy import DeliveryManifest, KeyedResponseReceipt
+    from .delivery_policy import DeliveryManifest, KeyedResponseAcknowledgement
     from .messages import Message
     from .wake import NoWakeDecision, WakeDecision
 
@@ -127,7 +127,7 @@ class CommittedDelivery(MessageWireRecord):
     resolver_version: str
     policy_version: str
     manifest_codec: str = INITIAL_CODEC
-    acknowledgement: KeyedResponseReceipt | None = field(default=None, metadata={"wire_name": 'receipt'})
+    acknowledgement: KeyedResponseAcknowledgement | None = field(default=None, metadata={"wire_name": 'receipt'})
 
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and its original addressed incarnation agree."""
@@ -199,7 +199,7 @@ class CommittedDelivery(MessageWireRecord):
         rows = decisions_wire(decisions)
         if raw.decisions != rows or raw.decisions_digest != decisions_digest(rows):
             raise ValueError("Delivery decisions do not match the full committed N.")
-        acknowledgement = policy.require_receipt(wire_root_id, message)
+        acknowledgement = policy.require_acknowledgement(wire_root_id, message)
         return cls(
             wire_root_id,
             message,

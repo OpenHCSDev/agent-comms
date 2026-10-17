@@ -19,7 +19,7 @@ from agent_comms.agent_backend import PlacedCompaction
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.messages import InfoKind, Message
-from agent_comms.owned_send_claim import OwnedSend
+from agent_comms.owned_send_admission import OwnedSend
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread

@@ -1289,7 +1289,7 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
         assert db.snapshots.get("exec").is_current
         assert db.snapshots.get("exec").attempt is not None
         assert not db.snapshots.get("exec").attempt.lifecycle.backend_done
-        assert db.snapshots.get("exec").publication_receipts == ()
+        assert db.snapshots.get("exec").publication_evidence == ()
     with store(db_path) as reopened:
         obligations = reopened.snapshots.get("exec").obligations
         assert len(obligations) == 1 and obligations[0].lifecycle.declared_name == "publishing"

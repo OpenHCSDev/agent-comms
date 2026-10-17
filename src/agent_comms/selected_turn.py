@@ -236,7 +236,7 @@ class SelectedAttempt:
             )
             return await CoordinatedTurn.capture(
                 participant, result.context.input_id, CompletedAssignment,
-                published.publication_receipts,
+                published.publication_evidence,
             )
 
     async def observe_event(self, event):

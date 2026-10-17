@@ -22,7 +22,7 @@ from .bus_publication import (
 )
 from .bus_source_page import CandidateQuery
 from .checkpoint_seals import PrefixSource
-from .delivery_policy import KeyedResponseReceipt
+from .delivery_policy import KeyedResponseAcknowledgement
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
@@ -137,7 +137,7 @@ class CandidateCatchUp:
 class _ParsedRow:
     seq: int
     recipients: tuple[Candidate, ...]
-    response: KeyedResponseReceipt | None
+    response: KeyedResponseAcknowledgement | None
 
 
 @dataclass(frozen=True, slots=True)

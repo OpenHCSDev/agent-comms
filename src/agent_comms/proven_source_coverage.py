@@ -22,7 +22,7 @@ from agent_comms.coordinator import Coordination
 
 from .audience_manifest import FrozenRecipient
 from .bus_publication import CommittedDelivery
-from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema
+from .cohort_schema import ClaimBatchAcknowledgements, assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import AcceptedCohort, _claim_record
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
@@ -144,7 +144,7 @@ class SourceCoverage:
                     covered = seq
                     continue
                 recipient, decision = matches[0]
-                acknowledgement = self._receipt(initial)
+                acknowledgement = self._accepted_cohort(initial)
                 if acknowledgement is None:
                     blocked = seq
                     break
@@ -187,12 +187,12 @@ class SourceCoverage:
             request.require_exhausted(more)
         return witness, tuple(initials), more
 
-    def _receipt(self, initial: CommittedDelivery) -> AcceptedCohort | None:
+    def _accepted_cohort(self, initial: CommittedDelivery) -> AcceptedCohort | None:
         with self.store.session.read():
             db = self.store.session._connection
             assert_cohort_schema(db)
             assert_native_runtime_schema(db)
-            sealed = ClaimBatchReceipts.one(
+            sealed = ClaimBatchAcknowledgements.one(
                 db, wire_root_id=self.wire_root_id, wire_seq=initial.message.seq
             )
             return _claim_record(db, initial) if sealed and sealed.sealed else None

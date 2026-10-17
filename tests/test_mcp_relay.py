@@ -13,12 +13,12 @@ from acp.schema import PromptResponse
 from agent_comms import agent_events as ae
 from agent_comms import pi_events as pi
 from agent_comms.acp_extension import (
-    McpClientReceiptUpdate,
+    McpClientAcknowledgementUpdate,
     decode_updates,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_pi import CAPABILITY
-from agent_comms.pi_payloads import McpLiveReceipt
+from agent_comms.pi_payloads import McpLiveAcknowledgement
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend
@@ -51,7 +51,7 @@ async def test_live_projection_requires_owning_acp_turn_and_session(saved_owner)
             updates.append(kwargs)
 
     observer = Observer()
-    acknowledgement = McpLiveReceipt(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
+    acknowledgement = McpLiveAcknowledgement(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
     event = ae.McpLiveStatus(acknowledgement)
     async with native.original_input(owner, session_id, "Original acknowledgement operation") as turn:
         original_id = turn.turn_id
@@ -59,7 +59,7 @@ async def test_live_projection_requires_owning_acp_turn_and_session(saved_owner)
         assert len(updates) == 1
         assert updates[0]["session_id"] == session_id
         assert decode_updates(updates[0]["update"].field_meta) == (
-            McpClientReceiptUpdate(original_id, acknowledgement),
+            McpClientAcknowledgementUpdate(original_id, acknowledgement),
         )
     assert not owner.turns.turn_state(session_id).busy
     await owner._emit_event(session_id, event, observer, turn_id=original_id)
@@ -231,13 +231,13 @@ def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
         ],
     }
 
-    assert McpLiveReceipt.from_status(json.dumps(valid), input_id) == FieldCodec.decode(
-        McpLiveReceipt,
+    assert McpLiveAcknowledgement.from_status(json.dumps(valid), input_id) == FieldCodec.decode(
+        McpLiveAcknowledgement,
         valid,
     )
-    assert McpLiveReceipt.from_status(json.dumps(valid), "b" * 32) is None
+    assert McpLiveAcknowledgement.from_status(json.dumps(valid), "b" * 32) is None
     assert (
-        McpLiveReceipt.from_status(
+        McpLiveAcknowledgement.from_status(
             json.dumps(valid).replace('"version": 1', '"version": 1, "version": 1'),
             input_id,
         )
@@ -245,10 +245,10 @@ def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
     )
     valid["servers"][0]["calls"] = "automatic"
     valid["servers"][0]["state"] = "denied"
-    assert McpLiveReceipt.from_status(json.dumps(valid), input_id) is None
+    assert McpLiveAcknowledgement.from_status(json.dumps(valid), input_id) is None
     valid["servers"][0]["calls"] = "unavailable"
     valid["servers"][0]["id"] = "\x1b[2J"
-    assert McpLiveReceipt.from_status(json.dumps(valid), input_id) is None
+    assert McpLiveAcknowledgement.from_status(json.dumps(valid), input_id) is None
 
 
 @pytest.mark.usefixtures("native_rpc_fixture")

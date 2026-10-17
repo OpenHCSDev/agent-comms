@@ -105,7 +105,7 @@ async def configured_pure_channel(arguments):
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.selected_triage import FullSelectedTriage
-    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.coordination_tables.publications import PublicationEvidence
     from agent_comms.field_codec import FieldCodec
     from agent_comms.store_files import _store_lock
     from agent_comms.native_entries import NativeEntry
@@ -268,7 +268,7 @@ async def configured_pure_channel(arguments):
                             assert {row.assignment_id for row in sealed.assignments} == {
                                 row.assignment_id for row in claims if row.wire_seq == original.seq}
                         for claim in claims:
-                            rows = PublicationReceipts.select(db, where='execution_id=?',
+                            rows = PublicationEvidence.select(db, where='execution_id=?',
                                 parameters=(claim.lifecycle.execution_id,))
                             assert len(rows) == 1 and rows[0].exact_target == '#openhcs'
                             reply, = service.bus.log.messages_for_references((rows[0].reference,))
@@ -374,7 +374,7 @@ async def configured_pure_channel(arguments):
 async def configured_cancel_continue(arguments, service, attachment, name, sender, stage):
     """Use ordinary originals and the existing joined ACP cancellation boundary."""
     from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
-    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.coordination_tables.publications import PublicationEvidence
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.store_files import _store_lock
@@ -399,7 +399,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                     for link in ExecutionAssignmentLink.select(
                         db, where='assignment_id=?', parameters=(claim.assignment_id,))}
                 receipts = tuple(acknowledgement for execution_id in sorted(execution_ids)
-                    for acknowledgement in PublicationReceipts.select(
+                    for acknowledgement in PublicationEvidence.select(
                         db, where='execution_id=?', parameters=(execution_id,)))
                 return claims, inputs, receipts
 
@@ -462,7 +462,7 @@ async def configured_mixed_routes(arguments):
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_entries import NativeEntry
     from agent_comms.pi_payloads import ToolResultMessage
-    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.coordination_tables.publications import PublicationEvidence
     from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
     from agent_comms.store_files import _store_lock
 
@@ -528,7 +528,7 @@ async def configured_mixed_routes(arguments):
                         execution_ids = {row.execution_id for row in links if row.assignment_id in original_claims}
                         assert len(execution_ids) == 1
                         first_execution = execution_ids.pop()
-                        receipts = PublicationReceipts.select(db,where='execution_id=?',parameters=(first_execution,))
+                        receipts = PublicationEvidence.select(db,where='execution_id=?',parameters=(first_execution,))
                         assert {row.exact_target for row in receipts} == {'#team','human'}
                         replies = service.bus.log.messages_for_references(tuple(row.reference for row in receipts))
                         channel = next(row for row in replies if row.target == '#team')
@@ -537,7 +537,7 @@ async def configured_mixed_routes(arguments):
                         assert 'PRIVATE_ROUTE_490' not in channel.body
                         assert '15' in direct.body and 'PRIVATE_ROUTE_490' in direct.body
                         late_assignment = next(row for row in assignments if row.wire_seq == late.seq)
-                        late_receipts = PublicationReceipts.select(db,where='execution_id=?',
+                        late_receipts = PublicationEvidence.select(db,where='execution_id=?',
                             parameters=(late_assignment.lifecycle.execution_id,))
                         assert len(late_receipts) == 1 and late_receipts[0].exact_target == 'human'
                         assert '23' in service.bus.log.messages_for_references((late_receipts[0].reference,))[0].body

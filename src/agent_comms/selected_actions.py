@@ -120,7 +120,7 @@ class SelectedExistingFileWrite(NoSelectedTools):
         return SelectedExistingFileWrite(ExistingFileClaim(Path(normalized)), self.contents)
 
     def apply(self, owner: CodingToolOwner) -> None:
-        from .claim_authority import publish_selected_resource_claim, write_selected_claimed_file
+        from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
 
         claimed = publish_selected_resource_claim(
             owner.comms,

@@ -45,7 +45,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         """Compare the frozen intent once against the Message-owned content snapshot."""
         return self.message == message.publication_snapshot
 
-    def validate_receipt(self, acknowledgement: PublicationReceipts) -> None:
+    def validate_acknowledgement(self, acknowledgement: PublicationEvidence) -> None:
         if acknowledgement.message_id != self.expected_message_id:
             raise IntegrityViolationError("acknowledgement envelope does not match frozen intent")
 
@@ -179,7 +179,7 @@ END"""
 
 
 @dataclass(frozen=True, kw_only=True)
-class PublicationReceipts(CoordinatorTable, TypedTable):
+class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publication_receipts"):
     @property
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)

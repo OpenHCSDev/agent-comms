@@ -60,7 +60,7 @@ class AuthoredTaskMemberPromotion:
         # The original decoder already validated this acknowledgement against its own
         # Message. The acknowledgement retains execution/key/root; only the new envelope
         # content relation changes. Policy still owns target resolution/validation.
-        original_response = policy.require_receipt(
+        original_response = policy.require_acknowledgement(
             root_id, OriginalPublicEnvelope(original_public, message))
         if original_response is not None:
             recertified = replace(recertified, response=replace(

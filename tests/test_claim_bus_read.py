@@ -21,7 +21,7 @@ import pytest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.claim_authority import (
+from agent_comms.claim_admission import (
     publish_selected_resource_claim,
     write_selected_claimed_file,
 )
