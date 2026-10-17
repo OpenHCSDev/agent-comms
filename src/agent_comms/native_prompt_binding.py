@@ -211,7 +211,7 @@ def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> str:
 def expected_prompt_bindings(
     store: Coordination, input_ids, *, blocking: bool = True
 ) -> Iterator[dict[str, PromptBinding]]:
-    """Keep one immutable binding snapshot open through admission."""
+    """Keep one immutable binding snapshot open while validating input."""
     input_ids = tuple(input_ids)
     if any(type(input_id) is not str for input_id in input_ids):
         raise ValueError("prompt binding lookup requires string input IDs")
