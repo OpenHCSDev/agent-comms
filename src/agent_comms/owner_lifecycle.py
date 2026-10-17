@@ -35,6 +35,13 @@ from .threads import Thread
 _LOG = logging.getLogger(__name__)
 
 
+class IdleLaunchInput:
+    environment_key = "AGENT_COMMS_STARTUP_INPUT_KEY"
+
+    def apply_environment(self, environment: dict[str, str]) -> None:
+        pass
+
+
 @dataclass(frozen=True, slots=True)
 class OwnerRestartSelection:
     identity: OwnerIdentity
@@ -363,7 +370,7 @@ class OwnerLifecycle:
         agent_args: Sequence[str] | None = None,
         *,
         launch_runtime: LaunchRuntime,
-        startup_input_key: str | None = None,
+        initial_input: IdleLaunchInput = IdleLaunchInput(),
         environment: Mapping[str, str] | None = None,
     ) -> Thread:
         # Callers hold the wire lock; a phase change takes wire then registry.
@@ -375,7 +382,7 @@ class OwnerLifecycle:
             "PI_PROMPT",
             "PI_PARENT_ID",
             "PI_TASK",
-            "AGENT_COMMS_STARTUP_INPUT_KEY",
+            IdleLaunchInput.environment_key,
             ROOT_ID_ENV,
             PACKAGE_ENV,
         ):
@@ -421,8 +428,7 @@ class OwnerLifecycle:
             env["PI_PARENT_ID"] = thread.parent
         if thread.task is not None:
             env["PI_TASK"] = thread.task
-        if startup_input_key is not None:
-            env["AGENT_COMMS_STARTUP_INPUT_KEY"] = startup_input_key
+        initial_input.apply_environment(env)
         if agent_args is not None:
             env[NativeArguments.arguments_key] = shlex.join(agent_args)
         owned: Thread | None = None
