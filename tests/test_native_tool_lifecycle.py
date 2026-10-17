@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -37,7 +38,7 @@ def policy(request, tmp_path):
         if selected
         else CodingToolSocket(
             tmp_path, token,
-            SimpleNamespace(admit=lambda round_number, call: commit(call, round_number)),
+            SimpleNamespace(admit=AsyncMock(side_effect=lambda round_number, call: commit(call, round_number))),
         )
     )
 
@@ -348,7 +349,7 @@ async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
     observed = []
     socket = CodingToolSocket(
         tmp_path, secrets.token_hex(32),
-        SimpleNamespace(admit=lambda round_number, call: observed.append(call.call_id)),
+        SimpleNamespace(admit=AsyncMock(side_effect=lambda round_number, call: observed.append(call.call_id))),
     )
     arguments = {"path": "x"}
     socket.announce(
