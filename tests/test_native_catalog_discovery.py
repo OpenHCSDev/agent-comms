@@ -340,7 +340,6 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
     from uuid import uuid4
 
     from agent_comms.coordinator import Coordination
-    from agent_comms.native_custody import PiSessionChild
     import hashlib
     import os
     from pathlib import Path
