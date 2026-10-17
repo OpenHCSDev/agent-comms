@@ -78,7 +78,7 @@ async def test_actual_native_refusal_after_tool_preserves_saved_history(tmp_path
     async def turn(text):
         return [event async for event in backend.stream_agent_events(
             launcher, arguments, text, str(tmp_path), session_file=saved,
-            persistent_session=session, require_input_id=True, model_wait_timeout=240,
+            persistent_session=session, model_wait_timeout=240,
         )]
 
     try:

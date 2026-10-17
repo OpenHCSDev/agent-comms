@@ -30,6 +30,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
@@ -60,7 +61,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
             # boundary after authentic SDK source/identity acquisition.
             raise NativePiUnavailable("native preflight refused before prompt")
 
-        monkeypatch.setattr(backend.TurnSession, "input_ready", refused_preflight)
+        monkeypatch.setattr(TrackedTurnSession, "attest", refused_preflight)
         with pytest.raises(RequestError) as caught:
             await owner.prompt(session, [TextContentBlock(type="text", text="test")])
         assert isinstance(caught.value.__cause__, NativePiUnavailable)

@@ -342,7 +342,6 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 },
                 session_file=str(root / "session.jsonl"),
                 steering_queue=queue,
-                require_input_id=True,
                 native_start=lambda *_: True,
                 interrupt_boundary=lambda *_: nullcontext(surface != "revoked"),
                 persistent_session=pi_session,
