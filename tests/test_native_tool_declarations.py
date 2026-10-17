@@ -217,7 +217,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     # Declaration-owned argument fields supply the title without execution parsing.
     # The SDK reports raw arguments, not a caption. Presentation does not validate
     # or reinterpret that object as an execution request; disclosure retains it.
-    expected_title = "Read"
+    expected_title = f"Read {source}"
     assert starts[0].kind == "read" and starts[0].title == expected_title
     assert ends[0].ok and "ACTUAL_READ_CONTENT" in ends[0].output
     assert len(native.starts) == len(native.saved_inputs()) == 1
