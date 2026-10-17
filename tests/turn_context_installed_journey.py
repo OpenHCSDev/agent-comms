@@ -60,7 +60,7 @@ async def configured_terminal(owner, thread, output, receipt, marker):
         assert service.registry.require('terminal-waiter').goal.state.active
         assert response.stop_reason == 'end_turn'
         assert any(marker in str(update) for update in subscriber.updates)
-        child = owner.turns.persistent_backends[thread.name].custody.idle().child
+        child = owner.turns.persistent_backends[thread.name].child_state.idle().child
         receipt.update(original_lease=FieldCodec.encode(lease), terminal_state=FieldCodec.encode(state),
             original_waiter_goal=waiter_goal, waiter_released=True,
             acp_response=response.model_dump(by_alias=True, exclude_none=True),
@@ -116,7 +116,7 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
         assert exact_child.text in root.text
         assert original_system.text == '\n'.join(system.captured_text)
         assert Path(thread.require_saved_session()).read_bytes() == before
-        assert owner.turns.persistent_backends[thread.name].custody.idle().child is child
+        assert owner.turns.persistent_backends[thread.name].child_state.idle().child is child
     finally:
         await connection.close()
     updates = json.loads((output / 'original-acp-updates.json').read_text())
@@ -284,11 +284,11 @@ async def run_configured(options):
         assert selected.read_bytes() == before
         if options.context_only:
             persistent = owner.turns.persistent_backends[thread.name]
-            child = persistent.custody.idle().child
+            child = persistent.child_state.idle().child
             assert child.proc.alive()
             repeated = await query()
             assert repeated == preview
-            assert persistent.custody.idle().child is child
+            assert persistent.child_state.idle().child is child
             assert selected.read_bytes() == before
             assert not stored_inputs(service.root).rows
             assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest

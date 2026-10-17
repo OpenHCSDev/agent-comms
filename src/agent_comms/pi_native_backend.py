@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent, AgentInfo
     from .comms import Comms
     from .native_arguments import NativeArguments
-    from .native_custody import NativeCustody, PiSessionChild
+    from .native_custody import NativeChildState, PiSessionChild
     from .native_session_reopen import NativeSessionIdentity
     from .pi_payloads import StateData
     from .threads import Thread
@@ -114,17 +114,17 @@ class PersistentPiSession:
         from .native_custody import EmptyNative
 
         self.lock = asyncio.Lock()
-        self.custody: NativeCustody = EmptyNative()
+        self.child_state: NativeChildState = EmptyNative()
 
     @property
     def available(self) -> bool:
-        return self.custody.available
+        return self.child_state.available
 
     async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
         from .native_custody import BorrowedNative, EmptyNative, PiSessionChild
 
         key = (launch, launch.configuration.auth_revision())
-        child = self.custody.reuse(key) if reuse else None
+        child = self.child_state.reuse(key) if reuse else None
         reused = child is not None
         if child is None:
             await self.close()
@@ -132,10 +132,10 @@ class PersistentPiSession:
             watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
             with startup.measurements.operation("native_spawn"):
                 child = await PiSessionChild.start(key, attestation)
-            self.custody = BorrowedNative(child, self.custody)
+            self.child_state = BorrowedNative(child, self.child_state)
         else:
             watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
-            self.custody = BorrowedNative(child, EmptyNative())
+            self.child_state = BorrowedNative(child, EmptyNative())
         watchdog.spawned(reused)
         return child
 
@@ -149,18 +149,18 @@ class PersistentPiSession:
             revision = SessionRevision.observe(identity.session_file).require_available()
         except SessionRevisionUnavailable:
             return False
-        self.custody = RetainedNative(child, identity, revision)
+        self.child_state = RetainedNative(child, identity, revision)
         return True
 
     async def close(self) -> None:
-        await self._finish_retirement(self.custody.retire())
+        await self._finish_retirement(self.child_state.retire())
 
-    async def _finish_retirement(self, retiring: NativeCustody) -> None:
-        self.custody = retiring
+    async def _finish_retirement(self, retiring: NativeChildState) -> None:
+        self.child_state = retiring
         try:
             await retiring.closed()
         finally:
-            self.custody = retiring.settled
+            self.child_state = retiring.settled
 
     async def close_idle(self) -> None:
         async with self.lock:
@@ -242,7 +242,7 @@ class PiNativeBackend(
 
     async def inspect(self, thread: Thread, request):
         """Answer one Pi query on the idle child, preparing it first when needed."""
-        return await self.custody.inspect(self, partial(self.prepare, thread), request)
+        return await self.child_state.inspect(self, partial(self.prepare, thread), request)
 
     # -- RunsTurns / Steers / Interrupts ------------------------------------
 

@@ -8,7 +8,6 @@ from collections.abc import Callable, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from .pi_events import PiEvent
 
@@ -18,9 +17,7 @@ from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
-
-if TYPE_CHECKING:
-    from .session_revision import SessionRevision
+from .session_revision import SessionRevision
 
 
 @dataclass
@@ -147,7 +144,7 @@ class PiSessionChild(PiChild):
                 key=key, attestation=attestation, resources=resources.pop_all())
 
 
-class NativeCustody(ABC):
+class NativeChildState(ABC):
     """State owns the legal child capabilities, including its retirement successor."""
 
     @property
@@ -169,29 +166,29 @@ class NativeCustody(ABC):
     async def inspect(self, persistent, prepare, request):
         """Prepare once, then inspect through the acquired idle capability."""
         await prepare()
-        return await persistent.custody.idle().inspect_acquired(persistent, request)
+        return await persistent.child_state.idle().inspect_acquired(persistent, request)
 
-    def retire(self, successor: NativeCustody | None = None) -> NativeCustody:
+    def retire(self, successor: NativeChildState | None = None) -> NativeChildState:
         return successor if successor is not None else self
 
     @property
-    def settled(self) -> NativeCustody:
+    def settled(self) -> NativeChildState:
         return self
 
     async def closed(self) -> None:
         """Complete this custody's retirement, if any."""
 
-class EmptyNative(NativeCustody):
+class EmptyNative(NativeChildState):
     available = False
 
 
 @dataclass
-class ChildNative(NativeCustody):
+class ChildNative(NativeChildState):
     child: PiSessionChild
     available = True
 
     @abstractmethod
-    def _shutdown_successor(self) -> NativeCustody: ...
+    def _shutdown_successor(self) -> NativeChildState: ...
 
     def retire(self, successor=None):
         following = self._shutdown_successor() if successor is None else successor
@@ -203,9 +200,9 @@ class ChildNative(NativeCustody):
 
 @dataclass
 class SuccessorNative(ChildNative):
-    successor: NativeCustody
+    successor: NativeChildState
 
-    def _shutdown_successor(self) -> NativeCustody:
+    def _shutdown_successor(self) -> NativeChildState:
         return self.successor
 
 
@@ -222,7 +219,7 @@ class RetiringNative(SuccessorNative):
         return self
 
     @property
-    def settled(self) -> NativeCustody:
+    def settled(self) -> NativeChildState:
         return self.successor if self.child.retired else self
 
 
@@ -252,12 +249,10 @@ class RetainedNative(ChildNative):
 
     async def inspect_acquired(self, persistent, request):
         async with persistent.lock:
-            current = persistent.custody.idle()
+            current = persistent.child_state.idle()
             data = await current.child.request(request)
             if request.writes_session:
                 # This child wrote the file itself; its loaded context is the new revision.
-                from .session_revision import SessionRevision
-
                 current.revision = SessionRevision.observe(
                     current.identity.session_file
                 ).require_available()
@@ -281,6 +276,6 @@ class RetainedNative(ChildNative):
         return super().managed_launch(command, arguments, worktree=worktree,
             environment=environment, session_file=session_file)
 
-    def _shutdown_successor(self) -> NativeCustody:
+    def _shutdown_successor(self) -> NativeChildState:
         return EmptyNative()
 

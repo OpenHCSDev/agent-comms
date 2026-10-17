@@ -8,7 +8,7 @@ from agent_comms.agent_backend import ContextUsage, FailedCompaction, NothingToC
 from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
 from agent_comms.pi_durable_backend import (
     CompactDurable, DurableDatabase,
-    DurablePiEvent, Inspect, PiDurableBackend, Settle,
+    DurablePiEvent, Inspect, PiDurableBackend, Resume, Settle,
 )
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_commands import GetSessionStats
@@ -94,6 +94,11 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path):
                 await backend.child.request(Settle('task:missing', 'ABANDON'))
             assert (await backend.child.request(Inspect())).work == ()
             assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(0, None)
+            await backend.child.request(Resume())
+            outcome = await backend.compact(thread, 'retain the empty plan')
+            assert isinstance(outcome, FailedCompaction)
+            assert 'model' in outcome.message.lower()
+            assert (await backend.child.request(Inspect())).work == ()
             assert backend.child.proc.alive()
         finally:
             await backend.close_idle()

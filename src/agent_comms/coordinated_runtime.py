@@ -78,7 +78,7 @@ class SelectedExecution:
     def retained_source(self, session_file: Path):
         """The owner's idle child on this saved source with this package, if still current."""
         try:
-            retained = self.pi_session.custody.idle()
+            retained = self.pi_session.child_state.idle()
         except NativePiUnavailable:
             return None
         if retained.identity.session_file != str(session_file) or retained.child.key[0].package != self.native_package:

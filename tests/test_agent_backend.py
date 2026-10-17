@@ -381,7 +381,7 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         assert "".join(event.text for event in events if isinstance(event, ae.Chunk)) == "pong"
         assert isinstance(events[-1], ae.Done) and events[-1].ok and events[-1].text == "pong"
         assert starts == ["ping"]
-        assert backend.custody.retained
+        assert backend.child_state.retained
 
         usage = await backend.context_usage(thread)
         assert usage == ab.ContextUsage(tokens=321, window=1000)

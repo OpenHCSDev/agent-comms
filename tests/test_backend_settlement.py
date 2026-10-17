@@ -113,6 +113,6 @@ for line in sys.stdin:
         settlements = [i for i, e in enumerate(events) if isinstance(e, ae.StreamSettled)]
         assert len(usages) == 2
         assert len(settlements) == 1 and settlements[0] > usages[-1]
-        assert persistent.available and persistent.custody.child.proc.returncode is None
+        assert persistent.available and persistent.child_state.child.proc.returncode is None
     finally:
         await persistent.close()

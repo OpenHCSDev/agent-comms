@@ -75,7 +75,7 @@ async def read_original_context(
                 # source through the original selected startup, without input.
                 first = FieldCodec.decode(NativeContextData, await connection.request("context"))
                 selected_before = fixture.session.read_bytes()
-                prepared_child = owner.turns.persistent_backends[thread.name].custody.idle().child.proc
+                prepared_child = owner.turns.persistent_backends[thread.name].child_state.idle().child.proc
                 assert prepared_child.alive()
                 second = FieldCodec.decode(NativeContextData, await connection.request("context"))
             assert first.identity == second.identity

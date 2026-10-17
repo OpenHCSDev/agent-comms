@@ -144,7 +144,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     print("PARENT_NATIVE_RESULT", repr(result[-1]), flush=True)
     assert result[-1].ok, result[-1]
     assert native.provider.posts == 1
-    retained = native.persistent.custody.idle()
+    retained = native.persistent.child_state.idle()
 
     async def probe(command):
         retained.child.proc.stdin.write(PiRpcChannel.command_bytes(command))
