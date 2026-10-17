@@ -6,6 +6,7 @@ import logging
 import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,7 @@ from .activity import (
     Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity,
 )
 from .declared_family import DeclaredFamily
+from .coordinator import Coordination
 from .audience_manifest import FrozenRecipient
 from .errors import RelationViolationError
 from .routing import TurnRouting
@@ -198,7 +200,7 @@ class AgentActivity:
 
             return self.activity.update(participant.name, record)
 
-    def recover_drain(
+    async def recover_drain(
         self, thread: str, owner: OwnerIdentity, observed: ObservedActivity,
     ) -> bool:
         """Clear only the original failure observed before a successful drain.
@@ -210,6 +212,9 @@ class AgentActivity:
         expected = observed.readiness.source_diagnostic()
         if expected is None or expected.owner != owner:
             return False
+        return await Coordination.run_worker(partial(self._recover_drain, thread, owner, expected))
+
+    def _recover_drain(self, thread: str, owner: OwnerIdentity, expected: DrainDiagnostic) -> bool:
         with _store_lock(self._wire_lock_path, shared=True):
             snapshot = self.registry.snapshot()
             if snapshot.owner_identity(thread) != owner:

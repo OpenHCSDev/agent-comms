@@ -86,16 +86,9 @@ async def test_repeated_turn_preparation_displays_real_native_drain_failure(tmp_
         )
     )
     owner = comms.registry.snapshot().owner_identity("worker")
-    retried = 0
-
-    async def retry():
-        nonlocal retried
-        retried += 1
-
-    async with drain_failures(
-        comms, "worker", owner, retry
-    ):
-        raise NativePiUnavailable("native request never opened")
+    with pytest.raises(NativePiUnavailable, match="native request never opened"):
+        async with drain_failures(comms, "worker", owner):
+            raise NativePiUnavailable("native request never opened")
 
     failure = comms.agents.activity_of("worker").readiness.source_diagnostic()
     assert isinstance(failure, NativeInputDrainDiagnostic)
@@ -107,7 +100,6 @@ async def test_repeated_turn_preparation_displays_real_native_drain_failure(tmp_
     ))
     failed_generation = comms.registry.require("worker").turn_generation
     repeated = comms.agents.begin_turn("worker", "repeated-failure", "Preparing queued input")
-    assert retried == 1
     assert repeated.turn_lease.identity.generation == failed_generation + 1
 
     view = comms.views.thread_views()[0]

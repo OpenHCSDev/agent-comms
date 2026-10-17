@@ -7,7 +7,6 @@ import sqlite3
 import time
 from contextlib import asynccontextmanager
 from functools import partial
-from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from acp import RequestError
@@ -19,7 +18,11 @@ from .activity import (
 )
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
+from .errors import RelationViolationError
 from .native_pi import NativePiUnavailable
+
+UNAVAILABLE_DRAIN_ERRORS = (OSError, sqlite3.Error, CoordinationError, RequestError, RelationViolationError)
+DEFERRED_DRAIN_ERRORS = (NativePiUnavailable, *UNAVAILABLE_DRAIN_ERRORS)
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -31,22 +34,18 @@ async def drain_failures(
     comms: Comms,
     thread: str,
     owner: OwnerIdentity,
-    retry: Callable[[], Awaitable[None]],
 ):
-    """Record failures; a completed operation recovers its original observation."""
+    """Record and propagate failures; the observation owner waits for real change."""
     observed = await Coordination.run_worker(partial(comms.agents.activity_of, thread))
 
     async def record(kind, error) -> None:
         diagnostic = kind(
             owner, type(error).__name__, str(error), recorded_at=time.time()
         )
-        try:
-            await Coordination.run_worker(partial(
-                comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
-                source_error=error,
-            ))
-        finally:
-            await retry()
+        await Coordination.run_worker(partial(
+            comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
+            source_error=error,
+        ))
 
     try:
         yield
@@ -58,8 +57,10 @@ async def drain_failures(
         # inputs, as a restart would. This is not an inbox read failure and
         # must not borrow the Inbox unavailable presentation.
         await record(NativeInputDrainDiagnostic, error)
-    except (OSError, ValueError, sqlite3.Error, CoordinationError, RequestError) as error:
+        raise
+    except UNAVAILABLE_DRAIN_ERRORS as error:
         await record(UnavailableDrainDiagnostic, error)
+        raise
     except Exception as error:
         diagnostic = StoppedDrainDiagnostic(
             owner, type(error).__name__, str(error), recorded_at=time.time()
@@ -70,6 +71,4 @@ async def drain_failures(
         ))
         raise
     else:
-        await Coordination.run_worker(partial(
-            comms.agents.recover_drain, thread, owner, observed,
-        ))
+        await comms.agents.recover_drain(thread, owner, observed)
