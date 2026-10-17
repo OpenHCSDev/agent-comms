@@ -5,8 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
-import time
+from dataclasses import replace
 from contextlib import contextmanager, ExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -26,7 +25,6 @@ if TYPE_CHECKING:
     from .native_input_owner import RegistryOwner
 from .goal_presentation import GoalExecution, GoalWaitTarget
 from .goals import Goal
-from .activity import ObservedActivity
 from .messages import Message, AlertKind
 from .message_bus import MessageBus
 from .store_files import _store_lock
@@ -35,25 +33,6 @@ from .todos import TodoStore
 from .turn_lease import FinishedTurnFence
 
 _LOG = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class UnitProgress:
-    summary: str
-    notifies_commander: bool = False
-
-    @classmethod
-    def of(cls, goal: Goal | None, activity: ObservedActivity | None) -> UnitProgress:
-        if goal is not None:
-            if goal.delivery_complete:
-                return cls("Works in app", notifies_commander=True)
-            if not goal.state.terminal and goal.deadline.elapsed(time.time(), 0):
-                return cls("Deadline passed without accepted delivery", notifies_commander=True)
-        if activity is not None and activity.state.busy:
-            return cls("Working")
-        if goal is not None and not goal.state.terminal:
-            return cls("Idle with an open goal", notifies_commander=True)
-        return cls("No open goal")
 
 
 class Goals:
@@ -69,35 +48,37 @@ class Goals:
 
     @contextmanager
     def writing(self):
-        # Publication runs after physical custody ends, also on exceptional exits.
+        # Publish after releasing the write lock, including exceptional exits.
         with ExitStack() as completed:
             with _store_lock(self._wire_lock_path):
                 yield completed
 
     def write_goal(self, thread, goal, completed):
-        """The work-goal writer; callers hold writing() custody."""
+        """Write the work goal under the caller's writing() lock."""
         snapshot = self.registry.snapshot()
         previous = thread.goal
         self.registry.register(replace(thread, goal=goal), self.registry.status(thread.name))
-        if goal is not None and goal.notification_targets(self, previous=previous):
+        targets = () if goal is None else goal.notification_targets(self, previous=previous)
+        if targets:
             activity = self.agents.activity_of(thread.name, snapshot=snapshot)
             completed.callback(self._notify_transition, thread.incarnation.require_recorded(),
-                               previous, goal, activity)
+                               previous, goal, activity, targets)
         return goal
 
-    def _notify_transition(self, original, previous, goal, activity):
-        progress = UnitProgress.of(goal, activity)
+    def _notify_transition(self, original, previous, goal, activity, targets):
+        summary = goal.commander_update(activity)
         same_order = goal.same_order_as(previous)
-        if same_order and (not progress.notifies_commander
-                           or UnitProgress.of(previous, activity) == progress):
+        if same_order and (summary is None or previous.commander_update(activity) == summary):
             return
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             if not original.current(snapshot):
                 return
             unit = snapshot.require(original.name)
-            summary = progress.summary if same_order else "Order assigned"
-            for target in goal.notification_targets(self, previous=previous):
+            summary = summary if same_order else "Order assigned"
+            for target in targets:
+                if not target.current(snapshot):
+                    continue
                 message = Message(
                     sender=unit.name, target=target.name, type=AlertKind,
                     body=f"{unit.name}: {summary}. Goal {goal.id}: {goal.text}",

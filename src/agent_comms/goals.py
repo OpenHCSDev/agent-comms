@@ -64,10 +64,6 @@ class GoalReport:
 
 
 class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
-    @classmethod
-    def capture(cls, value: GoalProgress | GoalReport | str) -> GoalProgress:
-        return value if isinstance(value, cls) else cls.from_wire(FieldCodec.encode(value))
-
     def require_report(self) -> GoalReport:
         raise ValueError("A commanded goal requires stupid, deleted, delivery and next.")
 
@@ -261,8 +257,8 @@ class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
         pass
 
     def require_target(self, goals, target, goal_id):
-        if target.goal is not None and not target.goal.state.terminal:
-            target.goal.author.require_self_direction()
+        for order in target.open_orders:
+            order.require_current(goals.registry).author.require_self_direction()
 
     def notification_targets(self, goals, *, new_order):
         return ()
@@ -386,6 +382,11 @@ class Goal:
     def same_order_as(self, other: Goal | None) -> bool:
         return other is not None and self.id == other.id
 
+    def commander_update(self, activity) -> str | None:
+        if self.delivery_complete:
+            return "Works in app"
+        return self.state.commander_update(self.deadline, activity)
+
     def after_failed_turn(self, diagnostic: str) -> Goal:
         return self._failure_projection(
             self.state.after_failed_turn(diagnostic), self.progress.noted(diagnostic)
@@ -405,11 +406,10 @@ class Goal:
         return FieldCodec.encode(self)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "progress", GoalProgress.capture(self.progress))
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
         GoalRevision(self.id, self.revision)
-        self.require_deadline(self.deadline)
+        self.deadline.require_deadline()
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
 
@@ -417,19 +417,13 @@ class Goal:
     def checkpoint(self) -> GoalRevision:
         return GoalRevision(self.id, self.revision)
 
-    @staticmethod
-    def require_deadline(deadline: EventTime):
-        if any(at <= 0 for at in deadline.timestamps):
-            raise ValueError("A goal deadline requires a positive Unix timestamp.")
-
     @property
     def late(self) -> bool:
-        return any(delivered > deadline for delivered in self.delivery_time.timestamps
-                   for deadline in self.deadline.timestamps)
+        return self.delivery_time.after(self.deadline)
 
     @property
     def delivery_complete(self) -> bool:
-        return self.state.terminal and bool(self.delivery_time.timestamps)
+        return self.state.delivery_complete(self.delivery_time)
 
     def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
         """Later revisions may describe the same failed goal, never a replacement."""

@@ -6,6 +6,7 @@ acceptance and final post-merge review; no fake can establish Pi model authority
 
 from __future__ import annotations
 
+from agent_comms.goals import TextGoalProgress
 import asyncio
 import hashlib
 import json
@@ -1809,7 +1810,7 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
             task="Bootstrap: wait for a concrete task; do not modify files yet.",
             title="Channel delivery implementation",
             goal=Goal(
-                text="Restore channel subscribers", id="current-goal", progress="Routing fixed"
+                text="Restore channel subscribers", id="current-goal", progress=TextGoalProgress("Routing fixed")
             ),
         )
     )

@@ -1,5 +1,6 @@
 """Current goal/input boundaries through durable stores and the real owner socket."""
 
+from agent_comms.goals import TextGoalProgress
 import os
 import sqlite3
 from contextlib import ExitStack
@@ -48,7 +49,7 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
     comms = wire(tmp_path)
     register(comms, "owner")
     goal = Goal(
-        "Retained objective", "retained", progress="Unrelated progress", state=UnrecordedBlockGoal()
+        "Retained objective", "retained", progress=TextGoalProgress("Unrelated progress"), state=UnrecordedBlockGoal()
     )
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
     history = comms.goals.goal_history("owner")
