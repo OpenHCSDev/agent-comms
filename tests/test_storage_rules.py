@@ -79,3 +79,40 @@ def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
     with pytest.raises(SelectedToolDenied):
         for effect in shell_storage_effects(command, tmp_path):
             effect.check(rule, roots)
+
+
+def test_programs_do_not_claim_to_be_effect_values():
+    from agent_comms.storage_rules import ShellProgram, StorageEffect
+    assert all(not issubclass(program, StorageEffect)
+               for program in set(ShellProgram.programs.values()))
+
+
+def test_new_program_is_one_declaration_and_composes_both_decoders(tmp_path, monkeypatch):
+    from agent_comms.storage_rules import (
+        ShellProgram, ForbidsCommands, AllocatesOnCommands, ForbiddenStorageEffect,
+    )
+    monkeypatch.setattr(ShellProgram, 'programs', dict(ShellProgram.programs))
+    class TestProgram(ForbidsCommands, AllocatesOnCommands):
+        names = frozenset({'unit-program'})
+        forbidden = prefixes = (('both',),)
+    effects = shell_storage_effects('unit-program both', tmp_path)
+    assert tuple(type(effect) for effect in effects) == (ForbiddenStorageEffect, AllocateStorageEffect)
+
+
+@pytest.mark.parametrize('command,kind', [
+    ('python3.14.7 -m venv env', 'ForbiddenStorageEffect'),
+    ('python /scripts/build_runtime.py', 'AllocateStorageEffect'),
+    ('python -m pip install package', 'AllocateStorageEffect'),
+    ('uv pip install package', 'AllocateStorageEffect'),
+    ('npm ci', 'AllocateStorageEffect'),
+    ('ffmpeg -i input output', 'AllocateStorageEffect'),
+    ('git -C repo worktree add --detach extra origin/main', 'CheckoutStorageEffect'),
+    ('git worktree remove --force extra', 'RemoveCheckoutStorageEffect'),
+    ('mkdir -p target', 'WriteStorageEffect'),
+    ('cp source target', 'WriteStorageEffect'),
+    ("cat <<'PY'\ngit clone remote target\nPY\nmkdir target", 'WriteStorageEffect'),
+])
+def test_program_decoders_preserve_command_shapes(tmp_path, command, kind):
+    effects = shell_storage_effects(command, tmp_path)
+    assert len(effects) == 1
+    assert type(effects[0]).__name__ == kind
