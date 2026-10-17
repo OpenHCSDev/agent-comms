@@ -574,14 +574,9 @@ class WireLog:
         )
 
         if certificate_enabled(self.path):
-            try:
-                append_private_bus_checkpoint_unlocked(self, metadata, encoded, record)
-            except Exception as error:
-                # The bus may already contain this fsynced row. Never retry an
-                # uncertain input or report publication as definitely absent.
-                raise RelationViolationError(
-                    "Private bus checkpoint publication outcome UNKNOWN."
-                ) from error
+            # The checkpoint publisher owns the typed UNKNOWN boundary after
+            # the row has been fsynced; do not reclassify its original failure.
+            append_private_bus_checkpoint_unlocked(self, metadata, encoded, record)
         StoreLock.current_release().callback(_notify_candidates, self, self.path.stat().st_size)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:

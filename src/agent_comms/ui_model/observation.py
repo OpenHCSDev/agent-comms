@@ -30,6 +30,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Self, TypeVar, final
 
+from acp import RequestError
+
 from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
@@ -190,7 +192,7 @@ class OwnerRead(AwaitedRead):
     owner: ThreadIncarnation
 
     def receive(self, service: ObservationService) -> None:
-        service.owner_reads[self.request_id] = asyncio.ensure_future(self.serve(service))
+        service.owner_reads[self.request_id] = service.tasks.create_task(self.serve(service))
 
     async def serve(self, service: ObservationService) -> None:
         try:
@@ -203,7 +205,7 @@ class OwnerRead(AwaitedRead):
         try:
             self.require_root(comms)
             return ReadAnswered(self.request_id, await self.ask(comms))
-        except Exception as error:
+        except (OSError, ValueError, RuntimeError, RequestError) as error:
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
@@ -810,6 +812,7 @@ class ObservationService:
         self.pending: dict[int, ReadRequest] = {}
         # Owner reads being asked, until answered or cancelled.
         self.owner_reads: dict[int, asyncio.Future] = {}
+        self.tasks = asyncio.TaskGroup()
         self.closed = False
 
     def retire(self) -> None:
@@ -906,25 +909,28 @@ class ObservationService:
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
         loop.add_reader(self.connection.fileno(), self.receive)
-        watching = asyncio.create_task(self.watch())
-        expiring = asyncio.create_task(self.expire())
-        try:
-            while not self.closed:
-                await self.changed.wait()
-                self.changed.clear()
-                attempted: set[int] = set()
-                await self.answer_pending(attempted)
-                if self.observe_due and not self.closed:
-                    self.observe_due = False
-                    await self.observe(attempted)
-        finally:
-            self.retire()
-            loop.remove_reader(self.connection.fileno())
-            watching.cancel()
-            expiring.cancel()
-            self.pending.clear()
-            self.observations.clear()
-            self.comms.views.transcript_reads.close()
+        # Request and watcher defects belong to the service process boundary;
+        # an unobserved background-task error must not strand an awaited UI read.
+        async with self.tasks:
+            watching = self.tasks.create_task(self.watch())
+            expiring = self.tasks.create_task(self.expire())
+            try:
+                while not self.closed:
+                    await self.changed.wait()
+                    self.changed.clear()
+                    attempted: set[int] = set()
+                    await self.answer_pending(attempted)
+                    if self.observe_due and not self.closed:
+                        self.observe_due = False
+                        await self.observe(attempted)
+            finally:
+                self.retire()
+                loop.remove_reader(self.connection.fileno())
+                watching.cancel()
+                expiring.cancel()
+                self.pending.clear()
+                self.observations.clear()
+                self.comms.views.transcript_reads.close()
 
 
 def serve(route: CommsRoute, connection: Connection) -> None:

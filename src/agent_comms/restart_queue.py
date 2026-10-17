@@ -362,7 +362,7 @@ def step(comms: Comms) -> None:
             # credentials or authorize installation/input replay in its queue.
             exc.abandon()
             record = record.transition(UncertainRestart(reason=f'{exc}: {exc.__cause__}'))
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             record = record.transition(UncertainRestart(reason=f"{type(exc).__name__}: {exc}"))
         else:
             record = record.transition(
@@ -418,17 +418,7 @@ def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: python -m agent_comms.restart_queue ROOT")
     comms = wire(sys.argv[1])
-    try:
-        asyncio.run(run(comms))
-    except Exception as exc:
-        queue = RestartQueue(comms.root / DIRECTORY)
-        with queue.locked():
-            for record in queue.active_records():
-                if record.state.pending and record.target.is_current_watcher:
-                    queue.save(record.transition(
-                        BlockedRestart(reason=f"Watcher failed: {type(exc).__name__}: {exc}")
-                    ))
-        raise
+    asyncio.run(run(comms))
 
 
 if __name__ == "__main__":

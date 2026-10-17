@@ -378,12 +378,14 @@ class SessionLifecycle:
         together after the runtime has closed.
         """
         failures: list[Exception] = []
-        for name in set(self.bindings.values()) | self.launched_owners:
-            try:
-                await Coordination.run_worker(partial(self.release_registered_owner, name))
-            except Exception as error:
-                failures.append(error)
-        await self.runtime.close()
+        try:
+            for name in set(self.bindings.values()) | self.launched_owners:
+                try:
+                    await Coordination.run_worker(partial(self.release_registered_owner, name))
+                except (OSError, ValueError) as error:
+                    failures.append(error)
+        finally:
+            await self.runtime.close()
         if failures:
             raise ExceptionGroup("Owned threads were not released at shutdown", failures)
 

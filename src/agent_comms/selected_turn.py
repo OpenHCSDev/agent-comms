@@ -9,7 +9,7 @@ from functools import partial
 from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
 from .channel_coding_tools import CodingToolOwner
-from .coordination_errors import IdentityConflict, StaleFence
+from .coordination_errors import CoordinationError, IdentityConflict, StaleFence
 from .coordinator import Coordination
 from .coordination_tables.executions import ExecutionOrigin
 from .coordination_snapshot import RecoverySnapshot
@@ -17,6 +17,7 @@ from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeClaim
 from .optional_awareness_projection import OptionalAwarenessProjection
+from .native_pi import NativePiUnavailable
 from .owner_fence import prepare_fence_token
 from .private_send_stage import FullNativeSend, TriageNativeSend
 from .selected_actions import BatchSelectedAction, SelectedAction
@@ -189,7 +190,7 @@ class SelectedAttempt:
             request = await SelectedRequest.reserve(
                 participant, session, self.stage, self.token, prompt
             )
-        except Exception:
+        except (NativePiUnavailable, CoordinationError, OSError, ValueError):
             # The attempt exists even if preparation fails before a request can
             # own a reserved ID (native unavailability, or a busy journal or
             # coordinator store). Preserve the old dead-attempt UNKNOWN boundary

@@ -21,6 +21,7 @@ from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
 from .owned_send_admission import OwnedSend
 from .native_input_owner import RegistryOwner
+from .native_pi import NativePiUnavailable
 from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
 from .runtime import UNBOUND_CONTROLLER
@@ -416,7 +417,7 @@ class OwnedTurn:
                 self.session_id, events.PromptCancelled(state), turn_id=self.turn_id
             )
             raise
-        except Exception as error:
+        except (NativePiUnavailable, RequestError) as error:
             await Coordination.run_worker(self.settle_unbound)
             request_failure = await self.progress.report_failure(error)
             if request_failure is not None:

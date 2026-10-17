@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 from functools import partial
+from http.client import HTTPException
 
 from acp.schema import SessionInfoUpdate
 
@@ -73,7 +74,7 @@ class AnnotationWorker:
         original = await self.store(lambda owner: owner.reserve(request, grant))
         try:
             response, label = await grant.classifier.classifier.classify(request, api_key)
-        except Exception as error:
+        except (OSError, HTTPException, ValueError) as error:
             await self.store(lambda owner: owner.fail(
                 original, FailedAnnotationOutcome(type(error).__name__)))
             raise

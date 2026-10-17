@@ -137,13 +137,8 @@ class TurnProgress(events.AgentEventConsumer):
             # A transport/cleanup fault cannot reconstruct an already resolved
             # native failure. Keep the reported failure and separate diagnostic.
             return self.result.outcome.request_failure
-        try:
-            await self.consume(events.Done(text=detail, ok=False))
-            return self.result.outcome.request_failure
-        except Exception as delivery_error:
-            self.effects._debug_log(
-                f"turn:error-publication failed: {delivery_error!r}; original: {error!r}"
-            )
+        await self.consume(events.Done(text=detail, ok=False))
+        return self.result.outcome.request_failure
 
 
     @handles(events.SteeringInterrupted)

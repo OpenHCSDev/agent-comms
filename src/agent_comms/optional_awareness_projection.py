@@ -15,7 +15,7 @@ import os
 import sqlite3
 import threading
 import time
-from contextlib import suppress
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -100,6 +100,9 @@ class OptionalAwarenessProjection:
     # Completion alone releases the single reader. Timed-out reads must not
     # queue a daemon fleet or occupy the default executor used by native work.
     _build_slot: ClassVar[threading.BoundedSemaphore] = threading.BoundedSemaphore(1)
+    _reader: ClassVar[ThreadPoolExecutor] = ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix="agent-comms-optional-awareness"
+    )
 
     @classmethod
     def for_selected(
@@ -116,29 +119,6 @@ class OptionalAwarenessProjection:
         return cls(index, after_seq, through_seq, generation, claimed_generation,
                    registry=registry)
 
-    @staticmethod
-    def _deliver(
-        finished: asyncio.Future[OptionalAwarenessResult], result: OptionalAwarenessResult
-    ):
-        if not finished.done():
-            finished.set_result(result)
-
-    @staticmethod
-    def _fail(finished: asyncio.Future[OptionalAwarenessResult], error: Exception):
-        if not finished.done():
-            finished.set_exception(error)
-
-    def _finish_read(self, initial, assignment, owner, loop, finished) -> None:
-        """Deliver the read's result or its defect to the awaiting turn."""
-        try:
-            outcome = (self._deliver, finished, self(initial, assignment, owner))
-        except Exception as error:
-            outcome = (self._fail, finished, error)
-        finally:
-            self._build_slot.release()
-        with suppress(RuntimeError):  # The caller's loop may have closed after timeout.
-            loop.call_soon_threadsafe(*outcome)
-
     async def segments(
         self,
         initial: CommittedDelivery,
@@ -148,22 +128,20 @@ class OptionalAwarenessProjection:
         deadline = time.monotonic() + self.build_seconds
         if not self._build_slot.acquire(blocking=False):
             return OmittedAwareness.capture(reason="builder busy").segments(self.max_text_bytes)
-        loop = asyncio.get_running_loop()
-        finished: asyncio.Future[OptionalAwarenessResult] = loop.create_future()
         try:
-            threading.Thread(
-                target=self._finish_read,
-                args=(initial, assignment, owner, loop, finished),
-                name="agent-comms-optional-awareness",
-                daemon=True,
-            ).start()
+            reading = self._reader.submit(self, initial, assignment, owner)
         except RuntimeError:
             self._build_slot.release()
             return OmittedAwareness.capture(reason="builder unavailable").segments(
                 self.max_text_bytes
             )
+        # The executor's Future owns both the value and the original defect.
+        # Cancellation of the waiter cannot release a still-running read's slot.
+        reading.add_done_callback(lambda _: self._build_slot.release())
         try:
-            result = await asyncio.wait_for(finished, max(0.0, deadline - time.monotonic()))
+            result = await asyncio.wait_for(
+                asyncio.wrap_future(reading), max(0.0, deadline - time.monotonic())
+            )
         except TimeoutError:
             return OmittedAwareness.capture(reason="TimeoutError").segments(self.max_text_bytes)
         if time.monotonic() > deadline:

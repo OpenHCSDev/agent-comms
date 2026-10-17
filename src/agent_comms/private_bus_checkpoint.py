@@ -191,7 +191,7 @@ class CertifiedSourceRead:
                     witness = PrefixCertificate._install(bus, prior.marker)
                     self.require_current()
                     return witness
-                except Exception as error:
+                except (OSError, sqlite3.Error, RelationViolationError) as error:
                     raise RelationViolationError(
                         "Carried checkpoint installation outcome UNKNOWN; preserve both roots"
                     ) from error
