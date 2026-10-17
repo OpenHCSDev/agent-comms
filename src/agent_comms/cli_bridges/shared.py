@@ -10,6 +10,7 @@ import secrets
 import os
 import signal
 import sys
+import traceback
 from abc import ABC, abstractmethod
 from contextlib import closing, contextmanager
 from collections.abc import Iterable
@@ -30,6 +31,7 @@ from agent_comms.cli_protocol import (
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_errors import CoordinationError
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
@@ -557,20 +559,14 @@ class Inbox(Operation[OperationBridge]):
         key = hashlib.sha256(bridge.binding.thread.encode()).hexdigest()
         with (claims / f'{key}.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            try:
-                from agent_comms.registration import Registration
+            from agent_comms.registration import Registration
 
-                registry = await asyncio.to_thread(
-                    Registration, Path(bridge.binding.root) / 'registry.json')
-                # The endpoint, not a particular CLI's record parser, owns presence.
-                with registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid())):
-                    async with asyncio.TaskGroup() as tasks:
-                        self.start(bridge, tasks)
-            except ExceptionGroup as error:
-                # Join all tasks, retaining the original single failure's exit policy.
-                if len(error.exceptions) == 1:
-                    raise error.exceptions[0] from error
-                raise
+            registry = await asyncio.to_thread(
+                Registration, Path(bridge.binding.root) / 'registry.json')
+            # The endpoint, not a particular CLI's record parser, owns presence.
+            with registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid())):
+                async with asyncio.TaskGroup() as tasks:
+                    self.start(bridge, tasks)
 
 
 class Watch(Inbox):
@@ -666,15 +662,16 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, current.cancel)
         try:
             await self.options.operation.run(self)
-        except (BlockingIOError, asyncio.CancelledError):
+        except* BlockingIOError:
             raise
-        except Exception as error:
-            failure = f'Comms bridge stopped: {type(error).__name__}: {error}'
+        except* (OSError, ValueError, CoordinationError) as group:
+            failure = 'Comms bridge stopped:\n' + ''.join(
+                traceback.TracebackException.from_exception(
+                    group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,
+                ).format()
+            )
             print(failure, file=sys.stderr, flush=True)
-            try:
-                await self.report_failure(failure + '\nNo message was retried.')
-            except Exception as notification_error:
-                print(f'Failure display also failed: {notification_error}', file=sys.stderr)
+            await self.report_failure(failure + '\nNo message was retried.')
             raise
 
 
@@ -841,7 +838,7 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
         with Binding.open(options.state) as db, asyncio.Runner() as runner:
             bridge = bridge_type(options, Binding.bind(db, options.binding), db)
             runner.run(bridge.run())
-    except asyncio.CancelledError:
+    except* asyncio.CancelledError:
         pass
-    except BlockingIOError:
+    except* BlockingIOError:
         sys.exit('Another watcher owns this conversation')
