@@ -1,0 +1,48 @@
+{
+  "original_release": [
+    11,
+    3,
+    3,
+    6
+  ],
+  "target_release": [
+    11,
+    3,
+    3,
+    6
+  ],
+  "original_ddl_sha256": "8bb4f7a56af33476715f7fcbf89c34cbf6e5b14fe2cdcdbb8d71f40bd16b4070",
+  "target_ddl_sha256": "3c4b97ae100b962aaa193f3998261ebc1ba199c3e40118c79ebaa946d790d825",
+  "created_empty_tables": [],
+  "rebuilt_tables": [
+    "wake_claims"
+  ],
+  "original_identity_rows_sha256": "ed2e3e309a9c5a4773e19efef735da871f326a7490aa06d3d1fec3e0033c93eb",
+  "autoincrement_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "unchanged_rows_sha256": "1c1633008830ea802a98e26f2528e80a9b7c151d8e0df14d89c3ff13b5041538",
+  "original_rows": {
+    "span_annotations": 0,
+    "annotation_requests": 0,
+    "wake_claims": 0,
+    "execution_claims": 0,
+    "participants": 0,
+    "participant_aliases": 0,
+    "owner_generations": 0,
+    "attempts": 0,
+    "replay_assessments": 0,
+    "current_executions": 0,
+    "executions": 0,
+    "schema_meta": 1,
+    "publication_intents": 0,
+    "publication_receipts": 0,
+    "connectivity": 0,
+    "recovery_audit": 0,
+    "obligations": 0,
+    "response_schema_meta": 1,
+    "publication_append_dispatches": 0,
+    "native_runtime_schema_meta": 1,
+    "native_runtime_input": 0,
+    "current_native_cursor": 0,
+    "native_runtime_triage_sources": 0
+  }
+}
