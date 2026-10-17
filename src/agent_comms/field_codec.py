@@ -344,12 +344,12 @@ class FieldCodec(Sealed):
         return cast(T, compile_decoder(target).decode(data))
 
     @classmethod
-    def encode_editor(cls, annotation, value, formatter=None):
-        return compile_decoder(annotation).encode_editor(value, formatter)
+    def encode_editor(cls, annotation, value):
+        return compile_decoder(annotation).encode_editor(value)
 
     @classmethod
-    def decode_editor(cls, annotation, value, normalize=None):
-        return compile_decoder(annotation).decode_editor(value, normalize)
+    def decode_editor(cls, annotation, value):
+        return compile_decoder(annotation).decode_editor(value)
 
     @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
@@ -560,12 +560,12 @@ class ValueDecoder(ABC):
 
     editor_annotation = str
 
-    def encode_editor(self, value, formatter=None):
-        encoded = formatter(value) if formatter else FieldCodec.encode(value)
+    def encode_editor(self, value):
+        encoded = FieldCodec.encode(value)
         return encoded if encoded is None or isinstance(encoded, str) else json.dumps(encoded)
 
-    def decode_editor(self, value, normalize=None):
-        return normalize(value) if normalize else json.loads(value)
+    def decode_editor(self, value):
+        return value
 
     def editor_options(self, options):
         return options
@@ -580,23 +580,24 @@ class _ScalarDecoder(ValueDecoder):
     def decode(self, data):
         return FieldCodec._decode_scalar(self.target, data)
 
-    def decode_editor(self, value, normalize=None):
-        return value if self.target is str and normalize is None else super().decode_editor(value, normalize)
+class _JsonEditor:
+    def decode_editor(self, value):
+        return json.loads(value)
+
+class _JsonScalarDecoder(_JsonEditor, _ScalarDecoder):
+    pass
 
 class _NullDecoder(_ScalarDecoder):
     editor_annotation = type(None)
 
-    def encode_editor(self, value, formatter=None):
+    def decode_editor(self, value):
         return self.decode(value)
-
-    def decode_editor(self, value, normalize=None):
-        return value
 
     def editor_options(self, options):
         return (("Not set", None),)
 
 @dataclass(frozen=True, slots=True)
-class _RepresentedDecoder(ValueDecoder):
+class _RepresentedDecoder(_JsonEditor, ValueDecoder):
     """A declared representation capability; null without one decodes structurally."""
 
     representation: type[FieldRepresentation]
@@ -646,9 +647,6 @@ class _FamilyNameDecoder(ValueDecoder):
     def editor_choices(self):
         return tuple((name, name) for name in self.family.names())
 
-    def decode_editor(self, value, normalize=None):
-        return normalize(value) if normalize else value
-
     def decode(self, data):
         if type(data) is not str:
             raise ValueError("Expected a declared family name.")
@@ -661,9 +659,6 @@ class _LiteralDecoder(ValueDecoder):
 
     def editor_choices(self):
         return tuple((str(value), value) for value in self.values)
-
-    def decode_editor(self, value, normalize=None):
-        return compile_decoder(type(self.values[0])).decode_editor(value, normalize)
 
     def decode(self, data):
         if any(type(data) is type(value) and data == value for value in self.values):
@@ -679,14 +674,11 @@ class _UnionDecoder(ValueDecoder):
     def editor_annotation(self):
         return Union[tuple(item.editor_annotation for item in self.alternatives)]
 
-    def encode_editor(self, value, formatter=None):
-        return self._read(lambda item: item.encode_editor(item.decode(FieldCodec.encode(value)), formatter))
-
     def editor_options(self, options):
         return tuple(dict.fromkeys(choice for item in self.alternatives for choice in item.editor_options(options)))
 
-    def decode_editor(self, value, normalize=None):
-        return FieldCodec.encode(self._read(lambda item: item.decode(item.decode_editor(value, normalize))))
+    def decode_editor(self, value):
+        return self._read(lambda item: item.decode_editor(value))
 
     def decode(self, data):
         return self._read(lambda item: item.decode(data))
@@ -711,7 +703,7 @@ class _UnionDecoder(ValueDecoder):
             first_error = None
 
 @dataclass(frozen=True, slots=True)
-class _FrozenSetDecoder(ValueDecoder):
+class _FrozenSetDecoder(_JsonEditor, ValueDecoder):
     item: ValueDecoder
 
     def decode(self, data):
@@ -720,7 +712,7 @@ class _FrozenSetDecoder(ValueDecoder):
         return frozenset(self.item.decode(value) for value in data)
 
 @dataclass(frozen=True, slots=True)
-class _ListDecoder(ValueDecoder):
+class _ListDecoder(_JsonEditor, ValueDecoder):
     item: ValueDecoder
 
     def decode(self, data):
@@ -729,7 +721,7 @@ class _ListDecoder(ValueDecoder):
         return [self.item.decode(value) for value in data]
 
 @dataclass(frozen=True, slots=True)
-class _VariadicTupleDecoder(ValueDecoder):
+class _VariadicTupleDecoder(_JsonEditor, ValueDecoder):
     item: ValueDecoder
 
     def decode(self, data):
@@ -738,7 +730,7 @@ class _VariadicTupleDecoder(ValueDecoder):
         return tuple(self.item.decode(value) for value in data)
 
 @dataclass(frozen=True, slots=True)
-class _FixedTupleDecoder(ValueDecoder):
+class _FixedTupleDecoder(_JsonEditor, ValueDecoder):
     items: tuple[ValueDecoder, ...]
 
     def decode(self, data):
@@ -749,7 +741,7 @@ class _FixedTupleDecoder(ValueDecoder):
         return tuple(item.decode(value) for item, value in zip(self.items, data, strict=True))
 
 @dataclass(frozen=True, slots=True)
-class _DictDecoder(ValueDecoder):
+class _DictDecoder(_JsonEditor, ValueDecoder):
     key: ValueDecoder
     value: ValueDecoder
 
@@ -767,11 +759,11 @@ class _FamilyRecordDecoder(ValueDecoder):
     def editor_choices(self):
         return tuple((member.label, member) for member in self.family.members_with(self.family))
 
-    def encode_editor(self, value, formatter=None):
-        return formatter(value) if formatter else value.declared_name
+    def encode_editor(self, value):
+        return value.declared_name
 
-    def decode_editor(self, value, normalize=None):
-        return normalize(value) if normalize else {self.family.family_discriminator: value}
+    def decode_editor(self, value):
+        return {self.family.family_discriminator: value}
 
     def decode(self, data):
         if not isinstance(data, dict):
@@ -786,7 +778,7 @@ class _FamilyRecordDecoder(ValueDecoder):
         )
 
 @dataclass(frozen=True, slots=True)
-class _RecordDecoder(ValueDecoder):
+class _RecordDecoder(_JsonEditor, ValueDecoder):
     """A dataclass record. Its plan is looked up at decode time, so a
     record that contains itself compiles without recursion."""
 
@@ -832,9 +824,6 @@ class _EnumDecoder(ValueDecoder):
     def editor_choices(self):
         return tuple((str(member.value), member.value) for member in self.target)
 
-    def decode_editor(self, value, normalize=None):
-        return compile_decoder(type(next(iter(self.target)).value)).decode_editor(value, normalize)
-
     def decode(self, data):
         return self.target(data)
 
@@ -854,11 +843,10 @@ def compile_decoder(annotation: object) -> ValueDecoder:
 def _structural_decoder(target: object) -> ValueDecoder:
     if target is type(None):
         return _NullDecoder(target)
-    if (
-        target is str or target is int or target is bool
-        or target is float
-    ):
+    if target is str:
         return _ScalarDecoder(target)
+    if target is int or target is bool or target is float:
+        return _JsonScalarDecoder(target)
     if target is Any:
         return _AnyDecoder()
     origin, args = get_origin(target), get_args(target)

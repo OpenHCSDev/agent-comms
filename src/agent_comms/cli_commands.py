@@ -92,8 +92,8 @@ def _tags(value: str) -> list[str]:
     return [tag.strip() for tag in value.split(",") if tag.strip()]
 
 
-def _tag_text(value: frozenset[str] | None) -> str:
-    return ', '.join(sorted(value or ()))
+def _tag_text(value: frozenset[str] | None) -> str | None:
+    return None if value is None else ', '.join(sorted(value))
 
 
 def _shell_words(value: str | None) -> list[str] | None:
@@ -134,7 +134,13 @@ class TargetField:
 
     @property
     def editor_default(self):
-        return FieldCodec.encode_editor(self.annotation, self.value, self.declaration.metadata['editor_format'])
+        formatter = self.declaration.metadata['editor_format']
+        return FieldCodec.encode_editor(self.annotation, formatter(self.value) if formatter else self.value)
+
+    @staticmethod
+    def decode_editor(declaration, annotation, value):
+        normalize = declaration.metadata['normalize']
+        return normalize(value) if normalize else FieldCodec.decode_editor(annotation, value)
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
         """An unrestricted field does not declare a finite-choice editor."""
@@ -519,7 +525,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         result = {}
         for key, text in values.items():
             item = declared[key]
-            result[key] = FieldCodec.decode_editor(hints[item.name], text, item.metadata['normalize'])
+            result[key] = item.metadata[TargetField].decode_editor(item, hints[item.name], text)
         return result
 
     def confirmation(self) -> str:
