@@ -271,7 +271,7 @@ class MessageNotification:
         if not 1 <= limit <= cls.window_limit:
             raise ValueError("Sent notification limit must fit one bounded window")
         owner = registry.require(name)
-        from .transcript_receipts import AssignedTranscriptSource
+        from .transcript_sources import AssignedTranscriptSource
 
         captured = AssignedTranscriptSource.for_thread(root, owner, log).window(
             limit=0, sent_limit=limit

@@ -20,7 +20,7 @@ from typing import ClassVar
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest
-from .transcript_receipts import TranscriptSource
+from .transcript_sources import TranscriptSource
 from .typed_table import Column, TypedRow, TypedStore, TypedTable
 
 

@@ -163,7 +163,7 @@ def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> Accepte
         )
         for ordinal, recipient in enumerate(audience.recipients)
     ]:
-        raise IdentityConflict("sealed N delivery receipts conflict with committed bus")
+        raise IdentityConflict("sealed N delivery rows conflict with committed bus")
     current: list[WakeAssignment] = []
     for accepted in expected:
         db_row = WakeAssignment.one(db, assignment_id=accepted.assignment_id)

@@ -158,7 +158,7 @@ class PrivateSocketRole(PrivateRole):
 
         The socket inode remains at path. Linux resolves this short proc address
         through the held directory FD; native children may use it while the
-        listener owns that FD. Receipt paths never derive from this address.
+        listener owns that FD. Reply paths never derive from this address.
         POSIX platforms without proc use a private, temporary directory link
         for the same inode. No socket or acknowledgement moves into that directory.
         """

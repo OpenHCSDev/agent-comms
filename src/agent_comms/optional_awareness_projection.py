@@ -359,7 +359,7 @@ class OptionalAwarenessProjection:
         sequences = tuple(row.wire_seq for row in assignments)
         claims = tuple(row.assignment_id for row in assignments)
         marks = ",".join("?" for _ in assignments)
-        receipts = {
+        handled = {
             row.wire_seq: row
             for row in ClaimBatchAcknowledgements.select(
                 db,
@@ -392,7 +392,7 @@ class OptionalAwarenessProjection:
             )
         }
         proof_domains = (
-            (set(receipts), set(sequences)),
+            (set(handled), set(sequences)),
             (set(deliveries), set(sequences)),
             (set(members), set(claims)),
             (set(generations), set(claims)),
@@ -402,7 +402,7 @@ class OptionalAwarenessProjection:
         return [
             _SelectedDecision.capture(
                 row,
-                receipts[row.wire_seq],
+                handled[row.wire_seq],
                 members[row.assignment_id],
                 deliveries[row.wire_seq],
                 generations[row.assignment_id],
