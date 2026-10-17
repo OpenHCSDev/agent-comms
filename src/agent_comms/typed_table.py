@@ -650,12 +650,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             parameters))[0]
 
     @classmethod
-    def column_values(cls, db: sqlite3.Connection, name: str, *,
-                      where: str = "1", parameters: tuple = ()) -> list:
-        selected, = cls._fields_named((name,))
-        return selected.read(db.execute(
-            f"SELECT {_identifier(selected.name)} FROM {_identifier(cls.declared_name)} WHERE {where}",
-            parameters))
+    def count(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> int:
+        where, parameters = cls._condition(where, parameters, key)
+        return SqlValue.for_annotation(int).read(db.execute(
+            f"SELECT COUNT(*) FROM {_identifier(cls.declared_name)} WHERE {where}", parameters))[0]
 
     @classmethod
     def _writable_fields(cls, columns: tuple[str, ...] | None = None) -> tuple[_Field, ...]:

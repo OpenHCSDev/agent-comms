@@ -34,7 +34,7 @@ from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, ReadCursor
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
-from .store_files import _store_lock, _store_read_lock
+from .store_files import _store_lock
 from .wire_log import OpenedWireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
 from .display_references import DisplayReferences
@@ -759,7 +759,7 @@ class WireRevision:
     def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
         """Every source is a group; missing files contribute no revision."""
         paths = cls.source_paths(views)
-        with _store_read_lock(views.bus.log.path) as source:
+        with views.bus.log.locked(shared=True) as source:
             through_seq = views.bus.log._committed_sequence_unlocked(source)
             captured = {
                 name: tuple(revision for path in group

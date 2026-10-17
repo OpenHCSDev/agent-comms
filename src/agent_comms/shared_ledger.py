@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 class SharedLedger(ThreadOwnedState, LockedStore[dict[str, Any]]):
     """One free-form JSON document; no in-memory mirror or closed value family."""
 
+    lock_rank = 8
     filename: ClassVar[str] = "ledger.json"
     json_indent = 2
 

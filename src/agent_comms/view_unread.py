@@ -240,7 +240,7 @@ class NativeReplyPreparation:
         if self.future.cancelled():
             return None
         batch = self.future.result()
-        try:
+        with CoordinationReadUnavailable.checking():
             with database:
                 database.execute("BEGIN IMMEDIATE")
                 for update in batch.updates:
@@ -251,8 +251,6 @@ class NativeReplyPreparation:
                     expected = self.reads[source][1]
                     if revision is not None and expected.holds_cut(revision, expected.size):
                         update.commit(database)
-        except sqlite3.OperationalError as error:
-            CoordinationReadUnavailable.raise_from(error)
         return batch.last_source
 
 

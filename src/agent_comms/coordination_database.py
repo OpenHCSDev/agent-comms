@@ -62,10 +62,8 @@ class StoreBusy(StoreContention):
     """Do not wait when optional presentation or admission cannot acquire SQLite custody."""
 
     def reader(self, uri: str) -> sqlite3.Connection:
-        try:
+        with CoordinationReadUnavailable.checking():
             return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=0)
-        except sqlite3.OperationalError as error:
-            CoordinationReadUnavailable.raise_from(error)
 
     def writer(
         self, path: str | os.PathLike[str], options: dict[str, object]
@@ -144,11 +142,9 @@ class CoordinationStore:
         path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
     ):
         """Own a configured read connection whose consumers bound each snapshot."""
-        try:
+        with CoordinationReadUnavailable.checking():
             with closing(CoordinationStore._open_reader(path, contention)) as db:
                 yield db
-        except sqlite3.OperationalError as error:
-            CoordinationReadUnavailable.raise_from(error)
 
     @staticmethod
     def observation_failure(path: Path) -> Literal["missing", "invalid_store"] | None:
@@ -181,19 +177,20 @@ class CoordinationStore:
         path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
     ):
         """Own an existing committed read, never initialization or write admission."""
-        try:
-            with closing(CoordinationStore.read_snapshot(path, contention)) as db:
-                try:
-                    yield db
-                finally:
-                    if db.in_transaction:
-                        db.execute("ROLLBACK")
-        except sqlite3.OperationalError as error:
-            error.add_note(
-                f"SQLite observation store: {path}; "
-                f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
-            )
-            CoordinationReadUnavailable.raise_from(error)
+        with CoordinationReadUnavailable.checking():
+            try:
+                with closing(CoordinationStore.read_snapshot(path, contention)) as db:
+                    try:
+                        yield db
+                    finally:
+                        if db.in_transaction:
+                            db.execute("ROLLBACK")
+            except sqlite3.OperationalError as error:
+                error.add_note(
+                    f"SQLite observation store: {path}; "
+                    f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
+                )
+                raise
 
     def __init__(
         self, path: str | os.PathLike[str],
