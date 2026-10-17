@@ -203,6 +203,15 @@ class Goal:
     reported_turn: str | None = None
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
+    problem: str | None = None
+
+    def require_order(self, goals, owner) -> None:
+        if self.problem is not None:
+            goals.todos.get(self.problem).require_assignee(owner, self.id)
+
+    def require_replacement(self, goals, owner) -> None:
+        if self.problem is not None:
+            goals.todos.get(self.problem).require_released_order(owner, self.id)
 
     def after_failed_turn(self, diagnostic: str) -> Goal:
         progress = f"{self.progress}\n\n{diagnostic}" if self.progress else diagnostic

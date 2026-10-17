@@ -6,6 +6,7 @@ import logging
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import replace
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -43,6 +44,11 @@ class Goals:
         self.waits = GoalWaits(root / GoalWaits.filename)
         self.goal_store: GoalAttemptStore | None = None
 
+    @cached_property
+    def todos(self):
+        from .todos import TodoStore
+        return TodoStore(self.root)
+
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
             private = self.root / "goal-private"
@@ -55,6 +61,7 @@ class Goals:
     ) -> str:
         """Caller holds wire; recover only this owner's original unused READY grant."""
         try:
+            owner.require_active_goal(generation.goal_id).require_order(self, owner.incarnation)
             GoalLaunchOwner(thread=owner, admission_generation=admission).require_ready(
                 self.registry.snapshot(), generation.goal_id,
             )
@@ -123,7 +130,7 @@ class Goals:
     ) -> GoalInputReview:
         from .input_disposition import InputDispositions
 
-        goal = thread.require_active_goal(goal_id)
+        thread.require_active_goal(goal_id)
         if not wait_for:
             raise ValueError("Standby requires explicit wait_for thread names.")
         resolved = tuple(self.registry.require(target.removeprefix("@")) for target in wait_for)

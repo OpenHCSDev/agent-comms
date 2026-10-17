@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Literal, Type
+from typing import TYPE_CHECKING, ClassVar, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
@@ -22,9 +22,11 @@ from .goal_actions import (
     GoalAction,
     GoalPrecondition,
     ModelInvocable,
+    OrderGoalAction,
     SetGoalAction,
 )
 from .goal_states import ActiveGoal
+from .todos import TodoOperation
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -33,7 +35,6 @@ from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
-from .thread_identity import TurnId
 from .turn_digests import TurnDigestRead
 from .relationships import RelationshipEdit
 from .thread_status import ThreadStatus
@@ -584,6 +585,44 @@ class CommsGoalHistoryTool(ThreadToolRequest):
         requested = self.goal_id.strip()
         entries = comms.goals.goal_history(caller.name, goal_id=requested or None)
         return {"history": [entry.to_wire() for entry in entries]}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodoCreateTool(ThreadToolRequest):
+    label = "Create problem"
+    description = "Create a Todo problem; its creator owns assignment and strike decisions."
+    id: str = tool_field("Unique problem ID")
+    repo: str = tool_field("Repository owner/name")
+    text: str = tool_field("Problem and requested repair")
+
+    def apply(self, comms, caller):
+        return {"todo": FieldCodec.encode(comms.goals.todos.create(
+            self.id, self.repo, self.text, creator=comms.registry.require(caller.name)))}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodoTool(ThreadToolRequest):
+    label = "Change problem"
+    description = "Apply an exact revision-checked Todo command; only its commander may invoke this tool."
+    id: str = tool_field("Problem ID")
+    operation: TodoOperation = tool_field("Typed assignment, strike, release or state command")
+
+    def apply(self, comms, caller):
+        comms.goals.todos.get(self.id).require_commander(comms.registry.require(caller.name).incarnation)
+        todo = comms.goals.todos.apply(self.id, self.operation)
+        return {"todo": FieldCodec.encode(todo), "strike_count": todo.strike_count}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderTool(ThreadToolRequest):
+    label = "Assign problem order"
+    description = "Reserve a Todo assignment and publish its Goal with a deadline; does not replay input."
+    order: OrderGoalAction = tool_field("Problem, goal_id, expected_revision and deadline")
+    owner: str = tool_field("Assignee thread")
+
+    def apply(self, comms, caller):
+        goal = comms.goals.update_goal(self.owner, replace(self.order, commander=caller.name))
+        return {"goal": goal.to_wire()}
 
 
 @dataclass(frozen=True, kw_only=True)
