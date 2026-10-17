@@ -18,6 +18,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
+from agent_comms.pi_durable_backend import PiDurableBackend, DurableDatabase
 from agent_comms.threads import Thread
 from agent_comms.unstarted_runtime import UnstartedRuntime
 
@@ -26,12 +27,11 @@ from agent_comms.unstarted_runtime import UnstartedRuntime
 
 
 def test_registry_holds_the_pi_native_backend_and_is_frozen():
-    assert ab.AgentBackend.names() == ("pi_native",)
+    assert ab.AgentBackend.names() == ("pi_native", "pi_durable")
     assert ab.AgentBackend.decode("pi_native") is PiNativeBackend
     assert ab.AgentBackend.for_new_threads() is PiNativeBackend
     assert isinstance(ab.AgentBackend.__registry__, MappingProxyType)
-    with pytest.raises(ValueError, match="Unknown AgentBackend name: 'pi_durable'"):
-        ab.AgentBackend.decode("pi_durable")
+    assert ab.AgentBackend.decode("pi_durable") is PiDurableBackend
 
 
 def test_a_backend_declared_after_sealing_fails_loud():
@@ -40,7 +40,7 @@ def test_a_backend_declared_after_sealing_fails_loud():
         class LateBackend(ab.AgentBackend):  # noqa: F841
             pass
 
-    assert ab.AgentBackend.names() == ("pi_native",)
+    assert ab.AgentBackend.names() == ("pi_native", "pi_durable")
 
 
 def test_pi_native_serves_threads_with_every_thread_capability():

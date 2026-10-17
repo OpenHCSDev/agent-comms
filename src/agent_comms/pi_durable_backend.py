@@ -8,18 +8,24 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import json
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
 from .agent_backend import (
-    AgentBackend, Compacts, ConfiguresModel, ContextUsage, EntryPage, EntryRef,
-    FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction, ReadsHistory, ReportsContext,
-    RuntimeLocation, Steers, TranscriptKind, TranscriptEntry,
+    AgentBackend, Compacts, ConfiguresModel, ContextUsage,
+    FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction, ReportsContext,
+    RuntimeLocation, Steers,
 )
 from .child_process import AttachedChild
 from .declared_family import DeclaredFamily
+from .external_transcript import ExternalRecord, ExternalCut
+from .transcript_receipts import TranscriptSource
+from .transcript_events import UserTranscript, AssistantTranscript, NoticeTranscript
+from .unstarted_runtime import UnstartedRuntime
+from .native_session_files import NativeSessionFiles
+from .selected_session import SelectedSession
 
 
 @dataclass(frozen=True)
@@ -32,14 +38,123 @@ class DurableDatabase(RuntimeLocation):
         if not Path(self.path).is_absolute():
             raise ValueError('Durable database path must be absolute')
 
-    @classmethod
-    def from_wire(cls, value):
-        if not isinstance(value, dict) or set(value) != {'path'} or not isinstance(value['path'], str):
-            raise ValueError('Durable location requires exactly an absolute path')
-        return cls(value['path'])
+    def require_forkable(self):
+        raise ValueError('Durable database forking is not implemented')
 
-    def location_payload(self):
-        return {'path': self.path}
+    def select_session(self, directory, execution):
+        return DurableSelectedSession(directory, self)
+
+    def history_source(self, root, incarnation):
+        return DurableTranscript(self)
+
+    @property
+    def read_key(self):
+        return self.path
+
+    def storage_files(self):
+        return (DurableDatabaseFiles(Path(self.path)),)
+
+
+@dataclass(frozen=True)
+class DurableSelectedSession(SelectedSession):
+    location: DurableDatabase
+
+    @property
+    def path(self):
+        return Path(self.location.path)
+
+    @property
+    def session_file(self):
+        return self.location.path
+
+    def attest(self, identity):
+        raise ValueError('A durable database cannot attest a native Pi session')
+
+
+class DurableDatabaseFiles(NativeSessionFiles):
+    @property
+    def members(self):
+        return (self.session, *(Path(str(self.session) + suffix)
+                for suffix in ('-wal', '-shm', '-journal', '.lock')))
+
+    @property
+    def schema_paths(self):
+        return (self.session,)
+
+
+@dataclass(frozen=True)
+class DurableEntry(DeclaredFamily, affix='DurableEntry'):
+    order: int
+    text: str
+    transcript_type: ClassVar = NoticeTranscript
+
+    def record(self):
+        return ExternalRecord(self.order, (self.transcript_type(self.text),))
+
+
+class UserDurableEntry(DurableEntry):
+    transcript_type = UserTranscript
+
+
+class AssistantDurableEntry(DurableEntry):
+    transcript_type = AssistantTranscript
+
+
+class SystemDurableEntry(DurableEntry): pass
+class ToolResultDurableEntry(DurableEntry): pass
+class CompactionDurableEntry(DurableEntry): pass
+class ResetDurableEntry(DurableEntry): pass
+
+
+class DurableTranscriptRead(TranscriptSource):
+    def __init__(self, loop, host):
+        self.loop, self.host = loop, host
+        page = loop.run(host.request('entries', limit=1)) if host is not None else {'items': []}
+        self.through = max((item['order'] for item in page['items']), default=0)
+
+    def cut(self):
+        return ExternalCut(self.through)
+
+    def records(self, minimum, maximum, order):
+        if self.host is None or maximum < minimum:
+            return
+        cursor = None
+        while True:
+            page = self.loop.run(self.host.request('entries', limit=128, cursor=cursor,
+                query={'minEntryId': minimum, 'maxEntryId': min(maximum, self.through), 'order': order}))
+            for item in page['items']:
+                yield DurableEntry.decode(item['kind'])(item['order'], item['text']).record()
+            cursor = page.get('cursor')
+            if cursor is None:
+                return
+
+    def forward(self, after, through):
+        return self.records(after + 1, through, 'ascending')
+
+    def reverse(self, before):
+        return self.records(1, before, 'descending')
+
+
+@dataclass(frozen=True)
+class DurableTranscript(TranscriptSource):
+    location: DurableDatabase
+
+    @contextmanager
+    def reading(self):
+        if not Path(self.location.path).is_file():
+            yield DurableTranscriptRead(None, None)
+            return
+        with asyncio.Runner() as loop:
+            lifetime = DurableHost.history(self.location)
+            host = loop.run(lifetime.__aenter__())
+            try:
+                yield DurableTranscriptRead(loop, host)
+            finally:
+                loop.run(lifetime.__aexit__(None, None, None))
+
+    def cut(self):
+        with self.reading() as reader:
+            return reader.cut()
 
 
 class DurableEvent(DeclaredFamily, affix='DurableEvent'):
@@ -148,12 +263,7 @@ class DurableHost:
         self.lock_file = path.with_suffix(path.suffix + '.lock').open('a+b')
         try:
             fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            self.child = await AttachedChild.start(
-                ('node', str(Path(__file__).with_name('pi_durable_host.mjs'))), cwd=thread.worktree,
-                pass_fds=(self.lock_file.fileno(),),
-            )
-            self.reader = asyncio.create_task(self.read())
-            self.stderr = asyncio.create_task(self.child.discard_stderr())
+            await self.start(thread.worktree, (self.lock_file.fileno(),))
             agent = {}
             if thread.model:
                 provider, model = thread.model.split('/', 1)
@@ -165,6 +275,25 @@ class DurableHost:
         except BaseException:
             await self.close()
             raise
+
+    @classmethod
+    @asynccontextmanager
+    async def history(cls, location):
+        host = cls()
+        try:
+            await host.start(str(Path(location.path).parent))
+            await host.request('open_history', path=location.path)
+            yield host
+        finally:
+            await host.close()
+
+    async def start(self, cwd, pass_fds=()):
+        self.child = await AttachedChild.start(
+            ('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+            cwd=cwd, pass_fds=pass_fds,
+        )
+        self.reader = asyncio.create_task(self.read())
+        self.stderr = asyncio.create_task(self.child.stderr_tail())
 
     async def read(self):
         try:
@@ -181,7 +310,7 @@ class DurableHost:
                             future.set_exception(RuntimeError(message['error']))
                         else:
                             future.set_result(message['result'])
-            raise EOFError('Durable host closed its protocol stream')
+            raise EOFError(f'Durable host closed its protocol stream: {await self.stderr}')
         except BaseException as error:
             for future in self.pending.values():
                 if not future.done():
@@ -238,7 +367,7 @@ class DurableHost:
                 self.lock_file = None
 
 
-class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, ReadsHistory, ConfiguresModel):
+class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, ConfiguresModel):
     """Explicitly selected only; PiNativeBackend remains the new-thread default.
 
     This draft checkpoint intentionally refuses turns until Core's admission
@@ -246,6 +375,7 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, ReadsHist
     call can slip through an unfinished worker integration.
     """
     location_type = DurableDatabase
+    unstarted_type = UnstartedRuntime
     event_kinds = frozenset(member.wire_kind() for member in DurableEvent.members_with(DurableEvent))
 
     def __init__(self):
@@ -255,6 +385,11 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, ReadsHist
     @classmethod
     def for_worker(cls, runner, session_id):
         return cls()
+
+    @classmethod
+    def new_location(cls, root, worktree):
+        from uuid import uuid4
+        return DurableDatabase(str(Path(root).absolute() / 'durable-sessions' / f'{uuid4().hex}.sqlite3'))
 
     async def open(self, thread):
         await self.host.open(thread.runtime, thread)
@@ -295,12 +430,6 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, ReadsHist
         await self.open(thread)
         value = await self.host.request('context_usage')
         return ContextUsage(value['tokens'], value['window'])
-
-    async def entries(self, thread, before, limit):
-        await self.open(thread)
-        page = await self.host.request('entries', limit=limit, cursor=before.backend_id if before else None)
-        entries = tuple(TranscriptEntry(EntryRef(item['order'], item['id']), TranscriptKind.decode(item['kind']), item['text'], None) for item in page['items'])
-        return EntryPage(entries, EntryRef(entries[-1].ref.order, page['cursor']) if page.get('cursor') and entries else None)
 
     async def compact(self, thread, instructions):
         await self.open(thread)

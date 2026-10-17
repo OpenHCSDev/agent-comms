@@ -140,10 +140,6 @@ class NativeTranscript(TranscriptSource):
         """Keep the native record owner bound across one page projection."""
         yield self
 
-    def current_draft(self) -> None:
-        """Native in-progress output belongs to the ACP stream."""
-        return None
-
     def imported_sources(self):
         """Read original metadata before conversation, including native configuration.
 

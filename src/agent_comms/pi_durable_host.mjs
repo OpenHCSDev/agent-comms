@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { BACKGROUND_CONTEXT as context } from '@earendil-works/chord/context';
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
-import { Harness, createRegistry, defineDoc, watchEvents } from '@earendil-works/pi-durable';
+import { Harness, ROOT_CONVERSATION_ID, createRegistry, defineDoc, watchEvents } from '@earendil-works/pi-durable';
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
 import { NodeExecutionEnv } from '@earendil-works/pi-durable/env/node';
 import { CodingTools } from '@earendil-works/pi-durable/tools';
@@ -45,6 +45,18 @@ const handlers = {
     const initial = await watchEvents(harness, root.id, context);
     await initial.stop();
     return { snapshot: initial.snapshot, interrupted: workItems(await harness.inspect(context)) };
+  },
+  async open_history(request) {
+    if (harness) throw new Error('Host already open');
+    models = builtinModels({ credentials: new InMemoryCredentialStore() });
+    harness = await Harness.open(await openNodeSqliteStorage(request.path), {
+      models, registry: createRegistry(),
+      env: ({ cwd }) => new NodeExecutionEnv({ cwd }),
+      onReport: error => process.stderr.write(`${error.stack ?? error}\n`),
+    }, context);
+    root = await harness.conversation(ROOT_CONVERSATION_ID, context);
+    if (!root) throw new Error('Durable database has no root conversation');
+    return null;
   },
   async watch() {
     requireOpen();
@@ -94,7 +106,7 @@ const handlers = {
   async abort() { requireResumed(); await root.abort(context); return null; },
   async entries(request) {
     requireOpen();
-    const page = await root.entries({}, request.limit, request.cursor ?? undefined, context);
+    const page = await root.entries(request.query ?? {}, request.limit, request.cursor ?? undefined, context);
     return { items: page.items.map(entry => ({ id: String(entry.id), order: entry.id, kind: ({ 'pi.user': 'user', 'pi.assistant': 'assistant', 'pi.tool-result': 'tool_result', 'pi.compaction': 'compaction', 'pi.reset': 'reset' })[entry.kind] ?? 'system', text: text(entry) })), cursor: page.cursor };
   },
   async context_usage() {

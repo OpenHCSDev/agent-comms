@@ -29,6 +29,10 @@ class NativeSessionFiles:
         return Path(f"{self.session}.input-proof")
 
     @property
+    def schema_paths(self) -> tuple[Path, ...]:
+        return (self.input_proof,)
+
+    @property
     def writer_lock(self) -> Path:
         return self.session.with_name(f".{self.session.name}.agent-comms-writer.lock")
 

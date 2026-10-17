@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -272,6 +273,19 @@ class TranscriptSource:
     Native and external stores supply their original records. An assigned
     source adds the separately acquired wire/publication capability below.
     """
+
+    def current_draft(self):
+        """Saved records have no draft unless their reader supplies one."""
+        return None
+
+    def publication_revision(self, root, recipient):
+        return PublishedReplyRevision(0, 0)
+
+    @contextmanager
+    def projection(self, receipts, routes):
+        def project(records, *, max_records, max_bytes):
+            return ((record, record.events) for record in records)
+        yield project
 
     def resolve_sent(self, messages):
         """Records without a sender assignment cannot qualify Send reports."""
