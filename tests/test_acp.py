@@ -1076,7 +1076,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
 
-        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True, auto_wake=False)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
         class FakeClient:
@@ -1300,7 +1300,7 @@ class TestAgentTurn:
     async def test_goal_has_only_one_in_flight_attempt(self, wired, tmp_path, monkeypatch):
         from acp import RequestError
 
-        agent = canonical_agent(wired, agent_bin="pi")
+        agent = canonical_agent(wired, agent_bin="pi", auto_wake=False)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="One attempt"))
