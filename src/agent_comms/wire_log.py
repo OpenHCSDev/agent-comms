@@ -745,9 +745,6 @@ class WireLog:
             return lock.certified_read().committed_sequence()
         return self.read_metadata_unlocked().last_seq
 
-    def claim_gate_enabled(self) -> bool:
-        return self._claim_marker_unlocked() is not None
-
     def _claim_marker_unlocked(self) -> WireMetadata | None:
         # _store_lock is also used for registry, channels, and marker files.
         # Only the canonical bus may enter this read/durability barrier.
