@@ -146,7 +146,7 @@ class InterruptedCase(EffectCase):
 
 
 @pytest.fixture
-async def owner_turn(comms, tmp_path):
+async def owner_turn(comms, tmp_path, fake_native_catalog):
     owner = CommsAgent(
         comms,
         agent_bin="unused",
