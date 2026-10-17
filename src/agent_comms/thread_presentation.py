@@ -46,14 +46,13 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
         return IdleThreadPresentationStatus()
 
     def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        """Work and warnings keep their own explanation while the CLI is alive."""
-        return ordinary
+        """A live CLI inbox shows its bridge state; the CLI's activity reports are not work here."""
+        return replace(ordinary, marker="@", summary="CLI inbox · connected", status=self.without_work())
 
 
 @dataclass(frozen=True, slots=True)
 class IdleThreadPresentationStatus(ThreadPresentationStatus):
-    def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        return replace(ordinary, marker="@", summary="CLI inbox · connected")
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +92,10 @@ class AttentionThreadPresentationStatus(ThreadPresentationStatus):
     def without_work(self) -> ThreadPresentationStatus:
         return replace(self, activity=self.activity.without_work())
 
+    def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        """A warning keeps its own explanation; the CLI's activity reports are still not work."""
+        return replace(ordinary, status=self.without_work())
+
 
 @dataclass(frozen=True, slots=True)
 class StatusPending(ThreadPresentationStatus):
@@ -100,6 +103,29 @@ class StatusPending(ThreadPresentationStatus):
 
     def presentation(self, title: str) -> ThreadPresentation:
         return ThreadPresentation(title, "…", "Waiting for agent status", status=self)
+
+
+@dataclass(frozen=True, slots=True)
+class SessionDisconnected(ThreadPresentationStatus):
+    """A viewer's session to the thread failed; the owner process may still be live.
+
+    Every place a viewer shows the thread (its row, tab, status line and
+    input notice) shows this one state while that session stays failed.
+    """
+
+    reason: str
+
+    @property
+    def notice(self) -> str:
+        return f"Thread disconnected: {self.reason}"
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        return ThreadPresentation(title, "✗", self.notice, status=self)
+
+    def over(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        """The ordinary presentation, with its notifications, showing the disconnection."""
+        shown = self.presentation(ordinary.title)
+        return replace(ordinary, marker=shown.marker, summary=shown.summary, status=self)
 
 
 @dataclass(frozen=True, slots=True)

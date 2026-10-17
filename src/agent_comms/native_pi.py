@@ -28,7 +28,7 @@ from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .field_codec import FieldCodec
 from .pi_rpc import unique_fields
 from .native_input_record import NativeInputCommit, NativeInputIdText
-from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole
+from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
@@ -1004,15 +1004,6 @@ def _private_session_dir(directory: Path) -> None:
         raise NativePiUnavailable("Native Pi session directory must be owner-only")
 
 
-def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    descriptor = os.open(path, flags)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
 def _durable_private_session_dir(directory: Path) -> None:
     """Commit each new directory entry before a Pi launch can be returned.
 
@@ -1034,11 +1025,11 @@ def _durable_private_session_dir(directory: Path) -> None:
         for path in reversed(missing):
             path.mkdir(mode=0o700, exist_ok=True)
             _private_session_dir(path)
-            _fsync_directory(path.parent)
+            fsync_directory(path.parent)
         _private_session_dir(directory)
         parent = directory.parent
         while True:
-            _fsync_directory(parent)
+            fsync_directory(parent)
             info = parent.lstat()
             if parent == parent.parent or PrivateDirectoryRole.violation(info) is not None:
                 break

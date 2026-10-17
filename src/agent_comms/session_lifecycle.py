@@ -41,7 +41,7 @@ from .session_effects import SessionEffects
 from .threads import Thread
 from .registry_document import RegistryEntry
 from .transcript_updates import TranscriptReplay
-from .owner_protocol import IncompatibleOwnerError
+from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from .session_load import SessionLoadPlan, ExistingSessionLoadPlan, FailedSessionLoadPlan
 
 
@@ -65,7 +65,7 @@ class SessionLifecycle:
         self.titles: dict[str, str] = {}
         self.display_titles: dict[str, str | None] = {}
         self.worktrees: dict[str, str] = {}
-        self.proxies: dict[str, RuntimeProxy] = {}
+        self.proxies: dict[str, RuntimeProxy | IncompatibleOwner] = {}
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()
         self.transcript = TranscriptReplay(comms, runtime)
@@ -266,9 +266,13 @@ class SessionLifecycle:
                 metadata = await proxy.subscribe()
                 self.proxies[session_id] = proxy
             except IncompatibleOwnerError as error:
-                raise RequestError.invalid_params(
-                    {**error.owner.failure_metadata(), **failed_command.failure_metadata()}
-                ) from error
+                # History is Core's own store; only owner requests need the owner's Core.
+                await self.transcript.replay(session_id, thread.name)
+                self.proxies[session_id] = error.owner
+                return LoadSessionResponse(field_meta={
+                    **await self.metadata(thread.name, session_id=session_id),
+                    **error.owner.failure_metadata(), **ExistingSessionLoadPlan(binding).metadata(),
+                })
             except (OSError, RuntimeError, TypeError, ValueError) as error:
                 raise RequestError.invalid_params(
                     {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}",

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from agent_comms.tracked_turn import TrackedTurnSession
-from agent_comms import acp, cohort_foreground, native_pi, worker
+from agent_comms import acp, native_pi, private_nk_entrypoint, worker
 from agent_comms.input_drain import InputDrain
 from test_coordinated_runtime import _fake_model
 
@@ -22,7 +22,7 @@ async def main(base: Path) -> None:
         await asyncio.sleep(0.01)
     else:
         raise RuntimeError("parent did not register child")
-    cohort_foreground._trusted_package = lambda _: None
+    private_nk_entrypoint._trusted_package = lambda _: None
     native_pi._trusted_package = lambda _: None
     fake, calls = _fake_model(decision="FULL")
     TrackedTurnSession.execute = fake

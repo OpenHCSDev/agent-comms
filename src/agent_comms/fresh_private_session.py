@@ -9,9 +9,9 @@ from pathlib import Path
 from uuid import uuid4
 
 from .native_entries import SessionEntry
-from .native_pi import NativePiUnavailable, _durable_private_session_dir, _fsync_directory
+from .native_pi import NativePiUnavailable, _durable_private_session_dir
 from .native_session_reopen import NativeSessionIdentity
-from .private_path import PrivateFileRole
+from .private_path import PrivateFileRole, fsync_directory
 
 
 def create_fresh_private_session(
@@ -46,7 +46,7 @@ def create_fresh_private_session(
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        _fsync_directory(session_dir)
+        fsync_directory(session_dir)
         return NativeSessionIdentity(session_id, str(path))
     except OSError as error:
         # A failed sync can leave a committed file. Preserve it, never infer success.

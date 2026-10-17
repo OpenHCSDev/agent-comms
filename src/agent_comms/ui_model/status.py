@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.thread_presentation import (
     IdleThreadPresentationStatus,
+    SessionDisconnected,
     StatusPending,
     ThreadRetired,
     ThreadPresentation,
@@ -44,6 +45,9 @@ class ThreadStatusModel:
 
     def with_delivery(self, delivery: InputDelivery) -> ThreadStatusModel:
         return replace(self, presentation=delivery.presentation(self.presentation))
+
+    def disconnected(self, status: SessionDisconnected) -> ThreadStatusModel:
+        return ThreadStatusModel.known(self.name, status.over(self.presentation))
 
     @classmethod
     def known(cls, name: str, presentation: ThreadPresentation | None) -> ThreadStatusModel:

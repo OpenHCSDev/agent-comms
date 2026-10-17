@@ -97,6 +97,26 @@ class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
     """A per-node count, kept separately for each file."""
 
 
+class SourceLines(GitMeasure):
+    """Net production lines may not exceed the budget the merged range declares (default 0)."""
+
+    trailer: typing.ClassVar[str] = "Src-Budget"
+
+    @classmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+        return {cls.__name__: sum(source.count(b"\n") for _, source in sources)}
+
+    @classmethod
+    def budget(cls, repo: Path, base: str, head: str) -> int:
+        declared = git(repo, "log", f"--format=%(trailers:key={cls.trailer},valueonly)", f"{base}..{head}")
+        return max((int(value) for value in declared.split()), default=0)
+
+    @classmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        before, after = super().compare(repo, base, head, changed, root)
+        return {cls.__name__: before[cls.__name__] + cls.budget(repo, base, head)}, after
+
+
 @dataclass(frozen=True)
 class ChangedSource:
     """One head module and the new-side lines changed by its Git patch."""
