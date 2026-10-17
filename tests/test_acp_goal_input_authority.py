@@ -25,6 +25,7 @@ from agent_comms.comms import wire
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
 from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
+from agent_comms.owned_send_admission import OwnedSend
 from agent_comms.transcript_events import ContextTranscript
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
@@ -109,7 +110,7 @@ async def replay(agent):
 async def test_origin_goal_allows_only_followup_admitted_after_activation(
     tmp_path, monkeypatch, queued_before_activation, caplog
 ):
-    caplog.set_level(logging.INFO, logger="agent_comms.owned_send_claim")
+    caplog.set_level(logging.INFO, logger=OwnedSend.__module__)
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
     observed = {}
 
@@ -165,7 +166,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
 async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
     tmp_path, monkeypatch, change, caplog
 ):
-    caplog.set_level(logging.INFO, logger="agent_comms.owned_send_claim")
+    caplog.set_level(logging.INFO, logger=OwnedSend.__module__)
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
     store = comms.goals.open_goal_store()
     original_goal = comms.goals.update_goal(
