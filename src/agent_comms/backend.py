@@ -591,7 +591,7 @@ class TurnSession:
 
     async def finish_diagnostics(self) -> AsyncIterator[events.AgentEvent]:
         self.error_text = (
-            "" if self.native_session.custody.retained else await self.native.stderr_task
+            "" if self.native.proc.alive() else await self.native.proc.stderr_tail()
         )
         self.output.startup_error(self.error_text)
         if False:

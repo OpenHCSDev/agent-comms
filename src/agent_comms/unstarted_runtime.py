@@ -17,6 +17,10 @@ class UnstartedRuntime(RuntimeLocation):
     def backend(self):
         return self.owner
 
+    @property
+    def path(self) -> str:
+        raise ValueError("Canonical saved session required")
+
     def require_forkable(self):
         raise ValueError("Canonical saved session required")
 

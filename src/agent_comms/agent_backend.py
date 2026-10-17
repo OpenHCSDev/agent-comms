@@ -43,6 +43,7 @@ class BackendDeclarationError(TypeError):
 class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     """Runtime behavior derived once by the owning thread record."""
 
+    path: str
     _backend: ClassVar[type[AgentBackend]]
 
     @property

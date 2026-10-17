@@ -6,7 +6,6 @@ import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from acp.exceptions import RequestError
 from acp.schema import (
@@ -19,7 +18,7 @@ from .following_inputs import OwnerFollowingInputs
 from .queued_input import InitialInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
-from .agent_backend import AgentBackend, InputRequest, SendNow, TurnInbox
+from .agent_backend import AgentBackend, TurnInbox
 from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .coordinator import Coordination
@@ -41,7 +40,6 @@ from .runtime import (
     SocketClient,
 )
 from .pi_payloads import StateData
-from .thread_configuration import ReplyTiming
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
@@ -57,9 +55,6 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
-REPLY_POLL = 0.25
-ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
-IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
 
 
 class CompactionObservation(MroDispatch):
@@ -90,12 +85,10 @@ class TurnRunner:
         *,
         agent_bin: str | None,
         agent_args: list[str] | None,
-        reply_timing: ReplyTiming,
     ):
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        self.reply_timing = reply_timing
         self.agent_bin = NativeArguments.configured_binary(agent_bin)
         self.agent_args = NativeArguments.configured(agent_args)
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
@@ -198,16 +191,13 @@ class TurnRunner:
                 relay_text = text
             else:
                 agent_task = text.strip()
-            sent_seq = 0
             if relay_text:
                 target, body = parse_target(relay_text)
-                message = await Coordination.run_worker(partial(
+                await Coordination.run_worker(partial(
                     self.comms.messaging.send_message, thread_name, target, body,
                 ))
-                sent_seq = message.seq
             self.effects._debug_log(
-                f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
-                f"sent_seq={sent_seq}"
+                f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'}"
             )
             if images or agent_task:
                 await InitialInput.run(self.inputs,
@@ -219,20 +209,6 @@ class TurnRunner:
                     input_id=input_id,
                     origin=origin,
                 )
-            else:
-                turn_id = uuid4().hex
-                async with AsyncExitStack() as resources:
-                    await Coordination.run_worker(partial(
-                        self.acquire_turn, resources, session_id, thread_name,
-                        turn_id, "Waiting for replies",
-                    ))
-                    await self.effects._emit_event(
-                        session_id, await Coordination.run_worker(partial(
-                            self.current_turn_update, session_id,
-                        )),
-                    )
-                    await self.inputs.drain_inbox(session_id)
-                    await self.collect_replies(session_id, thread_name, sent_seq)
             self.effects._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -242,59 +218,6 @@ class TurnRunner:
             if self.turn_tasks.get(session_id) is turn_task:
                 self.turn_tasks.pop(session_id, None)
             self.inputs.ensure_live_drain(session_id)
-
-    async def collect_replies(self, session_id: str, thread_name: str, sent_seq: int = 0) -> None:
-        """Stream inbox messages into the open turn until quiet or timeout.
-
-        While a peer is on it (activity thinking/working, or a peer's read
-        marker past our message), the turn stays open — the client shows
-        its spinner, and replies drain the moment they land.
-        """
-        timing = self.reply_timing
-        waited = 0.0
-        quiet = 0.0
-        got_reply = False
-        idle_for = 0.0
-        while True:
-            await asyncio.sleep(REPLY_POLL)
-            waited += REPLY_POLL
-            quiet += REPLY_POLL
-            pushed = await self.inputs.drain_inbox(session_id)
-            if pushed:
-                got_reply = True
-                quiet = 0.0
-                idle_for = 0.0
-            if got_reply:
-                if quiet >= timing.reply_quiet or waited >= timing.reply_window:
-                    self.effects._debug_log(f"collect:break got_reply waited={waited}")
-                    break
-                continue
-            # No reply yet: keep waiting while a peer is on it.
-            peer_progress = await Coordination.run_worker(partial(self.peer_progress, thread_name, sent_seq))
-            idle_for = 0.0 if peer_progress else idle_for + REPLY_POLL
-            if idle_for >= IDLE_GRACE and waited >= timing.no_reply_window:
-                break
-            if waited >= ACTIVITY_WINDOW:
-                break
-
-    def peer_progress(self, thread_name: str, sent_seq: int) -> bool:
-        """True when a peer is active on, or has read, our message."""
-        snapshot = self.comms.registry.snapshot()
-        running = (
-            thread for name, thread in snapshot.threads.items()
-            if name != thread_name and snapshot.statuses[name].active
-        )
-        for activity in self.comms.agents.all_activity(running, snapshot=snapshot).values():
-            if activity.state.busy:
-                return True
-        if sent_seq:
-            document = self.comms.bus.reads.read()
-            for name in snapshot.threads:
-                if name != thread_name and sent_seq in self.comms.bus.reads.cursor(
-                    name, snapshot, document=document
-                ):
-                    return True
-        return False
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         if session_id in self.sessions.proxies:

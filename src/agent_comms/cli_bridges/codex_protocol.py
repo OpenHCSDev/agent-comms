@@ -331,7 +331,7 @@ class ToolItem(Item, ABC):
 
     @property
     @abstractmethod
-    def arguments(self) -> JsonValue: ...
+    def arguments(self) -> dict[str, JsonValue]: ...
 
     @property
     @abstractmethod
@@ -342,12 +342,8 @@ class ToolItem(Item, ABC):
     def succeeded(self) -> bool: ...
 
     @property
-    def tool_detail(self) -> str:
-        return ""
-
-    @property
     def call(self) -> ToolCall:
-        return ToolCall(self.id, self.tool_name, self.arguments, self.tool_detail)
+        return ToolCall(self.id, self.tool_name, self.arguments)
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.call.finished(self.output, self.succeeded)
@@ -369,12 +365,8 @@ class CommandItem(ToolItem):
         return 'bash'  # Core's declared shell tool, which presents its command
 
     @property
-    def arguments(self) -> JsonValue:
+    def arguments(self) -> dict[str, JsonValue]:
         return {'command': self.command}
-
-    @property
-    def tool_detail(self) -> str:
-        return self.command
 
     @property
     def output(self) -> str:
@@ -428,7 +420,7 @@ ToolContent = ToolContentPart.declared_union()
 class DynamicToolItem(ToolItem):
     wire_tag = 'dynamicToolCall'
     tool: str
-    input_value: JsonValue = Field(alias='arguments')
+    input_value: dict[str, JsonValue] = Field(alias='arguments')
     contentItems: list[ToolContent] | None = None
     success: bool | None = None
 
@@ -437,7 +429,7 @@ class DynamicToolItem(ToolItem):
         return self.tool
 
     @property
-    def arguments(self) -> JsonValue:
+    def arguments(self) -> dict[str, JsonValue]:
         return self.input_value
 
     @property
@@ -471,7 +463,7 @@ class McpToolItem(ToolItem):
     wire_tag = 'mcpToolCall'
     server: str
     tool: str
-    input_value: JsonValue = Field(alias='arguments')
+    input_value: dict[str, JsonValue] = Field(alias='arguments')
     status: str
     result: McpResult | None = None
     error: McpError | None = None
@@ -481,7 +473,7 @@ class McpToolItem(ToolItem):
         return f'{self.server}/{self.tool}'
 
     @property
-    def arguments(self) -> JsonValue:
+    def arguments(self) -> dict[str, JsonValue]:
         return self.input_value
 
     @property
@@ -634,8 +626,7 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return ToolCall(call_id, 'edit', {'file_path': self.path}, self.path).finished(
-            '', ok, diff=self.kind.patch(self.path, self.diff))
+        return ToolCall(call_id, 'edit', {'path': self.path}, self.kind.patch(self.path, self.diff)).finished('', ok)
 
 
 class FileChangeItem(Item):

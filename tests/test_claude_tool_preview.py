@@ -3,27 +3,31 @@ import pytest
 from agent_comms.cli_bridges.claude_protocol import ClaudeSession, TimedRecord, ToolResult, ToolUse
 
 
-@pytest.mark.parametrize('name,arguments,native,detail,patch', [
-    ('Bash', {'command':'echo hello'}, 'bash', 'echo hello', None),
-    ('Read', {'file_path':'a.py'}, 'read', 'a.py', None),
-    ('Grep', {'pattern':'needle'}, 'grep', 'needle', None),
-    ('Edit', {'file_path':'a.py','old_string':'old\n','new_string':'new\n'}, 'edit', 'a.py', '-old\n+new\n'),
-    ('Write', {'file_path':'a.py','content':'new\n'}, 'write', 'a.py', '+new\n'),
-    ('MultiEdit', {'file_path':'a.py','edits':[{'old_string':'a\n','new_string':'b\n'},{'old_string':'c\n','new_string':'d\n'}]}, 'edit', 'a.py', '-c\n+d\n'),
-    ('mcp__opaque', {'custom':['untouched']}, 'mcp__opaque', '', None),
+@pytest.mark.parametrize('name,arguments,native,expected,title,patch', [
+    ('Bash', {'command':'echo hello'}, 'bash', {'command':'echo hello'}, 'Run echo hello', None),
+    ('Read', {'file_path':'a.py'}, 'read', {'path':'a.py'}, 'Read a.py', None),
+    ('Grep', {'pattern':'needle'}, 'grep', {'pattern':'needle'}, 'Search needle', None),
+    ('Edit', {'file_path':'a.py','old_string':'old\n','new_string':'new\n','replace_all':True}, 'edit',
+     {'path':'a.py','edits':[{'old_string':'old\n','new_string':'new\n'}],'replace_all':True},
+     'Edit a.py', '-old\n+new\n'),
+    ('Write', {'file_path':'a.py','content':'new\n'}, 'write', {'path':'a.py','content':'new\n'}, 'Write a.py', '+new\n'),
+    ('MultiEdit', {'file_path':'a.py','edits':[{'old_string':'a\n','new_string':'b\n'},{'old_string':'c\n','new_string':'d\n'}]}, 'edit',
+     {'path':'a.py','edits':[{'old_string':'a\n','new_string':'b\n'},{'old_string':'c\n','new_string':'d\n'}]},
+     'Edit a.py', '-c\n+d\n'),
+    ('mcp__opaque', {'custom':['untouched']}, 'mcp__opaque', {'custom':['untouched']}, 'mcp__opaque', None),
 ])
-def test_claude_tool_names_arguments_and_diff_reach_shared_events(name, arguments, native, detail, patch):
+def test_claude_tool_names_arguments_and_diff_reach_shared_events(name, arguments, native, expected, title, patch):
     session=ClaudeSession(turn='turn', catching_up=False)
     record=TimedRecord(uuid='record',timestamp='2026-10-17T00:00:00+00:00')
     tool=ToolUse(id='call',name=name,input=arguments)
     active,=tool.updates(record,session)
     call=session.tools['call']
-    assert call.name==native and call.arguments==arguments and call.detail==detail
-    assert detail in active.detail
+    assert call.name==native and call.arguments==expected and call.title==title
+    assert active.detail == title
     result=ToolResult(tool_use_id='call',content=[{'type':'text','text':'done'}])
     completed,_=result.updates(record,session)
     started,ended=completed.events
-    assert started.raw_input==arguments and started.detail==detail
+    assert started.raw_input==expected and started.title==title
     if patch is None:
         assert ended.diff is None
     else:

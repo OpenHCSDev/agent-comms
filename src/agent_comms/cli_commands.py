@@ -92,8 +92,8 @@ def _tags(value: str) -> list[str]:
     return [tag.strip() for tag in value.split(",") if tag.strip()]
 
 
-def _tag_text(value: frozenset[str] | None) -> str:
-    return ', '.join(sorted(value or ()))
+def _tag_text(value: frozenset[str] | None) -> str | None:
+    return None if value is None else ', '.join(sorted(value))
 
 
 def _shell_words(value: str | None) -> list[str] | None:
@@ -129,16 +129,9 @@ class TargetField:
             'help', self.name.replace('_', ' ').capitalize())
 
     @property
-    def editor_default(self) -> str:
+    def editor_default(self):
         formatter = self.declaration.metadata['editor_format']
-        if formatter is not None:
-            return formatter(self.value)
-        if self.value is None:
-            return ''
-        if isinstance(self.value, DeclaredFamily):
-            return FieldCodec.encode(type(self.value))
-        encoded = FieldCodec.encode(self.value)
-        return encoded if isinstance(encoded, str) else json.dumps(encoded)
+        return formatter(self.value) if formatter else compile_decoder(self.annotation).encode_editor(self.value)
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
         """An unrestricted field does not declare a finite-choice editor."""
@@ -169,11 +162,11 @@ class ChoiceTargetField(TargetField):
         return ()
 
     @property
-    def choices(self) -> tuple[tuple[str, str], ...]:
+    def choices(self) -> tuple[tuple[str, str | None], ...]:
         return tuple((choice.name, choice.value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
-        options = (SessionConfigSelectOption(name=label, value=str(FieldCodec.encode(value)))
+        options = (SessionConfigSelectOption(name=label, value=compile_decoder(self.annotation).encode_editor(value))
                    for label, value in compile_decoder(self.annotation).editor_choices())
         return replace(self, options=tuple(options))
 
@@ -192,10 +185,11 @@ class CatalogTargetField(ChoiceTargetField):
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
         options = await catalogs.catalog_for(self.catalog).choices(selection)
-        return replace(self, options=tuple(options))
+        return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
+            value=compile_decoder(self.annotation).encode_editor(item.value)) for item in options))
 
     def value_schema(self) -> dict[str, object]:
-        return {'type': 'string', 'configuration': FieldCodec.encode(self.catalog)}
+        return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
 
 
 def option(
@@ -265,7 +259,7 @@ class TargetAction:
         return '\n'.join(filter(None, (commands[0].selection_confirmation(tuple(commands))
                                        for commands in groups.values())))
 
-    def edited(self, arguments: dict[str, str]) -> TargetAction:
+    def edited(self, arguments: dict[str, str | None]) -> TargetAction:
         return replace(self, bound=tuple(command.edited(type(command).editor_arguments(arguments))
                                         for command in self.bound))
 
@@ -327,7 +321,7 @@ class TargetEdit(Command):
     """Accepted editor values use the original declaration and fresh binding."""
     declaration: type[CliCommand]
     target: CommandTarget | str | tuple[CommandTarget | str, ...]
-    arguments: dict[str, str]
+    arguments: dict[str, str | None]
     confirmed: bool = False
     channel: str | dict[str, tuple[str, ...]] | None = None
     project: str | None = None
@@ -516,24 +510,14 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return ()
 
     @classmethod
-    def editor_arguments(cls, values: dict[str, str]) -> dict[str, object]:
+    def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
         hints = get_type_hints(cls)
         declared = {item.metadata.get('wire_name', item.name): item for item in fields(cls)}
         result = {}
         for key, text in values.items():
             item = declared[key]
-            annotation = hints[item.name]
             normalize = item.metadata['normalize']
-            if not text and type(None) in get_args(annotation):
-                result[key] = None
-            elif normalize is not None:
-                result[key] = normalize(text)
-            elif isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-                result[key] = {'kind': text}
-            elif FieldCodec.value_schema(annotation).get('type') == 'string' or str in get_args(annotation):
-                result[key] = text
-            else:
-                result[key] = json.loads(text)
+            result[key] = normalize(text) if normalize else compile_decoder(hints[item.name]).decode_editor(text)
         return result
 
     def confirmation(self) -> str:
@@ -1409,9 +1393,9 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     project: str = option("--project", parser_default_factory=os.getcwd)
-    model: str = option("--model", parser_default=NativeThreadDefaults.model,
+    model: str | None = option("--model", parser_default=NativeThreadDefaults.model,
                         catalog=ModelConfigOption)
-    thinking_level: type[ThinkingLevel] = option(
+    thinking_level: type[ThinkingLevel] | None = option(
         "--thinking-level", parser_default=NativeThreadDefaults.thinking_level,
         catalog=ThinkingLevelConfigOption)
 
@@ -1532,7 +1516,7 @@ class ContextCliCommand(CliCommand):
                 try:
                     payload = await connection.request("context")
                     native = FieldCodec.decode(NativeContextData, payload).require_session_file(
-                        owner.require_saved_session())
+                        owner.runtime.path)
                 except (OSError, ValueError, RuntimeError, RequestError) as error:
                     return context, None, str(error)
                 return context, native, None

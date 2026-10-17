@@ -86,13 +86,19 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
         "send({'type': 'response', 'command': 'get_state', 'id': state['id'], "
         "'success': True, 'data': {'nativeInputProofCapability': "
         "'pi-native-input-v1-live-only'}})\n"
+        "mode = json.loads(sys.stdin.readline())\n"
+        "assert mode['type'] == 'set_steering_mode' and mode['mode'] == 'all'\n"
+        "send({'type': 'response', 'command': mode['type'], 'success': True})\n"
         "prompt = json.loads(sys.stdin.readline())\n"
+        "assert prompt['type'] == 'prompt'\n"
         "send({'type': 'response', 'command': 'prompt', 'id': prompt['id'], 'success': True})\n"
         "send({'type': 'message_start', 'message': {'role': 'user', "
         "'content': prompt['message'], 'inputId': prompt['inputId']}})\n"
         f"for payload in {payloads!r}: send(payload)\n"
-        "sys.stdin.readline()  # postturn get_state\n"
-        "sys.stdin.readline()  # get_session_stats\n"
+        "state = json.loads(sys.stdin.readline())\n"
+        "assert state['type'] == 'get_state'\n"
+        "stats = json.loads(sys.stdin.readline())\n"
+        "assert stats['type'] == 'get_session_stats'\n"
         "send({'type': 'response', 'command': 'get_session_stats', 'success': True, "
         "'data': {'contextUsage': {'tokens': 33}}})\n"
     )
@@ -100,6 +106,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
     events = [
         event async for event in one_turn_events(str(stub), [], "task", str(tmp_path))
     ]
+    assert next(event for event in events if isinstance(event, ae.Done)).ok, events
     live = next(event for event in events if isinstance(event, ae.ToolEnd))
     assert live.diff.text == patch
 
