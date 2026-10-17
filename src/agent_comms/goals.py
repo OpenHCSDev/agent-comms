@@ -285,7 +285,6 @@ class ProblemGoalOrder(GoalOrder):
     def require_order(self, goal, goals, owner) -> None:
         todo = goals.todos.get(self.problem)
         todo.require_assignee(owner, goal.id)
-        todo.require_not_fired()
 
     def require_replacement(self, goal, goals, owner) -> None:
         goals.todos.get(self.problem).require_released_order(owner, goal.id)

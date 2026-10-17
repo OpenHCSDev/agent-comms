@@ -8,7 +8,6 @@ collaboration edges and thread goals remain separate authorities.
 from __future__ import annotations
 
 import sqlite3
-import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
@@ -21,7 +20,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, Index, TypedRow, TypedTable
+from .typed_table import Column, TypedRow, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
 
 
@@ -97,11 +96,6 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         pass
 
     @classmethod
-    def require_owner(cls, current: Todo) -> None:
-        if current.assignment is None:
-            raise TodoError("An open problem requires its owner and order at creation.")
-
-    @classmethod
     def assign(cls, current: Todo, proposed: Assignment) -> Todo:
         raise TodoConflict(current)
 
@@ -138,10 +132,6 @@ class DoneTodoState(TodoState):
         goal.order.require_close()
 
     @classmethod
-    def require_owner(cls, current):
-        pass
-
-    @classmethod
     def change(cls, current, command):
         raise TodoConflict(current)
 
@@ -161,12 +151,6 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
 
     def prepare(self, goals, current):
         pass
-
-    def publish_order(self, goals, current):
-        pass
-
-    def record_activity(self, current, at):
-        return replace(current, commanded_at=at)
 
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
@@ -198,52 +182,7 @@ class StrikeTodo(TodoOperation):
         current.require_commander(self.actor)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
-        struck = replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
-        return self.after_strike(current, struck)
-
-    def after_strike(self, current, struck):
-        if struck.strike_count >= 2:
-            raise TodoError("A second strike requires an atomic reassignment, not an unowned problem.")
-        return struck
-
-
-@dataclass(frozen=True)
-class ReassignStrikeTodo(StrikeTodo):
-    proposed: Assignment
-    deadline: EventTime
-
-    def prepare(self, goals, current):
-        goals.registry.require(self.proposed.owner).require_order_slot(self.proposed.generation, current.id)
-
-    def after_strike(self, current, struck):
-        if struck.strike_count < 2 or self.proposed.owner_identity == self.previous.owner_identity:
-            raise TodoError("The second strike takes this problem away from its failed owner.")
-        current.require_commander(self.proposed.parent_identity)
-        self.deadline.require_deadline()
-        return replace(current.assigned(self.proposed), strikes=struck.strikes, deadline=self.deadline)
-
-    def publish_order(self, goals, current):
-        from .goal_actions import ClearGoalAction, GoalPrecondition, OrderGoalAction
-
-        order = goals.registry.require(self.previous.owner).require_goal(self.previous.generation).order
-        goals.update_goal(self.proposed.owner, OrderGoalAction(
-            order=order, goal_id=self.proposed.generation,
-            expected_revision=current.revision, deadline=self.deadline, commander=self.proposed.parent))
-        goals.update_goal(self.previous.owner, ClearGoalAction(
-            expect=GoalPrecondition(goal_id=self.previous.generation)))
-
-
-@dataclass(frozen=True)
-class SweepTodo(TodoOperation):
-    actor: ThreadIncarnation
-
-    def apply(self, current):
-        current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
-        return replace(current, revision=current.revision + 1)
-
-    def record_activity(self, current, at):
-        return replace(current, swept_at=at)
+        return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -273,29 +212,13 @@ class Todo(TypedTable):
     assignment: Assignment | None
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
     strikes: tuple[StrikeTodo, ...] = ()
-    commanded_at: EventTime = field(default_factory=UnrecordedEventTime)
-    swept_at: EventTime = field(default_factory=UnrecordedEventTime)
-    commanded_stamp: float | None = field(default=None, init=False, compare=False,
-        metadata={"sql": Column(generated="json_extract(commanded_at,'$.at')")})
-    indexes = (Index(("creator", "creator_created", "commanded_stamp")), Index(("state",)))
-
-    def __post_init__(self) -> None:
-        self.state.require_owner(self)
-
     @property
     def creator_identity(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.creator, self.creator_created)
 
     @property
     def strike_count(self) -> int:
-        return self.strikes_for(self.assignment.owner_identity) if self.assignment else 0
-
-    def strikes_for(self, owner: ThreadIncarnation) -> int:
-        return sum(strike.previous.owner_identity == owner for strike in self.strikes)
-
-    def require_not_fired(self) -> None:
-        if self.strike_count >= 2:
-            raise TodoError("Two strikes take the problem away; reassign it before running work.")
+        return sum(strike.previous == self.assignment for strike in self.strikes)
 
     def require_result(self, result: Todo) -> None:
         if self != result:
@@ -314,9 +237,6 @@ class Todo(TypedTable):
             raise TodoConflict(self)
 
     def assigned(self, proposed: Assignment) -> Todo:
-        self.require_commander(proposed.parent_identity)
-        if self.strikes_for(proposed.owner_identity) >= 2:
-            raise TodoError("This owner has two strikes on the problem; choose another owner.")
         if self.assignment is not None:
             self.assignment.require_successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
@@ -346,11 +266,6 @@ class Todo(TypedTable):
                 deadline=proposed.deadline,
             )
         )
-
-
-@dataclass(frozen=True)
-class TodoReference(TypedRow):
-    id: str
 
 
 @dataclass(frozen=True)
@@ -448,26 +363,6 @@ class TodoStore:
         with closing(self._connect()) as db:
             return self._current(db, todo_id)
 
-    def unowned(self) -> tuple[str, ...]:
-        state, = Todo._fields_named(("state",))
-        with closing(self._connect()) as db:
-            return tuple(row.id for row in TodoReference.read(db.execute(
-                f'SELECT id FROM "{Todo.declared_name}" WHERE assignment IS NULL AND state<>?',
-                (state.encode(DoneTodoState),))))
-
-    def commander_activity(self, creator: ThreadIncarnation) -> EventTime:
-        with closing(self._connect()) as db:
-            row, = Todo.read(db.execute(f'SELECT * FROM "{Todo.declared_name}" '
-                'WHERE creator=? AND creator_created=? ORDER BY commanded_stamp DESC LIMIT 1',
-                (creator.name, creator.created_at)))
-            return row.commanded_at
-
-    def open_problems(self) -> tuple[Todo, ...]:
-        state, = Todo._fields_named(("state",))
-        with closing(self._connect()) as db:
-            return tuple(Todo.select(db, where="state<>? AND assignment IS NOT NULL",
-                                     parameters=(state.encode(DoneTodoState),)))
-
     def list(self, repo: str) -> tuple[Todo, ...]:
         with closing(self._connect()) as db:
             return tuple(
@@ -510,7 +405,6 @@ class TodoStore:
             assignment=Assignment(assignee.name, assignee.created_at,
                                   identity.name, identity.created_at, generation),
             deadline=deadline,
-            commanded_at=EventTime.capture(time.time()),
         )
         with self._write() as db:
             proposed.insert_if_absent(db)
@@ -525,7 +419,7 @@ class TodoStore:
             result = command.apply(current)
             if result == current:
                 return current
-            command.record_activity(result, EventTime.capture(time.time())).upsert(db)
+            result.upsert(db)
             return self._current(db, todo_id)
 
     def assign(

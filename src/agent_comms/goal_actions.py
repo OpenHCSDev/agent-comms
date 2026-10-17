@@ -461,16 +461,14 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OrderGoalAction(GoalAction, RuntimeInvocable):
+class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
     order: ProblemGoalOrder
     goal_id: str
-    expected_revision: int
     deadline: EventTime
     commander: str
-    def reserve(self, ctx):
-        return ctx.goals.todos.assign(self.order.problem, expected_revision=self.expected_revision,
-            owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
-            generation=self.goal_id, deadline=self.deadline)
+
+    @abstractmethod
+    def reserve(self, ctx): ...
 
     def change(self, ctx):
         ctx.thread.require_order_slot(self.goal_id, self.order.problem)
@@ -483,7 +481,17 @@ class OrderGoalAction(GoalAction, RuntimeInvocable):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CreateProblemGoalAction(OrderGoalAction):
+class OrderGoalAction(ProblemOrderGoalAction):
+    expected_revision: int
+
+    def reserve(self, ctx):
+        return ctx.goals.todos.assign(self.order.problem, expected_revision=self.expected_revision,
+            owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
+            generation=self.goal_id, deadline=self.deadline)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CreateProblemGoalAction(ProblemOrderGoalAction):
     repo: str
     text: str
 
