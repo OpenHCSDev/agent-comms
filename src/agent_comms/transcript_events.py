@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import Any
+from urllib.parse import quote
 
+from . import tool_declaration
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
-from .tool_results import ToolDiff, ToolText
+from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 
 
@@ -159,11 +163,6 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
 
     def tool_content(self, tool_call_id):
         """Encode the Send report only at its actual ACP output boundary."""
-        import json
-        from urllib.parse import quote
-        from .field_codec import FieldCodec
-        from .tool_results import SENT_MESSAGE_MIME
-
         return {"type": "content", "content": {
             "type": "resource", "resource": {
                 "uri": f"agent-comms:///messages/{self.source.seq}/{quote(self.source.message_id, safe='')}",
@@ -195,15 +194,11 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
 
     @property
     def title(self) -> str:
-        from .tool_declaration import ToolDeclaration
-
-        return ToolDeclaration.caption(self.tool_name)
+        return tool_declaration.ToolDeclaration.caption(self.tool_name)
 
     @property
     def kind(self) -> str:
-        from .tool_declaration import ToolDeclaration
-
-        return ToolDeclaration.for_name(self.tool_name).acp_kind
+        return tool_declaration.ToolDeclaration.for_name(self.tool_name).acp_kind
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -213,9 +208,7 @@ class ToolStartTranscript(ToolTranscript):
 
     @property
     def title(self) -> str:
-        from .tool_declaration import ToolDeclaration
-
-        return ToolDeclaration.caption(self.tool_name, self.detail)
+        return tool_declaration.ToolDeclaration.caption(self.tool_name, self.detail)
 
 
 @dataclass(frozen=True, kw_only=True)
