@@ -54,14 +54,14 @@ class Channel:
                 raise ValueError("Built-in channels cannot have tag filters.")
             if self.parent is not None or self.archived:
                 raise ValueError("Built-in channels cannot be grouped or archived.")
-        elif self.view is not None:
+        elif self.read_only:
             if name != f"#{self.view.name}" or self.tags != self.view.predicate.tags:
                 raise ValueError("Saved projection must retain its declaration identity.")
         elif self.tags != frozenset({name.removeprefix("#")}):
             raise ValueError("A routable channel must be its exact tag.")
 
     def matches(self, tags: frozenset[str]) -> bool:
-        if self.view is not None:
+        if self.read_only:
             return self.view.predicate.matches(tags)
         builtin = self.builtin
         return builtin.matches(tags) if builtin is not None else bool(self.tags & tags)
@@ -79,17 +79,21 @@ class Channel:
         builtin = self.builtin
         return builtin is not None and builtin.aggregate
 
+    @property
+    def read_only(self) -> bool:
+        return self.view is not None
+
     def require_routable(self) -> None:
-        if self.aggregate or self.view is not None:
+        if self.aggregate or self.read_only:
             raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
 
     @property
     def exact(self) -> bool:
-        return self.view is None and self.builtin is None
+        return not self.read_only and self.builtin is None
 
     @property
     def history_targets(self) -> frozenset[str] | None:
-        if self.view is not None:
+        if self.read_only:
             return self.view.history_targets
         builtin = self.builtin
         return builtin.history_targets if builtin is not None else frozenset({self.name})
