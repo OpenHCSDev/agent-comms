@@ -127,7 +127,7 @@ def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path):
         # Deliberate index corruption, not a normal writer: STRICT protects
         # storage types and the version CHECK must be bypassed to inject it.
         db.execute("PRAGMA ignore_check_constraints=ON")
-        db.execute("UPDATE candidate_checkpoint SET version=4")
+        db.execute("UPDATE candidate_checkpoint SET version=999")
     with pytest.raises(ProjectionRebuildRequiredError):
         index.page(root_id=root_id, recipient_lookup=lookup['Alice'], after_seq=0,
                    required_through_seq=message.seq)
