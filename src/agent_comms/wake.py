@@ -42,10 +42,16 @@ class WakeDecision:
     def __post_init__(self) -> None:
         if not isinstance(self.recipient, str) or not self.recipient:
             raise ValueError("decision recipient requires a stable lookup.")
-        if type(self.audience) is not MessageAudience or not isinstance(self.wake_mode, WakePolicy):
-            raise TypeError("wake decision requires MessageAudience and a nominal WakePolicy.")
+        if type(self.audience) is not MessageAudience:
+            raise TypeError("wake decision requires MessageAudience.")
         if self.audience.observer and self.wake_mode.active:
             raise ValueError("observer decisions must be passive")
+
+    def to_wire(self) -> dict[str, str]:
+        if self.audience.observer:
+            return {"recipient_lookup": self.recipient, "no_wake": "unmentioned_observer"}
+        return {"recipient_lookup": self.recipient, "audience": self.audience.value,
+                "wake_mode": self.wake_mode.declared_name}
 
     def initial_notification(self, recipient, *, observation):
         return self.wake_mode.initial_state().notification(

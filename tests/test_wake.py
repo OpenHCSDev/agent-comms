@@ -9,6 +9,7 @@ from typing import Type
 from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from agent_comms.comms import wire
 from agent_comms.coordination_tables.assignments import MessageAudience
+from agent_comms.field_codec import FieldCodec
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import AckKind, HandoffKind, InfoKind, MembershipChange, Message, MessageKind
 from agent_comms.obligation_states import SilentResponse
@@ -206,7 +207,6 @@ def test_no_wake_is_not_a_passive_claim_and_decisions_are_strictly_typed() -> No
     mentioned = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
     observer = decide(mentioned, "lookup-alpha")
     assert observer == WakeDecision("lookup-alpha", MessageAudience.OBSERVER, PassiveWake())
-    assert isinstance(observer, WakeDecision)
     assert observer.wake_mode == PassiveWake()
     assert observer.audience is MessageAudience.OBSERVER
     assert MEMBERS[0] in audience(mentioned).recipients
@@ -215,10 +215,10 @@ def test_no_wake_is_not_a_passive_claim_and_decisions_are_strictly_typed() -> No
         WakeDecision("", MessageAudience.DIRECT, FullWake())
     with pytest.raises(ValueError, match="stable lookup"):
         WakeDecision("", MessageAudience.OBSERVER, PassiveWake())
-    with pytest.raises(TypeError, match="MessageAudience and a nominal WakePolicy"):
+    with pytest.raises(TypeError, match="MessageAudience"):
         WakeDecision("lookup-alpha", "direct", FullWake())  # type: ignore[arg-type]
-    with pytest.raises(TypeError, match="MessageAudience and a nominal WakePolicy"):
-        WakeDecision("lookup-alpha", MessageAudience.DIRECT, "full")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="family object"):
+        FieldCodec.decode(WakeDecision, {"recipient": "lookup-alpha", "audience": "direct", "wake_mode": "full"})
     with pytest.raises(TypeError, match="MessageAudience"):
         WakeDecision("lookup-alpha", "observer", PassiveWake())  # type: ignore[arg-type]
 

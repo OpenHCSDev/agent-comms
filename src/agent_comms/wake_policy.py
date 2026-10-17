@@ -62,7 +62,8 @@ class Engagement(DeclaredFamily, affix="Engagement"):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls.policy.engagement_type = cls
+        if "policy" in cls.__dict__:
+            cls.policy.engagement_type = cls
 
     def __post_init__(self):
         if not self.execution_id or not self.exact_target:

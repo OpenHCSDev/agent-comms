@@ -87,22 +87,8 @@ def reject_private_wire_fields(record: Mapping[str, object]) -> None:
         raise ValueError("Bus-private wire fields cannot be exported.")
 
 
-def _decision_wire(decision: WakeDecision) -> dict[str, str]:
-    from .wake import WakeDecision
-
-    if type(decision) is not WakeDecision:
-        raise TypeError("Only typed, pure full-cohort decisions may be committed.")
-    if decision.audience.observer:
-        return {"recipient_lookup": decision.recipient, "no_wake": "unmentioned_observer"}
-    return {
-        "recipient_lookup": decision.recipient,
-        "audience": decision.audience.value,
-        "wake_mode": decision.wake_mode.declared_name,
-    }
-
-
 def decisions_wire(decisions: tuple[WakeDecision, ...]) -> list[dict[str, str]]:
-    return [_decision_wire(decision) for decision in decisions]
+    return [decision.to_wire() for decision in decisions]
 
 
 def decisions_digest(decisions: list[dict[str, str]]) -> str:

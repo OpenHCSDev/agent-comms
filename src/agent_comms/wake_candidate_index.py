@@ -27,7 +27,6 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable, sql_literal
 from .coordination_tables.assignments import MessageAudience
-from .wake import WakeDecision
 from .wire_log import OpenedWireSnapshot, WireLog
 from .wire_metadata import WireRootIdText
 from .wire_record import WireRecord
@@ -219,8 +218,6 @@ class WakeCandidateIndex(TypedStore):
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
             ):
-                if type(decision) is not WakeDecision:
-                    raise ProjectionUnavailableError("unknown candidate wake decision")
                 rows.append(
                     Candidate(
                         message.seq,

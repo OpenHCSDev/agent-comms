@@ -59,7 +59,6 @@ from agent_comms.typed_table import (
     TypedTable,
     ForeignKey,
 )
-from agent_comms.wake import WakeDecision
 
 
 class ResponseTable:
@@ -430,7 +429,7 @@ def _require_cohort_assignments(
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
             )
-            if type(decision) is WakeDecision
+            if not decision.audience.observer
         }
         if initial.wire_root_id != wire_root_id or assignment.source != initial.message.reference:
             raise IdentityConflict("response claim conflicts with original bus source")

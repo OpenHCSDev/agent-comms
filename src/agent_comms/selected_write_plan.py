@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
 
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
@@ -197,13 +196,9 @@ class SelectedWritePlans:
             lookup = owner.incarnation.lookup
             with Coordination(str(self.comms.root / "coordination.sqlite3")) as store:
                 assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
-                selected = [
-                    assignment
-                    for assignment in assignments
-                    if assignment.source == MessageReference(source_seq, source_message_id)
-                    and assignment.recipient == owner.name
-                    and isinstance(assignment.lifecycle, FullPendingAssignment)
-                ]
+                reference = MessageReference(source_seq, source_message_id)
+                selected = [chosen for assignment in assignments
+                            if (chosen := assignment.lifecycle.selected_write(assignment, reference, owner.name)) is not None]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")
             path = ExistingFileClaim(Path(resource)).normalized(Path(owner.worktree))

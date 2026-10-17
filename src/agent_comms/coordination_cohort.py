@@ -33,7 +33,6 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
-from agent_comms.wake import WakeDecision
 
 _LOG = logging.getLogger(__name__)
 
@@ -63,8 +62,6 @@ def _expected_assignments(
             raise IntegrityViolationError("bus decision does not match frozen N")
         if decision.audience.observer:
             continue
-        if type(decision) is not WakeDecision:
-            raise IntegrityViolationError("bus decision has an unsupported kind")
         result.append(
             WakeAssignment(
                 assignment_id=_assignment_id(

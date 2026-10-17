@@ -150,14 +150,12 @@ class SourceCoverage:
                     break
                 if decision.audience.observer:
                     no_wake.append(seq)
-                elif type(decision) is WakeDecision:
+                else:
                     evidence = self._selected_inputs(seq, recipient, decision, receipt, source_reads)
                     if not evidence:
                         blocked = seq
                         break
                     inputs.extend(evidence)
-                else:
-                    raise IdentityConflict("unsupported frozen wake decision")
                 covered = seq
             if blocked is None:
                 covered = max(covered, horizon)

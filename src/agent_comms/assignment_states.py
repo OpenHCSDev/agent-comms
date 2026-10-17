@@ -10,6 +10,7 @@ from typing import ClassVar
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .message_reference import MessageReference
 from .notification_progress import UnrecordedProgress
 from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
@@ -17,6 +18,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
+    from .coordination_tables.assignments import WakeAssignment
 
 
 @dataclass(frozen=True)
@@ -72,8 +74,27 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def reserve_triage(self) -> AssignmentState:
         raise IdentityConflict("triage claim changed before native batch reservation")
 
+    def completion(self) -> Engagement | None:
+        return None
+
+    @property
+    def completed(self) -> bool:
+        return self.completion() is not None
+
+    @property
+    def pending(self) -> bool:
+        """An unbound assignment with a declared next transition remains pending."""
+        return self.execution_id is None and bool(self.successors())
+
     def require_completion(self) -> Engagement:
-        raise IdentityConflict("wake assignment is not completed")
+        completion = self.completion()
+        if completion is None:
+            raise IdentityConflict("wake assignment is not completed")
+        return completion
+
+    def selected_write(self, assignment: WakeAssignment, reference: MessageReference,
+                       recipient: str) -> WakeAssignment | None:
+        return None
 
     notification_state: ClassVar[str] = "Sent"
     notification_detail: ClassVar[str] = ""
@@ -175,7 +196,8 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
 class InitialAssignment:
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls.policy.initial_state = cls
+        if "policy" in cls.__dict__:
+            cls.policy.initial_state = cls
 
 
 class PassiveAssignment(InitialAssignment, AssignmentState):
@@ -265,18 +287,17 @@ class TriagePendingAssignment(InitialAssignment, PendingNotification, Assignment
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
         return self.mode.triage_expectation(), "No response obligation exists until triage engages."
 
-    notification_state = "Sent"
-    notification_detail = ""
-
     @classmethod
     def successors(cls):
         return IgnoredAssignment, EngagedAssignment, DeferredAssignment, FailedAssignment
 
 
 class FullPendingAssignment(InitialAssignment, PendingNotification, AssignmentState):
+    def selected_write(self, assignment: WakeAssignment, reference: MessageReference,
+                       recipient: str) -> WakeAssignment | None:
+        return assignment if (assignment.source, assignment.recipient) == (reference, recipient) else None
+
     policy = FullWake
-    notification_state = "Sent"
-    notification_detail = ""
 
     @classmethod
     def successors(cls):
@@ -332,11 +353,7 @@ class AssignmentDecision:
 
     @classmethod
     def binding_expression(cls) -> str:
-        active = ",".join(
-            sql_literal(member)
-            for member in WakePolicy.members_with(WakePolicy)
-            if not issubclass(member, PassiveWake)
-        )
+        active = ",".join(sql_literal(member.policy) for member in Engagement.members_with(Engagement))
         return (
             f"wake_mode IN ({active}) AND ((execution_id IS NULL AND exact_target IS NULL) "
             "OR (execution_id IS NOT NULL AND exact_target IS NOT NULL))"
@@ -425,7 +442,7 @@ class CompletedAssignment(BoundAssignment):
         )
         return activity.completed_notification(notification)
 
-    def require_completion(self) -> Engagement:
+    def completion(self) -> Engagement:
         return self.decision
 
     notification_priority = 2
