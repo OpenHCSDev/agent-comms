@@ -32,10 +32,10 @@ class ToolDiff:
 
     @classmethod
     def from_versions(cls, path: str, before: str, after: str, *,
-                      before_path: str | None = None, after_path: str | None = None) -> ToolDiff:
+                      before_path: str | None = None, after_path: str | None = None) -> ToolDiff | None:
         lines = tuple(unified_diff(before.splitlines(), after.splitlines(),
             fromfile=before_path or path, tofile=after_path or path, lineterm=''))
-        return cls('\n'.join(lines) + ('\n' if lines else ''))
+        return cls('\n'.join(lines) + '\n') if lines else None
 
     @property
     def mime_type(self) -> str:

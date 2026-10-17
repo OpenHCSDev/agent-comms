@@ -259,8 +259,8 @@ class ClaudeEditArguments(ClaudePathArguments):
         return value if 'edits' in value else {**value, 'edits': [value]}
 
     def diff(self) -> ToolDiff:
-        return ToolDiff(''.join(ToolDiff.from_versions(self.detail, edit.old_string, edit.new_string).text
-                                for edit in self.edits))
+        return ToolDiff(''.join(patch.text for edit in self.edits
+            if (patch := ToolDiff.from_versions(self.detail, edit.old_string, edit.new_string)) is not None))
 
 
 class ClaudeWriteArguments(ClaudePathArguments):
