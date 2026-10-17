@@ -269,7 +269,7 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     restarted = wire(tmp_path)
     assert restarted.channels.catalog.read().resolve("#child").parent is None
     assert not restarted.channels.catalog.read().resolve("#api").archived
-    assert [message.body for message in restarted.views.channel_history("#api")] == [
+    assert [message.body for message in list(restarted.views.channel_history_page("#api").messages)] == [
         "target-owned historical row"
     ]
     assert restarted.channels.catalog.read().saved_views["cross-team"].predicate.tags == {"docs"}
@@ -537,15 +537,15 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
         )
     )
     comms.channels.update_tags("moving", add=frozenset({"api"}))
-    joined = comms.views.channel_history("#api")
+    joined = list(comms.views.channel_history_page("#api").messages)
     assert len(joined) == 1 and joined[0].membership.value == "joined"
     assert joined[0].body == "moving joined #api" and not joined[0].starts_turn
     assert "moving" not in comms.views.last_sent_timestamps()
     comms.channels.update_tags("moving", add=frozenset({"ui"}))
     comms.channels.update_tags("moving", remove=frozenset({"api"}))
-    assert len(comms.views.channel_history("#api")) == 2
+    assert len(list(comms.views.channel_history_page("#api").messages)) == 2
     comms.channels.update_tags("moving", remove=frozenset({"ui"}))
-    history = wire(tmp_path).views.channel_history("#api")
+    history = list(wire(tmp_path).views.channel_history_page("#api").messages)
     assert [message.membership.value for message in history] == ["joined", "left"]
     assert all(not message.starts_turn for message in history)
     assert not comms.views.coordination_snapshot().participants("#api")

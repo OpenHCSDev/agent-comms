@@ -471,7 +471,7 @@ class TestHandlers:
             session_id="proj", prompt=[{"type": "text", "text": "!relay hello all"}]
         )
         assert response.stop_reason == "end_turn"
-        history = agent._comms.views.channel_history("#all")
+        history = list(agent._comms.views.channel_history_page("#all").messages)
         assert [m.body for m in history] == ["hello all"]
 
     async def test_unknown_session_fails_closed(self, tmp_path):
@@ -1494,7 +1494,7 @@ class TestWireProtocol:
         assert responses[2]["result"]["sessionId"] == "proj"
         assert responses[3]["result"]["stopReason"] == "end_turn"
         assert "proj" in comms.registry
-        assert [m.body for m in comms.views.channel_history("#all")] == ["anyone alive?"]
+        assert [m.body for m in list(comms.views.channel_history_page("#all").messages)] == ["anyone alive?"]
 
 
 class TestLiveDrain:
@@ -1522,7 +1522,7 @@ class TestFullHistory:
         comms.messaging.send("a", "#all", "one")
         comms.messaging.send("a", "b", "dm")
         comms.messaging.send("b", "#x", "tagged")
-        bodies = [(m.sender, m.target, m.body) for m in comms.views.full_history()]
+        bodies = [(m.sender, m.target, m.body) for m in list(comms.views.full_history_page().messages)]
         assert bodies == [("a", "#all", "one"), ("a", "b", "dm"), ("b", "#x", "tagged")]
 
 
@@ -1690,7 +1690,7 @@ class TestTargetPrefix:
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])
         assert wired.bus.pending_count("peer") == 1
         assert wired.bus.pending_count("PR111") == 0
-        assert [m.body for m in wired.views.dm_history("proj", "peer")] == ["hi peer"]
+        assert [m.body for m in list(wired.views.dm_history_page("proj", "peer").messages)] == ["hi peer"]
 
 
 class TestFailureFeedback:
@@ -1717,7 +1717,7 @@ class TestFailureFeedback:
         origin = Message(sender="peer", target="#team", body="do the work", type=InfoKind)
         with pytest.raises(RequestError, match="Internal error"):
             await agent.turns.run_agent_turn("proj", "proj", "do the work", origins=(origin,))
-        history = wired.views.channel_history("#team")
+        history = list(wired.views.channel_history_page("#team").messages)
         assert history, "failed agent delivery must be reported where the request came from"
         notice = history[-1]
         assert notice.notice is True
@@ -1759,9 +1759,9 @@ class TestFailureFeedback:
                 "proj", "proj", "answer", origins=(origin,)
             )
         history = (
-            wired.views.channel_history(reply_target)
+            list(wired.views.channel_history_page(reply_target).messages)
             if channel
-            else wired.views.dm_history("proj", human.name)
+            else list(wired.views.dm_history_page("proj", human.name).messages)
         )
         assert len(history) == 1
         assert history[0].notice is True
@@ -1796,7 +1796,7 @@ class TestFailureFeedback:
             await agent.turns.run_agent_turn(
                 "proj", "proj", "answer", origins=(origin,)
             )
-        history = wired.views.dm_history("proj", human.name)
+        history = list(wired.views.dm_history_page("proj", human.name).messages)
         assert len(history) == 1
         assert history[0].notice is True
         assert history[0].body.startswith("Request failed: backend turn did not complete. ")
@@ -1831,7 +1831,7 @@ class TestFailureFeedback:
         assert all(
             (
                 "foreign earlier turn" not in message.body
-                for message in wired.views.channel_history("#team")
+                for message in list(wired.views.channel_history_page("#team").messages)
             )
         )
 
@@ -1857,7 +1857,7 @@ class TestFailureFeedback:
             await agent.turns.run_agent_turn(
                 "proj", "proj", "answer", origins=(origin,)
             )
-        history = wired.views.full_history()
+        history = list(wired.views.full_history_page().messages)
         assert len(history) == 1
         assert {message.target for message in history} == {"#team"}
         assert all((message.notice and (not message.starts_turn) for message in history))

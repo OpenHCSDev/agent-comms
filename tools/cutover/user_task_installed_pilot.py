@@ -36,7 +36,7 @@ def main():
         assert all(not owner.pid and owner.turn_lease is None
                    for owner in snapshot.threads.values())
         results.append({'journey': name, 'state': 'PASS',
-                        'wire_rows': len(service.bus.log.full_history())})
+                        'wire_rows': len(list(service.bus.full_history_page().messages))})
     modules = ('task_sources.py', 'messaging.py', 'messages.py', 'retained_task_facts.py')
     hashes = {}
     for name in modules:

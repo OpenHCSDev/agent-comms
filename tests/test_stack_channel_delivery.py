@@ -212,7 +212,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 ]
                 assert [event.text for event in incoming] == [origin.body for origin in messages]
             if case in {"deliver", "rename", "batch_rename"}:
-                assert comms.views.channel_history("#team")[-1].body == "RECEIVED"
+                assert list(comms.views.channel_history_page("#team").messages)[-1].body == "RECEIVED"
             if not success:
                 updates = []
 

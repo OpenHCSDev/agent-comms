@@ -105,28 +105,28 @@ class TestHistory:
         chat.messaging.send("PR111", "fixer", "hello")
         chat.messaging.send("fixer", "PR111", "hi back")
         chat.messaging.send("PR111", "PR112", "unrelated")
-        history = [m.body for m in chat.views.dm_history("PR111", "fixer")]
+        history = [m.body for m in list(chat.views.dm_history_page("PR111", "fixer").messages)]
         assert history == ["hello", "hi back"]
 
     def test_dm_history_requires_registered_threads(self, chat):
         with pytest.raises(UnregisteredThreadError):
-            chat.views.dm_history("PR111", "ghost")
+            list(chat.views.dm_history_page("PR111", "ghost").messages)
 
     def test_channel_history_returns_all(self, chat):
         chat.messaging.send("PR111", "#ci", "one")
         chat.messaging.send("fixer", "#ci", "two")
         chat.messaging.send("PR111", "#all", "three")
-        assert [m.body for m in chat.views.channel_history("#ci")] == ["one", "two"]
+        assert [m.body for m in list(chat.views.channel_history_page("#ci").messages)] == ["one", "two"]
 
     def test_global_channel_history(self, chat):
         chat.messaging.send("PR111", "#all", "hello")
-        assert [m.body for m in chat.views.channel_history("#all")] == ["hello"]
+        assert [m.body for m in list(chat.views.channel_history_page("#all").messages)] == ["hello"]
         with pytest.raises(ValueError, match="not a channel"):
-            chat.views.channel_history("broadcast")
+            list(chat.views.channel_history_page("broadcast").messages)
 
     def test_channel_history_rejects_dm_target(self, chat):
         with pytest.raises(ValueError, match="not a channel"):
-            chat.views.channel_history("fixer")
+            list(chat.views.channel_history_page("fixer").messages)
 
 
 class TestChannelsDerived:

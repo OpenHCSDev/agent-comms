@@ -30,8 +30,8 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     current = comms.views.message_notifications_for_references((message.reference,))[(message.seq, message.message_id)]
     assert [(row.recipient, row.state) for row in current] == [("beta", "Sent")]
     assert comms.registry.require("beta").active_turn is None
-    assert original.message in comms.views.channel_history("#team")
-    assert message in comms.views.channel_history("#team")
+    assert original.message in list(comms.views.channel_history_page("#team").messages)
+    assert message in list(comms.views.channel_history_page("#team").messages)
     assert not (root / "acp_passive_channel_awareness.json").exists()
 
 

@@ -129,7 +129,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         for _ in range(20):
             await agent.inputs.drain_inbox(owner.name)
         assert agent.cursors.delivery(owner.name).revision == settled_revision
-        assert comms.views.full_history() == []  # No input submitted or replayed.
+        assert list(comms.views.full_history_page().messages) == []  # No input submitted or replayed.
     finally:
         for task in agent.inputs.drain_tasks.values():
             task.cancel()
