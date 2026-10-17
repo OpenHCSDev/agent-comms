@@ -293,7 +293,7 @@ class MessageBus:
         if not rows:
             return ()
         first = {
-            relation.peer.incarnation.lookup
+            relation.peer.lookup
             for relation in relations
             if relation.relevance.grants(Prioritized)
         }

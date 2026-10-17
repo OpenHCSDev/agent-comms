@@ -778,8 +778,10 @@ class ThreadRelationships:
 
     def context_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Open contacts, the parent and current-incarnation recent direct work."""
-        registry = self.registry.snapshot()
-        thread = registry.require(owner)
+        with _store_lock(self._wire_lock_path, shared=True):
+            registry = self.registry.snapshot()
+            thread = registry.require(owner)
+            relations = self.peer_relations(owner)
         messages, _ = self._recent_messages()
         correspondents = set()
         for message in messages:
@@ -790,7 +792,7 @@ class ThreadRelationships:
             person = registry.threads.get(peer)
             if person is not None and message.timestamp >= max(thread.created_at, person.created_at):
                 correspondents.add(person.incarnation)
-        return tuple(relation for relation in self.peer_relations(owner)
+        return tuple(relation for relation in relations
                      if relation.records or relation.peer.name == thread.parent
                      or relation.peer in correspondents)
 
