@@ -8,6 +8,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import threading
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -51,7 +52,7 @@ async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, di
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", race)
     with pytest.raises(StaleFence):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
         ).run()
     assert calls == []
 
@@ -150,7 +151,7 @@ async def test_actual_raw_writes_follow_committed_admission_without_global_exclu
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
         ).run()
     if revoke:
         assert observed == []
@@ -260,7 +261,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
                 root=root,
                 wire_root_id=root_id,
                 owner_name=owner.name,
-                native_package=directory,
+                native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
             ).run()
         )
         error = asyncio.CancelledError if "cancel" in mode else native_pi.NativePiUnavailable
@@ -282,7 +283,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         if mode not in {"lifecycle", "preflight-drain"}:
             assert (
                 await SelectedExecution(
-                    root=root, wire_root_id=root_id, owner_name=owner.name, native_package=directory
+                    root=root, wire_root_id=root_id, owner_name=owner.name, native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
                 ).run()
                 is None
             )
@@ -396,7 +397,7 @@ async def test_short_admission_contention_sends_once_after_release(
     # admission only, not a native context or successful model response.
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
         ).run()
     if revoke:
         assert not received.exists() or not received.read_text()
@@ -405,75 +406,6 @@ async def test_short_admission_contention_sends_once_after_release(
     assert received.exists() and received.read_text()
     assert json.loads(received.read_text())["type"] == "prompt"
     assert admissions == [received.read_bytes()]
-
-
-@pytest.mark.parametrize("cancel", [False, True])
-def test_busy_admission_does_not_spend_write_budget_and_cancel_proves_no_bytes(cancel):
-    import threading
-    import time
-
-    calls = []
-    cancelled = threading.Event()
-    release = threading.Event()
-
-    @contextmanager
-    def busy():
-        calls.append(1)
-        if not release.is_set():
-            raise native_prompt_send.PromptAdmissionBusy("held by another owner")
-        yield
-
-    read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
-    timer = threading.Timer(0.08, cancelled.set if cancel else release.set)
-    try:
-        timer.start()
-        start = time.monotonic()
-        if cancel:
-            with pytest.raises(native_prompt_send.PromptSendNotWritten,match="before writing") as caught:
-                native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02,PublicationMeasurements())
-            assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
-            with pytest.raises(BlockingIOError):
-                os.read(read_fd,10)
-        else:
-            native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02,PublicationMeasurements())
-            assert os.read(read_fd,100)==b"prompt\n"
-        assert time.monotonic() - start < 1
-        assert len(calls) > 1
-    finally:
-        if timer:
-            timer.cancel()
-            timer.join()
-        os.close(read_fd)
-        os.close(write_fd)
-
-
-def test_admitted_write_never_reenters_after_busy_post_write_failure():
-    import threading
-    import time
-
-    entered = []
-
-    @contextmanager
-    def boundary():
-        entered.append(1)
-        yield
-        raise native_prompt_send.PromptAdmissionBusy("post-write failure is not retryable")
-
-    read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
-    try:
-        with pytest.raises(
-            native_prompt_send.PromptSendUnknown,
-            match="PromptAdmissionBusy: post-write failure is not retryable",
-        ) as caught:
-            native_prompt_send._write_fenced(
-                write_fd, b"one prompt\n", boundary, threading.Event(), 1, PublicationMeasurements()
-            )
-        assert entered == [1]
-        assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
-        assert os.read(read_fd, 100) == b"one prompt\n"
-    finally:
-        os.close(read_fd)
-        os.close(write_fd)
 
 
 def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
@@ -551,39 +483,39 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
 
     def probe(fd, payload, boundary, cancelled, deadline, measurements):
         path = root / "coordination.sqlite3"
-        reader = sqlite3.connect(path, isolation_level=None, timeout=0)
+        reader = sqlite3.connect(path, isolation_level=None, timeout=0, check_same_thread=False)
         reader.execute("BEGIN")
         reader.execute("SELECT * FROM native_runtime_input").fetchall()
 
+        def release_reader():
+            assert not received.exists()
+            reader.execute("ROLLBACK")
+            observations.append("reader released before bytes")
+
+        release = threading.Timer(0.1, release_reader)
+        release.start()
+
         @contextmanager
         def checked_admission():
-            try:
-                with boundary():
-                    assert observations == ["reader refused before bytes"]
-                    # The exact epoch has committed before any raw byte. A
-                    # later reader borrows it without blocking this pipe writer.
-                    late = sqlite3.connect(path, isolation_level=None, timeout=0)
-                    try:
-                        epochs = late.execute(
-                            "SELECT sent_owner_admission_generation FROM native_runtime_input"
-                        ).fetchall()
-                        assert len(epochs) == 1 and epochs[0][0] is not None
-                    finally:
-                        late.close()
-                    assert _held(root) == []
-                    observations.append("original admission committed and released")
-                    yield
-            except native_prompt_send.PromptAdmissionBusy:
-                assert observations == []
-                assert not received.exists()  # No raw prompt has reached the child.
-                observations.append("reader refused before bytes")
-                reader.execute("ROLLBACK")
-                raise
+            with boundary():
+                assert observations == ["reader released before bytes"]
+                late = sqlite3.connect(path, isolation_level=None, timeout=0)
+                try:
+                    epochs = late.execute(
+                        "SELECT sent_owner_admission_generation FROM native_runtime_input"
+                    ).fetchall()
+                    assert len(epochs) == 1 and epochs[0][0] is not None
+                finally:
+                    late.close()
+                assert _held(root) == []
+                observations.append("original admission committed and released")
+                yield
 
         try:
             write(fd, payload, checked_admission, cancelled, deadline, measurements)
             observations.append("sent and committed once")
         finally:
+            release.join()
             reader.close()
 
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
@@ -591,11 +523,11 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
     # the expected downstream error is NOT a post-write admission failure.
     with pytest.raises(native_pi.NativePiUnavailable) as caught:
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
         ).run()
     assert "post-write" not in str(caught.value)
     assert observations == [
-        "reader refused before bytes",
+        "reader released before bytes",
         "original admission committed and released",
         "sent and committed once",
     ]

@@ -1,7 +1,7 @@
 """One-use selected admission commits before the original raw pipe writer.
 
-Only exclusion acquisition is repeatable. A taken token, durable UNKNOWN marker,
-raw byte or uncertain commit never becomes a fresh send attempt.
+Lock owners wait before the one-use token is consumed. An uncertain write
+or commit never becomes a fresh send attempt.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_database import StoreBusy
 from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_acquisition_progress, record_request_progress
@@ -26,7 +25,6 @@ from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
-from .native_prompt_send import PromptAdmissionBusy
 from .pi_vocabulary import ThinkingLevel
 from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
@@ -214,39 +212,27 @@ class PrivateSendAdmission:
         subsequent owner loss permits replay.
         """
         with ExitStack() as authority:
-            try:
-                with self._measurements.operation("coordinator_open"):
-                    store = authority.enter_context(
-                        Coordination(str(self.store_path), contention=StoreBusy())
-                    )
-                with self._measurements.operation("maintenance_ingress"):
-                    authority.enter_context(MaintenanceBarrier(
-                        self.bus._registry.store.path
-                    ).admit_ingress(blocking=False))
-                with self._measurements.operation("registry_exclusion"):
-                    document = authority.enter_context(
-                        self.bus._registry.store.reading(blocking=False)
-                    )
-                with self._measurements.operation("registry_snapshot"):
-                    registry = document.snapshot()
-                with self._measurements.operation("prompt_binding"):
-                    authority.enter_context(self.stage.bound_prompt(
-                        store, self.input_id, self.participant, self.wire_root_id,
-                        self.prompt.text, blocking=False,
-                    ))
-                with self._measurements.operation("coordinator_exclusive"):
-                    db = authority.enter_context(store.session.transaction())
-                with self._measurements.operation("selected_source_admission"):
-                    self.session.verify_start(identity)
-            except BlockingIOError as error:
-                raise PromptAdmissionBusy("Native admission exclusion is busy") from error
-            except sqlite3.OperationalError as error:
-                if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
-                    raise PromptAdmissionBusy("Native admission database is busy") from error
-                raise
-            # Busy acquisition is the ONLY repeatable operation. From token
-            # consumption through COMMIT/fsync, every failure retains original
-            # uncertainty and must propagate without another admission probe.
+            with self._measurements.operation("coordinator_open"):
+                store = authority.enter_context(Coordination(str(self.store_path)))
+            with self._measurements.operation("maintenance_ingress"):
+                authority.enter_context(MaintenanceBarrier(
+                    self.bus._registry.store.path
+                ).allow_input())
+            with self._measurements.operation("registry_exclusion"):
+                document = authority.enter_context(self.bus._registry.store.reading())
+            with self._measurements.operation("registry_snapshot"):
+                registry = document.snapshot()
+            with self._measurements.operation("prompt_binding"):
+                authority.enter_context(self.stage.bound_prompt(
+                    store, self.input_id, self.participant, self.wire_root_id,
+                    self.prompt.text, blocking=True,
+                ))
+            with self._measurements.operation("coordinator_exclusive"):
+                db = authority.enter_context(store.session.transaction())
+            with self._measurements.operation("selected_source_check"):
+                self.session.verify_start(identity)
+            # From token consumption through COMMIT/fsync, every failure
+            # remains uncertain and propagates without another send attempt.
             if not self._once.acquire(blocking=False):
                 raise IdentityConflict("native send admission cannot be reused")
             with self._measurements.operation("admission_checks"):

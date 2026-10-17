@@ -24,6 +24,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, TextRepresentation
 from .lifecycle import LifecycleState
+from .send_outcome import GrantedSend, HeldSend
 from .store_files import _async_store_lock, _atomic_write_text, _store_lock, store_lock_path
 
 
@@ -31,9 +32,20 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
     turn_pending = True
 
     @classmethod
+    @contextmanager
+    def send(cls, delegate, *args):
+        if cls.turn_pending:
+            yield HeldSend()
+        elif delegate is None:
+            yield GrantedSend()
+        else:
+            with delegate(*args) as outcome:
+                yield outcome
+
+    @classmethod
     def require_open(cls) -> None:
         if cls.turn_pending:
-            raise RelationViolationError("Maintenance new turns held")
+            raise RelationViolationError("Maintenance ingress requires READY")
 
 
 class DrainingPhase(MaintenancePhase):
@@ -283,12 +295,12 @@ class MaintenanceBarrier:
             )
 
     @contextmanager
-    def admit_ingress(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:
-        """Share open-root custody through one synchronous ingress operation.
+    def allow_input(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:
+        """Hold the root lock through one synchronous input operation.
 
         Do not await while inside this context. A child still needs to perform
         its own claim/send checks, and old-import children are not protected.
-        Maintenance, stop and rename take exclusive wire custody. Independent
+        Maintenance, stop and rename take the exclusive wire lock. Independent
         inputs share this gate; their registry, input and journal owners retain
         their own determining locks.
         """
@@ -296,11 +308,11 @@ class MaintenanceBarrier:
             yield self.assert_open_unlocked()
 
     @asynccontextmanager
-    async def admit_ingress_async(self):
+    async def ingress_async(self):
         """Acquire the same ingress gate without blocking a native event loop.
 
         The borrower writes synchronously, then releases before waiting for
         pipe drain or a native response.
         """
         async with _async_store_lock(self.wire_path, shared=True):
-            yield self.assert_open_unlocked()
+            yield self.current_unlocked()

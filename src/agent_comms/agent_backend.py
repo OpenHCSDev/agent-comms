@@ -27,6 +27,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
 from .declared_family import DeclaredFamily
+from .send_outcome import SendBoundary
 
 if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
@@ -95,12 +96,40 @@ class TurnInboxReceiver(Protocol):
     def clear_queue(self, turn: object, item: ClearQueue) -> Awaitable[bool]: ...
 
 
+class TurnInbox(asyncio.Queue):
+    """The live inbox parks its head until the existing observer sees READY."""
+    def __init__(self):
+        super().__init__()
+        self.ready = asyncio.Event()
+        self.ready.set()
+
+    async def get(self):
+        await self.ready.wait()
+        return await super().get()
+
+    @property
+    def all_written_started(self):
+        return not any(item.carried_inputs for item in self._queue)
+
+    def begin(self, item):
+        self._queue.appendleft(item)
+        self._wakeup_next(self._getters)
+
+    def hold(self, item):
+        # Park under the shared wire lock, before READY can be published.
+        self.ready.clear()
+        self.begin(item)
+
+
 class TurnInboxItem(ABC):
     """An inbox item owns its carried inputs and delivery to a running turn."""
 
     @property
     def carried_inputs(self) -> tuple[InputId, ...]:
         return ()
+
+    def refuse(self, inputs, turn):
+        inputs.refuse(turn, self.carried_inputs)
 
     @abstractmethod
     def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]: ...
@@ -275,10 +304,10 @@ class TurnDelivery:
 
     worktree: str
     environment: dict[str, str]
-    inbox: asyncio.Queue[TurnInboxItem]
+    inbox: TurnInbox
     finish_event: asyncio.Event
-    send_boundary: Callable[..., Any]
-    interrupt_boundary: Callable[..., Any]
+    send_boundary: SendBoundary
+    interrupt_boundary: SendBoundary
     input_started: Callable[..., bool]
     request_progress: Callable[..., None]
     ui_request: Callable[..., Awaitable[Any]]
