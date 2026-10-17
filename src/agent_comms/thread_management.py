@@ -11,6 +11,7 @@ import stat
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
@@ -79,8 +80,12 @@ class NewThreadSpec(IdleLaunchInput):
     def with_task(cls, task: str, **values) -> NewThreadSpec:
         return TaskNewThreadSpec(task=task, **values)
 
-    def record_first_input(self, threads: ThreadManagement, owner: Thread) -> None:
+    def record_first_input(self, record) -> None:
         pass
+
+    def declaration(self, project: str) -> Thread:
+        return Thread(name=self.name, task=self.task, tags=self.tags or frozenset(),
+                      worktree=project, model=self.model, thinking_level=self.thinking_level)
 
     def __post_init__(self) -> None:
         if not self.model:
@@ -97,9 +102,7 @@ class NewThreadSpec(IdleLaunchInput):
         project = Path(self.project).expanduser().resolve(strict=True)
         if not project.is_dir():
             raise ValueError(f"Project path is not a directory: {project}")
-        thread = Thread(name=self.name, task=self.task, tags=self.tags or frozenset(),
-                        worktree=str(project), model=self.model,
-                        thinking_level=self.thinking_level)
+        thread = self.declaration(str(project))
         threads.registry.require_declaration_available(thread)
         fresh = create_fresh_private_session(threads.root / "sessions", worktree=project)
         with _store_lock(threads._wire_lock_path):
@@ -118,25 +121,13 @@ class ForkSpec(NewThreadSpec):
 
     def child(self, parent: Thread, session_file: str) -> Thread:
         """Derive the child declaration from the exact parent and fork result."""
-        return Thread(
-            name=self.name,
-            tags=parent.tags if self.tags is None else self.tags,
-            worktree=self.project,
-            parent=parent.name,
-            task=self.task,
-            session_file=session_file,
-            process_identity=None,
-            model=self.model,
-            thinking_level=self.thinking_level,
-        )
+        return replace(self.declaration(self.project), parent=parent.name,
+                       tags=parent.tags if self.tags is None else self.tags,
+                       session_file=session_file)
 
     def _parent(self, threads: ThreadManagement) -> Thread:
         parent = threads.registry.require(self.parent)
         parent.execution.require_native()
-        if threads.registry.name_reserved(self.name):
-            raise RelationViolationError(
-                f"Thread {self.name!r} already exists; reuse it instead of creating it again."
-            )
         if not parent.session_file:
             raise RelationViolationError(f"Parent thread {self.parent!r} has no session file to fork.")
         return parent
@@ -165,11 +156,8 @@ class TaskNewThreadSpec(NewThreadSpec):
     def apply_environment(self, environment: dict[str, str]) -> None:
         environment[self.environment_key] = self.input_key
 
-    def record_first_input(self, threads: ThreadManagement, owner: Thread) -> None:
-        InputDispositions(threads.root).record(
-            self.input_key, seq=None, owner=owner.name, target=owner.name,
-            admission=threads.registry.snapshot().admission_generations[owner.name], text=self.task,
-        )
+    def record_first_input(self, record) -> None:
+        record(self.input_key, seq=None, text=self.task)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -674,7 +662,12 @@ class ThreadManagement:
                 owned = self.owners._launch_owner_unlocked(
                     child, resolved_bin, initial_input=spec, launch_runtime=runtime,
                 )
-                spec.record_first_input(self, owned)
+                spec.record_first_input(
+                    partial(
+                        InputDispositions(self.root).record, owner=owned.name, target=owned.name,
+                        admission=self.registry.snapshot().admission_generations[owned.name],
+                    )
+                )
                 return owned
             except OSError:
                 self.registry.remove(spec.name)
