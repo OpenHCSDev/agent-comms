@@ -3,8 +3,10 @@
 from __future__ import annotations
 from agent_comms.storage_rules import StorageRule
 
+import asyncio
 import json
 import os
+import shutil
 import sqlite3
 import time
 from pathlib import Path
@@ -279,7 +281,6 @@ def test_early_prefix_edit_plus_complete_lagged_suffix_denied(tmp_path: Path, mo
     "fault",
     [
         "shrink",
-        "replace",
         "partial",
         "missing",
         "schema",
@@ -299,11 +300,6 @@ def test_checkpoint_faults_deny_without_rebuild(tmp_path: Path, fault: str) -> N
     if fault == "shrink":
         with bus.open("r+b") as stream:
             stream.truncate(1)
-    elif fault == "replace":
-        replacement = bus.with_name("replacement.jsonl")
-        replacement.write_bytes(bus.read_bytes())
-        replacement.chmod(0o600)
-        os.replace(replacement, bus)
     elif fault == "partial":
         with bus.open("ab") as stream:
             stream.write(b'{"seq":')
@@ -517,6 +513,119 @@ def test_reopened_root_preserves_certified_source_and_supports_append(
         one.seq,
         three.seq,
     ]
+
+
+@pytest.mark.parametrize("copy_root", [False, True])
+def test_copied_root_rebuilds_its_index(tmp_path: Path, copy_root: bool) -> None:
+    from agent_comms.child_process import Platform
+    from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair
+    from agent_comms.store_files import _store_lock_file
+
+    original, root_id = _root(tmp_path)
+    first = original.messaging.send_initial_cohort("sender", "Alice", "copied original")
+    original_bytes = original.bus.log.path.read_bytes()
+    original_db = (original.root / "private_bus_checkpoint.sqlite3").read_bytes()
+    original_inode = original.bus.log.path.stat().st_ino
+    if copy_root:
+        copied = Comms(shutil.copytree(original.root, tmp_path / "copied"))
+    else:
+        replacement = original.root / "replacement.jsonl"
+        shutil.copy2(original.bus.log.path, replacement)
+        replacement.replace(original.bus.log.path)
+        copied = original
+    log = copied.bus.log
+    assert log.path.stat().st_ino != original_inode
+    platform = Platform.current()
+    with _store_lock_file(log.path) as lock_file:
+        platform.acquire_store_lock(lock_file.fileno(), shared=True, blocking=True)
+        with pytest.raises(CheckpointNeedsRepair, match="relocated"):
+            log._read_certified(lock_file, platform, lambda source: None, True)
+    # The real reader upgrades its lock and rebuilds the copied SQLite index.
+    request = AddressedPage.capture(lookup=RecordedThreadIncarnation("fixture", 17002.0).lookup)
+    witness, messages, _ = asyncio.run(log.read_certified_async(
+        lambda source: source.addressed_page(log, request)
+    ))
+    assert witness.root_id == root_id
+    assert witness.inode == log.path.stat().st_ino
+    assert [(row.message.seq, row.message.body) for row in messages] == [
+        (first.seq, "copied original")
+    ]
+    assert log.path.read_bytes() == original_bytes
+    assert _page(copied, request.lookup)[0] == witness
+    second = copied.messaging.send_initial_cohort("sender", "Alice", "after copy")
+    assert second.seq == first.seq + 1
+    assert [row.message.seq for row in _page(copied, request.lookup)[1]] == [first.seq, second.seq]
+    if copy_root:
+        assert original.bus.log.path.read_bytes() == original_bytes
+        assert (original.root / "private_bus_checkpoint.sqlite3").read_bytes() == original_db
+
+
+@pytest.mark.parametrize("fault", ["tail", "prefix", "root", "shrink"])
+def test_copied_root_corruption_is_not_recertified(tmp_path: Path, fault: str) -> None:
+    comms, _ = _root(tmp_path)
+    for _ in range(12):
+        comms.messaging.send_initial_cohort("sender", "Alice", "retained " + "x" * 500)
+    copied = Comms(shutil.copytree(comms.root, tmp_path / "copied"))
+    bus = copied.bus.log.path
+    if fault == "root":
+        with sqlite3.connect(copied.root / "private_bus_checkpoint.sqlite3") as db:
+            db.execute("UPDATE prefix_certificate SET root_id=?", ("0" * 32,))
+    else:
+        with bus.open("r+b") as stream:
+            if fault == "shrink":
+                stream.truncate(1)
+            else:
+                raw = stream.read()
+                position = raw.rfind(b"retained") if fault == "tail" else raw.find(b"retained")
+                stream.seek(position)
+                stream.write(b"changed ")
+    before = (copied.root / "private_bus_checkpoint.sqlite3").read_bytes()
+    marker = (copied.root / "bus_meta.json").read_bytes()
+    with pytest.raises(RelationViolationError):
+        asyncio.run(copied.bus.log.read_certified_async(lambda source: source.witness))
+    assert (copied.root / "private_bus_checkpoint.sqlite3").read_bytes() == before
+    assert (copied.root / "bus_meta.json").read_bytes() == marker
+
+
+def test_copied_root_rebuilds_unsealed_index_rows(tmp_path: Path) -> None:
+    comms, _ = _root(tmp_path)
+    first = comms.messaging.send_initial_cohort("sender", "Alice", "canonical original")
+    copied = Comms(shutil.copytree(comms.root, tmp_path / "copied"))
+    with sqlite3.connect(copied.root / "private_bus_checkpoint.sqlite3") as db:
+        db.execute("DELETE FROM addressed")
+        db.execute("DELETE FROM delivery_sources")
+    assert [row.message.seq for row in _page(
+        copied, RecordedThreadIncarnation("fixture", 17002.0).lookup
+    )[1]] == [first.seq]
+
+
+def test_copy_preserves_unknown_sequence_reservation(tmp_path: Path, monkeypatch) -> None:
+    from agent_comms.errors import HumanClaimBlockedError
+    from agent_comms.wire_log import WireLog
+
+    comms, _ = _root(tmp_path)
+    comms.messaging.send_initial_cohort("sender", "Alice", "committed")
+    write = WireLog.write_metadata_unlocked
+
+    def reserve_then_crash(log, marker):
+        write(log, marker)
+        if marker.last_seq == 2:
+            raise OSError("crash after durable reservation")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(WireLog, "write_metadata_unlocked", reserve_then_crash)
+        with pytest.raises(OSError, match="crash after durable reservation"):
+            comms.messaging.send_initial_cohort("sender", "Alice", "uncertain")
+    copied = Comms(shutil.copytree(comms.root, tmp_path / "copied"))
+    original = copied.bus.log.path.read_bytes()
+    with pytest.raises(HumanClaimBlockedError, match="UNKNOWN"):
+        asyncio.run(copied.bus.log.read_certified_async(
+            lambda source: source.require_new_human_message("human", "new-message")
+        ))
+    assert copied.bus.log._private_marker_unlocked().last_seq == 2
+    assert copied.bus.log.path.read_bytes() == original
+    with sqlite3.connect(copied.root / "private_bus_checkpoint.sqlite3") as db:
+        assert db.execute("SELECT through_seq FROM prefix_certificate").fetchone() == (1,)
 
 
 def test_warm_witness_rejects_changed_revision_even_with_complete_row(tmp_path: Path) -> None:

@@ -63,6 +63,7 @@ from .message_reference import MessageReference
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
 from .owner_lifecycle import OwnerStartResult
+from .tools import CommsStartTool, CommsStopTool, ToolRequest
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
 
 
@@ -410,16 +411,6 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     @classmethod
     def channel_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
         return ()
-
-    @classmethod
-    def member_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
-        """Use original roster membership and each command's thread eligibility."""
-        if snapshot is None:
-            snapshot = comms.registry.snapshot()
-        return tuple(bound for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
-                     if channel.matches(thread.tags)
-                     for bound in cls.thread_bindings(
-                         comms, thread, snapshot.status(thread.name), channel.name))
 
     @classmethod
     def bindings(cls, comms: Comms, target: CommandTarget | str, channel: str | None = None,
@@ -1261,19 +1252,30 @@ class ActivityCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StopCliCommand(CliCommand):
-    help = "Stop process"
+class ThreadLifecycleCliCommand(CliCommand):
+    availability_tool: ClassVar[type[ToolRequest]]
     multiple_targets = True
     name: str = option("--name", target_bound=True)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        from .tools import CommsStopTool
-        return (cls(name=thread.name),) if CommsStopTool.available_for_thread(thread, status) else ()
+        return (cls(name=thread.name),) if cls.availability_tool.available_for_thread(thread, status) else ()
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return cls.member_bindings(comms, channel, snapshot=snapshot)
+    def channel_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
+        """Use original roster membership and each command's thread eligibility."""
+        if snapshot is None:
+            snapshot = comms.registry.snapshot()
+        return tuple(bound for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
+                     if channel.matches(thread.tags)
+                     for bound in cls.thread_bindings(
+                         comms, thread, snapshot.status(thread.name), channel.name))
+
+
+@dataclass(frozen=True, kw_only=True)
+class StopCliCommand(ThreadLifecycleCliCommand):
+    help = "Stop process"
+    availability_tool = CommsStopTool
 
     def apply(self, ctx: Comms) -> ThreadStoppedResult:
         ctx.owners.stop(self.name)
@@ -1575,19 +1577,9 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StartCliCommand(CliCommand):
+class StartCliCommand(ThreadLifecycleCliCommand):
     help = 'Start thread'
-    multiple_targets = True
-    name: str = option('--name', target_bound=True)
-
-    @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        from .tools import CommsStartTool
-        return (cls(name=thread.name),) if CommsStartTool.available_for_thread(thread, status) else ()
-
-    @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return cls.member_bindings(comms, channel, snapshot=snapshot)
+    availability_tool = CommsStartTool
 
     @classmethod
     def reconnect_targets(cls, result: OwnerStartResult | TargetBatchResult) -> tuple[str, ...]:
