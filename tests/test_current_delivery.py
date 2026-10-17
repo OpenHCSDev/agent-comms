@@ -14,6 +14,7 @@ from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from agent_comms.routing import DeliveryScope
+from agent_comms.read_basis import ReadCursor
 
 
 def consistent(comms, *names):
@@ -212,10 +213,10 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_
         ))
         with comms.bus.snapshot(viewer=viewer) as (pending_basis, pending_source):
             assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 1}
-        later_reads = comms.bus.reads.read().seen_sequences(
+        later_reads = comms.bus.reads.read().cursor(
             viewer, basis.registry, source.revision.identity
         )
-        assert later_reads == {later.seq}
+        assert later_reads == ReadCursor().add((later.seq,))
         delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
         with OpenedRouteCounts(
             comms.bus.log.path, source, basis.registry, {viewer: delivery}
