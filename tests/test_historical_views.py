@@ -9,7 +9,7 @@ import pytest
 from agent_comms import HistoricalMessage, HistoryCursor
 from agent_comms.comms import Comms
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.read_basis import ReadCursor
+from agent_comms.read_basis import Conversation, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
@@ -115,9 +115,9 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
     )
     live.views.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
     snapshot = live.registry.snapshot()
-    assert ReadLedger(Path(source.root) / ReadLedger.filename).cursor(
-        viewer.name, snapshot
-    ) == ReadCursor(exceptions=(page.messages[1].seq,))
+    assert ReadLedger(Path(source.root) / ReadLedger.filename).read().messages == {
+        viewer.incarnation: {Conversation('#team'): ReadCursor(exceptions=(page.messages[1].seq,))}
+    }
     assert live.bus.reads.cursor(viewer.name, snapshot) == ReadCursor()
     assert live.bus.pending_count("bob", "#team") == 2
     with pytest.raises(ValueError):
