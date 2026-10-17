@@ -793,7 +793,8 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     assert calls == [] and not saved.exists() and moved.exists()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
-            "SELECT sent_owner_claimed_generation,session_id FROM native_runtime_input"
+            f"SELECT {NativeRuntimeInput.column_projection()['sent_owner_claimed_generation']},session_id "
+            f"FROM {NativeRuntimeInput.declared_name}"
         ).fetchone()
         assert row is not None and tuple(row) == (None, None)
         assert (

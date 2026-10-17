@@ -237,7 +237,8 @@ def test_missing_claim_cannot_borrow_a_live_successor_release(released_unknown):
     with Coordination(str(root / "coordination.sqlite3")) as store:
         if (
             store.session._connection.execute(
-                f"SELECT sent_owner_claimed_generation FROM {NativeRuntimeInput.declared_name}"
+                f"SELECT {NativeRuntimeInput.column_projection()['sent_owner_claimed_generation']} "
+                f"FROM {NativeRuntimeInput.declared_name}"
             ).fetchone()[0]
             is not None
         ):
@@ -313,7 +314,7 @@ print(json.dumps({"type":"response", "id":request["id"],
             f"SELECT * FROM {NativeRuntimeInput.declared_name}"
         ).fetchone()
         execution_id, old_id = old["execution_id"], old["input_id"]
-        assert old["session_id"] is old["sent_owner_claimed_generation"] is None
+        assert old["session_id"] is old[NativeRuntimeInput.column_projection()["sent_owner_claimed_generation"]] is None
         snapshot = store.snapshots.get(execution_id)
         assert type(snapshot.execution.lifecycle) is FailedExecution
         assert not snapshot.is_current and not snapshot.can_retry

@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import native_pi, native_prompt_send
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.child_process import AttachedChild
@@ -302,8 +303,8 @@ def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode
             sys.executable,
             "-c",
             "import asyncio,sys; from pathlib import Path; "
-            "from test_native_send_claim import _same_loop_backpressure_case; "
-            "asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))",
+            f"from {_same_loop_backpressure_case.__module__} import {_same_loop_backpressure_case.__name__}; "
+            f"asyncio.run({_same_loop_backpressure_case.__name__}(Path(sys.argv[1]),sys.argv[2]))",
             str(tmp_path),
             mode,
         ],
@@ -486,7 +487,7 @@ async def test_actual_native_claim_commits_before_bytes_and_releases_feedback_re
         path = root / "coordination.sqlite3"
         reader = sqlite3.connect(path, isolation_level=None, timeout=0, check_same_thread=False)
         reader.execute("BEGIN")
-        reader.execute("SELECT * FROM native_runtime_input").fetchall()
+        reader.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}").fetchall()
 
         def release_reader():
             assert not received.exists()
@@ -503,7 +504,8 @@ async def test_actual_native_claim_commits_before_bytes_and_releases_feedback_re
                 late = sqlite3.connect(path, isolation_level=None, timeout=0)
                 try:
                     epochs = late.execute(
-                        "SELECT sent_owner_claimed_generation FROM native_runtime_input"
+                        f"SELECT {NativeRuntimeInput.column_projection()['sent_owner_claimed_generation']} "
+                        f"FROM {NativeRuntimeInput.declared_name}"
                     ).fetchall()
                     assert len(epochs) == 1 and epochs[0][0] is not None
                 finally:
@@ -536,6 +538,7 @@ async def test_actual_native_claim_commits_before_bytes_and_releases_feedback_re
     assert len(children) == 1 and children[0].returncode is not None
     with Coordination(root / "coordination.sqlite3") as store:
         rows = store.session._connection.execute(
-            "SELECT sent_owner_claimed_generation FROM native_runtime_input"
+            f"SELECT {NativeRuntimeInput.column_projection()['sent_owner_claimed_generation']} "
+            f"FROM {NativeRuntimeInput.declared_name}"
         ).fetchall()
         assert len(rows) == 1 and rows[0][0] is not None
