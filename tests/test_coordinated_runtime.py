@@ -33,6 +33,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
@@ -425,7 +426,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
         assignment = sealed_cohort_assignments(store, lookup)[0]
     notification = MessageNotification(
         initial.audience.recipients[0], "Read", "",
-        message=initial.message, changed=True,
+        message=initial.message, changed=True, progress=HumanReadProgress(),
     )
     sent_outcome = notification.sent_outcome()
     assert sent_outcome is not None
@@ -488,7 +489,7 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
         assert len(one) == 1 and isinstance(one[0].execution, FullNativeExecution)
         assert isinstance(one[0], FullHistoricalNativeInput)
         assert one[0].input_id == outcome.input_id
-    assert comms.bus.dm_history("sender", "beta")[-1].target == "sender"
+    assert comms.views.dm_history("sender", "beta")[-1].target == "sender"
 
 
 
@@ -968,7 +969,7 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(calls) == 1
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(comms.views.dm_history("sender", "beta")) == 1
 
 
 async def test_project_change_during_native_full_turn_denies_response(
@@ -994,7 +995,7 @@ async def test_project_change_during_native_full_turn_denies_response(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(calls) == 1
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(comms.views.dm_history("sender", "beta")) == 1
 
 
 async def test_owner_generation_revoked_during_native_triage_fails_closed(
@@ -1118,7 +1119,7 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(
     assert not calls
     assert not comms.registry.status("beta").active
     assert comms.registry.require("beta").active_turn is None
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(comms.views.dm_history("sender", "beta")) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
@@ -1161,14 +1162,14 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
                 opt_in=True,
             ).run()
         assert not calls
-        assert len(comms.bus.dm_history("sender", "beta")) == 1
+        assert len(comms.views.dm_history("sender", "beta")) == 1
     else:
         result = await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
         assert result is not None and result.disposition is CompletedAssignment
         assert len(calls) == 1
-        assert len(comms.bus.dm_history("sender", "beta")) == 2
+        assert len(comms.views.dm_history("sender", "beta")) == 2
     assert comms.registry.require("beta").active_turn is None
     with Coordination(str(root / "coordination.sqlite3")) as store:
         inputs = store.session._connection.execute(
@@ -1240,14 +1241,14 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
                 opt_in=True,
             ).run()
         assert comms.registry.require("delta").active_turn is None
-        assert len(comms.bus.dm_history("sender", "gamma")) == 1
+        assert len(comms.views.dm_history("sender", "gamma")) == 1
     else:
         result = await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
         assert result is not None and result.disposition is CompletedAssignment
         assert comms.registry.require("gamma").active_turn is None
-        assert len(comms.bus.dm_history("sender", "gamma")) == 2
+        assert len(comms.views.dm_history("sender", "gamma")) == 2
     assert len(calls) == 1
 
 
@@ -1273,7 +1274,7 @@ async def test_owner_stop_before_response_boundary_never_appends(
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(comms.views.dm_history("sender", "beta")) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         receipts = store.session._connection.execute(
             "SELECT count(*) FROM publication_receipts"
@@ -1322,7 +1323,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
             worker.join(timeout=4)
     assert workers and all(not worker.is_alive() for worker in workers)
     assert stopped.is_set() and not comms.registry.status("beta").active
-    assert len(comms.bus.dm_history("sender", "beta")) == 2
+    assert len(comms.views.dm_history("sender", "beta")) == 2
     with Coordination(str(root / "coordination.sqlite3")) as store:
         state = store.session._connection.execute("SELECT state FROM obligations").fetchone()
         assert state[0] == "published"
@@ -1365,7 +1366,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
     assert len(calls) == 1
     assert comms.registry.status("beta").active
     assert comms.registry.require("beta").active_turn is None
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(comms.views.dm_history("sender", "beta")) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert store.session._connection.execute("SELECT state FROM obligations").fetchone()[0] == (
             "pending" if boundary == "before_tx1" else "publishing"
@@ -1467,7 +1468,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
                 opt_in=True,
             ).run()
         assert len(calls) == 1
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(comms.views.dm_history("sender", "beta")) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
@@ -1541,7 +1542,7 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
         is None
     )
     assert len(calls) == 1
-    rows = comms.bus.dm_history("sender", "beta")
+    rows = comms.views.dm_history("sender", "beta")
     assert len(rows) == 2 and rows[-1].notice
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
