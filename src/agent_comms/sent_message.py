@@ -1,7 +1,7 @@
 """A reported send and a source-proved publication have different authority.
 
-SentTranscript remains the existing wire payload. These values are local read
-results, not another wire format or a change to native tool result producers.
+A report's publication is proved by its original sender's wire assignment.
+The proved value retains that original Message, not a second report-shaped copy.
 """
 from __future__ import annotations
 

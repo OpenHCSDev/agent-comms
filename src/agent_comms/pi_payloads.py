@@ -18,6 +18,7 @@ from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
 from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
+from .messages import Message
 from .transcript_events import SentTranscript
 
 
@@ -1167,7 +1168,11 @@ class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
 
     @classmethod
     def wire_member(cls, value):
-        return cls.decode(value[cls.wire_tag])
+        name = FieldCodec.decode(str, value[cls.wire_tag])
+        try:
+            return cls.decode(name)
+        except ValueError:
+            return OpaqueToolDetails
 
     def edit_diff(self):
         return None
@@ -1177,19 +1182,19 @@ class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PublishedMessageToolDetails(NativeToolDetails):
-    """The send owner supplies its original committed message, not a guessed receipt."""
+class PublishedMessageToolDetails(NativeToolDetails, declared_name="published_message_v2"):
+    """The full-message schema; older report versions remain opaque native evidence."""
 
     strict_fields = True
     id: str
-    message: SentTranscript
+    message: Message
 
     def __post_init__(self):
-        if self.id != self.message.source.message_id:
+        if self.id != self.message.message_id:
             raise ValueError("Published tool result belongs to another message")
 
     def sent_message(self):
-        return self.message
+        return SentTranscript.from_message(self.message)
 
 
 class NoToolDetails(NativeToolDetails):
