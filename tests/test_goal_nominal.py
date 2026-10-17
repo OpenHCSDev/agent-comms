@@ -1,6 +1,7 @@
 """S8 extension experiments and canonical saved-data contracts."""
 
-from agent_comms.goals import TextGoalProgress
+from agent_comms.goals import GoalProgress, GoalReport, ReportedGoalProgress, TextGoalProgress, Unfinished
+from agent_comms.field_codec import FieldCodec
 import json
 from dataclasses import dataclass, replace
 
@@ -32,6 +33,19 @@ from agent_comms.goal_states import (
     PauseSource,
 )
 from agent_comms.threads import Thread
+
+
+@pytest.mark.parametrize("progress, expected", [
+    (TextGoalProgress(), ()),
+    (TextGoalProgress("A saved note"), ("A saved note",)),
+    (ReportedGoalProgress(GoalReport("Cause", "Removed copy", Unfinished("Evidence"), "Next action")),
+     ("Stupid: Cause\nDeleted: Removed copy\nDelivery: Evidence\nNext: Next action",)),
+])
+def test_progress_members_emit_their_display_text_after_wire_roundtrip(progress, expected):
+    decoded = FieldCodec.decode(GoalProgress, FieldCodec.encode(progress))
+    assert type(decoded) is type(progress)
+    assert decoded.texts() == expected
+    assert "__bool__" not in GoalProgress.__dict__
 
 
 @pytest.fixture

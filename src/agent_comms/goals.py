@@ -77,8 +77,10 @@ class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
     def block_reason(self) -> str:
         return str(self)
 
-    def __bool__(self) -> bool:
-        return bool(str(self))
+    @abstractmethod
+    def texts(self) -> tuple[str, ...]:
+        """Display text owned by this progress case; an empty case emits none."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -87,6 +89,9 @@ class TextGoalProgress(GoalProgress, JsonShapeMember):
 
     def __str__(self) -> str:
         return self.value
+
+    def texts(self) -> tuple[str, ...]:
+        return (self.value,) if self.value else ()
 
     def noted(self, note: str) -> TextGoalProgress:
         return type(self)(f"{self.value}\n\n{note}" if self.value else note)
@@ -104,6 +109,9 @@ class ReportedGoalProgress(GoalProgress, JsonShapeMember):
 
     def __str__(self) -> str:
         return str(self.value)
+
+    def texts(self) -> tuple[str, ...]:
+        return (str(self.value),)
 
     @property
     def block_reason(self) -> str:
