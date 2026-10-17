@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import AsyncExitStack, aclosing, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from acp.exceptions import RequestError
 from acp.schema import (
@@ -19,7 +18,7 @@ from .following_inputs import OwnerFollowingInputs
 from .queued_input import InitialInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
-from .agent_backend import AgentBackend, InputRequest, SendNow, TurnInbox
+from .agent_backend import AgentBackend, TurnInbox
 from .channel_targets import BuiltinChannel
 from .comms import Comms
 from .coordinator import Coordination
@@ -41,13 +40,11 @@ from .runtime import (
     SocketClient,
 )
 from .pi_payloads import StateData
-from .thread_configuration import ReplyTiming
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
-from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -58,8 +55,6 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
-ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
-IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
 
 
 class CompactionObservation(MroDispatch):
@@ -90,12 +85,10 @@ class TurnRunner:
         *,
         agent_bin: str | None,
         agent_args: list[str] | None,
-        reply_timing: ReplyTiming,
     ):
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        self.reply_timing = reply_timing
         self.agent_bin = NativeArguments.configured_binary(agent_bin)
         self.agent_args = NativeArguments.configured(agent_args)
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
@@ -197,16 +190,13 @@ class TurnRunner:
                 relay_text = text
             else:
                 agent_task = text.strip()
-            sent_seq = 0
             if relay_text:
                 target, body = parse_target(relay_text)
-                message = await Coordination.run_worker(partial(
+                await Coordination.run_worker(partial(
                     self.comms.messaging.send_message, thread_name, target, body,
                 ))
-                sent_seq = message.seq
             self.effects._debug_log(
-                f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
-                f"sent_seq={sent_seq}"
+                f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'}"
             )
             if images or agent_task:
                 await InitialInput.run(self.inputs,
@@ -218,20 +208,6 @@ class TurnRunner:
                     input_id=input_id,
                     origin=origin,
                 )
-            else:
-                turn_id = uuid4().hex
-                async with AsyncExitStack() as resources:
-                    await Coordination.run_worker(partial(
-                        self.acquire_turn, resources, session_id, thread_name,
-                        turn_id, "Waiting for replies",
-                    ))
-                    await self.effects._emit_event(
-                        session_id, await Coordination.run_worker(partial(
-                            self.current_turn_update, session_id,
-                        )),
-                    )
-                    await self.inputs.drain_inbox(session_id)
-                    await self.collect_replies(session_id, thread_name, sent_seq)
             self.effects._debug_log("prompt:returning")
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
@@ -241,53 +217,6 @@ class TurnRunner:
             if self.turn_tasks.get(session_id) is turn_task:
                 self.turn_tasks.pop(session_id, None)
             self.inputs.ensure_live_drain(session_id)
-
-    async def collect_replies(self, session_id: str, thread_name: str, sent_seq: int = 0) -> None:
-        """Drain on wire changes, ending at the nearest actual loop-clock deadline."""
-        timing, loop = self.reply_timing, asyncio.get_running_loop()
-        started = loop.time()
-        activity_end = started + ACTIVITY_WINDOW
-        idle_end, quiet_end = started + IDLE_GRACE, started + timing.reply_quiet
-        deadline, got_reply = activity_end, False
-        async with aclosing(WireWatch.observations(
-            WatchSource.wire(self.comms.root),
-            WatchSource.modified_file(self.comms.agents.activity.path),
-            WatchSource.file(self.comms.bus.reads.path),
-        )) as changes:
-            while loop.time() < deadline:
-                try:
-                    async with asyncio.timeout_at(deadline):
-                        await anext(changes)
-                except TimeoutError:
-                    return
-                pushed = await self.inputs.drain_inbox(session_id)
-                now = loop.time()
-                if pushed:
-                    got_reply, quiet_end = True, now + timing.reply_quiet
-                if got_reply:
-                    deadline = min(started + timing.reply_window, quiet_end)
-                else:
-                    progress = await Coordination.run_worker(partial(self.peer_progress, sent_seq))
-                    now = loop.time()
-                    idle_end = activity_end if progress else min(idle_end, now + IDLE_GRACE)
-                    deadline = min(activity_end, max(started + timing.no_reply_window, idle_end))
-
-    def peer_progress(self, sent_seq: int) -> bool:
-        """Only the original audience can be working on or have read this send."""
-        if not sent_seq:
-            return False
-        original = self.comms.bus.log.read_delivery_cohort(self.effects.configured_root_id, sent_seq)
-        snapshot = self.comms.registry.snapshot()
-        peers = tuple(snapshot.by_lookup[recipient.recipient_lookup]
-                      for recipient in original.audience.recipients
-                      if recipient.recipient_lookup in snapshot.by_lookup)
-        running = (peer for peer in peers if snapshot.statuses[peer.name].active)
-        if any(activity.state.busy for activity in
-               self.comms.agents.all_activity(running, snapshot=snapshot).values()):
-            return True
-        document = self.comms.bus.reads.read()
-        return any(sent_seq in self.comms.bus.reads.cursor(peer.name, snapshot, document=document)
-                   for peer in peers)
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         if session_id in self.sessions.proxies:

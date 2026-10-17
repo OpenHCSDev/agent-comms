@@ -324,7 +324,7 @@ class ActivityLog(ThreadOwnedState):
     """
 
     def __init__(self, store_path: Path, stale_after: float = 120.0):
-        self.path = store_path
+        self._path = store_path
         from .activity_checkpoint import ActivityCheckpointStore
 
         self.checkpoint = ActivityCheckpointStore(
@@ -343,11 +343,11 @@ class ActivityLog(ThreadOwnedState):
         """
         while True:
             snapshot = self._read_snapshot()
-            with _store_lock(self.path):
-                if not snapshot.current_at(self.path):
+            with _store_lock(self._path):
+                if not snapshot.current_at(self._path):
                     continue
                 yield snapshot
-                after = FileRevision.capture(self.path)
+                after = FileRevision.capture(self._path)
                 break
         if after != snapshot.revision:
             self._publish_checkpoint()
@@ -360,9 +360,9 @@ class ActivityLog(ThreadOwnedState):
             self.checkpoint.write(checkpoint)
 
     def emit(self, activity: Activity) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._writing():
-            _append_jsonl(self.path, FieldCodec.encode(activity))
+            _append_jsonl(self._path, FieldCodec.encode(activity))
 
     def update(self, thread: str, transition: Callable[[Activity], Activity | None]) -> bool:
         """Read and change one thread under the existing activity writer lock.
@@ -376,7 +376,7 @@ class ActivityLog(ThreadOwnedState):
             ))
             if event is None:
                 return False
-            _append_jsonl(self.path, FieldCodec.encode(event))
+            _append_jsonl(self._path, FieldCodec.encode(event))
             return True
 
     def current(self, thread: str, *, active: bool = False) -> Activity:
@@ -422,7 +422,7 @@ class ActivityLog(ThreadOwnedState):
         read = self._read
         while True:
             with read.lock:
-                revision = FileRevision.capture(self.path)
+                revision = FileRevision.capture(self._path)
                 started_from = read.snapshot
                 if revision == started_from.revision:
                     return started_from
@@ -433,7 +433,7 @@ class ActivityLog(ThreadOwnedState):
             captured = None
             if revision is not None:
                 try:
-                    with self.path.open("rb") as stream:
+                    with self._path.open("rb") as stream:
                         if not revision.opened_by(stream):
                             continue
                         if checkpoint is not None and not checkpoint.accepts(revision, stream):
@@ -456,7 +456,7 @@ class ActivityLog(ThreadOwnedState):
                                     raise
                                 if not isinstance(record, Mapping):
                                     raise ValueError(
-                                        f"JSONL record in {self.path} must be an object."
+                                        f"JSONL record in {self._path} must be an object."
                                     )
                                 event = Activity.from_wire(record)
                                 if terminated:
@@ -493,13 +493,13 @@ class ActivityLog(ThreadOwnedState):
     def rename_thread(self, old_name: str, new_name: str) -> None:
         while True:
             snapshot = self._read_snapshot()
-            events = (Activity.from_wire(record) for record in _jsonl_records(self.path))
+            events = (Activity.from_wire(record) for record in _jsonl_records(self._path))
             renamed = (replace(event, thread=new_name) if event.thread == old_name else event
                        for event in events)
             text = "".join(f"{json.dumps(FieldCodec.encode(event))}\n" for event in renamed)
-            with _store_lock(self.path):
-                if not snapshot.current_at(self.path):
+            with _store_lock(self._path):
+                if not snapshot.current_at(self._path):
                     continue
-                _atomic_write_text(self.path, text)
+                _atomic_write_text(self._path, text)
                 break
         self._publish_checkpoint()
