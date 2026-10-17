@@ -1,7 +1,7 @@
 """Owner-local goal scheduling/control over the sole durable attempt ledger.
 
 The runner owns turn lifetimes. This owner holds goal origin and projection state,
-and asks declared admission rules before recovering any unused READY grant.
+and checks the declared start rules before recovering any unused READY grant.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class GoalScheduler:
         self.inputs = inputs
 
     async def schedule_goal(self, session_id: str) -> None:
-        """Join durable goal admission before binding its existing loop queue."""
+        """Finish recording the goal's start permission before binding its loop queue."""
         check = OwnerTurnScheduleCheck(
             session_id=session_id, inputs=self.inputs, turns=self.effects.turns,
         )

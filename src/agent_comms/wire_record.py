@@ -1,4 +1,4 @@
-"""Canonical wire-record admission and complete-scan sequence custody.
+"""Validate wire records and track sequence numbers through complete scans.
 
 The public message and committed delivery remain the data authorities. This
 family distinguishes retained/claim envelopes from attested delivery records;
@@ -200,7 +200,7 @@ class ObservationWireRecord(WireRecord):
         return previous
 
     def require_admission(self, metadata: WireMetadata) -> None:
-        # Decoding validates the observation; it grants no delivery admission.
+        # Decoding validates the observation; it cannot permit delivery.
         return None
 
     def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):

@@ -59,7 +59,7 @@ class StoreWait(StoreContention):
 
 @dataclass(frozen=True)
 class StoreBusy(StoreContention):
-    """Do not wait when optional presentation or admission cannot acquire SQLite custody."""
+    """Do not wait when optional display or input work cannot acquire a SQLite lock."""
 
     def reader(self, uri: str) -> sqlite3.Connection:
         with CoordinationReadUnavailable.checking():
@@ -176,7 +176,7 @@ class CoordinationStore:
     def observing(
         path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
     ):
-        """Own an existing committed read, never initialization or write admission."""
+        """Read existing committed data without initializing storage or permitting writes."""
         with CoordinationReadUnavailable.checking():
             try:
                 with closing(CoordinationStore.read_snapshot(path, contention)) as db:

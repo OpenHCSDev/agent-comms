@@ -1,4 +1,4 @@
-"""Ordinary owner-turn admission: named checks held through native stdin.write."""
+"""Check an ordinary owner turn and hold its locks through native stdin.write."""
 
 from __future__ import annotations
 
@@ -122,7 +122,7 @@ class OwnedSend:
     def _prepare(
         self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
     ) -> SendOutcome:
-        # Backend ingress already owns shared custody through this check and write.
+        # Backend input handling holds shared locks through this check and write.
         snapshot = self.comms.registry.snapshot()
         canonical = snapshot.canonical_name(self.thread.name)
         current = snapshot.threads.get(canonical)

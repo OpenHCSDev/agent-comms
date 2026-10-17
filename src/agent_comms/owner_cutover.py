@@ -48,7 +48,7 @@ class OwnerCutover(ABC):
 
     @abstractmethod
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
-        """Only acquired all-stopped custody can install and launch a target."""
+        """Install and launch only from a batch whose owners have all stopped."""
         pass
 
     def recover(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
@@ -58,7 +58,7 @@ class OwnerCutover(ABC):
         raise RelationViolationError('This operation has not certified original-unchanged recovery')
 
     def failed(self, failure: StoppedOwnerFailure) -> NoReturn:
-        """Transfer live custody to the caller, or dispose within this operation.
+        """Pass responsibility for held resources to the caller, or release them here.
 
         A one-shot process member must make its disposition before it exits.
         Recovery of unchanged owners is distinct from retrying installation or
@@ -67,7 +67,7 @@ class OwnerCutover(ABC):
         raise failure
 
     def leave_stopped(self, failure: StoppedOwnerFailure) -> NoReturn:
-        """A one-shot operation explicitly relinquishes failed launch custody."""
+        """A one-shot operation explicitly releases its failed-launch resources."""
         failure.abandon()
         raise failure
 
@@ -148,5 +148,5 @@ class PreserveOwnerRuntime(StoppedOwnerInstallation):
 
     def recover(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         # This member installs nothing. The shared handoff revalidates EVERY
-        # original incarnation/admission/process before the first source launch.
+        # captured thread identity, input generation and process before any launch.
         return stopped.handoff.restore(stopped.lifecycle)

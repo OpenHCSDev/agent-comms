@@ -190,7 +190,7 @@ def _store_lock_file(store_path: Path):
 
 @contextmanager
 def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, shared=False):
-    """One durability guard after physical custody, with exact release on refusal."""
+    """Check durability after locking; release the lock if the check refuses access."""
     try:
         if max_bus_bytes is not None:
             if type(max_bus_bytes) is not int or max_bus_bytes < 0:
@@ -216,7 +216,7 @@ def _store_lock(
     shared: bool = False,
     contention: StoreLockContention | None = None,
 ) -> Iterator[StoreLock]:
-    """Canonical synchronous acquisition; inherited POSIX custody ends at last close."""
+    """Acquire a store lock synchronously; inherited POSIX locks end at last close."""
     from .child_process import Platform
     from .private_bus_checkpoint import CheckpointNeedsRepair
 
@@ -251,7 +251,7 @@ async def _async_store_lock(
     """Borrow the same physical resource without blocking its owner event loop.
 
     Cancellation during acquisition closes only the unacquired descriptor. The
-    original durability guard runs only after custody is acquired; no SQLite
+    durability check runs only after the lock is acquired; no SQLite
     connection or consumer is transferred to another thread.
     """
     from .child_process import Platform

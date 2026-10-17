@@ -61,7 +61,7 @@ class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed out
 
 
 class NativePiInputNotSent(NativePiUnavailable):
-    """Original admission never entered its prompt writer; grants no replay."""
+    """The input never entered its prompt writer; this does not permit replay."""
 
     def __init__(self, error, attestation):
         self.attestation = attestation
@@ -81,7 +81,7 @@ class NativePiInputNotSent(NativePiUnavailable):
 
 
 class NativePiPromptRejected(NativePiUnavailable):
-    """A correlated RPC refusal; it grants no retry or admission authority."""
+    """A refusal matched to its RPC request; it permits neither retry nor new input."""
 
     def __init__(self, response: pi.Response):
         self.response = response
@@ -270,7 +270,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
             except (OSError, sqlite3.Error, ValueError, TypeError) as error:
                 raise NativePiUnavailable("Native proof indexed evidence is unavailable") from error
             # Consumer exceptions retain their original boundary and disposition.
-            # Custody closes the database/descriptor without classifying callers.
+            # The ExitStack closes the database and descriptor without handling caller errors.
             yield db
             try:
                 if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
@@ -549,7 +549,7 @@ class NativePiRpcLaunch:
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
 
-        Only original child custody may consume it after comparing the complete
+        Only the session that owns the child may reuse it after comparing the complete
         launch/auth key and checking its actual saved-source revision/liveness.
         A different package or selected file needs its own fresh acquisition.
         """
@@ -566,7 +566,7 @@ class NativePiRpcLaunch:
 
         The returned factory retains the original verified CLI for its owner's
         lifetime. Every call still constructs a new complete source/auth launch;
-        it grants no child readiness, input admission or prior context proof.
+        it proves neither child readiness, permission to send input nor prior context.
         """
         package = Path(package).absolute()
         return cls.verified_launcher(package, _trusted_package(package))
@@ -652,7 +652,7 @@ class NativePiRpcLaunch:
 def _read_private_file(path: Path):
     """Yield strict private evidence rows, checking the same opened revision.
 
-    Historical bytes are not an admission quota. A bounded byte snapshot is
+    Historical bytes do not set the live input budget. A bounded byte snapshot is
     validated before decoding; callers must exhaust the resulting observation.
     """
     with PrivateEvidenceRead.open(path) as evidence:
@@ -745,7 +745,7 @@ class VerifiedNativeEvidencePrefix:
 class PrivateEvidenceRead:
     """Pinned private source with one owned verified-prefix state.
 
-    Resource custody lasts until close. Initial acquisition verifies the full
+    This reader holds its descriptor until close. The first read verifies the full
     prefix. Later observations trust an unchanged pinned revision and extend
     its running digest only across appended bytes; non-growth revision changes
     reverify the retained prefix before it can be reused.

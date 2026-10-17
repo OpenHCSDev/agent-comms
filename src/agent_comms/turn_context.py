@@ -17,7 +17,6 @@ from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
-from .thread_status import ThreadStatus
 
 if TYPE_CHECKING:
     from .input_attempt import StoredInput
@@ -177,7 +176,7 @@ class PreviewProvenance(Provenance):
         return (self,)
 
     def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
-        """Original SDK identity for read corroboration, never input admission."""
+        """SDK identity for checking a read, never permission to start input."""
         return (self.identity,)
 
 
@@ -818,12 +817,9 @@ class UserFollowupSegment(TypedUserInputSegment):
 
 @dataclass(frozen=True)
 class PeerState:
-    """One listed peer: its roster state, how relevant it is, why, and what it works on."""
+    """One relevant peer's identity, relationship and current goal."""
 
     name: str
-    status: type[ThreadStatus]
-    activity: str
-    activity_detail: str
     relevance: type[PeerRelevance]
     note: str
     goal: str | None
@@ -833,9 +829,6 @@ class PeerState:
         goal = view.thread.active_goal if relation.relevance.grants(GoalShown) else None
         return cls(
             view.thread.name,
-            type(view.status),
-            view.activity.state.value,
-            view.activity.detail,
             relation.relevance,
             relation.note,
             goal.instructions if goal is not None else None,
@@ -971,7 +964,7 @@ class ContextManifest:
     segments: tuple[SegmentManifest, ...]
     counter: str
     # Original request-owner correlation, absent for previews and captures that
-    # never observed dispatch. It grants neither admission nor replay.
+    # never observed dispatch. It permits neither new input nor replay.
     request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
 
     @property

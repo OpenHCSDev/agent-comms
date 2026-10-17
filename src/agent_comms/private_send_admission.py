@@ -1,4 +1,4 @@
-"""One-use selected admission commits before the original raw pipe writer.
+"""Record permission for selected input once, before the raw pipe writer runs.
 
 Lock owners wait before the one-use token is consumed. An uncertain write
 or commit never becomes a fresh send attempt.
@@ -143,9 +143,9 @@ class PrivateSendAdmission:
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
 
-        TrackedTurnSession retains child/tool custody. Its return or exception
+        TrackedTurnSession owns the child and tool resources. Its return or exception
         follows cleanup; disconnect and unknown outcomes are never committed here.
-        The raw writer retains the sole one-use send token after durable admission.
+        The raw writer keeps the single-use send token after the input is recorded.
         """
         registry = await Coordination.run_worker(self.bus._registry.snapshot)
         try:
@@ -205,9 +205,9 @@ class PrivateSendAdmission:
     def _start_once(self, identity: NativeSessionIdentity) -> None:
         """Commit the exact grant under original fences, then release them.
 
-        Stop, rename and maintenance before this grant refuse admission. After
-        it, they are ordered after the original admitted attempt, whose raw
-        writer retains its own pipe and token. The recorded admission remains
+        Stop, rename and maintenance before this grant refuse the input. After
+        it, they are ordered after the permitted attempt, whose raw
+        writer retains its own pipe and token. The recorded send grant remains
         the original recovery evidence; neither successful pipe completion nor
         subsequent owner loss permits replay.
         """
@@ -250,7 +250,7 @@ class PrivateSendAdmission:
                 reserved.sent_owner_admission_generation.record(
                     reserved, db, self.owner.admission_generation, identity
                 )
-            # ExitStack commits/closes the coordinator before releasing shared registry/wire custody. No bus publication
+            # ExitStack commits/closes the coordinator before releasing shared registry/wire locks. No bus publication
             # resource is borrowed: the selected claim and prompt are already
             # certified originals, and this grant changes only their SQL/input
             # records. No payload byte is

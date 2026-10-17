@@ -105,7 +105,7 @@ class MessageBus:
     def snapshot(
         self, viewer: str | None = None
     ) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
-        """Own the original bus/namespace/read cut, beyond physical custody.
+        """Keep a fixed bus, namespace and read snapshot after releasing its locks.
 
         The bus owns capture, including the committed sequence of this exact
         descriptor. Presentation and delivery borrow that same source instead

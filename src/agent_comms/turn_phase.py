@@ -32,7 +32,7 @@ class LabeledActivity:
 class TurnPhase(DeclaredFamily, affix="Phase"):
     """One phase owns watchdog behavior and its public control projection.
 
-    A phase is an observation, never native input admission or replay authority.
+    A phase describes progress; it cannot permit native input or replay.
     The existing registry turn lease supplies identity independently of phase.
     """
     detail: str = ""

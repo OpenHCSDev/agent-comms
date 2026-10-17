@@ -33,11 +33,11 @@ class PrivateNkLaunch:
 
     @classmethod
     def from_environment(cls, root: Path, environment: Mapping[str, str]) -> PrivateNkLaunch | None:
-        """Decode the explicit launch selection without performing an admission.
+        """Decode the explicit launch settings without permitting work to start.
 
         Observing a thread or publishing activity does not launch a native owner.
         Actual worker/ACP entrypoints and process handoffs call validate before
-        admission; retaining this selection cannot grant that authority.
+        starting work; retaining these settings cannot grant permission to run.
         """
         root_id = environment.get(launch_runtime.ROOT_ID_ENV)
         package = environment.get(launch_runtime.PACKAGE_ENV)

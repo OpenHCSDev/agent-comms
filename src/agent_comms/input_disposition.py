@@ -239,7 +239,7 @@ class InputDispositions(TypedStore):
         self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str,
         origin: InputOrigin = UnattributedInputOrigin(), custody: ExitStack | None = None,
     ) -> bool:
-        """Enlist supplied reservation custody before publishing acceptance."""
+        """Register supplied reservation rollback before publishing acceptance."""
         row = ReservedInput(key, seq, owner, admission, target, text,
                             origin=origin)
         document = self.record_originals(row, custody=custody)

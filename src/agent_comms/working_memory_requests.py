@@ -72,4 +72,4 @@ class FailedAnnotationOutcome(AnnotationOutcome):
 
 
 class AnnotationBudgetExhausted(ValueError):
-    """The original disclosure grant has no remaining hourly request admission."""
+    """The disclosure grant has used up its hourly request allowance."""

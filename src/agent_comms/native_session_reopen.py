@@ -92,8 +92,8 @@ class SessionIdentityHelper(PiHelper):
         """Locate the original header without constructing another history index.
 
         A located identity is not history readiness. The actual native loader
-        validates the whole journal before get_state; custody compares that
-        attestation with this identity before any input can be granted.
+        validates the whole journal before get_state; the child's owner compares
+        that reported identity with this one before accepting any input.
         """
         try:
             file = Path(session_file).absolute()

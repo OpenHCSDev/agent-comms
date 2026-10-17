@@ -2,7 +2,7 @@
 
 Tx1 freezes an intent without a bus append. For the bounded append/Tx2, acquire
 the shared wire lock, bus lock, registry lock, then the coordinator's exclusive
-write admission. The registry lock is retained through the fsynced append and SQL terminal
+write lock. The registry lock is retained through the fsynced append and SQL terminal
 commit; an explicitly witnessed live owner can be checked on that revision.
 A stop before the boundary refuses publication, whereas a concurrent stop
 linearizes after commit. The
@@ -63,7 +63,7 @@ from agent_comms.wake import WakeDecision
 
 
 class ResponseTable:
-    """Frozen declaration-owned response admission and append evidence."""
+    """An immutable response definition with its write checks and append evidence."""
 
     @classmethod
     def trigger_bodies(cls) -> dict[str, str]:
@@ -318,7 +318,7 @@ class LiveResponseOwner(RegistryOwner):
         self, store_path: Path, bus: MessageBus, fence: OwnerFence,
         replies: tuple[Message, ...],
     ) -> RecoverySnapshot:
-        """Join all original route publications before releasing turn custody.
+        """Wait for every route write before releasing the turn's resources.
 
         The worker owns its connection and each original ordered write fence.
         Only frozen proposals and the original owner/fence cross into it; no

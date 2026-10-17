@@ -58,7 +58,7 @@ T = TypeVar("T")
 
 
 class NativeCommitObservation(ABC, Generic[T]):
-    """Observed original native receipts, without granting admission or replay."""
+    """Observed native input records, without permission to start or replay input."""
 
     @abstractmethod
     def require(self) -> T: ...
@@ -265,7 +265,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                         else PublicationMeasurements())
         # Independent execution acquires a fresh artifact. A selected stage
         # derives from its execution's original pre-claim factory; source/config and
-        # child admission remain fresh. Join the whole construction before custody.
+        # child permissions remain fresh. Finish construction before acquiring the child.
         with measurements.operation("native_launch_selection"):
             launch = await Coordination.run_worker(partial(
                 NativePiRpcLaunch.tracked if launch_owner is None else launch_owner.tracked_launch,
@@ -310,7 +310,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             try:
                 self.custody = custody
                 # Transport resources are the turn's innermost lifetime. Stop
-                # retires them before native-child custody can block, so an
+                # closes them before child cleanup can block, so an
                 # interrupted selected turn cannot leave its socket path behind.
                 async with AsyncExitStack() as transport:
                     self.native = await self.acquire_native(transport, reuse=True)
@@ -347,7 +347,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 custody.callback(retirement.__enter__)
 
     async def retain_or_close(self) -> None:
-        """Keep a settled, proved child idle in the owner's custody; retire anything else."""
+        """Let the session keep a verified idle child; close any other child."""
         await self.native.finish_input()
         identity = self.native.attestation.identity
         # An input written but never started may still run in the child; it is not idle.
@@ -562,7 +562,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if not self.prompt_state.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
         # The original event consumer serializes observations. Cancellation
-        # joins this read before the acquired evidence/custody can close.
+        # waits for this read before closing the evidence reader.
         return await Coordination.run_worker(partial(_verify_context,
             self.active_session_file,
             self.command.input_id,

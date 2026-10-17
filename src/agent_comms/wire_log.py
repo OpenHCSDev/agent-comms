@@ -61,7 +61,7 @@ def _notify_candidates(log: WireLog, through_bytes: int) -> None:
 class OpenedWireSnapshot:
     """One original descriptor and fixed cut, owned until the reader exits.
 
-    This is read custody, not permission to append or admit a live turn.
+    This reader owns a snapshot, not permission to append or start a live turn.
     Uncertified cuts decode every row strictly, including silent observations.
     """
 
@@ -354,7 +354,7 @@ class WireLog:
 
         Return detached observations only. Verification and the callback share
         one resource thread; no SQLite connection crosses to the event loop.
-        The worker closes physical custody before returning its result; result
+        The worker releases its locks before returning its result; result
         delivery must not keep a POSIX lock until the event loop resumes.
         Cancellation joins acquired work before the original descriptor closes.
         """
@@ -405,7 +405,7 @@ class WireLog:
 
         A later append cannot extend this iteration. Each page captures exact
         original pointers and bytes inside certification; validation and all
-        consumer work occur after its publication custody has closed.
+        consumer work occur after releasing the bus locks.
         """
         request = AddressedPage(lookup=lookup, after_seq=after_seq)
         with self.certified_read() as source:
@@ -437,8 +437,8 @@ class WireLog:
         """Borrow one certified wire/registry/input cut for retained readers.
 
         Capture original bytes under the existing wire/bus/registry/input cut,
-        then decode outside publication custody. This is an observation, never
-        a current admission or compaction permit.
+        then release the bus locks before decoding. This is an observation, never
+        permission to start input or compact history.
         """
         from .exporting import WireExportBoundary
         from .input_disposition import InputDispositions
@@ -597,7 +597,7 @@ class WireLog:
             return source.delivery(wire_seq)
 
     def delivery_cohorts_unlocked(self, wire_root_id: str, sequences):
-        """Borrow canonical checkpoint resources under the caller's bus custody."""
+        """Read checkpoint resources while the caller holds the bus locks."""
         from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
         marker = self._private_marker_unlocked()
@@ -638,7 +638,7 @@ class WireLog:
         self, *, need_sequence: bool = True,
         prepared_indexes: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...] = (),
     ):
-        """Own one fixed opened inode/byte boundary beyond physical custody."""
+        """Keep a fixed opened inode and byte boundary after releasing the bus locks."""
         with ExitStack() as resources:
             with self.locked(shared=True) as lock:
                 metadata = (
@@ -659,11 +659,11 @@ class WireLog:
                 if lock.source is not None:
                     source = lock.certified_read()
                     source.require_marker(metadata)
-                    # A reserved but unappended sequence revokes admission,
+                    # A reserved but unappended sequence blocks new input,
                     # not the original committed bytes of this read-only cut.
                     source.require_open_prefix()
                     # Bind the separate retained descriptor to the exact admitted
-                    # inode/revision while original physical custody is held.
+                    # inode/revision while the bus locks are still held.
                     if (stream is None or revision != FileRevision.from_file(source.stream)
                             or os.fstat(stream.fileno()).st_dev != source.witness.device
                             or boundary != source.witness.offset):
@@ -677,10 +677,10 @@ class WireLog:
 
     @contextmanager
     def verified_snapshot(self) -> Iterator[Iterator[WireRecord]]:
-        """Run the original strict WireScan after releasing publication custody.
+        """Run the strict WireScan after releasing the bus locks.
 
         Uncertified streams retain the same complete validation algorithm.
-        This resource is a fixed read, not a current append/admission permit.
+        This resource is a fixed read, not permission to append or start input.
         """
         with self._opened_wire_snapshot(need_sequence=False) as opened:
             yield self._snapshot_records(opened.metadata, opened.stream, opened.boundary)

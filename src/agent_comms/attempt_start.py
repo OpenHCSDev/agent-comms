@@ -1,4 +1,4 @@
-"""Attempt admission identity and the cross-lifecycle rule permitting its start."""
+"""Identify an attempt and check whether its lifecycle permits starting it."""
 
 from dataclasses import dataclass
 

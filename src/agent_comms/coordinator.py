@@ -32,7 +32,7 @@ class Coordination:
 
     @staticmethod
     async def run_worker(operation: Callable[[], Result]) -> Result:
-        """Join an owned blocking operation before its enclosing custody exits.
+        """Wait for blocking work before its caller releases the enclosing resources.
 
         The callback owns and closes every borrowed resource it opens. This
         scheduling seam also supports registry-only acquisition/retirement;
@@ -54,7 +54,7 @@ class Coordination:
         Only the result crosses back to the event loop. The callback must not
         export this connection or any resource borrowed from it. Cancellation
         joins the acquired operation through connection close; it cannot leave
-        a later projection write after the caller releases its custody.
+        a later derived-data write after the caller releases its resources.
         """
         return await cls.run_worker(
             partial(cls._run_owned, path, operation, clock_ms, contention)

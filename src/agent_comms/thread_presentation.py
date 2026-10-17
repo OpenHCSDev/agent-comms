@@ -162,7 +162,7 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
 
     def replaces(self, original: LiveThreadOwnerBinding) -> bool:
         # Both operands are the ORIGINAL registry owner/process witnesses.
-        # Queue admission generations are a different allocation domain.
+        # Queued-input generations use a different counter.
         if self.owner.incarnation != original.owner.incarnation:
             return False
         if self.owner.generation < original.owner.generation:

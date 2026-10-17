@@ -130,8 +130,8 @@ class SelectedExecution:
         if following is not None:
             self.following = following
         self.root = Path(self.root).absolute()
-        # Package acquisition belongs to this execution before it can select
-        # a claim. Join its blocking verification before that custody advances.
+        # This execution must verify its package before selecting work.
+        # Wait for the blocking check before claiming any input.
         await Coordination.run_worker(self.validate)
         comms = Comms(self.root)
         with Coordination(str(self.root / "coordination.sqlite3")) as store:

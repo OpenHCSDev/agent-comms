@@ -1,8 +1,8 @@
 """Default-off, one-slot owner boundary for a selected Pi tool request.
 
 The model supplies only a relative existing-file resource and UTF-8 replacement
-text. The owner supplies every admission field; neither an injected prompt nor
-a socket message can mint a wake admission. Consumption is durable before any
+text. The owner supplies the identities and permission checks; neither a prompt nor
+a socket message can authorize a wake. Consumption is durable before any
 claim append or file mutation, and UNKNOWN is never retried automatically.
 """
 
@@ -463,7 +463,7 @@ class NativeToolCallTable(Generic[Call]):
         return candidate
 
     def identity_for(self, call: Call) -> ToolCallIdentity:
-        """Resolve admission only after this exact declared call has started."""
+        """Check permission only after this exact declared call has started."""
         identity, current = self.require_current(
             call.call_id, "Native tool request has no declared round"
         )
@@ -496,7 +496,7 @@ class NativeToolCallTable(Generic[Call]):
 
 
 class OwnerToolSocket(ABC, Generic[Call]):
-    """Authenticated native child transport; the policy owns request admission."""
+    """Authenticated native child transport; the policy decides which requests may run."""
 
     max_request = _MAX_REQUEST
 

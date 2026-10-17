@@ -1,4 +1,4 @@
-"""Acquired retained restart phases, shared by admission and target launch.
+"""Retained restart phases shared by permission checks and target launch.
 
 An original-format process may execute these phases with its own registry
 declarations. Only the stopped handoff crosses runtimes; it has no Thread or
@@ -67,7 +67,7 @@ class RetiredOwnerLaunch:
     @classmethod
     def capture_retired(cls, snapshot: RegistrySnapshot, original: Thread,
                         launch: RetainedOwnerLaunch) -> RetiredOwnerLaunch:
-        """Acquire the original post-retirement allocations, never live admission."""
+        """Capture the original allocations after stopping, without permitting live work."""
         original.require_local_process(launch.process)
         owner = cls(snapshot.owner_identity(original.name),
                     snapshot.admission_identity(original.name), launch)
@@ -96,7 +96,7 @@ class RetiredOwnerLaunch:
 
 @dataclass(frozen=True)
 class OwnerRestartHandoff:
-    """Bounded original custody, transferred once; never persisted credentials."""
+    """Captured owner launches passed to the next phase once; never saved credentials."""
 
     root: str
     owners: tuple[RetiredOwnerLaunch, ...]
@@ -172,7 +172,7 @@ class StoppedOwnerBatch:
         return self.handoff.launch(self.lifecycle, runtime)
 
     def close(self) -> None:
-        """Explicitly release physical custody; never launch or retry inputs."""
+        """Release held locks and descriptors; never launch or retry inputs."""
         self.custody.close()
 
     def recover(self, operation: OwnerCutover) -> tuple[OwnerRestartResult, ...]:

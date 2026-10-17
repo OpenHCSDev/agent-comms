@@ -269,7 +269,7 @@ class OptionalAwarenessProjection:
         # The SQL read above is an immutable snapshot, not a live-owner lease.
         # Do not hold the SQL read lock while consulting the registry. A newer
         # SQL generation or owner turn omits awareness rather than borrowing
-        # a stale result; the native send has its own final admission fence.
+        # a stale result; the native sender checks permission again before writing.
         self._verify_live_inclusion(path, lookup, owner)
         instruction = InstructionFile.read("selected-awareness.md")
         content_instruction = InstructionFile.read("selected-awareness-content.md")

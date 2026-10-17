@@ -265,7 +265,7 @@ class RegistryDocument(RegistryPresence):
         Current declarations always win. An explicit identity collision refuses
         the whole selection before writing; callers can inspect and select the
         unambiguous records. Saved sessions and metadata retain their original
-        provenance, but old PIDs, active turns and admission epochs do not travel.
+        provenance, but old PIDs, active turns and input generations do not travel.
         No bus, delivery cursor, pending input or coordinator row is copied.
         """
         selected = tuple(dict.fromkeys(names))
@@ -391,7 +391,7 @@ class RegistryDocument(RegistryPresence):
             change.apply(self)
 
     def begin_delete_originals(self, originals: Sequence[Thread]) -> None:
-        """Fence admission first; a stopped status is required by its owner."""
+        """Withdraw input permission first; the owner requires a stopped status."""
         self.require_originals(originals)
         for original in originals:
             self.begin_delete(original.name)
@@ -464,7 +464,7 @@ class RegistryDocument(RegistryPresence):
         return leased, owner_generation
 
     def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, FinishedTurnFence | None]:
-        """Release only this exact lease; a revoked admission cannot attest completion."""
+        """Release only this exact lease; a revoked input grant cannot confirm completion."""
         name = self.canonical_name(lease.identity.incarnation.name)
         current = self.threads.get(name)
         if current is None:
