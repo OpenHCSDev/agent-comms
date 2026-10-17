@@ -22,7 +22,8 @@ from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import projected
+from .field_codec import FieldCodec
+from .read_basis import ReadCursor
 from .private_path import FileIdentity, FileRevision
 from .routing import DeliveryMessage, DeliveryScope
 from .store_files import _store_lock
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
 class RouteTable:
     """Disposable tables owned and reset together by the route projection."""
 
-    schema: ClassVar[int] = 3
+    schema: ClassVar[int] = 4
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -70,9 +71,12 @@ class RouteTimeNode(DeclaredFamily, affix="RouteTimeNode"):
     @abstractmethod
     def children(self) -> tuple[int, ...]: ...
 
-    @property
-    @abstractmethod
-    def heads(self) -> tuple[int, ...]: ...
+    def count_since(self, db, since: float) -> int:
+        if self.minimum >= since:
+            return self.count
+        if self.maximum < since:
+            return 0
+        return sum(RouteTimeRow.require(db, child).node.count_since(db, since) for child in self.children)
 
     def add(self, db, original: RouteTimeRow, leaf: LeafRouteTimeNode):
         different = self.key(self.minimum) ^ self.key(leaf.timestamp)
@@ -94,21 +98,17 @@ class LeafRouteTimeNode(RouteTimeNode):
     head_seq: int
     bit: ClassVar[int] = RouteTimeNode.key_width
 
-    @projected(view="wire")
+    @property
     def minimum(self):
         return self.timestamp
 
-    @projected(view="wire")
+    @property
     def maximum(self):
         return self.timestamp
 
-    @projected(view="wire")
+    @property
     def children(self):
         return ()
-
-    @projected(view="wire")
-    def heads(self):
-        return (self.head_seq,)
 
     def grow(self, db, leaf):
         return RouteTimeRow.store(db, replace(leaf, count=self.count + 1)), self.head_seq
@@ -121,21 +121,17 @@ class ForkRouteTimeNode(RouteTimeNode):
     left: int
     right: int
 
-    @projected(view="wire")
+    @property
     def minimum(self):
         return self.lower
 
-    @projected(view="wire")
+    @property
     def maximum(self):
         return self.upper
 
-    @projected(view="wire")
+    @property
     def children(self):
         return (self.left, self.right)
-
-    @projected(view="wire")
-    def heads(self):
-        return ()
 
     @classmethod
     def join(cls, db, bit, left: RouteTimeRow, right: RouteTimeRow):
@@ -523,7 +519,7 @@ class OpenedRouteCounts(BusRouteCounts):
                       for actor in (delivery.message.sender, delivery.message.target))
         return frozenset(actors)
 
-    def unseen_counts(self, seen: Mapping[str, frozenset[int]]) -> dict[str, dict[str, int]]:
+    def unseen_counts(self, seen: Mapping[str, ReadCursor]) -> dict[str, dict[str, int]]:
         counts: dict[str, dict[str, int]] = {actor: {} for actor in self.deliveries}
 
         def add(actor: str, sender: str, target: str, count: int):
@@ -540,7 +536,7 @@ class OpenedRouteCounts(BusRouteCounts):
                     add(actor, message.sender, message.target, 1)
         return counts
 
-    def unseen_deliveries(self, actor: str, seen: frozenset[int]) -> tuple[UnseenDelivery, ...]:
+    def unseen_deliveries(self, actor: str, seen: ReadCursor) -> tuple[UnseenDelivery, ...]:
         delivery = self.deliveries[actor]
         return (*self._read_deliveries(actor, seen), *(
             UnseenDelivery(item.message.seq, item.message.target)
@@ -598,78 +594,45 @@ class OpenedRouteCounts(BusRouteCounts):
             "through": self.source.through,
         }
 
-    # One eligibility implementation supplies both counts and listings. The
-    # accepted frontier has disjoint subtrees; count uses their stored ranks,
-    # while listing alone descends to the original delivery sequences.
-    _eligible = f"""timestamp_walk(actor,root,since,id,node) AS (
-                SELECT request.actor, request.root, request.since, tree.id, tree.node
-                FROM requests AS request JOIN "{RouteTimeRow.declared_name}" AS tree
-                    ON tree.id=request.root
-                UNION ALL
-                SELECT walk.actor, walk.root, walk.since, child.id, child.node
-                FROM timestamp_walk AS walk, json_each(walk.node,'$.children') AS edge
-                JOIN "{RouteTimeRow.declared_name}" AS child ON child.id=edge.value
-                WHERE json_extract(walk.node,'$.minimum')<walk.since
-                    AND json_extract(walk.node,'$.maximum')>=walk.since
-            ), eligible AS MATERIALIZED (
-                SELECT actor,root,id,node FROM timestamp_walk
-                WHERE json_extract(node,'$.minimum')>=since
-            )"""
-
-    def _read_counts(self, seen: Mapping[str, frozenset[int]]) -> list[RouteUnread]:
-        """Seek each original route root, rank timestamps, subtract sparse paint.
-
-        Threshold traversal visits at most twice the finite key width plus one
-        node per route, even for nonmonotone timestamps. No later suffix or
-        original historical message range is scanned.
-        """
-        return RouteUnread.read(self.connection.execute(
-            f'''WITH RECURSIVE {self._requests}, {self._eligible},
-            totals AS (
-                SELECT actor,root,sum(json_extract(node,'$.count')) AS count
-                FROM eligible GROUP BY actor,root
-            ), actors AS MATERIALIZED (
-                SELECT key AS actor, value AS sequences FROM json_each(:seen)
+    def _read_counts(self, seen: Mapping[str, ReadCursor]) -> list[RouteUnread]:
+        node_field, = RouteTimeRow._fields_named(("node",))
+        rows = self.connection.execute(
+            f'''WITH {self._requests}, actors AS MATERIALIZED (
+                SELECT key AS actor, json_extract(value,'$.high_water') AS high_water,
+                    json_extract(value,'$.exceptions') AS exceptions FROM json_each(:seen)
             ), painted AS (
-                SELECT request.actor, request.root, count(*) AS count
-                FROM actors AS owner, json_each(owner.sequences) AS seen
-                CROSS JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=seen.value
-                JOIN requests AS request
-                    ON request.actor=owner.actor
+                SELECT request.actor,request.root,count(*) AS count
+                FROM actors AS owner,json_each(owner.exceptions) AS seen
+                JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=seen.value
+                JOIN requests AS request ON request.actor=owner.actor
                     AND request.target=row.target AND request.sender=row.sender
                     AND request.sender_lookup=row.sender_lookup AND row.timestamp>=request.since
                 WHERE row.seq<=:through GROUP BY request.actor,request.root
-            )
-            SELECT request.actor,request.target,request.sender,
-                coalesce(totals.count,0)-coalesce(painted.count,0) AS count
-            FROM requests AS request
-            LEFT JOIN totals ON totals.actor=request.actor AND totals.root=request.root
+            ) SELECT request.actor,request.target,request.sender,request.since,full.node,
+                prefix.node,coalesce(painted.count,0)
+            FROM requests AS request JOIN actors AS owner ON owner.actor=request.actor
+            JOIN "{RouteTimeRow.declared_name}" AS full ON full.id=request.root
+            LEFT JOIN "{RouteTimeRow.declared_name}" AS prefix ON prefix.id=(
+                SELECT time_root FROM "{RouteEntryRow.declared_name}"
+                WHERE target=request.target AND sender=request.sender AND sender_lookup=request.sender_lookup
+                    AND seq<=min(owner.high_water,:through) ORDER BY seq DESC LIMIT 1)
             LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
             self._request_bindings(self.deliveries) | {
-                "seen": json.dumps({actor: sorted(rows) for actor, rows in seen.items()}),
-            },
-        ))
+                "seen": json.dumps({actor: FieldCodec.encode(cursor) for actor,cursor in seen.items()})})
+        return [RouteUnread(actor,target,sender,
+                node_field.decode(full).count_since(self.connection,since)
+                - (node_field.decode(prefix).count_since(self.connection,since) if prefix is not None else 0)
+                - painted)
+                for actor,target,sender,since,full,prefix,painted in rows]
 
-    def _read_deliveries(self, actor: str, seen: frozenset[int]) -> list[UnseenDelivery]:
-        """Visit eligible original sequences, never a future timestamp range."""
+    def _read_deliveries(self, actor: str, seen: ReadCursor) -> list[UnseenDelivery]:
         return UnseenDelivery.read(self.connection.execute(
-            f'''WITH RECURSIVE {self._requests}, {self._eligible},
-            listing_nodes(id,node) AS (
-                SELECT id,node FROM eligible WHERE actor=:actor
-                UNION ALL
-                SELECT child.id,child.node
-                FROM listing_nodes AS parent, json_each(parent.node,'$.children') AS edge
-                JOIN "{RouteTimeRow.declared_name}" AS child ON child.id=edge.value
-            ), sequences(seq) AS (
-                SELECT head.value FROM listing_nodes AS leaf,
-                    json_each(leaf.node,'$.heads') AS head
-                UNION ALL
-                SELECT row.previous_at_timestamp FROM sequences AS chain
-                JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=chain.seq
-                WHERE row.previous_at_timestamp IS NOT NULL
-            )
-            SELECT row.seq,row.target FROM sequences AS listed
-            JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=listed.seq
-            WHERE row.seq NOT IN (SELECT value FROM json_each(:seen)) ORDER BY row.seq''',
-            self._request_bindings((actor,)) | {"actor": actor, "seen": json.dumps(sorted(seen))},
-        ))
+            f'''WITH {self._requests} SELECT row.seq,row.target
+            FROM requests AS request JOIN "{RouteEntryRow.declared_name}" AS row
+                ON row.target=request.target AND row.sender=request.sender
+                AND row.sender_lookup=request.sender_lookup
+            WHERE request.actor=:actor AND row.timestamp>=request.since
+                AND row.seq>:high_water AND row.seq<=:through
+                AND row.seq NOT IN (SELECT value FROM json_each(:exceptions)) ORDER BY row.seq''',
+            self._request_bindings((actor,)) | {"actor":actor,"high_water":seen.high_water,
+                "exceptions":json.dumps(seen.exceptions)}))

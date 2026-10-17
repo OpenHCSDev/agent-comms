@@ -15,7 +15,7 @@ from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
-from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance, Visible
+from .peer_relevance import GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .thread_status import ThreadStatus
 
@@ -825,26 +825,6 @@ class PeerState:
             goal.text if goal is not None else None,
         )
 
-    @classmethod
-    def listed(
-        cls, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], slots: int
-    ) -> tuple[PeerState, ...]:
-        """Peers in the order their relations arrive; only other visible peers compete for slots."""
-        viewed = {view.thread.incarnation: view for view in views}
-        visible = tuple(
-            relation for relation in relations
-            if relation.peer in viewed and relation.relevance.grants(Visible)
-        )
-        always = tuple(r for r in visible if r.relevance.grants(AlwaysListed))
-        others = tuple(
-            r for r in visible
-            if not r.relevance.grants(AlwaysListed) and viewed[r.peer].status.active
-        )
-        return tuple(
-            cls.from_view(viewed[relation.peer], relation)
-            for relation in (*always, *others[: max(0, slots - len(always))])
-        )
-
 
 @dataclass(frozen=True, kw_only=True)
 class CoordinationSegment(InstructionSegment):
@@ -853,7 +833,6 @@ class CoordinationSegment(InstructionSegment):
     parent: str | None
     project: str
     peers: tuple[PeerState, ...]
-    PEER_SLOTS: ClassVar[int] = 8
 
     @classmethod
     def capture(
@@ -863,7 +842,9 @@ class CoordinationSegment(InstructionSegment):
 
         instruction = InstructionFile.read("coordination.md")
         response_instruction = WakePolicy.relevance_instruction()
-        peers = PeerState.listed(views, relations, cls.PEER_SLOTS)
+        viewed = {view.thread.incarnation: view for view in views}
+        peers = tuple(PeerState.from_view(viewed[r.peer], r)
+                      for r in relations if r.peer in viewed)
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
         return cls(
             provenance=(OwnerProvenance(owner.incarnation, revision), instruction.source,
@@ -1077,7 +1058,7 @@ class TurnContext:
         This is a preview through the same contributor declarations used by
         preparation. It is never a recorded SDK request or an input grant.
         """
-        relations = comms.relationships.peer_relations(owner.name)
+        relations = comms.relationships.context_relations(owner.name)
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations)
         for segment in owner.context_goal_segments():
             context = context.prepend(segment)
@@ -1136,12 +1117,10 @@ class TurnContext:
             OwnerProvenance(owner.incarnation, turn.source_revision(owner)),
         )
         source += tuple(row.context_provenance() for row in inputs)
-        from .context_segments.doctrine import DoctrineSegment
         return cls(
             owner.incarnation,
             turn,
             (
-                DoctrineSegment.capture(),
                 CoordinationSegment.capture(owner, views, relations),
                 UserInputSegment(provenance=source, content=task),
             ),

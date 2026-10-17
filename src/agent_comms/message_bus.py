@@ -24,7 +24,7 @@ from .read_basis import (
     ListedDeliveries,
     DisplayBasis,
     MessageDisplayScope,
-    WatchAcknowledgment,
+    WatchAcknowledgment, ReadCursor,
 )
 from .routing import DeliveryScope
 from .store_files import _store_lock
@@ -132,7 +132,7 @@ class MessageBus:
         catalog = self._channels.read()
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
-        seen = self.reads.seen_sequences(delivery.actor, snapshot)
+        seen = self.reads.cursor(delivery.actor, snapshot)
         with self.log._opened_wire_snapshot() as source:
             with OpenedRouteCounts(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
@@ -206,7 +206,7 @@ class MessageBus:
             for actor in set(actors.values())
         }
         seen = {
-            actor: basis.document.seen_sequences(
+            actor: basis.document.cursor(
                 actor, basis.registry, source.revision.identity if source.revision else None
             ) for actor in deliveries
         }
@@ -235,7 +235,7 @@ class MessageBus:
         """
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        seen = self.reads.seen_sequences(delivery.actor, snapshot)
+        seen = self.reads.cursor(delivery.actor, snapshot)
         messages = self.log.messages_for_references(references)
         return self.reads.capture(
             name, tuple(message for message in messages if delivery.includes(message) and message.seq not in seen),
@@ -376,7 +376,7 @@ class MessageBus:
         ).read(self.log)
 
     def conversation_older_unread(
-        self, scope: DMDisplayScope, *, before: int, seen: frozenset[int]
+        self, scope: DMDisplayScope, *, before: int, seen: ReadCursor
     ) -> bool:
         """Ask the scoped offset reader, newest first, stopping at the first unread."""
         return UnreadBeforeRequest(scope, before, seen).read(self.log)

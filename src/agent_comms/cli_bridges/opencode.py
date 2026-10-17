@@ -15,7 +15,7 @@ from agent_comms.messages import Message
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
 from .shared import (
-    TranscriptBridge, TranscriptUpdate, Options, SendResult, parse_options, run_bridge, shared_parser,
+    IncomingFrame, TranscriptBridge, TranscriptUpdate, Options, run_bridge,
     Watch, Binding,
 )
 from .opencode_protocol import (
@@ -61,21 +61,15 @@ class Attach(Watch):
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--pid', type=int, required=True)
 
-    @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> Attach:
-        operation = cls(arguments.pid)
-        del arguments.pid
-        return operation
-
-    def binding(self, options: OpenCodeOptions) -> Binding:
+    def binding(self, arguments: argparse.Namespace) -> Binding:
         from agent_comms.comms import wire
 
-        if options.session is None:
+        if arguments.session is None:
             raise ValueError('Attach requires the selected native session')
-        comms = wire(options.root)
-        name = options.bus_thread or f'opencode-{options.session}'
-        options.state = options.state / options.session
-        return Binding(str(comms.root), name, options.session)
+        comms = wire(arguments.root)
+        name = arguments.bus_thread or f'opencode-{arguments.session}'
+        arguments.state = arguments.state / arguments.session
+        return Binding(str(comms.root), name, arguments.session)
 
     def start(self, bridge: OpenCodeBridge, tasks: asyncio.TaskGroup) -> None:
         from agent_comms.comms import wire
@@ -187,11 +181,10 @@ class OpenCodeBridge(TranscriptBridge[OpenCodeOptions]):
 
     async def deliver(self, message: Message) -> type[Outcome]:
         async with OpenCodeConnection.open(self.options, self.binding.thread) as connection:
-            for part in self.incoming_frame(message).parts:
-                await connection.deliver(part)
+            await connection.deliver(IncomingFrame(message).text)
         return DeliveredOutcome
 
-    async def show_sent(self, result: SendResult, target: str, body: str) -> None:
+    async def show_sent(self, result: str, target: str, body: str) -> None:
         async with OpenCodeConnection.open(self.options, self.binding.thread) as connection:
             await connection.toast(Toast(message=self.sent_text(result, target, body), variant='success'))
 
@@ -201,6 +194,5 @@ class OpenCodeBridge(TranscriptBridge[OpenCodeOptions]):
 
 
 def main() -> None:
-    parser = shared_parser(__doc__, Path.home() / '.local/state/opencode-comms-inbox', OpenCodeBridge)
-    run_bridge(OpenCodeBridge, parse_options(parser, OpenCodeOptions))
+    run_bridge(OpenCodeBridge, OpenCodeOptions.parse(__doc__, Path.home() / '.local/state/opencode-comms-inbox', OpenCodeBridge))
 
