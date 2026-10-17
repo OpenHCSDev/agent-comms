@@ -52,7 +52,7 @@ async def main():
     original_wire = comms.bus.log.path.read_bytes()
     actor = comms.views.coordination_snapshot('stopped')
     human = comms.views.viewer_snapshot(str(root))
-    assert {view.thread.name for view in actor.threads} == {owner, 'stopped'}
+    assert set(actor.threads) == {owner, 'stopped'}
     assert actor.channel_unread['#team'] == human.channel_unread['#team'] == 1
     assert comms.views.coordination_snapshot('stopped') == actor
     original = comms.views.message_notifications((message,))
@@ -86,7 +86,7 @@ async def main():
             assert set(group._members) == expected
             snapshot = comms.views.viewer_snapshot(str(root), show_stopped=show_stopped,
                                                   show_archived=show_archived)
-            assert set(group._members) == {view.thread.name for view in snapshot.threads}
+            assert set(group._members) == set(snapshot.threads)
         checks.append('real sidebar filtered cohorts agree with original registry status')
     await asyncio.get_running_loop().shutdown_default_executor()
     assert comms.bus.log.path.read_bytes() == original_wire

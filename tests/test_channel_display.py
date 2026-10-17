@@ -116,13 +116,13 @@ def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
 
     with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=toggle_after_boundary):
         first = comms.views.viewer_snapshot(str(tmp_path))
-    old = next(view for view in first.channels if view.channel.name == "#api")
+    old = first.channels["#api"]
     assert not old.channel.any_mode
     assert old.last_activity == 0
     assert first.channel_unread["#api"] == 0
 
     second = comms.views.viewer_snapshot(str(tmp_path))
-    new = next(view for view in second.channels if view.channel.name == "#api")
+    new = second.channels["#api"]
     assert new.channel.any_mode
     assert new.last_activity > 0
     assert second.channel_unread["#api"] == 1
@@ -133,18 +133,10 @@ def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
 def test_opt_in_user_input_activity_uses_same_member_scope(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send_user_message("alice", "human input to member", worktree=str(tmp_path))
-    off = next(
-        view
-        for view in comms.views.viewer_snapshot(str(tmp_path)).channels
-        if view.channel.name == "#api"
-    )
+    off = comms.views.viewer_snapshot(str(tmp_path)).channels["#api"]
     assert off.last_user_input == 0
     comms.channels.set_channel_any_mode("#api", True)
-    on = next(
-        view
-        for view in comms.views.viewer_snapshot(str(tmp_path)).channels
-        if view.channel.name == "#api"
-    )
+    on = comms.views.viewer_snapshot(str(tmp_path)).channels["#api"]
     assert on.last_user_input > 0
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 0
     assert bodies(comms.views.channel_display_page("#api")) == ["human input to member"]
@@ -157,9 +149,7 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms.channels.set_channel_any_mode("api", True)
     high_water = comms.bus.log.latest_sequence()
     assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
-    initial = {
-        view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels
-    }
+    initial = comms.views.viewer_snapshot(str(tmp_path)).channels
     assert initial["#api"].last_activity > 0
 
     comms.registry.rename("alice", "renamed")
@@ -171,9 +161,7 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     )
     assert comms.bus.log.latest_sequence() == high_water
     assert bodies(comms.views.channel_display_page("#api")) == []
-    after = {
-        view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels
-    }
+    after = comms.views.viewer_snapshot(str(tmp_path)).channels
     assert after["#api"].last_activity < initial["#api"].last_activity
 
     comms.registry.register(replace(comms.registry.require("renamed"), tags=frozenset({"api"})))
