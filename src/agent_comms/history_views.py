@@ -77,8 +77,11 @@ class ThreadPresentations:
     transcripts: Transcripts
     sent_source_limit: int
 
+    def view(self, name: str) -> ThreadView | None:
+        return self.views.get(self.snapshot.canonical_name(name))
+
     def read(self, name: str) -> ThreadPresentation | None:
-        view = self.views.get(self.snapshot.canonical_name(name))
+        view = self.view(name)
         if view is None:
             return None
         captured = self.transcripts.capture_page_window(

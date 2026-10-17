@@ -158,4 +158,4 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     comms.registry.rename("parent", "renamed-parent")
     review = comms.goals.goal_input_review("worker", goal.id, ["renamed-parent"])
     assert review["reviewed_inputs"] == [f"bus:{current.seq}"]
-    assert old in comms.bus.dm_history("renamed-parent", "worker")
+    assert old in comms.views.dm_history("renamed-parent", "worker")

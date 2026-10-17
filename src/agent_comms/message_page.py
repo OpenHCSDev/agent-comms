@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from contextlib import closing
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .bus_page_index import BusPageIndex
 from .messages import Message
@@ -186,6 +186,7 @@ class MessageReadRequest[T](ABC):
     def includes(self, message: Message) -> bool:
         return self.scope.includes(message)
 
+    @property
     @abstractmethod
     def empty(self) -> T: ...
 
@@ -207,11 +208,12 @@ class MessageReadRequest[T](ABC):
 
 @dataclass(frozen=True, slots=True)
 class MessagePageRequest(MessageReadRequest[MessagePage]):
-    """Captured membership, direction and bounds for both authoritative readers."""
+    """Captured membership, direction and bounds for indexed paging."""
 
     traversal: PageTraversal
     limit: int = 100
     max_bytes: int = 256 * 1024
+    empty: ClassVar[MessagePage] = MessagePage((), False, False)
 
     def __post_init__(self):
         if self.limit <= 0:
@@ -231,9 +233,6 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
         not the silent records between them.
         """
         return cls(scope, NewerTraversal(after), sys.maxsize, sys.maxsize)
-
-    def empty(self) -> MessagePage:
-        return MessagePage((), False, False)
 
     def indexed(self, index, source: OpenedWireSnapshot) -> MessagePage:
         window = PageWindow(self.limit, self.max_bytes)
@@ -255,12 +254,10 @@ class UnreadBeforeRequest(MessageReadRequest[bool]):
     scope: DMDisplayScope
     before: int
     seen: frozenset[int]
+    empty: ClassVar[bool] = False
 
     def includes(self, message: Message | BusPageRow) -> bool:
         return self.scope.unread_before(message, self.before, self.seen)
-
-    def empty(self) -> bool:
-        return False
 
     def indexed(self, index, source: OpenedWireSnapshot) -> bool:
         with closing(OlderTraversal(self.before).offsets(index, self.scope, source.boundary)) as rows:

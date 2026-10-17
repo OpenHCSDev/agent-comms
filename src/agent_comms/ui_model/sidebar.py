@@ -7,7 +7,7 @@ meaning (unread kinds, activity, labels) itself.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Container
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import NoReturn
@@ -82,7 +82,7 @@ class ChannelRowModel:
     order: type[ThreadSort]
 
     @classmethod
-    def of(cls, view, snapshot: CoordinationSnapshot, working: frozenset[str]) -> ChannelRowModel:
+    def of(cls, view, snapshot: CoordinationSnapshot, working: frozenset[str], threads: Container[str]) -> ChannelRowModel:
         channel = view.channel
         return cls(
             channel.name,
@@ -91,7 +91,7 @@ class ChannelRowModel:
             f" · tags: {', '.join(sorted(channel.tags)) or 'all'}",
             UnreadPresentation.for_channel(snapshot, channel.name),
             any(name in working for name in view.members),
-            tuple(name for name in view.members if name in {person.thread.name for person in snapshot.threads}),
+            tuple(name for name in view.members if name in threads),
             frozenset(view.pinned_members),
             channel.order,
         )
@@ -183,7 +183,7 @@ class SidebarModel:
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
         threads = {person.thread.name: ThreadRowModel.of(person, snapshot) for person in snapshot.threads}
         working = frozenset(name for name, row in threads.items() if row.status.busy)
-        channels = {view.channel.name: ChannelRowModel.of(view, snapshot, working)
+        channels = {view.channel.name: ChannelRowModel.of(view, snapshot, working, threads)
                     for view in snapshot.channels}
         return channels, threads
 

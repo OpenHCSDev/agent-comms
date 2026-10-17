@@ -1207,7 +1207,7 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
     assert failed.disposition is FailedAssignment
     assert len(calls) == 1
     assert "invalid triage decision" in comms.views.channel_history("#team")[-1].body
-    notifications = comms.views.message_notifications((_initial.message,))[
+    notifications = comms.views.message_notifications_for_references((_initial.message.reference,))[
         (_initial.message.seq, _initial.message.message_id)
     ]
     failure = next(item for item in notifications if item.recipient == "alpha")
