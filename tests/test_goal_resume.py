@@ -373,7 +373,7 @@ def test_automatic_failure_block_advances_goal_revision(comms, monkeypatch):
     )
     assert blocked is not None and blocked.state.declared_name == "blocked"
     assert blocked.revision == newer.revision + 1
-    assert blocked.progress.startswith("verified newer step\n\n")
+    assert str(blocked.progress).startswith("verified newer step\n\n")
     assert Comms(comms.root).registry.require("owner").goal == blocked
 
 
