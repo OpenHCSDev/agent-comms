@@ -1,5 +1,6 @@
 """Selected execution and ACP followups share one live input lifetime."""
 
+from agent_comms.goals import TextGoalProgress
 import asyncio
 from dataclasses import replace
 
@@ -231,7 +232,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         await prepare(execution)
         if change == "goal_revision":
             comms.goals.update_goal(
-                "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
+                "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress=TextGoalProgress("new"))
             )
         elif change == "goal_replaced":
             comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))

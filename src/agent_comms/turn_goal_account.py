@@ -18,6 +18,7 @@ from .goal_actions import BlockedGoalAction, GoalPrecondition
 from .goal_attempts import GoalAttemptError, GoalAttemptStore, LaunchPermit, StaleAttemptError
 from .goal_failure_observation import FailedTurnObservation
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
+from .goals import TextGoalProgress
 from .mro_dispatch import MroDispatch, handles
 from .store_files import _store_lock
 
@@ -79,7 +80,7 @@ class FailedGoalOrigin(MroDispatch):
             self.thread_name,
             BlockedGoalAction(
                 expect=GoalPrecondition(goal_id=self.goal.id, expected_goal=self.goal),
-                progress="Goal origin turn did not finish successfully.",
+                progress=TextGoalProgress("Goal origin turn did not finish successfully."),
             ),
         )
 

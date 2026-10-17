@@ -11,7 +11,7 @@ from typing import ClassVar
 
 from ..field_codec import FieldCodec
 from ..goal_history import GoalHistoryEntry
-from ..goals import GoalRevision
+from ..goals import GoalRevision, GoalProgress, NoGoalProgress
 from ..goal_states import GoalState
 from ..peer_relevance import Informed
 from ..turn_context import InstructionFile, InstructionSegment, OwnerProvenance
@@ -26,7 +26,7 @@ class PartnerGoalChange:
     # None when the peer no longer has a goal.
     goal: GoalRevision | None
     state: type[GoalState] | None
-    progress: str
+    progress: GoalProgress
 
     @classmethod
     def latest(cls, peer: str, history: tuple[GoalHistoryEntry, ...]):
@@ -35,7 +35,7 @@ class PartnerGoalChange:
         entry = history[-1]
         goal = entry.after
         if goal is None:
-            return cls(peer, entry.observed_at, None, None, "")
+            return cls(peer, entry.observed_at, None, None, NoGoalProgress())
         return cls(peer, entry.observed_at, goal.checkpoint, type(goal.state), goal.progress)
 
 
