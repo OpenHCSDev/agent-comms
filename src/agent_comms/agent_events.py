@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from .input_disposition import InputDocument
     from .turn_input_source import OriginalTurnInput
     from .runtime_info import AgentRuntimeInfo
+    from .input_drain import InputDrain
 
 
 class AgentEvent(ABC):
@@ -81,7 +82,20 @@ class InputStarted(InputDisposition):
 
 @dataclass(frozen=True)
 class InputRefused(InputDisposition):
-    pass
+    async def apply_to(self, inputs: InputDrain, session_id: str) -> None:
+        await inputs.input_refused(session_id, self.id)
+
+
+@dataclass(frozen=True)
+class InputCleared(InputRefused):
+    """The native queue positively confirmed removal of this exact input."""
+
+    id: str
+    native_id: str
+    text: str
+
+    async def apply_to(self, inputs: InputDrain, session_id: str) -> None:
+        await inputs.input_cleared(session_id, self.id, self.native_id, self.text)
 
 
 @dataclass(frozen=True)

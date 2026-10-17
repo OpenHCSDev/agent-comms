@@ -57,7 +57,7 @@ def test_ordinary_coordination_snapshot_exposes_actual_active_channel_participan
     try:
         snapshot = comms.views.coordination_snapshot()
         assert [person.thread.name for person in snapshot.participants("#team")] == ["beta"]
-        assert snapshot.participants("#team")[0].presentation.status.busy
+        assert snapshot.participants("#team")[0].presentation.status.working
     finally:
         comms.agents.finish_turn(lease)
     assert comms.views.coordination_snapshot().participants("#team") == ()

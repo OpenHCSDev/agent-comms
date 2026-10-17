@@ -44,8 +44,9 @@ from .shared import (
 
 
 class ClaudeMonitorFrame(IncomingFrame):
-    """Claude Monitor caps each encoded stdout event at 500 UTF-16 units."""
+    """Claude Monitor caps lines at 500 and joined batches at 3000 UTF-16 units."""
     EVENT_CHARS = 500
+    BATCH_CHARS = 3000
     HEADER = 'Comms in'
     JSON_TEXT = TypeAdapter(str)
 

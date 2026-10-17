@@ -965,11 +965,11 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
         return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
+        emit = self.acknowledgment.line_output(output)
         async def stream() -> None:
             async with aclosing(self.apply(ctx)) as messages:
                 async for message in messages:
-                    output.write(ArrivedMessage(message=message).model_dump_json() + '\n')
-                    output.flush()
+                    emit(ArrivedMessage(message=message).model_dump_json())
 
         asyncio.run(stream())
         return 0

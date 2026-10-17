@@ -91,7 +91,7 @@ class ChannelRowModel:
             f" · tags: {', '.join(sorted(channel.tags)) or 'all'}",
             UnreadPresentation.for_channel(snapshot, channel.name),
             any(name in working for name in view.members),
-            tuple(name for name in view.members if name in {person.thread.name for person in snapshot.threads}),
+            tuple(name for name in view.members if name in snapshot.threads),
             frozenset(view.pinned_members),
             channel.order,
         )
@@ -181,11 +181,10 @@ class SidebarModel:
 
     @staticmethod
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
-        threads = {person.thread.name: ThreadRowModel.of(person, snapshot) for person in snapshot.threads}
-        working = frozenset(member for name, row in threads.items()
-                            for member in row.status.working_members(name))
-        channels = {view.channel.name: ChannelRowModel.of(view, snapshot, working)
-                    for view in snapshot.channels}
+        threads = {name: ThreadRowModel.of(person, snapshot) for name, person in snapshot.threads.items()}
+        working = frozenset(name for name, row in threads.items() if row.status.working)
+        channels = {name: ChannelRowModel.of(view, snapshot, working)
+                    for name, view in snapshot.channels.items()}
         return channels, threads
 
     def clear(self, error: Exception) -> None:
