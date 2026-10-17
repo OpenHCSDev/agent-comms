@@ -196,7 +196,10 @@ class TestHandlers:
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.AgentInfo(model="test/model", context_used=38723, context_size=272000)
+            "proj", ae.ContextUsageObservation(context_used=38723)
+        )
+        agent._comms.agents.observe_runtime_info(
+            "proj", ae.AgentInfo(model="test/model", context_size=272000)
         )
         reopened = canonical_agent(wire(agent._comms.root))
         assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
