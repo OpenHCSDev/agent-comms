@@ -447,7 +447,7 @@ class HistoryViews:
         """
         CommandTarget.named(target).mark_view_read(self, worktree)
 
-    def mark_thread_view_read(self, target: str, *, worktree: str) -> None:
+    def mark_thread_user_read(self, target: str, *, worktree: str) -> None:
         viewer = self.messaging.user_identity(worktree).name
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(target)
