@@ -24,18 +24,14 @@ from .agent_backend import (
     CompactionOutcome,
     ConfiguresModel,
     ContextUsage,
-    EntryPage,
-    EntryRef,
     FailedCompaction,
     Forks,
     InputContent,
     Interrupts,
     NothingToCompaction,
     PlacedCompaction,
-    ReadsHistory,
     ReportsContext,
     RuntimeLocation,
-    TranscriptEntry,
     TurnDelivery,
 )
 from .native_pi import NativePiRpcLaunch
@@ -186,7 +182,6 @@ class PiNativeBackend(
     Interrupts,
     Compacts,
     ReportsContext,
-    ReadsHistory,
     Forks,
     ConfiguresModel,
 ):
@@ -321,39 +316,6 @@ class PiNativeBackend(
             first_kept=data.first_kept_entry_id,
             tokens_before=data.tokens_before,
         )
-
-    # -- ReadsHistory -----------------------------------------------------
-
-    async def entries(self, thread: Thread, before: EntryRef | None, limit: int) -> EntryPage:
-        """Decoded session-file entries, newest first; incomplete tails are skipped."""
-        from .coordinator import Coordination
-
-        return await Coordination.run_worker(
-            partial(self.read_entries, Path(thread.runtime.path), before, limit)
-        )
-
-    @staticmethod
-    def read_entries(path: Path, before: EntryRef | None, limit: int) -> EntryPage:
-        from .native_transcript import NativeTranscript
-
-        if limit <= 0:
-            raise ValueError("A history page needs a positive limit")
-        start = path.stat().st_size if before is None else before.order
-        page: list[TranscriptEntry] = []
-        for record in NativeTranscript(path).reverse(start):
-            if record.entry is None:
-                continue
-            entry = record.entry
-            page.append(TranscriptEntry(
-                ref=EntryRef(record.start, entry.source_coordinates.id or ""),
-                kind=entry.transcript_kind(),
-                text=entry.transcript_text(),
-                at=entry.recorded_at,
-            ))
-            if len(page) == limit:
-                break
-        older = page[-1].ref if len(page) == limit and page[-1].ref.order > 0 else None
-        return EntryPage(tuple(page), older)
 
     # -- Forks ------------------------------------------------------------
 

@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 from .pi_vocabulary import ThinkingLevel
-from . import agent_backend as pivot
 from .declared_family import DeclaredFamily
 from .pi_payloads import PiMessage, PiPayload
 from .routing import TurnRouting
@@ -178,13 +177,6 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
         recorded = self.recorded_at
         timestamp = recorded.timestamp() if recorded is not None else None
         return [replace(event, timestamp=timestamp) for event in self._events(context)]
-
-    def transcript_kind(self) -> type[pivot.TranscriptKind]:
-        """The backend-neutral kind of this entry; runtime bookkeeping by default."""
-        return pivot.SystemEntry
-
-    def transcript_text(self) -> str:
-        return ""
 
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         return []
@@ -458,12 +450,6 @@ class MessageEntry(NativeEntry):
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         return self.message.transcript_events(context)
 
-    def transcript_kind(self) -> type[pivot.TranscriptKind]:
-        return self.message.transcript_kind
-
-    def transcript_text(self) -> str:
-        return self.message.text
-
     @property
     def unread_reply(self) -> bool:
         return self.message.unread_reply
@@ -478,12 +464,6 @@ class CompactionEntry(NativeEntry):
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         text = self.summary.strip()
         return [NoticeTranscript(f"## Context compacted\n\n{text}")] if text else []
-
-    def transcript_kind(self) -> type[pivot.TranscriptKind]:
-        return pivot.CompactionEntry
-
-    def transcript_text(self) -> str:
-        return self.summary
 
 
 class CustomEntry(NativeEntry):

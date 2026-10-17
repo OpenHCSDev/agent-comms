@@ -102,7 +102,7 @@ def test_validation_names_missing_roles_and_abstract_methods():
     with pytest.raises(ab.BackendDeclarationError) as error:
         ab.validate_backends([HalfBackend])
     message = str(error.value)
-    for role in ("ReportsContext", "ReadsHistory", "ConfiguresModel"):
+    for role in ("ReportsContext", "ConfiguresModel"):
         assert role in message
     assert "leaves methods abstract" in message
     for method in ("compact", "run_turn", "abort", "close_idle"):
@@ -270,20 +270,18 @@ def _session_lines(path: Path) -> None:
 def test_session_entries_convert_to_transcript_entries_newest_first(tmp_path):
     session = tmp_path / "s.jsonl"
     _session_lines(session)
-    page = PiNativeBackend.read_entries(session, None, 4)
-    assert [(entry.kind, entry.text, entry.ref.backend_id) for entry in page.entries] == [
-        (ab.SystemEntry, "", "l1"),
-        (ab.CompactionEntry, "earlier work", "c1"),
-        (ab.ToolResultEntry, "file body", "t1"),
-        (ab.AssistantEntry, "hi back", "a1"),
-    ]
-    assert page.entries[2].at is None  # an invalid external time stays undated
-    assert page.entries[3].at.isoformat() == "2026-10-10T10:00:02+00:00"
-    older = PiNativeBackend.read_entries(session, page.older, 4)
-    assert [(entry.kind, entry.text) for entry in older.entries] == [
-        (ab.UserEntry, "hello there"), (ab.SystemEntry, ""),
-    ]
-    assert older.older is None
+    source = PiSessionFile(str(session)).history_source(tmp_path, None)
+    records = tuple(source.reverse(session.stat().st_size))
+    page = records[:4]
+    assert [record.entry.source_coordinates.id for record in page] == ["l1", "c1", "t1", "a1"]
+    assert page[1].entry.summary == "earlier work"
+    assert page[2].entry.message.text == "file body"
+    assert page[3].entry.message.text == "hi back"
+    assert page[2].entry.recorded_at is None  # an invalid external time stays undated
+    assert page[3].entry.recorded_at.isoformat() == "2026-10-10T10:00:02+00:00"
+    older = tuple(source.reverse(page[-1].start))
+    assert [record.entry.source_coordinates.id for record in older] == ["u1", "s"]
+    assert older[0].entry.message.text == "hello there"
 
 
 def _pi_stub(tmp_path: Path, session: Path) -> Path:

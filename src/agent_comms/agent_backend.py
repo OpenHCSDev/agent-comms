@@ -21,7 +21,6 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
@@ -282,60 +281,6 @@ class ClearQueue(TurnInboxItem):
 
 
 @dataclass(frozen=True)
-class EntryRef:
-    """A position in a backend's transcript: an order key plus the backend's own ID."""
-
-    order: int
-    backend_id: str
-
-
-class TranscriptKind(DeclaredFamily, affix="Entry"):
-    """The kind of one transcript entry."""
-
-
-class UserEntry(TranscriptKind):
-    """A user input."""
-
-
-class AssistantEntry(TranscriptKind):
-    """A model reply."""
-
-
-class ToolResultEntry(TranscriptKind):
-    """The result of one tool call."""
-
-
-class CompactionEntry(TranscriptKind):
-    """A compaction summary that replaces the entries before its first kept entry."""
-
-
-class ResetEntry(TranscriptKind):
-    """A boundary after which earlier entries no longer reach the model."""
-
-
-class SystemEntry(TranscriptKind):
-    """Runtime bookkeeping: session header, model or setting changes, labels."""
-
-
-@dataclass(frozen=True)
-class TranscriptEntry:
-    """One transcript entry in the backend-neutral form readers page through."""
-
-    ref: EntryRef
-    kind: type[TranscriptKind]
-    text: str
-    at: datetime | None
-
-
-@dataclass(frozen=True)
-class EntryPage:
-    """Entries newest first, and the cursor for the next older page (None at the start)."""
-
-    entries: tuple[TranscriptEntry, ...]
-    older: EntryRef | None
-
-
-@dataclass(frozen=True)
 class ContextUsage:
     """Context size measured by the backend's own estimator."""
 
@@ -446,14 +391,6 @@ class ReportsContext(ABC):
         """The thread's current context size."""
 
 
-class ReadsHistory(ABC):
-    """Pages of the transcript, newest first, for lazy history."""
-
-    @abstractmethod
-    async def entries(self, thread: Thread, before: EntryRef | None, limit: int) -> EntryPage:
-        """Up to ``limit`` entries older than ``before`` (or the newest when None)."""
-
-
 class Forks(ABC):
     """Creates a child runtime location from a parent thread's history."""
 
@@ -478,20 +415,10 @@ class ConfiguresModel(ABC):
         """Apply the choice and return the ``(model, thinking level)`` now in effect."""
 
 
-class ImportsHistory(ABC):
-    """Writes another backend's transcript into a new location of this backend."""
-
-    @classmethod
-    @abstractmethod
-    async def import_from(cls, source: ReadsHistory, thread: Thread) -> RuntimeLocation:
-        """Import ``source``'s history for ``thread`` into a new location."""
-
-
 THREAD_CAPABILITIES: tuple[type, ...] = (
     Steers,
     Compacts,
     ReportsContext,
-    ReadsHistory,
     ConfiguresModel,
 )
 
