@@ -1,11 +1,11 @@
 """Claude Code notifications and completed transcript blocks for Core."""
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import AsyncIterator
 
 from agent_comms.private_path import FileRevision
+from agent_comms.wire_watch import WatchSource, WireWatch
 from .claude_protocol import CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame
 from .shared import (
     LineMonitorBridge, Options, TranscriptUpdate,
@@ -41,8 +41,13 @@ class ClaudeBridge(LineMonitorBridge):
                     # None means this prefix began outside our captured window.
                     # Discard through its newline, even if it is still being written.
                     pending = None
-            available = original.size - stream.tell()
-            while True:
+            async for _ in WireWatch.observations(WatchSource.modified_file(path)):
+                opened = FileRevision.from_file(stream)
+                current = FileRevision.capture(path)
+                if (current is None or current.identity != original.identity
+                        or min(opened.size, current.size) < stream.tell()):
+                    raise ValueError('Claude transcript was replaced or truncated')
+                available = opened.size - stream.tell()
                 chunk = stream.read(available)
                 if pending is None:
                     boundary = chunk.find(b'\n')
@@ -64,13 +69,6 @@ class ClaudeBridge(LineMonitorBridge):
                     session.catching_up = False
                     if last_status is not None:
                         yield last_status
-                await asyncio.sleep(0.2)
-                opened = FileRevision.from_file(stream)
-                current = FileRevision.capture(path)
-                if (current is None or current.identity != original.identity
-                        or min(opened.size, current.size) < stream.tell()):
-                    raise ValueError('Claude transcript was replaced or truncated')
-                available = opened.size - stream.tell()
 
 
 def main() -> None:
