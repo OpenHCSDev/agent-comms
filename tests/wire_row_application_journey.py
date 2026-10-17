@@ -2,7 +2,7 @@
 
 No provider, saved session or retained input is involved. Refuse an existing
 root so a failed run is evidence, never an operation to replay for clean output.
-Run with the intended package/interpreter; the receipt identifies the import.
+Run with the intended package/interpreter; the acknowledgement identifies the import.
 """
 from __future__ import annotations
 
@@ -60,14 +60,14 @@ def main(root: Path) -> None:
     assert len(page.entries) == 1
     assert page.entries[0].message_id == message.message_id
     assert log.path.read_bytes() == before
-    receipt = {
+    acknowledgement = {
         "accepted": True, "package": agent_comms.__file__, "python": sys.executable,
         "physical_limit": WireRecord.max_row_bytes, "row_bytes": len(before),
         "batch_bytes": 1, "complete_read": True, "candidate_page": True,
         "original_written_bytes_unchanged": True, "provider_called": False,
     }
-    (root / "result.json").write_text(json.dumps(receipt, indent=2) + "\n")
-    print(json.dumps(receipt))
+    (root / "result.json").write_text(json.dumps(acknowledgement, indent=2) + "\n")
+    print(json.dumps(acknowledgement))
 
 
 if __name__ == "__main__":

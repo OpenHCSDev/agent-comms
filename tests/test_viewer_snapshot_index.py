@@ -171,7 +171,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
             assert projection_bytes() == before
         else:
             # The same observer serves actual foreground work between the two
-            # admitted index units, with no append, expiry tick or new request.
+            # authorized index units, with no append, expiry tick or new request.
             assert any(isinstance(value, ReadAnswered) and value.request_id == 9976
                        and value.value == "bob" for value in results)
         attempts.append(True)
@@ -629,7 +629,7 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path):
             list(source.public_records_for(frozenset({1}), before_offset=source.boundary))
 
 
-def test_reserved_sequence_preserves_committed_read_cut_without_admission(tmp_path):
+def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
     from agent_comms.wire_log import CertifiedOpenedWireSnapshot
     from test_private_bus_checkpoint import _root
 

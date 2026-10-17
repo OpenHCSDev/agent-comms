@@ -1,4 +1,4 @@
-"""Both native socket policies share per-call state, not admission authority."""
+"""Both native socket policies share per-call state, not claim_scope authority."""
 
 import asyncio
 import json
@@ -95,7 +95,7 @@ async def test_socket_arrival_before_native_events_waits_without_authority(polic
     p.start()
     assert await request == {"ok": True}
     with pytest.raises(SelectedToolDenied, match="UNKNOWN"):
-        p.socket.assert_complete()  # Admission/durable .done alone is insufficient.
+        p.socket.assert_complete()  # Claim/durable .done alone is insufficient.
     p.end()
     p.socket.assert_complete()
     assert p.effects == ["one"]
@@ -135,7 +135,7 @@ async def test_repeated_native_events_never_repeat_effects(policy, phase):
         "terminal-id",
         "terminal-null",
         "no-start",
-        "no-admission",
+        "no-claim_scope",
         "socket-args",
     ],
 )
@@ -153,7 +153,7 @@ async def test_mismatched_observation_does_not_complete(policy, observation):
             p.end()
         else:
             p.start()
-            if observation == "no-admission":
+            if observation == "no-claim_scope":
                 p.end()
             elif observation == "socket-args":
                 changed = {key: "different" for key in p.args}
@@ -186,7 +186,7 @@ async def test_cancelled_wait_cannot_be_restarted_or_replayed(policy):
     assert not p.effects
 
 
-async def test_start_timeout_retains_observations_without_reopening_admission(policy, monkeypatch):
+async def test_start_timeout_retains_observations_without_reopening_claim(policy, monkeypatch):
     p = policy
 
     async def missed_start(call):
@@ -267,7 +267,7 @@ async def test_concurrent_duplicate_requests_admit_exactly_once(policy):
 
 
 @pytest.mark.parametrize("failure", ["owner-revoked", "slot-fsync", "cancel-action"])
-async def test_failed_admission_is_consumed_and_never_retried(policy, monkeypatch, failure):
+async def test_failed_claim_is_consumed_and_never_retried(policy, monkeypatch, failure):
     p = policy
     p.announce()
     p.start()
@@ -323,7 +323,7 @@ async def test_lost_terminal_receipt_cannot_be_replaced_by_error(policy, monkeyp
     assert p.effects == ["one"]
 
 
-async def test_socket_close_cancels_pending_admission_and_closes_client(policy):
+async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
     p = policy
     await p.socket.start()
     p.socket.expected_pid = os.getpid()

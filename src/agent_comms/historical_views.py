@@ -256,7 +256,7 @@ class HistorySource:
         info = log.path.stat()
         if (log.read_metadata_unlocked(required=True).root_id != self.wire_root_id
                 or (info.st_dev, info.st_ino) != self.bus_identity or info.st_size != self.size):
-            raise ValueError("Recorded provenance lost original wire custody")
+            raise ValueError("Recorded provenance lost original wire ownership")
 
     @classmethod
     def require(cls, sources: tuple[HistorySource, ...], key: str) -> HistorySource:
@@ -487,7 +487,7 @@ class HistoryArchive:
                     if bus_info is None:
                         archived.path.touch()
                     marker = archived.read_metadata_unlocked(required=True)
-                    marker.admission_after_seq = marker.last_seq
+                    marker.claimed_after_seq = marker.last_seq
                     marker.access = ArchivedAccess()
                     marker.checkpoint_version = None
                     marker.checkpoint_seal = None

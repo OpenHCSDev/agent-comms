@@ -10,7 +10,7 @@ from functools import partial
 from .coordination_errors import StaleFence
 from .coordinator import Coordination
 from .native_pi import NativePiTerminalFailure, NativePiUnavailable
-from .private_send_admission import PrivateSendAdmission
+from .private_send_claim import PrivateSendClaim
 from .selected_participant import SelectedParticipant
 from .selected_result import publish_native_failure
 from .turn_context import RenderedInput
@@ -19,13 +19,13 @@ from .turn_context import RenderedInput
 @dataclass(frozen=True)
 class SelectedRequest:
     participant: SelectedParticipant
-    admission: PrivateSendAdmission
+    claim_scope: PrivateSendClaim
 
     @classmethod
     async def reserve(cls, participant, session, stage, token, prompt: RenderedInput):
         return cls(
             participant,
-            await PrivateSendAdmission.reserve(
+            await PrivateSendClaim.reserve(
                 selected=participant,
                 stage=stage,
                 token=token,
@@ -56,7 +56,7 @@ class SelectedRequest:
 
     async def _settle_unknown(self) -> bool:
         try:
-            await self.admission.stage.fail_unknown(
+            await self.claim_scope.stage.fail_unknown(
                 self.participant.bus,
                 self.participant.owner,
                 self.participant.response_owner,
@@ -75,7 +75,7 @@ class SelectedRequest:
             return
         await Coordination.run_worker(partial(publish_native_failure,
             self.participant,
-            self.admission.input_id,
+            self.claim_scope.input_id,
             error.public_failure,
             native_response=error.rejected_response,
             source_error=error,

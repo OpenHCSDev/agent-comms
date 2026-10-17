@@ -7,7 +7,7 @@ import json
 import math
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import field, dataclass
 from typing import TYPE_CHECKING, Final
 
 from .wire_record import MessageWireRecord
@@ -17,7 +17,7 @@ from .jsonl_stream import unique_fields
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
-    from .delivery_policy import DeliveryManifest, KeyedResponseReceipt
+    from .delivery_policy import DeliveryManifest, KeyedResponseAcknowledgement
     from .messages import Message
     from .wake import NoWakeDecision, WakeDecision
 
@@ -65,11 +65,11 @@ def public_envelope_digest(record: Mapping[str, object]) -> str:
 
 
 class DuplicateWireKeyError(ValueError):
-    """Ambiguous JSON cannot carry a canonical wire receipt."""
+    """Ambiguous JSON cannot carry a canonical wire acknowledgement."""
 
 
 def unique_wire_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    """Reject ambiguous JSON objects, including nested receipt keys."""
+    """Reject ambiguous JSON objects, including nested acknowledgement keys."""
     try:
         return unique_fields(pairs)
     except ValueError as error:
@@ -127,7 +127,7 @@ class CommittedDelivery(MessageWireRecord):
     resolver_version: str
     policy_version: str
     manifest_codec: str = INITIAL_CODEC
-    receipt: KeyedResponseReceipt | None = None
+    acknowledgement: KeyedResponseAcknowledgement | None = field(default=None, metadata={"wire_name": 'receipt'})
 
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and its original addressed incarnation agree."""
@@ -199,7 +199,7 @@ class CommittedDelivery(MessageWireRecord):
         rows = decisions_wire(decisions)
         if raw.decisions != rows or raw.decisions_digest != decisions_digest(rows):
             raise ValueError("Delivery decisions do not match the full committed N.")
-        receipt = policy.require_receipt(wire_root_id, message)
+        acknowledgement = policy.require_acknowledgement(wire_root_id, message)
         return cls(
             wire_root_id,
             message,
@@ -209,21 +209,21 @@ class CommittedDelivery(MessageWireRecord):
             raw.control.value,
             RESOLVER_VERSION,
             POLICY_VERSION,
-            receipt=receipt,
+            acknowledgement=acknowledgement,
         )
 
     def deliveries(self) -> tuple[CommittedDelivery, ...]:
         return (self,)
 
-    def require_admission(self, metadata) -> None:
+    def require_claim(self, metadata) -> None:
         """Factory already bound root/audience; deliveries need no retained-public exception."""
 
     def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
         from .private_bus_checkpoint import Addressed, DeliverySources, Replies, ResponseKeys
 
         yield from super().checkpoint_rows(offset, length, previous_sequence)
-        if self.receipt is not None:
-            yield ResponseKeys(self.receipt.publication_key)
+        if self.acknowledgement is not None:
+            yield ResponseKeys(self.acknowledgement.publication_key)
         yield DeliverySources(self.message.seq, self.message.message_id,
                               self.audience.sender_lookup, offset=offset, length=length)
         for recipient in self.audience.recipients:

@@ -35,7 +35,7 @@ _MAX_SIDECAR_BYTES = 32 * 1024 * 1024
 
 
 class SidecarCommitUnknown(IdentityConflict):
-    """No successful durability receipt; callers must not send or retry input."""
+    """No successful durability acknowledgement; callers must not send or retry input."""
 
 
 def _identity(info: os.stat_result) -> tuple[int, int]:
@@ -344,7 +344,7 @@ def sidecar_connection(
     """Verify and use one exact snapshot, committing only on successful scope exit.
 
     Callers must check rowcount/readback for their own exact inserted identities.
-    SQL COMMIT alone is not a durable receipt: the scope must also exit normally.
+    SQL COMMIT alone is not a durable acknowledgement: the scope must also exit normally.
     """
     with _locked_directory(path, blocking=blocking) as directory:
         snapshot = _read_snapshot(directory, path.name)

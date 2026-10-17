@@ -247,7 +247,7 @@ def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
         ([{"type": "extension_final", "text": "unattested"}], None),
     ],
 )
-def test_final_content_owns_native_text_admission(content, expected):
+def test_final_content_owns_native_text_claim(content, expected):
     from agent_comms.native_pi import NativePiUnavailable
 
     event = decode({"type": "message_end", "message": {

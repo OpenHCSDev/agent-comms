@@ -77,20 +77,20 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def require_original_provenance(self, source: InputProvenance):
         raise RelationViolationError("Constraint lacks its original input provenance")
 
-    def matches_admission(self, admission: int) -> bool:
+    def matches_claim(self, claim_scope: int) -> bool:
         return False
 
-    def queued_for(self, owner: ThreadIncarnation, admission: int, text: str) -> bool:
+    def queued_for(self, owner: ThreadIncarnation, claim_scope: int, text: str) -> bool:
         return False
 
-    def require_started(self, admission: int) -> StartedInput:
+    def require_started(self, claim_scope: int) -> StartedInput:
         raise RelationViolationError("Input start lacks its original native disposition")
 
     def context_provenance(self) -> InputProvenance:
         raise RelationViolationError("Constraint lacks its original input")
 
     def bind(
-        self, *, admission: int, turn_id: str, native_id: str, text: str
+        self, *, claim_scope: int, turn_id: str, native_id: str, text: str
     ) -> InputAttempt | None:
         self.require_not_cleared()
         return None
@@ -152,7 +152,7 @@ class StoredInput(InputAttempt):
     key: str = field(metadata={"public_exclude": True})
     sequence: int | None
     owner: str = field(metadata={"public_exclude": True})
-    admission: int = field(metadata={"public_exclude": True})
+    claim_scope: int = field(metadata={"wire_name": 'admission', "public_exclude": True})
     target: str
     source_text: str = field(metadata={"public_name": "text"})
     origin: InputOrigin = field(default_factory=UnattributedInputOrigin, kw_only=True,
@@ -171,7 +171,7 @@ class StoredInput(InputAttempt):
             for value in (self.key, self.owner, self.target, self.source_text):
                 if not FieldCodec.decode(str, value):
                     raise ValueError("Input identity text cannot be empty")
-            GenerationCounter.require_positive(self.admission)
+            GenerationCounter.require_positive(self.claim_scope)
         except ValueError as error:
             raise ValueError("Invalid ACP input identity") from error
         if self.sequence is not None and (
@@ -192,8 +192,8 @@ class StoredInput(InputAttempt):
         # rows have only a name and never acquire an inferred incarnation.
         return self.origin.matches_owner(self.owner, source_owner)
 
-    def matches_admission(self, admission: int) -> bool:
-        return self.admission == admission
+    def matches_claim(self, claim_scope: int) -> bool:
+        return self.claim_scope == claim_scope
 
     def _transition(self, target: type[StoredInput], **changes) -> StoredInput:
         values = {item.name: getattr(self, item.name) for item in fields(self)}
@@ -242,17 +242,17 @@ class ReservedInput(RecoverableUnboundInput):
 
     accepts_reservation = True
 
-    def queued_for(self, owner: ThreadIncarnation, admission: int, text: str) -> bool:
+    def queued_for(self, owner: ThreadIncarnation, claim_scope: int, text: str) -> bool:
         return (
             self.matches_owner(owner)
-            and self.matches_admission(admission)
+            and self.matches_claim(claim_scope)
             and self.digest.matches(text)
         )
 
     def bind(
-        self, *, admission: int, turn_id: str, native_id: str, text: str
+        self, *, claim_scope: int, turn_id: str, native_id: str, text: str
     ) -> InputAttempt | None:
-        if self.admission != admission:
+        if self.claim_scope != claim_scope:
             return None
         return self._transition(
             BoundUnknownInput, turn_id=turn_id, native_id=native_id, sent_digest=TextDigest.of(text)
@@ -319,15 +319,15 @@ class StartedInput(SentInput):
     public_status = "started"
     cancellation_feedback = "Native input started; turn cancelled."
 
-    def require_started(self, admission: int) -> StartedInput:
-        if not self.matches_admission(admission):
-            raise RelationViolationError("Input start admission changed")
+    def require_started(self, claim_scope: int) -> StartedInput:
+        if not self.matches_claim(claim_scope):
+            raise RelationViolationError("Input start claim_scope changed")
         return self
 
     def matches_lease(self, lease, snapshot) -> bool:
         return (
             lease.identity.incarnation.matches_recorded_name(self.owner, snapshot)
-            and self.matches_admission(lease.admission_generation)
+            and self.matches_claim(lease.claimed_generation)
             and self.turn_id == lease.turn_id
         )
 
@@ -348,7 +348,7 @@ class StartedInput(SentInput):
 
         Stored rows record owner name and input generation, not thread birth or process. The
         publication source independently validates the original complete lease
-        and native ancestry; this receipt never invents their missing proof.
+        and native ancestry; this acknowledgement never invents their missing proof.
         """
         return self if self.matches_lease(lease, snapshot) and self.matches_native(
             turn_id=lease.turn_id, native_id=native_id, text=sent_text,

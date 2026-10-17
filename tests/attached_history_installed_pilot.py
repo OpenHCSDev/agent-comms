@@ -49,12 +49,12 @@ def prepare_physical_fixture():
                                   model='selected-offline/fixture',thinking_level='off'))
     reference_actual_history(comms.root,Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
     index=next(i for i,item in enumerate(comms.views.historical_threads()) if item.thread.name=='nra-architecture')
-    receipt={'owner':'Mendel477/268','root':str(comms.root),'wire_root_id':root_id,
+    acknowledgement={'owner':'Mendel477/268','root':str(comms.root),'wire_root_id':root_id,
              'project':str(project),'profile':str(profile),'archive_index':index,
              'input_policy':'No native/user inputs. Offline selected fixture. Provider endpoint closed.',
              'preserved_source':os.environ['ACTUAL_COMMS_SOURCE_ROOT']}
-    (destination/'fixture.json').write_text(json.dumps(receipt,indent=2)+'\n')
-    print(json.dumps(receipt),flush=True)
+    (destination/'fixture.json').write_text(json.dumps(acknowledgement,indent=2)+'\n')
+    print(json.dumps(acknowledgement),flush=True)
 
 
 

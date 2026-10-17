@@ -926,7 +926,7 @@ class GoalAttemptStore:
     ) -> Generation:
         """A separate explicit user retry decision retires uncertainty; resume alone cannot.
 
-        This records an authorization, not a provider receipt. Integration must
+        This records an authorization, not a provider acknowledgement. Integration must
         route only a real user action here; same-UID user authentication is not
         claimed by the ledger.
         """

@@ -72,7 +72,7 @@ class PublicationMeasurements:
     def operation(self, name: str):
         """Borrow bounded counters for a declared acquisition/publication operation.
 
-        These counters observe resources; they never decide readiness, receipt
+        These counters observe resources; they never decide readiness, acknowledgement
         acceptance or replay. Owners call this with their fixed operation names.
         """
         return self.operations.setdefault(name, PublicationMeasurements()).measuring()
@@ -97,7 +97,7 @@ def record_request_progress(root, lease, progress, native_process, *, publicatio
 
     This private diagnostic does not contain prompt bodies, headers or credentials,
     grant retry or participate in lifecycle decisions. Native clocks remain native;
-    receipt and publication spans use the local monotonic clock independently.
+    acknowledgement and publication spans use the local monotonic clock independently.
     """
     now = time.monotonic_ns()
     record = {"turn": FieldCodec.encode(lease), "native": FieldCodec.encode(progress),
@@ -135,7 +135,7 @@ def _record_request_observation(root, lease, record):
         with os.fdopen(descriptor, "w") as output:
             output.write(json.dumps(record) + "\n")
     except OSError:
-        # Optional observation cannot change an admitted original's outcome.
+        # Optional observation cannot change an authorized original's outcome.
         _LOG.warning("Native request timing diagnostic unavailable", exc_info=True)
 
 

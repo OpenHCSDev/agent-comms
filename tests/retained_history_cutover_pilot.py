@@ -47,7 +47,7 @@ def test_all_declared_saved_checkpoints_keep_original_certificates():
         assert witness.root_id==source.wire_root_id
 
 
-def test_current_saved_history_has_no_live_admission_or_delivery(tmp_path):
+def test_current_saved_history_has_no_live_claim_or_delivery(tmp_path):
     original=max(current_sources(),key=lambda source:(Path(source.root)/'bus.jsonl').stat().st_size)
     comms=wire(tmp_path/'destination')
     comms.messaging.initialize_private_initial_protocol()
@@ -61,4 +61,4 @@ def test_current_saved_history_has_no_live_admission_or_delivery(tmp_path):
     assert (comms.root/'bus.jsonl').read_bytes()==live_before
     assert (Path(source.root)/'bus.jsonl').read_bytes()==(Path(original.root)/'bus.jsonl').read_bytes()
     marker=WireLog(Path(source.root)/'bus.jsonl').read_metadata_unlocked(required=True)
-    assert marker.admission_after_seq==marker.last_seq
+    assert marker.claimed_after_seq==marker.last_seq

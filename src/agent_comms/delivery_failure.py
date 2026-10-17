@@ -1,7 +1,7 @@
 """Decode actual send exceptions once into the shared delivery failure family."""
 
-from .acp_extension import AdmissionBlockedFailure, BackendDeliveryFailure, UnknownDeliveryFailure
-from .errors import HumanAdmissionBlockedError, HumanInitialUnknownError
+from .acp_extension import ClaimBlockedFailure, BackendDeliveryFailure, UnknownDeliveryFailure
+from .errors import HumanClaimBlockedError, HumanInitialUnknownError
 from .mro_dispatch import MroDispatch, handles
 
 
@@ -13,9 +13,9 @@ class FailureDecoder(MroDispatch):
     def unknown(self, error):
         self.failure = UnknownDeliveryFailure(str(error), error.wire_root_id, error.wire_seq, error.message_id)
 
-    @handles(HumanAdmissionBlockedError)
+    @handles(HumanClaimBlockedError)
     def blocked(self, error):
-        self.failure = AdmissionBlockedFailure(str(error))
+        self.failure = ClaimBlockedFailure(str(error))
 
     @handles(Exception)
     def refused(self, error):

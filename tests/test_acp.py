@@ -68,8 +68,8 @@ def fake_input_started(args, kwargs):
     """Bind and start the original input as Pi does before emitting output."""
     text = args[2]
     native_id = uuid4().hex
-    with kwargs["send_boundary"](None, native_id, text) as admitted:
-        assert isinstance(admitted, GrantedSend)
+    with kwargs["send_boundary"](None, native_id, text) as authorized:
+        assert isinstance(authorized, GrantedSend)
     assert kwargs["native_start"](None, native_id, text)
     return ae.InputStarted(id=None)
 
@@ -283,9 +283,9 @@ class TestHandlers:
             prompt = None
             if selected:
                 await Coordination.run_worker(lambda: agent._comms.messaging.send_user_message(
-                    session, "Settings custody check", worktree=str(native.project)))
+                    session, "Settings ownership check", worktree=str(native.project)))
             else:
-                prompt = asyncio.create_task(agent.prompt(session, [TextContentBlock(type="text", text="Settings custody check")]))
+                prompt = asyncio.create_task(agent.prompt(session, [TextContentBlock(type="text", text="Settings ownership check")]))
             try:
                 async with asyncio.timeout(10):
                     while not native.provider.requests:

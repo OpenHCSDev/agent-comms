@@ -26,7 +26,7 @@ from .envelope_claim_transitions import (
     ClaimRelease,
     ClaimTransition,
     FileClaimPath,
-    WakeAdmission,
+    WakeClaim,
     _release_resource,
 )
 from .errors import (
@@ -199,7 +199,7 @@ class Publisher:
         releases: Sequence[str | Path | ClaimRelease] = (),
         _locked_registry_snapshot: RegistrySnapshot | None = None,
         _bus_lock: StoreLock | None = None,
-        _admission: WakeAdmission | None = None,
+        _claim: WakeClaim | None = None,
     ) -> Message:
         """One guarded message and whole-set claim transition in ONE bus row.
 
@@ -223,7 +223,7 @@ class Publisher:
             raise RelationViolationError("Claim and release sets must be finite sequences.")
         if len(claims) + len(releases) > ClaimTransition.max_resources:
             raise RelationViolationError("Claim envelope exceeds the bounded resource set.")
-        if _admission is not None and (
+        if _claim is not None and (
             not claims or releases or _bus_lock is None or _locked_registry_snapshot is None
         ):
             raise RelationViolationError("Bound claims require the selected wake boundary.")
@@ -265,7 +265,7 @@ class Publisher:
                 transition = ClaimTransition(
                     stored.sender, owner_incarnation, stored.seq, stored.message_id,
                     requested, tuple(release_records),
-                    uuid.uuid4().hex if requested else None, _admission,
+                    uuid.uuid4().hex if requested else None, _claim,
                 )
                 source.prepare_claim(transition)  # pre-append conflict is synchronous
             stored = replace(stored, claim_transition=transition)

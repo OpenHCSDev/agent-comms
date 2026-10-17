@@ -32,7 +32,7 @@ from .envelope_claim_transitions import (
     ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
 )
 from .coordination_tables.publications import PublicationIntents
-from .errors import HumanAdmissionBlockedError, RelationViolationError
+from .errors import HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
@@ -211,7 +211,7 @@ class CertifiedSourceRead:
         self.require_open_prefix()
         PublicMessages.require_contiguous(self.connection)
         if self.marker.last_seq != self.witness.through_seq:
-            raise HumanAdmissionBlockedError(
+            raise HumanClaimBlockedError(
                 "Private bus sequence reservation has UNKNOWN outcome; "
                 "human send blocked, do not retry."
             )
@@ -514,7 +514,7 @@ class CertifiedSourceRead:
         # The original intent already owns its Message-derived identity. Use
         # that exact pointer relation; never decode unrelated history while
         # the publication transaction holds its current source fence. Message
-        # IDs are not assumed unique: the original receipt still proves key,
+        # IDs are not assumed unique: the original acknowledgement still proves key,
         # execution and complete publication content for every candidate.
         cursor = self.connection.execute(
             f"SELECT * FROM {DeliverySources.declared_name} WHERE message_id=? ORDER BY seq DESC",
@@ -522,9 +522,9 @@ class CertifiedSourceRead:
         )
         for row in DeliverySources.iterate(cursor):
             original = row.delivery(self.stream, self.witness.root_id)
-            receipt = original.receipt
-            if receipt is not None and receipt.publication_key == intent.publication_key:
-                if receipt.execution_id != intent.execution_id:
+            acknowledgement = original.acknowledgement
+            if acknowledgement is not None and acknowledgement.publication_key == intent.publication_key:
+                if acknowledgement.execution_id != intent.execution_id:
                     raise RelationViolationError("Response publication identity conflicts.")
                 if not intent.matches_publication(original.message):
                     raise RelationViolationError("Response publication intent conflicts.")
@@ -547,7 +547,7 @@ class ClaimCommits(CheckpointTable, TypedTable):
     """Original claim facts, including operation IDs consumed before release.
 
     Generated columns belong to the typed transition, not another authored
-    encoding. One admitted envelope may acquire several normalized resources.
+    encoding. One authorized envelope may acquire several normalized resources.
     """
 
     transition: ClaimTransition
@@ -555,7 +555,7 @@ class ClaimCommits(CheckpointTable, TypedTable):
         "sql": Column(unique=True, generated="json_extract(transition,'$.seq')"),
     })
     operation_id: str | None = field(default=None, init=False, compare=False, metadata={
-        "sql": Column(unique=True, generated="json_extract(transition,'$.admission.operation_id')"),
+        "sql": Column(unique=True, generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')"),
     })
 
     @classmethod
@@ -667,7 +667,7 @@ class PublicMessages(CheckpointTable, TypedTable):
     @classmethod
     def require_contiguous(cls, db: sqlite3.Connection) -> None:
         if cls.exists(db, where=cls.gap):
-            raise HumanAdmissionBlockedError(
+            raise HumanClaimBlockedError(
                 "Private bus sequence gap has UNKNOWN outcome; "
                 "human send blocked, do not retry."
             )
@@ -676,7 +676,7 @@ class PublicMessages(CheckpointTable, TypedTable):
     def require_unused(cls, db: sqlite3.Connection, sender: str, message_id: str) -> None:
         if cls.exists(db, where="sender=? AND message_id=?", parameters=(sender, message_id)):
             raise RelationViolationError(
-                "Human initial ID already exists; inspect its receipt, do not retry."
+                "Human initial ID already exists; inspect its acknowledgement, do not retry."
             )
 
 
@@ -1474,7 +1474,7 @@ def addressed_source_pointers_unlocked(
 ) -> tuple[DeliverySources, ...]:
     """Latest source pointers for natural-turn awareness, and the observation
     tick's wake answer: an empty result under the current seal means the owner
-    has no unadmitted addressed rows.
+    has no unauthorized addressed rows.
 
     Caller holds the bus lock. Read only the current sealed index: no payload
     decode, historical scan, index repair, recovery, or native cursor advancement.
@@ -1497,7 +1497,7 @@ def addressed_source_pointers_unlocked(
                 f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} FROM {Addressed.declared_name} a "
                 f"JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
                 "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq DESC LIMIT ?",
-                (lookup, marker.admission_after_seq, limit),
+                (lookup, marker.claimed_after_seq, limit),
             )
         )
         marker.seal.check_final(saved, path)

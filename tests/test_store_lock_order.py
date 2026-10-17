@@ -15,7 +15,7 @@ from agent_comms.threads import Thread
 def test_undeclared_store_rank_is_rejected_before_acquisition():
     with pytest.raises(AttributeError, match="lock_rank"):
         with StoreLock.ordered({object(): True}):
-            pytest.fail("Unranked owner was admitted")
+            pytest.fail("Unranked owner was authorized")
 
 
 def test_concrete_store_cannot_inherit_or_omit_its_rank():

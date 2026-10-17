@@ -28,7 +28,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     original = comms.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
     inputs = InputDispositions(comms.root)
-    inputs.record("acp:original-unknown", seq=None, owner=owner.name, admission=1,
+    inputs.record("acp:original-unknown", seq=None, owner=owner.name, claim_scope=1,
                   target=owner.name, text="Unpinned original UNKNOWN input; never export/replay")
 
     def command(*args):
@@ -131,15 +131,15 @@ def original_input_consumer_journey(tmp_path, command):
     originals = []
     with _store_lock(comms._wire_lock_path):
         for _ in range(2):
-            with ExitStack() as custody:
+            with ExitStack() as ownership:
                 queued, _, _receipt = QueuedInput.capture(
                     agent.inputs, "beta", text=wording, prompt=wording, echo=True,
-                    images=(), controller=Client(), origin=origin, custody=custody)
-                custody.pop_all()
+                    images=(), controller=Client(), origin=origin, ownership=ownership)
+                ownership.pop_all()
             originals.append(stored_inputs(agent.inputs.dispositions.root).lookup(queued.key))
         assert agent.inputs.dispositions.record(
             "neutral-original", seq=None, owner="beta",
-            admission=origin.admission.admission_generation, target="beta", text=wording)
+            claim_scope=origin.claim_scope.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()
     other = comms.registry.declare(Thread("unaddressed", frozenset(), origin.project))

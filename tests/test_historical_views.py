@@ -349,7 +349,7 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     }
     assert not hasattr(recorded, "process_identity")
     assert not hasattr(recorded, "active_turn")
-    assert not hasattr(source.provenance, "admission_generations")
+    assert not hasattr(source.provenance, "claimed_generations")
     # Required creation is parsed before any constructor clock/default can run.
     raw = FieldCodec.encode(recorded)
     raw.pop("created_at")
@@ -372,7 +372,7 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
 
 @pytest.mark.parametrize('changed_resource', ['bus', 'certificate', 'pending'])
 def test_archived_certificate_remains_immutable_without_writer_recovery(migrated, changed_resource):
-    """Archive reads reject mutation/pending custody instead of adopting it."""
+    """Archive reads reject mutation/pending ownership instead of adopting it."""
     import sqlite3
     from agent_comms.checkpoint_seals import PendingSeal
     from agent_comms.errors import RelationViolationError

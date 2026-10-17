@@ -414,7 +414,7 @@ class Transcripts:
         """Expose the source owner's complete identity without parsing its page.
 
         Native bytes alone are insufficient: input display/routing and older
-        bus receipts contribute to the same projection. Registry-owned thread
+        bus evidences contribute to the same projection. Registry-owned thread
         metadata also carries inherited fork text and source selection.
         """
         if not 1 <= source_limit <= MessageNotification.window_limit:
@@ -567,11 +567,11 @@ class Transcripts:
                     raise TranscriptChanged()
                 size = through.offset
                 if cursor and cursor.offset > size:
-                    raise ValueError("Cursor is outside the transcript window.")
+                    raise TranscriptChanged()
             frontier = through or source.frontier.cursor(runtime.read_key, size)
             source.require_cursor(frontier)
             if frontier.wire.sequence < 0 or (cursor is not None and not frontier.contains(cursor)):
-                raise ValueError("Cursor is outside the combined transcript source")
+                raise TranscriptChanged()
             traversal = LaterTranscript() if after is not None else EarlierTranscript()
             initial = cursor or frontier
             with reader.projection(source, page.routes) as project:

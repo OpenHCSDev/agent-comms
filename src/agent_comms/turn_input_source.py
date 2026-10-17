@@ -126,18 +126,18 @@ class OriginalTurnInput(TurnInputSource):
         return super().valid_keys(text) or (self.batch.admits_multiple and text == self.prompt)
 
     def reserve(
-        self, dispositions: InputDispositions, owner: Thread, turn: TurnId, admission: int,
-        *, custody: ExitStack,
+        self, dispositions: InputDispositions, owner: Thread, turn: TurnId, claim_scope: int,
+        *, ownership: ExitStack,
     ) -> OriginalTurnInput:
         """Every original uses the same durable input authority before native preparation.
 
         ACP and bus inputs already own ingress keys. A scheduled original has no
-        external ingress; its admitted turn supplies identity, never replay authority.
+        external ingress; its authorized turn supplies identity, never replay authority.
         """
         if self.keys:
             return self
         batch = dispositions.reserve_turn(
-            owner.name, turn, admission, self.prompt, custody=custody,
+            owner.name, turn, claim_scope, self.prompt, ownership=ownership,
         )
         return replace(self, batch=batch)
 

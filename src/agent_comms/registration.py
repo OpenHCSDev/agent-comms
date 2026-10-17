@@ -80,7 +80,7 @@ class Registration:
             change = edit.document.prepare_native_source(original, session_file)
             self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
-            # observed source must not rewrite this admitted turn's settings.
+            # observed source must not rewrite this authorized turn's settings.
             observed = replace(change.installed_thread,
                 worktree=original.thread.worktree, model=original.thread.model,
                 thinking_level=original.thread.thinking_level)
@@ -133,7 +133,7 @@ class Registration:
         return change.installed_thread
 
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> None:
-        if change.needs_maintenance_admission:
+        if change.needs_maintenance_claim:
             MaintenanceBarrier(self.store.path).assert_open_unlocked()
         before = change.prior_goal
         history = None
@@ -165,7 +165,7 @@ class Registration:
         with self.store.editing() as edit:
             fenced = tuple(
                 (thread, edit.document.fence_idle_owner(
-                    thread, expected_admission_generation=generation
+                    thread, expected_claimed_generation=generation
                 ))
                 for thread, generation in selected
             )
@@ -242,13 +242,13 @@ class Registration:
             edit.commit()
             return effects
 
-    def live_owner_with_admission(self, name: str) -> tuple[Thread, int]:
+    def live_owner_with_claim(self, name: str) -> tuple[Thread, int]:
         """Read the stored process input generation, independent of metadata revisions."""
         with self.store.reading() as document:
             owner = RegistryOwner.capture_local(document.snapshot(), name)
-            return owner.thread, owner.admission_generation
+            return owner.thread, owner.claimed_generation
 
-    def lease_live_turn_with_admission(
+    def lease_live_turn_with_claim(
         self, expected: Thread, turn_id: str, *, expected_generation: int
     ) -> tuple[Thread, int]:
         """Claim a turn against the input generation, allowing unrelated metadata changes."""

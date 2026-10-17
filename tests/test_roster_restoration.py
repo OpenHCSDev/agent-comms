@@ -49,7 +49,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     after = current.registry.snapshot()
     assert after.threads["live"] == before.threads["live"]
     assert after.owner_generations["live"] == before.owner_generations["live"]
-    assert after.admission_generations["live"] == before.admission_generations["live"]
+    assert after.claimed_generations["live"] == before.claimed_generations["live"]
     assert after.threads["missing"] == replace(missing, process_identity=None, active_turn=None)
     assert after.statuses["missing"] == StoppedThreadStatus()
     assert after.aliases["former-name"] == "missing"

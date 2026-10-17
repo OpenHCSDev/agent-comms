@@ -18,22 +18,22 @@ class ActiveTurn:
     owner_pid: int
     started_at: float = field(default_factory=time.time)
     routing: TurnRouting | None = None
-    admission_generation: int | None = None
+    claimed_generation: int | None = field(default=None, metadata={"wire_name": "admission_generation"})
     turn_generation: int | None = None
     phase: TurnPhase = field(default_factory=PreparingPhase)
 
-    def owned_by(self, pid: int, admission_generation: int) -> bool:
+    def owned_by(self, pid: int, claimed_generation: int) -> bool:
         """Check that this turn's local process and registered input generation agree."""
         return (
             self.owner_pid == pid
-            and self.admission_generation == admission_generation
-            and admission_generation > 0
+            and self.claimed_generation == claimed_generation
+            and claimed_generation > 0
         )
 
-    def current(self, admission_generation: int, turn_generation: int) -> bool:
+    def current(self, claimed_generation: int, turn_generation: int) -> bool:
         """Compare persisted turn witnesses with the current registry authority."""
         return (
-            self.admission_generation == admission_generation
+            self.claimed_generation == claimed_generation
             and self.turn_generation == turn_generation
             and turn_generation > 0
         )
@@ -115,7 +115,7 @@ class TurnFence:
 
     identity: TurnIdentity
     turn_id: str
-    admission_generation: int
+    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
 
 
     def renamed(self, name: str) -> TurnFence:
@@ -124,15 +124,15 @@ class TurnFence:
             self.identity, incarnation=replace(self.identity.incarnation, name=name)
         ))
 
-    def can_attest(self, admission: int) -> bool:
-        return self.identity.generation > 0 and self.admission_generation > 0 and self.admission_generation == admission
+    def can_attest(self, claim_scope: int) -> bool:
+        return self.identity.generation > 0 and self.claimed_generation > 0 and self.claimed_generation == claim_scope
 
     def matches(self, other: TurnFence) -> bool:
         """Lease and finished observations may describe the same exact turn."""
         return (
             self.identity == other.identity
             and self.turn_id == other.turn_id
-            and self.admission_generation == other.admission_generation
+            and self.claimed_generation == other.claimed_generation
         )
 
 

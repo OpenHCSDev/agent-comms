@@ -22,7 +22,7 @@ from . import agent_events as events
 from .acp_extension import (
     CompactionChangedUpdate,
     GoalChangedUpdate,
-    McpClientReceiptUpdate,
+    McpClientAcknowledgementUpdate,
     PromptCancelledUpdate,
     encode_updates,
 )
@@ -140,7 +140,7 @@ class AcpEventConsumer(MroDispatch):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(McpClientReceiptUpdate(turn_id, event.receipt)),
+                field_meta=encode_updates(McpClientAcknowledgementUpdate(turn_id, event.acknowledgement)),
             ),
         )
 

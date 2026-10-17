@@ -145,7 +145,7 @@ class AssignmentBinding:
 
 
 @dataclass(frozen=True, slots=True)
-class WakeAdmission:
+class WakeClaim:
     """A selected N/K execution bound into the durable resource-claim row."""
 
     wire_root_id: str
@@ -156,7 +156,7 @@ class WakeAdmission:
     recipient_lookup: str
     execution_id: str
     operation_id: str
-    owner_admission_generation: int
+    owner_claimed_generation: int = field(metadata={"wire_name": 'owner_admission_generation'})
     turn_id: str
     participant_generation: int
     attempt_ordinal: int
@@ -192,12 +192,12 @@ class WakeAdmission:
                 self.source,
                 self.execution_id,
             )
-            GenerationCounter.require_positive(self.owner_admission_generation)
+            GenerationCounter.require_positive(self.owner_claimed_generation)
             GenerationCounter.require_positive(self.participant_generation)
             if FieldCodec.decode(int, self.attempt_ordinal) <= 0:
                 raise ValueError("attempt ordinal must be positive")
         except ValueError as error:
-            raise ClaimTransitionError("Wake admission version or revision is invalid.") from error
+            raise ClaimTransitionError("Wake claim_scope version or revision is invalid.") from error
         TurnId.for_registration(self.turn_id)
         if (
             type(self.wake_assignment_id) is not str
@@ -233,8 +233,8 @@ class ClaimTransition:
     claims: tuple[str, ...] = field(default=(), metadata={"wire_required": True})
     releases: tuple[ClaimRelease, ...] = field(default=(), metadata={"wire_required": True})
     generation: str | None = field(default=None, metadata={"wire_required": True})
-    admission: WakeAdmission | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_nonnull": True}
+    claim_scope: WakeClaim | None = field(
+        default=None, metadata={"wire_name": 'admission', "wire_omit_default": True, "wire_nonnull": True}
     )
 
     def __post_init__(self) -> None:
@@ -258,14 +258,14 @@ class ClaimTransition:
             _generation(self.generation)
         elif self.generation is not None:
             raise ClaimTransitionError("A release-only envelope cannot mint a generation.")
-        if self.admission is not None and (
-            type(self.admission) is not WakeAdmission or not self.claims or self.releases
+        if self.claim_scope is not None and (
+            type(self.claim_scope) is not WakeClaim or not self.claims or self.releases
         ):
-            raise ClaimTransitionError("Wake admission requires a claim-only transition.")
+            raise ClaimTransitionError("Wake claim_scope requires a claim-only transition.")
 
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
         """A selected operation stays consumed even after its resources release."""
-        if self.admission is not None and is_used(self.admission.operation_id):
+        if self.claim_scope is not None and is_used(self.claim_scope.operation_id):
             raise IdentityConflict("Wake claim operation was already consumed")
 
     @property
@@ -277,7 +277,7 @@ class ClaimTransition:
         if resource not in self.claims or self.generation is None:
             raise ClaimTransitionError("Resource is not part of this claim acquisition.")
         return ClaimOwner(resource, self.owner, self.incarnation, self.generation,
-                          self.seq, self.message_id, self.admission)
+                          self.seq, self.message_id, self.claim_scope)
 
     def apply(self, previous: ClaimProjection) -> ClaimProjection:
         """Apply atomically to the affected certified resources.
@@ -316,7 +316,7 @@ class ClaimOwner:
     generation: str
     seq: int
     message_id: str
-    admission: WakeAdmission | None = None
+    claim_scope: WakeClaim | None = field(default=None, metadata={"wire_name": 'admission'})
 
     def __post_init__(self) -> None:
         _resource(self.resource)
@@ -326,8 +326,8 @@ class ClaimOwner:
         _text(self.message_id, "Message ID")
         if type(self.seq) is not int or self.seq <= 0:
             raise ClaimTransitionError("Claim sequence must be a positive exact integer.")
-        if self.admission is not None and type(self.admission) is not WakeAdmission:
-            raise ClaimTransitionError("Claim owner requires a typed wake admission.")
+        if self.claim_scope is not None and type(self.claim_scope) is not WakeClaim:
+            raise ClaimTransitionError("Claim owner requires a typed wake claim_scope.")
 
 
 @dataclass(frozen=True, slots=True)

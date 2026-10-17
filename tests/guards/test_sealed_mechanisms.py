@@ -55,7 +55,7 @@ def test_seal_follows_owned_descendants_and_every_mechanism_in_multiple_inherita
         exec("class Adapter(Local, Mechanism): pass", adapter.__dict__)
 
 
-def test_tracked_native_cannot_fork_child_reader_or_admission_authorities():
+def test_tracked_native_cannot_fork_child_reader_or_claim_authorities():
     from agent_comms import backend, tracked_turn, turn_watchdog
 
     tree = ast.parse(Path(tracked_turn.__file__).read_text())

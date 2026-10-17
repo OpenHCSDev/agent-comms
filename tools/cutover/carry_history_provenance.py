@@ -78,15 +78,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument("--acknowledgement", type=Path, required=True)
     args = parser.parse_args()
     if args.output.resolve() == args.manifest.resolve():
         parser.error("Carry writes a separate candidate; release publication has a single owner")
-    if args.output.exists() or args.receipt.exists():
-        parser.error("Candidate/receipt must be fresh; preserve previous evidence")
-    sources, receipt = carry(args.manifest)
+    if args.output.exists() or args.acknowledgement.exists():
+        parser.error("Candidate/acknowledgement must be fresh; preserve previous evidence")
+    sources, acknowledgement = carry(args.manifest)
     _atomic_write_text(args.output, json.dumps(sources, indent=2) + "\n")
-    _atomic_write_text(args.receipt, json.dumps(receipt, indent=2) + "\n")
+    _atomic_write_text(args.acknowledgement, json.dumps(acknowledgement, indent=2) + "\n")
 
 
 if __name__ == "__main__":

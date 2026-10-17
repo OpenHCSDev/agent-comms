@@ -107,7 +107,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         marker = case.bus.log._private_marker_unlocked()
         rows = [json.loads(line) for line in case.bus.log.path.read_bytes().splitlines()]
         rows[-1]["_agent_comms_private_v1"]["response"][field] = value
-        # The semantic decoder shared by both readers rejects each invalid receipt.
+        # The semantic decoder shared by both readers rejects each invalid acknowledgement.
         with pytest.raises((ValueError, TypeError)):
             CommittedDelivery.from_wire(rows[-1], case.root_id)
         case.bus.log.path.write_text("".join(json.dumps(row) + "\n" for row in rows))
@@ -124,7 +124,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
             assert checkpoint.read_bytes() == saved_index
             return
         # Explicit cold certification must reject a corrupt candidate rather
-        # than trusting a stale index or accepting a merely well-shaped receipt.
+        # than trusting a stale index or accepting a merely well-shaped acknowledgement.
         (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
         marker.checkpoint_version = None
         marker.checkpoint_seal = None

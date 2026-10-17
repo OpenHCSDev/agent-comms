@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
-from .coordination_errors import StaleRevision
+from .coordination_errors import StaleRevision, TranscriptChanged
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -89,10 +89,10 @@ class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
         return parent.contains(self)
 
     def contains(self, other):
-        return self.identity == other.identity and other.sequence <= self.sequence
+        return self.same_publication_source(other) and other.sequence <= self.sequence
 
     def require_native(self):
-        raise ValueError("Recorded items cannot acquire an assigned wire cursor")
+        raise TranscriptChanged()
 
     def resolve_sent(self, messages):
         return AssignedTranscriptSource.open(self.identity).resolve_sent(messages)
@@ -102,8 +102,8 @@ class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
         return AssignedSourceIdentity(self.root, self.recipient)
 
     def require_source(self, identity: AssignedSourceIdentity) -> None:
-        if self.identity != identity:
-            raise ValueError("Receipt cursor belongs to a different transcript source")
+        if not self.same_publication_source(identity):
+            raise TranscriptChanged()
 
     def at(self, sequence: int) -> AssignedSourceCursor:
         return replace(self, sequence=sequence)
@@ -111,7 +111,7 @@ class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
 
 @dataclass(frozen=True)
 class AssignedSourceWindow:
-    """Conversation and sent sources captured with one receipt frontier."""
+    """Conversation and sent sources captured with one acknowledgement frontier."""
 
     cursor: WireFrontier
     sources: tuple[CommittedDelivery, ...]

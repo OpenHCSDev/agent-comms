@@ -16,7 +16,7 @@ from .assignment_states import (
 from .coordination_errors import IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
-from .coordination_errors import ResponseAdmissionBlocked
+from .coordination_errors import ResponseClaimBlocked
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     def assignment_state(cls) -> type[AssignmentState]: ...
 
     def require_final_response(self) -> None:
-        raise ResponseAdmissionBlocked()
+        raise ResponseClaimBlocked()
 
     def validate_budget(self, maximum: int) -> None:
         ordinal = self.current_attempt_ordinal
@@ -220,7 +220,7 @@ class FailedExecution(InterruptedExecution):
         return ()
 
     def validate_snapshot(self, snapshot, authorized):
-        if bool(snapshot.publication_receipts):
-            raise IntegrityViolationError("failed execution cannot erase a publication receipt")
+        if bool(snapshot.publication_evidence):
+            raise IntegrityViolationError("failed execution cannot erase a publication acknowledgement")
         if snapshot.attempt is not None and authorized:
             raise IntegrityViolationError("authorized retry cannot settle failed")

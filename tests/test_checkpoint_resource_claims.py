@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, WakeAdmission
+from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, WakeClaim
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import CertifiedSourceRead, ClaimCommits
 from agent_comms.store_files import _store_lock
@@ -23,72 +23,72 @@ def authored(tmp_path):
     for path in paths:
         path.write_text('owned\n')
     original = comms.messaging.send_message('peer', 'owner', 'original source')
-    admission = WakeAdmission(root_id, original.seq, original.message_id,
+    claim_scope = WakeClaim(root_id, original.seq, original.message_id,
         'cohort-v1:' + 'd' * 64, 1, 'e' * 32, 'execution-one', 'f' * 32,
         1, 'turn-one', 1, 1)
-    return comms, paths, admission
+    return comms, paths, claim_scope
 
 
-def admitted(comms, admission, paths):
+def authorized(comms, claim_scope, paths):
     with _store_lock(comms._wire_lock_path), comms.bus.log.locked() as lock:
         snapshot = comms.registry.snapshot()
         owner = snapshot.threads['owner']
         return comms.bus.publisher.publish_claim_envelope(
-            Message('owner', 'peer', 'admitted claim', InfoKind),
+            Message('owner', 'peer', 'authorized claim', InfoKind),
             worktree=Path(owner.worktree), incarnation=str(owner.created_at),
             claims=tuple(ExistingFileClaim(path) for path in paths),
-            _locked_registry_snapshot=snapshot, _bus_lock=lock, _admission=admission,
+            _locked_registry_snapshot=snapshot, _bus_lock=lock, _claim=claim_scope,
         )
 
 
-def test_multi_resource_admission_consumes_one_operation_even_after_release(tmp_path):
-    comms, paths, admission = authored(tmp_path)
-    claimed = admitted(comms, admission, paths[:2])
+def test_multi_resource_claim_consumes_one_operation_even_after_release(tmp_path):
+    comms, paths, claim_scope = authored(tmp_path)
+    claimed = authorized(comms, claim_scope, paths[:2])
     with comms.bus.log.certified_read() as source:
         commits = ClaimCommits.select(source.connection)
-        assert len(commits) == 1 and commits[0].operation_id == admission.operation_id
-        assert source.claim_operation_used(admission.operation_id)
-        assert all(source.claim(str(path)).admission == admission for path in paths[:2])
+        assert len(commits) == 1 and commits[0].operation_id == claim_scope.operation_id
+        assert source.claim_operation_used(claim_scope.operation_id)
+        assert all(source.claim(str(path)).claim_scope == claim_scope for path in paths[:2])
     comms.messaging.send_message('owner', 'peer', 'release', releases=paths[:2])
     assert not comms.bus.log.claim_projection()
     before = comms.bus.log.path.read_bytes()
     with pytest.raises(IdentityConflict, match='already consumed'):
-        admitted(comms, admission, paths[2:])
+        authorized(comms, claim_scope, paths[2:])
     assert comms.bus.log.path.read_bytes() == before
     reopened = Comms(comms.root)
     with reopened.bus.log.certified_read() as source:
-        assert source.claim_operation_used(admission.operation_id)
+        assert source.claim_operation_used(claim_scope.operation_id)
         assert source.claim(str(paths[0])) is None
-    again = admitted(reopened, replace(admission, operation_id='a' * 32), paths[:2])
+    again = authorized(reopened, replace(claim_scope, operation_id='a' * 32), paths[:2])
     assert again.seq > claimed.seq
 
 
 def test_claim_decisions_never_read_or_decode_retained_messages(tmp_path, monkeypatch):
-    comms, paths, admission = authored(tmp_path)
+    comms, paths, claim_scope = authored(tmp_path)
 
     def forbidden(*args, **kwargs):
         raise AssertionError('A claim decision must not scan or decode bus history')
 
     monkeypatch.setattr(CertifiedSourceRead, 'messages', forbidden)
     monkeypatch.setattr(WireLog, 'verified_records_unlocked', forbidden)
-    first = admitted(comms, admission, paths[:1])
+    first = authorized(comms, claim_scope, paths[:1])
     with pytest.raises(ClaimConflict):
         comms.messaging.send_message('peer', 'owner', 'losing', claims=[ExistingFileClaim(paths[0])])
     assert comms.bus.log.claim_projection()[str(paths[0])].seq == first.seq
     comms.messaging.send_message('owner', 'peer', 'release', releases=paths[:1])
     with pytest.raises(IdentityConflict):
-        admitted(comms, admission, paths[1:2])
+        authorized(comms, claim_scope, paths[1:2])
     assert not comms.bus.log.claim_projection()
 
 
 def test_resource_and_operation_queries_use_their_unique_indexes(tmp_path):
-    comms, paths, admission = authored(tmp_path)
-    admitted(comms, admission, paths[:1])
+    comms, paths, claim_scope = authored(tmp_path)
+    authorized(comms, claim_scope, paths[:1])
     with comms.bus.log.certified_read() as source:
         statements = []
         source.connection.set_trace_callback(statements.append)
         assert source.claim(str(paths[0])) is not None
-        assert source.claim_operation_used(admission.operation_id)
+        assert source.claim_operation_used(claim_scope.operation_id)
         source.connection.set_trace_callback(None)
         assert len(statements) == 2
         for sql in statements:

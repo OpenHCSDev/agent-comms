@@ -1,4 +1,4 @@
-"""Bus snapshots share read custody while publication remains exclusive."""
+"""Bus snapshots share read ownership while publication remains exclusive."""
 
 import threading
 import time

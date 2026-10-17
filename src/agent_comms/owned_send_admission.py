@@ -49,7 +49,7 @@ class OwnedSend:
     session_id: str
     thread: Thread
     turn: TurnId
-    admission: int
+    claim_scope: int
     original: OriginalTurnInput
     goal_permit: LaunchPermit | None
 
@@ -80,7 +80,7 @@ class OwnedSend:
             current=current,
             registry=snapshot,
             canonical=canonical,
-            admission=self.admission,
+            claim_scope=self.claim_scope,
             turn=self.turn,
         ).require_valid()
         InputKeysCheck(source=source, text=text).require_valid()
@@ -92,9 +92,9 @@ class OwnedSend:
                 row.require_not_cleared()
             MissingAcceptedInputCheck().require_valid()
         AcceptedInputCheck(
-            receipt=accepted,
+            acknowledgement=accepted,
             current=current,
-            admission=self.admission,
+            claim_scope=self.claim_scope,
             input_id=source.accepted_id,
             keys=source.keys,
             accepted_source=self.inputs.following_sources.get(self.session_id, {}).get(
@@ -141,7 +141,7 @@ class OwnedSend:
         # never reinterpret a failed durable operation as a retryable policy refusal.
         if not self.inputs.dispositions.bind_turn_input(
             source.keys,
-            admission=self.admission,
+            claim_scope=self.claim_scope,
             turn_id=self.turn.value,
             native_id=native_id,
             text=sent_text,

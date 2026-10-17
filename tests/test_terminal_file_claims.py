@@ -137,7 +137,7 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
             async with asyncio.timeout(40):
                 while target.read_text() != "value = 2\n" or native.provider.posts < 2:
                     await asyncio.sleep(0.02)
-            assert comms.bus.log.claim_projection()[str(target)].admission is not None
+            assert comms.bus.log.claim_projection()[str(target)].claim_scope is not None
             await asyncio.to_thread(comms.owners.stop, "worker")
             assert not comms.registry.require("worker").process_alive
             assert dict(comms.bus.log.claim_projection()) == {}

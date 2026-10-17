@@ -1,4 +1,4 @@
-"""The real message bus and wire watcher preserve unread delivery custody."""
+"""The real message bus and wire watcher preserve unread delivery ownership."""
 
 import asyncio
 from contextlib import aclosing

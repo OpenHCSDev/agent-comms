@@ -1179,7 +1179,7 @@ class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
 
 @dataclass(frozen=True, kw_only=True)
 class PublishedMessageToolDetails(NativeToolDetails):
-    """The send owner supplies its original committed message, not a guessed receipt."""
+    """The send owner supplies its original committed message, not a guessed acknowledgement."""
 
     strict_fields = True
     id: str
@@ -1311,7 +1311,7 @@ class McpServerReceipt:
 
 
 @dataclass(frozen=True)
-class McpLiveReceipt:
+class McpLiveAcknowledgement:
     version: Literal[1]
     source: Literal["pi-mcp-client"]
     input_id: str = field(metadata={"wire_name": "inputId"})
@@ -1320,7 +1320,7 @@ class McpLiveReceipt:
     servers: tuple[McpServerReceipt, ...]
 
     @classmethod
-    def from_status(cls, text: str | None, input_id: str) -> McpLiveReceipt | None:
+    def from_status(cls, text: str | None, input_id: str) -> McpLiveAcknowledgement | None:
         """Decode the package's external status claim once at its boundary.
 
         Same-user extensions can imitate this claim. It is never a package
@@ -1332,10 +1332,10 @@ class McpLiveReceipt:
         if text is None or len(text) > 8192:
             return None
         try:
-            receipt = FieldCodec.decode(cls, json.loads(text, object_pairs_hook=unique_fields))
+            acknowledgement = FieldCodec.decode(cls, json.loads(text, object_pairs_hook=unique_fields))
         except (TypeError, ValueError):
             return None
-        return receipt if receipt.input_id == input_id else None
+        return acknowledgement if acknowledgement.input_id == input_id else None
 
     def __post_init__(self):
         if re.fullmatch(r"[a-f0-9]{32}", self.input_id) is None:

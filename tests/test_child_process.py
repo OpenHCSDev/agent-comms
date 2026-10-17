@@ -61,11 +61,11 @@ async def ready(path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_bounded_run_retires_real_child_and_defiant_grandchild(tmp_path: Path) -> None:
-    receipt = tmp_path / "tree.json"
-    result = await BoundedRun.run((sys.executable, "-c", TREE, str(receipt)), timeout=1)
+    acknowledgement = tmp_path / "tree.json"
+    result = await BoundedRun.run((sys.executable, "-c", TREE, str(acknowledgement)), timeout=1)
     assert isinstance(result.outcome, TimedOutOutcome)
     assert result.stdout == b"tree ready\n"
-    assert all(not member.alive() for member in identities(receipt))
+    assert all(not member.alive() for member in identities(acknowledgement))
 
 
 @pytest.mark.asyncio
@@ -74,8 +74,8 @@ async def test_attached_stop_retires_real_child_and_defiant_grandchild(
 ) -> None:
     import threading
 
-    receipt = tmp_path / "tree.json"
-    child = await AttachedChild.start((sys.executable, "-c", TREE, str(receipt)))
+    acknowledgement = tmp_path / "tree.json"
+    child = await AttachedChild.start((sys.executable, "-c", TREE, str(acknowledgement)))
     original = child.platform.group_members
     scan_threads = []
 
@@ -85,10 +85,10 @@ async def test_attached_stop_retires_real_child_and_defiant_grandchild(
 
     monkeypatch.setattr(child.platform, "group_members", observed_members)
     try:
-        await ready(receipt)
+        await ready(acknowledgement)
     finally:
         await child.stop()
-    assert all(not member.alive() for member in identities(receipt))
+    assert all(not member.alive() for member in identities(acknowledgement))
     assert child.returncode is not None
     assert scan_threads and threading.get_ident() not in scan_threads
 
@@ -152,7 +152,7 @@ async def test_exchange_deadline_cancels_launch_verification_and_retires_child(d
     async with asyncio.timeout(5):
         with pytest.raises(TimeoutError):
             async with BoundedRun.exchange(command, timeout=1):
-                pytest.fail("expired launch admitted a result")
+                pytest.fail("expired launch authorized a result")
     assert verified == [True]
     assert len(captured) == 1
     assert not platform.matches(captured[0])
@@ -170,7 +170,7 @@ async def test_retirement_owner_preserves_failure_and_cancellation(monkeypatch, 
         await original_stop()  # Retire the real child; inject a lost attestation safely.
         if cancel:
             operation.cancel()
-        raise fault("retirement receipt failed")
+        raise fault("retirement acknowledgement failed")
 
     monkeypatch.setattr(child, "_stop", failing_receipt)
     operation = asyncio.create_task(child.stop())
@@ -187,15 +187,15 @@ async def test_retirement_owner_preserves_failure_and_cancellation(monkeypatch, 
 
 @pytest.mark.asyncio
 async def test_cancellation_retains_child_cleanup(tmp_path: Path) -> None:
-    receipt = tmp_path / "tree.json"
+    acknowledgement = tmp_path / "tree.json"
     task = asyncio.create_task(
-        BoundedRun.run((sys.executable, "-c", TREE, str(receipt)), timeout=10)
+        BoundedRun.run((sys.executable, "-c", TREE, str(acknowledgement)), timeout=10)
     )
-    await ready(receipt)
+    await ready(acknowledgement)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert all(not member.alive() for member in identities(receipt))
+    assert all(not member.alive() for member in identities(acknowledgement))
 
 
 def test_new_outcome_is_derived_and_field_encoded() -> None:
@@ -223,7 +223,7 @@ async def test_namespace_deadline_kills_group_escaping_descendant(tmp_path: Path
 
     if not isinstance(Platform.current(), NamespaceContainment):
         pytest.skip("This platform does not provide PID namespaces")
-    receipt = tmp_path / "escaped"
+    acknowledgement = tmp_path / "escaped"
     command = (
         sys.executable,
         "-c",
@@ -233,11 +233,11 @@ code=('import os,sys,time; os.setsid(); '
 subprocess.Popen([sys.executable,'-c',code,sys.argv[1]])
 time.sleep(60)
 """,
-        str(receipt),
+        str(acknowledgement),
     )
     child = await NamespacedChild.start(command, deadline=time.monotonic() + 2)
     try:
-        await ready(receipt)
+        await ready(acknowledgement)
         assert NamespaceContainment.namespace_alive(child.namespace)
         async with asyncio.timeout(6):
             outcome = await child.wait()
@@ -261,7 +261,7 @@ async def test_namespace_watchdog_survives_launcher_death(tmp_path: Path) -> Non
 
     if not isinstance(Platform.current(), NamespaceContainment):
         pytest.skip("This platform does not provide PID namespaces")
-    receipt = tmp_path / "namespace.json"
+    acknowledgement = tmp_path / "namespace.json"
     launcher = ParentedProcess.launch(
         (
             sys.executable,
@@ -276,12 +276,12 @@ async def run():
     await asyncio.sleep(60)
 asyncio.run(run())
 """,
-            str(receipt),
+            str(acknowledgement),
         )
     )
     try:
-        await ready(receipt)
-        namespace = json.loads(receipt.read_text())
+        await ready(acknowledgement)
+        namespace = json.loads(acknowledgement.read_text())
         assert NamespaceContainment.namespace_alive(namespace)
         launcher.force()
         await launcher.wait()
@@ -304,7 +304,7 @@ async def test_parent_lifeline_loss_releases_real_sqlite_reader(tmp_path: Path) 
     database = tmp_path / "reader.sqlite"
     with sqlite3.connect(database) as db:
         db.execute("CREATE TABLE state (value INTEGER)")
-    receipt = tmp_path / "ready"
+    acknowledgement = tmp_path / "ready"
     with ParentLifeline() as life:
         child = await AttachedChild.start(
             (
@@ -321,12 +321,12 @@ Path(sys.argv[2]).write_text('ready')
 time.sleep(60)
 """,
                 str(database),
-                str(receipt),
+                str(acknowledgement),
             ),
             env=life.environment,
             pass_fds=(life.read_fd,),
         )
-        await ready(receipt)
+        await ready(acknowledgement)
         with closing(sqlite3.connect(database, timeout=0.05, isolation_level=None)) as db:
             db.execute("BEGIN IMMEDIATE")
             db.execute("INSERT INTO state VALUES (1)")
@@ -345,11 +345,11 @@ time.sleep(60)
 
 
 def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> None:
-    receipt = tmp_path / "started"
+    acknowledgement = tmp_path / "started"
     recorded = []
 
     def reserve(identity: ProcessIdentity) -> None:
-        assert not receipt.exists()
+        assert not acknowledgement.exists()
         assert identity.alive()
         recorded.append(identity)
 
@@ -358,7 +358,7 @@ def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> 
             sys.executable,
             "-c",
             'import sys,time; open(sys.argv[1],"w").write("started"); time.sleep(60)',
-            str(receipt),
+            str(acknowledgement),
         ),
         before_start=reserve,
     )
@@ -374,7 +374,7 @@ def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> 
 
 
 def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> None:
-    receipt = tmp_path / "should-not-exist"
+    acknowledgement = tmp_path / "should-not-exist"
     captured = []
 
     def reject(identity: ProcessIdentity) -> None:
@@ -387,13 +387,13 @@ def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> N
                 sys.executable,
                 "-c",
                 "import sys; open(sys.argv[1], 'w').write('wrong')",
-                str(receipt),
+                str(acknowledgement),
             ),
             before_start=reject,
         )
     assert len(captured) == 1
     assert not captured[0].alive()
-    assert not receipt.exists()
+    assert not acknowledgement.exists()
 
 
 @pytest.mark.asyncio
@@ -401,10 +401,10 @@ def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> N
 async def test_repeated_cancellation_joins_real_tree_before_return(
     tmp_path: Path, shape: str
 ) -> None:
-    receipt = tmp_path / "tree.json"
+    acknowledgement = tmp_path / "tree.json"
 
     async def operation():
-        command = (sys.executable, "-c", TREE, str(receipt))
+        command = (sys.executable, "-c", TREE, str(acknowledgement))
         if shape == "run":
             await BoundedRun.run(command, timeout=20)
         else:
@@ -412,13 +412,13 @@ async def test_repeated_cancellation_joins_real_tree_before_return(
                 await asyncio.Event().wait()
 
     task = asyncio.create_task(operation())
-    await ready(receipt)
+    await ready(acknowledgement)
     task.cancel()
     await asyncio.sleep(0.1)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert all(not member.alive() for member in identities(receipt))
+    assert all(not member.alive() for member in identities(acknowledgement))
 
 
 @pytest.mark.asyncio

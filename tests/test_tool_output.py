@@ -29,7 +29,7 @@ def seed_unknown(comms, count, text):
             "key": f"bus:{index}",
             "sequence": index,
             "owner": "b",
-            "admission": index,
+            "claim_scope": index,
             "target": "b",
             "source_text": f"{index}: {text}",
             "turn_id": "private-turn",
@@ -161,7 +161,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
             f"bus:{message.seq}",
             seq=message.seq,
             owner="b",
-            admission=1,
+            claim_scope=1,
             target="b",
             text=message.body,
         )
@@ -169,7 +169,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
         "acp:owner-input",
         seq=None,
         owner="b",
-        admission=1,
+        claim_scope=1,
         target="b",
         text="Uncertain owner follow-up",
     )
@@ -260,7 +260,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
             f"acp:owner-{index}",
             seq=None,
             owner="b",
-            admission=1,
+            claim_scope=1,
             target="b",
             text="Uncertain owner input " * 45,
         )
@@ -273,7 +273,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
             f"bus:{message.seq}",
             seq=message.seq,
             owner="b",
-            admission=1,
+            claim_scope=1,
             target="b",
             text=message.body,
         )
@@ -319,7 +319,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     # A reply arriving after this snapshot still blocks standby atomically.
     late = comms.messaging.send_message("a", "b", "New evidence after inbox inspection")
     dispositions.record(
-        f"bus:{late.seq}", seq=late.seq, owner="b", admission=1, target="b", text=late.body
+        f"bus:{late.seq}", seq=late.seq, owner="b", claim_scope=1, target="b", text=late.body
     )
     after_arrival = stored_inputs(dispositions.root)
     with pytest.raises(ValueError, match="pending or UNKNOWN"):

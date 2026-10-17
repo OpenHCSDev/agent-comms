@@ -32,7 +32,7 @@ from agent_comms.threads import Thread
 from native_backend_fixture import native_backend_fixture
 
 pytestmark = pytest.mark.skipif(
-    sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
+    sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
 )
 
 

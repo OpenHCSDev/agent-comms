@@ -792,7 +792,7 @@ class CommsSendTool(ToolRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class CommsAuthoredTaskTool(ThreadToolRequest):
-    """One original admitted publication path for authored task declarations."""
+    """One original authorized publication path for authored task declarations."""
     target: str = tool_field("Thread or channel receiving the original declaration", wire_name="to")
     scope: TaskScopeSelection = tool_field(
         "Current project/goal or explicit scope", default=CurrentTaskScopeSelection())
@@ -821,14 +821,14 @@ class CommsDecisionTool(CommsAuthoredTaskTool):
     label = "Record Decision"
     description = (
         "Record a chosen alternative and valid rejected alternatives on its original "
-        "wire message. Author and source turn come from your admitted execution. "
+        "wire message. Author and source turn come from your authorized execution. "
         "Defaults to current project/goal revision or current turn; corrections name "
         "the original reference and grant no execution.")
     chosen: str = tool_field("Chosen alternative, preserving exact wording")
     rejected: tuple[str, ...] = tool_field("Nonempty unique valid rejected alternatives")
 
     def declaration(self, owner):
-        return Decision.from_admission(owner, self.scope, self.change,
+        return Decision.from_claim(owner, self.scope, self.change,
                                        chosen=self.chosen, rejected=self.rejected)
 
     def original_body(self, declaration):
@@ -840,14 +840,14 @@ class CommsConstraintTool(CommsAuthoredTaskTool):
     label = "Record Constraint"
     description = (
         "Declare an exact authored restriction on its original wire message; wording "
-        "is retained verbatim. This records your admitted authorship, not inferred "
+        "is retained verbatim. This records your authorized authorship, not inferred "
         "human authority. Defaults to current project/goal revision or current turn. "
         "Corrections name the original constraint reference; no execution or replay "
         "is authorized.")
     text: str = tool_field("Exact authored restriction, never a paraphrase of another source")
 
     def declaration(self, owner):
-        return Constraint.from_admission(owner, self.scope, self.change)
+        return Constraint.from_claim(owner, self.scope, self.change)
 
     def original_body(self, declaration):
         if not self.text.strip():
@@ -861,7 +861,7 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
     description = (
         "Explicitly record whether a described subtask is completed or unfinished. "
         "This is not assistant-turn termination or goal completion. Original author, "
-        "turn, scope and correction reference use the existing admitted task owner. "
+        "turn, scope and correction reference use the existing authorized task owner. "
         "A completed observation may permit optional compaction when enabled.")
     text: str = tool_field("Exact description of the observed subtask")
     completed: bool = tool_field("Your explicit observation: completed or unfinished")
@@ -869,7 +869,7 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
     def declaration(self, owner):
         if not self.text.strip():
             raise ValueError("A subtask observation requires its exact description")
-        return Subtask.from_admission(owner, self.scope, self.change, completed=self.completed)
+        return Subtask.from_claim(owner, self.scope, self.change, completed=self.completed)
 
     def original_body(self, declaration):
         return self.text

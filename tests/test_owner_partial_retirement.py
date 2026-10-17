@@ -37,7 +37,7 @@ class AuthoredRetirement(OwnerLifecycle):
             statuses={t.name: StoppedThreadStatus() for t in self.originals},
             last_seen={t.name: 1.0 for t in self.originals}, aliases={},
             owner_generations={t.name: 4 for t in self.originals},
-            admission_generations={t.name: 5 for t in self.originals},
+            claimed_generations={t.name: 5 for t in self.originals},
             by_lookup={t.incarnation.lookup: t for t in self.originals},
         )
         self.registry = SimpleNamespace(snapshot=lambda: self.snapshot)
@@ -62,8 +62,8 @@ class AuthoredRetirement(OwnerLifecycle):
     def _stop_process(self, thread, generation):
         self.stop_attempts.append(thread.name)
         if self.mode == 'second_guard' and thread.name == 'second':
-            self.snapshot = replace(self.snapshot, admission_generations={
-                **self.snapshot.admission_generations, 'second': 6,
+            self.snapshot = replace(self.snapshot, claimed_generations={
+                **self.snapshot.claimed_generations, 'second': 6,
             })
         try:
             self._require_same_stop_owner(thread, generation)
@@ -77,8 +77,8 @@ class AuthoredRetirement(OwnerLifecycle):
                 **self.snapshot.statuses, thread.name: RunningThreadStatus(),
             })
         if self.mode == 'final_witness' and thread.name == 'second':
-            self.snapshot = replace(self.snapshot, admission_generations={
-                **self.snapshot.admission_generations, 'first': 6,
+            self.snapshot = replace(self.snapshot, claimed_generations={
+                **self.snapshot.claimed_generations, 'first': 6,
             })
 
     def _launch_owner_unlocked(self, *args, **kwargs):
@@ -128,7 +128,7 @@ def test_partial_retirement_transfers_original_custody_and_refuses_launch(mode, 
     phase = failure.stopped
     assert isinstance(phase, FencedOwnerBatch)
     assert phase.captured == batch.captured and phase.launches == batch.launches
-    assert phase.custody is batch.custody
+    assert phase.ownership is batch.ownership
     if mode == 'second_guard':
         assert failure.__cause__ is lifecycle.guard_refusal
         assert lifecycle.signal_boundaries == ['first']

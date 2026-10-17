@@ -116,7 +116,7 @@ async def test_suppressed_binding_insert_denies_native_send(tmp_path, monkeypatc
     @contextmanager
     def suppressed(*args, **kwargs):
         with original(*args, **kwargs) as db:
-            # Inject after schema admission to independently test insert/readback,
+            # Inject after schema claim_scope to independently test insert/readback,
             # not only the complete-schema negative in test_private_sidecar.
             db.execute(
                 "CREATE TRIGGER suppress BEFORE INSERT ON prompt_binding "
@@ -141,9 +141,9 @@ async def test_uncertain_binding_commit_denies_native_send_and_retry(tmp_path, m
     publish = private_sidecar._publish
 
     def uncertain(*args, **kwargs):
-        # Model a lost success receipt after the snapshot really became durable.
+        # Model a lost success acknowledgement after the snapshot really became durable.
         publish(*args, **kwargs)
-        raise private_sidecar.SidecarCommitUnknown("lost commit receipt")
+        raise private_sidecar.SidecarCommitUnknown("lost commit acknowledgement")
 
     monkeypatch.setattr(private_sidecar, "_publish", uncertain)
     with pytest.raises(private_sidecar.SidecarCommitUnknown):
@@ -183,14 +183,14 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
             session_file.chmod(0o600)
         assert session_file is not None
 
-        def admitted():
+        def authorized():
             identity = NativeSessionIdentity(
                 json.loads(session_file.read_text().splitlines()[0])["id"], str(session_file)
             )
             with _["prompt_send_boundary"](identity):
                 calls.append((input_id, prompt))
 
-        await asyncio.to_thread(admitted)
+        await asyncio.to_thread(authorized)
         if fresh:
             entries = [{"type": "session", "id": "isolated-session"}]
             proof_rows = []
@@ -501,13 +501,13 @@ async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monk
             is None
         )
         retained = store.session._connection.execute(
-            "SELECT owner_admission_generation,input_id FROM current_native_cursor"
+            "SELECT owner_claimed_generation,input_id FROM current_native_cursor"
         ).fetchone()
-        assert tuple(retained) == (old.owner_admission_generation, turn.input_id)
+        assert tuple(retained) == (old.owner_claimed_generation, turn.input_id)
     assert len(calls) == 1
 
 
-async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, monkeypatch):
+async def test_old_input_id_cannot_directly_seed_new_claim_cursor(tmp_path, monkeypatch):
     root, root_id, comms, _, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -518,7 +518,7 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
     comms.registry.unregister("alpha")
     comms.registry.heartbeat("alpha")
     owner = comms.registry.require("alpha")
-    admission_generation = comms.registry.snapshot().admission_generations["alpha"]
+    claimed_generation = comms.registry.snapshot().claimed_generations["alpha"]
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         generation = store.participants.get(lookup).participant_generation
@@ -529,7 +529,7 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
         assert (
             NativeSourceCursor(comms.bus, store, wire_root_id=root_id).advance(
                 owner=owner,
-                owner_admission_generation=admission_generation,
+                owner_claimed_generation=claimed_generation,
                 owner_generation=generation,
                 committed_input_id=turn.input_id,
             )
@@ -540,15 +540,15 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
             is None
         )
         old_generation = store.session._connection.execute(
-            "SELECT sent_owner_admission_generation FROM native_runtime_input WHERE input_id=?",
+            "SELECT sent_owner_claimed_generation FROM native_runtime_input WHERE input_id=?",
             (turn.input_id,),
         ).fetchone()[0]
-        assert old_generation != admission_generation
+        assert old_generation != claimed_generation
         with pytest.raises(sqlite3.IntegrityError, match="input identity is frozen"):
             store.session._connection.execute(
-                "UPDATE native_runtime_input SET sent_owner_admission_generation=? "
+                "UPDATE native_runtime_input SET sent_owner_claimed_generation=? "
                 "WHERE input_id=?",
-                (admission_generation, turn.input_id),
+                (claimed_generation, turn.input_id),
             )
         assert (
             store.session._connection.execute(
@@ -656,7 +656,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
             opt_in=True,
         ).run()
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        # A mismatched journal cannot become a live-recorded source receipt.
+        # A mismatched journal cannot become a live-recorded source acknowledgement.
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
@@ -800,9 +800,9 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
 
-    from agent_comms import private_send_admission
+    from agent_comms import private_send_claim
 
-    real_bind = private_send_admission.bind_expected_prompt
+    real_bind = private_send_claim.bind_expected_prompt
 
     def generation_bumps_then_bind(*args, **kwargs):
         # Simulate a concurrent owner generation advance after the reservation
@@ -816,7 +816,7 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
         return real_bind(*args, **kwargs)
 
     monkeypatch.setattr(
-        "agent_comms.private_send_admission.bind_expected_prompt", generation_bumps_then_bind
+        "agent_comms.private_send_claim.bind_expected_prompt", generation_bumps_then_bind
     )
     with pytest.raises((IdentityConflict, StaleFence)) as error:
         await SelectedExecution(

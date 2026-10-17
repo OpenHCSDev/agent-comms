@@ -45,7 +45,7 @@ class CoordinationSession(CoordinationStore):
         then makes those readers a fallible dependency of ``COMMIT``.  Every
         coordinator write instead acquires the exclusive rollback-journal lock
         before changing state, so contention is handled before writing and
-        a successfully admitted transaction owns its complete commit lifetime.
+        a successfully authorized transaction owns its complete commit lifetime.
         """
         with self._transaction_lifetime() as db:
             db.execute("BEGIN EXCLUSIVE")

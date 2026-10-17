@@ -271,6 +271,10 @@ class FieldCodec(Sealed):
             )
         )
 
+    @classmethod
+    def record_key(cls, record: type, name: str) -> str:
+        return next(key for item, key in cls.record_fields(record) if item.name == name)
+
     @staticmethod
     @lru_cache(maxsize=_declaration_cache_capacity)
     def _types(declaration: type) -> dict[str, Any]:

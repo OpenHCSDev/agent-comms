@@ -117,7 +117,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
         await owner._runtime.start()
         await owner.load_session(str(project), thread.name)
         absent_origin = HumanInputOrigin.capture(owner._comms,
-            owner._comms.registry.snapshot().admission_identity(thread.name))
+            owner._comms.registry.snapshot().claimed_identity(thread.name))
         assert isinstance(absent_origin.goal, AbsentGoalCheckpoint)
         assert FieldCodec.decode(HumanInputOrigin, FieldCodec.encode(absent_origin)) == absent_origin
         # Seed an authentic active-but-waiting goal through its declaration and

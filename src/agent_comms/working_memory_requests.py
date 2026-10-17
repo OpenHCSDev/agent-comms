@@ -68,7 +68,7 @@ class FailedAnnotationOutcome(AnnotationOutcome):
     error: str
 
     def public_description(self) -> str:
-        return f"Classifier did not produce an admitted answer: {self.error}. Not automatically resent."
+        return f"Classifier did not produce an authorized answer: {self.error}. Not automatically resent."
 
 
 class AnnotationBudgetExhausted(ValueError):

@@ -29,7 +29,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.comms import Comms
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
-from agent_comms.thread_identity import AdmissionIdentity
+from agent_comms.thread_identity import ClaimedIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
@@ -43,25 +43,25 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
     comms.registry.declare(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"
-    owner, admission_generation = comms.registry.live_owner_with_admission("beta")
-    return comms, agent, owner.created_at, admission_generation
+    owner, claimed_generation = comms.registry.live_owner_with_claim("beta")
+    return comms, agent, owner.created_at, claimed_generation
 
 
-async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, monkeypatch):
+async def test_queue_exact_ids_restore_snapshot_and_claim_change(tmp_path, monkeypatch):
     comms, agent, created, generation = _owner(tmp_path)
     first, second = "a" * 32, "b" * 32
     agent.inputs.queued_inputs["beta"] = {
         key: QueuedInput(
             "same text",
             True,
-            QueuedInputContext(AdmissionIdentity(RecordedThreadIncarnation("beta", created), generation)),
+            QueuedInputContext(ClaimedIdentity(RecordedThreadIncarnation("beta", created), generation)),
             key,
             "same text",
         )
         for key in (first, second)
     }
     initial = await agent.inputs.queue_state("beta")
-    assert initial.scope.admission_generation == generation
+    assert initial.scope.claimed_generation == generation
     assert initial.projection.items == (
         QueueItem(first, "same text"),
         QueueItem(second, "same text"),
@@ -98,7 +98,7 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
     )
     comms.registry.register(comms.registry.require("beta"), new_owner=True)
     current = await agent.inputs.queue_state("beta")
-    assert current.scope.admission_generation > generation
+    assert current.scope.claimed_generation > generation
     assert current.projection.items == current.projection.restored == ()
     assert second in agent.inputs.restored_inputs["beta"]
 
@@ -123,7 +123,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
         for f in decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
         if isinstance(f, QueueChangedUpdate)
     )
-    assert state.scope.admission.incarnation.name == "beta"
+    assert state.scope.claim_scope.incarnation.name == "beta"
     assert isinstance(state.projection, UnavailableQueueProjection)
     assert exact in agent.inputs.queued_inputs["beta"]
 
@@ -137,8 +137,8 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
         response = await agent.prompt(
             "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(request)
         )
-        receipt = next(f for f in decode_updates(response.field_meta) if isinstance(f, InputDeliveryChangedUpdate))
-        assert receipt.input_id == request.input_id
+        acknowledgement = next(f for f in decode_updates(response.field_meta) if isinstance(f, InputDeliveryChangedUpdate))
+        assert acknowledgement.input_id == request.input_id
     assert requests[0].input_id != requests[1].input_id
     state = await agent.inputs.queue_state("beta")
     assert [item.input_id for item in state.projection.items] == [request.input_id for request in requests]
@@ -192,7 +192,7 @@ async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path
         key: QueuedInput(
             text,
             True,
-            QueuedInputContext(AdmissionIdentity(RecordedThreadIncarnation("beta", created), generation)),
+            QueuedInputContext(ClaimedIdentity(RecordedThreadIncarnation("beta", created), generation)),
             key,
             text,
         )
@@ -209,23 +209,23 @@ async def test_alias_maps_only_attachment_session_id(tmp_path):
     state = await agent.inputs.queue_state("beta")
     (rebased,) = decode_updates(present_session(encode_updates(state), "alias"))
     assert rebased.scope.session_id == "alias"
-    assert rebased.scope.admission == state.scope.admission
+    assert rebased.scope.claim_scope == state.scope.claim_scope
     assert rebased.projection is not None and rebased.projection == state.projection
     assert state.scope.session_id == "beta"
 
 
 def test_attachment_routing_rename_preserves_exact_executor_fences():
     from dataclasses import replace
-    original = AdmissionIdentity(RecordedThreadIncarnation("old-route", 1000.0), 7)
+    original = ClaimedIdentity(RecordedThreadIncarnation("old-route", 1000.0), 7)
     renamed = replace(original, incarnation=replace(original.incarnation, name="new-route"))
     scopes = (QueueScope("official-acp-id", original, 123),
               CursorScope("official-acp-id", "a" * 32, original, 123))
     for scope in scopes:
-        assert scope.relation(replace(scope, admission=renamed)).current
+        assert scope.relation(replace(scope, claim_scope=renamed)).current
         assert scope.relation(replace(scope, session_id="new-route")).foreign
         assert scope.relation(replace(scope, owner_pid=124)).ambiguous
-        assert scope.relation(replace(scope, admission=replace(original, incarnation=replace(original.incarnation, created_at=1001.0)))).ambiguous
-        assert scope.relation(replace(scope, admission=replace(original, admission_generation=8))).newer
-        assert scope.relation(replace(scope, admission=replace(original, admission_generation=6))).older
+        assert scope.relation(replace(scope, claim_scope=replace(original, incarnation=replace(original.incarnation, created_at=1001.0)))).ambiguous
+        assert scope.relation(replace(scope, claim_scope=replace(original, claimed_generation=8))).newer
+        assert scope.relation(replace(scope, claim_scope=replace(original, claimed_generation=6))).older
     assert scopes[1].relation(replace(scopes[1], wire_root_id="b" * 32)).foreign
     assert original != renamed  # Routing identity equality is deliberately unchanged.
