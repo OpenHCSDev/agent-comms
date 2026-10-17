@@ -849,18 +849,17 @@ class ThreadRelationships:
             with self.bus.log._opened_wire_snapshot(need_sequence=False) as source:
                 revision = source.revision
                 previous = self._recent_revision
-                extended = (
-                    previous is not None and revision is not None
-                    and revision.identity == previous.identity and revision.size > previous.size
-                )
-                limit = self.RECENT_BYTES
+                extended = False
+                if previous is not None and revision is not None:
+                    extended = (previous.holds_cut(revision, previous.size)
+                                and revision.size > previous.size)
                 if extended:
-                    start = max(previous.size, source.boundary - limit)
+                    start = max(previous.size, source.boundary - self.RECENT_BYTES)
                     source.stream.seek(start)
                     data = source.stream.read(source.boundary - start)
                     contiguous = start == previous.size
                 else:
-                    data, start = source.tail_bytes(limit)
+                    data, start = source.tail_bytes(self.RECENT_BYTES)
                     contiguous = False
             lines = data.splitlines(keepends=True)
             if start and not contiguous and lines:

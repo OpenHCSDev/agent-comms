@@ -291,8 +291,7 @@ class OwnerIdentity:
         return (
             self.incarnation.renamed(thread.name) == thread.incarnation
             and self.generation == generation
-            and thread.role.executable
-            and thread.process_identity == process
+            and thread.same_local_process(process)
         )
 
     def require_current(self, thread: Thread, generation: int, process: ProcessIdentity) -> None:
