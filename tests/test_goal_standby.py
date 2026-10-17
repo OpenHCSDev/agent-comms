@@ -30,11 +30,7 @@ from agent_comms.goal_waits import RecordedGoalWait, NoGoalWait
 async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     tmp_path, monkeypatch, changed
 ):
-    from agent_comms.native_arguments import NativeArguments
-
-    configured_model = NativeArguments.parse(NativeArguments.default).model
-    assert configured_model is not None
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = canonical_goal_wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
