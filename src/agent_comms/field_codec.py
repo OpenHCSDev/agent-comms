@@ -404,7 +404,7 @@ class FieldCodec(Sealed):
                 return cls.value_schema(members[0])
             return {"anyOf": [cls.value_schema(item) for item in members]}
         if origin is Literal:
-            return {**cls.value_schema(type(args[0])), "enum": list(args)}
+            return {**cls.value_schema(type(args[0])), "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
         if origin in (list, tuple, frozenset):
             return {"type": "array", "items": cls.value_schema(args[0])}
         if origin is dict:
@@ -412,9 +412,9 @@ class FieldCodec(Sealed):
                 return {"type": "object", "additionalProperties": cls.value_schema(args[1])}
             return {"type": "array", "items": {"type": "array", "prefixItems": [cls.value_schema(arg) for arg in args], "minItems": 2, "maxItems": 2}}
         if origin is type and args and issubclass(args[0], DeclaredFamily):
-            return {"type": "string", "enum": list(args[0].names())}
+            return {"type": "string", "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
         if isinstance(annotation, type) and issubclass(annotation, Enum):
-            values = [item.value for item in annotation]
+            values = [value for _, value in compile_decoder(annotation).editor_choices()]
             return {**cls.value_schema(type(values[0])), "enum": values}
         primitive = {
             str: "string",
@@ -550,6 +550,9 @@ class ValueDecoder(ABC):
     @abstractmethod
     def decode(self, data: object) -> object: ...
 
+    def editor_choices(self) -> tuple[tuple[str, object], ...]:
+        raise TypeError("The declared decoder does not offer finite choices")
+
 @dataclass(frozen=True, slots=True)
 class _ScalarDecoder(ValueDecoder):
     target: object
@@ -605,6 +608,9 @@ class _AnyDecoder(ValueDecoder, FieldRepresentation):
 class _FamilyNameDecoder(ValueDecoder):
     family: type[DeclaredFamily]
 
+    def editor_choices(self):
+        return tuple((name, name) for name in self.family.names())
+
     def decode(self, data):
         if type(data) is not str:
             raise ValueError("Expected a declared family name.")
@@ -614,6 +620,9 @@ class _FamilyNameDecoder(ValueDecoder):
 class _LiteralDecoder(ValueDecoder):
     target: object
     values: tuple[object, ...]
+
+    def editor_choices(self):
+        return tuple((str(value), value) for value in self.values)
 
     def decode(self, data):
         if any(type(data) is type(value) and data == value for value in self.values):
@@ -697,6 +706,9 @@ class _FamilyRecordDecoder(ValueDecoder):
 
     family: type[DeclaredFamily]
 
+    def editor_choices(self):
+        return tuple((member.label, member) for member in self.family.members_with(self.family))
+
     def decode(self, data):
         if not isinstance(data, dict):
             raise ValueError("Expected a family object.")
@@ -752,6 +764,9 @@ class _RecordDecoder(ValueDecoder):
 @dataclass(frozen=True, slots=True)
 class _EnumDecoder(ValueDecoder):
     target: object
+
+    def editor_choices(self):
+        return tuple((str(member.value), member.value) for member in self.target)
 
     def decode(self, data):
         return self.target(data)
