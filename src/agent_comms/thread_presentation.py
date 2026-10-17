@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .errors import RelationViolationError
@@ -14,7 +14,7 @@ from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
-    from .presentation import MessageNotification
+    from .presentation import MessageNotification, ThreadView
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
 
 
@@ -183,6 +183,7 @@ class ThreadPresentation:
     read_identity: TranscriptReadIdentity | None = None
     incoming_references: tuple[MessageReference, ...] = ()
     sent_references: tuple[MessageReference, ...] = ()
+    view: ThreadView | None = field(default=None, compare=False)
 
     def same_status(self, other: ThreadPresentation | None) -> bool:
         """Status changes do not require reacquiring an unchanged source window."""

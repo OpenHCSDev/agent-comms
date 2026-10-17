@@ -573,10 +573,12 @@ class ThreadReading(Observation[ObserveThreads]):
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         previous = self.observed
         presentations, unavailable, busy = {}, {}, set()
+        refreshed = {}
         names = self.request.names
         try:
             if previous is not None:
-                names = (revision.changed_threads(previous, comms) | names - previous.changed_since(None)) & names
+                changed, refreshed = revision.changed_threads(previous, comms)
+                names = (changed | names - previous.changed_since(None)) & names
             if names:
                 batch = comms.views.thread_presentations(names)
         except UnreadableHistory.DEFERRED_READS:
@@ -593,7 +595,7 @@ class ThreadReading(Observation[ObserveThreads]):
                     unavailable[name] = UnreadableHistory.capture(error)
                 yield None
         if previous is not None:
-            presentations.update((name, value) for name, value in previous.presentations.items()
+            presentations.update((name, refreshed.get(name, value)) for name, value in previous.presentations.items()
                                  if name in self.request.names and name not in names)
             unavailable.update((name, value) for name, value in previous.unavailable.items()
                                if name in self.request.names and name not in names)
