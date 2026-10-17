@@ -467,8 +467,8 @@ class MonitorAttemptRow(TypedTable, MonitorAttempt):
             if observed.insert_if_absent(bridge.journal.db).rowcount:
                 evidence = evidence.accepted(self.parts)
                 evidence.record(bridge.journal, self.id)
+        await bridge.part_observed(self.id, notification.number)
         await evidence.confirm(bridge, self, record)
-        bridge.part_observed(self.id, notification.number)
 
 
 class DeliveryJournal:
@@ -850,12 +850,14 @@ class LineMonitorBridge(TranscriptBridge[Options]):
     """Monitor delivery requires the same live transcript subscription."""
 
     operations = (Send, Watch)
+    window_bytes: ClassVar[int]
 
     def __init__(self, options: Options, binding: Binding, journal: DeliveryJournal) -> None:
         super().__init__(options, binding, journal)
         self.probe = MonitorProbe(session=binding.thread, token=secrets.token_hex(24))
         self.monitor_ready = asyncio.Event()
-        self.part_events: dict[tuple[str, int], asyncio.Event] = {}
+        self.pending_parts: dict[tuple[str, int], int] = {}
+        self.window_changed = asyncio.Condition()
 
     async def prepare_delivery(self) -> None:
         print(self.probe.model_dump_json(), flush=True)
@@ -872,44 +874,36 @@ class LineMonitorBridge(TranscriptBridge[Options]):
     async def settle(self, message: Message, result: type[Outcome]) -> None:
         return  # The session evidence already completed delivery.
 
-    def part_observed(self, message_id: str, number: int) -> None:
-        # An observation with no waiter is a startup replay of a finished part.
-        if event := self.part_events.get((message_id, number)):
-            event.set()
+    async def part_observed(self, message_id: str, number: int) -> None:
+        async with self.window_changed:
+            self.pending_parts.pop((message_id, number), None)
+            self.window_changed.notify_all()
 
     @staticmethod
-    def emit(text: str) -> None:
+    def encode(text: str) -> str:
         # One reversible JSON string per line; no truncation or lost line breaks.
-        print(json.dumps(text, ensure_ascii=False), flush=True)
+        return json.dumps(text, ensure_ascii=False)
 
     async def deliver(self, message: Message) -> type[Outcome]:
         parts = self.incoming_frame(message).parts
         self.journal.emitting(message, len(parts))
         for number, part in enumerate(parts, 1):
-            event = asyncio.Event()
-            key = message.message_id, number
-            self.part_events[key] = event
-            try:
-                self.emit(part)
-                self.journal.finish(message, EmittedOutcome)
-                # Monitor may combine stdout writes into one capped event. The
-                # session's observation, not a timer, releases the next part.
-                await event.wait()
-            finally:
-                del self.part_events[key]
+            line = self.encode(part)
+            size = len((line + '\n').encode('utf-16-le'))
+            async with self.window_changed:
+                await self.window_changed.wait_for(
+                    lambda: not self.pending_parts
+                    or sum(self.pending_parts.values()) + size <= self.window_bytes)
+                self.pending_parts[message.message_id, number] = size
+                print(line, flush=True)
+        self.journal.finish(message, EmittedOutcome)
         return self.journal.outcome(message)
 
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
-        self.emit(self.sent_text(result, target, body))
+        print(self.encode(self.sent_text(result, target, body)), flush=True)
 
     async def report_failure(self, text: str) -> None:
-        self.emit(text)
-
-    async def watch(self) -> None:
-        try:
-            await super().watch()
-        finally:
-            self.emit('Comms monitor ended. No message was retried.')
+        print(self.encode(text), flush=True)
 
 
 def shared_parser(description: str | None, state: Path,
