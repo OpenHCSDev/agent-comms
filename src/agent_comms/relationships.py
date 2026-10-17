@@ -783,19 +783,16 @@ class ThreadRelationships:
             thread = registry.require(owner)
             relations = self.peer_relations(owner)
         messages, _ = self._recent_messages()
-        correspondents = set()
+        correspondents: dict[str, float] = {}
         for message in messages:
-            if message.notice or message.membership is not None or is_channel_target(message.target):
-                continue
-            sender, target = registry.canonical_name(message.sender), registry.canonical_name(message.target)
-            peer = target if sender == thread.name else sender if target == thread.name else None
-            if peer in registry.threads:
-                person = registry.threads[peer]
-                if message.timestamp >= max(thread.created_at, person.created_at):
-                    correspondents.add(person.incarnation)
-        return tuple(relation for relation in relations
-                     if relation.records or relation.peer.name == thread.parent
-                     or relation.peer in correspondents)
+            peer = message.response_policy.context_peer(
+                thread.name, registry.canonical_name(message.sender),
+                registry.canonical_name(message.target))
+            if peer is not None:
+                correspondents[peer] = max(correspondents.get(peer, 0), message.timestamp)
+        return tuple(r for r in relations if r.records or r.peer.name == thread.parent
+                     or correspondents.get(r.peer.name, 0) >= max(
+                         thread.created_at, r.peer.require_recorded().created_at))
 
     def relevance(self, owner: str, peer: str) -> type[PeerRelevance]:
         """The most derived relevance ``peer`` has to ``owner``."""

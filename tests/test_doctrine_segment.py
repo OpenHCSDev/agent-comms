@@ -1,4 +1,4 @@
-"""The maintenance doctrine segment derives from its one declared source file."""
+"""Retained doctrine remains decodable but is not repeated in new prompts."""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ def _doctrine():
 
 
 def test_the_segment_derives_its_text_from_the_declared_file(tmp_path: Path):
-    captured = _doctrine().capture()
     instruction = InstructionFile.read("doctrine.md")
+    captured = _doctrine()(instruction=instruction, provenance=(instruction.source,))
     assert captured.instruction == instruction
     assert captured.provenance == (instruction.source,)
     assert captured.text() == instruction.content
