@@ -100,14 +100,10 @@ class StoreLock:
     @contextmanager
     def ordered(cls, requests, *, blocking=True, contention=None):
         """Acquire store owners by their declared rank, never their filenames."""
-        for owner in requests:
-            if owner.lock_rank is None:
-                raise ValueError("Store owner declares no lock rank")
         with ExitStack() as resources:
-            locks = {owner: resources.enter_context(_store_lock(owner.path,
+            yield {owner: resources.enter_context(_store_lock(owner.path,
                 shared=requests[owner], blocking=blocking, contention=contention))
                 for owner in sorted(requests, key=lambda owner: (owner.lock_rank, str(owner.path)))}
-            yield locks
 
     @classmethod
     def current_release(cls) -> StoreLockRelease:

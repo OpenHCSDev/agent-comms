@@ -108,7 +108,6 @@ class NativeBoundary(ExitStack):
     def __enter__(self):
         from .store_files import StoreLock
 
-        super().__enter__()
         try:
             with self.measurements.operation("file_exclusion"):
                 locks = self.enter_context(StoreLock.ordered(

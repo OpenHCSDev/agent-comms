@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from inspect import isabstract
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .field_codec import FieldCodec
@@ -21,12 +22,7 @@ T = TypeVar("T")
 
 @dataclass(frozen=True, slots=True)
 class JsonDocument(ABC, Generic[T]):
-    """Declared JSON decoding and durable atomic file I/O, not transaction custody.
-
-    Atomic reads see one complete file. Writers supply their own serialization
-    and source authority; authoritative documents add those through LockedStore,
-    while disposable append projections use their checked-prefix publisher.
-    """
+    """Declared JSON codec and atomic file I/O; LockedStore owns transactions."""
 
     path: Path
     json_indent: ClassVar[int | None] = None
@@ -141,16 +137,17 @@ class JsonDocument(ABC, Generic[T]):
 
 @dataclass(frozen=True, slots=True)
 class LockedStore(JsonDocument[T]):
-    """One document's transactions, composed with its declared file codec.
+    """Document transactions; callbacks return replacements, never mutate or reenter.
 
-    Update callbacks return a replacement value, or the original object to skip
-    writing. They must not mutate the original or call this store recursively.
-    No public method may be called while holding this document's canonical lock
-    on another descriptor. Distinct outer locks (for example wire) are allowed.
-    The append-only wire is not a document and must not use this abstraction.
+    Joint reads acquire declared source owners through StoreLock.ordered.
     """
 
-    lock_rank: ClassVar[int] = 3
+    lock_rank: ClassVar[int]
+
+    def __init_subclass__(cls, **kwargs):
+        super(LockedStore, cls).__init_subclass__(**kwargs)
+        if not isabstract(cls) and ("lock_rank" not in cls.__dict__ or cls.lock_rank is None):
+            raise TypeError(f"{cls.__name__} must declare its own lock_rank")
 
     @contextmanager
     def locked(self, *, shared: bool = False, blocking: bool = True) -> Iterator[int]:
