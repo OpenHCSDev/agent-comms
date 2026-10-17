@@ -87,7 +87,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     """ACP agent bound to one Comms wire.
 
     Session -> thread. Coding prompts run the configured backend; targeted
-    prompts relay through the shared wire and drain replies back to the client.
+    prompts publish to the shared wire. Replies belong to the thread's bus view.
     """
 
     session_lifecycle_class = SessionLifecycle
