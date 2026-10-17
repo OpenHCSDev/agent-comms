@@ -61,7 +61,7 @@ class ReadProvider(LoopbackProvider):
 
 
 @pytest.mark.parametrize("outcome", ["complete", "cancel"])
-async def test_installed_retained_native_read_round_preserves_original_custody(tmp_path, monkeypatch, outcome):
+async def test_installed_retained_native_read_round_preserves_original_inputs(tmp_path, monkeypatch, outcome):
     source = Path(SOURCE).absolute()
     original = FileRevision.from_stat(source.stat())
     original_hash = hashlib.sha256(source.read_bytes()).hexdigest()
