@@ -136,36 +136,29 @@ async def stream_agent_events(
             from .session_fence import session_writer_fence
 
             async with session_writer_fence(launch.session.session_file):
-                try:
-                    async with aclosing(
-                        TurnSession(
-                            launch,
-                            task,
-                            steering_queue=steering_queue,
-                            finish_event=finish_event,
-                            images=images,
-                            context_contributions=context_contributions,
-                            model_wait_timeout=model_wait_timeout,
-                            rpc_abort_grace=rpc_abort_grace,
-                            send_boundary=send_boundary,
-                            native_start=native_start,
-                            interrupt_boundary=interrupt_boundary,
-                            persistent_session=persistent_session,
-                            ui_request=ui_request,
-                            request_observer=request_observer,
-                        ).run()
-                    ) as stream:
-                        async for event in stream:
-                            yield event
-                finally:
-                    if owner is not None:
-                        await terminate_task_process(owner)
-    except Exception:
-        # The owner-turn publisher owns diagnostic privacy and input settlement.
-        # Preserve the producer's original cause instead of fabricating a terminal.
+                async with aclosing(
+                    TurnSession(
+                        launch,
+                        task,
+                        steering_queue=steering_queue,
+                        finish_event=finish_event,
+                        images=images,
+                        context_contributions=context_contributions,
+                        model_wait_timeout=model_wait_timeout,
+                        rpc_abort_grace=rpc_abort_grace,
+                        send_boundary=send_boundary,
+                        native_start=native_start,
+                        interrupt_boundary=interrupt_boundary,
+                        persistent_session=persistent_session,
+                        ui_request=ui_request,
+                        request_observer=request_observer,
+                    ).run()
+                ) as stream:
+                    async for event in stream:
+                        yield event
+    finally:
         if owner is not None:
             await terminate_task_process(owner)
-        raise
 
 
 class TurnSession:
