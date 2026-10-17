@@ -122,7 +122,7 @@ class AcquiredChannelTarget(ChannelTarget):
     members: tuple[Thread, ...]
 
     def bindings(self, declaration, comms, channel, snapshot, catalog):
-        return declaration.channel_target_bindings(comms, self, snapshot)
+        return declaration.channel_bindings(comms, self, snapshot=snapshot)
 
 
 @dataclass(frozen=True)

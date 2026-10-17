@@ -399,10 +399,6 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return ()
 
     @classmethod
-    def channel_target_bindings(cls, comms, target, snapshot) -> tuple[Self, ...]:
-        return cls.channel_bindings(comms, target.channel, snapshot=snapshot)
-
-    @classmethod
     def bindings(cls, comms: Comms, target: CommandTarget | str, channel: str | None = None,
                  *, snapshot: RegistrySnapshot | None = None,
                  catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
@@ -436,13 +432,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                         declaration = member.catalog_declaration() if len(selected) > 1 else member
                         commands = grouped.setdefault(declaration, {})
                         bound = command.for_editor(comms, name.name, project)
-                        commands.setdefault(bound.catalog_identity, bound)
+                        commands.setdefault((type(bound), json.dumps(FieldCodec.encode(bound), sort_keys=True)), bound)
         names = tuple(name for item in selected for name in item.names)
         return tuple(TargetAction(tuple(commands.values()), names) for commands in grouped.values())
-
-    @property
-    def catalog_identity(self) -> tuple[type, str]:
-        return type(self), json.dumps(FieldCodec.encode(self), sort_keys=True)
 
     def for_editor(self, comms: Comms, target: str, project: str) -> Self:
         return self
@@ -1257,7 +1249,7 @@ class ChannelMemberBindings:
     name: str = option('--name', target_bound=True)
 
     @classmethod
-    def channel_target_bindings(cls, comms, target, snapshot):
+    def channel_bindings(cls, comms, target, *, snapshot=None):
         return tuple(bound for thread in target.members for bound in cls.thread_bindings(
             comms, thread, snapshot.statuses[thread.name], target.channel.name))
 
@@ -1619,8 +1611,8 @@ class ExactTagCliCommand(CliCommand):
         return cls(name=name)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls.for_tag(channel.name.removeprefix('#')),) if channel.exact else ()
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls.for_tag(target.channel.name.removeprefix('#')),) if target.channel.exact else ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1675,8 +1667,8 @@ class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
         return ArchiveCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(name=channel.name),) if channel.can_set_archived(cls.archived) else ()
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls(name=target.channel.name),) if target.channel.can_set_archived(cls.archived) else ()
 
     def confirmation(self):
         return (f"Archive {self.name}? Hide the channel without removing threads, tags or history. It can be restored."
@@ -1695,10 +1687,6 @@ class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-
     def catalog_declaration(cls):
         return cls
 
-    @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(name=channel.name),) if channel.can_set_archived(cls.archived) else ()
-
 
 @dataclass(frozen=True, kw_only=True)
 class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
@@ -1706,8 +1694,8 @@ class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
     name: str = option('--name', target_bound=True)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(name=channel.view.name),) if channel.view is not None else ()
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls(name=target.channel.view.name),) if target.channel.view is not None else ()
 
     def confirmation(self):
         return f"Delete saved view #{self.name}? Thread tags and messages are preserved."
@@ -1729,8 +1717,8 @@ class PinChannelCliCommand(CliCommand, declared_name='pin-channel'):
         return PinThreadCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(name=channel.name, pinned=not channel.pinned),) if channel.exact else ()
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls(name=target.channel.name, pinned=not target.channel.pinned),) if target.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:
         return ctx.channels.set_channel_pinned(self.name, self.pinned)
@@ -1743,8 +1731,8 @@ class ChannelActivityCliCommand(CliCommand, declared_name='channel-activity'):
     enabled: bool = option('--enabled', default=False, target_bound=True)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(name=channel.name, enabled=not channel.any_mode),) if channel.exact else ()
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls(name=target.channel.name, enabled=not target.channel.any_mode),) if target.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:
         return ctx.channels.set_channel_any_mode(self.name, self.enabled)
@@ -1772,8 +1760,8 @@ class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
         return (cls(target=thread.name),)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(target=channel.name),)
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls(target=target.channel.name),)
 
     def for_editor(self, comms, target, project):
         return replace(self, worktree=project)
