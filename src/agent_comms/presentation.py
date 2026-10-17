@@ -615,12 +615,17 @@ class ThreadView:
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""
-        ordinary = self.status.presentation(self.thread.display_title, self.activity)
+        ordinary = self._display_presentation()
         if self.status.active:
-            ordinary = ordinary.status.when_idle(ordinary, self._idle_presentation)
             ordinary = self.activity.readiness.presentation(ordinary)
         return replace(self.thread.execution.presentation(self.thread, self.status, ordinary, self.binding),
-                       binding=self.binding, view=self)
+                       binding=self.binding)
+
+    def _display_presentation(self) -> ThreadPresentation:
+        ordinary = self.status.presentation(self.thread.display_title, self.activity)
+        if self.status.active:
+            return ordinary.status.when_idle(ordinary, self._idle_presentation)
+        return ordinary
 
     def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         if self.thread.executing:
@@ -759,15 +764,14 @@ class WireRevision:
             }
         return cls(**captured, expiry_tick=expiry_tick, through_seq=through_seq)
 
-    def changed_threads(self, previous: ThreadsObserved, comms: Comms
-                        ) -> tuple[frozenset[str], Mapping[str, ThreadPresentation]]:
-        """Return changed names and refreshed original views whose status stayed equal."""
+    def changed_threads(self, previous: ThreadsObserved, comms: Comms,
+                        activity: Mapping[str, ObservedActivity]) -> frozenset[str]:
+        """Attribute changes using the retained observation and existing route rows."""
         earlier = previous.revision
         names = previous.changed_since(None)
-        refreshed = {}
         if (self.registry != earlier.registry or self.bus_source_changed_since(earlier)
                 or not any(view is not None for view in previous.presentations.values())):
-            return frozenset(names), refreshed
+            return frozenset(names)
         changed = set(previous.busy)
         if self.through_seq > earlier.through_seq:
             snapshot = comms.registry.snapshot()
@@ -783,19 +787,11 @@ class WireRevision:
         status_names = names if (self.goal_waits, self.expiry_period) != (
             earlier.goal_waits, earlier.expiry_period) else ()
         if not status_names and self.activity != earlier.activity:
-            snapshot = comms.registry.snapshot()
-            activity = comms.agents.all_activity(snapshot.visible_threads(
-                names=names, show_stopped=True, show_archived=False), snapshot=snapshot)
-            status_names = tuple(name for name in names if (before := previous.presentations.get(name)) is None
-                                 or before.view is None or before.view.activity != activity.get(snapshot.canonical_name(name)))
+            status_names = tuple(name for name in names if activity.get(name) != previous.activity.get(name))
         if status_names:
             status_batch = comms.views.thread_presentations(status_names)
-            for name in status_names:
-                view, before = status_batch.view(name), previous.presentations.get(name)
-                if view is None or not view.presentation.same_status(before):
-                    changed.add(name)
-                else:
-                    refreshed[name] = replace(before, view=view)
+            changed.update(name for name in status_names if (view := status_batch.view(name)) is None
+                           or not view.presentation.same_status(previous.presentations.get(name)))
         if self.notifications_changed_since(earlier):
             remaining = {name: view for name, view in previous.presentations.items()
                          if name not in changed and view is not None}
@@ -813,7 +809,7 @@ class WireRevision:
                                    for item in (*view.notifications, *view.sent_notifications))
                     if current != before:
                         changed.add(name)
-        return frozenset(changed & names), refreshed
+        return frozenset(changed & names)
 
     def bus_source_changed_since(self, earlier: WireRevision) -> bool:
         return self.through_seq < earlier.through_seq or any(
