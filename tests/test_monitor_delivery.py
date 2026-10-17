@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import (
-    CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame, ForeignAttachment, TaskEnvelope,
+    CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame, MetadataRecord, TaskEnvelope,
 )
 from agent_comms.cli_bridges.shared import (
     Binding, DeliveryJournal, DeliveryRow, MonitorAttemptRow, MonitorPartRow, MonitorPart,
@@ -94,13 +94,12 @@ def test_frame_cap_and_exact_reconstruction(body, sender):
 def test_task_notifications_paint_declared_content_and_reject_malformed_xml():
     record = notification('ordinary monitor output')
     rendered, = record.updates(ClaudeSession())
-    assert rendered.events[0].text == 'Monitor output\n\nordinary monitor output'
+    assert rendered.events[0].text == 'Monitor output\nordinary monitor output'
     for text in ('<summary>Shell finished</summary>',
                  '<summary>Agent completed</summary><status>completed</status><result>Analysis</result>'):
         envelope = TaskEnvelope.from_text('<task-notification>' + text + '</task-notification>')
         notice, = envelope.updates(record)
-        assert envelope.summary in notice.events[0].text
-        assert envelope.result in notice.events[0].text
+        assert notice.events[0].text == envelope.summary
     from xml.etree.ElementTree import ParseError
     with pytest.raises(ParseError):
         TaskEnvelope.from_text('<task-notification>')
@@ -111,7 +110,7 @@ def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
     record=CLAUDE_RECORD.validate_python(dict(type='attachment', uuid='foreign-record',
         timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='queued_command',
         origin=dict(kind='peer'), prompt='Not a Monitor notification')))
-    assert isinstance(record.attachment, ForeignAttachment)
+    assert isinstance(record, MetadataRecord) and record.type == 'attachment'
     assert record.updates(ClaudeSession())==()
     queued=CLAUDE_RECORD.validate_python(dict(type='queue-operation', operation='enqueue',
         sessionId='session', content='<task-notification><event>not yet received</event></task-notification>'))
