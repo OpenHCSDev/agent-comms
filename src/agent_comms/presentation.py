@@ -790,8 +790,7 @@ class WireRevision:
         """Attribute changes using the retained view's originals and existing route rows."""
         earlier = previous.revision
         names = previous.presentations.keys() | previous.unavailable.keys() | previous.busy
-        if (self.registry != earlier.registry or self.through_seq < earlier.through_seq
-                or self.bus_source_changed_since(earlier)
+        if (self.registry != earlier.registry or self.bus_source_changed_since(earlier)
                 or not any(view is not None for view in previous.presentations.values())):
             return frozenset(names)
         changed = set(previous.busy)
@@ -834,8 +833,9 @@ class WireRevision:
         return frozenset(changed & names)
 
     def bus_source_changed_since(self, earlier: WireRevision) -> bool:
-        return any(FileRevision.source_changed(before, current)
-                   for before, current in zip_longest(earlier.bus_log, self.bus_log))
+        return self.through_seq < earlier.through_seq or any(
+            FileRevision.source_changed(before, current)
+            for before, current in zip_longest(earlier.bus_log, self.bus_log))
 
     @property
     def expiry_period(self) -> int:
