@@ -376,6 +376,11 @@ class ThreadRole(StrEnum):
     def executable(self) -> bool:
         return self is self.AGENT
 
+    def initial_delivery(self, message, target):
+        if not self.executable:
+            return replace(message, notice=True), []
+        return message, [target]
+
     def require_executable(self) -> None:
         if not self.executable:
             raise RelationViolationError("thread role does not execute owner turns")

@@ -134,23 +134,10 @@ class AuthoredSourceScope(WireExportScope):
 class ChannelScope(WireExportScope):
     channel: str
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.channel, str) or not self.channel.startswith("#"):
-            raise ValueError("A channel wire-export scope requires one #channel.")
-        builtin = BuiltinChannel.lookup(self.channel)
-        if builtin is not None and builtin.aggregate:
-            raise ValueError(
-                f"{self.channel} is an aggregate projection, not an exportable conversation."
-            )
-
     def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
         channel = catalog.read().resolve(self.channel)
         channel.require_routable()
         targets = channel.history_targets
-        if targets is None:
-            raise RelationViolationError(
-                f"View {self.channel!r} is an aggregate, not an exportable conversation."
-            )
         return ResolvedExportScope(self, lambda message: message.target in targets)
 
 

@@ -33,10 +33,10 @@ class Channel:
     view: SavedView | None = None
 
     def __post_init__(self) -> None:
-        name = self.name if self.name.startswith("#") else f"#{self.name}"
+        name = ChannelTarget.normalize_name(self.name)
         object.__setattr__(self, "name", name)
         if self.parent is not None:
-            parent = self.parent if self.parent.startswith("#") else f"#{self.parent}"
+            parent = ChannelTarget.normalize_name(self.parent)
             object.__setattr__(self, "parent", parent)
         if not isinstance(self.order, type) or self.order not in ThreadSort.members_with(ThreadSort):
             raise ValueError("Channel ordering must be a declared ThreadSort.")

@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 
 from .active_route import guard_original_root_write
-from .channel_targets import Tag
+from .channel_targets import ChannelTarget, Tag
 from .channels import Channel, SavedView
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
@@ -220,7 +220,7 @@ class ChannelManagement:
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             threads = self.registry.all_threads()
             with self.catalog.editing() as document:
-                target = name if name.startswith('#') else f'#{name}'
+                target = ChannelTarget.normalize_name(name)
                 channel = document.views(threads).get(target)
                 if channel is None:
                     raise ValueError(f'Unknown channel: {target!r}')
@@ -250,7 +250,7 @@ class ChannelManagement:
                 return document.set_preferences(name, threads, pinned=pinned)
 
     def set_thread_pinned(self, channel: str, name: str, pinned: bool) -> None:
-        canonical_channel = channel if channel.startswith("#") else f"#{channel}"
+        canonical_channel = ChannelTarget.normalize_name(channel)
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             snapshot = self.registry.snapshot()

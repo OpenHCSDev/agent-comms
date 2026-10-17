@@ -1,7 +1,7 @@
 """Named destinations own route behavior; strings are decoded at the boundary."""
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from typing import ClassVar
 from enum import StrEnum
@@ -173,14 +173,12 @@ class ThreadTarget(NamedTarget):
 
     def initial_delivery(self, sender, message, snapshot, catalog):
         target = self.canonical_name(snapshot.canonical_name)
-        recipient = snapshot.threads.get(target)
-        if recipient is not None and snapshot.statuses[target].visible:
-            if target == sender:
-                raise RelationViolationError("A thread cannot message itself.")
-            if recipient.role.executable:
-                return ThreadTarget(target), message, [target]
-            return ThreadTarget(target), replace(message, notice=True), []
-        raise RelationViolationError("Initial direct target must be visible.")
+        recipient = snapshot.require(target)
+        snapshot.status(target).require_visible()
+        if target == sender:
+            raise RelationViolationError("A thread cannot message itself.")
+        message, names = recipient.role.initial_delivery(message, target)
+        return ThreadTarget(target), message, names
 
     def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
         return direct_scope.capture(viewer, snapshot.require(self.name).name, snapshot)
@@ -201,6 +199,10 @@ class ChannelTarget(NamedTarget):
     batchable = True
     kind = "channel"
     default_audience = MessageAudience.COLLECTIVE
+
+    @classmethod
+    def normalize_name(cls, name: str) -> str:
+        return name if name.startswith("#") else f"#{name}"
 
     @property
     def incoming_scope(self):
@@ -244,11 +246,8 @@ class ChannelTarget(NamedTarget):
 
     def initial_delivery(self, sender, message, snapshot, catalog):
         channel = catalog.resolve(self.name)
-        names = []
-        for name, thread in snapshot.threads.items():
-            if name != sender and thread.role.executable:
-                if snapshot.statuses[name].visible and channel.matches(thread.tags):
-                    names.append(name)
+        names = [thread.name for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
+                 if thread.name != sender and channel.matches(thread.tags)]
         return self, message, names
 
     def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):

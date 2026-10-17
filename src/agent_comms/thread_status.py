@@ -25,6 +25,10 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
 
+    def require_visible(self) -> None:
+        if not self.visible:
+            raise RelationViolationError("Initial direct target must be visible.")
+
     def require_running(self) -> None:
         raise RelationViolationError("goal owner is not running")
 
