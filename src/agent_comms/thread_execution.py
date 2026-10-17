@@ -145,7 +145,7 @@ class ExternalThreadExecution(ThreadExecution):
         if thread.has_process and not thread.process_alive:
             return replace(ordinary, marker="○", summary="CLI offline",
                            status=ordinary.status.without_work())
-        return ordinary.status.live_cli_presentation(ordinary)
+        return ordinary
 
     @classmethod
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):

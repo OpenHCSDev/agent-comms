@@ -1,6 +1,7 @@
 """New status text is bounded by activity; saved text is never repaired on read."""
 
 import os
+from dataclasses import replace
 
 import pytest
 
@@ -122,7 +123,8 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
 
 def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
     thread = comms.registry.declare(Thread("cli-worker", frozenset(), str(comms.root),
-                                          execution=ExternalThreadExecution))
+                                          execution=ExternalThreadExecution,
+                                          process_identity=ProcessIdentity.capture(os.getpid())))
     output = ThreadOutput(ExternalTranscript(comms.root, thread.incarnation), comms.agents)
     output.status(ActivityState.WORKING, "  tool:\n\t" + "x" * Activity.detail_limit)
     activity = comms.agents.activity_of(thread.name)
@@ -132,3 +134,11 @@ def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
     assert "\n" not in activity.detail and "\t" not in activity.detail
     output.status(ActivityState.WORKING, "  short:\n\ttext  ")
     assert comms.agents.activity_of(thread.name).detail == "short: text"
+    shown = comms.views.require_thread_presentation(thread.name)
+    assert shown.status.working
+    assert shown.summary == "Working · short: text"
+    assert shown.marker == "⌛"
+    attention = replace(shown, status=shown.status.with_attention())
+    assert ExternalThreadExecution.presentation(thread, comms.registry.snapshot().status(thread.name), attention, attention.binding) == attention
+    output.status(ActivityState.IDLE)
+    assert not comms.views.require_thread_presentation(thread.name).status.working
