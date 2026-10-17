@@ -11,18 +11,19 @@ from agent_comms import agent_events as ae
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
     TranscriptSnapshotUpdate,
-    TurnSettledUpdate,
+    TurnChangedUpdate,
     decode_updates,
 )
 from agent_comms.agent_backend import CompactionOutcome, PlacedCompaction
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
+from test_backend_native_lifecycle import native_backend
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
@@ -120,9 +121,12 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
-async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, monkeypatch):
-    comms = wire(tmp_path / ("long-wire-" * 16))
-    owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, monkeypatch, native_backend):
+    comms = Comms(tmp_path / ("long-wire-" * 16))
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
+    owner = canonical_agent(comms, agent_bin="pi", agent_args=native_backend.native_arguments(), runtime_enabled=True)
     client = canonical_agent(comms)
     updates = []
 
@@ -161,7 +165,9 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
         assert result["stopReason"] == "end_turn"
         await until(
             lambda: any(
-                any(isinstance(f, TurnSettledUpdate) for f in decode_updates(u.get("_meta")))
+                any(isinstance(f, TurnChangedUpdate)
+                    and not f.state.busy and f.state.finished_turn_id is not None
+                    for f in decode_updates(u.get("_meta")))
                 for u in updates
             )
         )
