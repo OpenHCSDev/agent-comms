@@ -26,7 +26,7 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import Goal, ProblemGoalOrder
+from .goals import Goal, GoalOrder, ProblemGoalOrder, UnorderedGoalOrder
 from .threads import Thread
 from .recorded_time import EventTime
 
@@ -350,7 +350,7 @@ class DeliveredOrderGoalAction(CompletionGoalAction, RuntimeInvocable):
         ctx = GoalActionContext(goals, goals.registry.require(name), actor)
         self.expect.check(ctx)
         goal = ctx.require_goal()
-        check = goal.order.check(goal.text)
+        check = goal.order.delivery_check()
         asyncio.run(self.verify(check))
         return replace(self, expect=replace(self.expect, expected_goal=goal))
 
@@ -376,9 +376,6 @@ class DeliveredOrderGoalAction(CompletionGoalAction, RuntimeInvocable):
             raise ValueError("The order's own check did not print its required count.")
         await require_commit()
 
-    def before_transition(self, ctx):
-        pass
-
 
 @dataclass(frozen=True, kw_only=True)
 class InstalledOrderGoalAction(GoalAction, RuntimeInvocable):
@@ -387,8 +384,9 @@ class InstalledOrderGoalAction(GoalAction, RuntimeInvocable):
 
     def change(self, ctx):
         goal = ctx.require_goal()
-        if not goal.state.terminal or not Path(self.artifact).is_file():
-            raise ValueError("Finish the order and retain its installed application artifact before closing.")
+        goal.state.require_order_slot()
+        if not Path(self.artifact).is_file():
+            raise ValueError("Retain the installed application artifact before closing.")
         return replace(goal, order=goal.order.installed(self.works, self.artifact),
                        revision=goal.revision + 1)
 
@@ -437,6 +435,7 @@ class ReplacementGoalAction(GoalAction):
 @dataclass(frozen=True, kw_only=True)
 class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
     text: str
+    order: GoalOrder = field(default_factory=UnorderedGoalOrder)
     goal_id: str = field(default_factory=lambda: uuid4().hex)
 
     @classmethod
@@ -447,14 +446,17 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
 
     def change(self, ctx: GoalActionContext) -> Goal:
-        if ctx.thread.goal_for(self.goal_id) is not None:
+        current = ctx.thread.goal_for(self.goal_id)
+        if current is not None:
+            if (current.text, current.order) != (self.text.strip(), self.order):
+                raise ValueError("Goal identity already has different instructions.")
             return ctx.require_goal()
         ctx.thread.require_goal_replacement(ctx.goals)
-        goal = Goal(text=self.text.strip(), id=self.goal_id, revision=1)
+        goal = Goal(text=self.text.strip(), id=self.goal_id, revision=1, order=self.order)
         goal = replace(
             goal,
             mention_source=bind_goal_mentions(
-                goal.text, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot()
+                goal.instructions, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot()
             ),
         )
         ctx.goals.open_goal_store().create_goal(goal.id)
@@ -463,30 +465,24 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
 @dataclass(frozen=True, kw_only=True)
 class OrderGoalAction(GoalAction, RuntimeInvocable):
-    problem: str
+    order: ProblemGoalOrder
     goal_id: str
     expected_revision: int
     deadline: EventTime
     commander: str
-    clean: bool = False
-
-    def order_text(self, ctx):
-        return ctx.goals.todos.get(self.problem).text
-
     def reserve(self, ctx):
-        return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
+        return ctx.goals.todos.assign(self.order.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
             generation=self.goal_id, deadline=self.deadline)
 
     def change(self, ctx):
-        ctx.thread.require_order_slot(self.goal_id, self.problem)
+        ctx.thread.require_order_slot(self.goal_id, self.order.problem)
         self.deadline.require_deadline()
-        order = ProblemGoalOrder(self.problem)
-        text = self.order_text(ctx)
-        order.require_tone(text, clean=self.clean)
-        order.check(text)
+        self.order.owner.require_exists()
+        self.order.check.require_directory()
         todo = self.reserve(ctx)
-        return replace(SetGoalAction(text=todo.text, goal_id=self.goal_id).change(ctx), order=ProblemGoalOrder(todo.id))
+        return SetGoalAction(text=todo.text, goal_id=self.goal_id,
+            order=self.order.copy_as(ProblemGoalOrder)).change(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -494,11 +490,8 @@ class CreateProblemGoalAction(OrderGoalAction):
     repo: str
     text: str
 
-    def order_text(self, ctx):
-        return self.text
-
     def reserve(self, ctx):
-        return ctx.goals.todos.create(self.problem, self.repo, self.text,
+        return ctx.goals.todos.create(self.order.problem, self.repo, self.text,
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
             generation=self.goal_id, deadline=self.deadline)
 
@@ -529,7 +522,7 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
             text=text,
             revision=revision,
             mention_source=bind_goal_mentions(
-                text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
+                goal.order.instructions(text), goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
             ),
         )
 

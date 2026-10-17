@@ -11,6 +11,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .field_codec import FieldCodec
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
 from .coordination_errors import StaleFence
@@ -62,7 +63,7 @@ class Goals:
     def fleet_orders(self) -> dict:
         """Read current problem/owner facts; never launch or replay work."""
         snapshot = self.registry.snapshot()
-        idle, overdue, missing_orders = [], [], []
+        idle, overdue, missing_orders, sweeps, commanders = [], [], [], {}, {}
         now = time.time()
         for problem in self.todos.open_problems():
             assignment = problem.assignment
@@ -73,12 +74,21 @@ class Goals:
             if goal is None:
                 missing_orders.append(row)
             if goal is None or not goal.state.terminal:
+                swept = sweeps.get(assignment.owner, problem.swept_at)
+                sweeps[assignment.owner] = max(swept, problem.swept_at, key=lambda at: at.sort_key)
+                commanders[problem.creator_identity] = None
                 if not self.agents.is_working(assignment.owner_identity, snapshot):
                     idle.append(row)
                 if problem.deadline.overdue(now):
                     overdue.append(row)
+        activity = [{"commander": owner.name,
+                     "last_order_or_judgment": FieldCodec.encode(at),
+                     "quiet_alarm": at.overdue(now - 120)}
+                    for owner in commanders for at in (self.todos.commander_activity(owner),)]
+        next_unit = min(sweeps, key=lambda owner: (sweeps[owner].sort_key, owner), default=None)
         return {"unowned_problems": self.todos.unowned(), "idle_owners": idle,
-                "overdue_orders": overdue, "unpublished_orders": missing_orders}
+                "overdue_orders": overdue, "unpublished_orders": missing_orders,
+                "next_sweep": next_unit, "commanders": activity}
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

@@ -21,7 +21,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, TypedRow, TypedTable
+from .typed_table import Column, Index, TypedRow, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
 
 
@@ -106,22 +106,6 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         raise TodoConflict(current)
 
     @classmethod
-    def transfer(cls, current: Todo, command: TransferTodoChange) -> Todo:
-        raise TodoConflict(current)
-
-    @classmethod
-    def transferred(cls, current: Todo, command: TransferTodoChange) -> Todo:
-        raise TodoConflict(current)
-
-    @classmethod
-    def release(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
-        raise TodoConflict(current)
-
-    @classmethod
-    def released(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
-        raise TodoConflict(current)
-
-    @classmethod
     def change(cls, current: Todo, command: ChangeTodoState) -> Todo:
         return command.state.decide(current, command)
 
@@ -140,16 +124,6 @@ class OpenTodoState(TodoState):
     def assign(cls, current, proposed):
         return current.assigned(proposed)
 
-    @classmethod
-    def transfer(cls, current, command):
-        current.require_assignment(command.previous)
-        return command.remember(current.assigned(command.proposed))
-
-    @classmethod
-    def transferred(cls, current, command):
-        current.require_result(command.remember(replace(current, assignment=command.proposed)))
-        return current
-
 
 class BlockedTodoState(TodoState):
     pass
@@ -160,8 +134,7 @@ class DoneTodoState(TodoState):
     def prepare_change(cls, goals, current):
         assignment = current.assignment
         goal = goals.registry.require(assignment.owner).require_goal(assignment.generation)
-        if not goal.state.terminal:
-            raise TodoError("The problem still has an open order.")
+        goal.state.require_order_slot()
         goal.order.require_close()
 
     @classmethod
@@ -202,54 +175,16 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
 @dataclass(frozen=True)
 class AssignTodo(TodoOperation):
     proposed: Assignment
-    deadline: EventTime = field(default_factory=UnrecordedEventTime)
+    deadline: EventTime
 
     def apply(self, current):
+        self.deadline.require_deadline()
         if current.assignment == self.proposed:
             current.require_result(replace(current, deadline=self.deadline))
             return current  # The original assignment generation is already reserved.
         current.require_revision(self.expected_revision)
         current.require_commander(self.proposed.parent_identity)
         return replace(current.state.assign(current, self.proposed), deadline=self.deadline)
-
-
-class AssignmentChange(TodoOperation):
-    """The durable row retains the operation kind and exact previous assignment."""
-
-    previous: Assignment
-
-    def remember(self, current):
-        return replace(current, last_transition=type(self), last_previous=self.previous)
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        if type(self.previous) is not Assignment:
-            raise TodoError("Assignment change requires the exact previous assignment")
-
-
-@dataclass(frozen=True)
-class TransferTodoChange(AssignmentChange, declared_name="transfer"):
-    previous: Assignment
-    proposed: Assignment
-
-    def apply(self, current):
-        self.previous.require_successor(self.proposed, current)
-        if current.revision == self.expected_revision + 1:
-            return current.state.transferred(current, self)
-        current.require_revision(self.expected_revision)
-        return current.state.transfer(current, self)
-
-
-@dataclass(frozen=True)
-class ReleaseTodoChange(AssignmentChange, declared_name="release"):
-    previous: Assignment
-
-    def apply(self, current):
-        if current.revision == self.expected_revision + 1:
-            return current.state.released(current, self)
-        current.require_revision(self.expected_revision)
-        current.require_assignment(self.previous)
-        return current.state.release(current, self)
 
 
 @dataclass(frozen=True)
@@ -290,8 +225,9 @@ class ReassignStrikeTodo(StrikeTodo):
     def publish_order(self, goals, current):
         from .goal_actions import ClearGoalAction, GoalPrecondition, OrderGoalAction
 
+        order = goals.registry.require(self.previous.owner).require_goal(self.previous.generation).order
         goals.update_goal(self.proposed.owner, OrderGoalAction(
-            problem=current.id, goal_id=self.proposed.generation,
+            order=order, goal_id=self.proposed.generation,
             expected_revision=current.revision, deadline=self.deadline, commander=self.proposed.parent))
         goals.update_goal(self.previous.owner, ClearGoalAction(
             expect=GoalPrecondition(goal_id=self.previous.generation)))
@@ -335,12 +271,13 @@ class Todo(TypedTable):
     revision: int = field(metadata={"sql": Column(check="revision>0")})
     goal: GoalRef | None
     assignment: Assignment | None
-    last_transition: type[AssignmentChange] | None = None
-    last_previous: Assignment | None = None
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
     strikes: tuple[StrikeTodo, ...] = ()
     commanded_at: EventTime = field(default_factory=UnrecordedEventTime)
     swept_at: EventTime = field(default_factory=UnrecordedEventTime)
+    commanded_stamp: float | None = field(default=None, init=False, compare=False,
+        metadata={"sql": Column(generated="json_extract(commanded_at,'$.at')")})
+    indexes = (Index(("creator", "creator_created", "commanded_stamp")), Index(("state",)))
 
     def __post_init__(self) -> None:
         self.state.require_owner(self)
@@ -458,9 +395,9 @@ def _repo(value: str) -> str:
 class TodoStore:
     """One SQLite row owns both todo state and its exclusive assignment.
 
-    A caller may retry the SAME create ID or assignment generation after an
-    uncertain reply. A different assignee always receives the current owner,
-    without entering a queue or launching another child.
+    Assignment identity and revision deduplicate known operations. An uncertain
+    input is not permission to replay it; inspect its original retained result.
+    This store never launches a child.
     """
 
     def __init__(self, root: Path):
@@ -517,6 +454,13 @@ class TodoStore:
             return tuple(row.id for row in TodoReference.read(db.execute(
                 f'SELECT id FROM "{Todo.declared_name}" WHERE assignment IS NULL AND state<>?',
                 (state.encode(DoneTodoState),))))
+
+    def commander_activity(self, creator: ThreadIncarnation) -> EventTime:
+        with closing(self._connect()) as db:
+            row, = Todo.read(db.execute(f'SELECT * FROM "{Todo.declared_name}" '
+                'WHERE creator=? AND creator_created=? ORDER BY commanded_stamp DESC LIMIT 1',
+                (creator.name, creator.created_at)))
+            return row.commanded_at
 
     def open_problems(self) -> tuple[Todo, ...]:
         state, = Todo._fields_named(("state",))
@@ -592,7 +536,7 @@ class TodoStore:
         owner: Thread,
         parent: Thread,
         generation: str,
-        deadline: EventTime = UnrecordedEventTime(),
+        deadline: EventTime,
     ) -> Todo:
         identity, parent_identity = _thread(owner), _thread(parent)
         proposed = Assignment(
@@ -603,45 +547,3 @@ class TodoStore:
             generation,
         )
         return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline))
-
-    def transfer(
-        self,
-        todo_id: str,
-        *,
-        expected_revision: int,
-        previous: Assignment,
-        owner: Thread,
-        parent: Thread,
-        generation: str,
-    ) -> Todo:
-        """Move one current assignment without an unclaimed race window."""
-        identity, parent_identity = _thread(owner), _thread(parent)
-        proposed = Assignment(
-            identity.name,
-            identity.created_at,
-            parent_identity.name,
-            parent_identity.created_at,
-            generation,
-        )
-        return self.apply(todo_id, TransferTodoChange(expected_revision, previous, proposed))
-
-    def release(self, todo_id: str, *, expected_revision: int, previous: Assignment) -> Todo:
-        return self.apply(todo_id, ReleaseTodoChange(expected_revision, previous))
-
-    def set_state(
-        self,
-        todo_id: str,
-        *,
-        expected_revision: int,
-        state: str,
-        actor: Thread,
-        generation: str | None = None,
-    ) -> Todo:
-        """An explicit, revision-checked decision; never infer it from Pi output."""
-        try:
-            state = FieldCodec.decode(type[TodoState], state)
-        except ValueError as error:
-            raise TodoError("Unknown todo state.") from error
-        return self.apply(
-            todo_id, ChangeTodoState(expected_revision, state, _participant(actor), generation)
-        )

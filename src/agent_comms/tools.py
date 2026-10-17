@@ -30,6 +30,8 @@ from .goal_actions import (
 )
 from .goal_states import ActiveGoal
 from .todos import ChangeTodoState, DoneTodoState, TodoOperation
+from .goals import OrderCheck, ProblemGoalOrder
+from .change_report import FileLine
 from .recorded_time import EventTime
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
@@ -597,16 +599,22 @@ class CommsTodoCreateTool(ThreadToolRequest):
     description = "Create a problem with its owner, checked order and deadline in one command."
     id: str = tool_field("Unique problem ID")
     repo: str = tool_field("Repository owner/name")
-    text: str = tool_field("Complete Problem/Owner/Check/numbered edits/Banned/Report order")
-    owner: str = tool_field("Assignee thread; a problem cannot be born unowned")
+    text: str = tool_field("Problem description")
+    assignee: str = tool_field("Assignee thread; a problem cannot be born unowned")
+    owner: FileLine = tool_field("Existing source owner path:line")
+    check: OrderCheck = tool_field("Existing directory, command and expected integer count")
+    edits: list[str] = tool_field("Required edits, rendered as numbered instructions")
+    banned: list[str] = tool_field("Banned actions")
+    report: str = tool_field("Required delivery report")
     goal_id: str = tool_field("Unique execution goal identity")
     deadline: EventTime = tool_field("Recorded deadline")
-    clean: bool = tool_field("No witnessed failure; permits an order without corrective wording", default=False)
 
     def apply(self, comms, caller):
-        goal = comms.goals.update_goal(self.owner, CreateProblemGoalAction(
-            problem=self.id, repo=self.repo, text=self.text, goal_id=self.goal_id,
-            deadline=self.deadline, expected_revision=1, commander=caller.name, clean=self.clean))
+        goal = comms.goals.update_goal(self.assignee, CreateProblemGoalAction(
+            order=ProblemGoalOrder(self.id, self.owner, self.check, tuple(self.edits),
+                                   tuple(self.banned), self.report),
+            repo=self.repo, text=self.text, goal_id=self.goal_id,
+            deadline=self.deadline, expected_revision=1, commander=caller.name))
         return {"todo": FieldCodec.encode(comms.goals.todos.get(self.id)), "goal": goal.to_wire()}
 
 

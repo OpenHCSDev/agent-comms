@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-import re
-from typing import ClassVar, Literal
+from typing import Literal
 
 from .change_report import FileLine
 from abc import abstractmethod
@@ -157,7 +156,7 @@ class GoalMentionSource:
         if self.goal_id != goal.id or self.text_revision > goal.revision:
             return False
         return (
-            self.digest.matches(goal.text)
+            self.digest.matches(goal.instructions)
             and self.incarnation.resolved(registry) == owner.incarnation
         )
 
@@ -203,10 +202,19 @@ class OrderCheck:
     expected: int
 
     def __post_init__(self):
-        if not Path(self.directory).is_dir() or not self.command.strip():
-            raise ValueError("An order check requires an existing directory and command.")
+        if not self.directory.strip() or not self.command.strip() or self.expected < 0:
+            raise ValueError("An order check requires a directory, command and nonnegative count.")
+
+    def require_directory(self):
+        if not Path(self.directory).is_dir():
+            raise ValueError("The order check directory does not exist.")
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
+    def require_slot(self, goal, goal_id, problem):
+        if goal.id == goal_id:
+            raise ValueError("Goal ID belongs to another problem.")
+        goal.state.require_order_slot()
+
     def require_completion(self) -> None:
         pass
 
@@ -216,8 +224,11 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_close(self) -> None:
         raise ValueError("Closing a problem requires recorded installed application evidence.")
 
-    def check(self, text: str) -> OrderCheck:
+    def delivery_check(self) -> OrderCheck:
         raise ValueError("This goal is not a problem order.")
+
+    def instructions(self, text: str) -> str:
+        return text
 
     @abstractmethod
     def require_order(self, goal, goals, owner) -> None: ...
@@ -238,38 +249,36 @@ class UnorderedGoalOrder(GoalOrder):
 @dataclass(frozen=True)
 class ProblemGoalOrder(GoalOrder):
     problem: str
-    soft: ClassVar[re.Pattern] = re.compile(
-        r"\b(please|could you|would you|can you|if possible|consider|maybe|perhaps|"
-        r"when you get a chance|feel free|if you (think|agree|want)|thoughts|"
-        r"what do you think|thanks|thank you|sorry|no rush|optional(ly)?|up to you|"
-        r"might want|suggest)\b", re.I)
+    owner: FileLine
+    check: OrderCheck
+    edits: tuple[str, ...]
+    banned: tuple[str, ...]
+    report: str
 
-    def require_tone(self, text: str, *, clean: bool) -> None:
-        if not clean and not re.search(
-            r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|"
-            r"sloppy|theater|dumb|worthless|broke|broken|pointless|waste)\b", text, re.I):
-            raise ValueError("A correction names what was wrong, or explicitly declares clean work.")
+    def __post_init__(self):
+        if not self.problem or not self.edits or not self.banned or not self.report.strip():
+            raise ValueError("An order requires its problem, edits, banned actions and report.")
+        if any(not text.strip() for text in (*self.edits, *self.banned)):
+            raise ValueError("Order edits and banned actions cannot be empty.")
 
-    def check(self, text: str) -> OrderCheck:
-        problem = re.search(r"(?m)^Problems?:\s*(P\d+(?:\s*,\s*P\d+)*)\s*$", text)
-        owner = re.search(r"(?m)^Owner:\s*(\S+:\d+)\s*$", text)
-        check = re.search(r"(?m)^Check:\s*(\S+)\s*::\s*(.+?)\s*->\s*(\d+)\s*$", text)
-        if not problem or re.findall(r"P\d+", problem[1]) != [self.problem]:
-            raise ValueError("The order must name its one problem; split unrelated work.")
-        if not owner or not check:
-            raise ValueError("An order requires Owner: path:line and Check: dir :: command -> count.")
-        FileLine.from_wire(owner[1]).require_exists()
-        unquoted = re.sub(r'"[^"\n]*"|“[^”\n]*”', '', text)
-        if self.soft.search(unquoted):
-            raise ValueError("An order states the edit; soft requests are refused.")
-        if not re.search(r"(?m)^\s*\d+[.)] ", text):
-            raise ValueError("An order requires numbered edits.")
-        if not re.search(r"(?mi)^Report:", text) or not re.search(r"(?mi)^Banned:", text):
-            raise ValueError("An order requires Banned: and Report: lines.")
-        return OrderCheck(check[1], check[2], int(check[3]))
+    def require_slot(self, goal, goal_id, problem):
+        if (goal.id, self.problem) != (goal_id, problem):
+            super().require_slot(goal, goal_id, problem)
+
+    def delivery_check(self):
+        return self.check
+
+    def instructions(self, text):
+        return "\n".join((text, f"Problem: {self.problem}", f"Owner: {self.owner.to_wire()}",
+            f"Check: {self.check.directory} :: {self.check.command} -> {self.check.expected}",
+            *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
+            "Banned: " + "; ".join(self.banned), "Report: " + self.report))
+
+    def copy_as(self, kind, **evidence):
+        return kind(**{f.name: getattr(self, f.name) for f in fields(ProblemGoalOrder)}, **evidence)
 
     def installed(self, works, artifact):
-        return InstalledProblemGoalOrder(self.problem, works, artifact)
+        return self.copy_as(InstalledProblemGoalOrder, works=works, artifact=artifact)
 
     def require_completion(self) -> None:
         raise ValueError("Complete a problem order with its checked delivered commit.")
@@ -289,6 +298,7 @@ class InstalledProblemGoalOrder(ProblemGoalOrder):
     artifact: str
 
     def __post_init__(self):
+        super().__post_init__()
         if len(self.works.split()) < 8 or not self.artifact.strip():
             raise ValueError("Describe the installed application result (8+ words) and name its artifact file.")
 
@@ -308,6 +318,10 @@ class Goal:
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
+
+    @property
+    def instructions(self) -> str:
+        return self.order.instructions(self.text)
 
     def require_order(self, goals, owner) -> None:
         self.order.require_order(self, goals, owner)
