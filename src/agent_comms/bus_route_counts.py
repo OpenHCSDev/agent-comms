@@ -22,7 +22,7 @@ from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, projected
+from .field_codec import FieldCodec
 from .read_basis import ReadCursor
 from .private_path import FileIdentity, FileRevision
 from .routing import DeliveryMessage, DeliveryScope
@@ -98,15 +98,15 @@ class LeafRouteTimeNode(RouteTimeNode):
     head_seq: int
     bit: ClassVar[int] = RouteTimeNode.key_width
 
-    @projected(view="wire")
+    @property
     def minimum(self):
         return self.timestamp
 
-    @projected(view="wire")
+    @property
     def maximum(self):
         return self.timestamp
 
-    @projected(view="wire")
+    @property
     def children(self):
         return ()
 
@@ -121,15 +121,15 @@ class ForkRouteTimeNode(RouteTimeNode):
     left: int
     right: int
 
-    @projected(view="wire")
+    @property
     def minimum(self):
         return self.lower
 
-    @projected(view="wire")
+    @property
     def maximum(self):
         return self.upper
 
-    @projected(view="wire")
+    @property
     def children(self):
         return (self.left, self.right)
 

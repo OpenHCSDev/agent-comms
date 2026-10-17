@@ -148,6 +148,9 @@ class ReadCursor:
     def add(self, sequences: tuple[int, ...]) -> ReadCursor:
         return self.union((self, type(self)(exceptions=sequences)))
 
+    def __len__(self) -> int:
+        return self.high_water + len(self.exceptions)
+
     def __contains__(self, sequence: int) -> bool:
         index = bisect_left(self.exceptions, sequence)
         return 0 < sequence <= self.high_water or (index < len(self.exceptions) and self.exceptions[index] == sequence)
