@@ -112,7 +112,7 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
         {"identity": TurnIdentity(RecordedThreadIncarnation("other", 10.0), 7)},
         {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 11.0), 7)},
         {"turn_id": "b" * 32},
-        {"admission_generation": 4},
+        {"claimed_generation": 4},
         {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 0)},
         {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 8)},
     ],
