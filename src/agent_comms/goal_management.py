@@ -69,10 +69,9 @@ class Goals:
     ) -> str:
         """Caller holds wire; recover only this owner's original unused READY grant."""
         try:
-            owner.require_active_goal(generation.goal_id).require_order(self, owner.incarnation)
             GoalLaunchOwner(thread=owner, claimed_generation=claim_scope).require_ready(
                 self.registry.snapshot(), generation.goal_id,
-            )
+            ).require_order(self, owner.incarnation)
         except (RelationViolationError, ValueError, StaleFence) as error:
             raise StaleAttemptError(
                 "The executing goal owner changed before READY recovery."
