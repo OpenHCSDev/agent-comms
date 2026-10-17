@@ -75,7 +75,7 @@ class RegistryOwner:
         self.thread.require_idle()
 
     def require_active_turn(self):
-        """Return the captured executable turn whose process/admission still agree."""
+        """Return the captured executable turn if its process and input generation still match."""
         turn = self.thread.active_turn
         if turn is None:
             raise StaleFence("registry owner has no active turn")
@@ -130,9 +130,9 @@ class RegistryOwner:
     def require_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:
         """Observe this admitted turn's source without admitting another input.
 
-        Goal authority belongs to input admission. A legitimate goal change
+        Check the goal when accepting input. A legitimate goal change
         during this turn does not revoke its source observation; the exact
-        lease, process, admission and session must still match. The admitted
+        lease, process, input generation and session must still match. The running
         turn retains its captured project/model/thinking while the document
         may select the next turn's configuration. This observes only the
         original source; fresh input still requires current configuration.
@@ -166,7 +166,7 @@ class RegistryOwner:
 
 
 class GoalLaunchOwner(RegistryOwner):
-    """Unused READY recovery binds identity/admission, not an old goal revision."""
+    """Recover unused READY grants by owner identity and input generation, not old goal revision."""
 
     check_type = RegistryIdentityCheck
 

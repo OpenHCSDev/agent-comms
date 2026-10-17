@@ -59,11 +59,11 @@ class VerifiedOwnerLoss:
     def observe_native_release(
         cls, store: Coordination, execution_id: str
     ) -> Iterator[VerifiedOwnerLoss]:
-        """Join the existing native admission, release receipt and live registry.
+        """Compare the recorded native send, released owner and live registry.
 
         Keep canonical wire/bus/registry exclusion through monitor settlement.
-        A later attested release also fences earlier admission generations of the same
-        incarnation. If send admission was never recorded, require the exact
+        A later verified release also blocks earlier input generations of the same
+        owner. If permission to send was never recorded, require the exact
         current owner to be attested stopped and dead: absence of an epoch is
         not proof that the input was unsent. Lease expiry or a replaced PID alone
         is insufficient.
@@ -131,9 +131,9 @@ class VerifiedOwnerLoss:
         """Inspect the original launch resources while owner exclusion is held.
 
         A recorded selected journal supplements the original allocated directory
-        check. Original directory-bound admissions recorded identity only with
-        the later context receipt. Before admission the exact stopped declaration
-        supplies any saved selection instead. Missing admission never establishes
+        check. Earlier directory-bound launches recorded identity only with
+        the later context record. Without a recorded send grant, the exact stopped declaration
+        supplies any saved selection instead. Missing send records never establish
         that a native child did not launch.
         """
         if not self.owns(self._store, self.attempt):
@@ -331,7 +331,7 @@ class RecoveryMonitorCapability:
         UNKNOWN effects and releases its slot. Input receipts/cursors are never
         changed. A frozen publication still requires its receipt resolver.
 
-        Without a recorded admission epoch, stop the current owner normally
+        Without a recorded send generation, stop the current owner normally
         before calling, then restart it normally for unrelated new work.
         """
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:

@@ -23,7 +23,7 @@ class ActiveTurn:
     phase: TurnPhase = field(default_factory=PreparingPhase)
 
     def owned_by(self, pid: int, admission_generation: int) -> bool:
-        """This turn's local process and registry admission witness agree."""
+        """Check that this turn's local process and registered input generation agree."""
         return (
             self.owner_pid == pid
             and self.admission_generation == admission_generation
@@ -111,7 +111,7 @@ class TurnState:
 
 @dataclass(frozen=True, slots=True)
 class TurnFence:
-    """One exact turn identity and its admission witness."""
+    """One exact turn identity and its recorded input generation."""
 
     identity: TurnIdentity
     turn_id: str

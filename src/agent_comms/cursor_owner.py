@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class CursorOwner(RegistryOwner):
-    """A captured identity, never an admission permit until rechecked under locks."""
+    """A captured identity; recheck it under locks before permitting work."""
 
     wire_root_id: str
     generation: int
@@ -86,7 +86,7 @@ class CursorOwner(RegistryOwner):
         """Validate the exact SQL row against this operation's original proof.
 
         A declined advancement may retain an earlier row. Its covered prefix
-        still needs its own admission/reference checks; later evidence cannot
+        still needs its own input permission and reference checks; later evidence cannot
         turn that old row into a verified observation.
         """
         if cursor.owner_identity != self.participant_identity:
@@ -123,11 +123,11 @@ class CursorOwner(RegistryOwner):
         prior: CurrentNativeCursor | None,
         committed_input_id: str | None,
     ) -> bool:
-        """The original recorded input seeds only its own live admission.
+        """The recorded input identifies only its own permitted live operation.
 
         A settled caller may additionally fence the expected input ID. Idle
         projection uses the same immutable receipt, not a cached completion ID;
-        absence of that caller assertion does not erase the receipt's admission.
+        absence of that caller assertion does not erase the recorded input permission.
         """
         if proof is None:
             return True  # Covered no-wake prefix may precede an UNKNOWN gap.

@@ -148,5 +148,5 @@ class PreserveOwnerRuntime(StoppedOwnerInstallation):
 
     def recover(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         # This member installs nothing. The shared handoff revalidates EVERY
-        # original incarnation/admission/process before the first source launch.
+        # captured thread identity, input generation and process before any launch.
         return stopped.handoff.restore(stopped.lifecycle)

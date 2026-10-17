@@ -176,7 +176,7 @@ class PreviewProvenance(Provenance):
         return (self,)
 
     def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
-        """Original SDK identity for read corroboration, never input admission."""
+        """SDK identity for checking a read, never permission to start input."""
         return (self.identity,)
 
 
@@ -964,7 +964,7 @@ class ContextManifest:
     segments: tuple[SegmentManifest, ...]
     counter: str
     # Original request-owner correlation, absent for previews and captures that
-    # never observed dispatch. It grants neither admission nor replay.
+    # never observed dispatch. It permits neither new input nor replay.
     request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
 
     @property

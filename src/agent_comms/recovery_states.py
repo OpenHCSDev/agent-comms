@@ -1,4 +1,4 @@
-"""Recovery incidents own audit admission; terminal incidents belong to settlement."""
+"""Recovery incidents decide whether auditing may run; settlement handles terminal incidents."""
 
 from abc import abstractmethod
 from dataclasses import dataclass
