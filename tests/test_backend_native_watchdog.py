@@ -7,9 +7,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms import backend
-from agent_comms import pi_commands as commands
-from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInbox, WhenBusy
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -35,7 +33,7 @@ async def test_actual_native_watchdog_failure_never_replays(native_backend, outc
 async def test_actual_native_interrupt_promotes_only_selected_followup(native_backend):
     owner = native_backend
     owner.provider.status = 0
-    queue = asyncio.Queue()
+    queue = TurnInbox()
     task = asyncio.create_task(owner.run("Interrupted original", queue=queue))
     try:
         async with asyncio.timeout(10):
@@ -55,21 +53,6 @@ async def test_actual_native_interrupt_promotes_only_selected_followup(native_ba
         if not task.done():
             task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-
-
-class UntrackedOracleTurn(backend.TurnSession):
-    """Pi's untracked external RPC oracle, never a managed input proof."""
-
-    def prepare_launch(self):
-        super().prepare_launch()
-        assert not self.require_input_id
-        self.prompt_payload = PiRpcChannel.command_bytes(
-            commands.Prompt(id=self.prompt_id, message=self.task)
-        )
-        self.stdin_payload = (
-            PiRpcChannel.command_bytes(commands.GetState(id=self.native.attestation.request.id))
-            + self.prompt_payload
-        )
 
 
 @pytest.mark.parametrize(
@@ -97,11 +80,10 @@ async def test_actual_native_retry_and_compaction_excursions(
             },
         },
     )
-    monkeypatch.setattr(backend, "TurnSession", UntrackedOracleTurn)
     prior = 0
     if excursion != "provider_retry":
         owner.provider.text = "Prior retained context. " * 3000
-        seeded = await owner.run("Seed actual retained context", require_input_id=False)
+        seeded = await owner.run("Seed actual retained context")
         assert seeded[-1].ok, seeded[-1]
         prior = owner.provider.posts
     owner.provider.text = "Recovered actual native turn."
@@ -119,9 +101,9 @@ async def test_actual_native_retry_and_compaction_excursions(
         await original(reader, writer)
 
     owner.provider.handle = respond
-    queue = asyncio.Queue()
+    queue = TurnInbox()
     task = asyncio.create_task(
-        owner.run("Recover without replaying this input", queue=queue, require_input_id=False)
+        owner.run("Recover without replaying this input", queue=queue)
     )
     try:
         if excursion == "compaction_abort":

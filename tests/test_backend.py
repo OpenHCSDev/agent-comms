@@ -14,7 +14,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp_failure import ProviderRetryResult
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.image_inputs import ImageInput
 from agent_comms.pi_events import AutoRetryStart
@@ -63,6 +63,8 @@ def _replay_stub(tmp_path: Path, lines: str) -> str:
         f"#!{sys.executable}\n"
         + f"""\
 import json, sys
+from agent_comms.native_pi import CAPABILITY
+from agent_comms.pi_payloads import PiMessage
 initial_state = True
 prompt_request = None
 for line in {lines.splitlines()!r}:
@@ -84,18 +86,20 @@ for line in {lines.splitlines()!r}:
                 if command == "prompt":
                     prompt_request = request
                 break
-            if request.get("type") != "get_state":
-                print(json.dumps({{
-                    "id": request.get("id"), "type": "response",
-                    "command": request.get("type"), "success": True,
-                }}), flush=True)
+            print(json.dumps({{
+                "id": request.get("id"), "type": "response",
+                "command": request.get("type"), "success": True,
+                "data": {{"nativeInputProofCapability": CAPABILITY}}
+                        if request.get("type") == "get_state" else {{}},
+            }}), flush=True)
     if command == "get_state":
+        record.setdefault("data", {{}})["nativeInputProofCapability"] = CAPABILITY
         initial_state = False
     if (
         prompt_request is not None
         and record.get("type") == "message_start"
         and message.get("role") == "user"
-        and message.get("content") == prompt_request.get("message")
+        and PiMessage.from_wire(message).text == prompt_request.get("message")
     ):
         message.setdefault("inputId", prompt_request.get("inputId"))
     print(json.dumps(record), flush=True)
@@ -136,7 +140,6 @@ async def _rpc_events(
     records: list[dict],
     *,
     current_input: bool = True,
-    require_input_id: bool = False,
 ) -> list[ae.AgentEvent]:
     # Pi's assistant wire type always carries its content array. Parser cases
     # specify only the fields they vary; the fake child supplies the owned base.
@@ -189,7 +192,7 @@ async def _rpc_events(
     return [
         event
         async for event in one_turn_events(
-            stub, [], "t", str(tmp_path), require_input_id=require_input_id
+            stub, [], "t", str(tmp_path)
         )
     ]
 
@@ -223,18 +226,6 @@ def _assert_full_rpc_stream(events: list[ae.AgentEvent]) -> None:
 
 
 class TestRpcParsing:
-    @pytest.fixture(autouse=True)
-    def legacy_stock_pi_fixture(self, monkeypatch):
-        """Historical projection fixtures are not native input-ID proofs."""
-        original = backend.stream_agent_events
-
-        async def legacy(*args, **kwargs):
-            kwargs.setdefault("require_input_id", False)
-            async for event in original(*args, **kwargs):
-                yield event
-
-        monkeypatch.setattr(backend, "stream_agent_events", legacy)
-
     def test_default_watchdog_yields_to_pi_provider_idle_authority(self):
         assert backend.MODEL_WAIT_TIMEOUT_SECONDS > backend._PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
 
@@ -423,14 +414,19 @@ class TestRpcParsing:
             f"#!{sys.executable}\n"
             + """
 import json, sys
+from agent_comms.native_pi import CAPABILITY
 def emit(value):
     print(json.dumps(value), flush=True)
 for line in sys.stdin:
     request = json.loads(line)
     command = request["type"]
-    if command == "prompt":
+    if command == "get_state":
+        emit({"type": "response", "command": command, "id": request["id"], "success": True,
+              "data": {"nativeInputProofCapability": CAPABILITY}})
+    elif command == "prompt":
         emit({"type": "response", "command": "prompt", "id": request["id"], "success": True})
-        emit({"type": "message_start", "message": {"role": "user", "content": "task"}})
+        emit({"type": "message_start", "message": {"role": "user", "content": "task",
+                                                  "inputId": request["inputId"]}})
         emit({"type": "message_update", "assistantMessageEvent": {
             "type": "text_delta", "delta": "completed reply"}})
         # Pi includes the turn's messages in one large agent_end record.
@@ -440,7 +436,7 @@ for line in sys.stdin:
         emit({"type": "agent_end", "messages": [{"role": "assistant", "content": "x" * 1048576}]})
         emit({"type": "agent_settled"})
     elif command == "get_session_stats":
-        emit({"type": "response", "command": command, "success": True,
+        emit({"type": "response", "command": command, "id": request["id"], "success": True,
             "data": {"contextUsage": {"tokens": 64330, "contextWindow": 1048576}}})
         break
 """,
@@ -481,14 +477,19 @@ for line in sys.stdin:
         stub = _stub(
             tmp_path,
             f"#!{sys.executable}\n"
-            + "import os, pathlib, time\n"
+            + "import json, os, pathlib, sys, time\n"
+            + "from agent_comms.native_pi import CAPABILITY\n"
             + f"pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))\n"
+            + "state = json.loads(sys.stdin.readline())\n"
+            + "print(json.dumps({'id': state['id'], 'type': 'response', 'command': 'get_state', "
+              "'success': True, 'data': {'nativeInputProofCapability': CAPABILITY}}), flush=True)\n"
+            + "json.loads(sys.stdin.readline())\n"
             + "print('[]', flush=True)\ntime.sleep(60)\n",
         )
         owner = asyncio.current_task()
         with pytest.raises(ValueError, match="Pi RPC record has wrong type"):
             async for _ in one_turn_events(
-                stub, [], "task", str(tmp_path), steering_queue=asyncio.Queue()
+                stub, [], "task", str(tmp_path), steering_queue=TurnInbox()
             ):
                 pass
         assert pid_file.exists()
@@ -1030,7 +1031,7 @@ for line in sys.stdin:
             }
         )
         owner = asyncio.current_task()
-        events = await _rpc_events(tmp_path, records, require_input_id=True)
+        events = await _rpc_events(tmp_path, records)
         info = [e for e in events if isinstance(e, ae.AgentInfo)]
         context = [e for e in events if isinstance(e, ae.ContextInfo)]
         assert [e.context_used for e in context] == [None, 250, None, None]
@@ -1202,11 +1203,11 @@ for line in sys.stdin:
         owner = asyncio.current_task()
         process = None
         events = []
-        queue: asyncio.Queue[InputRequest] = asyncio.Queue()
+        queue = TurnInbox()
         pending = steer("[peer] pending", "in-1")
         async for event in one_turn_events(
             stub, [], "task", str(tmp_path), steering_queue=queue,
-            rpc_abort_grace=0.3, require_input_id=True,
+            rpc_abort_grace=0.3,
         ):
             events.append(event)
             if isinstance(event, ae.Chunk):
@@ -1315,7 +1316,7 @@ cat <<'EOF'
 EOF
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         queue.put_nowait(steer("[peer] ping"))
 
         events = [
@@ -1356,7 +1357,7 @@ IFS= read -r stats
 echo '{"type":"response","command":"get_session_stats","success":true,"data":{"contextUsage":{}}}'
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         finish = asyncio.Event()
         events = []
 
@@ -1410,7 +1411,6 @@ for line in sys.stdin:
             event
             async for event in one_turn_events(
                 stub, [], "task", str(tmp_path), model_wait_timeout=0.05,
-                require_input_id=True,
             )
         ]
         assert not [event for event in events if isinstance(event, ae.TurnState)]
@@ -1446,7 +1446,6 @@ time.sleep(60)
                 str(tmp_path),
                 model_wait_timeout=0.15,
                 rpc_abort_grace=0.1,
-                require_input_id=True,
             )
         ]
 
@@ -1498,7 +1497,6 @@ time.sleep(60)
                 str(tmp_path),
                 model_wait_timeout=0.15,
                 rpc_abort_grace=0.03,
-                require_input_id=True,
             )
         ]
 
@@ -1537,7 +1535,6 @@ time.sleep(60)
                 str(tmp_path),
                 model_wait_timeout=0.15,
                 rpc_abort_grace=0.1,
-                require_input_id=True,
             )
         ]
 
@@ -1656,7 +1653,6 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
                 str(tmp_path),
                 model_wait_timeout=0.15,
                 rpc_abort_grace=0.1,
-                require_input_id=True,
             )
         ]
 
@@ -1700,7 +1696,6 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
                 "task",
                 str(tmp_path),
                 model_wait_timeout=0.5,
-                require_input_id=True,
             )
         ]
         assert [type(e) for e in events if isinstance(e, ae.CompactionEvent)] == [
@@ -1736,7 +1731,6 @@ time.sleep(60)
                 str(tmp_path),
                 model_wait_timeout=0.15,
                 rpc_abort_grace=0.1,
-                require_input_id=True,
             )
         ]
 
@@ -1792,7 +1786,6 @@ time.sleep(60)
                 "task",
                 str(tmp_path),
                 model_wait_timeout=0.5,
-                require_input_id=True,
                 native_start=native_start,
             )
         ]
@@ -1849,7 +1842,7 @@ time.sleep(60)
             content=InputContent(text="follow", images=(ImageInput("YWJj", "image/png"),)),
             when_busy=WhenBusy.FOLLOW_UP,
         )
-        queue: asyncio.Queue[InputRequest] = asyncio.Queue()
+        queue = TurnInbox()
         queue.put_nowait(original)
 
         events = [
@@ -1862,7 +1855,6 @@ time.sleep(60)
                 steering_queue=queue,
                 model_wait_timeout=0.15,
                 rpc_abort_grace=0.2,
-                require_input_id=True,
             )
         ]
 
@@ -1916,7 +1908,6 @@ for line in sys.stdin:
                 "task",
                 str(tmp_path),
                 model_wait_timeout=0.15,
-                require_input_id=True,
             )
         ]
 
@@ -1954,7 +1945,6 @@ for line in sys.stdin:
                 str(tmp_path),
                 model_wait_timeout=0.15,
                 rpc_abort_grace=0.1,
-                require_input_id=True,
             )
         ]
 
@@ -2136,7 +2126,7 @@ signal.signal(signal.SIGTERM, lambda *_: None)
 while True: time.sleep(0.1)
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         stream = one_turn_events(stub, [], "work", str(tmp_path), steering_queue=queue)
         try:
             if exit_mode == "malformed":
@@ -2246,7 +2236,7 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
        "data":{{"contextUsage":{{"tokens":33}}}}}})
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         queue.put_nowait(steer("inbox update"))
         async with asyncio.timeout(4):
             events = [
@@ -2289,7 +2279,7 @@ for line in sys.stdin:
         break
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         finish = asyncio.Event()
         events = []
         async with asyncio.timeout(4):
@@ -2807,7 +2797,7 @@ send({{"type":"message_end","message":{{
 send({{"type":"agent_settled"}})
 """,
         )
-        queue = asyncio.Queue() if "steer" in case else None
+        queue = TurnInbox() if "steer" in case else None
         if queue is not None:
             queue.put_nowait(steer("peer"))
         events = [
@@ -2855,7 +2845,7 @@ for line in sys.stdin:
         break
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         queue.put_nowait(steer("channel mention"))
         starts = []
 
@@ -2910,7 +2900,7 @@ for line in sys.stdin:
         break
 """,
         )
-        queue: asyncio.Queue[str | dict] = asyncio.Queue()
+        queue = TurnInbox()
         queue.put_nowait(steer("late direct", "bus-42"))
 
         @contextmanager
@@ -2943,18 +2933,6 @@ for line in sys.stdin:
 
 # PR#1 parser assertions retained alongside V3 projection/watchdog coverage.
 class TestPrRpcParsing:
-    @pytest.fixture(autouse=True)
-    def legacy_stock_pi_fixture(self, monkeypatch):
-        """Old event-shape fixtures cover projection, not input provenance."""
-        original = backend.stream_agent_events
-
-        async def legacy(*args, **kwargs):
-            kwargs.setdefault("require_input_id", False)
-            async for event in original(*args, **kwargs):
-                yield event
-
-        monkeypatch.setattr(backend, "stream_agent_events", legacy)
-
     async def test_full_rpc_stream(self, tmp_path):
         """Canned pi rpc stream -> chunk/tool_start/tool_end/done events."""
         rpc_lines = "\n".join(
@@ -3024,7 +3002,7 @@ IFS= read -r stats
 echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{"contextUsage":{{}}}}}}'
 """,
         )
-        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue = TurnInbox()
         finish = asyncio.Event()
         events = []
 
