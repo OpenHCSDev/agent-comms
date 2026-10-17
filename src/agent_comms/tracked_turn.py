@@ -265,7 +265,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                         else PublicationMeasurements())
         # Independent execution acquires a fresh artifact. A selected stage
         # derives from its execution's original pre-claim factory; source/config and
-        # child admission remain fresh. Finish construction before acquiring the child.
+        # child permissions remain fresh. Finish construction before acquiring the child.
         with measurements.operation("native_launch_selection"):
             launch = await Coordination.run_worker(partial(
                 NativePiRpcLaunch.tracked if launch_owner is None else launch_owner.tracked_launch,
