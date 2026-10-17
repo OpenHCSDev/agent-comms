@@ -288,6 +288,10 @@ class Message:
         return digest
 
     @property
+    def history_source(self):
+        return None
+
+    @property
     def display_metadata(self) -> dict:
         """Live messages carry no historical provenance decoration."""
         return {}

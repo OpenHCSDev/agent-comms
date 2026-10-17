@@ -352,7 +352,7 @@ class AssignedTranscriptSource(TranscriptSource):
         }
         scope = AssignedSourceIdentity(str(self.root), self.recipient)
         return tuple(
-            PublishedSentMessage(message, scope)
+            PublishedSentMessage(original, scope)
             if (original := originals.get(message.source)) is not None
             and SentTranscript.from_message(original) == message else message
             for message in messages
@@ -470,13 +470,7 @@ class AssignedTranscriptSource(TranscriptSource):
                 SentTranscript.from_message(message),
             )
         return (
-            IncomingTranscript(
-                message.body,
-                timestamp=message.timestamp,
-                source=message.reference,
-                route=MessageRoute(message.sender, (message.target,)),
-                routing=TurnRouting((message.reference,)),
-            ),
+            IncomingTranscript(message=message, reader=self.recipient.name),
         )
 
 

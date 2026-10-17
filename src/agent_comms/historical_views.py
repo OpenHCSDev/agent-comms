@@ -318,6 +318,10 @@ class HistoricalMessage(Message):
         return ()
 
     @property
+    def history_source(self) -> HistorySource:
+        return self.source
+
+    @property
     def response_policy(self) -> ResponsePolicy:
         return InformationalPolicy.instance()
 

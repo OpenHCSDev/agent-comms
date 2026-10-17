@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .messages import Message
 from .message_reference import MessageReference
 from .transcript_events import SentTranscript
 from .transcript_receipts import AssignedSourceIdentity
@@ -36,7 +37,7 @@ class OutgoingMessageReference:
 class PublishedSentMessage:
     """A full reported message proved by its original sender's wire assignment."""
 
-    message: SentTranscript
+    message: Message
     scope: AssignedSourceIdentity
 
     def __post_init__(self):
@@ -44,4 +45,8 @@ class PublishedSentMessage:
 
     @property
     def reference(self) -> OutgoingMessageReference:
-        return OutgoingMessageReference(self.scope, self.message.source)
+        return OutgoingMessageReference(self.scope, self.message.reference)
+
+    @property
+    def transcript(self) -> SentTranscript:
+        return SentTranscript.from_message(self.message)
