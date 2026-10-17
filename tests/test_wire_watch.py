@@ -318,7 +318,7 @@ async def test_sidebar_time_expiry_does_not_depend_on_a_file_wake(monkeypatch):
     service.closed = False
     service.observe_due = False
     service.changed = asyncio.Event()
-    monkeypatch.setattr(observation, "EXPIRY_PERIOD", 0.02)
+    monkeypatch.setattr(observation.WireRevision, "expiry_seconds", 0.02)
     expiring = asyncio.create_task(service.expire())
     try:
         await asyncio.wait_for(service.changed.wait(), 0.2)

@@ -737,7 +737,7 @@ class WireRevision:
     catalog: tuple[FileRevision, ...] = revision_source(lambda views: (views.channels.catalog.path,))
     bus_log: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.log.path,))
     history: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.history.path,))
-    activity: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.activity._path,))
+    activity: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.activity.path,))
     runtime_info: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.runtime_info.path,))
     reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,))
     native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,))

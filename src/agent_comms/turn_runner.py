@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -47,6 +47,7 @@ from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
+from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -57,7 +58,6 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
-REPLY_POLL = 0.25
 ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
 IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
 
@@ -243,57 +243,51 @@ class TurnRunner:
             self.inputs.ensure_live_drain(session_id)
 
     async def collect_replies(self, session_id: str, thread_name: str, sent_seq: int = 0) -> None:
-        """Stream inbox messages into the open turn until quiet or timeout.
+        """Drain on wire changes, ending at the nearest actual loop-clock deadline."""
+        timing, loop = self.reply_timing, asyncio.get_running_loop()
+        started = loop.time()
+        activity_end = started + ACTIVITY_WINDOW
+        idle_end, quiet_end = started + IDLE_GRACE, started + timing.reply_quiet
+        deadline, got_reply = activity_end, False
+        async with aclosing(WireWatch.observations(
+            WatchSource.wire(self.comms.root),
+            WatchSource.modified_file(self.comms.agents.activity.path),
+            WatchSource.file(self.comms.bus.reads.path),
+        )) as changes:
+            while loop.time() < deadline:
+                try:
+                    async with asyncio.timeout_at(deadline):
+                        await anext(changes)
+                except TimeoutError:
+                    return
+                pushed = await self.inputs.drain_inbox(session_id)
+                now = loop.time()
+                if pushed:
+                    got_reply, quiet_end = True, now + timing.reply_quiet
+                if got_reply:
+                    deadline = min(started + timing.reply_window, quiet_end)
+                else:
+                    progress = await Coordination.run_worker(partial(self.peer_progress, sent_seq))
+                    now = loop.time()
+                    idle_end = activity_end if progress else min(idle_end, now + IDLE_GRACE)
+                    deadline = min(activity_end, max(started + timing.no_reply_window, idle_end))
 
-        While a peer is on it (activity thinking/working, or a peer's read
-        marker past our message), the turn stays open — the client shows
-        its spinner, and replies drain the moment they land.
-        """
-        timing = self.reply_timing
-        waited = 0.0
-        quiet = 0.0
-        got_reply = False
-        idle_for = 0.0
-        while True:
-            await asyncio.sleep(REPLY_POLL)
-            waited += REPLY_POLL
-            quiet += REPLY_POLL
-            pushed = await self.inputs.drain_inbox(session_id)
-            if pushed:
-                got_reply = True
-                quiet = 0.0
-                idle_for = 0.0
-            if got_reply:
-                if quiet >= timing.reply_quiet or waited >= timing.reply_window:
-                    self.effects._debug_log(f"collect:break got_reply waited={waited}")
-                    break
-                continue
-            # No reply yet: keep waiting while a peer is on it.
-            peer_progress = await Coordination.run_worker(partial(self.peer_progress, thread_name, sent_seq))
-            idle_for = 0.0 if peer_progress else idle_for + REPLY_POLL
-            if idle_for >= IDLE_GRACE and waited >= timing.no_reply_window:
-                break
-            if waited >= ACTIVITY_WINDOW:
-                break
-
-    def peer_progress(self, thread_name: str, sent_seq: int) -> bool:
-        """True when a peer is active on, or has read, our message."""
+    def peer_progress(self, sent_seq: int) -> bool:
+        """Only the original audience can be working on or have read this send."""
+        if not sent_seq:
+            return False
+        original = self.comms.bus.log.read_delivery_cohort(self.effects.configured_root_id, sent_seq)
         snapshot = self.comms.registry.snapshot()
-        running = (
-            thread for name, thread in snapshot.threads.items()
-            if name != thread_name and snapshot.statuses[name].active
-        )
-        for activity in self.comms.agents.all_activity(running, snapshot=snapshot).values():
-            if activity.state.busy:
-                return True
-        if sent_seq:
-            document = self.comms.bus.reads.read()
-            for name in snapshot.threads:
-                if name != thread_name and sent_seq in self.comms.bus.reads.cursor(
-                    name, snapshot, document=document
-                ):
-                    return True
-        return False
+        peers = tuple(snapshot.by_lookup[recipient.recipient_lookup]
+                      for recipient in original.audience.recipients
+                      if recipient.recipient_lookup in snapshot.by_lookup)
+        running = (peer for peer in peers if snapshot.statuses[peer.name].active)
+        if any(activity.state.busy for activity in
+               self.comms.agents.all_activity(running, snapshot=snapshot).values()):
+            return True
+        document = self.comms.bus.reads.read()
+        return any(sent_seq in self.comms.bus.reads.cursor(peer.name, snapshot, document=document)
+                   for peer in peers)
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         if session_id in self.sessions.proxies:
