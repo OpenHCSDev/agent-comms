@@ -229,9 +229,9 @@ class MessageBus:
     ) -> DisplayBasis:
         """The named messages this reader received and has not yet read.
 
-        The canonical original-reference reader supplies only the named rows;
-        acknowledgement needs no disposable page index or unread listing.
-        The caller marks the returned basis read.
+        The canonical sparse public-message reader supplies only named rows,
+        including control messages without a wake cohort. No unread listing is
+        materialized. The caller marks the returned basis read.
         """
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
