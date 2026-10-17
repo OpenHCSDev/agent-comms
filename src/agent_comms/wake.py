@@ -103,7 +103,8 @@ def _validated_context(
     if candidate.wire_envelope_digest != frozen_audience.wire_envelope_digest:
         raise ValueError("message does not match the frozen audience envelope.")
     channel = is_channel_target(message.target)
-    if not channel and not (message.notice and not frozen_audience.recipients):
+    if (message.type.conversation_message and not channel
+            and not (message.notice and not frozen_audience.recipients)):
         if len(frozen_audience.recipients) != 1:
             raise ValueError("a direct message must have exactly one frozen eligible recipient.")
         if frozen_audience.recipients[0].canonical_thread != message.target:
@@ -125,6 +126,8 @@ def _member_decision(
     channel: bool,
     effective_mentions: frozenset[str],
 ) -> WakeDecision | NoWakeDecision:
+    if not message.type.conversation_message:
+        return NoWakeDecision(recipient.recipient_lookup)
     if not channel:
         audience = MessageAudience.DIRECT
     elif effective_mentions:

@@ -101,7 +101,8 @@ class Publisher:
             raise UnregisteredThreadError(f"Target {message.target!r} is not a registered thread.")
         sender = canonical(message.sender)
         target = message.target
-        if not is_channel_target(target) and canonical(target) == sender:
+        if (message.type.conversation_message
+                and not is_channel_target(target) and canonical(target) == sender):
             raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
         return sender, target
 

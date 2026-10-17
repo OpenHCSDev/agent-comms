@@ -234,6 +234,8 @@ class CommittedDelivery(MessageWireRecord):
     def delivery_messages(self):
         from .routing import DeliveryMessage
 
+        if not self.message.type.conversation_message:
+            return ()
         return (DeliveryMessage(self.message, self.audience.sender_lookup),)
 
 

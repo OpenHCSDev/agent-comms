@@ -90,7 +90,10 @@ class WireRecord(ABC):
     def delivery_messages(self):
         from .routing import DeliveryMessage
 
-        return tuple(DeliveryMessage(message) for message in self.messages())
+        return tuple(
+            DeliveryMessage(message) for message in self.messages()
+            if message.type.conversation_message
+        )
 
     def record_key(self, seen: set[str]) -> None:
         if self.receipt is not None:

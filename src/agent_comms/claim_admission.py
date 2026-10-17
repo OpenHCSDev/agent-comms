@@ -16,7 +16,6 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
 from .bus_publication import CommittedDelivery
-from .channel_targets import BuiltinChannel
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordination_cohort import _receipt_matches
@@ -160,7 +159,7 @@ def _selected_claim_boundary(
         initial = _committed_source(bus_lock, admission, "Selected wake has no committed initial row")
         with store.session.read():
             _verify_selected_wake_state(initial, owner, generation, store, admission)
-            yield bus, bus_lock, metadata, registry, owner, initial
+            yield bus, bus_lock, metadata, registry, owner
 
 
 def publish_selected_resource_claim(
@@ -182,7 +181,6 @@ def publish_selected_resource_claim(
         metadata,
         registry,
         owner,
-        initial,
     ):
         resource = resource_path.normalized(Path(owner.worktree))
         with bus_lock.current_source(bus.log, metadata) as source:
@@ -197,11 +195,8 @@ def publish_selected_resource_claim(
                 raise ClaimConflict(existing)
             if source.claim_operation_used(admission.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
-        target = initial.message.sender
-        if target == owner.name:
-            target = BuiltinChannel.ALL.value
         committed = bus.publisher.publish_claim_envelope(
-            Message(owner.name, target, "Resource claim admitted", ClaimNoticeKind, notice=True),
+            Message(owner.name, owner.name, "Claimed", ClaimNoticeKind),
             worktree=Path(owner.worktree),
             incarnation=str(owner.created_at),
             claims=[resource_path],
