@@ -156,6 +156,9 @@ def test_restart_recovery_preserves_native_outcome_without_replaying(released_fa
     leave(process, exit_allowed)
     rows = [json.loads(line) for line in session_file.read_text().splitlines()]
     rows[-1]["message"]["stopReason"] = stop
+    if stop in {"error", "toolUse"}:
+        rows[-1]["message"]["content"] = [{"type": "toolCall", "id": "uncertain-call",
+                                          "name": "bash", "arguments": {"command": "unobserved"}}]
     session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
     comms = Comms(root)
     owner = comms.registry.require("beta")
@@ -163,8 +166,10 @@ def test_restart_recovery_preserves_native_outcome_without_replaying(released_fa
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before = NativeRuntimeInput.one(store.session._connection, input_id=input_id)
         result = AttemptRecovery.recover_released_native_attempt(store, execution_id).value
-        expected = UnknownOutcomeAttempt if stop == "toolUse" else AttemptFailedAttempt
+        expected = AttemptFailedAttempt if stop == "stop" else UnknownOutcomeAttempt
         assert type(result.attempt.lifecycle) is expected
+        if expected is UnknownOutcomeAttempt:
+            assert result.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not result.is_current
         assert not result.can_retry
         assert NativeRuntimeInput.one(store.session._connection, input_id=input_id) == before

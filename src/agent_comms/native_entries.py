@@ -269,6 +269,8 @@ class NativeEvidenceRead:
                 break
             if entry.parent_id != last.id:
                 return PendingStopReason
+            if isinstance(entry, MessageEntry) and entry.message.tool_calls:
+                return PendingStopReason
             last = entry
         if isinstance(last, MessageEntry) and last.assistant_message:
             return last.message.stop_reason
