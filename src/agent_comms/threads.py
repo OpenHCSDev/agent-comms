@@ -14,7 +14,7 @@ from .field_codec import FieldCodec
 from .thread_execution import ThreadExecution, NativeThreadExecution
 from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
 from .goals import (
-    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
+    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint, ProblemGoalOrder,
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
@@ -326,7 +326,7 @@ class Thread(ThreadProvenance):
             self.goal.require_replacement(goals, self.incarnation)
 
     def require_order_slot(self, goal_id: str, problem: str) -> None:
-        if self.goal is not None and (self.goal.id, self.goal.problem) != (goal_id, problem):
+        if self.goal is not None and (self.goal.id, self.goal.order) != (goal_id, ProblemGoalOrder(problem)):
             if self.goal.id == goal_id:
                 raise ValueError("Goal ID belongs to another problem.")
             self.goal.state.require_order_slot()

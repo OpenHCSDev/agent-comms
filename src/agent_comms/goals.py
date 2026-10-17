@@ -192,6 +192,34 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
     revision: GoalRevision
 
 
+class GoalOrder(DeclaredFamily, affix="GoalOrder"):
+    @abstractmethod
+    def require_order(self, goal, goals, owner) -> None: ...
+
+    @abstractmethod
+    def require_replacement(self, goal, goals, owner) -> None: ...
+
+
+@dataclass(frozen=True)
+class UnorderedGoalOrder(GoalOrder):
+    def require_order(self, goal, goals, owner) -> None:
+        pass
+
+    def require_replacement(self, goal, goals, owner) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class ProblemGoalOrder(GoalOrder):
+    problem: str
+
+    def require_order(self, goal, goals, owner) -> None:
+        goals.todos.get(self.problem).require_assignee(owner, goal.id)
+
+    def require_replacement(self, goal, goals, owner) -> None:
+        goals.todos.get(self.problem).require_released_order(owner, goal.id)
+
+
 @dataclass(frozen=True)
 class Goal:
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
@@ -203,15 +231,13 @@ class Goal:
     reported_turn: str | None = None
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
-    problem: str | None = None
+    order: GoalOrder = field(default_factory=UnorderedGoalOrder)
 
     def require_order(self, goals, owner) -> None:
-        if self.problem is not None:
-            goals.todos.get(self.problem).require_assignee(owner, self.id)
+        self.order.require_order(self, goals, owner)
 
     def require_replacement(self, goals, owner) -> None:
-        if self.problem is not None:
-            goals.todos.get(self.problem).require_released_order(owner, self.id)
+        self.order.require_replacement(self, goals, owner)
 
     def after_failed_turn(self, diagnostic: str) -> Goal:
         progress = f"{self.progress}\n\n{diagnostic}" if self.progress else diagnostic
