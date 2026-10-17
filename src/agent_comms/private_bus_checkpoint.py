@@ -89,9 +89,8 @@ class PrefixWitness(PrefixSeal):
         if self.root_id != marker.root_id or self.through_seq != marker.last_seq:
             raise RelationViolationError("Original certificate differs from its durable marker.")
 
-    def require_source(self, marker: WireMetadata, stream: BinaryIO) -> os.stat_result:
+    def require_source(self, marker: WireMetadata, info: os.stat_result, stream: BinaryIO) -> None:
         """Content corruption is fatal; physical relocation needs exclusive repair."""
-        info = os.fstat(stream.fileno())
         if self.root_id != marker.root_id or info.st_size < self.offset:
             raise RelationViolationError("Private bus checkpoint root/size changed.")
         if _tail(stream, self.offset) != self.tail:
@@ -100,7 +99,6 @@ class PrefixWitness(PrefixSeal):
             raise RelationViolationError("Private bus checkpoint exceeds the durable sequence marker.")
         if self.revision.identity != FileIdentity.from_stat(info):
             raise CheckpointNeedsRepair("Private bus source was relocated.")
-        return info
 
     def require_append(self, marker: WireMetadata, info: os.stat_result,
                        offset: int, sequence: int) -> None:
@@ -1233,10 +1231,8 @@ def _rebuild_checkpoint_unlocked(
 ) -> PrefixWitness:
     """Rebuild the derived index from complete canonical history under its lock."""
     saved = _saved(db)
-    prior = saved.seal()
     digest = _SEED
-    prior_seen = prior.revision.size == 0
-    prior_seq = 0
+    prior_seen = saved.offset == 0
     last_seq = 0
     count = 0
     size = 0
@@ -1246,24 +1242,23 @@ def _rebuild_checkpoint_unlocked(
             owner.delete(db)
 
         def collect(offset, raw, record):
-            nonlocal digest, prior_seen, prior_seq, last_seq, count, size
+            nonlocal digest, prior_seen, last_seq, count, size
             count += 1
             size += len(raw)
             if count > 100_000 or size > 128 * 1024 * 1024:
                 raise RelationViolationError("Private bus pending recovery exceeds cold bound.")
             digest = _chain(digest, raw)
             last_seq = _index_row(db, offset, raw, record, last_seq)
-            if offset + len(raw) == prior.revision.size:
+            if offset + len(raw) == saved.offset:
                 prior_seen = True
-                prior_seq = last_seq
-                if digest.hex() != prior.digest or prior_seq != prior.through_seq:
+                if digest.hex() != saved.digest or last_seq != saved.through_seq:
                     raise RelationViolationError(
                         "Private bus checkpoint old prefix changed during recovery."
                     )
 
         for _ in bus.verified_records_unlocked(marker, on_row=collect):
             pass
-        if not prior_seen or (prior.revision.size == 0 and prior.digest != _SEED.hex()):
+        if not prior_seen or (saved.offset == 0 and saved.digest != _SEED.hex()):
             raise RelationViolationError("Private bus checkpoint old prefix is unavailable.")
         if FileRevision.from_stat(bus.path.stat()) != FileRevision.from_stat(info):
             raise RelationViolationError("Private bus changed during pending recovery.")
@@ -1301,7 +1296,8 @@ class CheckpointNeedsRepair(Exception):  # noqa: N818 - names a state
 def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWitness:
     """Check a final, up-to-date checkpoint under the shared bus lock; never writes."""
     saved = _saved(db)
-    info = saved.require_source(marker, stream)
+    info = os.fstat(stream.fileno())
+    saved.require_source(marker, info, stream)
     marker.seal.require_final(saved, path)
     if FileRevision.from_stat(info) != saved.revision:
         raise CheckpointNeedsRepair("Bus has rows the checkpoint does not cover yet.")
@@ -1317,7 +1313,7 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
     saved = _saved(db)
     info = os.fstat(stream.fileno())
     try:
-        saved.require_source(marker, stream)
+        saved.require_source(marker, info, stream)
     except CheckpointNeedsRepair:
         # Rebuild copied index rows; their old physical seal is not authority.
         return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, marker.seal)

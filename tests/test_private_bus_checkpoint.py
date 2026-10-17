@@ -586,6 +586,47 @@ def test_copied_root_corruption_is_not_recertified(tmp_path: Path, fault: str) -
     assert (copied.root / "bus_meta.json").read_bytes() == marker
 
 
+def test_copied_root_rebuilds_unsealed_index_rows(tmp_path: Path) -> None:
+    comms, _ = _root(tmp_path)
+    first = comms.messaging.send_initial_cohort("sender", "Alice", "canonical original")
+    copied = Comms(shutil.copytree(comms.root, tmp_path / "copied"))
+    with sqlite3.connect(copied.root / "private_bus_checkpoint.sqlite3") as db:
+        db.execute("DELETE FROM addressed")
+        db.execute("DELETE FROM delivery_sources")
+    assert [row.message.seq for row in _page(
+        copied, RecordedThreadIncarnation("fixture", 17002.0).lookup
+    )[1]] == [first.seq]
+
+
+def test_copy_preserves_unknown_sequence_reservation(tmp_path: Path, monkeypatch) -> None:
+    from agent_comms.errors import HumanClaimBlockedError
+    from agent_comms.wire_log import WireLog
+
+    comms, _ = _root(tmp_path)
+    comms.messaging.send_initial_cohort("sender", "Alice", "committed")
+    write = WireLog.write_metadata_unlocked
+
+    def reserve_then_crash(log, marker):
+        write(log, marker)
+        if marker.last_seq == 2:
+            raise OSError("crash after durable reservation")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(WireLog, "write_metadata_unlocked", reserve_then_crash)
+        with pytest.raises(OSError, match="crash after durable reservation"):
+            comms.messaging.send_initial_cohort("sender", "Alice", "uncertain")
+    copied = Comms(shutil.copytree(comms.root, tmp_path / "copied"))
+    original = copied.bus.log.path.read_bytes()
+    with pytest.raises(HumanClaimBlockedError, match="UNKNOWN"):
+        asyncio.run(copied.bus.log.read_certified_async(
+            lambda source: source.require_new_human_message("human", "new-message")
+        ))
+    assert copied.bus.log._private_marker_unlocked().last_seq == 2
+    assert copied.bus.log.path.read_bytes() == original
+    with sqlite3.connect(copied.root / "private_bus_checkpoint.sqlite3") as db:
+        assert db.execute("SELECT through_seq FROM prefix_certificate").fetchone() == (1,)
+
+
 def test_warm_witness_rejects_changed_revision_even_with_complete_row(tmp_path: Path) -> None:
     comms, _ = _root(tmp_path)
     comms.messaging.send_initial_cohort("sender", "Alice", "first")
