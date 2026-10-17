@@ -139,7 +139,7 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
                 await asyncio.sleep(0.01)
         child = owner.children[-1]
         session = backend.TurnSession.active[turn]
-        stderr, forwarding = session.native.stderr_task, session.native.forwarding_task
+        forwarding = session.native.forwarding_task
         if termination == "cancel":
             turn.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -152,7 +152,9 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
             result = await turn
             assert isinstance(result[-1], events.Done) and not result[-1].ok
         assert turn not in backend.TurnSession.active
-        assert stderr.done() and forwarding is not None and forwarding.done()
+        async with asyncio.timeout(0):
+            await session.native.proc.stderr_tail()
+        assert forwarding is not None and forwarding.done()
         assert not child.alive()
         assert not owner.persistent.available
         assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
@@ -201,7 +203,9 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
         result = await asyncio.wait_for(turn, 10)
         assert not result[-1].ok
         assert not session.native.proc.alive()
-        assert session.native.stderr_task.done() and forwarding.done()
+        async with asyncio.timeout(0):
+            await session.native.proc.stderr_tail()
+        assert forwarding.done()
         assert session.native.forwarding_task is None
         assert turn not in backend.TurnSession.active
         assert owner.provider.posts == len(owner.saved_inputs()) == 1

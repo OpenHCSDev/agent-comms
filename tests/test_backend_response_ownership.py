@@ -127,7 +127,6 @@ def test_backend_response_switches_and_stats_correlation_replica_stay_deleted():
         in {
             "proc",
             "reader",
-            "stderr_task",
             "preflight_id",
             "native_capability_confirmed",
             "reused",
