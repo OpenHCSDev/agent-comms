@@ -3,8 +3,11 @@
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
 from pathlib import Path
+import os
 
 import pytest
+
+from agent_comms.native_pi import NativePiRpcLaunch
 
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
@@ -26,6 +29,13 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "PI_TASK",
     "PI_WORKTREE",
 })
+
+
+def pytest_configure(config):
+    if "PI_COMPACTION_TEST_PACKAGE" not in os.environ:
+        os.environ["PI_COMPACTION_TEST_PACKAGE"] = str(
+            NativePiRpcLaunch.package_for_command("pi")
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -140,7 +150,6 @@ def native_rpc_fixture(monkeypatch):
     Production launch attestation is exercised separately; these fixtures test
     native input/event contracts with actual child pipes and no provider.
     """
-    import os
 
     from agent_comms.native_arguments import NativeArguments
     from agent_comms.native_pi import NativePiRpcLaunch

@@ -27,7 +27,7 @@ pytest_plugins = ("test_backend_native_lifecycle",)
 
 @pytest.mark.parametrize('recorded_readers', [True])
 async def test_original_context_query_preserves_native_journal_and_dispatches_no_prompt(
-    native_backend, recorded_readers=False
+    native_backend, recorded_readers
 ):
     from native_context_reader_journey import read_original_context
 
