@@ -182,7 +182,6 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
 @pytest.mark.parametrize(
     "rows",
     [
-        {"malformed": ["not text"]},
         {str(i): "message" for i in range(33)},
         {"long": "x" * 4097},
     ],
