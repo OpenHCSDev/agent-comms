@@ -1,0 +1,31 @@
+[31mF[0m[31m                                                                        [100%][0m
+=================================== FAILURES ===================================
+[31m[1m_ test_declared_progress_updates_bar_editor_and_details_without_presence_probes _[0m
+
+workspace = <support.workspace.Workspace object at 0x7eff355438c0>
+
+    [0m[94masync[39;49;00m [94mdef[39;49;00m[90m [39;49;00m[92mtest_declared_progress_updates_bar_editor_and_details_without_presence_probes[39;49;00m(workspace):[90m[39;49;00m
+>       [94masync[39;49;00m [94mwith[39;49;00m workspace.app(size=([94m110[39;49;00m, [94m40[39;49;00m)) [94mas[39;49;00m ui:[90m[39;49;00m
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+
+[1m[31mtests/textual/test_goal_owner_views.py[0m:142: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31m../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py[0m:214: in __aenter__
+    [0m[94mreturn[39;49;00m [94mawait[39;49;00m anext([96mself[39;49;00m.gen)[90m[39;49;00m
+           ^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+[1m[31mtests/support/workspace.py[0m:96: in app
+    [0m[94mawait[39;49;00m ui.new_session()[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <support.ui.TextualUi object at 0x7eff22242e40>
+
+    [0m[94masync[39;49;00m [94mdef[39;49;00m[90m [39;49;00m[92mnew_session[39;49;00m([96mself[39;49;00m) -> [96mstr[39;49;00m:[90m[39;49;00m
+        navigation = [96mself[39;49;00m.app.session_navigation[90m[39;49;00m
+>       details = [94mawait[39;49;00m navigation.new(navigation.default_source)[90m[39;49;00m
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+[1m[31mE       AttributeError: 'SessionNavigation' object has no attribute 'default_source'[0m
+
+[1m[31mtests/support/ui.py[0m:289: AttributeError
+[36m[1m=========================== short test summary info ============================[0m
+[31mFAILED[0m tests/textual/test_goal_owner_views.py::[1mtest_declared_progress_updates_bar_editor_and_details_without_presence_probes[0m - AttributeError: 'SessionNavigation' object has no attribute 'default_source'
+[31m[31m[1m1 failed[0m[31m in 6.55s[0m[0m

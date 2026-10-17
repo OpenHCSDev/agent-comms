@@ -1,0 +1,81 @@
+{
+  "threads": {
+    "owner": {
+      "name": "owner",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-p107/.artifacts/p107/core-tests/test_replacing_or_clearing_goa0",
+      "created_at": 1792214491.8166757,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 2832979,
+        "start_time": 169012074
+      },
+      "model": null,
+      "thinking_level": null,
+      "service_tier": "priority",
+      "goal": {
+        "text": "after clear",
+        "id": "b720de3165f54c129635d4dfc2752fe7",
+        "progress": "",
+        "revision": 1,
+        "reported_turn": null,
+        "mention_source": {
+          "goal_id": "b720de3165f54c129635d4dfc2752fe7",
+          "text_revision": 1,
+          "text_digest": "9c0075e82343b0d72d37a565dffabeaa9520d7e70036fc6c7e9d7b9d1279c3f5",
+          "owner_name": "owner",
+          "owner_created_at": 1792214491.8166757,
+          "bindings": [],
+          "author": {
+            "kind": "uncommanded"
+          }
+        },
+        "state": {
+          "kind": "active"
+        }
+      },
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": {
+        "id": "same-assistant-turn",
+        "owner_pid": 2832979,
+        "started_at": 1792214491.9461966,
+        "routing": null,
+        "admission_generation": 1,
+        "turn_generation": 1,
+        "phase": {
+          "kind": "preparing",
+          "detail": ""
+        }
+      },
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "owner": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "owner": 1792214492.227613
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 1,
+    "generations": {
+      "owner": 1
+    }
+  },
+  "admissions": {
+    "counter": 1,
+    "generations": {
+      "owner": 1
+    }
+  }
+}

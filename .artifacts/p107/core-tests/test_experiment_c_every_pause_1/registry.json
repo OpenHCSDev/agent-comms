@@ -1,0 +1,70 @@
+{
+  "threads": {
+    "worker": {
+      "name": "worker",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-p107/.artifacts/p107/core-tests/test_experiment_c_every_pause_1",
+      "created_at": 1792214484.9666688,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "service_tier": "priority",
+      "goal": {
+        "text": "Keep the durable objective",
+        "id": "e4bf366beb5847c4b1b0bd89d8bb9cd6",
+        "progress": "new report",
+        "revision": 4,
+        "reported_turn": null,
+        "mention_source": {
+          "goal_id": "e4bf366beb5847c4b1b0bd89d8bb9cd6",
+          "text_revision": 1,
+          "text_digest": "0105b06b5280d50d514f4c3bcba35f7fba84c744163b6397f2074519f4460e17",
+          "owner_name": "worker",
+          "owner_created_at": 1792214484.9666688,
+          "bindings": [],
+          "author": {
+            "kind": "uncommanded"
+          }
+        },
+        "state": {
+          "kind": "paused",
+          "source": {
+            "kind": "owner"
+          }
+        }
+      },
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "worker": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "worker": 1792214485.1665301
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 1,
+    "generations": {
+      "worker": 1
+    }
+  },
+  "admissions": {
+    "counter": 1,
+    "generations": {
+      "worker": 1
+    }
+  }
+}

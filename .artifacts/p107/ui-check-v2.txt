@@ -1,0 +1,31 @@
+[31mF[0m[31m                                                                        [100%][0m
+=================================== FAILURES ===================================
+[31m[1m_ test_declared_progress_updates_bar_editor_and_details_without_presence_probes _[0m
+
+workspace = <support.workspace.Workspace object at 0x7ff929a0f620>
+
+    [0m[94masync[39;49;00m [94mdef[39;49;00m[90m [39;49;00m[92mtest_declared_progress_updates_bar_editor_and_details_without_presence_probes[39;49;00m(workspace):[90m[39;49;00m
+        [94masync[39;49;00m [94mwith[39;49;00m workspace.app(size=([94m110[39;49;00m, [94m40[39;49;00m)) [94mas[39;49;00m ui:[90m[39;49;00m
+            app, pilot = ui.textual[90m[39;49;00m
+>           owner, view, bar, _ = [94mawait[39;49;00m shown_goal(workspace, ui)[90m[39;49;00m
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+
+[1m[31mtests/textual/test_goal_owner_views.py[0m:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+[1m[31mtests/textual/test_goal_owner_views.py[0m:39: in shown_goal
+    [0mowner = goal_owner(workspace)[90m[39;49;00m
+            ^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+workspace = <support.workspace.Workspace object at 0x7ff929a0f620>
+
+    [0m[94mdef[39;49;00m[90m [39;49;00m[92mgoal_owner[39;49;00m(workspace):[90m[39;49;00m
+        goal = Goal([33m"[39;49;00m[33mCoordinate with @peer[39;49;00m[33m"[39;49;00m, [33m"[39;49;00m[33mstable-goal[39;49;00m[33m"[39;49;00m, progress=TextGoalProgress([33m"[39;49;00m[33mKeep evidence[39;49;00m[33m"[39;49;00m), revision=[94m4[39;49;00m)[90m[39;49;00m
+>       execution = GoalExecution(GoalExecutionState.STANDBY, goal.id, (GoalWaitTarget([33m"[39;49;00m[33mpeer[39;49;00m[33m"[39;49;00m, [94m1.0[39;49;00m),))[90m[39;49;00m
+                                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^[90m[39;49;00m
+[1m[31mE       TypeError: GoalWaitTarget.__init__() takes 2 positional arguments but 3 were given[0m
+
+[1m[31mtests/textual/test_goal_owner_views.py[0m:24: TypeError
+[36m[1m=========================== short test summary info ============================[0m
+[31mFAILED[0m tests/textual/test_goal_owner_views.py::[1mtest_declared_progress_updates_bar_editor_and_details_without_presence_probes[0m - TypeError: GoalWaitTarget.__init__() takes 2 positional arguments but 3 wer...
+[31m[31m[1m1 failed[0m[31m in 7.78s[0m[0m

@@ -1,0 +1,68 @@
+{
+  "threads": {
+    "worker": {
+      "name": "worker",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-p107/.artifacts/p107/core-tests/test_block_reason_round_trips_0",
+      "created_at": 1792214490.300391,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "service_tier": "priority",
+      "goal": {
+        "text": "Finish selected work",
+        "id": "4ddb86dafe2f4fd4a659e1b70f8f60c7",
+        "progress": "  Need the exact ACP error text from the user before diagnosing.  ",
+        "revision": 2,
+        "reported_turn": "",
+        "mention_source": {
+          "goal_id": "4ddb86dafe2f4fd4a659e1b70f8f60c7",
+          "text_revision": 1,
+          "text_digest": "10c29bd96a5b262dcd05d98896cea34f82dc3b9e454ec39e608b8e6ebebcb343",
+          "owner_name": "worker",
+          "owner_created_at": 1792214490.300391,
+          "bindings": [],
+          "author": {
+            "kind": "uncommanded"
+          }
+        },
+        "state": {
+          "kind": "blocked",
+          "block_reason": "Need the exact ACP error text from the user before diagnosing."
+        }
+      },
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "worker": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "worker": 1792214490.3952324
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 1,
+    "generations": {
+      "worker": 1
+    }
+  },
+  "admissions": {
+    "counter": 1,
+    "generations": {
+      "worker": 1
+    }
+  }
+}

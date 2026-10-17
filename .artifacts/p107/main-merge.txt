@@ -1,0 +1,7 @@
+Auto-merging src/agent_comms/field_codec.py
+Auto-merging src/agent_comms/message_bus.py
+CONFLICT (content): Merge conflict in src/agent_comms/message_bus.py
+Auto-merging src/agent_comms/turn_context.py
+Auto-merging tests/test_coordinated_runtime.py
+Auto-merging tests/test_peer_relevance.py
+Automatic merge failed; fix conflicts and then commit the result.

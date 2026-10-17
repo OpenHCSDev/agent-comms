@@ -1,0 +1,67 @@
+{
+  "threads": {
+    "worker": {
+      "name": "worker",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-p107/.artifacts/p107/core-tests-final/test_missing_or_blank_block_re0",
+      "created_at": 1792214674.875924,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "service_tier": "priority",
+      "goal": {
+        "text": "Finish selected work",
+        "id": "868d8dc2f0f44654846aba3e68ff2faa",
+        "progress": "Verified 2 of 3 items",
+        "revision": 2,
+        "reported_turn": null,
+        "mention_source": {
+          "goal_id": "868d8dc2f0f44654846aba3e68ff2faa",
+          "text_revision": 1,
+          "text_digest": "10c29bd96a5b262dcd05d98896cea34f82dc3b9e454ec39e608b8e6ebebcb343",
+          "owner_name": "worker",
+          "owner_created_at": 1792214674.875924,
+          "bindings": [],
+          "author": {
+            "kind": "uncommanded"
+          }
+        },
+        "state": {
+          "kind": "active"
+        }
+      },
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "worker": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "worker": 1792214675.12967
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 1,
+    "generations": {
+      "worker": 1
+    }
+  },
+  "admissions": {
+    "counter": 1,
+    "generations": {
+      "worker": 1
+    }
+  }
+}
