@@ -15,7 +15,7 @@ from agent_comms.messages import Message
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
 from .shared import (
-    TranscriptBridge, TranscriptUpdate, Options, SendResult, parse_options, run_bridge, shared_parser,
+    IncomingFrame, TranscriptBridge, TranscriptUpdate, Options, parse_options, run_bridge, shared_parser,
     Watch, Binding,
 )
 from .opencode_protocol import (
@@ -187,11 +187,10 @@ class OpenCodeBridge(TranscriptBridge[OpenCodeOptions]):
 
     async def deliver(self, message: Message) -> type[Outcome]:
         async with OpenCodeConnection.open(self.options, self.binding.thread) as connection:
-            for part in self.incoming_frame(message).parts:
-                await connection.deliver(part)
+            await connection.deliver(IncomingFrame(message).text)
         return DeliveredOutcome
 
-    async def show_sent(self, result: SendResult, target: str, body: str) -> None:
+    async def show_sent(self, result: str, target: str, body: str) -> None:
         async with OpenCodeConnection.open(self.options, self.binding.thread) as connection:
             await connection.toast(Toast(message=self.sent_text(result, target, body), variant='success'))
 

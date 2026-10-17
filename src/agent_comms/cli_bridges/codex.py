@@ -14,7 +14,7 @@ import aiohttp
 from pydantic import JsonValue
 from agent_comms.messages import Message
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
-from .shared import TranscriptBridge, Options, SendResult, TranscriptUpdate, shared_parser, parse_options, run_bridge
+from .shared import IncomingFrame, TranscriptBridge, Options, TranscriptUpdate, shared_parser, parse_options, run_bridge
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcFailure, RpcNotification, RpcSuccess, TextInput,
@@ -74,14 +74,6 @@ class CodexConnection:
                 await socket.send_str(Initialized().model_dump_json())
                 yield connection
 
-    async def message(self, text: str, message_id: str) -> None:
-        await self.call(BusInput.for_message(self.thread, message_id, text))
-
-    async def sent(self, result: SendResult, text: str) -> None:
-        await self.call(DisplayOutput(
-            threadId=self.thread, clientUserMessageId=f'comms-out:{result.id}',
-            toolOutput=ToolOutput(output=text)))
-
 @dataclass
 class CodexOptions(Options):
     socket: str
@@ -119,13 +111,14 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
 
     async def deliver(self, message: Message) -> type[Outcome]:
         async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
-            for part in self.incoming_frame(message).parts:
-                await codex.message(part, message.message_id)
+            await codex.call(BusInput.for_message(self.binding.thread, message.message_id, IncomingFrame(message).text))
         return DeliveredOutcome
 
-    async def show_sent(self, result: SendResult, target: str, body: str) -> None:
+    async def show_sent(self, result: str, target: str, body: str) -> None:
         async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
-            await codex.sent(result, self.sent_text(result, target, body))
+            await codex.call(DisplayOutput(
+                threadId=self.binding.thread, clientUserMessageId=f'comms-out:{result}',
+                toolOutput=ToolOutput(output=self.sent_text(result, target, body))))
 
     async def report_failure(self, text: str) -> None:
         async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
