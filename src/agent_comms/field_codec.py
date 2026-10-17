@@ -530,28 +530,8 @@ class FieldCodec(Sealed):
             if isinstance(member, Projected) and member.view == view
         })
 
-    @staticmethod
-    def _decode_scalar(target: Any, data: Any) -> Any:
-        """The original strict scalar boundary, after representation selection.
-
-        Exact primitive declarations skip structural dispatch. Unknown targets
-        reach this only after that dispatch, preserving custom annotation
-        equality and record/enum construction precedence.
-        """
-        if target in (str, int, bool, type(None)) and type(data) is target:
-            return data
-        if target is float and type(data) in (int, float) and math.isfinite(data):
-            return data
-        raise ValueError(f"Expected {target}, received {type(data).__name__}")
-
-
 class ValueDecoder(ABC):
-    """One annotation's decode decisions, resolved once from its declaration.
-
-    Each way a value decodes is one subclass. ``compile_decoder`` picks the class
-    from the annotation once; decoding a value is that object's own
-    ``decode``, with no per-value re-classification.
-    """
+    """One annotation owns its wire decoding, draft projection and choice domain."""
 
     __slots__ = ()
 
@@ -578,7 +558,12 @@ class _ScalarDecoder(ValueDecoder):
     target: object
 
     def decode(self, data):
-        return FieldCodec._decode_scalar(self.target, data)
+        target = self.target
+        if target in (str, int, bool, type(None)) and type(data) is target:
+            return data
+        if target is float and type(data) in (int, float) and math.isfinite(data):
+            return data
+        raise ValueError(f"Expected {target}, received {type(data).__name__}")
 
 class _JsonEditor:
     def decode_editor(self, value):
