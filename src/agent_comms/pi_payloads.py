@@ -20,7 +20,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
 from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
 from .transcript_events import SentTranscript, ToolStartTranscript
-from .tool_declaration import ToolArguments, ToolDeclaration
+from .tool_declaration import ToolCall, ToolDeclaration, ToolInput
 from .recorded_time import UnrecordedEventTime
 
 
@@ -316,9 +316,10 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
         return (self,)
 
     def assistant_transcript(self):
-        call = ToolArguments.build_call(UnrecordedEventTime(), self.id, self.name, self.arguments)
+        arguments = ToolDeclaration.for_name(self.name).recorded_arguments(ToolInput, self.arguments)
+        call = ToolCall(UnrecordedEventTime(), self.id, self.name, arguments)
         return [ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=self.arguments, path=call.path, detail=call.detail)]
+                                    raw_input=call.arguments.raw_input)]
 
     id: str
     name: str

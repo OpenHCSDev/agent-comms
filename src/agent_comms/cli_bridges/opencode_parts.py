@@ -11,7 +11,7 @@ from pydantic import Field, JsonValue
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
-from agent_comms.tool_declaration import ToolArguments as RecordedToolArguments
+from agent_comms.tool_declaration import OpenCodeToolInput, ToolDeclaration
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TextTranscript
 
 from .shared import (
@@ -128,10 +128,6 @@ class StatusHeader(WireHeader):
     type: str = Field(alias='status')
 
 
-class ToolArguments(RecordedToolArguments):
-    path: str | None = Field(default=None, alias='filePath')
-
-
 class ToolState(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='__name__', skip_if_no_key=True)
@@ -147,8 +143,8 @@ class InvokedTool(WireModel):
     input: dict[str, JsonValue]
 
     def call(self, part: ToolPart) -> ToolCall:
-        return ToolArguments.build_call(UnrecordedEventTime(), part.callID, part.tool,
-                                        self.input, call_type=ToolCall)
+        arguments = ToolDeclaration.for_name(part.tool).recorded_arguments(OpenCodeToolInput, self.input)
+        return ToolCall(UnrecordedEventTime(), part.callID, part.tool, arguments)
 
 
 class PendingTool(ToolState):

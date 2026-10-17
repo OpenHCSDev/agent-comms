@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from .tool_declaration import ToolDeclaration, PathTool
+from .tool_declaration import PathTool, ToolArguments, ToolDeclaration
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 from .native_tool_call import SelectedToolDenied
@@ -47,11 +47,24 @@ class NativeRequestTools:
 
 
 class ArgumentTool(ToolDeclaration):
-    """One declared execution record supplies validation and native serialization."""
+    """The tool declares which input field supplies its caption."""
+    declared_name = None
 
     @classmethod
     def recorded_arguments(cls, schema, raw):
-        return schema.model_validate(raw)
+        parsed = schema.model_validate(raw)
+        return ToolArguments(raw, cls.file_location(parsed.path), parsed.caption_for(cls.caption_field))
+
+    @classmethod
+    def file_location(cls, path: str | None) -> str | None:
+        return path
+
+
+@dataclass(frozen=True, kw_only=True)
+class CodingTool(ArgumentTool, NativeExecutableTool):
+    """Typed Pi fields own mutation paths; the existing SDK executes the tools."""
+
+    claim: FileClaimPath | None = field(init=False, compare=False)
 
     @classmethod
     def parse_arguments(cls, arguments: dict[str, object]):
@@ -64,8 +77,6 @@ class ArgumentTool(ToolDeclaration):
 
     @property
     def arguments(self) -> dict[str, object]:
-        # The native argument object has no family envelope. Its contents come
-        # entirely from the record codec, never a retained raw dictionary.
         encoded = FieldCodec.encode(self)
         del encoded[self.family_discriminator]
         return encoded
@@ -73,13 +84,6 @@ class ArgumentTool(ToolDeclaration):
     @property
     @abstractmethod
     def detail(self) -> str: ...
-
-
-@dataclass(frozen=True, kw_only=True)
-class CodingTool(ArgumentTool, NativeExecutableTool):
-    """Typed Pi fields own mutation paths; the existing SDK executes the tools."""
-
-    claim: FileClaimPath | None = field(init=False, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "claim", self._parse_resource())
@@ -113,16 +117,13 @@ class ReadTool(PathTool, CodingTool):
 class BashTool(CodingTool):
     acp_kind = "execute"
     label = "Run"
+    caption_field = "command"
     command: str
     timeout: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
 
     @property
     def detail(self) -> str:
         return self.command
-
-    @classmethod
-    def command_detail(cls, command: str) -> str:
-        return command
 
     def _parse_resource(self) -> None:
         return None
@@ -163,11 +164,52 @@ class WriteTool(PathTool, CodingTool):
         return WritableFileClaim(Path(self.path))
 
 
-class GrepTool(ToolDeclaration):
+class GrepTool(ArgumentTool):
     acp_kind = "search"
     label = "Search"
+    caption_field = "pattern"
 
 
-class GlobTool(ToolDeclaration):
+class GlobTool(ArgumentTool):
     acp_kind = "search"
     label = "Find"
+    caption_field = "pattern"
+
+
+class WebFetchTool(ArgumentTool):
+    acp_kind = "fetch"
+    label = "Fetch"
+    caption_field = "url"
+
+
+class WebSearchTool(ArgumentTool):
+    acp_kind = "search"
+    label = "Search"
+    caption_field = "query"
+
+
+class ToolSearchTool(WebSearchTool):
+    label = "Search tools"
+
+
+class AgentTool(ArgumentTool):
+    label = "Agent"
+    caption_field = "description"
+
+
+class TaskTool(AgentTool):
+    label = "Task"
+
+
+class MonitorTool(AgentTool):
+    label = "Monitor"
+
+
+class NotebookEditTool(PathTool, ArgumentTool):
+    label = "Edit"
+    acp_kind = "edit"
+
+
+class SkillTool(ArgumentTool):
+    label = "Skill"
+    caption_field = "skill"

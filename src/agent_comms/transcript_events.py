@@ -7,7 +7,8 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .declared_family import DeclaredFamily
-from .tool_declaration import ToolDeclaration, ToolLocations
+from .tool_declaration import RecordedToolInput, ToolCall, ToolCallView, ToolDeclaration
+from .recorded_time import UnrecordedEventTime
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
 from .tool_results import ToolDiff, ToolText
@@ -202,14 +203,14 @@ class ToolPendingTranscript(ToolOpeningTranscript):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolStartTranscript(ToolLocations, ToolOpeningTranscript):
+class ToolStartTranscript(ToolCallView, ToolOpeningTranscript):
     raw_input: Any = None
-    detail: str = field(default="", metadata={"wire_omit_default": True})
-    path: str | None = field(default=None, metadata={"wire_omit_default": True})
 
     @property
-    def title(self) -> str:
-        return ToolDeclaration.caption(self.tool_name, detail=self.detail, path=self.path)
+    def call(self) -> ToolCall:
+        arguments = ToolDeclaration.for_name(self.tool_name).recorded_arguments(
+            RecordedToolInput, self.raw_input)
+        return ToolCall(UnrecordedEventTime(), self.tool_call_id, self.tool_name, arguments)
 
 
 @dataclass(frozen=True, kw_only=True)

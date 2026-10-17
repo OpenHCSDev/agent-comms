@@ -9,12 +9,12 @@ from typing import ClassVar, Literal
 from xml.etree import ElementTree
 
 from metaclass_registry import RegistryConfig
-from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
+from pydantic import ConfigDict, Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.tool_declaration import ToolArguments
+from agent_comms.tool_declaration import ClaudeToolInput, ToolDeclaration
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -37,7 +37,6 @@ from .shared import (
     MonitorFrame,
     MonitorPart,
     MonitorProbe,
-    ForeignMonitorFrame,
     MonitorObservation,
     ObservedMonitor,
     MONITOR_FRAME,
@@ -82,22 +81,22 @@ class ClaudeMonitorFrame(IncomingFrame):
                      for number, body in enumerate(bodies, 1))
 
     @classmethod
-    def decode_line(cls, line: str) -> MonitorFrame:
+    def decode_line(cls, line: str) -> MonitorFrame | None:
         if line.startswith(MonitorProbe.wire_prefix):
             return MONITOR_FRAME.validate_json(line)
-        # Classify the external header before decoding its JSON string. Old or
-        # unrelated monitor text, including truncated text, is a named foreign frame.
+        # Every event is painted by its task envelope. Only our declared line
+        # protocol can additionally confirm comms delivery.
         if not line.startswith('"' + cls.HEADER + ' · '):
-            return ForeignMonitorFrame(text=line)
+            return None
         raw_header, separator, _ = line.partition(r'\n')
         if not separator or not line.endswith('"'):
-            return ForeignMonitorFrame(text=line)
+            return None
         columns = raw_header[1:].rsplit(' · ', 2)
         if len(columns) != 3:
-            return ForeignMonitorFrame(text=line)
+            return None
         number, slash, total = columns[-1].partition('/')
         if not slash or not number.isdecimal() or not total.isdecimal():
-            return ForeignMonitorFrame(text=line)
+            return None
         decoded = cls.JSON_TEXT.validate_json(line)
         header, _, body = decoded.partition('\n')
         sender, message_id, _ = header.removeprefix(cls.HEADER + ' · ').rsplit(' · ', 2)
@@ -106,7 +105,8 @@ class ClaudeMonitorFrame(IncomingFrame):
 
     @classmethod
     def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:
-        return tuple(cls.decode_line(line) for line in event.splitlines())
+        return tuple(frame for line in event.splitlines()
+                     if (frame := cls.decode_line(line)) is not None)
 
 
 @dataclass
@@ -222,10 +222,6 @@ class ThinkingBlock(RedactedThinking):
             record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp),)))
 
 
-class ClaudeToolArguments(ToolArguments):
-    path: str | None = Field(default=None, alias='file_path')
-
-
 class ToolUse(AssistantBlock):
     wire_tag = 'tool_use'
     id: str
@@ -233,9 +229,8 @@ class ToolUse(AssistantBlock):
     input: JsonValue
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        call = ClaudeToolArguments.build_call(RecordedEventTime(record.timestamp),
-                                               self.id, self.name, self.input,
-                                               call_type=ToolCall)
+        arguments = ToolDeclaration.for_name(self.name).recorded_arguments(ClaudeToolInput, self.input)
+        call = ToolCall(RecordedEventTime(record.timestamp), self.id, self.name, arguments)
         return (session.started(call),)
 
 
@@ -346,41 +341,86 @@ class ContentBlocks(WireModel):
         return [{'type': 'text', 'text': value}] if isinstance(value, str) else value
 
 
-class TaskEnvelope(WireModel, ABC):
+class TaskEnvelope(WireModel):
+    """Claude's summary-only notification; other shapes add their own fields."""
+    model_config = ConfigDict(extra='forbid')
+    summary: str
+
     @classmethod
     def from_text(cls, text: str) -> TaskEnvelope:
-        if not text.startswith('<task-notification>'):
-            return ForeignTaskNotification(text=text)
-        closing = '</task-notification>'
-        # Claude Code appends sibling blocks (system-reminder) after the envelope in the same record.
-        envelope, terminator, _ = text.partition(closing)
-        root = ElementTree.fromstring(envelope + terminator)  # Incomplete XML still raises ParseError.
-        event = root.find('event')
-        if event is None:
-            return ForeignTaskNotification(text='\n'.join(root.itertext()).strip())
-        return MonitorTaskNotification(frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
+        # Claude may append a sibling system-reminder after the envelope.
+        envelope, terminator, _ = text.partition('</task-notification>')
+        root = ElementTree.fromstring(envelope + terminator)
+        if root.tag != 'task-notification':
+            raise ValueError('Expected a task-notification envelope')
+        return TASK_ENVELOPES.validate_python(cls.xml_fields(root))
 
-    @abstractmethod
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
+    @classmethod
+    def xml_fields(cls, root: ElementTree.Element) -> dict:
+        return {child.tag: cls.xml_fields(child) if len(child) else ''.join(child.itertext())
+                for child in root}
 
-
-class ForeignTaskNotification(TaskEnvelope):
-    text: str
+    def sections(self) -> tuple[str, ...]:
+        return (self.summary,)
 
     def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        text = '\n\n'.join(section for section in self.sections() if section)
         return (FinishedItem(record.uuid, record.uuid,
-                             (NoticeTranscript(self.text, timestamp=record.timestamp),)),)
+                             (NoticeTranscript(text, timestamp=record.timestamp),)),)
 
 
-class MonitorTaskNotification(TaskEnvelope):
-    frames: tuple[MonitorFrame, ...]
+class TaskUsage(WireModel):
+    model_config = ConfigDict(extra='forbid')
+    subagent_tokens: str
+    tool_uses: str
+    duration_ms: str
+
+
+class TaskGroupUsage(TaskUsage):
+    agent_count: str
+    agents_done: str
+    agents_error: str
+    agents_skipped: str
+    agents_empty_result: str
+
+
+class IdentifiedTaskNotification(TaskEnvelope):
+    task_id: str = Field(alias='task-id')
+
+
+class TaskStatusNotification(IdentifiedTaskNotification):
+    tool_use_id: str | None = Field(default=None, alias='tool-use-id')
+    output_file: str = Field(alias='output-file')
+    status: str
+    note: str = ''
+    result: str = ''
+    usage: TaskUsage | TaskGroupUsage | None = None
+    diagnostics: str = ''
+
+    def sections(self) -> tuple[str, ...]:
+        return (*super().sections(), f'Status: {self.status}', self.result, self.diagnostics)
+
+
+class MonitorTaskNotification(IdentifiedTaskNotification):
+    event: str
+
+    def sections(self) -> tuple[str, ...]:
+        return (*super().sections(), self.event)
 
     def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
         observations = tuple(MonitorObservation(frame,
                                                 ObservedMonitor(record.uuid, record.timestamp))
-                             for frame in self.frames)
-        events = tuple(event for frame in self.frames for event in frame.events(record.timestamp))
-        return observations + ((FinishedItem(record.uuid, record.uuid, events),) if events else ())
+                             for frame in ClaudeMonitorFrame.decode_event(self.event))
+        return observations + super().updates(record)
+
+
+class CompletedMonitorTaskNotification(TaskStatusNotification, MonitorTaskNotification):
+    pass
+
+
+TASK_ENVELOPES = TypeAdapter(
+    TaskEnvelope | TaskStatusNotification | MonitorTaskNotification | CompletedMonitorTaskNotification
+)
 
 
 class TaskContent(WireModel):

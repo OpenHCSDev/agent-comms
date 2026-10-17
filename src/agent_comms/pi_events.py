@@ -13,7 +13,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
-from .tool_declaration import ToolArguments, ToolDeclaration
+from .tool_declaration import ToolCall, ToolDeclaration, ToolInput
 from .recorded_time import UnrecordedEventTime
 from .turn_phase import ModelWaitPhase
 from .native_turn_context import NativeContextManifestData
@@ -826,8 +826,8 @@ class ToolExecutionStart(PiEvent):
         tool_id = self.tool_call_id or name
         session.watchdog.prompt_accepted = True
         session.active_tools.add(tool_id)
-        arguments = self.args or {}
-        call = ToolArguments.build_call(UnrecordedEventTime(), tool_id, name, arguments)
+        arguments = ToolDeclaration.for_name(name).recorded_arguments(ToolInput, self.args or {})
+        call = ToolCall(UnrecordedEventTime(), tool_id, name, arguments)
         yield events.ToolStart.from_call(call)
 
     @property

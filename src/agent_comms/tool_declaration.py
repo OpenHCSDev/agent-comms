@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar, TypeVar
+from typing import ClassVar
 
-from pydantic import JsonValue
+from pydantic import AliasChoices, ConfigDict, Field, JsonValue, StrictStr, TypeAdapter
 
 from .cli_protocol import WireModel
 from .declared_family import DeclaredFamily
+from .field_codec import projected
 from .recorded_time import EventTime
 
 
@@ -16,13 +17,12 @@ class ToolDeclaration(DeclaredFamily, affix="Tool", discovery_package="agent_com
     CAPTION_CHARS: ClassVar[int] = 80
     acp_kind: ClassVar[str] = "other"
     label: ClassVar[str]
+    caption_field: ClassVar[str | None] = None
 
     @classmethod
     def for_name(cls, name: str) -> type[ToolDeclaration] | UndeclaredTool:
-        try:
-            return cls.decode(name.lower())
-        except ValueError:
-            return UndeclaredTool(name)
+        member = cls.member_named(name.lower())
+        return UndeclaredTool(name) if member is None else member
 
     @classmethod
     def caption(cls, name: str, *, detail: str = "", path: str | None = None) -> str:
@@ -36,17 +36,13 @@ class ToolDeclaration(DeclaredFamily, affix="Tool", discovery_package="agent_com
         return caption if len(caption) <= limit else caption[:limit - 1] + '…'
 
     @classmethod
-    def recorded_arguments(cls, schema: type[ToolArguments], raw: JsonValue) -> ToolArguments:
+    def recorded_arguments(cls, schema: type[ToolInput], raw: JsonValue) -> ToolArguments:
         """An extension's opaque arguments are not a known coding-tool schema."""
-        return schema()
+        return ToolArguments(raw)
 
     @classmethod
     def file_location(cls, path: str | None) -> str | None:
         return None
-
-    @classmethod
-    def command_detail(cls, command: str) -> str:
-        return ""
 
     @classmethod
     def result_diff(cls, result, ok):
@@ -86,13 +82,33 @@ class UndeclaredTool(ToolDeclaration):
         return self.name
 
 
-class ToolLocations:
-    """Tool metadata exposes its zero or one file location."""
-    path: str | None
+class ToolCallView:
+    """Live and retained views derive metadata from their original call."""
+
+    @property
+    def call(self) -> ToolCall:
+        raise NotImplementedError
+
+    @projected(view="wire", persist=False)
+    def title(self) -> str:
+        return self.call.title
+
+    @projected(view="wire", persist=False)
+    def kind(self) -> str:
+        return self.call.kind
+
+    @projected(view="wire", persist=False)
+    def detail(self) -> str:
+        return self.call.arguments.caption
+
+    @projected(view="wire", persist=False)
+    def path(self) -> str | None:
+        return self.call.arguments.path
 
     @property
     def locations(self) -> tuple[str, ...]:
-        return () if self.path is None else (self.path,)
+        path = self.path
+        return () if path is None else (path,)
 
 
 @dataclass(frozen=True)
@@ -101,32 +117,52 @@ class ToolCall:
     started_at: EventTime
     id: str
     name: str
-    arguments: JsonValue
-    detail: str = ""
-    path: str | None = None
+    arguments: ToolArguments
 
     @property
     def title(self) -> str:
-        return ToolDeclaration.caption(self.name, detail=self.detail, path=self.path)
+        return ToolDeclaration.caption(self.name, detail=self.arguments.caption, path=self.arguments.path)
 
     @property
     def kind(self) -> str:
         return ToolDeclaration.for_name(self.name).acp_kind
 
 
-Call = TypeVar('Call', bound=ToolCall)
-
-
-class ToolArguments(WireModel):
-    """One decoding/build algorithm; foreign boundaries declare only aliases."""
+@dataclass(frozen=True)
+class ToolArguments:
+    raw_input: JsonValue
     path: str | None = None
-    command: str = ""
+    caption: str = ""
 
-    @classmethod
-    def build_call(cls, started_at: EventTime, call_id: str, name: str, raw: JsonValue, *,
-                   call_type: type[Call] = ToolCall) -> Call:
-        declaration = ToolDeclaration.for_name(name)
-        arguments = declaration.recorded_arguments(cls, raw)
-        return call_type(started_at, call_id, name, raw,
-                         detail=declaration.command_detail(arguments.command),
-                         path=declaration.file_location(arguments.path))
+
+class ToolInput(WireModel):
+    """A protocol's declared fields; unknown input stays in the original value."""
+    model_config = ConfigDict(extra='allow')
+    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
+    path: str | None = Field(default=None, alias='path', validation_alias=AliasChoices('path'))
+    command: str | None = None
+    pattern: str | None = None
+    caption_codec: ClassVar[TypeAdapter] = TypeAdapter(StrictStr)
+
+    def caption_for(self, field: str | None) -> str:
+        value = self.model_dump().get(field)
+        return '' if value is None else self.caption_codec.validate_python(value)
+
+
+class ClaudeToolInput(ToolInput):
+    path: str | None = Field(default=None, alias='file_path',
+                             validation_alias=AliasChoices('file_path', 'notebook_path'))
+    description: str | None = None
+    url: str | None = None
+    query: str | None = None
+    skill: str | None = None
+
+
+class OpenCodeToolInput(ToolInput):
+    path: str | None = Field(default=None, alias='filePath', validation_alias=AliasChoices('filePath'))
+
+
+class RecordedToolInput(ToolInput):
+    path: str | None = Field(default=None, validation_alias=AliasChoices(
+        *(path[0] for model in (ToolInput, *ToolInput.__subclasses__())
+          for path in model.model_fields['path'].validation_alias.convert_to_aliases())))

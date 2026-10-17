@@ -37,7 +37,7 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.thread_identity import ThreadRole
 from agent_comms import tool_declaration
 from agent_comms.tool_results import ToolDiff
-from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolPendingTranscript, ToolStartTranscript, TranscriptEvent, NoticeTranscript
+from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolPendingTranscript, ToolStartTranscript, TranscriptEvent
 from agent_comms.typed_table import Column, TypedTable
 
 
@@ -135,7 +135,7 @@ class ToolCall(tool_declaration.ToolCall, ToolCallDraft):
     def events(self) -> tuple[TranscriptEvent, ...]:
         return (self.started_at.stamp(ToolStartTranscript(
             tool_call_id=self.id, tool_name=self.name,
-            raw_input=self.arguments, detail=self.detail, path=self.path)),)
+            raw_input=self.arguments.raw_input)),)
 
 @dataclass(frozen=True)
 class TextDraft(SnapshotDraft):
@@ -877,9 +877,6 @@ class MonitorFrame(TaggedWire, ABC):
     @abstractmethod
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None: ...
 
-    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return ()  # Comms control frames are metadata, never duplicate messages.
-
 
 class MonitorProbe(MonitorFrame):
     wire_tag = 'probe'
@@ -908,17 +905,6 @@ class MonitorPart(MonitorFrame):
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
         await bridge.journal.monitor_attempt(self).confirm(bridge, self, record)
-
-
-class ForeignMonitorFrame(MonitorFrame):
-    wire_tag = 'foreign'
-    text: str
-
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
-        """Another monitor's output is not comms delivery evidence."""
-
-    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(self.text, timestamp=timestamp),)
 
 
 MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())

@@ -20,8 +20,8 @@ from pydantic import (
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
+from agent_comms.tool_declaration import ToolDeclaration, ToolInput
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
-from agent_comms.tool_declaration import ToolArguments
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -344,8 +344,8 @@ class ToolItem(Item, ABC):
     def succeeded(self) -> bool: ...
 
     def call(self, started_at: EventTime = UnrecordedEventTime()) -> ToolCall:
-        return ToolArguments.build_call(started_at, self.id, self.tool_name, self.arguments,
-                                        call_type=ToolCall)
+        arguments = ToolDeclaration.for_name(self.tool_name).recorded_arguments(ToolInput, self.arguments)
+        return ToolCall(started_at, self.id, self.tool_name, arguments)
 
     def accumulator(self, started_at: EventTime) -> ToolCall:
         return self.call(started_at)
@@ -660,8 +660,8 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return ToolArguments.build_call(UnrecordedEventTime(), call_id, 'edit',
-                                        {'path': self.path}, call_type=ToolCall).finished(
+        arguments = ToolDeclaration.for_name('edit').recorded_arguments(ToolInput, {'path': self.path})
+        return ToolCall(UnrecordedEventTime(), call_id, 'edit', arguments).finished(
             '', ok, diff=self.kind.patch(self.path, self.diff))
 
 
