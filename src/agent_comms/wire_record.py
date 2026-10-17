@@ -19,14 +19,14 @@ from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
-    from .delivery_policy import KeyedResponseReceipt
+    from .delivery_policy import KeyedResponseAcknowledgement
     from .messages import Message
     from .wire_metadata import WireMetadata
 
 
 class WireRecord(ABC):
     __slots__ = ()
-    receipt: KeyedResponseReceipt | None = None
+    acknowledgement: KeyedResponseAcknowledgement | None = None
     max_row_bytes: ClassVar[int] = 8 * 1024 * 1024
 
     @classmethod
@@ -60,7 +60,7 @@ class WireRecord(ABC):
 
     @classmethod
     def certified_public_messages(cls, value: Mapping) -> tuple[Message, ...]:
-        """Public output of a row already admitted by the complete WireScan.
+        """Public output of a row already authorized by the complete WireScan.
 
         Silent observations have no public messages. Their original manifests
         were validated by certification and need no second reconstruction.
@@ -96,11 +96,11 @@ class WireRecord(ABC):
         )
 
     def record_key(self, seen: set[str]) -> None:
-        if self.receipt is not None:
-            self.receipt.add_unique(seen)
+        if self.acknowledgement is not None:
+            self.acknowledgement.add_unique(seen)
 
     @abstractmethod
-    def require_admission(self, metadata: WireMetadata) -> None: ...
+    def require_claim(self, metadata: WireMetadata) -> None: ...
 
     @abstractmethod
     def checkpoint_rows(self, offset: int, length: int, previous_sequence: int): ...
@@ -122,7 +122,7 @@ class MessageWireRecord(WireRecord):
 
 
 class WireObservation(DeclaredFamily, affix="WireObservation"):
-    """A silent fact; it has no message, audience, receipt or sequence allocation."""
+    """A silent fact; it has no message, audience, acknowledgement or sequence allocation."""
 
     @abstractmethod
     def context_manifests(self): ...
@@ -199,7 +199,7 @@ class ObservationWireRecord(WireRecord):
     def sequence_after(self, previous: int) -> int:
         return previous
 
-    def require_admission(self, metadata: WireMetadata) -> None:
+    def require_claim(self, metadata: WireMetadata) -> None:
         # Decoding validates the observation; it cannot permit delivery.
         return None
 
@@ -214,8 +214,8 @@ class ObservationWireRecord(WireRecord):
 class PublicWireRecord(MessageWireRecord):
     message: Message
 
-    def require_admission(self, metadata: WireMetadata) -> None:
-        self.message.require_retained_admission(metadata.admission_after_seq)
+    def require_claim(self, metadata: WireMetadata) -> None:
+        self.message.require_retained_claim(metadata.claimed_after_seq)
 
 
 @dataclass
@@ -237,7 +237,7 @@ class WireScan:
             if not isinstance(value, dict):
                 raise ValueError("Bus row is not an object.")
             record = WireRecord.from_wire(value, self.metadata.root_id)
-            record.require_admission(self.metadata)
+            record.require_claim(self.metadata)
             record.record_key(self.seen_keys)
             self.previous_sequence = record.sequence_after(self.previous_sequence)
             return record
@@ -248,5 +248,5 @@ class WireScan:
 
 
 from .turn_context import ContextEntryManifest, RecordedContextManifest
-from .delivery_policy import KeyedResponseReceipt
+from .delivery_policy import KeyedResponseAcknowledgement
 from .messages import Message

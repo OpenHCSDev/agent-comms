@@ -1,4 +1,4 @@
-"""Default-off private registry durability gate; never a public wire receipt.
+"""Default-off private registry durability gate; never a public wire acknowledgement.
 
 This two-slot file must be created and directory-fsynced before the private
 marker. It is read only while the registry's process lock is held. A corrupt

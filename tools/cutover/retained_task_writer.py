@@ -11,25 +11,25 @@ from routing_recovery import write_original
 
 
 def main():
-    root, target_python, installer, root_id, receipt = sys.argv[1:]
-    root, receipt = Path(root), Path(receipt)
+    root, target_python, installer, root_id, acknowledgement = sys.argv[1:]
+    root, acknowledgement = Path(root), Path(acknowledgement)
     bus = WireLog(root / 'bus.jsonl')
     environment = dict(os.environ)
     environment.pop('PYTHONPATH', None)
-    with bus.locked() as custody:
-        source = custody.certified_read()
+    with bus.locked() as ownership:
+        source = ownership.certified_read()
         source.require_marker(bus._private_marker_unlocked())
         if source.marker.root_id != root_id:
             raise ValueError('Original task carry root changed.')
         packet = capture_original(bus, source)
         encoded = json.dumps(packet, ensure_ascii=False)
-        command = [target_python, installer, root, str(custody.descriptor), root_id, receipt]
+        command = [target_python, installer, root, str(ownership.descriptor), root_id, acknowledgement]
         # Target validates every post-image under this SAME physical lock before
         # private preimages or any publication. A refusal leaves originals intact.
         subprocess.run([*map(str, command), '--validate'], input=encoded, text=True,
-                       env=environment, pass_fds=(custody.descriptor,), check=True)
+                       env=environment, pass_fds=(ownership.descriptor,), check=True)
         source.require_current()
-        originals = receipt.with_name(receipt.name + '.originals')
+        originals = acknowledgement.with_name(acknowledgement.name + '.originals')
         originals.mkdir(mode=0o700)
         write_original(originals / 'bus.jsonl', bus.path.read_bytes())
         write_original(originals / 'bus_meta.json', bus.metadata_path.read_bytes())
@@ -43,7 +43,7 @@ def main():
             finally:
                 os.close(descriptor)
         subprocess.run(list(map(str, command)), input=encoded, text=True,
-                       env=environment, pass_fds=(custody.descriptor,), check=True)
+                       env=environment, pass_fds=(ownership.descriptor,), check=True)
 
 
 if __name__ == '__main__':

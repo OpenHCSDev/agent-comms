@@ -46,7 +46,7 @@ def history(tmp_path):
     old.bus.log.path.write_bytes(b"".join(raw for _, raw in rows))
     old.bus.log.path.chmod(0o600)
     marker = old.bus.log.read_metadata_unlocked(required=True)
-    marker.last_seq = marker.admission_after_seq = rows[-1][0].seq
+    marker.last_seq = marker.claimed_after_seq = rows[-1][0].seq
     old.bus.log.write_metadata_unlocked(marker)
     live = Comms(tmp_path / "live")
     # Deliberately different membership: source scope must not use live tags.

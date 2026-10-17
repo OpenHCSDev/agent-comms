@@ -32,5 +32,5 @@ class HumanInitialUnknownError(RelationViolationError):
         )
 
 
-class HumanAdmissionBlockedError(RelationViolationError):
+class HumanClaimBlockedError(RelationViolationError):
     """A prior private reservation cannot be safely retried."""

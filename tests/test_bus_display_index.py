@@ -21,7 +21,7 @@ def opened(path, *indexes):
     prepared = tuple((index, index.prepare()) for index in indexes)
     with path.open("rb") as stream:
         source = OpenedWireSnapshot(
-            WireMetadata(last_seq=2, admission_after_seq=2), 0,
+            WireMetadata(last_seq=2, claimed_after_seq=2), 0,
             stream, FileRevision.from_file(stream),
         )
         source.capture_append_indexes(prepared)

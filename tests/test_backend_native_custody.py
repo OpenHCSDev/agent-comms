@@ -20,10 +20,10 @@ async def test_stop_failure_accounts_for_native_resources_and_retains_uncertaint
     from native_backend_fixture import native_backend_fixture
     from agent_comms.native_custody import RetiringNative
 
-    failure = fault("lost process cleanup receipt")
+    failure = fault("lost process cleanup acknowledgement")
     with pytest.raises(ChildRetirementFailed) as fixture_failure:
         async with native_backend_fixture(tmp_path) as owner:
-            assert (await owner.run("Before process cleanup receipt failure"))[-1].ok
+            assert (await owner.run("Before process cleanup acknowledgement failure"))[-1].ok
             child = owner.persistent.child_state.child
             resource = child.resources.enter_context((tmp_path / "child-resource").open("w"))
             calls = []
@@ -55,7 +55,7 @@ async def test_stop_failure_accounts_for_native_resources_and_retains_uncertaint
             assert not owner.persistent.available
             assert owner.provider.posts == len(owner.saved_inputs()) == 1
     # Fixture teardown still joins all other resources, then reports the cached
-    # failed process receipt; it never clears/retries the original stop task.
+    # failed process acknowledgement; it never clears/retries the original stop task.
     assert fixture_failure.value.__cause__ is failure
     assert calls == [stage]
 
@@ -67,7 +67,7 @@ async def test_resource_release_failure_retains_exact_native_child(tmp_path):
     failure = RuntimeError("native resource release failed")
     with pytest.raises(RuntimeError) as fixture_failure:
         async with native_backend_fixture(tmp_path) as owner:
-            assert (await owner.run("Before resource cleanup receipt failure"))[-1].ok
+            assert (await owner.run("Before resource cleanup acknowledgement failure"))[-1].ok
             child = owner.persistent.child_state.child
             resource = child.resources.enter_context((tmp_path / "child-resource").open("w"))
             def fail_release():

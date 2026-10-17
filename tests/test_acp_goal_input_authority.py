@@ -1,6 +1,6 @@
-"""Goal admission uses each follow-up's authority, including goal origin turns.
+"""Goal claim_scope uses each follow-up's authority, including goal origin turns.
 
-The backend event source is controlled here to exercise exact admission races.
+The backend event source is controlled here to exercise exact claim_scope races.
 The callbacks, private goal ledger, ACP prompt queue, and transcript replay are real.
 """
 
@@ -109,7 +109,7 @@ async def replay(agent):
 async def test_origin_goal_allows_only_followup_admitted_after_activation(
     tmp_path, monkeypatch, queued_before_activation, caplog
 ):
-    caplog.set_level(logging.INFO, logger="agent_comms.owned_send_admission")
+    caplog.set_level(logging.INFO, logger="agent_comms.owned_send_claim")
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
     observed = {}
 
@@ -165,7 +165,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
 async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
     tmp_path, monkeypatch, change, caplog
 ):
-    caplog.set_level(logging.INFO, logger="agent_comms.owned_send_admission")
+    caplog.set_level(logging.INFO, logger="agent_comms.owned_send_claim")
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
     store = comms.goals.open_goal_store()
     original_goal = comms.goals.update_goal(

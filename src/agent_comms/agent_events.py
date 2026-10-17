@@ -18,7 +18,7 @@ from .acp_failure import (
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
-from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
+from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiUsage
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .tool_results import ToolDiff
 from .child_process import ProcessIdentity
@@ -307,7 +307,7 @@ class SteeringInterrupted(AgentEvent):
 
 @dataclass(frozen=True)
 class McpLiveStatus(AgentEvent):
-    receipt: McpLiveReceipt
+    acknowledgement: McpLiveAcknowledgement
 
 
 @dataclass(frozen=True)

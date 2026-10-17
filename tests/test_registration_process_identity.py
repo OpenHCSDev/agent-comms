@@ -1,4 +1,4 @@
-"""Actual process birth is the registration/admission authority, never PID alone."""
+"""Actual process birth is the registration/claim_scope authority, never PID alone."""
 
 import os
 from dataclasses import replace
@@ -46,10 +46,10 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     comms.registry.register(replace(owner, process_identity=stale))
     after = comms.registry.snapshot()
     assert after.owner_generations[owner.name] > before.owner_generations[owner.name]
-    assert after.admission_generations[owner.name] > before.admission_generations[owner.name]
+    assert after.claimed_generations[owner.name] > before.claimed_generations[owner.name]
     assert comms.registry.require(owner.name).pid == os.getpid()
     with pytest.raises(RelationViolationError, match="live owner"):
-        comms.registry.live_owner_with_admission(owner.name)
+        comms.registry.live_owner_with_claim(owner.name)
     with pytest.raises(RelationViolationError, match="live owner"):
         comms.registry.lease_local_turn(owner.name, "reused-pid")
     with pytest.raises(RelationViolationError, match="does not own"):

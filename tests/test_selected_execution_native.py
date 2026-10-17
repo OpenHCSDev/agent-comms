@@ -47,7 +47,7 @@ async def test_native_full_four_tools_publish_and_release(
     if after_cutover:
         with comms.bus.log.locked():
             marker = comms.bus.log._private_marker_unlocked()
-            marker.admission_after_seq = marker.last_seq
+            marker.claimed_after_seq = marker.last_seq
             comms.bus.log.write_metadata_unlocked(marker)
         fresh = comms.messaging.send_initial_cohort("sender", "beta", "Run the coding tools now.")
         initial = comms.bus.log.read_delivery_cohort(root_id, fresh.seq)
@@ -218,7 +218,7 @@ async def test_native_full_four_tools_publish_and_release(
         assert len(requests) == 2 + triage
         assert outcome.publications
         responses = [
-            m for m in list(comms.views.full_history_page().messages) if m.reference in tuple(receipt.reference for receipt in outcome.publications)
+            m for m in list(comms.views.full_history_page().messages) if m.reference in tuple(acknowledgement.reference for acknowledgement in outcome.publications)
         ]
         assert len(responses) == 1 and responses[0].body == "CODING_TOOLS_OK"
         assert comms.registry.require("beta").active_turn is None

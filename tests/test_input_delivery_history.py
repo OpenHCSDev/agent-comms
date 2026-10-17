@@ -17,8 +17,8 @@ def seed(comms, name):
     owners = frozenset({name})
     ledger = InputDispositions(comms.root)
     for key, seq in [("bus:1", 1), ("bus:2", 2), ("bus:7", 7), ("bus:8", 8), ("acp:ui", None)]:
-        ledger.record(key, seq=seq, owner=name, admission=1, target=name, text=f"Text {key}")
-    ledger.bind("bus:2", admission=1, turn_id="t", native_id="a" * 32, text="Text bus:2")
+        ledger.record(key, seq=seq, owner=name, claim_scope=1, target=name, text=f"Text {key}")
+    ledger.bind("bus:2", claim_scope=1, turn_id="t", native_id="a" * 32, text="Text bus:2")
     ledger.review_for_goal(("bus:1",), owners=owners, goal_id="goal", goal_revision=1, turn_id="t")
     return ledger
 
@@ -29,7 +29,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     ledger = seed(comms, "owner")
     awaiting = frozenset({"bus:2", "bus:8", "acp:ui"})
-    ledger.record("bus:3", seq=3, owner="peer", admission=1, target="peer", text="Peer")
+    ledger.record("bus:3", seq=3, owner="peer", claim_scope=1, target="peer", text="Peer")
     before = stored_inputs(ledger.root).unknown(frozenset({"owner"}))
     files = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     overview = comms.goals.input_delivery("owner", awaiting_keys=awaiting)
@@ -64,7 +64,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
         )["historicalInputs"]
     )
     assert reopened.goals.dismiss_historical_inputs("renamed", awaiting_keys=awaiting) == result
-    assert ledger.bind("bus:7", admission=1, turn_id="t2", native_id="b" * 32, text="Text bus:7")
+    assert ledger.bind("bus:7", claim_scope=1, turn_id="t2", native_id="b" * 32, text="Text bus:7")
     assert "bus:7" not in [
         r["inputId"]
         for r in reopened.goals.input_delivery("renamed", awaiting_keys=awaiting)["inputs"]
@@ -76,7 +76,7 @@ def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     ledger = InputDispositions(tmp_path)
-    ledger.record("bus:1", seq=1, owner="owner", admission=1, target="owner", text="Hello")
+    ledger.record("bus:1", seq=1, owner="owner", claim_scope=1, target="owner", text="Hello")
     before = ledger.path.read_bytes()
     assert comms.goals.dismiss_historical_inputs("owner")["historicalCount"] == 0
     assert len(comms.goals.input_delivery("owner")["inputs"]) == 1

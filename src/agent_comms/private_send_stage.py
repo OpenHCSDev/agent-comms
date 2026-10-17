@@ -46,7 +46,7 @@ class NativeSendStage(ABC):
 
     @property
     def recipient_lookup(self) -> str:
-        """All original sources belong to the same admitted participant."""
+        """All original sources belong to the same authorized participant."""
         lookups = {row.recipient_lookup for row in self.assignments}
         if len(lookups) != 1:
             raise IdentityConflict("Native batch requires one original participant")

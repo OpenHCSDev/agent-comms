@@ -13,7 +13,7 @@ from .bus_publication import CommittedDelivery
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_cohort import _receipt_matches, pending_sealed_assignments
+from .coordination_cohort import _claim_record, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, _assert_response_schema
 from .coordination_snapshot import RecoverySnapshot
@@ -58,7 +58,7 @@ class SelectedParticipant(MroDispatch):
 
     @handles(ObservedAttestation)
     async def native_source(self, event: ObservedAttestation) -> None:
-        """Publish the original child identity before its one input is admitted.
+        """Publish the original child identity before its one input is authorized.
 
         The registry remains the current-source owner. This acquired operation
         receives its returned snapshot; input checks use this SAME context,
@@ -95,7 +95,7 @@ class SelectedParticipant(MroDispatch):
     @property
     def response_owner(self) -> LiveResponseOwner:
         return LiveResponseOwner(
-            thread=self.owner.thread, admission_generation=self.owner.admission_generation
+            thread=self.owner.thread, claimed_generation=self.owner.claimed_generation
         )
 
     async def transition(self, phase: TurnPhase) -> None:
@@ -193,13 +193,13 @@ class SelectedParticipant(MroDispatch):
             _require_no_private_owner_rename(comms.root)
             marker = source.marker
             if marker.root_id != root_id:
-                raise IdentityConflict("selected admission wire root changed")
-            after_seq = max(after_seq, marker.admission_after_seq)
+                raise IdentityConflict("selected claim_scope wire root changed")
+            after_seq = max(after_seq, marker.claimed_after_seq)
         try:
-            thread, generation = comms.registry.live_owner_with_admission(name)
+            thread, generation = comms.registry.live_owner_with_claim(name)
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry identity stopped or changed") from error
-        owner = RegistryOwner(thread=thread, admission_generation=generation)
+        owner = RegistryOwner(thread=thread, claimed_generation=generation)
         owner.require_registry(comms.registry)
         lookup = thread.incarnation.lookup
         sent_owner, sent_sources = MessageNotification.sent_sources(
@@ -207,7 +207,7 @@ class SelectedParticipant(MroDispatch):
             limit=MessageNotification.window_limit,
         )
         LiveResponseOwner(
-            thread=thread, admission_generation=generation
+            thread=thread, claimed_generation=generation
         ).resolve_retained(store, bus)
         with store.session.read():
             assert_cohort_schema(store.session._connection)
@@ -245,17 +245,17 @@ class SelectedParticipant(MroDispatch):
         # instance's turn or revive an owner through a registration side effect.
         try:
             owner.thread.require_idle()
-            thread, generation = comms.registry.lease_live_turn_with_admission(
+            thread, generation = comms.registry.lease_live_turn_with_claim(
                 owner.thread,
                 secrets.token_hex(16),
-                expected_generation=owner.admission_generation,
+                expected_generation=owner.claimed_generation,
             )
         except RelationViolationError as error:
             raise StaleFence("selected owner stopped or busy before native turn") from error
         lease = thread.turn_lease
         assert lease is not None
         try:
-            current = RegistryOwner(thread=thread, admission_generation=generation)
+            current = RegistryOwner(thread=thread, claimed_generation=generation)
             current.require_registry(comms.registry)
             current.require_active_turn()
             yield current
@@ -267,7 +267,7 @@ class SelectedParticipant(MroDispatch):
         """Borrow one original certificate for the already sealed pending batch.
 
         Initial acceptance owns writes. Selection verifies every original sealed
-        receipt through that same validator, without re-entering acceptance. Both
+        acknowledgement through that same validator, without re-entering acceptance. Both
         read resources close before any native preparation or provider request.
         """
         def capture():
@@ -278,8 +278,8 @@ class SelectedParticipant(MroDispatch):
                 if marker.root_id != root_id:
                     raise IdentityConflict("selected source wire root changed")
                 for assignment in assignments:
-                    if assignment.wire_seq <= marker.admission_after_seq:
-                        raise IdentityConflict("historical source precedes the current admission floor")
+                    if assignment.wire_seq <= marker.claimed_after_seq:
+                        raise IdentityConflict("historical source precedes the current claim_scope floor")
                 return tuple(source.references(tuple(
                     MessageReference(assignment.wire_seq, assignment.message_id)
                     for assignment in assignments
@@ -291,10 +291,10 @@ class SelectedParticipant(MroDispatch):
             with resource.session.read():
                 assert_cohort_schema(resource.session._connection)
                 for assignment, initial in zip(assignments, originals, strict=True):
-                    receipt = _receipt_matches(resource.session._connection, initial)
+                    acknowledgement = _claim_record(resource.session._connection, initial)
                     if not any(row.assignment_id == assignment.assignment_id
-                               for row in receipt.assignments):
-                        raise IdentityConflict("selected assignment is absent from its sealed receipt")
+                               for row in acknowledgement.assignments):
+                        raise IdentityConflict("selected assignment is absent from its sealed acknowledgement")
                     assignment.require_selected_source(initial, identity.thread)
                     identity.require(resource, assignment.recipient_lookup)
 

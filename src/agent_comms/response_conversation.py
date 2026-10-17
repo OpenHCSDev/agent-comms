@@ -90,7 +90,7 @@ class ResponseConversation:
 
     def record(self, root_id, message, intent):
         from .bus_publication import PRIVATE_WIRE_FIELD, initial_sideband, public_envelope_digest
-        from .delivery_policy import KeyedResponseReceipt, ResponseDeliveryPolicy
+        from .delivery_policy import KeyedResponseAcknowledgement, ResponseDeliveryPolicy
         from .field_codec import FieldCodec
         from .wake import ControlClassification
 
@@ -103,7 +103,7 @@ class ResponseConversation:
             initial=initial_sideband(
                 root_id, message, audience, decisions, control=ControlClassification.ORDINARY.value
             ),
-            response=KeyedResponseReceipt(
+            response=KeyedResponseAcknowledgement(
                 root_id,
                 intent.execution_id,
                 intent.publication_key,

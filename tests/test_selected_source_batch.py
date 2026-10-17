@@ -99,7 +99,7 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
             # The original instruction is shared by the whole captured batch,
             # rather than multiplying mandatory context for every source row.
             assert prompt.count(WakePolicy.relevance_instruction().content) == 1
-            # Mandatory original content belongs to native selected-model admission,
+            # Mandatory original content belongs to native selected-model claim_scope,
             # not a Python-wide byte cap or the optional awareness resource bound.
             assert len(prompt.encode("utf-8")) > 32 * 1024
             assert all(json.dumps(original.body, ensure_ascii=True) in prompt for original in originals)
@@ -204,7 +204,7 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
             input_id = stage.reserve(store, selected.identity, token_digest)
             with store.session.transaction() as db:
                 reserved = NativeRuntimeInput.one(db, input_id=input_id)
-                reserved.sent_owner_admission_generation.record(reserved, db, 1, session)
+                reserved.sent_owner_claimed_generation.record(reserved, db, 1, session)
             context = NativeContextProof(
                 input_id, session.session_id, "entry", 7, "c" * 64, 1_791_964_800_007, session.path
             )

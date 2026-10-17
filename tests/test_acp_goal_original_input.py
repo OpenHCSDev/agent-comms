@@ -1,6 +1,6 @@
-"""Original owner inputs use the goal authority captured at local admission.
+"""Original owner inputs use the goal authority captured at local claim_scope.
 
-These tests control backend timing, exercising the real admission callbacks,
+These tests control backend timing, exercising the real claim_scope callbacks,
 private goal ledger, and durable UNKNOWN/STARTED transition without a provider.
 """
 
@@ -105,7 +105,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     replacement = None
     backend_calls = 0
 
-    async def activate_after_admission(session_id, row):
+    async def activate_after_claim(session_id, row):
         nonlocal replacement
         await original_emit(session_id, row)
         if replacement is None:
@@ -118,11 +118,11 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         backend_calls += 1
         yield ae.Done(ok=False, text="Must not reach backend")
 
-    monkeypatch.setattr(agent.inputs, "emit_input_disposition", activate_after_admission)
+    monkeypatch.setattr(agent.inputs, "emit_input_disposition", activate_after_claim)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         with pytest.raises(InputHandoffRefused, match="Queued input acceptance context changed"):
-            await InitialInput.run(agent.inputs, "project", "project", "admitted before goal change")
+            await InitialInput.run(agent.inputs, "project", "project", "authorized before goal change")
         assert backend_calls == 0
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0].unresolved

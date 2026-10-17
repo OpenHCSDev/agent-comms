@@ -234,8 +234,8 @@ class AgentActivity:
     def recover_completed_turn(self, lease: TurnLeaseFence, backend: type[AgentBackend]) -> bool:
         """A successful later backend turn disproves only an older drain failure."""
         snapshot = self.registry.snapshot()
-        thread = snapshot.threads[lease.identity.incarnation.name]
-        if thread.turn_lease != lease or thread.backend != backend:
+        thread = snapshot.require(lease.identity.incarnation.name)
+        if thread.turn_lease != lease.renamed(thread.name) or thread.backend != backend:
             return False
         owner = snapshot.owner_identity(thread.name)
         diagnostic = self.activity_of(thread.name, snapshot=snapshot).readiness.source_diagnostic()
@@ -258,7 +258,7 @@ class AgentActivity:
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
-            return RegistryOwner(thread=leased, admission_generation=lease.admission_generation)
+            return RegistryOwner(thread=leased, claimed_generation=lease.claimed_generation)
 
     def _record_turn_activity(self, name: str, phases: Iterable[TurnPhase]) -> None:
         """Changed phases are real activity events, just like CLI status reports."""

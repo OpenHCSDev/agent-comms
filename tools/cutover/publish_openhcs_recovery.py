@@ -8,7 +8,7 @@ external UI and archived-source gate artifacts, separate from package metadata.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, replace
+from dataclasses import field, dataclass, replace
 import hashlib
 import json
 import os
@@ -145,14 +145,14 @@ def require_publication_preimages(original, current):
 
 
 def retain_file(path, destination):
-    """Original private bytes/stat custody; no decoding or repairing preimages."""
+    """Original private bytes/stat ownership; no decoding or repairing preimages."""
     with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), 'rb') as opened:
         before = os.fstat(opened.fileno())
         PrivateFileRole().require(before)
         payload = opened.read()
         revision = FileRevision.from_stat(before)
         if revision != FileRevision.from_stat(os.fstat(opened.fileno())) or revision != FileRevision.from_stat(path.lstat()):
-            raise RuntimeError(f'Original file changed under stopped custody: {path}')
+            raise RuntimeError(f'Original file changed under stopped ownership: {path}')
     descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(descriptor, 'wb') as output:
         os.fchown(output.fileno(), before.st_uid, before.st_gid)
@@ -180,7 +180,7 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
     original_route: ActiveRoute
     route_directory: int
     current: Path
-    receipt: Path
+    acknowledgement: Path = field(metadata={"wire_name": 'receipt'})
     manifest_bytes: bytes
     candidate: tuple[HistorySource, ...]
     carry_proof: dict
@@ -192,14 +192,14 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
         self.leave_stopped(failure)
 
     def complete(self, stopped):
-        # FencedOwnerBatch retains the ORIGINAL wire custody through this
+        # FencedOwnerBatch retains the ORIGINAL wire ownership through this
         # method. Readback belongs here, before resumed owners may progress.
         results = super().complete(stopped)
         after = stopped.lifecycle.registry.snapshot()
         for previous, result in zip(self.originals, results, strict=True):
             current = after.threads[result.thread]
             if result.thread != previous.name or replace(current, process_identity=previous.process_identity) != previous:
-                raise RuntimeError('Original configuration readback differs under retained custody')
+                raise RuntimeError('Original configuration readback differs under retained ownership')
             RetainedOwnerLaunch.capture(current, after, interpreter=str(TARGET / 'bin/python'))
         self.note('retained-batch-launched-configurations-verified-public-ui-pending',
                   finished=time.time(), results=FieldCodec.encode(results))
@@ -213,9 +213,9 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
         return ROOT / HistoryArchive.filename
 
     def note(self, phase, **facts):
-        previous = json.loads(self.receipt.read_text())
+        previous = json.loads(self.acknowledgement.read_text())
         previous.update(phase=phase, **facts)
-        _atomic_write_text(self.receipt, json.dumps(previous, indent=2)+'\n', fsync_parent=True)
+        _atomic_write_text(self.acknowledgement, json.dumps(previous, indent=2)+'\n', fsync_parent=True)
 
     def require_sources(self):
         if self.manifest.read_bytes() != self.manifest_bytes:
@@ -241,7 +241,7 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
         require_no_clients(self.audience)
 
     def retain_preimages(self):
-        directory = self.receipt.with_suffix('.originals')
+        directory = self.acknowledgement.with_suffix('.originals')
         directory.mkdir(mode=0o700)
         originals = []
         for source in self.candidate:
@@ -329,13 +329,13 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
             raise RuntimeError('Target route readback differs')
         self.note('target-route-and-defaults-published-before-retained-launch')
         # complete() invokes the sole original credential/settings handoff and
-        # verifies it before FencedOwnerBatch releases original wire custody.
+        # verifies it before FencedOwnerBatch releases original wire ownership.
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute', action='store_true')
-    parser.add_argument('--receipt', type=Path, required=True)
+    parser.add_argument('--acknowledgement', type=Path, required=True)
     parser.add_argument('--source-interpreter', type=Path, required=True)
     parser.add_argument('--current-prefix', type=Path, required=True)
     for artifact in ('activation', 'source-proof', 'writer', 'installer', 'schema-script'):
@@ -344,7 +344,7 @@ def main():
         parser.add_argument('--'+gate+'-gate-artifact', type=Path)
         parser.add_argument('--'+gate+'-gate-sha256')
     args = parser.parse_args()
-    if args.receipt.exists() or args.receipt.is_symlink():
+    if args.acknowledgement.exists() or args.acknowledgement.is_symlink():
         raise RuntimeError('Existing attempt needs review; never automatically replay it')
     require_stage(args)
     original = read_active_route()
@@ -373,7 +373,7 @@ def main():
     try:
         acquire_exclusive_route_lock(directory)
         operation = PublishOpenhcsRecovery(audience, owners, original, directory,
-                                         args.current_prefix, args.receipt, manifest_bytes,
+                                         args.current_prefix, args.acknowledgement, manifest_bytes,
                                          sources, carry_proof)
         operation.require_selection(snapshot, owners)
         print(json.dumps({'state':'read-only-preflight', 'owners':len(owners), 'clients':0,
@@ -388,10 +388,10 @@ def main():
             if artifact in (SOURCE_PROOF, TARGET / 'activation.json') or digest(artifact) != expected:
                 raise RuntimeError('Actual journey evidence required, distinct from package metadata')
             gates[label] = {'artifact':str(artifact), 'sha256':expected}
-        args.receipt.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if args.receipt.parent.stat().st_mode & 0o077:
+        args.acknowledgement.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if args.acknowledgement.parent.stat().st_mode & 0o077:
             raise RuntimeError('Receipt directory must be private0700')
-        descriptor = os.open(args.receipt, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        descriptor = os.open(args.acknowledgement, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(descriptor,'w') as opened:
             json.dump({'phase':'preflight-complete', 'started':time.time(), 'target':str(TARGET),
                        'pins':PINS, 'actual_gate_artifacts':gates,

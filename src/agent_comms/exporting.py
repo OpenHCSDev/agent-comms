@@ -309,7 +309,7 @@ class WireExportBoundary:
 
 @dataclass(frozen=True, slots=True)
 class WireExportReceipt:
-    """Artifact provenance, never a delivery or source-session receipt."""
+    """Artifact provenance, never a delivery or source-session acknowledgement."""
 
     destination: str
     format: WireExportFormat

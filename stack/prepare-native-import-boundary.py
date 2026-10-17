@@ -88,7 +88,7 @@ def patch_package_manager(path: Path) -> None:
             assertApprovedPackage(parsed.type === "local" ? this.resolvePathFromBase(parsed.path, this.getBaseDirForScope(entry.scope)) : null);
         }""",
     )
-    # Check admission for the entire set BEFORE concurrency can start any probe.
+    # Check claim_scope for the entire set BEFORE concurrency can start any probe.
     old = "        const packageSources = this.dedupePackages(allPackages);\n        const checks = packageSources"
     assert text.count(old) == 1
     text = text.replace(

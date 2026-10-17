@@ -7,13 +7,13 @@ that phase. Native turn ownership remains S2's; these are durable observations.
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import field, dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError, RecoveryBlocked
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
-from .coordination_errors import ResponseAdmissionBlocked
+from .coordination_errors import ResponseClaimBlocked
 
 if TYPE_CHECKING:
     from .coordination_tables.attempts import ReplayFact
@@ -25,7 +25,7 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
         return False
 
     terminal: ClassVar[bool] = False
-    allows_tool_admission: ClassVar[bool] = False
+    allows_tool_claim: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
     failed: ClassVar[bool] = False
     starting: ClassVar[bool] = False
@@ -61,11 +61,11 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
         return replace(self, lease_expires_at_ms=max(self.lease_expires_at_ms or 0, expiry))
 
     @property
-    def tool_admission_open(self) -> bool:
-        return self.allows_tool_admission and not (self.backend_done or self.process_dead)
+    def tool_claim_open(self) -> bool:
+        return self.allows_tool_claim and not (self.backend_done or self.process_dead)
 
     def require_final_response(self) -> None:
-        raise ResponseAdmissionBlocked()
+        raise ResponseClaimBlocked()
 
     @property
     def publication_ready(self) -> bool:
@@ -133,7 +133,7 @@ class TerminalAttempt(AttemptState):
 
 
 class PromptStartingAttempt(LiveAttempt):
-    allows_tool_admission = True
+    allows_tool_claim = True
     starting = True
 
     @classmethod
@@ -146,7 +146,7 @@ class PromptStartingAttempt(LiveAttempt):
 
 
 class PromptAcceptedAttempt(LiveAttempt):
-    allows_tool_admission = True
+    allows_tool_claim = True
 
     @classmethod
     def successors(cls):
@@ -165,7 +165,7 @@ class ContextualAttempt(LiveAttempt):
 
 
 class ModelRunningAttempt(ContextualAttempt):
-    allows_tool_admission = True
+    allows_tool_claim = True
     running = True
 
     @classmethod
@@ -182,7 +182,7 @@ class ModelRunningAttempt(ContextualAttempt):
 
 
 class ToolRunningAttempt(ContextualAttempt):
-    allows_tool_admission = True
+    allows_tool_claim = True
 
     @classmethod
     def successors(cls):
@@ -217,7 +217,7 @@ class SettlingAttempt(ContextualAttempt):
 
     def require_final_response(self) -> None:
         if not self.publication_ready:
-            raise ResponseAdmissionBlocked()
+            raise ResponseClaimBlocked()
 
     @classmethod
     def successors(cls):

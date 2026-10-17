@@ -30,7 +30,7 @@ class CursorOwner(RegistryOwner):
 
     def __post_init__(self):
         GenerationCounter.require_positive(self.generation)
-        GenerationCounter.require_positive(self.admission_generation)
+        GenerationCounter.require_positive(self.claimed_generation)
 
     @property
     def participant_identity(self):
@@ -57,13 +57,13 @@ class CursorOwner(RegistryOwner):
             wire_root_id=self.wire_root_id,
             recipient_lookup=self.lookup,
             owner_generation=self.generation,
-            owner_admission_generation=self.admission_generation,
+            owner_claimed_generation=self.claimed_generation,
         )
 
     def _matches_input(self, row: NativeRuntimeInput | None, reference: NativeInputReference) -> bool:
         if row is None or row.owner_identity != self.participant_identity:
             return False
-        return row.sent_owner_admission_generation.matches(self.admission_generation) and row.reference == reference
+        return row.sent_owner_claimed_generation.matches(self.claimed_generation) and row.reference == reference
 
     def matches_prefix(
         self, db: sqlite3.Connection, evidence: tuple[HistoricalNativeInput, ...]
@@ -107,8 +107,8 @@ class CursorOwner(RegistryOwner):
 
     def require_recorded_reference(self, db: sqlite3.Connection, reference: NativeInputReference) -> None:
         row = NativeRuntimeInput.one(db, input_id=reference.input_id)
-        if row is None or not row.sent_owner_admission_generation.matches(self.admission_generation):
-            raise IdentityConflict("current cursor input admission differs")
+        if row is None or not row.sent_owner_claimed_generation.matches(self.claimed_generation):
+            raise IdentityConflict("current cursor input claim_scope differs")
         if not self._matches_input(
             row,
             reference,
@@ -126,7 +126,7 @@ class CursorOwner(RegistryOwner):
         """The recorded input identifies only its own permitted live operation.
 
         A settled caller may additionally fence the expected input ID. Idle
-        projection uses the same immutable receipt, not a cached completion ID;
+        projection uses the same immutable acknowledgement, not a cached completion ID;
         absence of that caller assertion does not erase the recorded input permission.
         """
         if proof is None:
@@ -144,14 +144,14 @@ class CursorOwner(RegistryOwner):
         reserved = NativeRuntimeInput.one(db, input_id=proof.input_id)
         if (
             reserved is not None
-            and not reserved.sent_owner_admission_generation.matches(self.admission_generation)
+            and not reserved.sent_owner_claimed_generation.matches(self.claimed_generation)
         ):
             if prior is None or injected_seq > prior.injected_seq:
                 return False
-            raise IdentityConflict("current cursor input admission differs")
+            raise IdentityConflict("current cursor input claim_scope differs")
         if not self._matches_input(
             reserved,
             proof.reference,
         ):
-            raise IdentityConflict("current cursor differs from committed native receipt")
+            raise IdentityConflict("current cursor differs from committed native acknowledgement")
         return True

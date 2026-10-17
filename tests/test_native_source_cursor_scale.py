@@ -67,8 +67,8 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
     frozen = comms.bus.log.read_delivery_cohort(root_id, selected.seq)
     assert len(frozen.audience.recipients) == recipients
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        receipt = accept_delivery_cohort(comms.bus, root_id, selected.seq, store).value
-        assert len(receipt.assignments) == 1
+        acknowledgement = accept_delivery_cohort(comms.bus, root_id, selected.seq, store).value
+        assert len(acknowledgement.assignments) == 1
         coverage = SourceCoverage(
             comms.bus,
             store,
@@ -92,9 +92,9 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
         assert current.covered_seq == list(comms.views.full_history_page().messages)[-1].seq
         assert current.input_id == second.input_id
         assert (
-            current.owner_admission_generation
+            current.owner_claimed_generation
             == store.session._connection.execute(
-                f"SELECT sent_owner_admission_generation FROM {NativeRuntimeInput.declared_name} WHERE input_id=?",
+                f"SELECT sent_owner_claimed_generation FROM {NativeRuntimeInput.declared_name} WHERE input_id=?",
                 (second.input_id,),
             ).fetchone()[0]
         )
@@ -214,7 +214,7 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
                 lookup,
                 "alpha-new",
                 2,
-                proof.sent_owner_admission_generation.to_wire(),
+                proof.sent_owner_claimed_generation.to_wire(),
                 second_message.seq,
                 second_message.seq,
                 second.input_id,

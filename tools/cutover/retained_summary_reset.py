@@ -38,9 +38,9 @@ class RetainedRuntimeFile:
         if named.st_nlink != 1 or opened.st_nlink != 1:
             raise RuntimeError('Runtime journal has another hardlink')
         if FileRevision.from_stat(named) != self.revision:
-            raise RuntimeError('Named runtime journal changed during stopped custody')
+            raise RuntimeError('Named runtime journal changed during stopped ownership')
         if FileRevision.from_stat(opened) != self.revision:
-            raise RuntimeError('Opened runtime journal changed during stopped custody')
+            raise RuntimeError('Opened runtime journal changed during stopped ownership')
 
     def evidence(self):
         return {'path': str(self.path), 'sha256': self.sha256,
@@ -105,11 +105,11 @@ class AcquiredRuntimeFiles:
     def require_original(self):
         present = {item.path for item in self.originals}
         if {path for path in self.paths if path.exists() or path.is_symlink()} != present:
-            raise RuntimeError('Runtime journal membership changed under stopped custody')
+            raise RuntimeError('Runtime journal membership changed under stopped ownership')
         for original in self.originals:
             original.require_original()
             if original.checksum() != original.sha256:
-                raise RuntimeError('Runtime journal bytes changed under stopped custody')
+                raise RuntimeError('Runtime journal bytes changed under stopped ownership')
             original.require_original()
 
     def evidence(self):
@@ -134,7 +134,7 @@ class AcquiredRuntimeFiles:
             original.path.unlink()
         fsync_directory(self.paths[0].parent)
         if any(path.exists() or path.is_symlink() for path in self.paths):
-            raise RuntimeError('Runtime journal reappeared under stopped custody')
+            raise RuntimeError('Runtime journal reappeared under stopped ownership')
         return {'classification': 'runtime/reset', 'original_files': retained,
                 'retired': [str(item.path) for item in self.originals],
                 'original_revisions': [FieldCodec.encode(item.revision) for item in self.originals]}

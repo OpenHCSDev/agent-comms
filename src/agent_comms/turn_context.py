@@ -940,7 +940,7 @@ class RecordedContextTurn(ContextTurn):
 
     def __post_init__(self):
         if self.occurrence.generation < 1:
-            raise ValueError("Context requires the original admitted turn generation")
+            raise ValueError("Context requires the original authorized turn generation")
 
     def source_revision(self, owner: Thread) -> str:
         return self.identity.value

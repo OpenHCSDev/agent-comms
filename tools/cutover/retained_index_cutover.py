@@ -62,7 +62,7 @@ class RetainedIndexCutover(StoppedOwnerInstallation):
         self.quiet_install(lifecycle.root)
 
     def quiet_install(self, root: Path) -> None:
-        """Install while the caller retains original wire custody and joined owners.
+        """Install while the caller retains original wire ownership and joined owners.
 
         This does not select, stop, decode or launch owners. The acquired batch
         and the newly authored, joined seed share this original writer operation.

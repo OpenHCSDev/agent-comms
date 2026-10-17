@@ -16,12 +16,12 @@ def main():
     parser.add_argument('--original-python', type=Path, required=True)
     parser.add_argument('--root-id', required=True)
     parser.add_argument('--native-package', type=Path, required=True)
-    parser.add_argument('--receipt', type=Path, required=True)
+    parser.add_argument('--acknowledgement', type=Path, required=True)
     arguments = parser.parse_args()
     os.environ.update(AGENT_COMMS_ROOT=str(arguments.root),
                       **{ROOT_ID_ENV: arguments.root_id, PACKAGE_ENV: str(arguments.native_package)})
     operation = RetainedRoutingCutover(arguments.original_python, arguments.root_id,
-                                       arguments.native_package, arguments.receipt)
+                                       arguments.native_package, arguments.acknowledgement)
     results = Comms(arguments.root).owners.restart_owners(cutover=operation)
     print(json.dumps(FieldCodec.encode(results)), flush=True)
 

@@ -1,4 +1,4 @@
-"""Read-only original installed writer admission; no target decoder imports."""
+"""Read-only original installed writer claim_scope; no target decoder imports."""
 import json
 from pathlib import Path
 import sys

@@ -1,4 +1,4 @@
-"""Original-byte custody survives appends and refuses altered proof/source."""
+"""Original-byte ownership survives appends and refuses altered proof/source."""
 
 import asyncio
 import json
@@ -247,11 +247,11 @@ def test_consumer_throw_into_original_rows_is_not_a_file_failure(tmp_path):
 
 def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
     from agent_comms.store_files import StoreLockContention, _store_lock
-    lock_target = tmp_path / "custody"
+    lock_target = tmp_path / "ownership"
     with _store_lock(lock_target):
         with pytest.raises(BlockingIOError):
             with _store_lock(lock_target, blocking=False, contention=StoreLockContention(.025)):
-                pytest.fail("A competing descriptor acquired exclusive custody")
+                pytest.fail("A competing descriptor acquired exclusive ownership")
     # The original and the refused scope both closed: immediate new acquisition
     # succeeds without any leaked earlier lock or replacement of its evidence.
     with _store_lock(lock_target, blocking=False):

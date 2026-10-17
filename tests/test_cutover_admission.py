@@ -25,11 +25,11 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
     accept_delivery_cohort(comms.bus, root_id, old.seq, old_store)
     assert len(sealed_cohort_assignments(old_store, lookups["bob"])) == 1
     old_store.close()
-    # Preserve the actual old receipt database for history; rebuild only runtime.
+    # Preserve the actual old acknowledgement database for history; rebuild only runtime.
     (comms.root / "coordination.sqlite").rename(comms.root / "prior-runtime.sqlite")
     with comms.bus.log.locked():
         marker = comms.bus.log._private_marker_unlocked()
-        marker.admission_after_seq = marker.last_seq
+        marker.claimed_after_seq = marker.last_seq
         comms.bus.log.write_metadata_unlocked(marker)
 
     with Coordination(str(comms.root / "coordination.sqlite")) as store:
@@ -48,7 +48,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
                 == old.seq
             )
             assert sealed_cohort_assignments(store, lookups["bob"]) == ()
-            with pytest.raises(IdentityConflict, match="admission floor"):
+            with pytest.raises(IdentityConflict, match="claim_scope floor"):
                 accept_delivery_cohort(reopened.bus, root_id, old.seq, store)
             coverage = SourceCoverage(
                 reopened.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
@@ -59,7 +59,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
         fresh = reopened.messaging.send_user_message("bob", "fresh input", worktree=str(tmp_path))
         assert fresh.seq > old.seq
         with reopened.bus.log.locked():
-            assert reopened.bus.log._private_marker_unlocked().admission_after_seq == old.seq
+            assert reopened.bus.log._private_marker_unlocked().claimed_after_seq == old.seq
         for _ in range(2):
             await _accept_visible_deliveries(
                 reopened.bus, root_id, store.session.path, lookups["bob"], 0, owner_name="bob"
@@ -75,12 +75,12 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
         assert list(reopened.bus.full_history_page().messages) == [old, fresh]
 
 
-def test_persisted_marker_cannot_omit_admission_authority(tmp_path):
+def test_persisted_marker_cannot_omit_claim_authority(tmp_path):
     comms, store, _root_id, _lookups = _root(tmp_path)
     store.close()
     path = comms.bus.log.metadata_path
     data = json.loads(path.read_text())
-    del data["admission_after_seq"]
+    del data["claimed_after_seq"]
     path.write_text(json.dumps(data))
     with pytest.raises(RelationViolationError, match="required fields"), comms.bus.log.locked():
         comms.bus.log._private_marker_unlocked()

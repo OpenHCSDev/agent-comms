@@ -53,7 +53,7 @@ def test_store_owns_document_and_failed_edit_cannot_leak_into_cache(tmp_path):
         raise RuntimeError("aborted")
     assert registration.snapshot() == prior
     assert registration.store.path.read_bytes() == raw
-    assert not {"_threads", "_owners", "_admissions", "_statuses"} & vars(registration).keys()
+    assert not {"_threads", "_owners", "_claims", "_statuses"} & vars(registration).keys()
 
 
 def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_path):

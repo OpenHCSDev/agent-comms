@@ -77,15 +77,15 @@ def _accepted(
             recipient.canonical_thread,
             committed=True,
         )
-    receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
-    assert len(receipt.assignments) == 1
-    return initial, receipt.assignments[0]
+    acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
+    assert len(acknowledgement.assignments) == 1
+    return initial, acknowledgement.assignments[0]
 
 
 def _owner(comms: Comms, name: str) -> Thread:
-    original, admission_generation = comms.registry.live_owner_with_admission(name)
-    owner, _ = comms.registry.lease_live_turn_with_admission(
-        original, f"selected-{name}", expected_generation=admission_generation
+    original, claimed_generation = comms.registry.live_owner_with_claim(name)
+    owner, _ = comms.registry.lease_live_turn_with_claim(
+        original, f"selected-{name}", expected_generation=claimed_generation
     )
     return owner
 
@@ -100,8 +100,8 @@ def _projection(
     max_rows: int = 100,
 ) -> OptionalAwarenessProjection:
     assert owner.active_turn is not None
-    admission_generation = owner.active_turn.admission_generation
-    assert admission_generation is not None
+    claimed_generation = owner.active_turn.claimed_generation
+    assert claimed_generation is not None
     return OptionalAwarenessProjection(
         index,
         after_seq,
@@ -110,7 +110,7 @@ def _projection(
         expected_participant_generation=store.participants.get(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup
         ).participant_generation,
-        expected_admission_generation=admission_generation,
+        expected_claimed_generation=claimed_generation,
         max_rows=max_rows,
     )
 
@@ -201,7 +201,7 @@ def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
             def crash_after_seal(*_args, **_kwargs):
                 raise RuntimeError("simulated interruption after seal before commit")
 
-            monkeypatch.setattr(cohort, "_receipt_matches", crash_after_seal)
+            monkeypatch.setattr(cohort, "_claim_record", crash_after_seal)
         with pytest.raises(RuntimeError, match="simulated interruption"):
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         assert (
@@ -476,7 +476,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         builder = _projection(index, store, owner, 0, initial.message.seq)
         assert builder(initial, assignment, owner).complete
         # Disposable legacy/disk inconsistency only: supported writes freeze
-        # receipt facts. Restore the original trigger before checking schema.
+        # acknowledgement facts. Restore the original trigger before checking schema.
         db = store.session._connection
         trigger = db.execute(
             "SELECT sql FROM sqlite_master WHERE name='cohort_receipt_update_guard'"
@@ -534,9 +534,9 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
         comms.threads._rename_thread("member000", "gamma")
         current_message = comms.messaging.send_initial_cohort("sender", "gamma", "new selected")
         current = comms.bus.log.read_delivery_cohort(root_id, current_message.seq)
-        receipt = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
-        assert len(receipt.assignments) == 1
-        current_claim = receipt.assignments[0]
+        acknowledgement = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
+        assert len(acknowledgement.assignments) == 1
+        current_claim = acknowledgement.assignments[0]
         index.maintain(rebuild=True)
         owner = _owner(comms, "gamma")
         result = _projection(index, store, owner, 0, current.message.seq)(

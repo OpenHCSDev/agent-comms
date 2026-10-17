@@ -338,7 +338,7 @@ class NativeEvidenceScope(ExitStack):
     """One acquired input-proof source for a bounded corroboration operation.
 
     Only the current descriptor and its decoded bytes are held. Switching
-    journals closes the previous reader; no proof, receipt or disposition is
+    journals closes the previous reader; no proof, acknowledgement or disposition is
     retained. Every borrow still validates the original prefix on observation.
     """
 

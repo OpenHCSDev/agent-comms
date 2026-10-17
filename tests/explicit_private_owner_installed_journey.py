@@ -130,7 +130,7 @@ async def main(package, evidence):
                 assert len(users) == 1 and f'ONE_NATIVE_INPUT_{mode}' in str(users[0])
                 results.append({'mode': mode, 'denied_before_fork': denied, 'native_users': len(users),
                                 'provider_requests': provider.posts - baseline_requests, 'reply': provider.text})
-                (evidence / 'receipt.json').write_text(json.dumps(results, indent=2))
+                (evidence / 'acknowledgement.json').write_text(json.dumps(results, indent=2))
                 print(mode, 'REAL_CLI_OWNER_STDIO_ACP_ONE_NATIVE_REPLY', flush=True)
             finally:
                 await asyncio.to_thread(comms.owners.stop, 'recipient')

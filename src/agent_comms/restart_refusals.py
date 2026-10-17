@@ -44,7 +44,7 @@ class OwnerChangedBeforeFenceRefusal(WaitForIdle, RestartRefusal):
 
 
 class OwnerGenerationChangedRefusal(ChangedSelection, RestartRefusal):
-    message = "Owner admission generation changed before restart."
+    message = "Owner claim_scope generation changed before restart."
 
 
 class OwnerSelectionChangedRefusal(ChangedSelection, RestartRefusal):

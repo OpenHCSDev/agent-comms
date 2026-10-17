@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict, ClaimOwner, ClaimProjection, ClaimRelease, ClaimTransition,
-    ClaimTransitionError, ExistingFileClaim, WakeAdmission,
+    ClaimTransitionError, ExistingFileClaim, WakeClaim,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
@@ -19,29 +19,29 @@ G2 = "b" * 32
 
 def test_selected_wake_binding_survives_claim_projection(tmp_path):
     _, resource, _ = resources(tmp_path)
-    admission = WakeAdmission(
+    claim_scope = WakeClaim(
         wire_root_id="c" * 32, source_seq=7, source_message_id="source-7",
         wake_assignment_id="cohort-v1:" + "d" * 64, wake_revision=3,
         recipient_lookup="e" * 32, execution_id="execution-7", operation_id="f" * 32,
-        owner_admission_generation=2, turn_id="turn-7", participant_generation=1,
+        owner_claimed_generation=2, turn_id="turn-7", participant_generation=1,
         attempt_ordinal=1,
     )
-    claimed = ClaimTransition("owner", "epoch-1", 8, "msg-8", (resource,), (), G1, admission)
+    claimed = ClaimTransition("owner", "epoch-1", 8, "msg-8", (resource,), (), G1, claim_scope)
     raw = FieldCodec.encode(claimed)
     decoded = FieldCodec.decode(ClaimTransition, raw)
     assert decoded == claimed
-    assert decoded.apply(ClaimProjection())[resource].admission == admission
+    assert decoded.apply(ClaimProjection())[resource].claim_scope == claim_scope
     message = Message("owner", "peer", "Claim file", InfoKind, seq=8, timestamp=1.0)
     bound = replace(message, claim_transition=replace(claimed, message_id=message.message_id))
     assert Message.from_wire(bound.to_wire()) == bound
     invalid = raw.copy()
-    invalid["admission"]["version"] = 99
-    with pytest.raises(ValueError, match="Wake admission version or revision"):
+    invalid["claim_scope"]["version"] = 99
+    with pytest.raises(ValueError, match="Wake claim_scope version or revision"):
         FieldCodec.decode(ClaimTransition, invalid)
-    null_admission = raw.copy()
-    null_admission["admission"] = None
+    null_claim = raw.copy()
+    null_claim["claim_scope"] = None
     with pytest.raises(ValueError, match="Null field"):
-        FieldCodec.decode(ClaimTransition, null_admission)
+        FieldCodec.decode(ClaimTransition, null_claim)
 
 
 def transition(seq, *, owner="owner", incarnation="epoch-1", claims=(), releases=(), generation=None):

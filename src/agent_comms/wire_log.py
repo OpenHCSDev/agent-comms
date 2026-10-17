@@ -1,4 +1,4 @@
-"""Canonical append-only wire persistence and durable receipt authority."""
+"""Canonical append-only wire persistence and durable acknowledgement authority."""
 
 from __future__ import annotations
 
@@ -240,12 +240,12 @@ class OpenedWireSnapshot:
             if has_private_wire_fields(record):
                 yield message, len(json.dumps(message.to_wire()).encode()) + 1
             else:
-                message.require_retained_admission(metadata.admission_after_seq)
+                message.require_retained_claim(metadata.claimed_after_seq)
                 yield message, raw_size
 
 
 class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
-    """Public projection of a cut admitted by the acquired complete WireScan.
+    """Public projection of a cut authorized by the acquired complete WireScan.
 
     Only original locked acquisition can select this implementation. Later
     appends stay outside the cut; the closed SQLite reader grants no authority.
@@ -611,7 +611,7 @@ class WireLog:
     def _keyed_receipt_unlocked(
         self, intent: PublicationIntents
     ) -> tuple[Message | None, int, WireMetadata]:
-        """Resolve the original receipt through the canonical sealed prefix.
+        """Resolve the original acknowledgement through the canonical sealed prefix.
 
         Caller holds the bus file lock. Absence is NOT authorization to append.
         """
@@ -625,7 +625,7 @@ class WireLog:
             return matched, source.witness.through_seq, metadata
 
     def read_keyed_response(self, intent: PublicationIntents) -> Message | None:
-        """Read-only exact receipt resolution; never append or repair an absent row."""
+        """Read-only exact acknowledgement resolution; never append or repair an absent row."""
         with self.certified_read() as source:
             return source.keyed_receipt(intent)
 
@@ -662,7 +662,7 @@ class WireLog:
                     # A reserved but unappended sequence blocks new input,
                     # not the original committed bytes of this read-only cut.
                     source.require_open_prefix()
-                    # Bind the separate retained descriptor to the exact admitted
+                    # Bind the separate retained descriptor to the exact authorized
                     # inode/revision while the bus locks are still held.
                     if (stream is None or revision != FileRevision.from_file(source.stream)
                             or os.fstat(stream.fileno()).st_dev != source.witness.device

@@ -136,7 +136,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
         'failed_original_native_input_unchanged':retained_input.input_id,
         'independent_original_frozen_source_without_handling_claim':pending_source.seq,
         'original_replays':0,'public_mutations':0,'paid_provider_calls':0}
-    (evidence/'receipt.json').write_text(json.dumps(result,indent=2)+'\n')
+    (evidence/'acknowledgement.json').write_text(json.dumps(result,indent=2)+'\n')
     print(json.dumps(result),flush=True)
 
 if __name__ == '__main__':

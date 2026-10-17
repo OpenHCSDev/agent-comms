@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from .assignment_states import AssignmentState
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
-from .coordination_tables.publications import PublicationReceipts
+from .coordination_tables.publications import PublicationEvidence
 from .diagnostics import record_terminal_failure
 from .errors import RelationViolationError
 from .messages import AlertKind
@@ -20,13 +20,13 @@ class CoordinatedTurn:
     assignment_ids: tuple[str, ...] = field(metadata={"wire_name": "claim_ids"})
     disposition: type[AssignmentState]
     input_id: str
-    publications: tuple[PublicationReceipts, ...]
+    publications: tuple[PublicationEvidence, ...]
     cursor_status: str = "unavailable"
 
     @classmethod
     async def capture(
         cls, participant, input_id, disposition: type[AssignmentState],
-        publications: tuple[PublicationReceipts, ...] = (),
+        publications: tuple[PublicationEvidence, ...] = (),
     ):
         return cls(
             participant.batch.assignment_ids,
@@ -45,7 +45,7 @@ class CoordinatedTurn:
                 participant.bus,
                 wire_root_id=participant.root_id,
                 owner=participant.owner.thread,
-                owner_admission_generation=participant.owner.admission_generation,
+                owner_claimed_generation=participant.owner.claimed_generation,
                 owner_generation=participant.identity.generation,
                 committed_input_id=input_id,
             )

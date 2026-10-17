@@ -21,13 +21,13 @@ tmp_path = private_root_fixture
 
 
 def accepted_input(response):
-    receipt = next(
+    acknowledgement = next(
         update
         for update in decode_updates(response.field_meta)
         if isinstance(update, InputDeliveryChangedUpdate)
     )
-    assert receipt.input_id is not None
-    return receipt
+    assert acknowledgement.input_id is not None
+    return acknowledgement
 
 
 @pytest.mark.parametrize("goal_mode", ["none", "active", "standby"])
@@ -80,8 +80,8 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         response = await asyncio.wait_for(
             agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
         )
-        receipt = accepted_input(response)
-        accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+        acknowledgement = accepted_input(response)
+        accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{acknowledgement.input_id}"]
         assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
         assert not starts
         release.set()
@@ -98,10 +98,10 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
             )
             assert request_failure.notification_published
             assert request_failure.failure.input_state is type(
-                stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{receipt.input_id}")
+                stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{acknowledgement.input_id}")
             )
         assert len(starts) == 1 and "Fresh owner input" in starts[0]
-        row = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+        row = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{acknowledgement.input_id}"]
         assert not row.unresolved and row.native_id == "b" * 32
         assert not agent.inputs.queued_inputs.get("beta")
         assert "beta" not in agent.inputs.backend_inboxes
@@ -109,7 +109,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert comms.registry.require("beta").active_turn is None
         assert comms.registry.require("beta").goal == before_goal
         # The completed selected reply consumes its certified dependency wait;
-        # a queued owner input keeps its admission/goal authority across that change.
+        # a queued owner input keeps its claim_scope/goal authority across that change.
         from agent_comms.goal_waits import NoGoalWait
 
         assert comms.goals.goal_wait("beta") == (NoGoalWait() if goal_mode == "standby" else before_wait)
@@ -145,10 +145,10 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
 
     monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden)
-    admission = comms.registry.snapshot().admission_generations["beta"]
+    claim_scope = comms.registry.snapshot().claimed_generations["beta"]
     old_key = "acp:historical-uncertain"
     agent.inputs.dispositions.record(
-        old_key, seq=None, owner="beta", admission=admission, target="beta", text="Do not replay"
+        old_key, seq=None, owner="beta", claim_scope=claim_scope, target="beta", text="Do not replay"
     )
     old_row = stored_inputs(agent.inputs.dispositions.root).rows[old_key]
     comms.messaging.send_message("sender", "beta", "Selected direct message")
@@ -288,7 +288,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         assert not refused.has_native_binding and not refused.has_started
         assert (
             refused.bind(
-                admission=refused.admission,
+                claim_scope=refused.claim_scope,
                 turn_id="retry",
                 native_id="f" * 32,
                 text=refused.source_text,
@@ -420,13 +420,13 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
             agent.prompt("beta", [{"type": "text", "text": "Exactly one fresh owner instruction"}]),
             2,
         )
-        receipt = accepted_input(response)
-        accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+        acknowledgement = accepted_input(response)
+        accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{acknowledgement.input_id}"]
         assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
         assert len(requests) == 1
         release.set()
         await asyncio.wait_for(turn, 18)
-        row = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+        row = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{acknowledgement.input_id}"]
         assert not row.unresolved and row.native_id
         assert len(requests) == 2
         assert "Exactly one fresh owner instruction" in json.dumps(requests[1])

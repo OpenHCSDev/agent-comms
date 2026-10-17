@@ -59,12 +59,12 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
     registry = Registration(path)
     registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     raw = json.loads(path.read_text())
-    for field in ("owners", "admissions"):
+    for field in ("owners", "claims"):
         incomplete = dict(raw)
         incomplete.pop(field)
         path.write_text(json.dumps(incomplete))
         with pytest.raises(RelationViolationError, match="generation"):
-            Registration(path).live_owner_with_admission("owner")
+            Registration(path).live_owner_with_claim("owner")
     raw["threads"]["owner"].pop("created_at")
     path.write_text(json.dumps(raw))
     with pytest.raises(RelationViolationError) as rejected:

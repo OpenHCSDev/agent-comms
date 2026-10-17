@@ -63,7 +63,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         """Selected prompts consume original wire sources, never human authorship.
 
         This display is derived inside the original read snapshot. It is not an
-        annotation, native receipt or another source-membership declaration.
+        annotation, native acknowledgement or another source-membership declaration.
         """
         from dataclasses import replace
         from .transcript_routes import InputDisplay

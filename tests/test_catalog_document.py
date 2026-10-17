@@ -73,7 +73,7 @@ def test_initial_publication_rechecks_current_catalog_revision(tmp_path, monkeyp
 
     def capture_then_change(*args, **kwargs):
         result = original(*args, **kwargs)
-        # A noncooperating writer changes the source during admission. The
+        # A noncooperating writer changes the source during claim_scope. The
         # already-held wire lock is not itself evidence of unchanged bytes.
         with comms.channels.catalog.editing() as document:
             document.list_order = CreatedChannelSort

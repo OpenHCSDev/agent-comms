@@ -17,7 +17,7 @@ from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
-from agent_comms.coordination_tables.publications import PublicationIntents, PublicationReceipts
+from agent_comms.coordination_tables.publications import PublicationIntents, PublicationEvidence
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import projected
@@ -40,7 +40,7 @@ class RecoverySnapshot:
     replay: ReplayAssessments | None
     obligations: tuple[ResponseObligation, ...]
     publication_intents: tuple[PublicationIntents, ...]
-    publication_receipts: tuple[PublicationReceipts, ...]
+    publication_evidence: tuple[PublicationEvidence, ...] = dataclass_field(metadata={"wire_name": "publication_receipts"})
     connectivity: ConnectivityFacet | None
     last_recovery: RecoveryAudit | None
     current_execution_id: str | None
@@ -91,17 +91,17 @@ class RecoverySnapshot:
 
     def require_published_evidence(self, exact_target: str):
         intent = ResponseObligation.response_record(self.publication_intents, exact_target)
-        receipt = ResponseObligation.response_record(self.publication_receipts, exact_target)
-        if intent is None or receipt is None:
+        acknowledgement = ResponseObligation.response_record(self.publication_evidence, exact_target)
+        if intent is None or acknowledgement is None:
             raise StaleFence("response route has no frozen publication evidence")
-        return intent, receipt
+        return intent, acknowledgement
 
     def completed_response(self) -> bool:
         return self.execution.lifecycle.completed
 
     def require_attempt(self) -> AttemptRecord:
         if self.attempt is None:
-            raise StaleFence("execution has no admitted attempt")
+            raise StaleFence("execution has no authorized attempt")
         return self.attempt
 
     def require_current_attempt(self) -> AttemptRecord:
@@ -128,7 +128,7 @@ class RecoverySnapshot:
             self.replay,
             *self.obligations,
             *self.publication_intents,
-            *self.publication_receipts,
+            *self.publication_evidence,
             self.connectivity,
             self.last_recovery,
         )
@@ -196,7 +196,7 @@ class RecoverySnapshot:
         targets = tuple(row.exact_target for row in self.obligations)
         if len(set(targets)) != len(targets) or set(targets) != expected:
             raise IntegrityViolationError("response obligations differ from original claim routes")
-        for records in (self.publication_intents, self.publication_receipts):
+        for records in (self.publication_intents, self.publication_evidence):
             routes = tuple(row.exact_target for row in records)
             if len(set(routes)) != len(routes) or not set(routes) <= expected:
                 raise IntegrityViolationError("publication routes differ from original obligations")
@@ -205,8 +205,8 @@ class RecoverySnapshot:
         for obligation in self.obligations:
             target = obligation.exact_target
             intent = ResponseObligation.response_record(self.publication_intents, target)
-            receipt = ResponseObligation.response_record(self.publication_receipts, target)
-            obligation.lifecycle.validate_publication(intent, receipt)
+            acknowledgement = ResponseObligation.response_record(self.publication_evidence, target)
+            obligation.lifecycle.validate_publication(intent, acknowledgement)
 
     @projected(view="snapshot")
     def can_retry(self) -> bool:
@@ -228,7 +228,7 @@ class RecoverySnapshot:
         db = session._connection
         execution, attempt = self.execution, self.attempt
         if self.publication_intents:
-            raise PublicationUncertain("publication requires bus-keyed receipt resolution")
+            raise PublicationUncertain("publication requires bus-keyed acknowledgement resolution")
         if (
             attempt is None
             or not self.is_current
@@ -347,11 +347,11 @@ class RecoverySnapshot:
             current = source.claim_projection()
         owned = tuple(
             claim for claim in current.values()
-            if claim.admission is not None
-            and claim.admission.execution_id == attempt.execution_id
-            and claim.admission.attempt_ordinal == attempt.attempt_ordinal
-            and claim.admission.recipient_lookup == attempt.owner_lookup
-            and claim.admission.participant_generation == attempt.owner_generation
+            if claim.claim_scope is not None
+            and claim.claim_scope.execution_id == attempt.execution_id
+            and claim.claim_scope.attempt_ordinal == attempt.attempt_ordinal
+            and claim.claim_scope.recipient_lookup == attempt.owner_lookup
+            and claim.claim_scope.participant_generation == attempt.owner_generation
         )
         if not owned:
             return

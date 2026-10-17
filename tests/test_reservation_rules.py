@@ -83,11 +83,11 @@ def test_plural_originals_preserve_order_and_bind_without_partial_transition(tmp
     inputs = InputDispositions(tmp_path)
     keys = ("acp:first", "acp:second")
     for key, text in zip(keys, ("first", "second"), strict=True):
-        inputs.record(key, seq=None, owner=owner, admission=1, target=owner, text=text)
+        inputs.record(key, seq=None, owner=owner, claim_scope=1, target=owner, text=text)
     assert tuple(row.source_text for row in stored_inputs(inputs.root).originals(keys)) == ("first", "second")
-    assert inputs.bind(keys[1], admission=1, turn_id="other", native_id="a" * 32, text="second")
+    assert inputs.bind(keys[1], claim_scope=1, turn_id="other", native_id="a" * 32, text="second")
     before = stored_inputs(inputs.root)
-    assert not inputs.bind_originals(keys, admission=1, turn_id="turn", native_id="b" * 32,
+    assert not inputs.bind_originals(keys, claim_scope=1, turn_id="turn", native_id="b" * 32,
                                      text="first\n\nsecond")
     assert stored_inputs(inputs.root) == before
     assert stored_inputs(inputs.root).lookup(keys[0]).accepts_reservation

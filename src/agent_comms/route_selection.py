@@ -59,10 +59,10 @@ def child_root(env: Mapping[str, str], cwd: str | Path) -> Path:
     if text == "~" or text.startswith("~/"):
         home = env.get("HOME") if os.name != "nt" else env.get("USERPROFILE")
         if not home or not Path(home).is_absolute():
-            raise ValueError("ACP home for maintenance admission is unknown")
+            raise ValueError("ACP home for maintenance claim_scope is unknown")
         text = str(Path(home) / text[2:]) if text != "~" else home
     elif text.startswith("~"):
-        raise ValueError("Unsupported ACP home expansion during maintenance admission")
+        raise ValueError("Unsupported ACP home expansion during maintenance claim_scope")
     raw = Path(text)
     return (raw if raw.is_absolute() else Path(cwd) / raw).resolve()
 

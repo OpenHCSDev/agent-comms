@@ -204,7 +204,7 @@ def main():
     inputs_before = file_witness(root / 'input_dispositions.json')
     native_before = file_witness(Path(seed['session']))
     original_bus = file_witness(root / 'bus.jsonl')
-    cutover = RetainedRoutingCutover(old_python, seed['root_id'], package, stage / 'carry-receipt.json')
+    cutover = RetainedRoutingCutover(old_python, seed['root_id'], package, stage / 'carry-acknowledgement.json')
     cutover.require_source()
     if '--reject-corrupt-original' in sys.argv:
         # Corrupt the last genuine old annotation, after two earlier valid
@@ -222,15 +222,15 @@ def main():
         except subprocess.CalledProcessError as error:
             assert error.returncode != 0
         else:
-            raise AssertionError('Corrupt original request was admitted')
+            raise AssertionError('Corrupt original request was authorized')
         assert all(file_witness(Path(path)) == witness for path, witness in original_files.items())
-        assert not (stage / 'carry-receipt.json').exists()
-        assert not (stage / 'carry-receipt.json.originals').exists()
-        receipt = {'corrupt_original_refused_before_mutation': True,
+        assert not (stage / 'carry-acknowledgement.json').exists()
+        assert not (stage / 'carry-acknowledgement.json.originals').exists()
+        acknowledgement = {'corrupt_original_refused_before_mutation': True,
                    'earlier_valid_cells_not_partially_carried': True,
                    'all_original_files_unchanged': True, 'provider_calls': 0, 'input_replays': 0}
-        (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2))
-        print(json.dumps(receipt), flush=True)
+        (stage / 'acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2))
+        print(json.dumps(acknowledgement), flush=True)
         return
     with _store_lock(root / 'wire'):
         cutover.quiet_install(root)
@@ -248,8 +248,8 @@ def main():
         assert all(json.loads(row[0])['requests'] == json.loads(display[3])['requests']
                    for row in db.execute('SELECT routing FROM transcript_route'))
     service = Comms(stage / 'reader')
-    receipt = json.loads((stage / 'carry-receipt.json').read_text())
-    acquired = FieldCodec.decode(HistorySource, receipt['recorded_source'])
+    acknowledgement = json.loads((stage / 'carry-acknowledgement.json').read_text())
+    acquired = FieldCodec.decode(HistorySource, acknowledgement['recorded_source'])
     source = service.views.attach_history(root, source_read=acquired)
     read = service.transcripts.capture_page_read('alpha', historical_source=source.key)
     page = service.transcripts.bind_page_read('alpha', read.identity).read()
@@ -261,13 +261,13 @@ def main():
                  for path in directory.rglob('*') if path.is_file()}
     result = asyncio.run(render(service, source, reference))
     assert all(file_witness(Path(path)) == witness for path, witness in protected.items())
-    assert receipt['routing_cells'] == 3 and receipt['registry_routings'] == 1
-    (stage / 'receipt.json').write_text(json.dumps({**result,
+    assert acknowledgement['routing_cells'] == 3 and acknowledgement['registry_routings'] == 1
+    (stage / 'acknowledgement.json').write_text(json.dumps({**result,
         'original_input_unknown_unchanged': True, 'source_bytes_unchanged': True,
         'central_batch_used': False, 'joined_authored_seed': True, 'new_owner_launches': 0,
         'provider_calls': 0, 'input_replays': 0,
-        'routing_cells': receipt['routing_cells'], 'registry_routings': receipt['registry_routings']}, indent=2))
-    print(json.dumps(json.loads((stage / 'receipt.json').read_text())), flush=True)
+        'routing_cells': acknowledgement['routing_cells'], 'registry_routings': acknowledgement['registry_routings']}, indent=2))
+    print(json.dumps(json.loads((stage / 'acknowledgement.json').read_text())), flush=True)
 
 
 if __name__ == '__main__':
