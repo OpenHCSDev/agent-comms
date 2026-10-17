@@ -10,7 +10,7 @@ import pytest
 
 from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, ForeignFieldSpellings,
-    FrozenFieldWrite, FunctionLocalImport, LiteralGetattr,
+    FrozenFieldWrite, FunctionLocalImport, LiteralGetattr, GitMeasure, python_paths,
 )
 
 pytestmark = pytest.mark.refactor_guard
@@ -58,6 +58,34 @@ class Repository:
 @pytest.fixture(params=["src/agent_comms", "src/toad"])
 def repo(tmp_path: Path, request) -> Repository:
     return Repository(tmp_path, request.param)
+
+
+def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, monkeypatch) -> None:
+    files = {
+        'ignored.py': 'value = 1\n',
+        'substituted.py': "stamp = '$Format:%H$'\n",
+        'a b.py': 'value = 2\n',
+        '[literal].py': 'value = 3\n',
+        'line\nbreak.py': 'value = 4\n',
+        'unicode-π.py': 'value = 5\n',
+        'duplicate.py': 'value = 1\n',
+        '.gitattributes': 'ignored.py export-ignore\nsubstituted.py export-subst\n',
+    }
+    revision = repo.commit(files)
+    selected = {f'{repo.root}/{name}' for name in files if name.endswith('.py')}
+    assert python_paths(repo.path, revision, repo.root) == selected
+    expected = [(path, subprocess.check_output(
+        ['git', '-C', str(repo.path), 'show', f'{revision}:{path}']
+    )) for path in sorted(selected)]
+    trace = repo.path / 'git-trace.json'
+    monkeypatch.setenv('GIT_TRACE2_EVENT', str(trace))
+    assert GitMeasure.sources(repo.path, revision, selected) == expected
+    starts = [json.loads(line) for line in trace.read_text().splitlines()
+              if json.loads(line)['event'] == 'start']
+    assert len(starts) == 2
+    assert GitMeasure.sources(repo.path, revision, set()) == []
+    with pytest.raises(ValueError, match='omitted'):
+        GitMeasure.sources(repo.path, revision, selected | {f'{repo.root}/missing.py'})
 
 
 def test_added_type_check_fails(repo: Repository) -> None:
