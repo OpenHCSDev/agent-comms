@@ -30,10 +30,8 @@ Final affected provider-free batch: **34 passed in 5.65s**. This ran
 controls in `test_fresh_private_session.py`, serially with empty pytest addopts.
 The copied-native opt-in environment variable was unset. No native/provider or
 public operation ran. Reused interpreter:
-`/home/ts/wt/comms-retained-context-framing-20261001/.artifacts/retained-context-framing-20261001/runtime/bin/python`,
 with this worktree's source/tests on `PYTHONPATH`.
 
-Raw result: `.artifacts/typed-journal-fixtures/provider-free-batch01.log`.
 Resource warning was handled with one bounded 60-second batch, no new environment
 or parallel fixtures. Sch retains functional installed manual/adaptive ownership;
 remaining old callers in other fixture files are outside this bounded contribution.
@@ -43,6 +41,5 @@ remaining old callers in other fixture files are outside this bounded contributi
 Normal merge of merged #494/main `590c406c` produced `9425ea89`; PR base is main.
 The resulting production diff against main is empty. The inherited intent/source
 reader changes were checked with the same 34 affected provider-free controls:
-**34 passed in 5.22s**, raw `.artifacts/typed-journal-fixtures/main-integration02.log`.
 No native/provider run or frozen #494 branch change. This test-only handoff is
 independent of #490 batching and its pending lifecycle API extension.
