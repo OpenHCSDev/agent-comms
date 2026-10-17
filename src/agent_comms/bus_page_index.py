@@ -24,6 +24,7 @@ from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .wire_record import WireRecord
 
 if TYPE_CHECKING:
+    from .bus_display_index import DisplayMetricScope, DisplayMetrics
     from .wire_log import OpenedWireSnapshot
 
 
@@ -62,7 +63,10 @@ class BusPageRow(PageIndexTable, TypedTable):
     offset: int
     sender: str
     target: str
-    indexes = (Index(("target", "seq")),)
+    timestamp: float
+    human: bool
+    mentions: tuple[str, ...]
+    indexes = (Index(("target", "seq")), Index(("offset",)),)
 
 
 class BusPageIndex:
@@ -207,7 +211,9 @@ class BusPageIndex:
             for message in opened.messages(record):
                 if last_sequence is not None and message.seq <= last_sequence:
                     raise RelationViolationError("Wire sequences are not increasing.")
-                rows.append(BusPageRow(message.seq, row_offset, message.sender, message.target))
+                rows.append(BusPageRow(message.seq, row_offset, message.sender, message.target,
+                                       message.timestamp, not message.sender_role.executable,
+                                       tuple(mention.thread for mention in message.mentions)))
                 last_sequence = message.seq
         through = stream.tell()
         source = BusPageSource(replace(revision, size=through), AppendCheckpoint.fingerprint(stream, through))
@@ -236,10 +242,10 @@ class BusPageIndex:
         upper: int | None,
         descending: bool,
         targets: frozenset[str] | None,
-        before_offset: int | None = None,
+        before_offset: int | None = None, after_offset: int = 0,
     ) -> Generator[BusPageRow, None, None]:
-        clauses: list[str] = []
-        params: list[object] = []
+        clauses: list[str] = ["offset >= ?"]
+        params: list[object] = [after_offset]
         if targets is not None:
             if not targets:
                 return
@@ -294,6 +300,21 @@ class BusPageIndex:
             except (ValueError, TypeError) as error:
                 raise StaleBusPageIndexError("Indexed row has invalid fields") from error
             yield row
+
+    def display_metrics(self, semantics: DisplayMetricScope, before_offset: int) -> DisplayMetrics:
+        clocks, counts = semantics.empty_metrics
+        seen, names = semantics.seen, tuple(semantics.viewer_names)
+        unread = "seq > ? AND seq NOT IN (SELECT value FROM json_each(?)) AND sender NOT IN (SELECT value FROM json_each(?))"
+        for scope in semantics.scopes:
+            predicate, parameters = scope.index_predicate
+            last, human, count = self.connection.execute(
+                f"SELECT MAX(0,COALESCE(MAX(timestamp),0)), MAX(0,COALESCE(MAX(CASE WHEN human THEN timestamp END),0)), "
+                f"COALESCE(SUM({unread}),0) FROM {BusPageRow.declared_name} "
+                f"WHERE offset < ? AND ({predicate})",
+                (seen.high_water, json.dumps(seen.exceptions), json.dumps(names), before_offset, *parameters),
+            ).fetchone()
+            clocks[scope.channel], counts[scope.channel] = (last, human), count
+        return clocks, counts
 
     @staticmethod
     def record(

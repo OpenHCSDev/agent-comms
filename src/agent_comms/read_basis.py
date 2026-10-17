@@ -13,7 +13,6 @@ from bisect import bisect_left
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field, replace
 from functools import partial
-from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
@@ -153,13 +152,6 @@ class ReadCursor:
     def __contains__(self, sequence: int) -> bool:
         index = bisect_left(self.exceptions, sequence)
         return 0 < sequence <= self.high_water or (index < len(self.exceptions) and self.exceptions[index] == sequence)
-
-    def changed(self, other: ReadCursor) -> Iterable[int]:
-        lower, upper = sorted((self.high_water, other.high_water))
-        for sequence in chain(range(lower + 1, upper + 1),
-                              (seq for seq in sorted(set(self.exceptions) | set(other.exceptions)) if seq > upper)):
-            if (sequence in self) != (sequence in other):
-                yield sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -536,6 +528,20 @@ class ChannelDisplayScope(MessageDisplayScope):
         # The existing offset index has no mention column. Any-mode can match
         # sender, DM peer or a mention regardless of target; never drop those rows.
         return None if self.any_mode else self.targets
+
+    @property
+    def index_predicate(self) -> tuple[str, tuple]:
+        targets, names = tuple(self.targets or ()), tuple(self.participant_names)
+        target_marks, name_marks = ",".join("?" for _ in targets), ",".join("?" for _ in names)
+        if self.targets is None:
+            return "1", ()
+        predicate = f"target IN ({target_marks})"
+        if not self.any_mode:
+            return predicate, targets
+        return (f"{predicate} OR sender IN ({name_marks}) OR "
+                f"(target NOT LIKE '#%' AND target IN ({name_marks})) OR "
+                f"EXISTS (SELECT 1 FROM json_each(mentions) WHERE value IN ({name_marks}))",
+                (*targets, *names, *names, *names))
 
     def selection(self, history_revision: FileRevision | None) -> DisplaySelection:
         if self.displayed is None:
