@@ -27,7 +27,6 @@ from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import (
     ClearQueueRequest,
-    ContextUsage,
     CoordinationChangedUpdate,
     GoalChangedUpdate,
     InputDeliveryChangedUpdate,
@@ -41,6 +40,7 @@ from agent_comms.acp_extension import (
     encode_request,
 )
 from agent_comms.activity import ActivityState
+from agent_comms.context_reading import ContextUsage
 from agent_comms.agent_backend import FailedCompaction
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -469,6 +469,7 @@ class TestHandlers:
             session_id="proj", prompt=[{"type": "text", "text": "!relay hello all"}]
         )
         assert response.stop_reason == "end_turn"
+        assert not agent.turns.turn_state("proj").busy
         history = list(agent._comms.views.channel_history_page("#all").messages)
         assert [m.body for m in history] == ["hello all"]
 
