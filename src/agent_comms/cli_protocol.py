@@ -176,7 +176,7 @@ class ArrivedMessage(WatchLine):
             await bridge.finish_delivery(message, outcome)
             return
         result = await bridge.deliver(message)
-        await bridge.settle(message, result)
+        await bridge.finish_delivery(message, result)
         print(f'{result.declared_name}: {message.message_id} from {message.sender}',
               file=sys.stderr, flush=True)
 
