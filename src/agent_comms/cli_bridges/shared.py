@@ -25,7 +25,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
-    DeliveredOutcome, EmittedOutcome, Outcome, TaggedWire,
+    EmittedOutcome, Outcome, TaggedWire,
     UnconfirmedOutcome, WatchLine, WireModel,
 )
 from agent_comms.declared_family import DeclaredFamily
@@ -131,8 +131,10 @@ class PendingToolCall(ToolCallDraft):
 
 
 @dataclass(frozen=True)
-class ToolCall(tool_declaration.ToolCall, ToolCallDraft):
-    """Compose CLI snapshot lifetime onto the shared decoded invocation."""
+class ToolCall(ToolCallDraft, tool_declaration.ToolCallMetadata):
+    id: str
+    name: str
+    arguments: tool_declaration.ToolArguments
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:

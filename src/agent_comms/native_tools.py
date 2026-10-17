@@ -170,25 +170,21 @@ class GrepTool(ArgumentTool):
     caption_field = "pattern"
 
 
-class GlobTool(ArgumentTool):
-    acp_kind = "search"
+class GlobTool(GrepTool):
     label = "Find"
-    caption_field = "pattern"
 
 
-class WebFetchTool(ArgumentTool):
+class WebFetchTool(ArgumentTool, declared_name='webfetch'):
     acp_kind = "fetch"
     label = "Fetch"
     caption_field = "url"
 
 
-class WebSearchTool(ArgumentTool):
-    acp_kind = "search"
-    label = "Search"
+class WebSearchTool(GrepTool, declared_name='websearch'):
     caption_field = "query"
 
 
-class ToolSearchTool(WebSearchTool):
+class ToolSearchTool(WebSearchTool, declared_name='toolsearch'):
     label = "Search tools"
 
 
@@ -205,7 +201,7 @@ class MonitorTool(AgentTool):
     label = "Monitor"
 
 
-class NotebookEditTool(PathTool, ArgumentTool):
+class NotebookEditTool(PathTool, ArgumentTool, declared_name='notebookedit'):
     label = "Edit"
     acp_kind = "edit"
 

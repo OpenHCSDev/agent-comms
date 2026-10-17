@@ -10,7 +10,6 @@ from pydantic import AliasChoices, ConfigDict, Field, JsonValue, StrictStr, Type
 from .cli_protocol import WireModel
 from .declared_family import DeclaredFamily
 from .field_codec import projected
-from .recorded_time import EventTime
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool", discovery_package="agent_comms.tools"):
@@ -82,50 +81,31 @@ class UndeclaredTool(ToolDeclaration):
         return self.name
 
 
-class ToolCallView:
-    """Live and retained views derive metadata from their original call."""
-
-    @property
-    def call(self) -> ToolCall:
-        raise NotImplementedError
+class ToolCallMetadata:
+    """Invocation views consume decoded arguments, never a second set of fields."""
+    name: str
+    arguments: ToolArguments
 
     @projected(view="wire", persist=False)
     def title(self) -> str:
-        return self.call.title
+        return ToolDeclaration.caption(self.name, detail=self.arguments.caption, path=self.arguments.path)
 
     @projected(view="wire", persist=False)
     def kind(self) -> str:
-        return self.call.kind
+        return ToolDeclaration.for_name(self.name).acp_kind
 
     @projected(view="wire", persist=False)
     def detail(self) -> str:
-        return self.call.arguments.caption
+        return self.arguments.caption
 
     @projected(view="wire", persist=False)
     def path(self) -> str | None:
-        return self.call.arguments.path
+        return self.arguments.path
 
     @property
     def locations(self) -> tuple[str, ...]:
         path = self.path
         return () if path is None else (path,)
-
-
-@dataclass(frozen=True)
-class ToolCall:
-    """A decoded invocation; CLI drafts compose their lifetime onto this value."""
-    started_at: EventTime
-    id: str
-    name: str
-    arguments: ToolArguments
-
-    @property
-    def title(self) -> str:
-        return ToolDeclaration.caption(self.name, detail=self.arguments.caption, path=self.arguments.path)
-
-    @property
-    def kind(self) -> str:
-        return ToolDeclaration.for_name(self.name).acp_kind
 
 
 @dataclass(frozen=True)

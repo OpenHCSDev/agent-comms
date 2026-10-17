@@ -20,8 +20,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
 from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
 from .transcript_events import SentTranscript, ToolStartTranscript
-from .tool_declaration import ToolCall, ToolDeclaration, ToolInput
-from .recorded_time import UnrecordedEventTime
+from .tool_declaration import ToolDeclaration, ToolInput
 
 
 def wire_field(name: str, default=None):
@@ -317,9 +316,8 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
 
     def assistant_transcript(self):
         arguments = ToolDeclaration.for_name(self.name).recorded_arguments(ToolInput, self.arguments)
-        call = ToolCall(UnrecordedEventTime(), self.id, self.name, arguments)
         return [ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=call.arguments.raw_input)]
+                                    raw_input=arguments.raw_input)]
 
     id: str
     name: str

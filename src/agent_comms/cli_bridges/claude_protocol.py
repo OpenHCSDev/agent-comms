@@ -9,7 +9,7 @@ from typing import ClassVar, Literal
 from xml.etree import ElementTree
 
 from metaclass_registry import RegistryConfig
-from pydantic import ConfigDict, Field, JsonValue, TypeAdapter, field_validator, model_validator
+from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
@@ -342,9 +342,12 @@ class ContentBlocks(WireModel):
 
 
 class TaskEnvelope(WireModel):
-    """Claude's summary-only notification; other shapes add their own fields."""
-    model_config = ConfigDict(extra='forbid')
+    """The notification owns its displayed fields and optional comms event."""
     summary: str
+    status: str = ''
+    result: str = ''
+    diagnostics: str = ''
+    event: str = ''
 
     @classmethod
     def from_text(cls, text: str) -> TaskEnvelope:
@@ -353,74 +356,15 @@ class TaskEnvelope(WireModel):
         root = ElementTree.fromstring(envelope + terminator)
         if root.tag != 'task-notification':
             raise ValueError('Expected a task-notification envelope')
-        return TASK_ENVELOPES.validate_python(cls.xml_fields(root))
-
-    @classmethod
-    def xml_fields(cls, root: ElementTree.Element) -> dict:
-        return {child.tag: cls.xml_fields(child) if len(child) else ''.join(child.itertext())
-                for child in root}
-
-    def sections(self) -> tuple[str, ...]:
-        return (self.summary,)
+        return cls.model_validate({name: ''.join(child.itertext()) for name in cls.model_fields
+                                   if (child := root.find(name)) is not None})
 
     def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
-        text = '\n\n'.join(section for section in self.sections() if section)
-        return (FinishedItem(record.uuid, record.uuid,
-                             (NoticeTranscript(text, timestamp=record.timestamp),)),)
-
-
-class TaskUsage(WireModel):
-    model_config = ConfigDict(extra='forbid')
-    subagent_tokens: str
-    tool_uses: str
-    duration_ms: str
-
-
-class TaskGroupUsage(TaskUsage):
-    agent_count: str
-    agents_done: str
-    agents_error: str
-    agents_skipped: str
-    agents_empty_result: str
-
-
-class IdentifiedTaskNotification(TaskEnvelope):
-    task_id: str = Field(alias='task-id')
-
-
-class TaskStatusNotification(IdentifiedTaskNotification):
-    tool_use_id: str | None = Field(default=None, alias='tool-use-id')
-    output_file: str = Field(alias='output-file')
-    status: str
-    note: str = ''
-    result: str = ''
-    usage: TaskUsage | TaskGroupUsage | None = None
-    diagnostics: str = ''
-
-    def sections(self) -> tuple[str, ...]:
-        return (*super().sections(), f'Status: {self.status}', self.result, self.diagnostics)
-
-
-class MonitorTaskNotification(IdentifiedTaskNotification):
-    event: str
-
-    def sections(self) -> tuple[str, ...]:
-        return (*super().sections(), self.event)
-
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
-        observations = tuple(MonitorObservation(frame,
-                                                ObservedMonitor(record.uuid, record.timestamp))
+        text = '\n\n'.join(value for value in self.model_dump().values() if value)
+        observations = tuple(MonitorObservation(frame, ObservedMonitor(record.uuid, record.timestamp))
                              for frame in ClaudeMonitorFrame.decode_event(self.event))
-        return observations + super().updates(record)
-
-
-class CompletedMonitorTaskNotification(TaskStatusNotification, MonitorTaskNotification):
-    pass
-
-
-TASK_ENVELOPES = TypeAdapter(
-    TaskEnvelope | TaskStatusNotification | MonitorTaskNotification | CompletedMonitorTaskNotification
-)
+        return (*observations, FinishedItem(record.uuid, record.uuid,
+                                            (NoticeTranscript(text, timestamp=record.timestamp),)))
 
 
 class TaskContent(WireModel):

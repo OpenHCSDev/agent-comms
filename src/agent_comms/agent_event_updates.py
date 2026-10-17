@@ -77,7 +77,7 @@ class AcpEventConsumer(MroDispatch):
             locations=[ToolCallLocation(path=path) for path in event.locations],
             status="in_progress",
         )
-        start_update.raw_input = event.args.raw_input
+        start_update.raw_input = event.arguments.raw_input
         await client.session_update(
             session_id=session_id,
             update=start_update,

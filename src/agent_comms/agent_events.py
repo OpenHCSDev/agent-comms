@@ -21,8 +21,7 @@ from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .tool_results import ToolDiff
-from .tool_declaration import ToolArguments, ToolCall, ToolCallView
-from .recorded_time import UnrecordedEventTime
+from .tool_declaration import ToolArguments, ToolCallMetadata
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
@@ -121,16 +120,8 @@ class ToolEvent(AgentEvent):
 
 
 @dataclass(frozen=True)
-class ToolStart(ToolCallView, ToolEvent):
-    args: ToolArguments
-
-    @property
-    def call(self) -> ToolCall:
-        return ToolCall(UnrecordedEventTime(), self.id, self.name, self.args)
-
-    @classmethod
-    def from_call(cls, call: ToolCall) -> ToolStart:
-        return cls(call.id, call.name, call.arguments)
+class ToolStart(ToolCallMetadata, ToolEvent):
+    arguments: ToolArguments
 
 
 @dataclass(frozen=True)
