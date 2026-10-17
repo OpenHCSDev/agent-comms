@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -75,11 +74,12 @@ class RuntimeForkHelper(ForkSessionHelper):
 
 
 def main():
-    with tempfile.TemporaryFile() as incoming:
-        incoming.write(sys.stdin.buffer.read())
-        incoming.seek(0)
-        request = FieldCodec.decode(RuntimeForkRequest, json.load(incoming))
-        command, environment = ForkSessionHelper.launch(request, dict(os.environ))
-        incoming.seek(0)
-        os.dup2(incoming.fileno(), sys.stdin.fileno())
-        os.execvpe(command[0], command, environment)
+    payload = sys.stdin.buffer.read()
+    request = FieldCodec.decode(RuntimeForkRequest, json.loads(payload))
+    command, environment = ForkSessionHelper.launch(request, dict(os.environ))
+    reader, writer = os.pipe()
+    os.write(writer, payload)
+    os.close(writer)
+    os.dup2(reader, sys.stdin.fileno())
+    os.close(reader)
+    os.execvpe(command[0], command, environment)

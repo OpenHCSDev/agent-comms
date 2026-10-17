@@ -41,6 +41,7 @@ from .agent_backend import (
     TranscriptEntry,
     TurnDelivery,
 )
+from .native_pi import NativePiRpcLaunch
 
 if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
@@ -327,7 +328,6 @@ class PiNativeBackend(
         """Copy the parent's whole saved history with Pi's own session manager."""
         from .coordinator import Coordination
         from .native_fork import RuntimeForkHelper, RuntimeForkRequest
-        from .native_pi import NativePiRpcLaunch
 
         package = await Coordination.run_worker(partial(
             NativePiRpcLaunch.package_for_command, launcher, runtime,
