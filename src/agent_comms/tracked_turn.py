@@ -340,7 +340,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                                 f"Native Pi operation failed: {type(error).__name__}: {error}"
                             ) from error
                     except NativePiUnavailable as error:
-                        self.admission.raise_native_failure(error, self.native.attestation)
+                        self.prompt_state.raise_native_failure(error, self.native.attestation)
             finally:
                 # LIFO starts the measurement immediately before cleanup. No
                 # await or manual close may separate this from stack retirement.
@@ -487,7 +487,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 raise NativePiUnavailable("Native Pi prompt acknowledgement differs")
             if event.success is not True:
                 raise NativePiPromptRejected(event)
-            self.admission = self.admission.acknowledge(event)
+            self.prompt_state = self.prompt_state.acknowledge(event)
         elif issubclass(event.command, commands.MutatesSession):
             raise NativePiUnavailable("Native Pi session identity changed during a turn")
         else:
@@ -499,7 +499,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     async def committed_input(self, event: pi.InputCommitted) -> None:
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
-            self.admission = self.admission.start(event)
+            self.prompt_state = self.prompt_state.start(event)
             self.evidence = self.custody.enter_context(
                 NativeEntry.open_input_evidence(self.active_session_file)
             )
@@ -562,7 +562,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         event.outcome.finish_request(self)
 
     async def context_proof(self) -> NativeContextProof:
-        if not self.admission.acknowledged:
+        if not self.prompt_state.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
         # The original event consumer serializes observations. Cancellation
         # joins this read before the acquired evidence/custody can close.

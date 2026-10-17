@@ -37,8 +37,8 @@ class InputForwarding:
     uncertain: bool = False
 
     @property
-    def permits_admission(self) -> bool:
-        """Only confirmed input delivery permits a fresh native interaction."""
+    def permits_interaction(self) -> bool:
+        """Observed authority loss blocks another native interaction."""
         return not self.uncertain
 
     def can_forward(self, writer):

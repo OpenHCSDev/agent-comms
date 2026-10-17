@@ -45,12 +45,12 @@ class NativeSessionPreparation(backend.TurnSession):
         ):
             raise NativePiUnavailable("Native preparation did not attest the idle saved session")
         self.active_session_file = identity.session_file
-        self.admission = PreparedSession()
+        self.prompt_state = PreparedSession()
         await self.stats.request(self)
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
         if not self.native_session.custody.retained:
-            self.admission.raise_native_failure(
+            self.prompt_state.raise_native_failure(
                 NativePiUnavailable(
                     self.output.failure_text or "Native session preparation failed"
                 ),

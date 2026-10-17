@@ -25,7 +25,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from .agent_backend import InputRequest, SendNow, TurnInboxItem
+from .agent_backend import TurnInboxItem
 from .child_process import ProcessIdentity
 from .request_progress import RequestProgress
 
@@ -245,7 +245,7 @@ class TurnSession:
         self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup if startup is not None else NativeStartup.for_launch(launch)
         self.inputs = InputForwarding(steering_queue)
-        self.admission = UnwrittenPrompt()
+        self.prompt_state = UnwrittenPrompt()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
         self.output = TurnOutput(sensitive=bool(images))
@@ -265,7 +265,7 @@ class TurnSession:
 
     @property
     def started_input(self):
-        return self.admission.started and self.inputs.permits_admission
+        return self.prompt_state.started and self.inputs.permits_interaction
 
     @property
     def awaiting_native_attestation(self):
@@ -302,7 +302,7 @@ class TurnSession:
         return self.native.attestation.trustworthy
 
     def matches_original_input(self, message):
-        return self.inputs.permits_admission and message.matches_input(
+        return self.inputs.permits_interaction and message.matches_input(
             self.task, self.original_input_id, self.require_input_id
         )
 
@@ -322,7 +322,7 @@ class TurnSession:
 
     async def admit_user_message(self, message, event):
         """Own the original/follow-up input effect across all decoded user messages."""
-        if self.admission.awaiting_start and self.matches_original_input(message):
+        if self.prompt_state.awaiting_start and self.matches_original_input(message):
             if not self.notify_input_started(None, self.original_input_id, self.task):
                 self.inputs.uncertain = True
                 self.output.record_failure(
@@ -331,7 +331,7 @@ class TurnSession:
                 await self.abort_stalled_rpc()
                 self.finished = True
                 return
-            self.admission = self.admission.start(event)
+            self.prompt_state = self.prompt_state.start(event)
             if self.has_start_listener:
                 yield events.InputStarted(id=None)
             self.ensure_input_forwarding()
@@ -364,7 +364,7 @@ class TurnSession:
         """Only tracked, live input may publish an informational package receipt."""
         if self.stats.requested:
             return False
-        return self.require_input_id and self.admission.permits_extension_ui(self)
+        return self.require_input_id and self.prompt_state.permits_extension_ui(self)
 
     async def abort_stalled_rpc(self) -> None:
         await self.native.finish_input()
@@ -415,9 +415,9 @@ class TurnSession:
                 f"Native resource acquisition failed: {type(error).__name__}: {error}"
             )
             failure.__cause__ = error
-            self.admission.raise_native_failure(failure, self.launch.session.attestation())
+            self.prompt_state.raise_native_failure(failure, self.launch.session.attestation())
         except NativePiUnavailable as error:
-            self.admission.raise_native_failure(error, self.launch.session.attestation())
+            self.prompt_state.raise_native_failure(error, self.launch.session.attestation())
 
     async def acquire_native(self, resources: AsyncExitStack, *, reuse: bool) -> PiSessionChild:
         """Acquire leaf transport once in the original turn's resource lifetime."""
@@ -552,7 +552,7 @@ class TurnSession:
 
     def grant_prompt(self) -> None:
         """Original granted write starts both admission and its input-start clock."""
-        self.admission = self.admission.dispatch()
+        self.prompt_state = self.prompt_state.dispatch()
         self.watchdog.await_input()
 
     async def input_ready(self) -> None:
@@ -659,7 +659,7 @@ class TurnSession:
             self.persistent_session is not None
             and self.require_input_id
             and identity is not None
-            and self.admission.permits_retention(self)
+            and self.prompt_state.permits_retention(self)
         ):
             self.native.sensitive_diagnostics = self.output.sensitive
             self.native_session.retain(self.native, identity)
