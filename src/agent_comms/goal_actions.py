@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+import asyncio
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
-from .child_process import ProcessIdentity
+from .child_process import BoundedRun, ExitedOutcome, ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
 from .goal_mentions import bind_goal_mentions
@@ -23,7 +25,7 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import Goal, ProblemGoalOrder
+from .goals import Goal, GoalOrder, ProblemGoalOrder, UnorderedGoalOrder
 from .threads import Thread
 from .recorded_time import EventTime
 
@@ -125,10 +127,16 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             goal_id=goal.id, expected_revision=goal.revision,
         )
 
+    def require_actor(self, actor: type) -> None:
+        if not isinstance(self, actor):
+            raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
+
+    def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction:
+        return self
+
     def apply(self, ctx: GoalActionContext) -> Goal | None:
         self.expect.check(ctx)
-        if not isinstance(self, ctx.actor):
-            raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
+        self.require_actor(ctx.actor)
         if ctx.model_report and any(
             entry.reports_turn(ctx.report_turn)
             for entry in ctx.goals.registry.goal_history(ctx.thread.name)
@@ -322,9 +330,62 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompletedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
+class CompletionGoalAction(TransitionGoalAction):
     def next_state(self, ctx: GoalActionContext) -> GoalState:
         return CompletedGoal()
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
+    def before_transition(self, ctx):
+        ctx.require_goal().order.require_completion()
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliveredOrderGoalAction(CompletionGoalAction, RuntimeInvocable):
+    commit: str
+
+    def prepare(self, goals, name, actor):
+        ctx = GoalActionContext(goals, goals.registry.require(name), actor)
+        self.expect.check(ctx)
+        goal = ctx.require_goal()
+        check = goal.order.delivery_check()
+        asyncio.run(self.verify(check))
+        return replace(self, expect=replace(self.expect, expected_goal=goal))
+
+    async def verify(self, check):
+        if not 7 <= len(self.commit) <= 40 or self.commit.strip("0123456789abcdef"):
+            raise ValueError("Delivery requires a commit hash.")
+
+        async def run(*command):
+            result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
+            if result.outcome != ExitedOutcome(0):
+                raise ValueError(result.stderr.decode(errors="replace") or "The order check failed.")
+            return result.stdout.decode(errors="replace")
+
+        async def require_commit():
+            head = (await run("git", "rev-parse", "HEAD", f"{self.commit}^{{commit}}")).split()
+            dirty = await run("git", "status", "--porcelain", "--untracked-files=no")
+            if len(head) != 2 or head[0] != head[1] or dirty.strip():
+                raise ValueError("Run the order check on its clean delivered commit.")
+
+        await require_commit()
+        if await run("bash", "-c", check.command):
+            raise ValueError("The order check must print nothing and exit zero.")
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstalledOrderGoalAction(GoalAction, RuntimeInvocable):
+    works: str
+    artifact: str
+
+    def change(self, ctx):
+        goal = ctx.require_goal()
+        goal.state.require_order_slot()
+        if not Path(self.artifact).is_file():
+            raise ValueError("Retain the installed application artifact before closing.")
+        return replace(goal, order=goal.order.installed(self.works, self.artifact),
+                       revision=goal.revision + 1)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -371,6 +432,7 @@ class ReplacementGoalAction(GoalAction):
 @dataclass(frozen=True, kw_only=True)
 class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
     text: str
+    order: GoalOrder = field(default_factory=UnorderedGoalOrder)
     goal_id: str = field(default_factory=lambda: uuid4().hex)
 
     @classmethod
@@ -381,14 +443,17 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
 
     def change(self, ctx: GoalActionContext) -> Goal:
-        if ctx.thread.goal_for(self.goal_id) is not None:
+        current = ctx.thread.goal_for(self.goal_id)
+        if current is not None:
+            if (current.text, current.order) != (self.text.strip(), self.order):
+                raise ValueError("Goal identity already has different instructions.")
             return ctx.require_goal()
         ctx.thread.require_goal_replacement(ctx.goals)
-        goal = Goal(text=self.text.strip(), id=self.goal_id, revision=1)
+        goal = Goal(text=self.text.strip(), id=self.goal_id, revision=1, order=self.order)
         goal = replace(
             goal,
             mention_source=bind_goal_mentions(
-                goal.text, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot()
+                goal.instructions, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot()
             ),
         )
         ctx.goals.open_goal_store().create_goal(goal.id)
@@ -396,19 +461,44 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OrderGoalAction(GoalAction, RuntimeInvocable):
-    problem: str
+class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
+    order: ProblemGoalOrder
     goal_id: str
-    expected_revision: int
     deadline: EventTime
     commander: str
 
+    @abstractmethod
+    def reserve(self, ctx): ...
+
     def change(self, ctx):
-        ctx.thread.require_order_slot(self.goal_id, self.problem)
-        todo = ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
+        ctx.thread.require_order_slot(self.goal_id, self.order.problem)
+        self.deadline.require_deadline()
+        self.order.owner.require_exists()
+        self.order.check.require_directory()
+        todo = self.reserve(ctx)
+        return SetGoalAction(text=todo.text, goal_id=self.goal_id,
+            order=self.order.copy_as(ProblemGoalOrder)).change(ctx)
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrderGoalAction(ProblemOrderGoalAction):
+    expected_revision: int
+
+    def reserve(self, ctx):
+        return ctx.goals.todos.assign(self.order.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
             generation=self.goal_id, deadline=self.deadline)
-        return replace(SetGoalAction(text=todo.text, goal_id=self.goal_id).change(ctx), order=ProblemGoalOrder(todo.id))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CreateProblemGoalAction(ProblemOrderGoalAction):
+    repo: str
+    text: str
+
+    def reserve(self, ctx):
+        return ctx.goals.todos.create(self.order.problem, self.repo, self.text,
+            creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
+            generation=self.goal_id, deadline=self.deadline)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -437,7 +527,7 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
             text=text,
             revision=revision,
             mention_source=bind_goal_mentions(
-                text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
+                goal.order.instructions(text), goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
             ),
         )
 
