@@ -117,38 +117,6 @@ class RegistryDocument(RegistryPresence):
     def entry_if_present(self, name: str) -> RegistryEntry | None:
         return self.entry(name) if self.canonical_name(name) in self.threads else None
 
-    @classmethod
-    def entry_from_wire(cls, raw: dict, name: str) -> RegistryEntry:
-        """Decode one thread's entry without decoding the other declarations.
-
-        Only this thread's rows go through the document decoder; another
-        thread's declaration is neither decoded nor validated here.
-        """
-        try:
-            aliases = raw["aliases"]
-            canonical = aliases.get(name, name)
-
-            def own(rows: dict) -> dict:
-                return {canonical: rows[canonical]} if canonical in raw["threads"] else {}
-
-            def counter(raw_counter: dict) -> dict:
-                return {**raw_counter, "generations": own(raw_counter["generations"])}
-
-            restricted = {
-                "threads": own(raw["threads"]),
-                "statuses": own(raw["statuses"]),
-                "last_seen": own(raw["last_seen"]),
-                "aliases": {
-                    alias: target for alias, target in aliases.items()
-                    if target == canonical
-                },
-                "owners": counter(raw["owners"]),
-                "admissions": counter(raw["admissions"]),
-            }
-        except (AttributeError, KeyError, TypeError) as error:
-            raise RelationViolationError(f"Invalid registry document: {error!r}") from error
-        return cls.from_wire(restricted).entry(name)
-
     # The sections that hold one row per thread name.
     THREAD_ROWS = ("threads", "statuses", "last_seen")
 

@@ -30,6 +30,10 @@ class RegistryRevision:
     revision: FileRevision | None
     document: RegistryDocument
     raw: dict
+    user_name: str | None = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "user_name", next((name for name, thread in self.document.threads.items() if not thread.role.executable), None))
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +100,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
         self.private_guard_unlocked()  # before even a cache hit
         revision = FileRevision.capture(self.path)
         if revision is None:
+            self.cache.entry = None
             return self.empty()
         entry = self.cache.entry
         if entry is not None and entry.revision == revision:
@@ -120,23 +125,16 @@ class RegistryStore(LockedStore[RegistryDocument]):
         """The registry file and its owner guard, which every write replaces together."""
         return FileRevision.capture(self.path), FileRevision.capture(self.guard_path)
 
-    def read_entry(self, name: str) -> RegistryEntryRevision:
-        """One thread's entry from the current file, without decoding the other threads.
-
-        The revision is taken under the same lock, so it is the one the entry
-        was read from, not an earlier stat taken while a write was in flight.
-        A decoded revision already in this process's cache answers directly.
-        """
-        with self.locked(shared=True):
-            self.private_guard_unlocked()
-            revision = self.revision_unlocked()
-            if revision[0] is None:
-                return RegistryEntryRevision(revision, self.empty().entry(name))
+    def read_user(self):
+        with self.reading() as document:
             entry = self.cache.entry
-            if entry is not None and entry.revision == revision[0]:
-                return RegistryEntryRevision(revision, entry.document.entry(name))
-            raw = json.loads(self.path.read_text())
-            return RegistryEntryRevision(revision, RegistryDocument.entry_from_wire(raw, name))
+            return document.threads[entry.user_name] if entry is not None and entry.user_name is not None else None
+
+    def read_entry(self, name: str) -> RegistryEntryRevision:
+        """A point lookup from the same decoded revision every registry reader takes."""
+        with self.locked(shared=True):
+            document = self._read_unlocked()
+            return RegistryEntryRevision(self.revision_unlocked(), document.entry(name))
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
