@@ -19,11 +19,13 @@ from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
+from .read_ledger import ReadLedger
 from .store_files import _store_lock
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .wire_record import WireRecord
 
 if TYPE_CHECKING:
+    from .bus_display_index import DisplayMetricScope, DisplayMetrics
     from .wire_log import OpenedWireSnapshot
 
 
@@ -62,7 +64,28 @@ class BusPageRow(PageIndexTable, TypedTable):
     offset: int
     sender: str
     target: str
-    indexes = (Index(("target", "seq")),)
+    timestamp: float
+    human: bool
+    mentions: tuple[str, ...]
+    indexes = (Index(("target", "seq")), Index(("offset",)),)
+
+    def record(self, stream: BinaryIO, *, max_bytes: int | None = None) -> tuple[Mapping, int]:
+        stream.seek(self.offset)
+        raw = stream.readline(max_bytes + 1 if max_bytes is not None else -1)
+        if max_bytes is not None and len(raw) > max_bytes:
+            raise OversizedIndexedBusRowError("Indexed bus row exceeds advisory byte budget.")
+        try:
+            record = json.loads(raw)
+        except ValueError as error:
+            raise StaleBusPageIndexError("Indexed bus row is invalid.") from error
+        if (
+            not isinstance(record, Mapping)
+            or int(record.get("seq", 0)) != self.seq
+            or record.get("from") != self.sender
+            or record.get("to") != self.target
+        ):
+            raise StaleBusPageIndexError("Indexed bus row changed.")
+        return record, len(raw)
 
 
 class BusPageIndex:
@@ -105,7 +128,8 @@ class BusPageIndex:
         with self.snapshot():
             actual, _ = self._schema(self.connection)
             saved = BusPageSource.one(self.connection, singleton=1) if actual else None
-            return saved is not None and saved.covers(opened.stream, opened.revision)
+            return saved is not None and saved.covers(
+                opened.stream, replace(opened.revision, size=opened.complete_boundary))
 
     @contextmanager
     def prepared(self, opened: OpenedWireSnapshot):
@@ -172,11 +196,7 @@ class BusPageIndex:
         stream, revision = opened.stream, opened.revision
         if stream is None:
             return None
-        size = opened.boundary
-        if size:
-            stream.seek(size - 1)
-            if stream.read(1) != b"\n":
-                return None
+        size = opened.complete_boundary
         if saved is not None and saved.covers(stream, revision):
             return saved, saved, saved.revision.size, ()
         offset = saved.revision.size if saved is not None else 0
@@ -207,7 +227,9 @@ class BusPageIndex:
             for message in opened.messages(record):
                 if last_sequence is not None and message.seq <= last_sequence:
                     raise RelationViolationError("Wire sequences are not increasing.")
-                rows.append(BusPageRow(message.seq, row_offset, message.sender, message.target))
+                rows.append(BusPageRow(message.seq, row_offset, message.sender, message.target,
+                                       message.timestamp, ReadLedger.human(message.sender_role),
+                                       tuple(mention.thread for mention in message.mentions)))
                 last_sequence = message.seq
         through = stream.tell()
         source = BusPageSource(replace(revision, size=through), AppendCheckpoint.fingerprint(stream, through))
@@ -236,10 +258,13 @@ class BusPageIndex:
         upper: int | None,
         descending: bool,
         targets: frozenset[str] | None,
-        before_offset: int | None = None,
+        before_offset: int | None = None, after_offset: int | None = None,
     ) -> Generator[BusPageRow, None, None]:
         clauses: list[str] = []
         params: list[object] = []
+        if after_offset is not None:
+            clauses.append("offset >= ?")
+            params.append(after_offset)
         if targets is not None:
             if not targets:
                 return
@@ -295,23 +320,17 @@ class BusPageIndex:
                 raise StaleBusPageIndexError("Indexed row has invalid fields") from error
             yield row
 
-    @staticmethod
-    def record(
-        stream: BinaryIO, row: BusPageRow, *, max_bytes: int | None = None
-    ) -> tuple[Mapping, int]:
-        stream.seek(row.offset)
-        raw = stream.readline(max_bytes + 1 if max_bytes is not None else -1)
-        if max_bytes is not None and len(raw) > max_bytes:
-            raise OversizedIndexedBusRowError("Indexed bus row exceeds advisory byte budget.")
-        try:
-            record = json.loads(raw)
-        except ValueError as error:
-            raise StaleBusPageIndexError("Indexed bus row is invalid.") from error
-        if (
-            not isinstance(record, Mapping)
-            or int(record.get("seq", 0)) != row.seq
-            or record.get("from") != row.sender
-            or record.get("to") != row.target
-        ):
-            raise StaleBusPageIndexError("Indexed bus row changed.")
-        return record, len(raw)
+    def display_metrics(self, semantics: DisplayMetricScope, before_offset: int) -> DisplayMetrics:
+        clocks, counts = semantics.empty_metrics
+        seen, names = semantics.seen, tuple(semantics.viewer_names)
+        unread = "seq > ? AND seq NOT IN (SELECT value FROM json_each(?)) AND sender NOT IN (SELECT value FROM json_each(?))"
+        for scope in semantics.scopes:
+            predicate, parameters = scope.index_predicate
+            last, human, count = self.connection.execute(
+                f"SELECT MAX(0,COALESCE(MAX(timestamp),0)), MAX(0,COALESCE(MAX(CASE WHEN human THEN timestamp END),0)), "
+                f"COALESCE(SUM({unread}),0) FROM {BusPageRow.declared_name} "
+                f"WHERE offset < ? AND ({predicate})",
+                (seen.high_water, json.dumps(seen.exceptions), json.dumps(names), before_offset, *parameters),
+            ).fetchone()
+            clocks[scope.channel], counts[scope.channel] = (last, human), count
+        return clocks, counts
