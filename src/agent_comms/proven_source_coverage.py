@@ -31,7 +31,7 @@ from .private_bus_checkpoint import (
     PrefixWitness,
     verify_private_bus_checkpoint_unlocked,
 )
-from .wake import NoWakeDecision, WakeDecision
+from .wake import WakeDecision
 
 if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope
@@ -148,7 +148,7 @@ class SourceCoverage:
                 if receipt is None:
                     blocked = seq
                     break
-                if type(decision) is NoWakeDecision:
+                if decision.audience.observer:
                     no_wake.append(seq)
                 elif type(decision) is WakeDecision:
                     evidence = self._selected_inputs(seq, recipient, decision, receipt, source_reads)

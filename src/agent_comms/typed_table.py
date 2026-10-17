@@ -241,6 +241,7 @@ class JsonStorage(SqlStorage):
 class Column:
     """Constraints on a field; its name and type remain on the dataclass field."""
 
+    generation_storage: ClassVar[str] = "STORED"
     primary_key: bool = False
     auto_increment: bool = False
     unique: bool = False
@@ -257,7 +258,11 @@ class Column:
 
     @property
     def generated_sql(self) -> str:
-        return "" if self.writable else f" GENERATED ALWAYS AS ({self.generated}) STORED"
+        return "" if self.writable else f" GENERATED ALWAYS AS ({self.generated}) {self.generation_storage}"
+
+
+class VirtualColumn(Column):
+    generation_storage = "VIRTUAL"
 
 
 @dataclass(frozen=True)

@@ -79,7 +79,7 @@ class AssignmentStore:
             raise StaleRevision("unbound delivery assignment changed")
         return self.transition_preengagement(
             current.assignment_id,
-            current.lifecycle.mode.initial_state(),
+            current.lifecycle.mode.initial_state,
             expected_revision=current.revision,
         ).value
 

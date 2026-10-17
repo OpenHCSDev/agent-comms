@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest, KeyedResponseReceipt
     from .messages import Message
-    from .wake import NoWakeDecision, WakeDecision
+    from .wake import WakeDecision
 
 
 PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
@@ -87,11 +87,11 @@ def reject_private_wire_fields(record: Mapping[str, object]) -> None:
         raise ValueError("Bus-private wire fields cannot be exported.")
 
 
-def _decision_wire(decision: WakeDecision | NoWakeDecision) -> dict[str, str]:
-    from .wake import NoWakeDecision, WakeDecision
+def _decision_wire(decision: WakeDecision) -> dict[str, str]:
+    from .wake import WakeDecision
 
-    if type(decision) is NoWakeDecision:
-        return {"recipient_lookup": decision.recipient, "no_wake": decision.reason.value}
+    if decision.audience.observer:
+        return {"recipient_lookup": decision.recipient, "no_wake": "unmentioned_observer"}
     if type(decision) is WakeDecision:
         return {
             "recipient_lookup": decision.recipient,
@@ -101,7 +101,7 @@ def _decision_wire(decision: WakeDecision | NoWakeDecision) -> dict[str, str]:
     raise TypeError("Only typed, pure full-cohort decisions may be committed.")
 
 
-def decisions_wire(decisions: tuple[WakeDecision | NoWakeDecision, ...]) -> list[dict[str, str]]:
+def decisions_wire(decisions: tuple[WakeDecision, ...]) -> list[dict[str, str]]:
     return [_decision_wire(decision) for decision in decisions]
 
 
@@ -121,7 +121,7 @@ class CommittedDelivery(MessageWireRecord):
     wire_root_id: str
     message: Message
     audience: FrozenAudience
-    decisions: tuple[WakeDecision | NoWakeDecision, ...]
+    decisions: tuple[WakeDecision, ...]
     decisions_digest: str
     control: str
     resolver_version: str
@@ -241,7 +241,7 @@ def initial_sideband(
     wire_root_id: str,
     message: Message,
     audience: FrozenAudience,
-    decisions: tuple[WakeDecision | NoWakeDecision, ...],
+    decisions: tuple[WakeDecision, ...],
     *,
     control: str,
 ) -> DeliveryManifest:

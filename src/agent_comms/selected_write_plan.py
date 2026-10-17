@@ -14,7 +14,7 @@ import json
 import os
 import secrets
 from contextlib import suppress
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
 
 from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
@@ -201,7 +202,7 @@ class SelectedWritePlans:
                     for assignment in assignments
                     if assignment.source == MessageReference(source_seq, source_message_id)
                     and assignment.recipient == owner.name
-                    and assignment.lifecycle.full_pending
+                    and isinstance(assignment.lifecycle, FullPendingAssignment)
                 ]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")

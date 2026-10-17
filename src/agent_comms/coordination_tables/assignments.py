@@ -25,6 +25,7 @@ from agent_comms.typed_table import (
     ForeignKey,
     Index,
     TypedTable,
+    VirtualColumn,
 )
 
 
@@ -32,6 +33,11 @@ class MessageAudience(StrEnum):
     DIRECT = "direct"
     MENTIONED = "mentioned"
     COLLECTIVE = "collective"
+    OBSERVER = "observer"
+
+    @property
+    def observer(self) -> bool:
+        return self is self.OBSERVER
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +77,7 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     def require_initial_decision(self) -> None:
         initial = replace(
             self,
-            lifecycle=self.lifecycle.mode.initial_state()(),
+            lifecycle=self.lifecycle.mode.initial_state(),
             updated_at_ms=self.accepted_at_ms,
             revision=1,
         )
@@ -206,7 +212,7 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
         default=None,
         metadata={
             "snapshot_exclude": True,
-            "sql": Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
+            "sql": VirtualColumn(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
         },
     )
     triage_verdict: str | None = dataclass_field(
@@ -326,7 +332,7 @@ BEGIN
       AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT NULL;
     SELECT RAISE(ABORT, 'post-engagement deferral cannot become pending')
     WHERE (json_extract(OLD.lifecycle, '$.kind')) = 'deferred' AND (json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NOT NULL
-      AND (json_extract(NEW.lifecycle, '$.kind')) IN ('triage_pending', 'full_pending');
+      AND (json_extract(NEW.lifecycle, '$.kind')) IN ({pending_assignment_names});
 END"""
             ),
             "wake_claim_delete_frozen": (

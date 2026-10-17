@@ -33,7 +33,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
-from agent_comms.wake import NoWakeDecision, WakeDecision
+from agent_comms.wake import WakeDecision
 
 _LOG = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def _expected_assignments(
     for recipient, decision in zip(initial.audience.recipients, initial.decisions, strict=True):
         if recipient.recipient_lookup != decision.recipient:
             raise IntegrityViolationError("bus decision does not match frozen N")
-        if type(decision) is NoWakeDecision:
+        if decision.audience.observer:
             continue
         if type(decision) is not WakeDecision:
             raise IntegrityViolationError("bus decision has an unsupported kind")
@@ -80,7 +80,7 @@ def _expected_assignments(
                 revision=1,
                 resolver_version=RESOLVER_VERSION,
                 policy_version=POLICY_VERSION,
-                lifecycle=decision.wake_mode.initial_state()(),
+                lifecycle=decision.wake_mode.initial_state(),
             )
         )
     return tuple(result)
@@ -109,7 +109,7 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> Acce
     row = ClaimBatchReceipts.one(db, wire_root_id=initial.wire_root_id, wire_seq=message.seq)
     if row is None or not row.sealed:
         raise IdentityConflict("cohort receipt is absent or unsealed")
-    expected_count = sum(type(decision) is WakeDecision for decision in initial.decisions)
+    expected_count = sum(not decision.audience.observer for decision in initial.decisions)
     if any(
         getattr(row, field) != expected
         for field, expected in (
@@ -178,7 +178,7 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> Acce
     if any(
         WakeAssignment.one(db, recipient_lookup=recipient.recipient_lookup, wire_seq=message.seq)
         for recipient, decision in zip(audience.recipients, initial.decisions, strict=True)
-        if type(decision) is NoWakeDecision
+        if decision.audience.observer
     ):
         raise IdentityConflict("no-wake observer has a conflicting unbound claim")
     return AcceptedCohort(
