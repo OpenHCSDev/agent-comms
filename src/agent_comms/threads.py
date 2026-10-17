@@ -121,10 +121,7 @@ class Thread(ThreadProvenance):
         return self.execution.restart_candidates(self, status)
 
     def require_restart_owner(self, status) -> None:
-        self.execution.require_native()
-        self.role.require_executable()
-        status.require_active()
-        if not self.process_alive or self.pid == os.getpid():
+        if not self.restart_candidates(status):
             raise RelationViolationError("Restart requires another live owner")
 
     def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
