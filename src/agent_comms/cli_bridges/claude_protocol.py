@@ -4,7 +4,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from difflib import unified_diff
 import json
 from typing import ClassVar, Literal
 from xml.etree import ElementTree
@@ -211,43 +210,38 @@ class ThinkingBlock(RedactedThinking):
             record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp),)))
 
 
-class ClaudeToolArguments(WireModel, ABC):
-    @property
-    @abstractmethod
-    def detail(self) -> str: ...
+class ClaudeToolArguments(WireModel):
+    claude_names: ClassVar[tuple[str, ...]] = ()
+    declaration: ClassVar[type[ToolDeclaration]]
+    types: ClassVar[dict[str, type[ClaudeToolArguments]]] = {}
+    detail: str
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for name in cls.claude_names:
+            cls.types[name] = cls
 
     def diff(self) -> ToolDiff | None:
         return None
 
 
 class ClaudeCommandArguments(ClaudeToolArguments):
-    command: str
-
-    @property
-    def detail(self) -> str:
-        return self.command
+    claude_names, declaration = ('Bash',), BashTool
+    detail: str = Field(alias='command')
 
 
 class ClaudePatternArguments(ClaudeToolArguments):
-    pattern: str
+    claude_names, declaration = ('Grep',), GrepTool
+    detail: str = Field(alias='pattern')
 
-    @property
-    def detail(self) -> str:
-        return self.pattern
+
+class ClaudeGlobArguments(ClaudePatternArguments):
+    claude_names, declaration = ('Glob',), GlobTool
 
 
 class ClaudePathArguments(ClaudeToolArguments):
-    file_path: str
-
-    @property
-    def detail(self) -> str:
-        return self.file_path
-
-    def patch(self, before: str, after: str, *, source: str | None = None) -> str:
-        # Claude supplies replacement fragments, not full-file line positions.
-        lines = tuple(unified_diff(before.splitlines(), after.splitlines(),
-                                   fromfile=source or self.file_path, tofile=self.file_path, lineterm=''))
-        return '\n'.join(lines) + ('\n' if lines else '')
+    claude_names, declaration = ('Read',), ReadTool
+    detail: str = Field(alias='file_path')
 
 
 class ClaudeReplacement(WireModel):
@@ -255,27 +249,27 @@ class ClaudeReplacement(WireModel):
     new_string: str
 
 
-class ClaudeEditArguments(ClaudePathArguments, ClaudeReplacement):
+class ClaudeEditArguments(ClaudePathArguments):
+    claude_names, declaration = ('Edit', 'MultiEdit'), EditTool
+    edits: list[ClaudeReplacement]
+
+    @model_validator(mode='before')
+    @classmethod
+    def replacements(cls, value):
+        return value if 'edits' in value else {**value, 'edits': [value]}
+
     def diff(self) -> ToolDiff:
-        return ToolDiff(self.patch(self.old_string, self.new_string))
+        return ToolDiff(''.join(ToolDiff.from_versions(self.detail, edit.old_string, edit.new_string).text
+                                for edit in self.edits))
 
 
 class ClaudeWriteArguments(ClaudePathArguments):
+    claude_names, declaration = ('Write',), WriteTool
     content: str
-    old_string: str | None = None
 
     def diff(self) -> ToolDiff:
-        # A Write request does not normally report its previous file content.
-        # Label that missing side explicitly; never claim the file did not exist.
-        return ToolDiff(self.patch(self.old_string or '', self.content,
-            source=self.file_path if self.old_string is not None else self.file_path + ' (previous content not supplied)'))
-
-
-class ClaudeMultiEditArguments(ClaudePathArguments):
-    edits: list[ClaudeReplacement]
-
-    def diff(self) -> ToolDiff:
-        return ToolDiff(''.join(self.patch(edit.old_string, edit.new_string) for edit in self.edits))
+        return ToolDiff.from_versions(self.detail, '', self.content,
+                                     before_path=self.detail + ' (previous content not supplied)')
 
 
 class ToolUse(AssistantBlock):
@@ -283,24 +277,14 @@ class ToolUse(AssistantBlock):
     id: str
     name: str
     input: JsonValue
-    native_tools: ClassVar[dict[str, tuple[type[ToolDeclaration], type[ClaudeToolArguments]]]] = {
-        'Bash': (BashTool, ClaudeCommandArguments),
-        'Read': (ReadTool, ClaudePathArguments),
-        'Edit': (EditTool, ClaudeEditArguments),
-        'Write': (WriteTool, ClaudeWriteArguments),
-        'MultiEdit': (EditTool, ClaudeMultiEditArguments),
-        'Grep': (GrepTool, ClaudePatternArguments),
-        'Glob': (GlobTool, ClaudePatternArguments),
-    }
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        mapped = self.native_tools.get(self.name)
-        if mapped is None:
+        arguments_type = ClaudeToolArguments.types.get(self.name)
+        if arguments_type is None:
             call = ToolCall(self.id, self.name, self.input)
         else:
-            declaration, arguments_type = mapped
             arguments = arguments_type.model_validate(self.input)
-            call = ToolCall(self.id, declaration.declared_name, self.input, arguments.detail, arguments.diff())
+            call = ToolCall(self.id, arguments.declaration.declared_name, self.input, arguments.detail, arguments.diff())
         session.started(call)
         return (ActiveItem(session.turn, self.id, ActivityState.WORKING, call.title),)
 

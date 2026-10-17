@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from difflib import unified_diff
 from typing import Annotated, ClassVar, Generic, Literal, TypeVar
 
 from metaclass_registry import RegistryConfig
@@ -615,12 +614,8 @@ class WholeFileChange(PatchChange, ABC):
     def patch(self, path: str, content: str) -> ToolDiff | None:
         before, after = self.versions(content)
         before_path, after_path = self.paths(path)
-        patch = ''.join(unified_diff(
-            before.splitlines(keepends=True), after.splitlines(keepends=True),
-            fromfile=before_path, tofile=after_path,
-        ))
-        # An empty file still has a creation/deletion event, but no changed lines.
-        return ToolDiff(patch) if patch else None
+        patch = ToolDiff.from_versions(path, before, after, before_path=before_path, after_path=after_path)
+        return patch if patch.text else None
 
 
 class AddedFile(WholeFileChange):
