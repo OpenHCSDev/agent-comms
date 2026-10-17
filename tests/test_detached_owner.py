@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsClient
-from agent_comms.acp_extension import CoordinationChangedUpdate, TurnSettledUpdate, decode_updates
+from agent_comms.acp_extension import CoordinationChangedUpdate, TurnChangedUpdate, decode_updates
 from agent_comms.child_process import ParentedProcess
 from agent_comms.comms import wire
 from compaction_loopback import LoopbackProvider
@@ -83,7 +83,9 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
     class Client:
         async def session_update(self, session_id, update):
             if any(
-                isinstance(fact, TurnSettledUpdate) for fact in decode_updates(update.get("_meta"))
+                isinstance(fact, TurnChangedUpdate)
+                and fact.state.active is None and fact.state.finished_turn_id is not None
+                for fact in decode_updates(update.get("_meta"))
             ):
                 settled.set()
 
