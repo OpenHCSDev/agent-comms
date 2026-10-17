@@ -480,7 +480,7 @@ class TestThreadOps:
 
 class TestFork:
     def test_fork_requires_parent_session(self, wired):
-        with pytest.raises(RelationViolationError, match="session file"):
+        with pytest.raises(ValueError, match="Canonical saved session required"):
             wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model="test/model", thinking_level="high", task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired):

@@ -81,12 +81,8 @@ class NewThreadSpec:
                       worktree=project, model=self.model, thinking_level=self.thinking_level)
 
     def __post_init__(self) -> None:
-        if not self.model:
-            raise ValueError("Choose a model for the new thread")
-        provider, separator, model = self.model.partition("/")
-        if not separator or not provider or not model:
+        if not all(self.model.partition("/")):
             raise ValueError("Choose a provider-qualified model for the new thread")
-        object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
@@ -108,28 +104,25 @@ class ForkSpec(NewThreadSpec):
 
     parent: str
 
-    def _parent(self, threads: ThreadManagement) -> Thread:
-        parent = threads.registry.require(self.parent)
-        parent.execution.require_native()
-        return parent
-
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         # Copy saved history outside the wire lock, retaining writer→wire order.
-        parent = self._parent(threads)
-        child = replace(self.declaration(self.project), parent=parent.name,
-                        tags=parent.tags if self.tags is None else self.tags,
-                        session_file=parent.require_saved_session())
-        threads.registry.require_declaration_available(child)
+        parent = threads.registry.require(self.parent)
+        parent.execution.require_native()
+        threads.registry.require_declaration_available(replace(
+            self.declaration(self.project), parent=parent.name,
+            tags=parent.tags if self.tags is None else self.tags, session_file=parent.require_saved_session()))
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
         with _store_lock(threads._wire_lock_path):
-            current = self._parent(threads)
+            current = threads.registry.require(self.parent)
+            current.execution.require_native()
             if current.incarnation != parent.incarnation or current.session_file != parent.session_file:
                 raise RelationViolationError(
                     f"Parent thread {self.parent!r} changed its saved session during the fork; "
                     f"the created fork {location.path} was not registered."
                 )
-            yield replace(child, session_file=location.path)
+            yield replace(self.declaration(self.project), parent=current.name,
+                          tags=current.tags if self.tags is None else self.tags, session_file=location.path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -630,11 +623,9 @@ class ThreadManagement:
                     child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
                 )
                 spec.task.record_first_input(
-                    partial(
-                        InputDispositions(self.root).record, owner=owned.name, target=owned.name,
+                    partial(InputDispositions(self.root).record, owner=owned.name, target=owned.name,
                         admission=self.registry.snapshot().admission_generations[owned.name],
-                    )
-                )
+                    ))
                 return owned
             except OSError:
                 self.registry.remove(spec.name)

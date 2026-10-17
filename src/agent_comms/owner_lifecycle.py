@@ -43,8 +43,7 @@ class LaunchInput:
     def apply_environment(self, environment: dict[str, str]) -> None:
         pass
 
-    def record_first_input(self, record) -> None:
-        pass
+    def record_first_input(self, record) -> None: pass
 
 
 @dataclass(frozen=True)
