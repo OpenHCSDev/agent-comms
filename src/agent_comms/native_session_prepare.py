@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from . import agent_events as events
 from . import backend
 from .native_pi import NativePiUnavailable
+from .native_custody import LoadedNative
 from .coordinator import Coordination
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence
@@ -49,6 +50,7 @@ class PreparedSession(UnwrittenPrompt):
 class NativeSessionPreparation(backend.TurnSession):
     """Share native launch/attestation with turns; retain an idle child, send no prompt."""
     prompt_type = PreparedSession
+    retained_state = LoadedNative
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
         if not self.native_session.child_state.retained:

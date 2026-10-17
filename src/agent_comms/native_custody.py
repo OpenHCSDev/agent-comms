@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .pi_events import PiEvent
+from .pi_commands import AgentCommsInspectContext
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .native_attestation import NativeAttestation, PendingAttestation
@@ -160,7 +161,10 @@ class NativeChildState(ABC):
     def reuse(self, key) -> PiSessionChild | None:
         return None
 
-    def idle(self) -> RetainedNative:
+    async def context_for_input(self, thread, context):
+        return context
+
+    def idle(self) -> LoadedNative:
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
     async def inspect(self, persistent, prepare, request):
@@ -233,7 +237,7 @@ class BorrowedNative(SuccessorNative):
             return (await response).data.require_payload()
 
 @dataclass
-class RetainedNative(ChildNative):
+class LoadedNative(ChildNative):
     retained = True
     identity: NativeSessionIdentity
     revision: SessionRevision
@@ -256,6 +260,7 @@ class RetainedNative(ChildNative):
                 current.revision = SessionRevision.observe(
                     current.identity.session_file
                 ).require_available()
+                persistent.child_state = LoadedNative(current.child, current.identity, current.revision)
             return data
 
     def reuse(self, key):
@@ -278,4 +283,13 @@ class RetainedNative(ChildNative):
 
     def _shutdown_successor(self) -> NativeChildState:
         return EmptyNative()
+
+
+class RetainedNative(LoadedNative):
+    async def context_for_input(self, thread, context):
+        if not self.current or self.identity.session_file != thread.runtime.read_key:
+            return context
+        received = await self.child.request(AgentCommsInspectContext())
+        self.identity.require_same_session(received.identity)
+        return context.after_received(tuple(segment.measured_manifest() for segment in received.segments))
 

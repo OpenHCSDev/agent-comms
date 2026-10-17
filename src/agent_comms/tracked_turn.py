@@ -352,7 +352,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         identity = self.native.attestation.identity
         # An input written but never started may still run in the child; it is not idle.
         self.retainable = self.retainable and self.inputs.settled
-        if self.retainable and identity is not None and self.native_session.retain(self.native, identity):
+        if self.retainable and identity is not None and self.native_session.retain(self.native, identity, state_type=self.retained_state):
             return
         await self.native_session.close()
 
