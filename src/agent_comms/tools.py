@@ -602,7 +602,7 @@ class CommsTodoCreateTool(ThreadToolRequest):
     text: str = tool_field("Problem description")
     assignee: str = tool_field("Assignee thread; a problem cannot be born unowned")
     owner: FileLine = tool_field("Existing source owner path:line")
-    check: OrderCheck = tool_field("Existing directory, silent check command and expected exit status zero")
+    check: OrderCheck = tool_field("Existing directory and silent command that exits zero on success")
     edits: list[str] = tool_field("Required edits, rendered as numbered instructions")
     banned: list[str] = tool_field("Banned actions")
     report: str = tool_field("Required delivery report")
@@ -665,6 +665,7 @@ class CommsProblemCloseTool(ThreadToolRequest):
     description = "Record installed application evidence and close only a problem with no open order."
     problem: str = tool_field("Problem ID")
     works: str = tool_field("What worked in the installed application, 8+ words")
+    artifact: str = tool_field("Existing verification artifact file")
 
     def apply(self, comms, caller):
         todo = comms.goals.todos.get(self.problem)
@@ -673,7 +674,7 @@ class CommsProblemCloseTool(ThreadToolRequest):
         assignment = todo.assignment
         comms.goals.update_goal(assignment.owner, InstalledOrderGoalAction(
             expect=GoalPrecondition(goal_id=assignment.generation),
-            works=self.works))
+            works=self.works, artifact=self.artifact))
         closed = comms.goals.change_problem(self.problem, ChangeTodoState(
             todo.revision, DoneTodoState, actor, assignment.generation), caller.name)
         return {"todo": FieldCodec.encode(closed)}

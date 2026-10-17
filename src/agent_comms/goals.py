@@ -199,10 +199,9 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
 class OrderCheck:
     directory: str
     command: str
-    expected: Literal[0] = 0
 
     def __post_init__(self):
-        if not self.directory.strip() or not self.command.strip() or self.expected != 0:
+        if not self.directory.strip() or not self.command.strip():
             raise ValueError("An order check requires a directory, a silent command and exit status zero.")
 
     def require_directory(self):
@@ -218,7 +217,7 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_completion(self) -> None:
         pass
 
-    def installed(self, works: str) -> GoalOrder:
+    def installed(self, works: str, artifact: str) -> GoalOrder:
         raise ValueError("This goal is not a problem order.")
 
     def require_close(self) -> None:
@@ -270,15 +269,15 @@ class ProblemGoalOrder(GoalOrder):
 
     def instructions(self, text):
         return "\n".join((text, f"Problem: {self.problem}", f"Owner: {self.owner.to_wire()}",
-            f"Check: {self.check.directory} :: {self.check.command} -> {self.check.expected}",
+            f"Check: {self.check.directory} :: {self.check.command}",
             *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
             "Banned: " + "; ".join(self.banned), "Report: " + self.report))
 
     def copy_as(self, kind, **evidence):
         return kind(**{f.name: getattr(self, f.name) for f in fields(ProblemGoalOrder)}, **evidence)
 
-    def installed(self, works):
-        return self.copy_as(InstalledProblemGoalOrder, works=works)
+    def installed(self, works, artifact):
+        return self.copy_as(InstalledProblemGoalOrder, works=works, artifact=artifact)
 
     def require_completion(self) -> None:
         raise ValueError("Complete a problem order with its checked delivered commit.")
@@ -295,11 +294,12 @@ class ProblemGoalOrder(GoalOrder):
 @dataclass(frozen=True)
 class InstalledProblemGoalOrder(ProblemGoalOrder):
     works: str
+    artifact: str
 
     def __post_init__(self):
         super().__post_init__()
-        if len(self.works.split()) < 8:
-            raise ValueError("Describe the installed application result in at least eight words.")
+        if len(self.works.split()) < 8 or not self.artifact.strip():
+            raise ValueError("Describe the installed application result (8+ words) and name its artifact file.")
 
     def require_close(self):
         pass

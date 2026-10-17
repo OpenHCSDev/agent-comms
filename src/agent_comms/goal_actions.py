@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 import asyncio
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
@@ -358,7 +359,7 @@ class DeliveredOrderGoalAction(CompletionGoalAction, RuntimeInvocable):
 
         async def run(*command):
             result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
-            if result.outcome != ExitedOutcome(check.expected):
+            if result.outcome != ExitedOutcome(0):
                 raise ValueError(result.stderr.decode(errors="replace") or "The order check failed.")
             return result.stdout.decode(errors="replace")
 
@@ -376,11 +377,14 @@ class DeliveredOrderGoalAction(CompletionGoalAction, RuntimeInvocable):
 @dataclass(frozen=True, kw_only=True)
 class InstalledOrderGoalAction(GoalAction, RuntimeInvocable):
     works: str
+    artifact: str
 
     def change(self, ctx):
         goal = ctx.require_goal()
         goal.state.require_order_slot()
-        return replace(goal, order=goal.order.installed(self.works),
+        if not Path(self.artifact).is_file():
+            raise ValueError("Retain the installed application artifact before closing.")
+        return replace(goal, order=goal.order.installed(self.works, self.artifact),
                        revision=goal.revision + 1)
 
 
