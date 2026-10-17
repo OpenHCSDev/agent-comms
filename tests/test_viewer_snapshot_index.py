@@ -11,6 +11,8 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.bus_display_index import BusDisplayIndex
+from agent_comms.bus_page_index import BusPageIndex
+from agent_comms.read_basis import ReadCursor
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
@@ -34,11 +36,12 @@ def test_display_metrics_encode_one_viewer_read_set_for_all_channels(tmp_path):
     from agent_comms.read_basis import ChannelDisplayScope
 
     scopes = tuple(ChannelDisplayScope(f"#{n}", frozenset({f"#{n}"})) for n in range(48))
-    seen = frozenset(range(10_000))
+    seen = ReadCursor(10_000, (10_003, 10_007))
     encoded = FieldCodec.encode(DisplayMetricScope(scopes, frozenset({"viewer"}), seen))
-    assert set(encoded) == {"scopes", "viewer_names", "seen_sequences"}
-    assert frozenset(encoded["seen_sequences"]) == seen
-    assert all("seen_sequences" not in scope for scope in encoded["scopes"])
+    assert set(encoded) == {"scopes", "viewer_names", "seen"}
+    assert FieldCodec.decode(ReadCursor, encoded["seen"]) == seen
+    assert encoded["seen"] == {"high_water": 10_000, "exceptions": [10_003, 10_007]}
+    assert all("seen" not in scope for scope in encoded["scopes"])
     index = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer")
     assert index.path.name.startswith(f"bus_display_{index.record_type.schema}_")
 
@@ -363,8 +366,8 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
         wire(tmp_path).views.viewer_snapshot(str(tmp_path))
 
 
-def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
-    """Real page coverage and read receipts keep clocks independent of unread."""
+def test_display_read_progress_aggregates_sparse_cursor_without_decoding(tmp_path):
+    """SQL applies exact sparse paint without decoding retained message bodies."""
     comms = wire(tmp_path)
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
@@ -379,20 +382,25 @@ def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
         viewer, comms.bus.reads.capture(viewer, (messages[1], messages[90]),
                                        comms.registry.snapshot(), comms.bus.log.path),
     )
-    with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+    with (
+        patch.object(Message, "from_wire", wraps=Message.from_wire) as decode,
+        patch.object(BusPageIndex, "display_metrics", autospec=True,
+                     side_effect=BusPageIndex.display_metrics) as aggregate,
+    ):
         after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
         assert after.channel_unread["#team"] == 98
-        assert decode.call_count == 2
-        assert {call.args[0]["seq"] for call in decode.call_args_list} == {
+        assert decode.call_count == 0  # Read changes reaggregate typed SQL rows, not bodies.
+        assert aggregate.call_count == 1
+        assert aggregate.call_args.args[1].seen == ReadCursor().add((
             messages[1].seq, messages[90].seq,
-        }
+        ))
     assert after.channels == before.channels
     # A new row still contributes once, after the rebased old prefix.
     comms.messaging.send_message("bob", "#team", "appended")
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 99
 
 
-def test_display_read_changes_prepare_missing_index_then_query_sparse_rows(tmp_path):
+def test_display_read_changes_rebuild_missing_index_then_aggregate(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
@@ -403,7 +411,9 @@ def test_display_read_changes_prepare_missing_index_then_query_sparse_rows(tmp_p
         viewer, comms.bus.reads.capture(viewer, (messages[3],),
                                        comms.registry.snapshot(), comms.bus.log.path),
     )
-    index_path = comms.bus.log.path.with_name("bus_page_index.sqlite3")
+    index_path = BusPageIndex(comms.bus.log.path).path
+    assert index_path.exists()  # The initial metrics query now prepares this SQL owner.
+    index_path.unlink()  # Exercise the missing disposable resource, not a stale setup assumption.
     assert not index_path.exists()
 
     read_appended = OpenedWireSnapshot.public_records
@@ -415,11 +425,17 @@ def test_display_read_changes_prepare_missing_index_then_query_sparse_rows(tmp_p
     with (
         patch.object(Message, "from_wire", wraps=Message.from_wire) as decode,
         patch.object(OpenedWireSnapshot, "public_records", no_full_scan),
+        patch.object(BusPageIndex, "display_metrics", autospec=True,
+                     side_effect=BusPageIndex.display_metrics) as aggregate,
     ):
         after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
         assert after.channel_unread["#team"] == 9
-        assert decode.call_count == len(messages) + 1  # Build once, then select one row.
-        assert decode.call_args_list[-1].args[0]["seq"] == messages[3].seq
+        assert decode.call_count == len(messages)  # Build once; SQL needs no extra body decode.
+        assert {call.args[0]["seq"] for call in decode.call_args_list} == {
+            message.seq for message in messages
+        }
+        assert aggregate.call_count == 1
+        assert aggregate.call_args.args[1].seen == ReadCursor().add((messages[3].seq,))
     assert after.channels == before.channels
     assert index_path.exists()
 

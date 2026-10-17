@@ -165,21 +165,29 @@ def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path)
     assert comms.registry.status(current.name) == ArchivedThreadStatus()
 
 
-def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog(tmp_path):
+@pytest.mark.asyncio
+async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog(tmp_path):
+    from agent_comms.channel_management import TagDisposition
     from agent_comms.cli_commands import CliCommand
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.field_codec import FieldCodec, compile_decoder
     from agent_comms.tools import CommsTagsTool, tool_catalog
 
     comms = setup_wire(tmp_path)
     action = next(action for action in CliCommand.target_catalog(comms, '#api', project=str(tmp_path))
                   if action.declaration.declared_name == 'delete-tag')
-    disposition = DeleteExclusiveInactiveThreadsTagDisposition
-    choices = next(field.choices for field in action.editable_fields if field.name == 'disposition')
-    assert (disposition.label, FieldCodec.encode(disposition)) in choices
-    edited = action.edited({'disposition': FieldCodec.encode(disposition)})
+    disposition = DeleteExclusiveInactiveThreadsTagDisposition()
+    editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
+    choices = next(field.choices for field in await action.prepare_fields()
+                   if field.name == 'disposition')
+    assert (disposition.label, editor_value) in choices
+    edited = action.edited({'disposition': editor_value})
+    assert edited.bound[0].disposition == disposition
     assert 'only inactive' in edited.confirmation
     tag_tool = next(tool for tool in tool_catalog() if tool['name'] == CommsTagsTool.declared_name)
-    assert FieldCodec.encode(disposition) in str(tag_tool['parameters']['properties']['disposition'])
+    schema = tag_tool['parameters']['properties']['disposition']
+    assert schema['oneOf'] == FieldCodec.value_schema(TagDisposition)['oneOf']
+    assert any(member['properties'][TagDisposition.family_discriminator]['const']
+               == disposition.declared_name for member in schema['oneOf'])
 
 
 def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
