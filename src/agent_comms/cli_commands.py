@@ -19,7 +19,9 @@ from contextlib import aclosing
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, TextIO, Type, TYPE_CHECKING, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
+
+from acp.schema import SessionConfigSelectOption
 
 from .activity import ActivityState
 from .channels import Channel
@@ -62,9 +64,6 @@ from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
 from .owner_lifecycle import OwnerStartResult
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
-
-if TYPE_CHECKING:
-    from acp.schema import SessionConfigSelectOption
 
 
 def _duration_seconds(value: str) -> float:
@@ -189,11 +188,20 @@ class TargetField:
         values = FieldCodec.value_schema(self.annotation).get('enum')
         return None if values is None else tuple((str(value), str(value)) for value in values)
 
+    def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
+        """An unrestricted field does not declare a finite-choice editor."""
+        return ()
+
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> TargetField:
         if (member := self.catalog) is None:
-            return self
-        options = await catalogs.catalog_for(member).choices(selection)
-        return CatalogTargetField(self.declaration, self.annotation, self.value, tuple(options))
+            choices = self.choices
+            if choices is None:
+                return self
+            options = tuple(SessionConfigSelectOption(name=label, value=value)
+                            for label, value in choices)
+        else:
+            options = await catalogs.catalog_for(member).choices(selection)
+        return ChoiceTargetField(self.declaration, self.annotation, self.value, tuple(options))
 
     @property
     def required(self) -> bool:
@@ -207,13 +215,16 @@ class TargetField:
 
 
 @dataclass(frozen=True)
-class CatalogTargetField(TargetField):
-    """A form projects the choices supplied by its declared configuration owner."""
+class ChoiceTargetField(TargetField):
+    """A prepared finite declaration, from its annotation or configuration catalog."""
     options: tuple[SessionConfigSelectOption, ...]
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
         return tuple((choice.name, choice.value) for choice in self.options)
+
+    def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
+        return (choices(self),)
 
 
 @dataclass(frozen=True)
