@@ -132,9 +132,12 @@ class OmittedAwareness(InstructionSegment, OptionalAwarenessResult):
     reason: str
 
     @classmethod
+    def instruction_name(cls):
+        return "selected-awareness-omitted.md"
+
+    @classmethod
     def capture(cls, reason: str) -> OmittedAwareness:
-        instruction = InstructionFile.read("selected-awareness-omitted.md")
-        return cls(provenance=(instruction.source,), instruction=instruction, reason=reason)
+        return super().capture(reason=reason)
 
     def values(self) -> dict[str, object]:
         return {"reason": self.reason}

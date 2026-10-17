@@ -10,7 +10,7 @@ from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
 from .messages import InfoKind, Message
 from .native_pi import NativePiUnavailable
-from .turn_context import InstructionFile, ReplyRouteSegment, WireProvenance
+from .turn_context import ReplyRouteSegment, WireProvenance
 
 if TYPE_CHECKING:
     from .assignment_store import AssignmentStore
@@ -102,13 +102,8 @@ class SelectedSourceBatch:
     def response_segment(self):
         """The reply route belongs to the original owners; no answer format is
         demanded of the model."""
-        instruction = InstructionFile.read("reply-route.md")
-        return ReplyRouteSegment(
-            provenance=(
-                instruction.source,
-                *(WireProvenance(source.delivery.message.reference) for source in self.sources),
-            ),
-            instruction=instruction,
+        return ReplyRouteSegment.capture(
+            tuple(WireProvenance(source.delivery.message.reference) for source in self.sources),
             targets=(self.target,),
         )
 

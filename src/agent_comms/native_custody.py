@@ -287,7 +287,8 @@ class LoadedNative(ChildNative):
 
 class RetainedNative(LoadedNative):
     async def context_for_input(self, thread, context):
-        if not self.current or self.identity.session_file != thread.runtime.read_key:
+        if (not self.current or thread.project_resume_due
+                or self.identity.session_file != thread.runtime.read_key):
             return context
         received = await self.child.request(AgentCommsInspectContext())
         self.identity.require_same_session(received.identity)

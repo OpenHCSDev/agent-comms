@@ -774,8 +774,12 @@ class InstructionSegment(ContextSegment):
     instruction: InstructionFile
 
     @classmethod
+    def instruction_name(cls):
+        return cls.declared_name.replace("_", "-") + ".md"
+
+    @classmethod
     def capture(cls, provenance=(), **values):
-        instruction = InstructionFile.read(cls.declared_name.replace("_", "-") + ".md")
+        instruction = InstructionFile.read(cls.instruction_name())
         return cls(provenance=(*provenance, instruction.source), instruction=instruction, **values)
 
     @abstractmethod
