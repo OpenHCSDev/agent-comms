@@ -7,6 +7,10 @@ class UnregisteredThreadError(ValueError):
     """A reference does not resolve to a registered thread."""
 
 
+class UnknownChannelError(ValueError):
+    """A target is absent from the catalog and current thread tags."""
+
+
 class RelationViolationError(ValueError):
     """A required relation between declarations cannot be proved."""
 
