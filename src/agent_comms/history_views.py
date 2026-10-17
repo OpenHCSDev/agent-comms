@@ -18,7 +18,6 @@ from .thread_identity import ThreadIncarnation
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
     from .registry_document import RegistrySnapshot
-    from .wire_log import OpenedWireSnapshot
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
@@ -282,7 +281,7 @@ class HistoryViews:
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
         channels = catalog.views(snapshot.threads)
-        channels_clock, sent = self.bus.activity_clocks()
+        clocks = self.bus.activity_clocks()
         return ChannelView.roster(
             snapshot,
             channels,
@@ -293,10 +292,8 @@ class HistoryViews:
                     show_stopped=show_stopped, show_archived=show_archived
                 ), snapshot=snapshot,
             ),
-            self.last_sent_timestamps(sent, registry=snapshot),
-            ChannelActivity.for_views(channels, {
-                name: ChannelActivity(*clocks) for name, clocks in channels_clock.items()
-            }),
+            self.last_sent_timestamps(clocks.sent, registry=snapshot),
+            ChannelActivity.for_views(channels, clocks.channels),
             show_stopped=show_stopped,
             show_archived=show_archived,
         )
@@ -368,10 +365,10 @@ class HistoryViews:
         with self.presentation.snapshot(viewer=viewer) as (basis, source):
             captured_viewer = basis.require_viewer()
             display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
-            _, sent = self.bus.activity_clocks(source)
+            clocks = self.bus.activity_clocks(source)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
-                self.last_sent_timestamps(sent, registry=basis.registry), display_activity,
+                self.last_sent_timestamps(clocks.sent, registry=basis.registry), display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
                 show_stopped=show_stopped, show_archived=show_archived,
                 read_marker_notice=basis.document.notice,

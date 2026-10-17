@@ -9,7 +9,7 @@ from contextlib import ExitStack, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .bus_activity_index import ActivitySnapshot, BusActivityIndex
+from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts, WaitingRouteCounts
 from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
@@ -77,7 +77,7 @@ class MessageBus:
             private_claim_writes=private_claim_writes,
         )
 
-    def activity_clocks(self, source: OpenedWireSnapshot | None = None) -> ActivitySnapshot:
+    def activity_clocks(self, source: OpenedWireSnapshot | None = None) -> ActivityClocks:
         """The existing index borrows the same opened source after release."""
         if source is not None:
             return self._activity.snapshot(source, self._bus_activity_fields)

@@ -16,7 +16,12 @@ if TYPE_CHECKING:
     from .wire_log import OpenedWireSnapshot
 
 ActivityFields = tuple[str, str, float, bool, bool]
-ActivitySnapshot = tuple[dict[str, tuple[float, float]], dict[str, float]]
+
+
+@dataclass(frozen=True)
+class ActivityClocks:
+    channels: Mapping[str, ChannelActivity]
+    sent: Mapping[str, float]
 
 
 @dataclass(frozen=True)
@@ -26,8 +31,10 @@ class ActivityCheckpoint(AppendCheckpoint):
     schema: Literal[3] = field(default=3, kw_only=True)
 
     @property
-    def snapshot(self) -> ActivitySnapshot:
-        return self.channels, self.sent
+    def snapshot(self) -> ActivityClocks:
+        return ActivityClocks(
+            {name: ChannelActivity(*clock) for name, clock in self.channels.items()}, self.sent,
+        )
 
 
 class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
@@ -38,11 +45,11 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
         super().__init__(bus_path, bus_path.with_name("bus_activity_latest.json"))
 
     def snapshot(self, opened: OpenedWireSnapshot,
-                 parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivitySnapshot:
+                 parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivityClocks:
         boundary = opened.complete_boundary
         source, stream = opened.revision, opened.stream
         if source is None:
-            return {}, {}
+            return ActivityClocks({}, {})
         checkpoint = opened.append_checkpoint(self)
         if checkpoint is None:
             channels, sent, offset = {}, {}, 0
