@@ -1,6 +1,7 @@
 """Explicit production ACP/worker N/K flags: no inferred activation or provider call."""
 
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 
 import json
 import fcntl
@@ -184,9 +185,9 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "resumable", frozenset(), str(tmp_path), process_identity=None, session_file=str(saved)
-        )
+        , storage_rule=StorageRule())
     )
     launched: list[ParentedProcess] = []
     captured: list[dict[str, str]] = []
@@ -331,12 +332,12 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     legacy = Comms(tmp_path / ".agent-comms")
     for name in ("sender", "receiver"):
         legacy.registry.declare(
-            Thread(
+            Thread.create(
                 name,
                 frozenset(),
                 str(tmp_path),
                 process_identity=ProcessIdentity.capture(os.getpid()),
-            )
+            storage_rule=StorageRule())
         )
     route_file = tmp_path / "route-state" / "active-route.json"
     route = active_route.ActiveRoute(root, root_id, tmp_path)
@@ -507,7 +508,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
 
     monkeypatch.setattr(ParentedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
-        comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi", launch_runtime=LaunchRuntime.current())
+        comms.owners._launch_owner_unlocked(Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule()), "pi", launch_runtime=LaunchRuntime.current())
     assert seen == [str(physical)]
     assert not (other / "registry.json").exists()
 
@@ -533,7 +534,7 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
 
     monkeypatch.setattr(ParentedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
-        comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi", launch_runtime=LaunchRuntime.current())
+        comms.owners._launch_owner_unlocked(Thread.create("owner", frozenset(), str(tmp_path), storage_rule=StorageRule()), "pi", launch_runtime=LaunchRuntime.current())
     assert seen == [(str(root), root_id, str(tmp_path))]
     assert not (other / "registry.json").exists()
 
@@ -542,7 +543,7 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     root, root_id, comms, _, _ = _root(tmp_path)
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
-    comms.registry.declare(Thread("late-owner", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("late-owner", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     late = comms.registry.require("late-owner")
     lookup = RecordedThreadIncarnation("fixture", late.created_at).lookup
     message = comms.messaging.send_initial_cohort("sender", "late-owner", "fresh private task")

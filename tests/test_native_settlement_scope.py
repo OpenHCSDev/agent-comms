@@ -1,4 +1,5 @@
 """Historical release on real isolated stores, never on a retained user input."""
+from agent_comms.storage_rules import StorageRule
 
 import sqlite3
 
@@ -38,8 +39,8 @@ def test_historical_terminal_release_keeps_recorded_incarnation_and_path(monkeyp
         later_file = other_project / "later.py"
         later_file.write_text("later\n")
         comms.registry.remove("Alice")
-        comms.registry.declare(Thread("Alice", original.tags, str(other_project),
-                                      created_at=original.created_at + 100))
+        comms.registry.declare(Thread.create("Alice", original.tags, str(other_project),
+                                      created_at=original.created_at + 100, storage_rule=StorageRule()))
         comms.messaging.send_message("Alice", "sender", "Independent manual claim",
                                      claims=(ExistingFileClaim(later_file),))
         later = comms.bus.log.claim_projection()[str(later_file)]

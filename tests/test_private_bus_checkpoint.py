@@ -1,6 +1,7 @@
 """Provider-free private-source checkpoint crash and prefix authority tests."""
 
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -37,13 +38,13 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
         ("outsider", {"else"}, 17004.0),
     ):
         comms.registry.register(
-            Thread(
+            Thread.create(
                 name,
                 frozenset(tags),
                 str(tmp_path),
                 process_identity=ProcessIdentity.capture(os.getpid()),
                 created_at=stamp,
-            )
+            storage_rule=StorageRule())
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     return comms, root_id

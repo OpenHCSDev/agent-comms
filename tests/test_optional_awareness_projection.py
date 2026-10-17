@@ -1,6 +1,7 @@
 """Sealed optional awareness omits incomplete work without changing delivery."""
 
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 
 import os
 import tempfile
@@ -42,22 +43,22 @@ def _root(
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "sender",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     for number in range(recipients):
         comms.registry.declare(
-            Thread(
+            Thread.create(
                 f"member{number:03}",
                 frozenset({"team"}),
                 str(tmp_path),
                 process_identity=ProcessIdentity.capture(os.getpid()),
                 model="openai-codex/gpt-6-sol",
-            )
+            storage_rule=StorageRule())
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     store = Coordination(str(root / "coordination.sqlite3"))

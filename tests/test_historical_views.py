@@ -1,4 +1,5 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 from dataclasses import replace
@@ -34,8 +35,8 @@ def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
 
 def setup(root, count=5):
     comms = Comms(root)
-    comms.registry.declare(Thread("alice", frozenset({"team"}), str(root), created_at=10.0))
-    comms.registry.declare(Thread("bob", frozenset({"team"}), str(root), created_at=11.0))
+    comms.registry.declare(Thread.create("alice", frozenset({"team"}), str(root), created_at=10.0, storage_rule=StorageRule()))
+    comms.registry.declare(Thread.create("bob", frozenset({"team"}), str(root), created_at=11.0, storage_rule=StorageRule()))
     comms.messaging.initialize_private_initial_protocol()
     viewer = comms.messaging.user_identity(str(root)).name
     for i in range(count):

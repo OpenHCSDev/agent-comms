@@ -101,8 +101,9 @@ def reserve_foreground_owner(
         marker = source.marker
     if marker.root_id != wire_root_id:
         raise RelationViolationError("Private wire root changed before owner reservation")
-    owner = Thread(
-        name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=task
+    owner = Thread.create(
+        name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=task,
+        storage_rule=comms.registry.storage_rule,
     )
     # Ordinary Comms.register intentionally supports replacing idle owners. That
     # is NOT safe for a private foreground attempt: serialize the exact fresh

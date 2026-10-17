@@ -1,4 +1,5 @@
 """Project changes preserve thread/session identity and synchronize executing owners."""
+from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -29,7 +30,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     new.mkdir()
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
-        Thread(
+        Thread.create(
             name="worker",
             tags=frozenset({"test"}),
             worktree=str(old),
@@ -37,7 +38,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
             session_file=str(old / "session.jsonl"),
             model="test/model",
             created_at=123,
-        )
+        storage_rule=StorageRule())
     )
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep this objective"))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
@@ -48,7 +49,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     assert thread.pid == os.getpid() and thread.model == "test/model"
     assert thread.goal == goal and thread.created_at == 123
     assert thread.session_file == str(old / "session.jsonl")
-    assert thread.previous_worktrees == (str(old),)
+    assert thread.storage_roots.checkouts == (old, new)
     assert not comms.threads.set_project("worker", str(new)).changed
     for path in ("", str(tmp_path / "missing")):
         with pytest.raises(ValueError):
@@ -62,7 +63,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
         comms.registry.require("worker"), str(old / "session.jsonl")
     )
     restored = wire(comms.root).registry.require("worker")
-    assert restored.worktree == str(new) and restored.previous_worktrees == (str(old),)
+    assert restored.worktree == str(new) and restored.storage_roots.checkouts == (old, new)
     assert len(comms.registry.all_threads()) == 1
 
 

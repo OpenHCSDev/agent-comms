@@ -1,3 +1,4 @@
+from agent_comms.storage_rules import StorageRule
 import json
 import sqlite3
 from contextlib import ExitStack
@@ -28,7 +29,7 @@ def setup_thread(tmp_path):
     source = tmp_path / "session.jsonl"
     source.touch()
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("worker", frozenset({"ci"}), str(tmp_path), session_file=str(source)))
+    comms.registry.declare(Thread.create("worker", frozenset({"ci"}), str(tmp_path), session_file=str(source), storage_rule=StorageRule()))
     return comms, source
 
 
@@ -282,7 +283,7 @@ def test_rename_preserves_reads_and_fresh_fork_does_not_count_parent_history(tmp
         "worker", worktree=str(tmp_path), through=comms.transcripts.transcript_checkpoint("worker")
     )
     comms.registry.rename("worker", "renamed")
-    comms.registry.declare(Thread("child", frozenset(), str(tmp_path), parent="renamed", task="New task"))
+    comms.registry.declare(Thread.create("child", frozenset(), str(tmp_path), parent="renamed", task="New task", storage_rule=StorageRule()))
     assert completed_snapshot(comms, str(tmp_path)).thread_unread == {"renamed": 0, "child": 0}
     append(source)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread == {"renamed": 1, "child": 0}
@@ -488,7 +489,7 @@ def test_deleted_source_withdraws_the_original_preparation_without_resurrection(
     try:
         assert state.counts("viewer", {"worker": str(source)}).pending == {"worker"}
         state.preparation.result(timeout=10)
-        state.remove_threads((Thread("worker", frozenset(), str(tmp_path), session_file=str(source)),))
+        state.remove_threads((Thread.create("worker", frozenset(), str(tmp_path), session_file=str(source), storage_rule=StorageRule()),))
         assert state.counts("viewer", {}).counts == {}
         assert ReplyIndex.one(state._database(), source=str(source)) is None
     finally:

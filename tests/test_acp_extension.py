@@ -1,3 +1,4 @@
+from agent_comms.storage_rules import StorageRule
 from agent_comms.acp_failure import ACPFailure
 
 """Declared extension decoding is strict and shares its owner with consumers."""
@@ -48,7 +49,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     from agent_comms.comms import wire
     from agent_comms.threads import Thread
     comms = wire(tmp_path)
-    comms.registry.declare(Thread("pilot", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("pilot", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     read = comms.transcripts.capture_page_read("pilot")
     owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
     queue_scope = QueueScope("pilot", owner, 123)

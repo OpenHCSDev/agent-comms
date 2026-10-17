@@ -1,3 +1,4 @@
+from agent_comms.storage_rules import StorageRule
 import pytest
 from acp.schema import SessionConfigSelectOption
 
@@ -34,7 +35,7 @@ async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_m
         "pi", NativeArguments.parse(()),
         RestartEnvironment(native_config=tmp_path, agent_directory=tmp_path),
     )
-    thread = Thread(name="setup", tags=frozenset(), worktree=str(tmp_path))
+    thread = Thread.create(name="setup", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule())
     advertised = await option.describe(thread)
     assert advertised.current_value == ""
     assert [choice.value for choice in advertised.options] == [""]

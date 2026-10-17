@@ -1,6 +1,7 @@
 """No-provider bounded human DM read evidence; never use global inbox ACK."""
 
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 
 import os
 import stat
@@ -18,7 +19,7 @@ from agent_comms.threads import Thread
 
 
 def _thread(root: Path, name: str) -> Thread:
-    return Thread(name, frozenset({"talk"}), str(root), process_identity=ProcessIdentity.capture(os.getpid()))
+    return Thread.create(name, frozenset({"talk"}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
 
 
 def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_path: Path):

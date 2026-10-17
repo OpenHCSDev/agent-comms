@@ -1,4 +1,5 @@
 """Actual queued owner handoff retains history and accepts a fresh native input."""
+from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -56,7 +57,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
     comms.owners.pin_private_nk_launch(
         comms.root, os.environ[ROOT_ID_ENV], pinned_native_package()
     )
-    comms.registry.declare(Thread('worker', frozenset(), str(fixture.project)))
+    comms.registry.declare(Thread.create('worker', frozenset(), str(fixture.project), storage_rule=StorageRule()))
     # This test queues work, but deliberately never admits an actual restart.
     watchers = []
     monkeypatch.setattr(queue, '_start_watcher', lambda root, target: watchers.append(target))
@@ -142,14 +143,14 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         comms.root, os.environ[ROOT_ID_ENV], pinned_native_package()
     )
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "worker",
             frozenset(),
             str(fixture.project),
             session_file=str(fixture.session),
             model="response-local/fixture",
             thinking_level="off",
-        )
+        storage_rule=StorageRule())
     )
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     monkeypatch.setenv(

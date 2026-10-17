@@ -1,4 +1,5 @@
 """Route-count writers decode outside locks; readers use committed WAL snapshots."""
+from agent_comms.storage_rules import StorageRule
 
 import os
 import threading
@@ -32,8 +33,8 @@ def _case(tmp_path, monkeypatch):
         "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
     )
     comms = wire(tmp_path)
-    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
-    comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("sender", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread.create("recipient", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     comms.messaging.send_message("sender", "recipient", "first")
     assert _sync(comms).complete
     return comms

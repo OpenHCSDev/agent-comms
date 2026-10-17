@@ -1,4 +1,5 @@
 """Saved documents, independent snapshots, and disposable activity projection."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 import time
@@ -91,7 +92,7 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path):
     reopened = RuntimeInfoStore(store.path).read()
     assert FieldCodec.encode(reopened["new"]) == {**saved["old"], "thread": "new"}
     before = store.path.stat()
-    store.remove_threads((Thread("absent", frozenset(), str(tmp_path)),))
+    store.remove_threads((Thread.create("absent", frozenset(), str(tmp_path), storage_rule=StorageRule()),))
     assert store.path.stat() == before
 
 
@@ -122,7 +123,7 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path):
     SharedLedger(store.path).merge({"other": [1, 2]}, "other")
     assert store.rename_thread("old", "new") == 2
     assert store.read()["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
-    store.remove_threads((Thread("new", frozenset(), str(tmp_path)),))
+    store.remove_threads((Thread.create("new", frozenset(), str(tmp_path), storage_rule=StorageRule()),))
     assert store.read() == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
 
 

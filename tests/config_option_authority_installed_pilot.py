@@ -5,6 +5,7 @@ authentic native model configuration for read-only catalog queries. No public
 root, setting, native journal or historical input is changed.
 """
 from __future__ import annotations
+from agent_comms.storage_rules import StorageRule
 
 import argparse
 import asyncio
@@ -117,10 +118,10 @@ async def run(stage, package, models, ui, menu_contention=False):
     rows = []
     for index, model in enumerate(models):
         name = f'configuration-{index}'
-        service.registry.declare(Thread(
+        service.registry.declare(Thread.create(
             name, frozenset(), str(project), model=model, thinking_level=OffThinkingLevel,
             task='Private provider-free configuration acceptance; never send a prompt',
-        ))
+        storage_rule=StorageRule()))
         service.owners.start(
             name, agent_bin=str(Path(sys.executable).with_name('pi-comms-native')),
             agent_args=[],

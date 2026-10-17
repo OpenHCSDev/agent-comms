@@ -1,4 +1,5 @@
 """Real bus/SQL reply delivery, awareness and missing-native-proof boundaries."""
+from agent_comms.storage_rules import StorageRule
 
 from pathlib import Path
 
@@ -22,7 +23,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
     case = _ready(tmp_path, direct=direct)
     try:
         # A subscriber arriving after the original is not a historical recipient.
-        case.comms.registry.declare(Thread("late", frozenset({"team"}), worktree=str(tmp_path)))
+        case.comms.registry.declare(Thread.create("late", frozenset({"team"}), worktree=str(tmp_path), storage_rule=StorageRule()))
         sender = case.comms.registry.require("sender")
         lookup = RecordedThreadIncarnation("fixture", sender.created_at).lookup
         intent = prepare_fenced_response(

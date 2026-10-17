@@ -1,4 +1,5 @@
 """Owner pause remains attributable and cannot be undone by a model tool."""
+from agent_comms.storage_rules import StorageRule
 
 import pytest
 
@@ -19,7 +20,7 @@ from agent_comms.tool_caller import ThreadCaller
 def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread.create(name="worker", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule()))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     comms.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
@@ -53,7 +54,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
 def test_model_cannot_pause(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread.create(name="worker", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule()))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     with pytest.raises(ValueError, match="actor cannot"):

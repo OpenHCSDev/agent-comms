@@ -1,4 +1,5 @@
 """Nominal extension, dispatch ordering, and shared settlement contracts."""
+from agent_comms.storage_rules import StorageRule
 
 import ast
 import asyncio
@@ -216,12 +217,12 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
     comms, tmp_path, monkeypatch, publication_fails
 ):
     comms.registry.declare(
-        Thread(
+        Thread.create(
             name="bot",
             tags=frozenset(),
             worktree=str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     owner = CommsAgent(comms, agent_bin="unused")
     lease = comms.agents.begin_turn("bot", "turn").turn_lease
@@ -258,12 +259,12 @@ async def test_stale_settlement_preserves_replacement_turn(
     comms, tmp_path, monkeypatch
 ):
     comms.registry.declare(
-        Thread(
+        Thread.create(
             name="bot",
             tags=frozenset(),
             worktree=str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     owner = CommsAgent(comms, agent_bin="unused")
     lease = comms.agents.begin_turn("bot", "turn").turn_lease
@@ -290,8 +291,8 @@ async def test_cancelled_worker_keeps_original_lease_and_waiter_cleanup(
     comms, tmp_path, monkeypatch, acquiring,
 ):
     """Cancel after the real CAS, before its result crosses back to the loop."""
-    comms.registry.declare(Thread("bot", frozenset(), str(tmp_path),
-        process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread.create("bot", frozenset(), str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
     owner = CommsAgent(comms, agent_bin="unused")
     owner.sessions.bindings["session"] = "bot"
     committed, deliver = threading.Event(), threading.Event()

@@ -1,4 +1,5 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
+from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -200,7 +201,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     comms = wire(tmp_path / "wire")
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
+    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), process_identity=old, storage_rule=StorageRule()))
     client = canonical_agent(comms)
     updates = []
 
@@ -299,9 +300,9 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         comms.registry.begin_delete("renamed")
         comms.registry.remove("renamed")
         comms.registry.declare(
-            Thread(
+            Thread.create(
                 "worker", frozenset(), str(tmp_path), process_identity=ProcessIdentity(901003, 1)
-            )
+            , storage_rule=StorageRule())
         )
         with pytest.raises(RuntimeError, match="identity changed"):
             await proxy.request("cancel")
@@ -328,7 +329,7 @@ async def test_request_only_proxy_never_replays_after_request_was_received(
     comms = wire(tmp_path / "wire")
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
+    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), process_identity=old, storage_rule=StorageRule()))
     old_path = socket_path(comms.root, old_pid)
     new_path = socket_path(comms.root, new_pid)
     old_path.parent.mkdir(parents=True, exist_ok=True)
@@ -524,15 +525,15 @@ def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
     session = tmp_path / "parent.jsonl"
     session.write_text("")
     comms.registry.declare(
-        Thread(name="parent", tags=frozenset(), worktree=str(tmp_path), session_file=str(session))
+        Thread.create(name="parent", tags=frozenset(), worktree=str(tmp_path), session_file=str(session), storage_rule=StorageRule())
     )
     comms.registry.declare(
-        Thread(
+        Thread.create(
             name="child",
             tags=frozenset(),
             worktree=str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     with pytest.raises(RelationViolationError, match="already exists"):
         comms.threads.create(ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level="high", task="duplicate"))

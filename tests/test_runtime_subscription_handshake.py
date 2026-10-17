@@ -1,4 +1,5 @@
 """Current subscription contract exercised across an actual owner Unix socket."""
+from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -30,9 +31,9 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
         "timestamp": "2026-10-10T00:00:00.000Z", "cwd": str(tmp_path),
     }) + "\n")
     session_file.chmod(0o600)
-    thread = Thread("owner", frozenset(), str(tmp_path),
+    thread = Thread.create("owner", frozenset(), str(tmp_path),
                     process_identity=ProcessIdentity.capture(os.getpid()),
-                    session_file=str(session_file))
+                    session_file=str(session_file), storage_rule=StorageRule())
     comms.registry.declare(thread)
     await owner.sessions.bind_owned(thread, thread.name)
     database = comms.root / "coordination.sqlite3"
@@ -86,12 +87,12 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
 async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, token_fields):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
-        Thread(
+        Thread.create(
             "owner",
             frozenset(),
             str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
-        )
+        storage_rule=StorageRule())
     )
     path = socket_path(comms.root, os.getpid())
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -62,7 +62,9 @@ class RunningTurnRegistryCheck(RegistryClaimCheck):
     """
 
     def worktree_matches(self) -> bool:
-        return self.actual.contains_worktree(self.expected.worktree)
+        return super().worktree_matches() or (
+            self.actual.project_resume_due and self.actual.contains_worktree(self.expected.worktree)
+        )
 
 
 class GoalRegistryIdentityCheck(RegistryIdentityCheck):

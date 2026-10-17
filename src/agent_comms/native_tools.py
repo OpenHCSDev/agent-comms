@@ -11,12 +11,17 @@ from .tool_declaration import ToolDeclaration
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 from .native_tool_call import SelectedToolDenied
+from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 
 
 class NativeExecutableTool(ToolDeclaration):
     """A declared tool participating in the existing native owner check."""
 
     claim: ClassVar[None] = None
+
+    @classmethod
+    def storage_effects(cls, cwd):
+        return ()
 
     @classmethod
     @abstractmethod
@@ -120,6 +125,9 @@ class BashTool(CodingTool):
     def _parse_resource(self) -> None:
         return None
 
+    def storage_effects(self, cwd):
+        return shell_storage_effects(self.command, cwd)
+
 
 @dataclass(frozen=True)
 class ReplacementEdit:
@@ -127,8 +135,18 @@ class ReplacementEdit:
     new_text: str = field(metadata={"wire_name": "newText"})
 
 
+class MutatingPathTool(PathTool):
+    claim_type: ClassVar[type[FileClaimPath]]
+
+    def _parse_resource(self):
+        return self.claim_type(Path(self.path))
+
+    def storage_effects(self, cwd):
+        return (WriteStorageEffect(physical_path(self.path, cwd)),)
+
+
 @dataclass(frozen=True, kw_only=True)
-class EditTool(PathTool, CodingTool):
+class EditTool(MutatingPathTool, CodingTool):
     acp_kind = "edit"
     label = "Edit"
     edits: tuple[ReplacementEdit, ...]
@@ -142,18 +160,16 @@ class EditTool(PathTool, CodingTool):
     def result_diff(cls, result, ok):
         return result.edit_diff(ok)
 
-    def _parse_resource(self) -> FileClaimPath:
-        return ExistingFileClaim(Path(self.path))
+    claim_type = ExistingFileClaim
 
 
 @dataclass(frozen=True, kw_only=True)
-class WriteTool(PathTool, CodingTool):
+class WriteTool(MutatingPathTool, CodingTool):
     acp_kind = "edit"
     label = "Write"
     content: str
 
-    def _parse_resource(self) -> FileClaimPath:
-        return WritableFileClaim(Path(self.path))
+    claim_type = WritableFileClaim
 
 
 class GrepTool(ToolDeclaration):

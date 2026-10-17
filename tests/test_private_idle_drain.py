@@ -1,4 +1,5 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
+from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import os
@@ -195,8 +196,8 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
 
 def _covered_session(tmp_path):
     comms, agent, root_id = _session(tmp_path)
-    other = Thread("alpha", frozenset(), str(tmp_path),
-                   process_identity=ProcessIdentity.capture(os.getpid()))
+    other = Thread.create("alpha", frozenset(), str(tmp_path),
+                   process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
     comms.registry.declare(other)
     with Coordination(comms.root / "coordination.sqlite3") as store:
         store.participants.register(
@@ -352,7 +353,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
             assert set(decoded) <= {1}, "the tick decoded other threads' entries"
 
         await changed_elsewhere(
-            lambda: comms.registry.declare(Thread("unrelated", frozenset(), str(tmp_path))))
+            lambda: comms.registry.declare(Thread.create("unrelated", frozenset(), str(tmp_path), storage_rule=StorageRule())))
         other = comms.registry.require("sender")
         await changed_elsewhere(
             lambda: comms.registry.register(replace(other, task="other owner changed")))
@@ -418,7 +419,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         agent.inputs.effects.turns.goals.goal_execution_signatures["beta"] = (None, GoalExecution(
             GoalExecutionState.STANDBY, "goal", (GoalWaitTarget(sender.incarnation.require_recorded()),),
         ))
-        comms.registry.declare(Thread("unrelated", frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread.create("unrelated", frozenset(), str(tmp_path), storage_rule=StorageRule()))
         await tick()
         assert len(drains) == settled + 2 and recovered == ["beta"]
         for _ in range(3):
@@ -613,8 +614,8 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
 
     comms, agent, _root_id = _session(tmp_path)
     comms.registry.declare(
-        Thread("gamma", frozenset(), str(tmp_path),
-               process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread.create("gamma", frozenset(), str(tmp_path),
+               process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
     )
 
     ticks, done = asyncio.Queue(), asyncio.Queue()

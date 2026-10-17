@@ -1,4 +1,5 @@
 """Shared fixtures: an isolated Comms wire per test."""
+from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
@@ -121,15 +122,15 @@ def comms(root: Path) -> Comms:
 @pytest.fixture
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
-    comms.registry.declare(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))
+    comms.registry.declare(Thread.create(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1", storage_rule=StorageRule()))
     comms.registry.declare(
-        Thread(
+        Thread.create(
             name="fixer",
             tags=frozenset({"auth"}),
             worktree="/tmp/wt1",
             parent="PR111",
             task="fix auth",
-        )
+        storage_rule=StorageRule())
     )
     return comms
 

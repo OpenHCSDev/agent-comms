@@ -1,4 +1,5 @@
 """Native input IDs retain incoming attribution across steering and failed turns."""
+from agent_comms.storage_rules import StorageRule
 
 import json
 
@@ -29,8 +30,8 @@ def append_input(path, native_id, text, *, role="user"):
 
 def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
-    comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread.create("peer", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     first = comms.messaging.send_message("peer", "worker", "Original input")
     second = comms.messaging.send_message("peer", "worker", "Distinct follow-up")
     raw_second = ScheduledTurn.incoming(second).prompt
@@ -57,8 +58,8 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
 
 def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
-    comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(Thread.create("peer", frozenset(), str(tmp_path), storage_rule=StorageRule()))
     incoming = comms.messaging.send_message("peer", "worker", "Verified input")
     route = TurnRouting((incoming,), None)
     text = ScheduledTurn.incoming(incoming).prompt
