@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .pi_events import PiEvent
-from .pi_commands import AgentCommsInspectContext
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .native_attestation import NativeAttestation, PendingAttestation
@@ -132,6 +131,10 @@ class PiSessionChild(PiChild):
     key: tuple[NativePiRpcLaunch, tuple[int, int]]
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
+    coordination_revision: tuple = ()
+
+    def forget_context(self) -> None:
+        self.coordination_revision = ()
 
     @classmethod
     async def start(cls, key, attestation):
@@ -164,7 +167,7 @@ class NativeChildState(ABC):
     async def context_for_input(self, thread, context):
         return context
 
-    def idle(self) -> LoadedNative:
+    def idle(self) -> RetainedNative:
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
     async def inspect(self, persistent, prepare, request):
@@ -237,7 +240,7 @@ class BorrowedNative(SuccessorNative):
             return (await response).data.require_payload()
 
 @dataclass
-class LoadedNative(ChildNative):
+class RetainedNative(ChildNative):
     retained = True
     identity: NativeSessionIdentity
     revision: SessionRevision
@@ -260,7 +263,7 @@ class LoadedNative(ChildNative):
                 current.revision = SessionRevision.observe(
                     current.identity.session_file
                 ).require_available()
-                persistent.child_state = LoadedNative(current.child, current.identity, current.revision)
+                current.child.forget_context()
             return data
 
     def reuse(self, key):
@@ -284,13 +287,10 @@ class LoadedNative(ChildNative):
     def _shutdown_successor(self) -> NativeChildState:
         return EmptyNative()
 
-
-class RetainedNative(LoadedNative):
     async def context_for_input(self, thread, context):
-        if (not self.current or thread.project_resume_due
-                or self.identity.session_file != thread.runtime.read_key):
+        if thread.project_resume_due or self.child.key[0].cwd != Path(thread.worktree):
+            self.child.forget_context()
+        if not self.current or self.identity.session_file != thread.runtime.read_key:
             return context
-        received = await self.child.request(AgentCommsInspectContext())
-        self.identity.require_same_session(received.identity)
-        return context.after_received(tuple(segment.measured_manifest() for segment in received.segments))
+        return context.after_received(self.child.coordination_revision)
 

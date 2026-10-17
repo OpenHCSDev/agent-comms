@@ -40,7 +40,7 @@ from .image_inputs import ImageInput
 from .turn_context import InputContributionCoordinates
 from .send_outcome import SendBoundary
 from .native_attestation import AttestationError
-from .native_custody import PiSessionChild, RetainedNative
+from .native_custody import PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
@@ -173,7 +173,6 @@ class TurnSession:
 
     active: ClassVar[dict[asyncio.Task[Any], TurnSession]] = {}
     prompt_type = UnwrittenPrompt
-    retained_state = RetainedNative
 
     def __init__(
         self,
@@ -582,7 +581,7 @@ class TurnSession:
             and self.prompt_state.permits_retention(self)
         ):
             self.native.sensitive_diagnostics = self.output.sensitive
-            self.native_session.retain(self.native, identity, state_type=self.retained_state)
+            self.native_session.retain(self.native, identity)
         if not self.native_session.child_state.retained:
             outcome = await self.native.shutdown(graceful=True)
             if isinstance(outcome, TimedOutOutcome):

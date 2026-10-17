@@ -242,10 +242,10 @@ class SegmentManifest:
         if len(self.sha256) != 64 or not set(self.sha256) <= set("0123456789abcdef"):
             raise ValueError("Context segment requires its measured byte digest")
 
-    def contains_revision(self, other: SegmentManifest) -> bool:
-        return (self.kind is other.kind and self.sha256 == other.sha256
-                and all(source in self.provenance for source in other.provenance)
-                or any(child.contains_revision(other) for child in self.contributors))
+    def remember_received(self, child) -> None:
+        self.kind.remember_received(child, self.provenance)
+        for contributor in self.contributors:
+            contributor.remember_received(child)
 
     def source_membership(self):
         yield from self.provenance
@@ -418,9 +418,12 @@ class ContextSegment(
     def public_description(self) -> str:
         return self.public_title()
 
-    def needed_after(self, received: tuple[SegmentManifest, ...]) -> bool:
-        current = self.manifest(0)
-        return not any(original.contains_revision(current) for original in received)
+    def needed_after(self, received) -> bool:
+        return True
+
+    @classmethod
+    def remember_received(cls, child, provenance):
+        pass
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()
@@ -559,9 +562,6 @@ class SuppliedSegment:
 
 @dataclass(frozen=True, kw_only=True)
 class UserInputSegment(SuppliedSegment, ContextSegment):
-    def needed_after(self, received) -> bool:
-        return True
-
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         return replace(super().contribution(offset, text), images=tuple(range(len(images))))
 
@@ -844,6 +844,13 @@ class PeerState:
 
 @dataclass(frozen=True, kw_only=True)
 class CoordinationSegment(InstructionSegment):
+    def needed_after(self, received) -> bool:
+        return not all(source in received for source in self.provenance)
+
+    @classmethod
+    def remember_received(cls, child, provenance):
+        child.coordination_revision = provenance
+
     response_instruction: InstructionFile
     owner: ThreadIncarnation
     parent: str | None
@@ -1137,7 +1144,7 @@ class TurnContext:
     def append(self, segment: ContextSegment) -> TurnContext:
         return replace(self, segments=(*self.segments, segment))
 
-    def after_received(self, received: tuple[SegmentManifest, ...]) -> TurnContext:
+    def after_received(self, received) -> TurnContext:
         return replace(self, segments=tuple(segment for segment in self.segments
                                            if segment.needed_after(received)))
 

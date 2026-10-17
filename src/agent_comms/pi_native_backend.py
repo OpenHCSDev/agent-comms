@@ -143,7 +143,8 @@ class PersistentPiSession:
         async with self.lock:
             return await self.child_state.context_for_input(thread, context)
 
-    def retain(self, child: PiSessionChild, identity: NativeSessionIdentity, *, state_type: type[NativeChildState]) -> bool:
+    def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
+        from .native_custody import RetainedNative
         from .session_revision import SessionRevision, SessionRevisionUnavailable
 
         if not child.proc.alive():
@@ -152,7 +153,7 @@ class PersistentPiSession:
             revision = SessionRevision.observe(identity.session_file).require_available()
         except SessionRevisionUnavailable:
             return False
-        self.child_state = state_type(child, identity, revision)
+        self.child_state = RetainedNative(child, identity, revision)
         return True
 
     async def close(self) -> None:

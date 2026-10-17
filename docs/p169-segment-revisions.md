@@ -1,43 +1,35 @@
-# P169: coordination revisions in the existing native context
+# P169: received coordination revisions
 
-Owner core-read-locks, issue895, branch fix/p169-segment-revisions.
-No failed/UNKNOWN input replay, second context cache, reminder store or timer.
+`PiSessionChild.coordination_revision` owns the last received coordination revision. It contains provenance, not instruction text or a per-thread dictionary. `TurnContextObserved` walks the actual SDK contributor manifests; declaration-owned `remember_received` records only coordination contributions whose original byte ranges survived native input conversion. Merely assembling or sending an input does not advance the revision.
 
-Source owner pass: ContextSegment/SegmentManifest already declare exact source
-and digest; the native context already carries the received contribution tree.
-NativeChildState owns whether a loaded child continued the previous turn or
-lost that continuity through preparation, compaction, resume or project change.
-Reuse those facts, not a second remembered-revisions dictionary.
+`CoordinationSegment.needed_after` compares its original provenance (the existing owner revision and instruction-file revisions) with that receipt. User input and other segment families remain unconditional. No whole-prompt hash is compared and no instruction text was shortened. `InstructionSegment.capture` now owns instruction loading; its callers no longer duplicate that operation.
 
-Baseline/acceptance use a separate native fork of the immutable completed p35
-cut supplied by toad-theme (94,566,492 bytes/13,003 records, assistant stop).
-Never use core-awareness-index: it has pending input. The loaned p21 root,
-viewer, original SDK/wire and inputs remain read-only and untouched.
+The existing child forgets the receipt on completed automatic compaction, successful session-writing queries, native preparation/resume, and a project change detected from the original native launch's cwd. Child retirement naturally discards it. No extra LoadedNative state, state-type argument, context cache, timer, reminder store or force-full flag remains.
 
-Current main's new Core instructions already omit the historical #753/#754/#749
-examples, and CoordinationSegment already filters peers through AlwaysListed.
-Retained historical instructions are evidence, not newly injected doctrine.
-Only actual current injected instruction files may be changed; project owner
-instructions (.pi/APPEND_SYSTEM.md, AGENTS.md) remain untouched.
+## Source evidence
 
-Checkpoint, 09:49: InstructionSegment now owns instruction/provenance construction
-throughout the family. LoadedNative represents an opened/reset native context;
-RetainedNative selects from actual native contribution manifests after an input.
-Native preparation and mutating queries reset continuity. User input always stays.
+Before/after AST census and original measurements are retained under `/home/ts/.cache/agent-scratch/p169-core-read-locks`. `receipt-owner-after.json` enumerates production declarations, writes, decisions, imports and consumers. Native JavaScript contribution ownership was read separately; it is outside that Python census. Declaration-family dispatch is dynamic, not statically resolved by AST.
 
-Private-fork byte assembly measurements (not delivered-model receipt acceptance):
-- Direct `hi`: coordination429 + input2 + unavailable-awareness71 =502 bytes;
-  matching-received-manifest projection2 bytes; first/reset remains502.
-- Collaboration: coordination597 + input34 + relationships590 + unavailable71
-  + partner-activity528 =1820 bytes; matching-received projection34;
-  first/reset remains1820.
-No source-root writes, saved-input replay or provider submission occurred.
+Owner/consumer searches:
 
-Existing native lifecycle checks:7 passed against the immutable native bundle.
-Other existing checks:22 passed/7 skipped/20 failed, including absent old APIs,
-installed-only assertions and missing native-package setup; this is not a green
-batch. A native-inspection module also fails collection on a default fixture
-argument. No tests added. Actual retained contribution receipt and installed
-acceptance remain unfinished; do not treat these projected bytes as delivery.
-Scratch/evidence owner: core-read-locks,
-/home/ts/.cache/agent-scratch/p169-core-read-locks.
+```
+rg -n 'coordination_revision|forget_context|remember_received|needed_after|context_for_input' src/agent_comms
+rg -n 'LoadedNative|retained_state|state_type' src/agent_comms/{native_custody,native_session_prepare,backend,tracked_turn,pi_native_backend}.py
+```
+
+## Actual native receipts
+
+An independent private ACP owner opened the completed saved-session fork, used the ordinary input reservation, OwnedTurn, backend, native process and SDK, and received controlled localhost provider responses. These are actual captured provider payload bytes, not reconstructed-manifest projections. They are not installed/configured-provider acceptance.
+
+| Prompt | Unfiltered current builder | Retained input actually received |
+|---|---:|---:|
+| `hi` | 768 | 296 |
+| `Continue the shared context repair` | 1539 | 919 |
+
+Direct segments: automatic title 294, coordination 472, user input 2. Collaboration: automatic title 294, coordination 620, user input 34, relationships 591. Only unchanged coordination disappears. Changed collaboration resends all 1539 bytes. First turn sends all 768. After actual native compaction, all 1507 bytes are sent; after the real project setter, all 1513 bytes; after closing/reopening the native child, all 1513 bytes. Private provider request bodies confirm those totals. The title segment is retained deliberately rather than deleting instructions to improve the numbers.
+
+`boundary-final-results.json` and `boundary-final.log` retain the receipts and retired-child report. An earlier candidate omitted coordination after an idle project change; `project_resume_due` only covers an executing turn, so selection now checks the launch-owned cwd too. Earlier permission/startup failures and the failed candidate remain retained. No failed or UNKNOWN input was replayed. The immutable source cut remains unchanged.
+
+The existing comparison batch produces exactly the same 20 failure lines on current main and this branch, with 22 passes and 7 skips in each run (`main-checks.log`, `feature-checks.log`). The failures include absent immutable native-package configuration, obsolete context inspection APIs and installed-only assertions. These are comparative observations, not assertions that those failures are harmless. No new tests were added.
+
+The old 502→2 and 1820→34 numbers were synthetic projections from the superseded prototype and are not acceptance evidence.

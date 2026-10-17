@@ -390,6 +390,7 @@ class CompactionEnd(ReasonedCompaction):
             for event in self.result.charge(session):
                 yield event
         if completed:
+            session.native.forget_context()
             session.watchdog.compacted(session.prompt_state.started)
         session.usage.invalidate()
         yield session.context_info()
@@ -442,6 +443,8 @@ class TurnContextObserved(NativePiEvent):
     context: NativeContextManifestData
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        for segment in self.context.segments:
+            segment.remember_received(session.native)
         yield events.ContextObserved(self.context)
 
 
