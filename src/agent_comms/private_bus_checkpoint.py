@@ -401,6 +401,7 @@ class CertifiedSourceRead:
         *,
         limit: int,
         ascending: bool,
+        sequences: tuple[int, ...] = (),
     ):
         """Read a bounded conversation from the existing certified source index.
 
@@ -410,6 +411,9 @@ class CertifiedSourceRead:
         a checkpoint, grant delivery, or advance any native-input cursor.
         """
         self.require_current()
+        if sequences:
+            predicate = f"({predicate}) AND w.seq IN ({','.join('?' for _ in sequences)})"
+            parameters = (*parameters, *sequences)
         db = self.connection
         rows = DeliverySources.read(
             db.execute(

@@ -368,10 +368,8 @@ class AssignedTranscriptSource(TranscriptSource):
         references = tuple(references)
         if not references:
             return {}
-        marks = ",".join("?" for _ in references)
         return {original.message.reference: original for original in self.rows(
-            f"w.seq IN ({marks})", tuple(reference.seq for reference in references),
-            limit=len(references),
+            sequences=tuple(reference.seq for reference in references), limit=len(references),
         )}
 
     def sent_messages(self, references):
@@ -410,14 +408,13 @@ class AssignedTranscriptSource(TranscriptSource):
 
     def rows(
         self, predicate="1", parameters=(), *, limit=1, ascending=False,
+        sequences: tuple[int, ...] = (),
     ) -> Iterator[CommittedDelivery]:
-        return self.log.conversation_sources(
-            self.recipient.lookup,
-            predicate,
-            parameters,
-            limit=limit,
-            ascending=ascending,
+        request = ConversationSourceWindowRequest(
+            predicate=predicate, parameters=parameters, limit=limit, ascending=ascending,
+            sequences=sequences,
         )
+        return request.capture_many(self.log, self.recipient.lookup, (request,))[0]
 
     @property
     def frontier(self):
@@ -430,9 +427,9 @@ class AssignedTranscriptSource(TranscriptSource):
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
         """One certified cut owns conversation, sent rows and their frontier."""
         lookup = self.recipient.lookup
-        conversation_request = ConversationSourceWindowRequest("1", (), limit, False)
+        conversation_request = ConversationSourceWindowRequest(limit=limit, ascending=False)
         sent_request = ConversationSourceWindowRequest(
-            "w.sender_lookup=?", (lookup,), sent_limit, False
+            predicate="w.sender_lookup=?", parameters=(lookup,), limit=sent_limit, ascending=False,
         )
         conversation, sent = conversation_request.capture_many(
             self.log, lookup, (conversation_request, sent_request)

@@ -37,6 +37,11 @@ class GoalWait(ABC):
     def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
         return False
 
+    def review_after_seq(
+        self, owner: RecordedThreadIncarnation, targets: tuple[GoalWaitTarget, ...]
+    ) -> int:
+        return 0
+
     def consume_dependency(self, comms, canonical: str) -> bool:
         return True
 
@@ -136,6 +141,13 @@ class RecordedGoalWait(GoalWait):
             and original.direct_for(owner.lookup)
             and any(target.sent(original) for target in self.targets)
         )
+
+    def review_after_seq(self, owner, targets) -> int:
+        if self.owner_matches(owner) and {
+            target.incarnation.lookup for target in targets
+        } == {target.incarnation.lookup for target in self.targets}:
+            return self.after_seq
+        return 0
 
     def has_reply(self, bus: WireLog, owner: RecordedThreadIncarnation) -> bool:
         if not self.owner_matches(owner):

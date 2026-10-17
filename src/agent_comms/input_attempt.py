@@ -203,6 +203,10 @@ class StoredInput(InputAttempt):
     def order(self) -> tuple[bool, int]:
         return self.sequence is None, self.sequence or 0
 
+    def bus_sequences_through(self, through: int) -> tuple[int, ...]:
+        """Only a bus-backed input can contribute an original source coordinate."""
+        return (self.sequence,) if self.sequence is not None and self.sequence <= through else ()
+
     def historical_notice(self, awaiting_keys: frozenset[str] | None) -> bool:
         if awaiting_keys is None:
             return self.notice_dismissed

@@ -98,7 +98,7 @@ class InputDocument:
     def all_started(self, keys) -> bool:
         return all(self.lookup(key).has_started for key in keys)
 
-    def unknown(self, owners: frozenset[str]) -> tuple[InputAttempt, ...]:
+    def unknown(self, owners: frozenset[str]) -> tuple[StoredInput, ...]:
         return tuple(
             sorted(
                 (row for row in self.rows.values() if row.owner in owners and row.unresolved),
