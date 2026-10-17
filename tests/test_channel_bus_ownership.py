@@ -6,6 +6,7 @@ from contextlib import AsyncExitStack
 
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordinator import Coordination
+from agent_comms.notification_progress import SentProgress
 from agent_comms.wake_policy import BoundedTriageWake
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
@@ -29,7 +30,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
     assert [assignment.recipient for assignment in accepted.assignments] == ["beta"]
     current = comms.views.message_notifications_for_references((message.reference,))[(message.seq, message.message_id)]
-    assert [(row.recipient, row.state) for row in current] == [("beta", "Sent")]
+    assert [(row.recipient, type(row.state)) for row in current] == [("beta", SentProgress)]
     assert comms.registry.require("beta").active_turn is None
     assert original.message in list(comms.views.channel_history_page("#team").messages)
     assert message in list(comms.views.channel_history_page("#team").messages)
