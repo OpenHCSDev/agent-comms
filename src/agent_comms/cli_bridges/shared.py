@@ -25,7 +25,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
-    DeliveredOutcome, EmittedOutcome, LineOutput, Outcome, TaggedWire,
+    DeliveredOutcome, EmittedOutcome, Outcome, TaggedWire,
     UnconfirmedOutcome, WatchLine, WireModel,
 )
 from agent_comms.declared_family import DeclaredFamily
@@ -855,10 +855,10 @@ class LineMonitorBridge(TranscriptBridge[Options]):
         self.monitor_ready = asyncio.Event()
         self.pending_parts: dict[tuple[str, int], int] = {}
         self.window_changed = asyncio.Condition()
-        self.output = LineOutput(sys.stdout)
+        self.write_line = ExplicitWatchAcknowledgment.line_output(sys.stdout)
 
     async def prepare_delivery(self) -> None:
-        self.output.write(self.probe.model_dump_json())
+        self.write_line(self.probe.model_dump_json())
         print('Waiting for this session to observe the monitor probe; inbox remains unread.',
               file=sys.stderr, flush=True)
         # The harness owns notification scheduling. Missing proof never opens
@@ -890,14 +890,14 @@ class LineMonitorBridge(TranscriptBridge[Options]):
                     lambda: not self.pending_parts
                     or sum(self.pending_parts.values()) + size <= self.window_bytes)
                 self.pending_parts[message.message_id, number] = size
-                self.output.write(line)
+                self.write_line(line)
         return EmittedOutcome
 
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
-        self.output.write(self.encode(self.sent_text(result, target, body)))
+        self.write_line(self.encode(self.sent_text(result, target, body)))
 
     async def report_failure(self, text: str) -> None:
-        self.output.write(self.encode(text))
+        self.write_line(self.encode(text))
 
 
 def shared_parser(description: str | None, state: Path,

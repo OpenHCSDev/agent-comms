@@ -7,6 +7,7 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, field, replace
@@ -70,6 +71,23 @@ class HistoricalSelection(SelectedDisplay):
     """The original viewer and attached-source revision select an archive page."""
 
 
+class LineOutput:
+    """Flush once per event-loop pass."""
+
+    def __init__(self, stream: TextIO) -> None:
+        self.stream = stream
+        self.pending: asyncio.Handle | None = None
+
+    def write(self, line: str) -> None:
+        self.stream.write(line + '\n')
+        if self.pending is None:
+            self.pending = asyncio.get_running_loop().call_soon(self.flush)
+
+    def flush(self) -> None:
+        self.pending = None
+        self.stream.flush()
+
+
 class WatchAcknowledgment(DeclaredFamily, affix="WatchAcknowledgment"):
     """Who confirms that a streamed message reached its receiver."""
 
@@ -91,7 +109,6 @@ class OnReadWatchAcknowledgment(WatchAcknowledgment):
 class ExplicitWatchAcknowledgment(WatchAcknowledgment):
     @classmethod
     def line_output(cls, output: TextIO) -> Callable[[str], None]:
-        from .cli_protocol import LineOutput
         return LineOutput(output).write
 
     @classmethod
