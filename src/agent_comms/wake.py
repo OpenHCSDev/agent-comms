@@ -47,9 +47,6 @@ class WakeDecision:
         if self.audience.observer and self.wake_mode.active:
             raise ValueError("observer decisions must be passive")
 
-    def initial_assignment(self):
-        return None if self.audience.observer else self.wake_mode.initial_state()
-
     def to_wire(self) -> dict[str, str]:
         if self.audience.observer:
             return {"recipient_lookup": self.recipient, "no_wake": "unmentioned_observer"}

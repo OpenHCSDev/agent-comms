@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
@@ -16,7 +16,8 @@ from .errors import RelationViolationError
 from .pi_rpc import unique_fields
 
 if TYPE_CHECKING:
-    from .audience_manifest import FrozenAudience
+    from .assignment_states import AssignmentState
+    from .audience_manifest import FrozenAudience, FrozenRecipient
     from .delivery_policy import DeliveryManifest, KeyedResponseReceipt
     from .messages import Message
     from .wake import WakeDecision
@@ -114,6 +115,16 @@ class CommittedDelivery(MessageWireRecord):
     policy_version: str
     manifest_codec: str = INITIAL_CODEC
     receipt: KeyedResponseReceipt | None = None
+
+    def assignment_decisions(self) -> Iterator[tuple[FrozenRecipient, WakeDecision, AssignmentState]]:
+        """Selected frozen members with their declared initial lifecycle, never observers."""
+        from .coordination_errors import IntegrityViolationError
+
+        for recipient, decision in zip(self.audience.recipients, self.decisions, strict=True):
+            if recipient.recipient_lookup != decision.recipient:
+                raise IntegrityViolationError("bus decision does not match frozen N")
+            if not decision.audience.observer:
+                yield recipient, decision, decision.wake_mode.initial_state()
 
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and its original addressed incarnation agree."""

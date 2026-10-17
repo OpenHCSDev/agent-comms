@@ -426,10 +426,7 @@ def _require_cohort_assignments(
             raise IdentityConflict("response claim lacks original bus/cohort authority")
         selected = {
             recipient.recipient_lookup
-            for recipient, decision in zip(
-                initial.audience.recipients, initial.decisions, strict=True
-            )
-            if decision.initial_assignment() is not None
+            for recipient, _decision, _lifecycle in initial.assignment_decisions()
         }
         if initial.wire_root_id != wire_root_id or assignment.source != initial.message.reference:
             raise IdentityConflict("response claim conflicts with original bus source")

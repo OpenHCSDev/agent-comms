@@ -31,7 +31,7 @@ from .private_bus_checkpoint import (
     PrefixWitness,
     verify_private_bus_checkpoint_unlocked,
 )
-from .wake import WakeDecision
+from .assignment_states import AssignmentState
 
 if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope
@@ -131,31 +131,26 @@ class SourceCoverage:
             covered, inputs, no_wake, blocked = after_seq if partial else 0, [], [], None
             for initial in initials:
                 seq = initial.message.seq
-                matches = [
-                    (recipient, decision)
-                    for recipient, decision in zip(
-                        initial.audience.recipients, initial.decisions, strict=True
-                    )
-                    if recipient.recipient_lookup == self.recipient_lookup
-                ]
-                if len(matches) > 1:
-                    raise IdentityConflict("duplicate stable lookup in frozen audience")
-                if not matches:
+                if not initial.audience.includes_lookup(self.recipient_lookup):
                     covered = seq
                     continue
-                recipient, decision = matches[0]
+                matches = [(recipient, lifecycle)
+                           for recipient, _decision, lifecycle in initial.assignment_decisions()
+                           if recipient.recipient_lookup == self.recipient_lookup]
                 receipt = self._receipt(initial)
                 if receipt is None:
                     blocked = seq
                     break
-                if decision.initial_assignment() is None:
+                if not matches:
                     no_wake.append(seq)
-                else:
-                    evidence = self._selected_inputs(seq, recipient, decision, receipt, source_reads)
+                for recipient, lifecycle in matches:
+                    evidence = self._selected_inputs(seq, recipient, lifecycle, receipt, source_reads)
                     if not evidence:
                         blocked = seq
                         break
                     inputs.extend(evidence)
+                if blocked is not None:
+                    break
                 covered = seq
             if blocked is None:
                 covered = max(covered, horizon)
@@ -196,7 +191,7 @@ class SourceCoverage:
             return _receipt_matches(db, initial) if sealed and sealed.sealed else None
 
     def _selected_inputs(
-        self, seq: int, recipient: FrozenRecipient, decision: WakeDecision, receipt: AcceptedCohort,
+        self, seq: int, recipient: FrozenRecipient, lifecycle: AssignmentState, receipt: AcceptedCohort,
         source_reads: NativeEvidenceScope,
     ) -> tuple[HistoricalNativeInput, ...]:
         assignments = [
@@ -205,12 +200,12 @@ class SourceCoverage:
             if a.recipient_lookup == self.recipient_lookup
             and a.recipient == recipient.canonical_thread
         ]
-        if len(assignments) != 1 or assignments[0].lifecycle.mode != decision.wake_mode:
+        if len(assignments) != 1 or assignments[0].lifecycle.mode != lifecycle.mode:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
-        if not decision.wake_mode.active:
+        if not lifecycle.mode.active:
             return ()  # PASSIVE is not native injection.
         evidence = self.native_inputs(seq, source_reads=source_reads)
-        if decision.wake_mode.proves_source(evidence) and all(
+        if lifecycle.mode.proves_source(evidence) and all(
             p.assignment_id == assignments[0].assignment_id for p in evidence
         ):
             return evidence
