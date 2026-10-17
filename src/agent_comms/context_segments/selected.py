@@ -12,14 +12,8 @@ class SelectedTriageSegment(InstructionSegment):
 
     @classmethod
     def capture(cls, participant, provenance):
-        instruction = InstructionFile.read("selected-triage.md")
         output = InstructionFile.read("selected-triage-output.md")
-        return cls(
-            provenance=(*provenance, instruction.source, output.source),
-            instruction=instruction,
-            participant=participant,
-            output=output,
-        )
+        return super().capture((*provenance, output.source), participant=participant, output=output)
 
     def values(self):
         return dict(
@@ -35,14 +29,9 @@ class SelectedWorkSegment(InstructionSegment):
 
     @classmethod
     def capture(cls, participant, action, provenance):
-        instruction = InstructionFile.read("selected-work.md")
         originals = action.instruction_files
-        return cls(
-            provenance=(*provenance, instruction.source, *(item.source for item in originals)),
-            instruction=instruction,
-            participant=participant,
-            action_instructions=originals,
-        )
+        return super().capture((*provenance, *(item.source for item in originals)),
+                               participant=participant, action_instructions=originals)
 
     def values(self):
         return dict(

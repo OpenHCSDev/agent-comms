@@ -486,14 +486,10 @@ def parse_target(text: str) -> tuple[str, str]:
     is consumed, never broadcast.
     """
     stripped = text.strip()
-    if stripped.startswith("@") and len(stripped) > 1:
-        parts = stripped[1:].split(maxsplit=1)
-        name = parts[0].rstrip("@#")
-        if name and len(parts) == 2 and parts[1].strip():
-            return name, parts[1].strip()
-    if stripped.startswith("#") and len(stripped) > 1:
-        parts = stripped[1:].split(maxsplit=1)
-        channel = parts[0].rstrip("@#")
-        if channel and len(parts) == 2 and parts[1].strip():
-            return f"#{channel}", parts[1].strip()
+    for prefix, template in (("@", "{}"), ("#", "#{}")):
+        if stripped.startswith(prefix) and len(stripped) > 1:
+            parts = stripped[1:].split(maxsplit=1)
+            name = parts[0].rstrip("@#")
+            if name and len(parts) == 2 and parts[1].strip():
+                return template.format(name), parts[1].strip()
     return BuiltinChannel.ALL.value, stripped

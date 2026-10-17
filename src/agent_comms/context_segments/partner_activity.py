@@ -14,7 +14,7 @@ from ..goal_history import GoalHistoryEntry
 from ..goals import GoalRevision
 from ..goal_states import GoalState
 from ..peer_relevance import Informed
-from ..turn_context import InstructionFile, InstructionSegment, OwnerProvenance
+from ..turn_context import InstructionSegment, OwnerProvenance
 
 
 @dataclass(frozen=True)
@@ -59,12 +59,8 @@ class PartnerActivitySegment(InstructionSegment):
         if not changes:
             return ()
         changes = tuple(sorted(changes, key=lambda change: change.observed_at)[-cls.LATEST:])
-        instruction = InstructionFile.read("partner-activity.md")
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(changes)).encode()).hexdigest()
-        return (cls(
-            provenance=(instruction.source, OwnerProvenance(owner.incarnation, revision)),
-            instruction=instruction, changes=changes,
-        ),)
+        return (super().capture((OwnerProvenance(owner.incarnation, revision),), changes=changes),)
 
     def values(self):
         return {"changes": json.dumps(FieldCodec.encode(self.changes), separators=(",", ":"))}

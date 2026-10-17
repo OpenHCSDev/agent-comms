@@ -132,9 +132,8 @@ class OmittedAwareness(InstructionSegment, OptionalAwarenessResult):
     reason: str
 
     @classmethod
-    def capture(cls, reason: str) -> OmittedAwareness:
-        instruction = InstructionFile.read("selected-awareness-omitted.md")
-        return cls(provenance=(instruction.source,), instruction=instruction, reason=reason)
+    def instruction_name(cls):
+        return "selected-awareness-omitted.md"
 
     def values(self) -> dict[str, object]:
         return {"reason": self.reason}
@@ -163,7 +162,7 @@ class CompleteAwareness(ContextSegment, OptionalAwarenessResult):
     def segments(self, max_text_bytes):
         if len(self.text().encode("utf-8")) > max_text_bytes:
             return OmittedAwareness.capture(
-                "rendered awareness exceeds the resource budget"
+                reason="rendered awareness exceeds the resource budget"
             ).segments(max_text_bytes)
         return (self,)
 

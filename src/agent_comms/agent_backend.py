@@ -403,6 +403,9 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     event_kinds: ClassVar[frozenset[str]]
     _sealed: ClassVar[bool] = False
 
+    async def context_for_input(self, thread, context):
+        return context
+
     def __init_subclass__(cls, **options: Any) -> None:
         if AgentBackend._sealed:
             raise BackendDeclarationError(
