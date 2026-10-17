@@ -10,6 +10,7 @@ import secrets
 import os
 import signal
 import sys
+import traceback
 from abc import ABC, abstractmethod
 from contextlib import closing, contextmanager
 from collections.abc import Iterable
@@ -661,10 +662,12 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, current.cancel)
         try:
             await self.options.operation.run(self)
-        except (BlockingIOError, asyncio.CancelledError):
-            raise
-        except (OSError, ValueError, CoordinationError) as error:
-            failure = f'Comms bridge stopped: {type(error).__name__}: {error}'
+        except* (OSError, ValueError, CoordinationError) as group:
+            failure = 'Comms bridge stopped:\n' + ''.join(
+                traceback.TracebackException.from_exception(
+                    group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,
+                ).format()
+            )
             print(failure, file=sys.stderr, flush=True)
             await self.report_failure(failure + '\nNo message was retried.')
             raise
