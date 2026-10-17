@@ -466,6 +466,28 @@ class CompactionEntry(NativeEntry):
         return [NoticeTranscript(f"## Context compacted\n\n{text}")] if text else []
 
 
+@dataclass(frozen=True, kw_only=True)
+class StoredEntry(NativeEntry):
+    """A committed Pi Durable entry owns zero or more ordinary Pi messages."""
+    id: int = field()
+    model: tuple[PiMessage, ...] = ()
+
+    @classmethod
+    def wire_member(cls, value):
+        return cls
+
+    @property
+    def original_id(self):
+        return str(self.id)
+
+    @property
+    def input_boundary(self):
+        return any(message.user for message in self.model)
+
+    def _events(self, context):
+        return [event for message in self.model for event in message.transcript_events(context)]
+
+
 class CustomEntry(NativeEntry):
     """External custom records select their declared payload once at ingress."""
 

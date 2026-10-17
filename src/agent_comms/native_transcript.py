@@ -140,6 +140,16 @@ class NativeRecord:
         return None
 
 
+class StoredRecord(NativeRecord):
+    @property
+    def events(self):
+        return self.turn_events
+
+    @property
+    def size(self):
+        return sum(event.text_size for event in self.events)
+
+
 class NativeTranscript(TranscriptSource):
     def __init__(self, path: Path):
         self.path = path

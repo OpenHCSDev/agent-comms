@@ -74,6 +74,9 @@ class PiEvent(PiPayload, DeclaredFamily):
     def wire_case(cls, wire):
         return cls
 
+    def convert(self):
+        return ()
+
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         """Apply shared progress and phase behavior around this event's meaning."""
         async for event in session.consume_native_event(self):
@@ -107,6 +110,14 @@ class PiEvent(PiPayload, DeclaredFamily):
         return False
 
 
+class NativePiEvent(PiEvent):
+    declared_name = None
+
+
+class DurablePiEvent(PiEvent):
+    declared_name = None
+
+
 @dataclass(frozen=True)
 class UnreadPayload:
     """A Pi event whose fields Core does not read; the record is kept as received."""
@@ -116,54 +127,54 @@ class UnreadPayload:
 
 
 @dataclass(frozen=True)
-class UnknownPiEvent(UnreadPayload, PiEvent):
+class UnknownPiEvent(UnreadPayload, NativePiEvent, DurablePiEvent):
     """Unrecognized events remain ignorable, never admission evidence."""
 
     unknown_kind: ClassVar[bool] = True
 
 
 @dataclass(frozen=True)
-class TurnStart(UnreadPayload, PiEvent):
+class TurnStart(UnreadPayload, NativePiEvent, DurablePiEvent):
     """Pi starts one model round. Core follows the run, not its rounds."""
 
 
 @dataclass(frozen=True)
-class TurnEnd(UnreadPayload, PiEvent):
+class TurnEnd(UnreadPayload, NativePiEvent, DurablePiEvent):
     """Pi ends one model round. Settlement comes from agent_end / agent_settled."""
 
 
 @dataclass(frozen=True)
-class QueueUpdate(UnreadPayload, PiEvent):
+class QueueUpdate(UnreadPayload, NativePiEvent):
     """Pi's own steering queue changed. Core keeps the queue the user sees."""
 
 
 @dataclass(frozen=True)
-class EntryAppended(UnreadPayload, PiEvent):
+class EntryAppended(UnreadPayload, NativePiEvent, DurablePiEvent):
     """Pi wrote a session entry. History is read from the session file."""
 
 
 @dataclass(frozen=True)
-class SessionInfoChanged(UnreadPayload, PiEvent):
+class SessionInfoChanged(UnreadPayload, NativePiEvent):
     """The session name changed. Core reads it from get_state."""
 
 
 @dataclass(frozen=True)
-class ThinkingLevelChanged(UnreadPayload, PiEvent):
+class ThinkingLevelChanged(UnreadPayload, NativePiEvent):
     """The thinking level changed. Core reads it from get_state."""
 
 
 @dataclass(frozen=True)
-class BashExecutionUpdate(UnreadPayload, PiEvent):
+class BashExecutionUpdate(UnreadPayload, NativePiEvent):
     """Output of a user ``!`` bash command; Core never sends one."""
 
 
 @dataclass(frozen=True)
-class ExtensionError(UnreadPayload, PiEvent):
+class ExtensionError(UnreadPayload, NativePiEvent):
     """An extension hook failed inside Pi; the failure stays in Pi's own handling."""
 
 
 @dataclass(frozen=True, kw_only=True)
-class AgentEnd(PiEvent):
+class AgentEnd(NativePiEvent):
     will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
     accepts_prompt = True
 
@@ -172,7 +183,7 @@ class AgentEnd(PiEvent):
         return self.will_retry is True
 
 
-class AgentSettled(PiEvent):
+class AgentSettled(NativePiEvent):
     def settles(self, session: TurnSession) -> bool:
         # A prior retained turn may finish while the new state query is
         # pending. It cannot settle a turn whose admission is not attested.
@@ -205,7 +216,7 @@ class AgentSettled(PiEvent):
         return True
 
 
-class AgentStart(PiEvent):
+class AgentStart(NativePiEvent):
     accepts_prompt = True
 
     @property
@@ -214,7 +225,7 @@ class AgentStart(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ModelRequestProgress(PiEvent):
+class ModelRequestProgress(NativePiEvent):
     progress: "RequestProgress"
 
     def observe_request(self, observer: Callable[[RequestProgress], None] | None) -> bool:
@@ -224,7 +235,11 @@ class ModelRequestProgress(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AutoRetryEnd(PiEvent):
+class AutoRetryEnd(NativePiEvent, DurablePiEvent):
+    @classmethod
+    def wire_case(cls, wire):
+        return cls if 'success' in wire else UnknownPiEvent
+
     outcome: ProviderRetryOutcome = field(metadata={"wire_name": "success"})
     attempt: int
 
@@ -266,7 +281,7 @@ class NativeRetryEnd(AutoRetryEnd):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetryAttemptEvent(PiEvent):
+class RetryAttemptEvent(NativePiEvent):
     """Original Pi retry data and shared observation behavior.
 
     This intermediate declaration factors the same fields and algorithm from
@@ -296,7 +311,7 @@ class RetryAttemptEvent(PiEvent):
         )
 
 
-class AutoRetryStart(RetryAttemptEvent):
+class AutoRetryStart(RetryAttemptEvent, DurablePiEvent):
     retry_reason_code = "provider_auto_retry"
     recovery_on_progress = True
 
@@ -319,7 +334,7 @@ class NativeRetryStart(AutoRetryStart):
     recovery_on_progress = False
 
 
-class ReasonedCompaction(PiEvent):
+class ReasonedCompaction(NativePiEvent, DurablePiEvent):
     """A compaction record owns decoding its external reason."""
 
     def __post_init__(self):
@@ -384,7 +399,7 @@ class CompactionStart(ReasonedCompaction):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ContextCommitted(PiEvent):
+class ContextCommitted(NativePiEvent):
     input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
     session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
     session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
@@ -396,7 +411,7 @@ class ContextCommitted(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class TurnContextObserved(PiEvent):
+class TurnContextObserved(NativePiEvent):
     context: NativeContextManifestData
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -433,7 +448,7 @@ class ValueUiChoice(ExtensionUiChoice):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ExtensionUiRequest(PiEvent):
+class ExtensionUiRequest(NativePiEvent):
     """Pi owns the outer type; concrete declarations own its method vocabulary."""
 
     method: str | None = None
@@ -616,14 +631,14 @@ class EditorUiRequest(DialogUiRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InputCommitted(PiEvent):
+class InputCommitted(NativePiEvent):
     input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
     session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
     session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageEnd(PiEvent):
+class MessageEnd(NativePiEvent, DurablePiEvent):
     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -638,7 +653,7 @@ class MessageEnd(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageStart(PiEvent):
+class MessageStart(NativePiEvent, DurablePiEvent):
     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -660,7 +675,11 @@ class MessageStart(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageUpdate(PiEvent):
+class MessageUpdate(NativePiEvent, DurablePiEvent):
+    @classmethod
+    def wire_case(cls, wire):
+        return BatchMessageUpdate if 'changes' in wire else cls
+
     assistant_message_event: PiDelta | None = field(
         default=None, metadata={"wire_name": "assistantMessageEvent"}
     )
@@ -677,9 +696,16 @@ class MessageUpdate(PiEvent):
                 session.usage.provisional = True
                 yield session.context_info()
 
-        if self.assistant_message_event is not None:
-            for event in self.assistant_message_event.emit(session):
+        for delta in self.deltas:
+            for event in delta.emit(session):
                 yield event
+
+    @property
+    def deltas(self):
+        return (self.assistant_message_event,) if self.assistant_message_event is not None else ()
+
+    def convert(self):
+        return tuple(event for delta in self.deltas for event in delta.events())
 
     accepts_prompt = True
 
@@ -697,7 +723,18 @@ class MessageUpdate(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Response(PiEvent):
+class BatchMessageUpdate(MessageUpdate):
+    """Pi Durable batches the same Pi deltas in one committed update."""
+    changes: tuple[PiDelta, ...] = ()
+    wire_kind = MessageUpdate.wire_kind
+
+    @property
+    def deltas(self):
+        return self.changes
+
+
+@dataclass(frozen=True, kw_only=True)
+class Response(NativePiEvent, DurablePiEvent):
     command: type[PiCommand] = UnknownCommand
     data: PiResponseData = field(default_factory=MissingData)
     error: str | None = field(default=None, metadata={"wire_name": "error"})
@@ -750,14 +787,14 @@ class Response(PiEvent):
             yield event
 
 
-class SteeringInterruptCompleted(PiEvent):
+class SteeringInterruptCompleted(NativePiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.explicit_interrupt = False
         session.output.interrupted()
         yield events.SteeringInterrupted()
 
 
-class SteeringInterruptStarted(PiEvent):
+class SteeringInterruptStarted(NativePiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.explicit_interrupt = True
         if False:
@@ -769,7 +806,7 @@ class SummarizationRetryAttemptStart(RetryAttemptEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SummarizationRetryFinished(PiEvent):
+class SummarizationRetryFinished(NativePiEvent):
     result: CompactionData | None = field(default=None, metadata={"wire_name": "result"})
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
@@ -786,7 +823,7 @@ class SummarizationRetryScheduled(RetryAttemptEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolExecutionEnd(PiEvent):
+class ToolExecutionEnd(NativePiEvent, DurablePiEvent):
     accepts_prompt = True
 
     is_error: bool | None = field(default=None, metadata={"wire_name": "isError"})
@@ -814,21 +851,26 @@ class ToolExecutionEnd(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolExecutionStart(PiEvent):
+class ToolExecutionStart(NativePiEvent, DurablePiEvent):
     accepts_prompt = True
 
     args: dict[str, Any] | None = field(default=None, metadata={"wire_name": "args"})
     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
-    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .tool_declaration import ToolDeclaration
+    @property
+    def tool_id(self):
+        return self.tool_call_id or self.tool_name or "tool"
 
-        name = self.tool_name or "tool"
-        tool_id = self.tool_call_id or name
+    def convert(self):
+        from .tool_declaration import ToolDeclaration
+        return (ToolDeclaration.start(self.tool_id, self.tool_name or "tool", self.args or {}),)
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.prompt_accepted = True
-        session.active_tools.add(tool_id)
-        yield ToolDeclaration.start(tool_id, name, self.args or {})
+        session.active_tools.add(self.tool_id)
+        for event in self.convert():
+            yield event
 
     @property
     def retry_progress(self) -> bool:
@@ -836,7 +878,7 @@ class ToolExecutionStart(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolExecutionUpdate(PiEvent):
+class ToolExecutionUpdate(NativePiEvent, DurablePiEvent):
     accepts_prompt = True
 
     partial_result: PiToolResult = field(
@@ -856,4 +898,4 @@ class ToolExecutionUpdate(PiEvent):
 
 from .pi_native_backend import PiNativeBackend  # noqa: E402
 
-PiNativeBackend.require_event_family(PiEvent)
+PiNativeBackend.require_event_family(NativePiEvent)
