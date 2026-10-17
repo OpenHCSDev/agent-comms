@@ -404,7 +404,7 @@ def complete_goal_controls(root):
                 wait_for=('context-peer',), expect=GoalPrecondition(goal_id=replacement.id)),
                 actor=RuntimeInvocable)
         except ValueError as error:
-            assert 'No declared dependency has an active turn' in str(error)
+            assert 'No declared dependency is working' in str(error)
             receipt['standby_refused_without_active_dependency'] = str(error)
         else:
             raise AssertionError('Standby accepted a completed, non-active dependency')

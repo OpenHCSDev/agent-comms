@@ -19,6 +19,7 @@ from .thread_owned_state import ThreadOwnedState
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
+    from .agent_activity import AgentActivity
     from .threads import Thread
 
 
@@ -43,7 +44,7 @@ class GoalWait(ABC):
     def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
         return False
 
-    def project(self, goal: Goal, snapshot: RegistrySnapshot) -> GoalExecution:
+    def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
         return GoalExecution(
             GoalExecutionState.for_domain_state(goal.state),
             goal.id,
@@ -108,14 +109,14 @@ class RecordedGoalWait(GoalWait):
     def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
         return waits.clear(goal_id, wait_id=self.wait_id)
 
-    def project(self, goal: Goal, snapshot: RegistrySnapshot) -> GoalExecution:
+    def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
         targets = tuple(
             GoalWaitTarget(target.incarnation.renamed(snapshot.canonical_name(target.incarnation.name)))
             for target in self.targets
         )
         inactive = tuple(
             target for target in targets
-            if not GoalWaits.target_has_active_turn(target, snapshot)
+            if not agents.is_working(target.incarnation, snapshot)
         )
         return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
 
@@ -236,25 +237,13 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
 
     @classmethod
     def execution(
-        cls, goal: Goal | None, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot
+        cls, goal: Goal | None, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot,
+        agents: AgentActivity,
     ) -> GoalExecution | None:
         """Project an optional thread goal from its resolved wait state."""
         if goal is None:
             return None
-        return cls.for_goal(goal, rows).project(goal, snapshot)
-
-    @staticmethod
-    def target_has_active_turn(target: GoalWaitTarget, snapshot: RegistrySnapshot) -> bool:
-        canonical = snapshot.canonical_name(target.incarnation.name)
-        thread = snapshot.threads.get(canonical)
-        status = snapshot.statuses.get(canonical)
-        return bool(
-            thread is not None
-            and target.incarnation.resolved(snapshot) == thread.incarnation
-            and status is not None
-            and status.running
-            and thread.executing
-        )
+        return cls.for_goal(goal, rows).project(goal, snapshot, agents)
 
     @staticmethod
     def closed_wait_group(
@@ -262,6 +251,7 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
         targets: tuple[GoalWaitTarget, ...],
         rows: dict[str, RecordedGoalWait],
         snapshot: RegistrySnapshot,
+        agents: AgentActivity,
     ) -> tuple[str, ...]:
         """Find waits with no path to a live active turn outside the wait graph.
 
@@ -305,7 +295,7 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
                     or not peer_wait.current_for(peer_goal, peer.created_at)
                 ):
                     peer_wait = None
-                if GoalWaits.target_has_active_turn(target, snapshot) and peer.process_alive:
+                if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before
                     # its turn finishes; only the reporting turn belongs here.

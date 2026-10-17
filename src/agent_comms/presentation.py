@@ -613,7 +613,7 @@ class ThreadView:
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.statuses[thread.name], activities[thread.name], runtime.get(thread.name),
-            snapshot.seen_at(thread.name), GoalWaits.execution(thread.goal, waits, snapshot),
+            snapshot.seen_at(thread.name), GoalWaits.execution(thread.goal, waits, snapshot, agents),
             snapshot.owner_binding(thread.name),
         ) for thread in threads)
 
