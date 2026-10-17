@@ -15,7 +15,7 @@ from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
-from .peer_relevance import GoalShown, PeerRelevance
+from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .thread_status import ThreadStatus
 
@@ -844,7 +844,7 @@ class CoordinationSegment(InstructionSegment):
         response_instruction = WakePolicy.relevance_instruction()
         viewed = {view.thread.incarnation: view for view in views}
         peers = tuple(PeerState.from_view(viewed[r.peer], r)
-                      for r in relations if r.peer in viewed)
+                      for r in relations if r.peer in viewed and r.relevance.grants(AlwaysListed))
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
         return cls(
             provenance=(OwnerProvenance(owner.incarnation, revision), instruction.source,
