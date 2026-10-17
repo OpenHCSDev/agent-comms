@@ -1468,7 +1468,9 @@ def append_private_bus_checkpoint_unlocked(
             marker.seal_with(FinalSeal.capture(expected, path))
             bus.write_metadata_unlocked(marker)
             return _saved(db)
-    except (sqlite3.Error, OSError) as error:
+    except (sqlite3.Error, OSError, ValueError) as error:
+        # Seal/witness validation and digest decoding can fail after the bus
+        # row is durable too. This publisher owns their UNKNOWN outcome.
         raise RelationViolationError("Private bus checkpoint append outcome UNKNOWN.") from error
 
 

@@ -24,6 +24,7 @@ from .comms import Comms, wire
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .coordination_errors import CoordinationError
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
@@ -418,7 +419,17 @@ def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: python -m agent_comms.restart_queue ROOT")
     comms = wire(sys.argv[1])
-    asyncio.run(run(comms))
+    try:
+        asyncio.run(run(comms))
+    except (OSError, ValueError, CoordinationError) as exc:
+        queue = RestartQueue(comms.root / DIRECTORY)
+        with queue.locked():
+            for record in queue.active_records():
+                if record.state.pending and record.target.is_current_watcher:
+                    queue.save(record.transition(
+                        BlockedRestart(reason=f"Watcher failed: {type(exc).__name__}: {exc}")
+                    ))
+        raise
 
 
 if __name__ == "__main__":

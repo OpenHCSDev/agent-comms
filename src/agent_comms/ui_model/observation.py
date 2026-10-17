@@ -908,10 +908,10 @@ class ObservationService:
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
-        loop.add_reader(self.connection.fileno(), self.receive)
         # Request and watcher defects belong to the service process boundary;
         # an unobserved background-task error must not strand an awaited UI read.
         async with self.tasks:
+            loop.add_reader(self.connection.fileno(), self.receive)
             watching = self.tasks.create_task(self.watch())
             expiring = self.tasks.create_task(self.expire())
             try:
