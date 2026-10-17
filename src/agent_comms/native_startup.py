@@ -26,7 +26,12 @@ class NativeStartupPolicy:
     def readiness_timeout(
         self, session_bytes: int | None, *, base_seconds: float | None = None
     ) -> float:
-        """Bound get_state wait by saved-session size, not the model/turn clock."""
+        """Bound get_state wait by saved-session size, not the model/turn clock.
+
+        A cold Pi parses the entire saved JSONL before responding. Allow two
+        extra seconds for each full 8 MiB beyond the first 8 MiB, up to 35s.
+        Missing/unreadable sessions retain the ten-second base bound.
+        """
         base = self.readiness_seconds if base_seconds is None else base_seconds
         extra_steps = (
             max(0, (session_bytes - 1) // self.readiness_step_bytes)
