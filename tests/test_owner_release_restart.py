@@ -207,7 +207,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
 
     comms = Comms(tmp_path / "wire")
     declared = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
-    generation = comms.registry.snapshot().admission_generations[declared.name]
+    generation = comms.registry.snapshot().claimed_generations[declared.name]
     comms.owners.stop(declared.name)
     snapshot = comms.registry.snapshot()
     assert snapshot.statuses[declared.name].stopped
@@ -215,7 +215,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     assert comms.owners.releases.read()[declared.name].current(snapshot, declared, generation)
 
     waiting = comms.registry.declare(Thread("waiting", frozenset(), str(tmp_path)))
-    before = comms.registry.snapshot().admission_generations[waiting.name]
+    before = comms.registry.snapshot().claimed_generations[waiting.name]
     comms.registry.register(
         replace(waiting, process_identity=ProcessIdentity.capture(os.getpid())),
         new_owner=True,
@@ -232,8 +232,8 @@ def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
     assert not original.process_alive
     comms.owners.stop("worker")
     snapshot = comms.registry.snapshot()
-    receipt = comms.owners.releases.read()["worker"]
-    assert receipt.current(snapshot, original, receipt.before)
+    acknowledgement = comms.owners.releases.read()["worker"]
+    assert acknowledgement.current(snapshot, original, acknowledgement.before)
     assert snapshot.statuses["worker"].stopped
 
 
@@ -258,9 +258,9 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
     assert (comms.root / "released").exists()
     assert not child.alive()
     assert child.reap() == SignaledOutcome(signal.SIGKILL)
-    receipt = comms.owners.releases.read()["worker"]
-    assert receipt.thread.process_identity == original.process_identity
-    assert receipt.after > receipt.before
+    acknowledgement = comms.owners.releases.read()["worker"]
+    assert acknowledgement.thread.process_identity == original.process_identity
+    assert acknowledgement.after > acknowledgement.before
 
 
 def test_voluntary_exit_during_grace_is_reaped_without_force(releasing_owner):
@@ -274,7 +274,7 @@ def test_voluntary_exit_during_grace_is_reaped_without_force(releasing_owner):
     assert not child.alive()
 
 
-@pytest.mark.parametrize("change", ["birth", "admission", "receipt"])
+@pytest.mark.parametrize("change", ["birth", "claim_scope", "acknowledgement"])
 def test_changed_owner_after_release_refuses_escalation_and_replacement(releasing_owner, change):
     comms, child = releasing_owner
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -291,7 +291,7 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
                 ),
                 new_owner=True,
             )
-        elif change == "admission":
+        elif change == "claim_scope":
             comms.registry.register(current, new_owner=True)
         else:
             comms.owners.releases.replace({})

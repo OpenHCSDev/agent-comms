@@ -56,7 +56,7 @@ def test_response_authority_cannot_restore_an_optional_or_pid_only_path():
         assert witness.annotation == "LiveResponseOwner"
 
 
-def test_claim_admission_uses_nominal_paths_without_raw_coercion():
+def test_claim_claim_uses_nominal_paths_without_raw_coercion():
     assert get_type_hints(FileClaimPath)["resource"] is Path
     assert (
         inspect.signature(claim_admission.publish_selected_resource_claim)

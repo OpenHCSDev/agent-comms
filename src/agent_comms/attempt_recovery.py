@@ -33,7 +33,7 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 if TYPE_CHECKING:
-    from agent_comms.owner_lifecycle import OwnerReleaseReceipt
+    from agent_comms.owner_lifecycle import OwnerReleaseEvidence
     from agent_comms.coordination_session import NativeBoundary
 
 _OWNER_LOSS_ISSUER = object()
@@ -45,7 +45,7 @@ class VerifiedOwnerLoss:
 
     attempt: AttemptRecord
     native_input: NativeRuntimeInput
-    release: OwnerReleaseReceipt
+    release: OwnerReleaseEvidence
     _issuer: object = field(repr=False)
     _active: bool = field(repr=False)
     _store: Coordination = field(repr=False)
@@ -91,13 +91,13 @@ class VerifiedOwnerLoss:
             try:
                 release = comms.owners.releases.read().get(attempt.owner_thread)
             except (OSError, ValueError, TypeError) as error:
-                raise RecoveryBlocked("native owner release receipt is invalid") from error
+                raise RecoveryBlocked("native owner release acknowledgement is invalid") from error
             if release is None:
-                raise RecoveryBlocked("native owner release receipt is missing")
+                raise RecoveryBlocked("native owner release acknowledgement is missing")
             try:
                 release.require_native_loss(registry, source)
             except (ValueError, IdentityConflict, RelationViolationError) as error:
-                raise RecoveryBlocked(f"native owner release does not prove loss of this admission: {error}") from error
+                raise RecoveryBlocked(f"native owner release does not prove loss of this claim_scope: {error}") from error
             proof = object.__new__(cls)
             for name, value in (
                 ("attempt", attempt),
@@ -138,7 +138,7 @@ class VerifiedOwnerLoss:
         """
         if not self.owns(self._store, self.attempt):
             raise RecoveryBlocked("native exit observation requires acquired owner loss")
-        session_files = self.native_input.sent_owner_admission_generation.recovery_session_files(
+        session_files = self.native_input.sent_owner_claimed_generation.recovery_session_files(
             self.native_input, self.release
         )
         session_dir = (
@@ -216,8 +216,8 @@ class RecoveryMonitorCapability:
 
         if not (root / "coordination.sqlite3").exists():
             return  # No native coordinator, hence no selected attempt claims.
-        receipt = Comms(root).owners.releases.read().get(owner.name)
-        if receipt is None or receipt.thread.process_identity != owner.process_identity:
+        acknowledgement = Comms(root).owners.releases.read().get(owner.name)
+        if acknowledgement is None or acknowledgement.thread.process_identity != owner.process_identity:
             raise RecoveryBlocked("stopped attempt requires the exact exited owner release")
         cls.recover_owner(root, owner)
 
@@ -328,8 +328,8 @@ class RecoveryMonitorCapability:
         not reconstruct a provider terminal, acceptance, or an unsent outcome.
         Owner exclusion and native-process absence prevent further local work.
         The existing monitor atomically fails the attempt, records replay-unsafe
-        UNKNOWN effects and releases its slot. Input receipts/cursors are never
-        changed. A frozen publication still requires its receipt resolver.
+        UNKNOWN effects and releases its slot. Input evidences/cursors are never
+        changed. A frozen publication still requires its acknowledgement resolver.
 
         Without a recorded send generation, stop the current owner normally
         before calling, then restart it normally for unrelated new work.
@@ -366,7 +366,7 @@ class RecoveryMonitorCapability:
     ) -> Applied[RecoverySnapshot]:
         """Retire a released owner's failed native input without recovering acceptance.
 
-        A saved error is evidence of failure only: no live context receipt is
+        A saved error is evidence of failure only: no live context acknowledgement is
         reconstructed, no cursor advances, and UNKNOWN effects remain unsafe
         to replay. An unfinished journal or unresolved publication is refused.
         """
@@ -509,5 +509,5 @@ class RecoveryMonitorCapability:
             # Death and genuinely observed backend completion commit even when
             # publication remains unresolved.  Neither state clears the pointer.
         if unresolved and (attempt.lifecycle.backend_done or evidence.backend_done):
-            raise PublicationUncertain("frozen publication requires bus-keyed receipt")
+            raise PublicationUncertain("frozen publication requires bus-keyed acknowledgement")
         raise RecoveryBlocked("process death alone is not backend-final proof")

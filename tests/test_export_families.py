@@ -52,7 +52,7 @@ CASES = list(
 def test_pre_refactor_golden_bytes_and_entire_receipt(tmp_path, scope, limit, format):
     name = f"{scope.declared_name}-{limit.declared_name}.{format.declared_name}"
     destination = tmp_path / name
-    receipt = (
+    acknowledgement = (
         WireTranscriptExporter(
             format=format,
             scope=scope,
@@ -62,9 +62,9 @@ def test_pre_refactor_golden_bytes_and_entire_receipt(tmp_path, scope, limit, fo
         .export(rows(), destination)
         .to_wire()
     )
-    receipt.pop("destination")
+    acknowledgement.pop("destination")
     assert destination.read_bytes() == (FIXTURES / name).read_bytes()
-    assert receipt == json.loads((FIXTURES / "receipts.json").read_text())[name]
+    assert acknowledgement == json.loads((FIXTURES / "receipts.json").read_text())[name]
     assert FieldCodec.decode(WireExportScope, scope.to_wire()) == scope
     assert FieldCodec.decode(WireExportLimit, limit.to_wire()) == limit
 
@@ -97,7 +97,7 @@ def test_new_limit_works_without_exporter_codec_or_registry_edits(tmp_path):
         assert WireExportLimit.decode("last_messages") is LastMessagesLimit
         assert FieldCodec.decode(WireExportLimit, {"kind": "last_messages", "count": 2}) == limit
         destination = tmp_path / "last.jsonl"
-        receipt = WireTranscriptExporter(
+        acknowledgement = WireTranscriptExporter(
             format=JsonlFormat(),
             scope=EverythingScope(),
             limit=limit,
@@ -106,12 +106,12 @@ def test_new_limit_works_without_exporter_codec_or_registry_edits(tmp_path):
         records = [json.loads(line) for line in destination.read_text().splitlines()]
         assert records[0]["limit"] == {"kind": "last_messages", "count": 2}
         assert [row["message"]["seq"] for row in records[1:]] == [3, 4]
-        assert (receipt.source_messages, receipt.exported_messages, receipt.omitted_messages) == (
+        assert (acknowledgement.source_messages, acknowledgement.exported_messages, acknowledgement.omitted_messages) == (
             4,
             2,
             2,
         )
-        assert receipt.truncated
+        assert acknowledgement.truncated
 
 
 def test_public_families_require_their_behavior_hooks():

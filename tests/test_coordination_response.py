@@ -106,8 +106,8 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     for extra_target in extra_targets:
         message = comms.messaging.send_initial_cohort("sender", extra_target, "Another original question")
         delivery = comms.bus.log.read_delivery_cohort(root_id, message.seq)
-        receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
-        (extra_assignment,) = receipt.assignments
+        acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
+        (extra_assignment,) = acknowledgement.assignments
         sources.append(SelectedSource(extra_assignment.assignment_id, store.assignments, delivery))
     reply_target = original.exact_reply_target
     assert reply_target is not None
@@ -145,11 +145,11 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         backend_done=True,
         process_dead=True,
     ).value.fence
-    owner, admission = comms.registry.live_owner_with_admission("owner")
-    owner, admission = comms.registry.lease_live_turn_with_admission(
-        owner, "fixture-response-turn", expected_generation=admission
+    owner, claim_scope = comms.registry.live_owner_with_claim("owner")
+    owner, claim_scope = comms.registry.lease_live_turn_with_claim(
+        owner, "fixture-response-turn", expected_generation=claim_scope
     )
-    witness = LiveResponseOwner(thread=owner, admission_generation=admission)
+    witness = LiveResponseOwner(thread=owner, claimed_generation=claim_scope)
     return Fixture(
         comms,
         bus,
@@ -180,7 +180,7 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
                 case.store, case.bus, case.fence,
                 exact_target=routes[0], owner_witness=case.witness,
             )
-        assert not case.store.snapshots.get("exec").publication_receipts
+        assert not case.store.snapshots.get("exec").publication_evidence
         assert case.bus.log.read_keyed_response(first) is None
         prepare_fenced_response(
             case.store, case.bus, case.fence, "Direct questions combined",
@@ -191,20 +191,20 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
             exact_target=routes[0], owner_witness=case.witness,
         ).value
         assert partial.execution.lifecycle.active and partial.is_current
-        assert len(partial.publication_receipts) == 1
+        assert len(partial.publication_evidence) == 1
         assert all(row.lifecycle.require_engagement() for row in partial.assignments)
         settled = publish_fenced_response(
             case.store, case.bus, case.fence,
             exact_target=routes[1], owner_witness=case.witness,
         ).value
         assert settled.execution.lifecycle.completed and not settled.is_current
-        assert len(settled.publication_receipts) == 2
+        assert len(settled.publication_evidence) == 2
         assert all(row.lifecycle.require_completion() for row in settled.assignments)
         assert settled.current_execution_id is None
         for route in routes:
-            intent, receipt = settled.require_published_evidence(route)
+            intent, acknowledgement = settled.require_published_evidence(route)
             message = case.bus.log.read_keyed_response(intent)
-            assert message.reference == receipt.reference and message.target == route
+            assert message.reference == acknowledgement.reference and message.target == route
             assert message.answers == tuple(
                 assignment.source for assignment in settled.assignments
                 if assignment.lifecycle.exact_target == route
@@ -248,9 +248,9 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         ).value
         assert type(published.execution.lifecycle) is CompletedExecution
         assert type(published.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
-        assert ResponseObligation.response_record(published.publication_receipts, case.reply_target) is not None
+        assert ResponseObligation.response_record(published.publication_evidence, case.reply_target) is not None
         assert type(published.assignments[0].lifecycle) is CompletedAssignment
-        assert ResponseObligation.response_record(published.publication_receipts, case.reply_target).seq == case.origin_seq + 1
+        assert ResponseObligation.response_record(published.publication_evidence, case.reply_target).seq == case.origin_seq + 1
         response = case.bus.log.read_keyed_response(intent)
         assert response is not None and response.target == case.reply_target
         assert "_agent_comms_private_v1" not in response.to_wire()
@@ -265,7 +265,7 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
                 reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
             )
             assert isinstance(reread, AlreadyApplied)
-            assert ResponseObligation.response_record(reread.value.publication_receipts, case.reply_target) == ResponseObligation.response_record(published.publication_receipts, case.reply_target)
+            assert ResponseObligation.response_record(reread.value.publication_evidence, case.reply_target) == ResponseObligation.response_record(published.publication_evidence, case.reply_target)
     finally:
         case.close()
 
@@ -363,12 +363,12 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
         with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
             completed = case.witness.resolve_retained(reopened, case.bus)
             assert len(completed) == 1
-            assert completed[0].publication_receipts[0].seq == case.origin_seq + 1
+            assert completed[0].publication_evidence[0].seq == case.origin_seq + 1
             result = resolve_existing_response(
                 reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
             )
             assert type(result.value.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
-            assert ResponseObligation.response_record(result.value.publication_receipts, case.reply_target).seq == case.origin_seq + 1
+            assert ResponseObligation.response_record(result.value.publication_evidence, case.reply_target).seq == case.origin_seq + 1
             assert isinstance(
                 publish_fenced_response(reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness),
                 AlreadyApplied,
@@ -454,13 +454,13 @@ def test_fresh_selection_refuses_missing_saved_reply_without_resend(
         accept_delivery_cohort(case.comms.bus, case.root_id, fresh.seq, case.store)
         install_native_runtime_schema(case.store)
 
-        with pytest.raises(PublicationUncertain, match="no keyed bus receipt; no resend"):
+        with pytest.raises(PublicationUncertain, match="no keyed bus acknowledgement; no resend"):
             SelectedParticipant.prepare(
                 case.comms, case.bus, case.store, case.root_id, "owner", case.origin_seq
             )
         assert case.bus.log.read_keyed_response(intent) is None
         assert case.comms.bus.log.latest_sequence() == fresh.seq
-        assert case.store.snapshots.get("exec").publication_receipts == ()
+        assert case.store.snapshots.get("exec").publication_evidence == ()
     finally:
         case.close()
 
@@ -663,12 +663,12 @@ def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
         key = inputs.bus_key(follow_up, case.witness.thread)
         text = "Part 2, mid-turn"
         assert inputs.record(
-            key, seq=follow_up.seq, owner="owner", admission=lease.admission_generation,
+            key, seq=follow_up.seq, owner="owner", claim_scope=lease.claimed_generation,
             target="owner", text=text, origin=WireInputOrigin(case.root_id, follow_up.reference),
         )
         native_id = uuid4().hex
         assert inputs.bind(
-            key, admission=lease.admission_generation, turn_id=lease.turn_id,
+            key, claim_scope=lease.claimed_generation, turn_id=lease.turn_id,
             native_id=native_id, text=text,
         )
         assert inputs.started(key, turn_id=lease.turn_id, native_id=native_id, text=text)

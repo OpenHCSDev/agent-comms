@@ -68,8 +68,8 @@ def fake_input_started(args, kwargs):
     """Bind and start the original input as Pi does before emitting output."""
     text = args[2]
     native_id = uuid4().hex
-    with kwargs["send_boundary"](None, native_id, text) as admitted:
-        assert isinstance(admitted, GrantedSend)
+    with kwargs["send_boundary"](None, native_id, text) as authorized:
+        assert isinstance(authorized, GrantedSend)
     assert kwargs["native_start"](None, native_id, text)
     return ae.InputStarted(id=None)
 
@@ -283,9 +283,9 @@ class TestHandlers:
             prompt = None
             if selected:
                 await Coordination.run_worker(lambda: agent._comms.messaging.send_user_message(
-                    session, "Settings custody check", worktree=str(native.project)))
+                    session, "Settings ownership check", worktree=str(native.project)))
             else:
-                prompt = asyncio.create_task(agent.prompt(session, [TextContentBlock(type="text", text="Settings custody check")]))
+                prompt = asyncio.create_task(agent.prompt(session, [TextContentBlock(type="text", text="Settings ownership check")]))
             try:
                 async with asyncio.timeout(10):
                     while not native.provider.requests:
@@ -1076,7 +1076,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
 
-        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True, auto_wake=False)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
         class FakeClient:
@@ -1298,9 +1298,9 @@ class TestAgentTurn:
         await agent.shutdown()
 
     async def test_goal_has_only_one_in_flight_attempt(self, wired, tmp_path, monkeypatch):
-        from acp import RequestError
+        from agent_comms.errors import RelationViolationError
 
-        agent = canonical_agent(wired, agent_bin="pi")
+        agent = canonical_agent(wired, agent_bin="pi", auto_wake=False)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="One attempt"))
@@ -1321,8 +1321,9 @@ class TestAgentTurn:
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         first = asyncio.create_task(agent.turns.run_agent_turn("proj", "proj", "first"))
         await asyncio.wait_for(entered.wait(), timeout=2)
-        with pytest.raises(RequestError):
+        with pytest.raises(RelationViolationError) as refused:
             await agent.turns.run_agent_turn("proj", "proj", "second")
+        assert str(refused.value) == "live owner already has an active turn"
         assert calls == 1
         release.set()
         with pytest.raises(RequestError, match="Internal error"):

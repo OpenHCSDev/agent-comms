@@ -117,7 +117,7 @@ def test_extension_ui_new_case_uses_declared_dispatch_and_shared_reply_behavior(
 
 def test_extension_ui_does_not_restore_session_scratch_or_method_switches():
     package = Path(pi_events.__file__).parent
-    retired = {"live_status_seen", "ui_seen", "request_id", "receipt"}
+    retired = {"live_status_seen", "ui_seen", "request_id", "acknowledgement"}
     for name in ("backend.py", "pi_events.py"):
         tree = ast.parse((package / name).read_text())
         for node in ast.walk(tree):

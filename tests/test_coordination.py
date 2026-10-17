@@ -47,7 +47,7 @@ from agent_comms.coordination_tables.executions import (
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    PublicationReceipts,
+    PublicationEvidence,
     canonical_publication_key,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
@@ -166,7 +166,7 @@ def snapshot(
         replay=replay or ReplayAssessments(record.execution_id, ReplayFact.NONE, True, False, 1),
         obligations=(response,) if record.origin is ExecutionOrigin.WIRE and response else (),
         publication_intents=(),
-        publication_receipts=(),
+        publication_evidence=(),
         connectivity=None,
         last_recovery=None,
         current_execution_id=record.execution_id if current else None,
@@ -957,7 +957,7 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
             replay=None,
             obligations=(),
             publication_intents=(),
-            publication_receipts=(),
+            publication_evidence=(),
             connectivity=None,
             last_recovery=None,
             current_execution_id=None,
@@ -1401,7 +1401,7 @@ def test_numeric_only_message_id_input_is_not_text(db):
             (int(message.message_id),),
         )
     c.execute("BEGIN IMMEDIATE")
-    PublicationReceipts(execution_id="e", exact_target="requester", seq=1,
+    PublicationEvidence(execution_id="e", exact_target="requester", seq=1,
                         message_id=message.message_id, received_at_ms=100).insert(c)
     c.execute(
         (
@@ -1546,12 +1546,12 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
     with pytest.raises(sqlite3.IntegrityError, match="disposition must change"):
         c.execute("UPDATE obligations SET reason_code='rewrite',revision=3 WHERE execution_id='e'")
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
-        PublicationReceipts(execution_id="e", exact_target="requester", seq=1,
+        PublicationEvidence(execution_id="e", exact_target="requester", seq=1,
                             message_id=message.message_id, received_at_ms=100).insert(c)
-        # PUBLISHING cannot retain receipt at COMMIT.
+        # PUBLISHING cannot retain acknowledgement at COMMIT.
     assert c.execute("SELECT count(*) FROM publication_receipts").fetchone()[0] == 0
     c.execute("BEGIN IMMEDIATE")
-    PublicationReceipts(execution_id="e", exact_target="requester", seq=1,
+    PublicationEvidence(execution_id="e", exact_target="requester", seq=1,
                         message_id=message.message_id, received_at_ms=100).insert(c)
     c.execute(
         (
@@ -1570,7 +1570,7 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
         c.execute("UPDATE publication_intents SET message=x'41' WHERE execution_id='e'")
     with pytest.raises(sqlite3.IntegrityError):
         c.execute("UPDATE publication_receipts SET seq=2 WHERE execution_id='e'")
-    with pytest.raises(sqlite3.IntegrityError, match="cannot erase publication receipt"):
+    with pytest.raises(sqlite3.IntegrityError, match="cannot erase publication acknowledgement"):
         c.execute(
             (
                 "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','failed'),revisi"

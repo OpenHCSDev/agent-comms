@@ -1,4 +1,4 @@
-"""Transient one-shot plan, consumed under original stopped-batch custody.
+"""Transient one-shot plan, consumed under original stopped-batch ownership.
 
 The old interpreter decodes its own annotations. The target decodes only the
 prepared reference format. No production reader learns the replaced format.

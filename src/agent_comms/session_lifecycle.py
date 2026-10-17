@@ -431,6 +431,6 @@ class AttachedSessionLifecycle(SessionLifecycle):
             owner = await plan.resolve(self, thread)
         except (OSError, RuntimeError, TypeError, ValueError) as error:
             raise RequestError.invalid_params(
-                {"reason": f"Session load not admitted for {thread.name!r}: {error}"}
+                {"reason": f"Session load not authorized for {thread.name!r}: {error}"}
             ) from error
         return await self.attach_owner(owner, session_id)

@@ -45,9 +45,9 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         """Compare the frozen intent once against the Message-owned content snapshot."""
         return self.message == message.publication_snapshot
 
-    def validate_receipt(self, receipt: PublicationReceipts) -> None:
-        if receipt.message_id != self.expected_message_id:
-            raise IntegrityViolationError("receipt envelope does not match frozen intent")
+    def validate_acknowledgement(self, acknowledgement: PublicationEvidence) -> None:
+        if acknowledgement.message_id != self.expected_message_id:
+            raise IntegrityViolationError("acknowledgement envelope does not match frozen intent")
 
     execution_id: str = dataclass_field(
         metadata={
@@ -179,7 +179,7 @@ END"""
 
 
 @dataclass(frozen=True, kw_only=True)
-class PublicationReceipts(CoordinatorTable, TypedTable):
+class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publication_receipts"):
     @property
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
@@ -236,15 +236,15 @@ class PublicationReceipts(CoordinatorTable, TypedTable):
                 """
 BEFORE INSERT ON publication_receipts
 BEGIN
-    SELECT RAISE(ABORT, 'failed execution cannot accept publication receipt')
+    SELECT RAISE(ABORT, 'failed execution cannot accept publication acknowledgement')
     WHERE EXISTS (SELECT 1 FROM executions
                   WHERE execution_id = NEW.execution_id AND status = 'failed');
-    SELECT RAISE(ABORT, 'publication receipt message mismatch')
+    SELECT RAISE(ABORT, 'publication acknowledgement message mismatch')
     WHERE NEW.message_id != (
         SELECT expected_message_id FROM publication_intents
         WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
     );
-    SELECT RAISE(ABORT, 'publication receipt requires publishing obligation')
+    SELECT RAISE(ABORT, 'publication acknowledgement requires publishing obligation')
     WHERE NOT EXISTS (
         SELECT 1 FROM obligations
         WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target AND state = 'publishing'
@@ -255,14 +255,14 @@ END"""
                 """
 BEFORE UPDATE ON publication_receipts
 BEGIN
-    SELECT RAISE(ABORT, 'publication receipt is frozen');
+    SELECT RAISE(ABORT, 'publication acknowledgement is frozen');
 END"""
             ),
             "publication_receipt_delete_frozen": (
                 """
 BEFORE DELETE ON publication_receipts
 BEGIN
-    SELECT RAISE(ABORT, 'publication receipt is frozen');
+    SELECT RAISE(ABORT, 'publication acknowledgement is frozen');
 END"""
             ),
         }

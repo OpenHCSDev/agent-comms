@@ -331,8 +331,8 @@ class TurnSession:
             self.finished = True
             return
 
-    def permits_live_receipt(self) -> bool:
-        """Only tracked, live input may publish an informational package receipt."""
+    def permits_live_status(self) -> bool:
+        """Only tracked, live input may publish an informational package acknowledgement."""
         if self.stats.requested:
             return False
         return self.prompt_state.permits_extension_ui(self)

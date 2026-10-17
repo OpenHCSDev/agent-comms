@@ -65,7 +65,7 @@ class RetryScheduled(CoordinationError):  # noqa: N818 - nominal outcome name
     """The settled execution is durably eligible for its next selected attempt."""
 
 
-class ResponseAdmissionBlocked(RecoveryBlocked):
+class ResponseClaimBlocked(RecoveryBlocked):
     """Response publication lacks final evidence or its exact retained route."""
 
     def __init__(self):
@@ -73,8 +73,8 @@ class ResponseAdmissionBlocked(RecoveryBlocked):
 
 
 class PublicationUncertain(CoordinationError):  # noqa: N818 - nominal outcome name
-    """A frozen publishing intent has no authoritative bus-keyed receipt."""
+    """A frozen publishing intent has no authoritative bus-keyed acknowledgement."""
 
 
 class PublicationActivationBlocked(CoordinationError):  # noqa: N818 - nominal outcome name
-    """No bus-owned idempotent append receipt is available in this slice."""
+    """No bus-owned idempotent append acknowledgement is available in this slice."""

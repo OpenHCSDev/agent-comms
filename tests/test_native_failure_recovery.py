@@ -55,7 +55,7 @@ def failed_owner(directory, output, exit_allowed):
                 + "\n"
             )
         # Revoke the real owner before the failure consumer can settle. This
-        # leaves the original admitted input unresolved without an obsolete
+        # leaves the original authorized input unresolved without an obsolete
         # failure hook or a fabricated owner-loss grant.
         os.environ["AGENT_COMMS_THREAD"] = "beta"
         comms.owners.release("beta")
@@ -134,7 +134,7 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
                 f"SELECT * FROM {NativeRuntimeInput.declared_name} WHERE input_id=?", (input_id,)
             ).fetchone()
         )
-        assert after == before  # No forged context, cursor, or acceptance receipt.
+        assert after == before  # No forged context, cursor, or acceptance acknowledgement.
         with pytest.raises(RecoveryBlocked):
             RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
 
@@ -170,7 +170,7 @@ def test_restart_recovery_preserves_native_outcome_without_replaying(released_fa
         assert not result.is_current
         assert not result.can_retry
         assert NativeRuntimeInput.one(store.session._connection, input_id=input_id) == before
-        assert not result.publication_receipts
+        assert not result.publication_evidence
         assert not result.publication_intents
     comms.owners.require_restart_idle(owner)
     # Startup after settlement is a read, not another recovery or a replay.
@@ -258,7 +258,7 @@ def replacement_release(root):
     comms.owners.release("beta")
 
 
-def test_later_attested_release_still_fences_original_admission(released_failure):
+def test_later_attested_release_still_fences_original_claim(released_failure):
     process, exit_allowed, root, execution_id, _input_id, session_file = released_failure
     leave(process, exit_allowed)
     replacement = multiprocessing.get_context("fork").Process(

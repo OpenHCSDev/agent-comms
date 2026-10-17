@@ -1,4 +1,4 @@
-"""Actual native Pi receipts for queued and steered channel requests."""
+"""Actual native Pi evidences for queued and steered channel requests."""
 
 from agent_comms.queued_input import InitialInput
 import asyncio

@@ -220,11 +220,8 @@ class ChannelManagement:
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             threads = self.registry.all_threads()
             with self.catalog.editing() as document:
-                target = ChannelTarget.normalize_name(name)
-                channel = document.views(threads).get(target)
-                if channel is None:
-                    raise ValueError(f'Unknown channel: {target!r}')
-                return document.set_metadata(target, threads, parent=channel.parent, archived=archived)
+                channel = document.require_channel(name, threads)
+                return document.set_metadata(channel.name, threads, parent=channel.parent, archived=archived)
 
     def set_channel_any_mode(self, name: str, enabled: bool) -> Channel:
         with _store_lock(self._wire_lock_path):
@@ -250,23 +247,20 @@ class ChannelManagement:
                 return document.set_preferences(name, threads, pinned=pinned)
 
     def set_thread_pinned(self, channel: str, name: str, pinned: bool) -> None:
-        canonical_channel = ChannelTarget.normalize_name(channel)
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             snapshot = self.registry.snapshot()
             with self.catalog.editing() as document:
-                view = document.views(snapshot.threads).get(canonical_channel)
-                if view is None:
-                    raise ValueError(f"Unknown channel: {canonical_channel!r}")
+                view = document.require_channel(channel, snapshot.threads)
                 if pinned and (
                     not view.matches(thread.tags)
                     or not thread.role.executable
                     or not snapshot.statuses[thread.name].visible
                 ):
                     raise ValueError(
-                        f"Thread {thread.name!r} is not a member of {canonical_channel}."
+                        f"Thread {thread.name!r} is not a member of {view.name}."
                     )
-                document.set_thread_pinned(canonical_channel, thread.name, pinned)
+                document.set_thread_pinned(view.name, thread.name, pinned)
 
     def rename_tag(self, name: str, new_name: str) -> None:
         Tag.validate(new_name)

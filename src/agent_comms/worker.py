@@ -55,7 +55,7 @@ async def run() -> None:
 
 
 async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
-    """Consume this launch's explicitly admitted input, never scan for retries."""
+    """Consume this launch's explicitly authorized input, never scan for retries."""
     from .store_files import _store_lock
 
     async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
@@ -65,9 +65,9 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
                 owner = snapshot.threads[name]
                 row = agent.inputs.dispositions.lookup(key)
                 if not row.queued_for(
-                    owner.incarnation, snapshot.admission_generations[name], row.source_text
+                    owner.incarnation, snapshot.claimed_generations[name], row.source_text
                 ):
-                    raise ValueError("Startup input no longer belongs to this owner admission")
+                    raise ValueError("Startup input no longer belongs to this owner claim_scope")
             return row
         row = await Coordination.run_worker(capture)
         await agent.inputs.emit_input_disposition(name, row)

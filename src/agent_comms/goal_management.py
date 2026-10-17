@@ -64,14 +64,13 @@ class Goals:
         return self.goal_store
 
     def ready_goal_grant_locked(
-        self, owner: Thread, admission: int, generation: Generation
+        self, owner: Thread, claim_scope: int, generation: Generation
     ) -> str:
         """Caller holds wire; recover only this owner's original unused READY grant."""
         try:
-            owner.require_active_goal(generation.goal_id).require_order(self, owner.incarnation)
-            GoalLaunchOwner(thread=owner, admission_generation=admission).require_ready(
+            GoalLaunchOwner(thread=owner, claimed_generation=claim_scope).require_ready(
                 self.registry.snapshot(), generation.goal_id,
-            )
+            ).require_order(self, owner.incarnation)
         except (RelationViolationError, ValueError, StaleFence) as error:
             raise StaleAttemptError(
                 "The executing goal owner changed before READY recovery."
@@ -171,7 +170,7 @@ class Goals:
                     key,
                     message.seq,
                     thread.name,
-                    snapshot.admission_generations[thread.name],
+                    snapshot.claimed_generations[thread.name],
                     message.target,
                     message.body,
                 )
@@ -256,7 +255,7 @@ class Goals:
             canonical = snapshot.canonical_name(fence.identity.incarnation.name)
             source = snapshot.threads.get(canonical)
             observed = (
-                source.observed_turn(snapshot.admission_generations.get(canonical, 0))
+                source.observed_turn(snapshot.claimed_generations.get(canonical, 0))
                 if source is not None
                 else None
             )

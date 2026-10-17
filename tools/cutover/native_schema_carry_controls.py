@@ -3,7 +3,7 @@
 The release owner supplies a stopped, privately retained original root. This
 control neither seeds history/proofs nor stops, launches, retries or prompts an
 owner. Running-source journal inventory can exercise request conversion only;
-that mode explicitly does not qualify the public stopped-custody installation.
+that mode explicitly does not qualify the public stopped-ownership installation.
 """
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ def run_journal_inventory(base, source_python, inventory_path):
     if digest(inventory_path) != before_sha:
         raise AssertionError('Original running-source inventory changed')
     # The actual current journal entrypoint authenticates target DDL and reads
-    # the original operations/states. It returns no original admission receipt.
+    # the original operations/states. It returns no original claim_scope acknowledgement.
     from agent_comms.compaction_journal import CompactionJournal
     journal = CompactionJournal(candidate)
     with journal.transaction() as db:
@@ -106,7 +106,7 @@ def run_journal_inventory(base, source_python, inventory_path):
               'target_release':list(target.release_versions),
               'relation':relation, 'carry':evidence,
               'provider_calls':0, 'native_inputs':0, 'owner_signals':0}
-    write_original(base/'receipt.json', (json.dumps(result,indent=2)+'\n').encode())
+    write_original(base/'acknowledgement.json', (json.dumps(result,indent=2)+'\n').encode())
     return result
 
 
@@ -122,8 +122,8 @@ def run(base, source_python, root):
     PrivateDirectoryRole.require(root.lstat())
     if not root.resolve(strict=True).is_relative_to(base.resolve(strict=True)) or root == base:
         raise ValueError('Stopped original copy must be private under this owned control root')
-    if (base/'receipt.json').exists() or (base/'receipt.json').is_symlink():
-        raise ValueError('Control receipt must be fresh')
+    if (base/'acknowledgement.json').exists() or (base/'acknowledgement.json').is_symlink():
+        raise ValueError('Control acknowledgement must be fresh')
     original = original_declaration(source_python)
     target = NativeSchemaDeclaration.observe()
     original.require_carry_target(target)
@@ -157,7 +157,7 @@ def run(base, source_python, root):
                 refused.append('ordinary-reader-original-schema')
             else:
                 raise AssertionError('Ordinary reader accepted the old coordination declaration')
-    # One-use custody refusals operate on ONLY this private copy, with exact
+    # One-use ownership refusals operate on ONLY this private copy, with exact
     # original bytes restored afterward. No original session or proof is edited.
     for case in ('existing-candidate','existing-attempt','companion'):
         try:
@@ -182,7 +182,7 @@ def run(base, source_python, root):
         except (ValueError,RuntimeError,FileExistsError):
             refused.append(case)
         else:
-            raise AssertionError('Expected stopped custody refusal missing: '+case)
+            raise AssertionError('Expected stopped ownership refusal missing: '+case)
         if source_hashes != {name:digest(root/name) for name in source_hashes}:
             raise AssertionError('Custody refusal changed original stores')
     with RuntimeCompactionFiles(root).acquire() as acquired:
@@ -190,8 +190,8 @@ def run(base, source_python, root):
         if installed.unchanged_protected(protected, acquired):
             raise AssertionError('Native declared members remain in unchanged partition')
         if installed.candidate.exists():
-            raise AssertionError('Native candidate was derived before installation custody')
-        receipt = installed.install(acquired, base/'original-preimages')
+            raise AssertionError('Native candidate was derived before installation ownership')
+        acknowledgement = installed.install(acquired, base/'original-preimages')
     plan = FieldCodec.decode(NativeSchemaCarryPlan, json.loads(
         (base/'original-preimages/reviewed-carry.json').read_text()))
     path=plan.candidate/next(item.name for item in plan.stores)
@@ -235,11 +235,11 @@ def run(base, source_python, root):
             'original_release':list(original.release_versions),
             'target_release':list(plan.target.release_versions),
             'relation':relation, 'installed_typed_rows':installed_rows,
-            'custody_refusals':refused, 'installation':receipt,
+            'custody_refusals':refused, 'installation':acknowledgement,
             'protected_original_files':protected_files,
             'provider_calls':0, 'native_inputs':0, 'owner_signals':0,
             'public_cutover_qualified':False}
-    write_original(base/'receipt.json',(json.dumps(result,indent=2)+'\n').encode())
+    write_original(base/'acknowledgement.json',(json.dumps(result,indent=2)+'\n').encode())
     return result
 
 
@@ -268,7 +268,7 @@ def goal_journey(base, original_db, declaration):
     except StorageUncertainError:
         pass
     else:
-        raise AssertionError('Original incompatible ledger unexpectedly admitted')
+        raise AssertionError('Original incompatible ledger unexpectedly authorized')
     source_schema = json.loads(declaration.read_text())
     installation = PreserveRuntimeInstallation(goal_schema=source_schema)
     assert FieldCodec.decode(RuntimeInstallation, FieldCodec.encode(installation)) == installation
@@ -281,7 +281,7 @@ def goal_journey(base, original_db, declaration):
         else:
             raise AssertionError('Unknown goal declaration was transformed')
         assert digest(path) == original_sha
-        receipt = installation.synchronize_goal(acquired, base/'originals')
+        acknowledgement = installation.synchronize_goal(acquired, base/'originals')
     assert digest(base/'originals/goal-private/goal_attempts.sqlite3') == original_sha
     store = GoalAttemptStore(goal_root)
     with closing(sqlite3.connect(path.as_uri()+'?mode=ro', uri=True)) as db:
@@ -299,15 +299,15 @@ def goal_journey(base, original_db, declaration):
     result = {'state': 'original-goal-ledger-carry-passed', 'target_python': sys.executable,
               'target_package': __import__('agent_comms').__file__,
               'original_db': str(original_db), 'original_copy_sha256': original_sha,
-              'source_declaration_sha256': digest(declaration), 'installation': receipt,
+              'source_declaration_sha256': digest(declaration), 'installation': acknowledgement,
               'unchanged_fact_rows': sum(len(before[name]) for name in facts),
               'unchanged_fact_rows_sha256': row_digest({name: before[name] for name in sorted(facts)}),
               'matched_declaration_preserved': matched,
               'refusals': ['original-strict-schema', 'unauthenticated-declaration'],
               'native_inputs': 0, 'provider_calls': 0, 'public_mutations': 0, 'owner_stops': 0,
               'strength': 'copied running-source inventory; actual RuntimeInstallation and strict GoalAttemptStore; not stopped public carry or native/UI journey'}
-    (base/'receipt.json').write_text(json.dumps(result, indent=2)+'\n')
-    return {'state': result['state'], 'receipt': str(base/'receipt.json')}
+    (base/'acknowledgement.json').write_text(json.dumps(result, indent=2)+'\n')
+    return {'state': result['state'], 'acknowledgement': str(base/'acknowledgement.json')}
 
 
 if __name__ == '__main__':

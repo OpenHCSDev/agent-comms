@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Provider-free, kernel-network-denied old/new package-process admission probe."""
+"""Provider-free, kernel-network-denied old/new package-process claim_scope probe."""
 
 from __future__ import annotations
 

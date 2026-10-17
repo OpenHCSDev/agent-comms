@@ -163,7 +163,7 @@ def main(launcher: Path, package: Path) -> None:
         (agent / value).resolve() for value in settings["packages"] if isinstance(value, str)
     ]
     assert extension.resolve() in installed_paths, settings
-    # Package acquisition is a separate code-execution path: prove admission
+    # Package acquisition is a separate code-execution path: prove claim_scope
     # happens before npm/git/lifecycle commands, not merely at module import.
     npm_marker = root / "unapproved-package-command"
     npm_wrapper = root / "npm-wrapper.mjs"
@@ -201,7 +201,7 @@ def main(launcher: Path, package: Path) -> None:
         assert (
             rejected.returncode != 0 and b"mutable npm/git package source" in rejected.stderr
         ), rejected.stderr
-        assert not npm_marker.exists(), "Package subprocess ran before admission"
+        assert not npm_marker.exists(), "Package subprocess ran before claim_scope"
     finally:
         (agent / "settings.json").write_text(json.dumps(settings))
     ancestor = ancestor_probe(package, root, env, deny)

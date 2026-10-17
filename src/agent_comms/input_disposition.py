@@ -59,7 +59,7 @@ class InputDocument:
         try:
             return tuple(self.rows[key] for key in keys)
         except KeyError as error:
-            raise ValueError("Original input receipt is unavailable") from error
+            raise ValueError("Original input acknowledgement is unavailable") from error
 
     def transition(self, keys: tuple[str, ...], change) -> InputDocument:
         """Each original state decides its successor; unchanged rows stay intact."""
@@ -83,8 +83,8 @@ class InputDocument:
         Look up that producer's exact native ID/text rather than choosing the
         initial turn input, a public event or the first matching row.
         """
-        return tuple(receipt for row in self.rows.values()
-                     if (receipt := row.started_for_native(
+        return tuple(acknowledgement for row in self.rows.values()
+                     if (acknowledgement := row.started_for_native(
                          lease, native_id, sent_text, snapshot=snapshot
                      )) is not None)
 
@@ -236,23 +236,23 @@ class InputDispositions(TypedStore):
         return message.response_policy.disposition_key(message, owner)
 
     def record(
-        self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str,
-        origin: InputOrigin = UnattributedInputOrigin(), custody: ExitStack | None = None,
+        self, key: str, *, seq: int | None, owner: str, claim_scope: int, target: str, text: str,
+        origin: InputOrigin = UnattributedInputOrigin(), ownership: ExitStack | None = None,
     ) -> bool:
         """Register supplied reservation rollback before publishing acceptance."""
-        row = ReservedInput(key, seq, owner, admission, target, text,
+        row = ReservedInput(key, seq, owner, claim_scope, target, text,
                             origin=origin)
-        document = self.record_originals(row, custody=custody)
+        document = self.record_originals(row, ownership=ownership)
         return document.rows[key] is row
 
     def record_originals(
-        self, *originals: ReservedInput, custody: ExitStack | None = None,
+        self, *originals: ReservedInput, ownership: ExitStack | None = None,
     ) -> InputDocument:
         """Publish one original cohort; return its exact captured document."""
         def reserve(original: InputDocument) -> InputDocument:
             changed = original.record(*originals)
-            if changed is not original and custody is not None:
-                custody.callback(
+            if changed is not original and ownership is not None:
+                ownership.callback(
                     self.settle_unbound,
                     tuple(key for key in changed.rows if key not in original.rows),
                 )
@@ -261,21 +261,21 @@ class InputDispositions(TypedStore):
         return self._update(*_members("key", (row.key for row in originals)), reserve)
 
     def reserve_turn(
-        self, owner: str, turn: TurnId, admission: int, text: str, *, custody: ExitStack,
+        self, owner: str, turn: TurnId, claim_scope: int, text: str, *, ownership: ExitStack,
     ) -> SingleInputBatch:
         """Enlist rollback before publication; caller retains the original wire scope."""
         from .channel_input_batch import SingleInputBatch
 
-        row = ReservedInput(f"turn:{turn.value}", None, owner, admission, owner, text)
+        row = ReservedInput(f"turn:{turn.value}", None, owner, claim_scope, owner, text)
 
-        document = self.reserve_originals(row, custody=custody)
+        document = self.reserve_originals(row, ownership=ownership)
         return SingleInputBatch(document.originals((row.key,)))
 
     def reserve_originals(
-        self, *originals: ReservedInput, custody: ExitStack,
+        self, *originals: ReservedInput, ownership: ExitStack,
     ) -> InputDocument:
         """Require fresh originals, retaining the exact publication and rollback."""
-        document = self.record_originals(*originals, custody=custody)
+        document = self.record_originals(*originals, ownership=ownership)
         if any(document.rows[row.key] is not row for row in originals):
             raise RelationViolationError("Input reservation already exists")
         return document
@@ -301,13 +301,13 @@ class InputDispositions(TypedStore):
     def clear_native(self, key: str, native_id: str, text: str) -> bool:
         return self._transition(key, lambda row: row.clear_native(native_id, text))
 
-    def bind(self, key: str, *, admission: int, turn_id: str, native_id: str, text: str) -> bool:
+    def bind(self, key: str, *, claim_scope: int, turn_id: str, native_id: str, text: str) -> bool:
         return self.bind_originals(
-            (key,), admission=admission, turn_id=turn_id, native_id=native_id, text=text
+            (key,), claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
         )
 
     def bind_turn_input(
-        self, keys: tuple[str, ...], *, admission: int, turn_id: str, native_id: str, text: str,
+        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: str, native_id: str, text: str,
         already_bound: bool,
     ) -> bool:
         """Bind a turn's unresolved inputs to the native input carrying them.
@@ -318,18 +318,18 @@ class InputDispositions(TypedStore):
         for row in document.rows.values():
             row.require_not_cleared()
         if any(not document.lookup(key).unresolved
-               or not document.lookup(key).matches_admission(admission) for key in keys):
+               or not document.lookup(key).matches_claim(claim_scope) for key in keys):
             return False
         if already_bound:
             return all(document.lookup(key).matches_native(
                 native_id=native_id, turn_id=turn_id, text=text
             ) for key in keys)
         return self.bind_originals(
-            keys, admission=admission, turn_id=turn_id, native_id=native_id, text=text
+            keys, claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
         )
 
     def bind_originals(
-        self, keys: tuple[str, ...], *, admission: int, turn_id: str, native_id: str, text: str
+        self, keys: tuple[str, ...], *, claim_scope: int, turn_id: str, native_id: str, text: str
     ) -> bool:
         """Bind the complete captured original atomically; no partial batch grant."""
         bound = False
@@ -339,7 +339,7 @@ class InputDispositions(TypedStore):
             if not keys or len(set(keys)) != len(keys):
                 return document
             successors = tuple(document.lookup(key).bind(
-                admission=admission, turn_id=turn_id, native_id=native_id, text=text
+                claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
             ) for key in keys)
             if any(row is None for row in successors):
                 return document

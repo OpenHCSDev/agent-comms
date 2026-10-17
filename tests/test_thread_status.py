@@ -108,12 +108,12 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
     assert registry.store.path.read_bytes() == saved
     registry.heartbeat("owner")
     assert registry.snapshot().owner_generations == before.owner_generations
-    assert registry.snapshot().admission_generations == before.admission_generations
+    assert registry.snapshot().claimed_generations == before.claimed_generations
     assert registry.status("owner").running
 
 
 @pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])
-def test_reactivation_rotates_owner_and_admission_without_rebinding_history(tmp_path, status):
+def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
     registry.register(
         Thread(
@@ -129,7 +129,7 @@ def test_reactivation_rotates_owner_and_admission_without_rebinding_history(tmp_
     after = registry.snapshot()
     assert after.threads["owner"].incarnation == before.threads["owner"].incarnation
     assert after.owner_generations["owner"] > before.owner_generations["owner"]
-    assert after.admission_generations["owner"] > before.admission_generations["owner"]
+    assert after.claimed_generations["owner"] > before.claimed_generations["owner"]
     assert after.threads["owner"].active_turn is None
 
 

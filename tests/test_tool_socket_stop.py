@@ -1,4 +1,4 @@
-"""An interrupted selected turn retires its socket before child custody can block."""
+"""An interrupted selected turn retires its socket before child ownership can block."""
 
 from __future__ import annotations
 

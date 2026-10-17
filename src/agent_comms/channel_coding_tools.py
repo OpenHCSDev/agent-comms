@@ -1,4 +1,4 @@
-"""Normal Pi coding tools admitted by the selected channel turn's existing owner.
+"""Normal Pi coding tools authorized by the selected channel turn's existing owner.
 
 Pi owns actual read/bash/edit/write execution. This module owns the cooperative
 pre-tool claim check, using the bus's existing claims and native input ledger.
@@ -22,7 +22,7 @@ from .claim_admission import (
 from .comms import Comms
 from .envelope_claim_transitions import (
     ClaimOwner,
-    WakeAdmission,
+    WakeClaim,
 )
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .native_tools import NativeExecutableTool
@@ -49,7 +49,7 @@ class CodingCall(NativeToolCall):
         slot = self.slot(input_id, round_number)
         record_selected_terminal(directory, slot, slot)
 
-    def admission_failed(self) -> None:
+    def claim_failed(self) -> None:
         # A denied ordinary tool may report an error and let Pi explain it. The
         # consumed call cannot be retried; this grants no mutation authority.
         pass
@@ -86,7 +86,7 @@ class CoordinationCall(CodingCall):
 class CodingToolOwner:
     comms: Comms
     store: Coordination
-    admission: WakeAdmission
+    claim_scope: WakeClaim
     owner_name: str
     session_dir: Path
     input_id: str
@@ -103,8 +103,8 @@ class CodingToolOwner:
                 self.store.session._connection, self.input_id
             ):
                 raise SelectedToolDenied("Tool original is absent from the reserved native batch")
-        return replace(self, admission=replace(
-            self.admission,
+        return replace(self, claim_scope=replace(
+            self.claim_scope,
             source_seq=assignment.wire_seq,
             source_message_id=assignment.message_id,
             wake_assignment_id=assignment.assignment_id,
@@ -114,8 +114,8 @@ class CodingToolOwner:
 
     async def admit(self, round_number: int, call: CodingCall) -> None:
         def check(store: Coordination) -> None:
-            verify_sent_full_input(store, self.admission, self.owner_name, self.input_id)
-            verify_selected_wake(self.comms, store, self.admission, self.owner_name)
+            verify_sent_full_input(store, self.claim_scope, self.owner_name, self.input_id)
+            verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
             slot = call.slot(self.input_id, round_number)
             consume_selected_slot(self.session_dir, slot, slot)
             resource = call.tool.claim
@@ -123,13 +123,13 @@ class CodingToolOwner:
                 owner = self.comms.registry.require(self.owner_name)
                 canonical = resource.normalized(Path(owner.worktree))
                 prior = self.claims.get(canonical)
-                claim_admission = (
-                    prior.admission
+                claim_authority = (
+                    prior.claim_scope
                     if prior is not None
-                    else replace(self.admission, operation_id=slot)
+                    else replace(self.claim_scope, operation_id=slot)
                 )
                 claimed = publish_selected_resource_claim(
-                    self.comms, store, claim_admission, self.owner_name, resource
+                    self.comms, store, claim_authority, self.owner_name, resource
                 )
                 self.claims[canonical] = claimed
 

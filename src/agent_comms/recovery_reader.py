@@ -15,7 +15,7 @@ from agent_comms.coordination_tables.executions import (
 )
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    PublicationReceipts,
+    PublicationEvidence,
 )
 from agent_comms.coordination_tables.recovery import (
     ConnectivityFacet,
@@ -60,7 +60,7 @@ class RecoveryReader:
                 parameters=(execution_id,), order_by=("exact_target",)))
             intents = tuple(PublicationIntents.select(db, where="execution_id=?",
                 parameters=(execution_id,), order_by=("exact_target",)))
-            receipts = tuple(PublicationReceipts.select(db, where="execution_id=?",
+            evidence = tuple(PublicationEvidence.select(db, where="execution_id=?",
                 parameters=(execution_id,), order_by=("exact_target",)))
             connectivity = ConnectivityFacet.one(db, execution_id=execution_id)
             audit = next(
@@ -84,7 +84,7 @@ class RecoveryReader:
                 replay,
                 obligations,
                 intents,
-                receipts,
+                evidence,
                 connectivity,
                 audit,
                 pointer.execution_id,

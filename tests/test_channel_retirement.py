@@ -60,7 +60,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     comms.bus.log.path.write_text(before)
     comms.bus.log.path.chmod(0o600)
     marker = comms.bus.log.read_metadata_unlocked(required=True)
-    marker.last_seq = marker.admission_after_seq = 4
+    marker.last_seq = marker.claimed_after_seq = 4
     marker.checkpoint_version = marker.checkpoint_seal = None
     comms.bus.log.write_metadata_unlocked(marker)
     (tmp_path / "private_bus_checkpoint.sqlite3").unlink()

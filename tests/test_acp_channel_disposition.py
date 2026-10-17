@@ -241,7 +241,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
                         ReplayFact.ASSISTANT_OUTPUT,
                     )
             # Output is not a competing read authority. Until the native
-            # context receipt exists, even output evidence remains not-read.
+            # context acknowledgement exists, even output evidence remains not-read.
             working = comms.views.message_notifications_for_references((message.reference,))[key]
             assert working[0].state == "Sent"
             assert working[0].detail == "" and working[0].busy

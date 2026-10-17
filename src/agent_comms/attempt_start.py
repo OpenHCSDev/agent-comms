@@ -98,7 +98,7 @@ class AttemptStart:
             raise StaleFence("retry must use a strictly newer owner generation")
 
     def activate(self, session, snapshot: RecoverySnapshot) -> None:
-        """Publish attempt, execution and current pointer in the admitted transaction."""
+        """Publish attempt, execution and current pointer in the authorized transaction."""
         db, execution = session._connection, snapshot.execution
         created = session.now(execution.updated_at_ms)
         # Versioned fixed policy: no caller-selected initial lease, no semantic mirror.

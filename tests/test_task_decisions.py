@@ -1,4 +1,4 @@
-"""One original decision/correction journey through declared tools and wire custody."""
+"""One original decision/correction journey through declared tools and wire ownership."""
 
 import os
 import json
@@ -38,9 +38,9 @@ def admit(comms, name):
         name, frozenset({"team"}), str(comms.root),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
-    owner, admission = comms.registry.live_owner_with_admission(name)
-    owner, _ = comms.registry.lease_live_turn_with_admission(
-        owner, name + "-turn", expected_generation=admission
+    owner, claim_scope = comms.registry.live_owner_with_claim(name)
+    owner, _ = comms.registry.lease_live_turn_with_claim(
+        owner, name + "-turn", expected_generation=claim_scope
     )
     return owner
 
@@ -257,7 +257,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     monkeypatch.setenv("AGENT_COMMS_THREAD", "renamed-alpha")
     comms.registry.release_turn(alpha.turn_lease)
     assert retained.current_authored_sources(comms.registry.require("alpha"), comms.registry.snapshot()) == ()
-    with pytest.raises(ValueError, match="admitted"):
+    with pytest.raises(ValueError, match="authorized"):
         invoke_tool(comms, "comms_decision", request)
     assert bus.read_bytes() == before
     from agent_comms.comms import Comms
@@ -340,8 +340,8 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
     request = {"chosen": "A", "rejected": ["B"], "to": "#team"}
     first = invoke_tool(comms, "comms_decision", request)
     comms.registry.release_turn(owner.turn_lease)
-    owner, admission = comms.registry.live_owner_with_admission("alpha")
-    comms.registry.lease_live_turn_with_admission(owner, "next-turn", expected_generation=admission)
+    owner, claim_scope = comms.registry.live_owner_with_claim("alpha")
+    comms.registry.lease_live_turn_with_claim(owner, "next-turn", expected_generation=claim_scope)
     before = (comms.root / "bus.jsonl").read_bytes()
     with pytest.raises(RelationViolationError, match="different turn scope"):
         invoke_tool(comms, "comms_decision", {

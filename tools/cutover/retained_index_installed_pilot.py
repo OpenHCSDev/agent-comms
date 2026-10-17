@@ -37,7 +37,7 @@ def main():
     except RelationViolationError as error:
         refusal = str(error)
     else:
-        raise AssertionError('New writer unexpectedly admitted the original old schema')
+        raise AssertionError('New writer unexpectedly authorized the original old schema')
     cutover = RetainedIndexCutover(old_python, seed['root_id'],
                                  Path(os.environ['AC_NATIVE_COPIED_PACKAGE']))
     # No fixture owner survives the old seed child. Existing real two-worker
@@ -55,15 +55,15 @@ def main():
     assert len(rows) == 1 and rows[0].message.to_wire() == seed['original']
     assert sorted(row.canonical_thread for row in rows[0].audience.recipients) == ['alpha', 'beta']
     assert [event.declared_name for event in source.events(rows[0])] == ['sent']
-    receipt = {'old_python': str(old_python), 'new_python': sys.executable,
+    acknowledgement = {'old_python': str(old_python), 'new_python': sys.executable,
                'old_schema_refusal': refusal, 'original_bytes_unchanged': True,
                'original_frozen_sender_and_audience_unchanged': True,
                'original_registry_and_guard_unchanged': True,
                'central_batch_used': False, 'joined_authored_seed': True,
                'new_owner_launches': 0, 'provider_calls': 0,
                'original_input_replays': 0}
-    (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2))
-    print(json.dumps(receipt), flush=True)
+    (stage / 'acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2))
+    print(json.dumps(acknowledgement), flush=True)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,4 @@
-"""Actual raw-pipe admission; no provider or native acceptance inferred."""
+"""Actual raw-pipe claim_scope; no provider or native acceptance inferred."""
 
 from __future__ import annotations
 from agent_comms.native_package import pinned_native_package
@@ -111,7 +111,7 @@ else:
 
 @pytest.mark.parametrize("direct", [False, True])
 @pytest.mark.parametrize("revoke", [False, True])
-async def test_actual_raw_writes_follow_committed_admission_without_global_exclusions(tmp_path, monkeypatch, direct, revoke):
+async def test_actual_raw_writes_follow_committed_claim_without_global_exclusions(tmp_path, monkeypatch, direct, revoke):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
@@ -143,10 +143,10 @@ async def test_actual_raw_writes_follow_committed_admission_without_global_exclu
                 observed.append(_held(root))
 
         result = write(fd, payload, scope, cancelled, deadline, measurements)
-        # The same production admission cannot write twice even after all locks
+        # The same production claim_scope cannot write twice even after all locks
         # are released. Its UNKNOWN journal reservation survives the first send.
         with pytest.raises(IdentityConflict, match="cannot be reused"), boundary():
-            pytest.fail("one-use native admission reopened")
+            pytest.fail("one-use native claim_scope reopened")
         return result
 
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
@@ -223,7 +223,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         def lifecycle():
             # This is intentionally a synchronous ordinary callback on the SAME
             # loop that awaits native send. The grant has already released
-            # registry custody; pipe backpressure cannot block this retirement.
+            # registry ownership; pipe backpressure cannot block this retirement.
             comms.registry.unregister(owner.name)
             lifecycle_done.append(True)
 
@@ -302,7 +302,7 @@ def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode
             sys.executable,
             "-c",
             "import asyncio,sys; from pathlib import Path; "
-            "from test_native_send_admission import _same_loop_backpressure_case; "
+            "from test_native_send_claim import _same_loop_backpressure_case; "
             "asyncio.run(_same_loop_backpressure_case(Path(sys.argv[1]),sys.argv[2]))",
             str(tmp_path),
             mode,
@@ -331,10 +331,10 @@ def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, mode
         ("wire", True),
     ],
 )
-async def test_short_admission_contention_sends_once_after_release(
+async def test_short_claim_contention_sends_once_after_release(
     tmp_path, monkeypatch, held_store, revoke
 ):
-    """A busy store before admission is not an attempted native prompt."""
+    """A busy store before claim_scope is not an attempted native prompt."""
     import sqlite3
     import threading
 
@@ -356,7 +356,7 @@ async def test_short_admission_contention_sends_once_after_release(
 
     monkeypatch.setattr(AttachedChild, "start", launch)
     write = native_prompt_send._write_fenced
-    admissions = []
+    claims = []
 
     def probe(fd, payload, boundary, cancelled, deadline, measurements):
         held, release = threading.Event(), threading.Event()
@@ -383,7 +383,7 @@ async def test_short_admission_contention_sends_once_after_release(
         @contextmanager
         def scope():
             with boundary():
-                admissions.append(payload)
+                claims.append(payload)
                 yield
 
         try:
@@ -395,18 +395,18 @@ async def test_short_admission_contention_sends_once_after_release(
 
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     # The child intentionally exits after reading the prompt; this tests raw
-    # admission only, not a native context or successful model response.
+    # claim_scope only, not a native context or successful model response.
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=pinned_native_package()
         ).run()
     if revoke:
         assert not received.exists() or not received.read_text()
-        assert admissions == []
+        assert claims == []
         return
     assert received.exists() and received.read_text()
     assert json.loads(received.read_text())["type"] == "prompt"
-    assert admissions == [received.read_bytes()]
+    assert claims == [received.read_bytes()]
 
 
 def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
@@ -421,7 +421,7 @@ def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
         entered = []
 
         @contextmanager
-        def admission():
+        def claim_scope():
             with store.session.transaction() as db:
                 db.execute("UPDATE owner_generations SET generation=2")
                 reader.execute("BEGIN")
@@ -438,7 +438,7 @@ def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
             native_prompt_send._write_fenced(
                 write_fd,
                 b"one prompt\n",
-                admission,
+                claim_scope,
                 threading.Event(),
                 1,
                 PublicationMeasurements(),
@@ -459,7 +459,7 @@ def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
 
 
 @pytest.mark.parametrize("direct", [False, True])
-async def test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers(
+async def test_actual_native_claim_commits_before_bytes_and_releases_feedback_readers(
     tmp_path, monkeypatch, direct
 ):
     root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
@@ -497,23 +497,23 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
         release.start()
 
         @contextmanager
-        def checked_admission():
+        def checked_claim():
             with boundary():
                 assert observations == ["reader released before bytes"]
                 late = sqlite3.connect(path, isolation_level=None, timeout=0)
                 try:
                     epochs = late.execute(
-                        "SELECT sent_owner_admission_generation FROM native_runtime_input"
+                        "SELECT sent_owner_claimed_generation FROM native_runtime_input"
                     ).fetchall()
                     assert len(epochs) == 1 and epochs[0][0] is not None
                 finally:
                     late.close()
                 assert _held(root) == []
-                observations.append("original admission committed and released")
+                observations.append("original claim_scope committed and released")
                 yield
 
         try:
-            write(fd, payload, checked_admission, cancelled, deadline, measurements)
+            write(fd, payload, checked_claim, cancelled, deadline, measurements)
             observations.append("sent and committed once")
         finally:
             release.join()
@@ -521,7 +521,7 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
 
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     # The local child supplies capability+reads prompt then exits without proof;
-    # the expected downstream error is NOT a post-write admission failure.
+    # the expected downstream error is NOT a post-write claim_scope failure.
     with pytest.raises(native_pi.NativePiUnavailable) as caught:
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=pinned_native_package()
@@ -529,13 +529,13 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
     assert "post-write" not in str(caught.value)
     assert observations == [
         "reader released before bytes",
-        "original admission committed and released",
+        "original claim_scope committed and released",
         "sent and committed once",
     ]
     assert json.loads(received.read_text())["type"] == "prompt"
     assert len(children) == 1 and children[0].returncode is not None
     with Coordination(root / "coordination.sqlite3") as store:
         rows = store.session._connection.execute(
-            "SELECT sent_owner_admission_generation FROM native_runtime_input"
+            "SELECT sent_owner_claimed_generation FROM native_runtime_input"
         ).fetchall()
         assert len(rows) == 1 and rows[0][0] is not None

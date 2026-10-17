@@ -1,4 +1,4 @@
-"""Named private admission refusals against production-created SQLite rows."""
+"""Named private claim_scope refusals against production-created SQLite rows."""
 from binding_reads import binding_rows
 
 import os
@@ -16,7 +16,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.goals import Goal
 
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.native_admission_epoch import RecordedNativeAdmission
+from agent_comms.native_claim_epoch import RecordedNativeClaim
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.reservation_rules import ReservationRule, ReservationViolationError
 from agent_comms.text_digest import TextDigest
@@ -29,7 +29,7 @@ tmp_path = private_root_fixture
 
 
 @pytest.mark.parametrize("direct", [False, True])
-async def test_durable_private_admission_names_each_changed_authority(
+async def test_durable_private_claim_names_each_changed_authority(
     tmp_path, monkeypatch, direct
 ):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
@@ -41,28 +41,28 @@ async def test_durable_private_admission_names_each_changed_authority(
         pass
 
     async def inspect_before_native(*args, **kwargs):
-        admission = kwargs["prompt_send_boundary"]
+        claim_scope = kwargs["prompt_send_boundary"]
         with Coordination(root / "coordination.sqlite3") as store:
-            row = NativeRuntimeInput.one(store.session._connection, input_id=admission.input_id)
-            binding = binding_rows(store, (admission.input_id,)).get(admission.input_id)
-        stage = admission.stage
-        expected = admission.participant.coordinator_identity(stage.assignment.recipient_lookup)
+            row = NativeRuntimeInput.one(store.session._connection, input_id=claim_scope.input_id)
+            binding = binding_rows(store, (claim_scope.input_id,)).get(claim_scope.input_id)
+        stage = claim_scope.stage
+        expected = claim_scope.participant.coordinator_identity(stage.assignment.recipient_lookup)
         reservation = rules.NativeReservationCheck(
-            row=row, stage=stage, owner=expected, token_digest=admission.token_digest
+            row=row, stage=stage, owner=expected, token_digest=claim_scope.token_digest
         )
         bound = rules.NativeBindingCheck(
             row=binding,
             stage=stage,
             owner=expected,
             wire_root_id=root_id,
-            prompt_digest=TextDigest(native_request_digest(admission.prompt)),
+            prompt_digest=TextDigest(native_request_digest(claim_scope.prompt)),
         )
-        current, generation = comms.registry.live_owner_with_admission(owner.name)
-        registry = rules.GoalRegistryAdmissionCheck(
+        current, generation = comms.registry.live_owner_with_claim(owner.name)
+        registry = rules.GoalRegistryClaimCheck(
             actual=current,
             expected=current,
-            admission=generation,
-            expected_admission=generation,
+            claim_scope=generation,
+            expected_claim=generation,
             process=ProcessIdentity.capture(os.getpid()),
         )
         claim = rules.NativeClaimCheck(captured=stage.assignment, current=stage.assignment)
@@ -76,7 +76,7 @@ async def test_durable_private_admission_names_each_changed_authority(
                 registry,
                 process=replace(registry.process, start_time=registry.process.start_time + 1),
             ),
-            rules.RegistryAdmissionRule: replace(registry, admission=generation + 1),
+            rules.RegistryClaimRule: replace(registry, claim_scope=generation + 1),
             rules.RegistryRoleRule: replace(
                 registry, actual=replace(current, role=ThreadRole.USER)
             ),
@@ -94,8 +94,8 @@ async def test_durable_private_admission_names_each_changed_authority(
                 reservation, row=replace(row, owner_generation=expected.generation + 1)
             ),
             rules.NativeTokenRule: replace(reservation, token_digest="0" * 64),
-            rules.NativeAlreadyAdmittedRule: replace(
-                reservation, row=replace(row, sent_owner_admission_generation=RecordedNativeAdmission(1))
+            rules.NativeAlreadyBoundRule: replace(
+                reservation, row=replace(row, sent_owner_claimed_generation=RecordedNativeClaim(1))
             ),
             rules.NativeAlreadyProvenRule: replace(
                 reservation, row=replace(row, session_id="returned")

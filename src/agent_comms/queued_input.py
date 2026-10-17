@@ -10,7 +10,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from functools import partial
-from dataclasses import dataclass, replace
+from dataclasses import field, dataclass, replace
 from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
 
 from acp import RequestError
@@ -30,7 +30,7 @@ from .coordinator import Coordination
 from .coordination_session import ReadNativeCoordinationSession
 from .turn_goal_permission import AcceptedGoalPermission
 from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
-from .thread_identity import AdmissionIdentity
+from .thread_identity import ClaimedIdentity
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -54,25 +54,25 @@ class InputHandoffRefused(RelationViolationError):
 
 @dataclass(frozen=True, slots=True)
 class QueuedInputContext:
-    admission: AdmissionIdentity
+    claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
     goal: Goal | None = None
 
     @classmethod
-    def capture(cls, owner: Thread, admission: AdmissionIdentity):
-        return cls(admission, owner.goal)
+    def capture(cls, owner: Thread, claim_scope: ClaimedIdentity):
+        return cls(claim_scope, owner.goal)
 
     def named(self, name: str) -> QueuedInputContext:
         """Use the caller's canonical registry name without changing authority."""
         return replace(
             self,
-            admission=replace(
-                self.admission,
-                incarnation=replace(self.admission.incarnation, name=name),
+            claim_scope=replace(
+                self.claim_scope,
+                incarnation=replace(self.claim_scope.incarnation, name=name),
             ),
         )
 
-    def owns(self, admission: AdmissionIdentity) -> bool:
-        return self.named(admission.incarnation.name).admission == admission
+    def owns(self, claim_scope: ClaimedIdentity) -> bool:
+        return self.named(claim_scope.incarnation.name).claim_scope == claim_scope
 
     @property
     def active_goal_id(self) -> str | None:
@@ -101,7 +101,7 @@ class QueuedInput:
         """Show the item only when its recorded input generation matches the queue."""
         from .acp_extension import QueueItem
 
-        return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.admission) else ()
+        return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.claim_scope) else ()
 
     def source(self) -> AcceptedFollowingInput:
         return AcceptedFollowingInput(
@@ -121,7 +121,7 @@ class QueuedInput:
         echo: bool,
         images: tuple[ImageInput, ...],
         controller: Any,
-        custody: ExitStack,
+        ownership: ExitStack,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[Self, InputAttempt]:
@@ -131,9 +131,9 @@ class QueuedInput:
         owner = snapshot.threads[canonical]
         context = QueuedInputContext.capture(
             owner,
-            snapshot.admission_identity(canonical),
+            snapshot.claimed_identity(canonical),
         )
-        origin.require_ingress(inputs.comms, snapshot, context.admission, controller)
+        origin.require_ingress(inputs.comms, snapshot, context.claim_scope, controller)
         item = cls(
             text or prompt or "[image prompt]",
             echo,
@@ -144,10 +144,10 @@ class QueuedInput:
             controller,
         )
         row = ReservedInput(
-            item.key, None, canonical, context.admission.admission_generation,
+            item.key, None, canonical, context.claim_scope.claimed_generation,
             canonical, item.text, origin=origin,
         )
-        document = inputs.dispositions.reserve_originals(row, custody=custody)
+        document = inputs.dispositions.reserve_originals(row, ownership=ownership)
         return item, document.lookup(item.key)
 
     @staticmethod
@@ -174,8 +174,8 @@ class QueuedInput:
     ) -> AsyncIterator[InputReservation[Self]]:
         """Serialize local queue placement; reserve durable input in a worker."""
         async with AsyncExitStack() as rollback:
-            custody = ExitStack()
-            rollback.push_async_callback(Coordination.run_worker, custody.close)
+            ownership = ExitStack()
+            rollback.push_async_callback(Coordination.run_worker, ownership.close)
             async with inputs.queue_lock:
                 sources = tuple(inputs.following_sources.get(session_id, {}).values())
 
@@ -185,7 +185,7 @@ class QueuedInput:
                         return cls.capture(
                             inputs, name, text=text, prompt=prompt, echo=echo,
                             images=images, controller=controller, input_id=input_id,
-                            origin=origin, custody=custody,
+                            origin=origin, ownership=ownership,
                         )
 
                 item, row = await Coordination.run_worker(capture)
@@ -242,9 +242,9 @@ class QueuedInput:
         if inputs.following_sources.get(session_id, {}).get(self.input_id) != self.source():
             raise RelationViolationError("Accepted input source changed")
 
-    def current(self, owner: Thread, admission: int) -> bool:
+    def current(self, owner: Thread, claim_scope: int) -> bool:
         return self.context.named(owner.name) == QueuedInputContext.capture(
-            owner, AdmissionIdentity(owner.incarnation, admission)
+            owner, ClaimedIdentity(owner.incarnation, claim_scope)
         )
 
     def require_handoff(
@@ -258,10 +258,10 @@ class QueuedInput:
         snapshot.statuses[owner.name].require_running()
         owner.require_local_process(ProcessIdentity.capture(os.getpid()))
         owner.require_idle()
-        admission = snapshot.admission_generations[owner.name]
-        if not self.current(owner, admission):
+        claim_scope = snapshot.claimed_generations[owner.name]
+        if not self.current(owner, claim_scope):
             raise RelationViolationError("Queued input acceptance context changed")
-        if not row.queued_for(owner.incarnation, admission, self.text):
+        if not row.queued_for(owner.incarnation, claim_scope, self.text):
             raise RelationViolationError("Queued input reservation changed")
         if row.key != f"acp:{input_id}":
             raise RelationViolationError("Queued input ID changed")
@@ -349,7 +349,7 @@ class DeliveredInput(QueuedInput):
             snapshot = inputs.comms.registry.snapshot()
             canonical = snapshot.canonical_name(name)
             owner = snapshot.threads[canonical]
-            context = QueuedInputContext.capture(owner, snapshot.admission_identity(canonical))
+            context = QueuedInputContext.capture(owner, snapshot.claimed_identity(canonical))
             document = inputs.dispositions.read(tuple(
                 InputDispositions.bus_key(source.message, owner) for source, _ in accepted
             ))
@@ -363,18 +363,18 @@ class DeliveredInput(QueuedInput):
                         (DeliveredMessageSegment.capture(source, assignment, owner),)
                     )
                     row = ReservedInput(
-                        key, message.seq, canonical, context.admission.admission_generation,
+                        key, message.seq, canonical, context.claim_scope.claimed_generation,
                         message.target,
                         ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                         origin=WireInputOrigin(root_id, message.reference),
                     )
-                    with ExitStack() as custody:
-                        inputs.dispositions.reserve_originals(row, custody=custody)
+                    with ExitStack() as ownership:
+                        inputs.dispositions.reserve_originals(row, ownership=ownership)
                         paused = store.assignments.transition_preengagement(
                             assignment.assignment_id, DeferredAssignment,
                             expected_revision=assignment.revision,
                         ).value
-                        custody.callback(store.assignments.restore_unbound_delivery, paused)
+                        ownership.callback(store.assignments.restore_unbound_delivery, paused)
                         reserved.append((
                             cls(
                                 text=row.source_text, echo=False, context=context,
@@ -383,7 +383,7 @@ class DeliveredInput(QueuedInput):
                             ),
                             InputContent(text=rendered.text, contributions=rendered.contributions),
                         ))
-                        custody.pop_all()
+                        ownership.pop_all()
 
     @staticmethod
     async def _restore_unplaced(

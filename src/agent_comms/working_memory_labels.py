@@ -114,7 +114,7 @@ class ModelLabel(SpanLabel):
 
     @property
     def working_memory_section(self) -> str:
-        # No empirical calibration/threshold has been admitted for this pin.
+        # No empirical calibration/threshold has been authorized for this pin.
         # A probability alone does not classify the human working-memory view.
         return OtherSpan.section
 

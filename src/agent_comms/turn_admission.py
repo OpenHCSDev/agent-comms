@@ -100,7 +100,7 @@ class StartedPrompt(AcknowledgedPrompt):
     awaiting_start = False
 
     def permits_extension_ui(self, session):
-        return session.native.attestation.admits_extension_input(session.inputs)
+        return session.native.attestation.allows_extension_input(session.inputs)
 
     def settle(self, event):
         return SettledPrompt(self.response, self.input_start, event)

@@ -1,4 +1,4 @@
-"""One-use declared native carry under the existing stopped custody.
+"""One-use declared native carry under the existing stopped ownership.
 
 Original declarations authenticate the source. Current declarations own target
 DDL. Only matched clones are transformed; original files remain preimages.
@@ -227,7 +227,7 @@ class NativeSchemaDeclaration:
                 'original_identity_rows_sha256': row_digest(identities),
                 'original_rows': {name: len(values) for name, values in identities.items()},
                 'original_source_bytes_preserved': True,
-                'admission_receipts_minted': 0, 'input_replays': 0}
+                'claim_receipts_minted': 0, 'input_replays': 0}
 
     @property
     def runtime_objects(self):
@@ -457,7 +457,7 @@ def carry_coordination(db, original, target):
         raise ValueError('Carry changed original autoincrement allocations')
     from agent_comms.native_runtime_input import NativeRuntimeInput, CurrentNativeCursor
     # The target declarations reject partial references. Reading cannot create
-    # a selected session, proof, cursor, assignment, or new admission.
+    # a selected session, proof, cursor, assignment, or new claim_scope.
     NativeRuntimeInput.select(db)
     CurrentNativeCursor.select(db)
     if db.execute('PRAGMA foreign_key_check').fetchall():
@@ -491,7 +491,7 @@ def original_compaction_requests(path):
     """
     from agent_comms.compaction_records import SelectedSummaryAttempt
     from agent_comms.input_origin import InputProvenance
-    from agent_comms.selected_source import SelectedAdmissionSource
+    from agent_comms.selected_source import SelectedClaimSource
 
     declared = NativeSchemaDeclaration.observe()
     if declared.release_versions != (9, 3, 3, 5):
@@ -518,7 +518,7 @@ def original_compaction_requests(path):
 
                 request = FieldCodec.encode(envelope)
                 source = envelope.source
-                if isinstance(source, SelectedAdmissionSource):
+                if isinstance(source, SelectedClaimSource):
                     row = originals.get(source.ingress_key)
                     if row is None or row.digest != source.original_digest:
                         raise ValueError('Selected original lacks its frozen content witness')
@@ -608,7 +608,7 @@ def carry_compaction(db, original, target, requests):
     return {'attempts':len(values), 'created_empty_tables':sorted(additions),
             'original_selected_rows_sha256':row_digest(prior),
             'unchanged_tables_sha256':row_digest(untouched),
-            'original_source_bytes_preserved':True, 'admission_receipts_minted':0,
+            'original_source_bytes_preserved':True, 'claim_receipts_minted':0,
             'input_replays':0}
 
 
@@ -621,7 +621,7 @@ class CarriedNativeStore(DeclaredFamily, affix='NativeStore'):
     candidate_sha256: str
     evidence: dict[str, Any]
 
-    def publisher(self, root, custody):
+    def publisher(self, root, ownership):
         def publish(staging, original):
             staging.replace_original(original)
         return publish
@@ -654,10 +654,10 @@ class PromptBindingNativeStore(NativeReleaseStore):
     def carry(cls, db, original, target, requests):
         return carry_binding(db, original, target)
 
-    def publisher(self, root, custody):
+    def publisher(self, root, ownership):
         from agent_comms.private_sidecar import _locked_directory, _read_snapshot, _publish
 
-        directory = custody.enter_context(_locked_directory(root / self.name))
+        directory = ownership.enter_context(_locked_directory(root / self.name))
         snapshot = _read_snapshot(directory, self.name)
         if snapshot is None:
             raise ValueError('Original prompt binding disappeared')
@@ -738,8 +738,8 @@ class NativeSchemaCarryPlan:
 
     def install(self, destination):
         self.require_candidate()
-        with ExitStack() as custody:
-            acquired = custody.enter_context(RuntimeNativeFiles(self.root).acquire())
+        with ExitStack() as ownership:
+            acquired = ownership.enter_context(RuntimeNativeFiles(self.root).acquire())
             by_name = {item.path.name:item for item in acquired.originals}
             if set(by_name) != {item.name for item in self.stores}:
                 raise ValueError('Original native store membership changed')
@@ -752,8 +752,8 @@ class NativeSchemaCarryPlan:
     def install_prepared(root, candidate, stores, acquired, destination, review,
                          classification='runtime/declaration-original-source-carry'):
         """One retained-preimage/publication lifetime for every carried store."""
-        with ExitStack() as custody:
-            publishers = {item.name:item.publisher(root, custody) for item in stores}
+        with ExitStack() as ownership:
+            publishers = {item.name:item.publisher(root, ownership) for item in stores}
             return NativeSchemaCarryPlan.publish_prepared(
                 root, candidate, stores, acquired, destination, review, publishers, classification)
 

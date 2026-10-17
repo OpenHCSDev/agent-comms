@@ -110,7 +110,7 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
               "native_package": str(package), "source_bytes": source.stat().st_size,
               "source_sha256": source_hash, "public_inputs": 0, "paid_calls": 0,
               "clock": "Same Python process perf_counter_ns; nested spans are not additive"}
-    receipt = Path(os.environ["NATIVE_TOOL_LATENCY_RECEIPT"])
+    acknowledgement = Path(os.environ["NATIVE_TOOL_LATENCY_RECEIPT"])
     try:
         session = (await owner.new_session(str(fixture.project))).session_id
         thread = comms.registry.require(session)
@@ -158,7 +158,7 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
         report["source_unchanged"] = hashlib.sha256(source.read_bytes()).hexdigest() == source_hash
         report["native_children_retired"] = all(not child.alive() for child in children)
         report["native_child_count"] = len(children)
-        receipt.parent.mkdir(parents=True, exist_ok=True)
-        receipt.write_text(json.dumps(report, indent=2) + "\n")
+        acknowledgement.parent.mkdir(parents=True, exist_ok=True)
+        acknowledgement.write_text(json.dumps(report, indent=2) + "\n")
     assert report["source_unchanged"]
     assert report["native_children_retired"] and report["native_child_count"] == 1

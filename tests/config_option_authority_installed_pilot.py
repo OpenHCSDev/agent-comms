@@ -188,11 +188,11 @@ async def run(stage, package, models, ui, menu_contention=False):
         finally:
             service.owners.stop(name)
         assert not owner.process_alive
-    receipt = {'models': rows, 'real_worker_socket_catalog': True,
+    acknowledgement = {'models': rows, 'real_worker_socket_catalog': True,
                'prompt_commands': 0, 'provider_calls': 0,
                'public_mutations': 0, 'all_owned_workers_retired': True}
-    (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
-    return receipt
+    (stage / 'acknowledgement.json').write_text(json.dumps(acknowledgement, indent=2) + '\n')
+    return acknowledgement
 
 
 def main():

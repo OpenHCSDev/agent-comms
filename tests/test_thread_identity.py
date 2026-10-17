@@ -12,7 +12,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.read_basis import Conversation
 from agent_comms.registration import Registration
-from agent_comms.thread_identity import AdmissionIdentity, GenerationCounter, TurnIdentity
+from agent_comms.thread_identity import ClaimedIdentity, GenerationCounter, TurnIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_status import IdleThreadStatus
 from agent_comms.threads import Thread
@@ -35,7 +35,7 @@ def test_metadata_and_turns_do_not_replace_process_owner(tmp_path):
     assert generation == identity.generation
     assert leased.turn_identity == TurnIdentity(identity.incarnation, 1)
     assert registry.snapshot().owner_identity("owner") == identity
-    assert registry.snapshot().admission_generations == before.admission_generations
+    assert registry.snapshot().claimed_generations == before.claimed_generations
     assert registry.release_turn(registry.require("owner").turn_lease)[0]
     finished = registry.require("owner")
     assert finished.turn_generation == 1
@@ -56,7 +56,7 @@ def test_owner_replacement_preserves_turn_counter_and_historical_incarnation(tmp
     assert before.threads["owner"].incarnation == after.threads["owner"].incarnation
     assert before.owner_identity("owner") != after.owner_identity("owner")
     assert after.threads["owner"].turn_generation == 1
-    assert after.admission_generations["owner"] > before.admission_generations["owner"]
+    assert after.claimed_generations["owner"] > before.claimed_generations["owner"]
 
 
 def test_registry_cannot_forge_turn_counter(tmp_path):
@@ -87,7 +87,7 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
     before = registry.snapshot()
     registry.heartbeat("owner")
     assert registry.snapshot().owner_identity("owner") == before.owner_identity("owner")
-    assert registry.snapshot().admission_generations == before.admission_generations
+    assert registry.snapshot().claimed_generations == before.claimed_generations
 
 
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
@@ -104,7 +104,7 @@ def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
 
 
 @pytest.mark.parametrize("revocation", ["finish", "stop"])
-def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
+def test_restored_active_turn_has_no_claim_authority(tmp_path, revocation):
     registry = registry_with_owner(tmp_path)
     saved, _ = registry.lease_local_turn("owner", "old")
     if revocation == "stop":
@@ -112,8 +112,8 @@ def test_restored_active_turn_has_no_admission_authority(tmp_path, revocation):
     else:
         registry.release_turn(registry.require("owner").turn_lease)[0]
     registry.register(saved)
-    with pytest.raises(RelationViolationError, match="live owner turn admission is no longer current"):
-        registry.live_owner_with_admission("owner")
+    with pytest.raises(RelationViolationError, match="live owner turn claim_scope is no longer current"):
+        registry.live_owner_with_claim("owner")
 
 
 def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path):
@@ -146,39 +146,39 @@ def test_identity_codec_and_counter_domain_are_not_parallel_registries():
         FieldCodec.decode(GenerationCounter, {"counter": 1, "generations": {"x": True}})
 
 
-def test_admission_scope_cannot_decode_a_registry_process_owner(tmp_path):
+def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
     from agent_comms.acp_extension import CursorScope, QueueScope
     from agent_comms.queued_input import QueuedInputContext
 
     registry = registry_with_owner(tmp_path)
     snapshot = registry.snapshot()
     owner = snapshot.threads["owner"]
-    admission = snapshot.admission_identity("owner")
+    claim_scope = snapshot.claimed_identity("owner")
     registry_owner = snapshot.owner_identity("owner")
-    assert admission.admission_generation == registry_owner.generation
-    assert admission != registry_owner
-    context = QueuedInputContext.capture(owner, admission)
-    assert context.owns(admission)
+    assert claim_scope.claimed_generation == registry_owner.generation
+    assert claim_scope != registry_owner
+    context = QueuedInputContext.capture(owner, claim_scope)
+    assert context.owns(claim_scope)
     assert not context.owns(registry_owner)
-    # Repeated revocation advances admission without a second owner replacement.
+    # Repeated revocation advances claim_scope without a second owner replacement.
     registry.unregister("owner")
     registry.unregister("owner")
     registry.heartbeat("owner")
     snapshot = registry.snapshot()
     owner = snapshot.threads["owner"]
-    admission = snapshot.admission_identity("owner")
+    claim_scope = snapshot.claimed_identity("owner")
     registry_owner = snapshot.owner_identity("owner")
-    assert admission.admission_generation != registry_owner.generation
+    assert claim_scope.claimed_generation != registry_owner.generation
     original_binding = snapshot.owner_binding("owner")
     assert not original_binding.superseded_by(snapshot.owner_binding("owner"))
-    for scope in (QueueScope("official-session", admission, owner.pid),
-                  CursorScope("official-session", "a" * 32, admission, owner.pid)):
+    for scope in (QueueScope("official-session", claim_scope, owner.pid),
+                  CursorScope("official-session", "a" * 32, claim_scope, owner.pid)):
         encoded = FieldCodec.encode(scope)
         assert FieldCodec.decode(type(scope), encoded) == scope
-        encoded["admission"] = FieldCodec.encode(registry_owner)
+        encoded["claim_scope"] = FieldCodec.encode(registry_owner)
         with pytest.raises(ValueError):
             FieldCodec.decode(type(scope), encoded)
-    assert FieldCodec.decode(AdmissionIdentity, FieldCodec.encode(admission)) == admission
+    assert FieldCodec.decode(ClaimedIdentity, FieldCodec.encode(claim_scope)) == claim_scope
 
 
 def test_coordination_assignment_generation_is_independent_of_registry_process(tmp_path):

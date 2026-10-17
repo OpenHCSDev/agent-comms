@@ -363,7 +363,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     permits_agent_revision = True
 
     @classmethod
-    def from_admission(cls, owner, scope, change, **content):
+    def from_claim(cls, owner, scope, change, **content):
         lease = owner.require_turn_lease()
         return cls(scope=scope.select(owner), source_turn=lease.identity,
                    source_turn_id=TurnId(lease.turn_id), change=change, **content)
@@ -371,7 +371,7 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
     def __post_init__(self):
         self.author.require_recorded()
         if self.source_turn.generation <= 0:
-            raise ValueError("A task declaration requires its original admitted turn")
+            raise ValueError("A task declaration requires its original authorized turn")
 
     @property
     def author(self):
@@ -397,12 +397,12 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
         self.require_sender(owner.name)
         lease = owner.require_turn_lease()
         if (lease.identity, lease.turn_id) != (self.source_turn, self.source_turn_id.value):
-            raise RelationViolationError("Task declaration's original turn is no longer admitted")
+            raise RelationViolationError("Task declaration's original turn is no longer authorized")
         self.scope.require_current(owner)
 
     def require_publication(self, sender, registry, original_source):
         author = registry.require(sender)
-        author.require_turn(self.source_turn_id, registry.admission_generations[sender])
+        author.require_turn(self.source_turn_id, registry.claimed_generations[sender])
         self.require_emission(author)
         self.change.require_publication(self, registry, original_source)
 
@@ -555,7 +555,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
         original_author = RecordedThreadIncarnation(origin.author.sender, origin.author.created_at)
         if original_author.resolved(registry) != self.source_user.resolved(registry):
             raise RelationViolationError("USER input pin differs from its original human author")
-        if origin.admission.incarnation.resolved(registry) != self.recipient.resolved(registry):
+        if origin.claim_scope.incarnation.resolved(registry) != self.recipient.resolved(registry):
             raise RelationViolationError("USER input pin recipient did not receive its original input")
         if origin.project != self.scope.project:
             raise RelationViolationError("USER input pin belongs to another project")

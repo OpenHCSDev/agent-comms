@@ -191,7 +191,7 @@ def bind_expected_prompt(
 
 
 def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> str:
-    """Resolve the trusted wire root for a sealed claim from the cohort receipt."""
+    """Resolve the trusted wire root for a sealed claim from the cohort acknowledgement."""
     with store.session.read():
         rows = _BindingRoot.read(
             store.session._connection.execute(
@@ -203,7 +203,7 @@ def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> str:
             )
         )
     if len(rows) != 1:
-        raise IdentityConflict("prompt binding requires a sealed claim receipt")
+        raise IdentityConflict("prompt binding requires a sealed claim acknowledgement")
     return rows[0].wire_root_id
 
 

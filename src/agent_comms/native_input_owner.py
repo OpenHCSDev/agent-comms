@@ -16,7 +16,7 @@ from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .native_admission_rules import (
-    GoalRegistryAdmissionCheck,
+    GoalRegistryClaimCheck,
     GoalRegistryIdentityCheck,
     RegistryIdentityCheck,
     RunningTurnRegistryCheck,
@@ -26,6 +26,7 @@ from .threads import Thread
 from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
+    from .goals import Goal
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .turn_lease import TurnLeaseFence
@@ -33,13 +34,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True)
 class RegistryOwner:
-    check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryAdmissionCheck
+    check_type: ClassVar[type[RegistryIdentityCheck]] = GoalRegistryClaimCheck
     thread: Thread
-    admission_generation: int
+    claimed_generation: int
 
     @property
     def turn_lease(self) -> TurnLeaseFence:
-        """The admitted owner declaration determines its exact original lease."""
+        """The authorized owner declaration determines its exact original lease."""
         return self.thread.require_turn_lease()
 
     @classmethod
@@ -47,9 +48,9 @@ class RegistryOwner:
         """Read local executable authority from this single locked snapshot."""
         thread = snapshot.require_active(name)
         thread.require_local_process(ProcessIdentity.capture(os.getpid()))
-        admission = snapshot.admission_generations[thread.name]
-        thread.require_current_turn(admission)
-        return cls(thread=thread, admission_generation=admission)
+        claim_scope = snapshot.claimed_generations[thread.name]
+        thread.require_current_turn(claim_scope)
+        return cls(thread=thread, claimed_generation=claim_scope)
 
     def require_exact(
         self, snapshot: RegistrySnapshot, expected: Thread, owner_generation: int
@@ -58,16 +59,16 @@ class RegistryOwner:
             raise RelationViolationError("live owner generation changed")
         try:
             RegistryOwner(
-                thread=expected, admission_generation=self.admission_generation
+                thread=expected, claimed_generation=self.claimed_generation
             ).require_snapshot(snapshot, "live owner source changed")
         except StaleFence as error:
             raise RelationViolationError(str(error)) from error
 
-    def require_claim(self, expected: Thread, admission: int) -> None:
+    def require_claim(self, expected: Thread, claim_scope: int) -> None:
         try:
             GoalRegistryIdentityCheck(
                 expected=expected, actual=self.thread,
-                expected_admission=admission, admission=self.admission_generation,
+                expected_claim=claim_scope, claim_scope=self.claimed_generation,
                 process=ProcessIdentity.capture(os.getpid()),
             ).require_valid()
         except ReservationViolationError as error:
@@ -84,30 +85,30 @@ class RegistryOwner:
             self.thread.execution.require_native()
         except RelationViolationError as error:
             raise StaleFence("registry owner is not executable") from error
-        if not turn.owned_by(self.thread.pid, self.admission_generation):
+        if not turn.owned_by(self.thread.pid, self.claimed_generation):
             raise StaleFence("registry owner turn witness is invalid")
         return turn
 
     @classmethod
     def capture(cls, snapshot: RegistrySnapshot, name: str, reason: str) -> RegistryOwner:
         thread = snapshot.threads.get(name)
-        admission = snapshot.admission_generations.get(name)
-        if thread is None or admission is None:
+        claim_scope = snapshot.claimed_generations.get(name)
+        if thread is None or claim_scope is None:
             raise StaleFence(reason)
-        owner = cls(thread=thread, admission_generation=admission)
+        owner = cls(thread=thread, claimed_generation=claim_scope)
         owner.require_snapshot(snapshot, reason)
         return owner
 
     def _require_current(
-        self, actual: Thread, admission: int | None, reason: str,
+        self, actual: Thread, claim_scope: int | None, reason: str,
         check: type[RegistryIdentityCheck],
     ) -> None:
         try:
             check(
                 expected=self.thread,
                 actual=actual,
-                expected_admission=self.admission_generation,
-                admission=admission,
+                expected_claim=self.claimed_generation,
+                claim_scope=claim_scope,
                 process=ProcessIdentity.capture(os.getpid()),
             ).require_valid()
         except ReservationViolationError as error:
@@ -124,11 +125,11 @@ class RegistryOwner:
             actual = snapshot.require_active(self.thread.name)
         except RelationViolationError as error:
             raise StaleFence(reason) from error
-        self._require_current(actual, snapshot.admission_generations.get(self.thread.name), reason, check)
+        self._require_current(actual, snapshot.claimed_generations.get(self.thread.name), reason, check)
         return actual
 
     def require_source_snapshot(self, snapshot: RegistrySnapshot) -> Thread:
-        """Observe this admitted turn's source without admitting another input.
+        """Observe this authorized turn's source without allowing another input.
 
         Check the goal when accepting input. A legitimate goal change
         during this turn does not revoke its source observation; the exact
@@ -157,11 +158,11 @@ class RegistryOwner:
         self, registry: Registration, check: type[RegistryIdentityCheck],
     ) -> None:
         try:
-            actual, admission = registry.live_owner_with_admission(self.thread.name)
+            actual, claim_scope = registry.live_owner_with_claim(self.thread.name)
         except (RelationViolationError, ValueError) as error:
             raise StaleFence("recipient registry owner stopped or changed") from error
         self._require_current(
-            actual, admission, "recipient registry owner stopped or changed", check,
+            actual, claim_scope, "recipient registry owner stopped or changed", check,
         )
 
 
@@ -170,13 +171,13 @@ class GoalLaunchOwner(RegistryOwner):
 
     check_type = RegistryIdentityCheck
 
-    def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> None:
+    def require_ready(self, snapshot: RegistrySnapshot, goal_id: str) -> Goal:
         name = snapshot.canonical_name(self.thread.name)
         canonical = replace(self, thread=replace(self.thread, name=name))
         canonical.require_snapshot(snapshot, "Goal launch owner changed")
         current = snapshot.require_active(name)
         snapshot.statuses[current.name].require_running()
-        current.require_active_goal(goal_id)
+        return current.require_active_goal(goal_id)
 
 
 @dataclass(frozen=True)

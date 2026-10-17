@@ -177,16 +177,16 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             )
             session_file.chmod(0o600)
         assert session_file is not None
-        # Model only admission in its dedicated thread, not native receipt.
-        def admitted():
-            admission = _kwargs["prompt_send_boundary"]
+        # Model only claim_scope in its dedicated thread, not native acknowledgement.
+        def authorized():
+            claim_scope = _kwargs["prompt_send_boundary"]
             identity = NativeSessionIdentity(
                 json.loads(session_file.read_text().splitlines()[0])["id"], str(session_file)
             )
-            with admission(identity):
+            with claim_scope(identity):
                 calls.append((input_id, prompt))
 
-        await asyncio.to_thread(admitted)
+        await asyncio.to_thread(authorized)
         if fail_on == len(calls):
             raise NativePiUnavailable("fake backend process died")
         if fresh:
@@ -252,8 +252,8 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         # Relevance guidance can mention triage inside a FULL prompt too.
         from agent_comms.private_send_stage import TriageNativeSend
 
-        admission = _kwargs["prompt_send_boundary"]
-        if isinstance(admission.stage, TriageNativeSend):
+        claim_scope = _kwargs["prompt_send_boundary"]
+        if isinstance(claim_scope.stage, TriageNativeSend):
             reply = json.dumps({"decision": decision})
         else:
             reply = "42"
@@ -322,7 +322,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
     assert beta is not None and beta.disposition is CompletedAssignment
-    assert tuple(receipt.exact_target for receipt in beta.publications) == ("#team",) and beta.publications
+    assert tuple(acknowledgement.exact_target for acknowledgement in beta.publications) == ("#team",) and beta.publications
     assert len(beta_calls) == 2
     assert WakePolicy.relevance_instruction().content in beta_calls[0][1]
     assert '"expectation":"this is yours; answer the original committed message"' in beta_calls[1][1]
@@ -473,7 +473,7 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
     assert outcome is not None and tuple(
-        receipt.exact_target for receipt in outcome.publications
+        acknowledgement.exact_target for acknowledgement in outcome.publications
     ) == ("sender",)
     assert len(calls) == 1  # direct FULL, no separate triage invocation
     assert '"expectation":"this is yours; answer the original committed message"' in calls[0][1]
@@ -602,7 +602,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         registry=first_comms.registry,
         through_seq=first_initial.message.seq,
         generation=1,
-        admission_generation=1,
+        claimed_generation=1,
     )
     try:
         omitted = await projection.segments(first_initial, assignment, owner)
@@ -692,7 +692,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
         assert cursor is not None and cursor.input_id == outcome.input_id
         response = next(
             message for message in list(comms.bus.full_history_page().messages)
-            if message.reference in tuple(receipt.reference for receipt in outcome.publications)
+            if message.reference in tuple(acknowledgement.reference for acknowledgement in outcome.publications)
         )
         # The published own reply is nonbinding for beta, but belongs to the
         # certified scanned prefix. It cannot become a second injected source.
@@ -794,11 +794,11 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
         identity = kwargs["session"].identity
         saved.rename(moved)
 
-        def admitted():
+        def authorized():
             with kwargs["prompt_send_boundary"](identity):
-                pytest.fail("renamed selected source reached raw-send admission")
+                pytest.fail("renamed selected source reached raw-send claim_scope")
 
-        await asyncio.to_thread(admitted)
+        await asyncio.to_thread(authorized)
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", renamed)
     with pytest.raises(IdentityConflict, match="exact saved session"):
@@ -813,7 +813,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     assert calls == [] and not saved.exists() and moved.exists()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
-            "SELECT sent_owner_admission_generation,session_id FROM native_runtime_input"
+            "SELECT sent_owner_claimed_generation,session_id FROM native_runtime_input"
         ).fetchone()
         assert row is not None and tuple(row) == (None, None)
         assert (
@@ -985,9 +985,9 @@ async def test_project_change_during_native_full_turn_denies_response(
     async def change_project(*args, **kwargs):
         result = await runner(*args, **kwargs)
         current = comms.registry.require("beta")
-        before = comms.registry.snapshot().admission_generations["beta"]
+        before = comms.registry.snapshot().claimed_generations["beta"]
         comms.registry.declare(replace(current, worktree=str(other_project)))
-        assert comms.registry.snapshot().admission_generations["beta"] == before
+        assert comms.registry.snapshot().claimed_generations["beta"] == before
         return result
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", change_project)
@@ -1106,13 +1106,13 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    original_claim = Registration.lease_live_turn_with_admission
+    original_claim = Registration.lease_live_turn_with_claim
 
     def stop_before_claim(self, *args, **kwargs):
         comms.registry.unregister("beta")
         return original_claim(self, *args, **kwargs)
 
-    monkeypatch.setattr(Registration, "lease_live_turn_with_admission", stop_before_claim)
+    monkeypatch.setattr(Registration, "lease_live_turn_with_claim", stop_before_claim)
     with pytest.raises(StaleFence, match="stopped or busy before native turn"):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
@@ -1138,7 +1138,7 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    original_claim = Registration.lease_live_turn_with_admission
+    original_claim = Registration.lease_live_turn_with_claim
     expected = comms.registry.require("beta")
 
     def change_registry_before_claim(self, *args, **kwargs):
@@ -1151,7 +1151,7 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
         return original_claim(self, *args, **kwargs)
 
     monkeypatch.setattr(
-        Registration, "lease_live_turn_with_admission", change_registry_before_claim
+        Registration, "lease_live_turn_with_claim", change_registry_before_claim
     )
     if mutation == "stop_then_heartbeat":
         with pytest.raises(StaleFence, match="stopped or busy before native turn"):
@@ -1405,7 +1405,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         comms.registry.register(saved)
         restored = comms.registry.require("beta")
         assert restored == replace(
-            saved, active_turn=replace(saved.active_turn, admission_generation=None)
+            saved, active_turn=replace(saved.active_turn, claimed_generation=None)
         )
         assert comms.registry.status("beta").active
 
@@ -1447,16 +1447,16 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         publish = getattr(coordination_response, method)
 
         def revoke_after_tx1(*args, **kwargs):
-            revoked_generation = kwargs["owner_witness"].admission_generation
+            revoked_generation = kwargs["owner_witness"].claimed_generation
             revoke_and_restore()
             if boundary.endswith("forged"):
                 # A same-UID caller can supply a fresh epoch in a dataclass.
                 # The locked registry snapshot must attest that THIS turn was
                 # created in that epoch, not merely compare caller assertions.
-                new_generation = comms.registry.snapshot().admission_generations["beta"]
+                new_generation = comms.registry.snapshot().claimed_generations["beta"]
                 assert new_generation != revoked_generation
                 kwargs["owner_witness"] = replace(
-                    kwargs["owner_witness"], admission_generation=new_generation
+                    kwargs["owner_witness"], claimed_generation=new_generation
                 )
             return publish(*args, **kwargs)
 

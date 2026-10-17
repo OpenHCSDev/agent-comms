@@ -127,8 +127,8 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
                 and row["message"].get("toolName") == "comms_send"
             ]
             assert len(tools) == 1 and not tools[0].get("isError")
-            receipt = json.loads(tools[0]["content"][0]["text"])
-            assert receipt == {"id": original.message_id}
+            acknowledgement = json.loads(tools[0]["content"][0]["text"])
+            assert acknowledgement == {"id": original.message_id}
             await client.load_session(cwd=str(native.project), session_id=sender, mcp_servers=[])
             replay = await snapshots.get()
             assert [event for event in replay.events if event.source == original.reference] == sent

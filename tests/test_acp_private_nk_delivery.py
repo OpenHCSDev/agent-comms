@@ -335,7 +335,7 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
         assert (
             len(
                 NativeRuntimeInput.select(
-                    store.session._connection, where="sent_owner_admission_generation IS NOT NULL"
+                    store.session._connection, where="sent_owner_claimed_generation IS NOT NULL"
                 )
             )
             == 0
@@ -377,7 +377,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
     before = cursor_envelope((await agent.sessions.metadata(sid)))
     assert before.status == "none"
     assert before.revision >= 1
-    assert before.scope.admission.incarnation.name == sid
+    assert before.scope.claim_scope.incarnation.name == sid
     assert before.scope.wire_root_id == root_id
     updates = []
 
@@ -474,7 +474,7 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
     loaded = await agent.load_session(str(tmp_path), "beta", mcp_servers=[])
     fresh = cursor_envelope(loaded.field_meta)
     assert fresh.status == "none"
-    assert fresh.scope.admission_generation > 0
+    assert fresh.scope.claimed_generation > 0
     release.set()
     await asyncio.wait_for(reply_turn, timeout=5)
     old = next(
@@ -482,14 +482,14 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
         if (cursor := cursor_fact(update.field_meta)) and cursor.envelope.status == "proven"
     )
     assert old.status == "proven" and old.observation.cursor.input_id
-    assert old.scope.admission_generation < fresh.scope.admission_generation
+    assert old.scope.claimed_generation < fresh.scope.claimed_generation
     assert old.revision < fresh.revision
     assert old.scope.session_id == fresh.scope.session_id == "beta"
     assert len(calls) == 1
 
 
-async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_path, monkeypatch):
-    """No reattach is required for a registry stop/heartbeat admission bump."""
+async def test_observed_mid_session_claim_change_invalidates_old_proof(tmp_path, monkeypatch):
+    """No reattach is required for a registry stop/heartbeat claim_scope bump."""
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
@@ -518,7 +518,7 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
     assert renewed.status == "none" and not isinstance(
         renewed.observation, VerifiedCursorObservation
     )
-    assert renewed.scope.admission_generation > proven.scope.admission_generation
+    assert renewed.scope.claimed_generation > proven.scope.claimed_generation
     assert renewed.revision > proven.revision
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "second"}, caller=NoThreadCaller())
     before_second = len(updates)
@@ -623,7 +623,7 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
     )
     await agent.cursors.publish("beta", "beta")
     assert updates[-1].status == "unavailable"
-    assert updates[-1].scope.admission_generation > scope.admission_generation
+    assert updates[-1].scope.claimed_generation > scope.claimed_generation
 
 
 async def test_acp_private_does_not_overlap_owner_turn(native_backend):
@@ -649,7 +649,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         # canonical selected execution on the same SDK-authored saved source.
         # This direct original requires FULL; it is not a relevance probe.
         # Runtime observation is an actual concurrent consumer; whichever
-        # original drain owns the admission consumes the original assignment.
+        # original drain owns the claim_scope consumes the original assignment.
         await agent.inputs.drain_inbox(session)
         async with asyncio.timeout(30):
             while (
@@ -720,7 +720,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
     assert await agent.inputs.drain_inbox("beta") == 0
     assert calls == []
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        receipt = store.session._connection.execute(
+        acknowledgement = store.session._connection.execute(
             "SELECT kind,claim_id FROM cohort_delivery_receipts WHERE wire_root_id=? "
             "AND wire_seq=? AND recipient_lookup=?",
             (
@@ -729,7 +729,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
                 RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
             ),
         ).fetchone()
-        assert tuple(receipt) == ("unmentioned_observer", None)
+        assert tuple(acknowledgement) == ("unmentioned_observer", None)
 
 
 async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monkeypatch):

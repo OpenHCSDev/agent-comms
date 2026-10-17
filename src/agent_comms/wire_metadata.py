@@ -95,7 +95,7 @@ class ArchivedAccess(WireAccess):
 @dataclass
 class WireMetadata:
     last_seq: int = 0
-    admission_after_seq: int = field(default=0, metadata={"wire_required": True})
+    claimed_after_seq: int = field(default=0, metadata={"wire_name": 'admission_after_seq', "wire_required": True})
     access: WireAccess = field(default_factory=WritableAccess, metadata={"wire_required": True})
     writer_protocol_version: Literal[1] | None = field(
         default=None, metadata={"wire_omit_default": True}
@@ -114,8 +114,8 @@ class WireMetadata:
     def __post_init__(self) -> None:
         if not 0 <= self.last_seq <= MAX_WIRE_SEQ:
             raise ValueError("Bus sequence is outside the durable range")
-        if not 0 <= self.admission_after_seq <= self.last_seq:
-            raise ValueError("Admission floor is outside the durable source range")
+        if not 0 <= self.claimed_after_seq <= self.last_seq:
+            raise ValueError("Claim floor is outside the durable source range")
         if self.private != (self.wire_root_id is not None):
             raise ValueError("Private bus protocol needs its root identity")
         if self.wire_root_id is not None:

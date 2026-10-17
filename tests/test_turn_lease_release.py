@@ -46,7 +46,7 @@ def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
     assert comms.agents.finish_turn(successor) is not None
 
 
-def test_revoked_admission_cleanup_cannot_attest_goal_completion(tmp_path):
+def test_revoked_claim_cleanup_cannot_attest_goal_completion(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     lease = comms.agents.begin_turn("owner", "turn").turn_lease

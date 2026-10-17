@@ -187,40 +187,40 @@ class TestRegistration:
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         snapshot = registry.snapshot()
         expected = RegistryOwner.capture_local(snapshot, "a").thread
-        admission_generation = snapshot.owner_identity("a").generation
+        claimed_generation = snapshot.owner_identity("a").generation
         registry.unregister("a")
         registry.heartbeat("a")  # Presence can resume; a stale turn CAS cannot reclaim it.
         assert registry.require("a") == expected
         assert registry.status("a") == RunningThreadStatus()
-        assert registry.snapshot().owner_identity("a").generation > admission_generation
+        assert registry.snapshot().owner_identity("a").generation > claimed_generation
         with pytest.raises(RelationViolationError, match="live owner generation changed"):
             registry.lease_live_turn_with_generation(
-                expected, "new-turn", expected_owner_generation=admission_generation
+                expected, "new-turn", expected_owner_generation=claimed_generation
             )
         assert registry.require("a").active_turn is None
 
-    def test_owner_admission_survives_session_metadata_and_rotates_on_restart(
+    def test_owner_claim_survives_session_metadata_and_rotates_on_restart(
         self, tmp_path: Path
     ) -> None:
         registry = Registration(tmp_path / "registry.json")
         owner = Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid()))
         registry.register(owner)
-        before = registry.snapshot().admission_generations["a"]
+        before = registry.snapshot().claimed_generations["a"]
         registry.register(replace(owner, session_file=str(tmp_path / "session.jsonl")))
-        assert registry.snapshot().admission_generations["a"] == before
-        assert Registration(registry.store.path).snapshot().admission_generations["a"] == before
+        assert registry.snapshot().claimed_generations["a"] == before
+        assert Registration(registry.store.path).snapshot().claimed_generations["a"] == before
 
         registry.register(replace(registry.require("a"), process_identity=ProcessIdentity.capture(os.getppid())))
-        assert registry.snapshot().admission_generations["a"] > before
+        assert registry.snapshot().claimed_generations["a"] > before
 
-    def test_owner_admission_follows_same_owner_rename(self, tmp_path: Path) -> None:
+    def test_owner_claim_follows_same_owner_rename(self, tmp_path: Path) -> None:
         registry = Registration(tmp_path / "registry.json")
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
-        before = registry.snapshot().admission_generations["a"]
+        before = registry.snapshot().claimed_generations["a"]
         registry.rename("a", "renamed-a")
         snapshot = Registration(registry.store.path).snapshot()
-        assert snapshot.admission_generations["renamed-a"] == before
-        assert "a" not in snapshot.admission_generations
+        assert snapshot.claimed_generations["renamed-a"] == before
+        assert "a" not in snapshot.claimed_generations
 
     def test_rename_reclaims_own_alias_without_losing_owner_or_turn(self, tmp_path: Path) -> None:
         registry = Registration(tmp_path / "registry.json")
@@ -238,7 +238,7 @@ class TestRegistration:
         )
         original = registry.require("agent-comms-ux")
         registry.rename("agent-comms-ux", "pr17")
-        admission = registry.snapshot().admission_generations["pr17"]
+        claim_scope = registry.snapshot().claimed_generations["pr17"]
         registry.lease_local_turn("pr17", "goal-turn")
 
         assert registry.rename("pr17", "agent-comms-ux") == ("pr17", "agent-comms-ux")
@@ -252,7 +252,7 @@ class TestRegistration:
         assert reopened.require("agent-comms-ux").active_turn is not None
         assert reopened.require("agent-comms-ux").active_turn.id == "goal-turn"
         assert reopened.require("child").parent == "agent-comms-ux"
-        assert snapshot.admission_generations["agent-comms-ux"] == admission
+        assert snapshot.claimed_generations["agent-comms-ux"] == claim_scope
         assert reopened.release_turn(reopened.require("pr17").turn_lease)[0]
 
     def test_other_owner_writes_do_not_invalidate_private_generation(self, tmp_path: Path):
@@ -261,7 +261,7 @@ class TestRegistration:
             registry.register(Thread(name=name, tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
-        admission_generation = snapshot.owner_identity("a").generation
+        claimed_generation = snapshot.owner_identity("a").generation
         registry.heartbeat("b")
         snapshot = registry.snapshot()
         other = RegistryOwner.capture_local(snapshot, "b").thread
@@ -271,9 +271,9 @@ class TestRegistration:
         )
         snapshot = registry.snapshot()
         assert RegistryOwner.capture_local(snapshot, "a").thread == owner
-        assert snapshot.owner_identity("a").generation == admission_generation
+        assert snapshot.owner_identity("a").generation == claimed_generation
         turn, _ = registry.lease_live_turn_with_generation(
-            owner, "mine", expected_owner_generation=admission_generation
+            owner, "mine", expected_owner_generation=claimed_generation
         )
         assert turn.active_turn is not None and turn.active_turn.id == "mine"
         assert registry.release_turn(turn.turn_lease)[0]
@@ -288,9 +288,9 @@ class TestRegistration:
         registry.register(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
-        admission_generation = snapshot.owner_identity("a").generation
+        claimed_generation = snapshot.owner_identity("a").generation
         leased, owner_generation = registry.lease_live_turn_with_generation(
-            owner, "claimed", expected_owner_generation=admission_generation
+            owner, "claimed", expected_owner_generation=claimed_generation
         )
         snapshot = registry.snapshot()
         assert RegistryOwner.capture_local(snapshot, "a").thread == leased
@@ -300,11 +300,11 @@ class TestRegistration:
         else:
             assert registry.release_turn(registry.require("a").turn_lease)[0]
         registry.register(leased)
-        assert registry.require("a").active_turn.admission_generation is None
+        assert registry.require("a").active_turn.claimed_generation is None
         with pytest.raises(
-            RelationViolationError, match="live owner turn admission is no longer current"
+            RelationViolationError, match="live owner turn claim_scope is no longer current"
         ):
-            registry.live_owner_with_admission("a")
+            registry.live_owner_with_claim("a")
         if revocation == "stop":
             assert registry.snapshot().owner_generations["a"] > owner_generation
         else:
@@ -342,7 +342,7 @@ class TestRegistration:
         comms.messaging.initialize_private_initial_protocol()
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
-        for field in ("owners", "admissions"):
+        for field in ("owners", "claims"):
             data.pop(field)
         registry_path.write_text(json.dumps(data))
         with pytest.raises(RelationViolationError, match="guard does not match"):
@@ -510,7 +510,7 @@ class TestRegistration:
             path = root / "registry.json"
             data = json.loads(path.read_text())
             data.pop("owners")
-            data.pop("admissions")
+            data.pop("claims")
             path.write_text(json.dumps(data))  # simulated old writer ignores marker
         with pytest.raises(RelationViolationError, match="Private registry guard"):
             cold.require("a")
@@ -526,10 +526,10 @@ class TestRegistration:
         registry.rename("a", "b")
         snapshot = registry.snapshot()
         owner = RegistryOwner.capture_local(snapshot, "a").thread
-        admission_generation = snapshot.owner_identity("a").generation
+        claimed_generation = snapshot.owner_identity("a").generation
         assert owner.name == "b"
         leased, _ = registry.lease_live_turn_with_generation(
-            owner, "claimed", expected_owner_generation=admission_generation
+            owner, "claimed", expected_owner_generation=claimed_generation
         )
         registry.rename("b", "c")
         assert not registry.release_turn(replace(leased.turn_lease, turn_id="other"))[0]

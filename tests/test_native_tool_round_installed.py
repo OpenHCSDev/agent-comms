@@ -22,7 +22,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
     (native.project / "independent-read.txt").write_text("Fresh fixture, not a retained input\n")
     effect = native.project / "independent-effect.txt"
     release = asyncio.Event()
-    requests, admissions, sockets, terminal_failures = [], [], [], []
+    requests, claims, sockets, terminal_failures = [], [], [], []
     provider = native.provider
     provider.error_type = "invalid_request_error"
 
@@ -40,7 +40,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         yield {}, "tool_calls"
         if number == 2:
             provider.status = 400
-            provider.error_message = "controlled terminal after the distinct admitted effect"
+            provider.error_message = "controlled terminal after the distinct authorized effect"
 
     message_end = TrackedTurnSession.message_end
 
@@ -67,9 +67,9 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
 
     admit = CodingToolOwner.admit
 
-    async def observed_admission(owner, round_number, call):
+    async def observed_claim(owner, round_number, call):
         await admit(owner, round_number, call)
-        admissions.append((round_number, call.call_id))
+        claims.append((round_number, call.call_id))
 
     result = TrackedTurnSession.result
 
@@ -84,7 +84,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
     monkeypatch.setattr(provider, "response_chunks", response_chunks)
     monkeypatch.setattr(TrackedTurnSession, "message_end", delayed_declaration)
     monkeypatch.setattr(CodingToolSocket, "handle_request", observed_request)
-    monkeypatch.setattr(CodingToolOwner, "admit", observed_admission)
+    monkeypatch.setattr(CodingToolOwner, "admit", observed_claim)
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
         comms = owner._comms
         comms.threads.claim_thread("verifier", tags=frozenset(), worktree=str(native.project))
@@ -97,7 +97,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         assert release.is_set()
         assert provider.posts == 3
         assert requests == ["fresh-round-1", "fresh-round-2"]
-        assert admissions == [(1, "fresh-round-2")]
+        assert claims == [(1, "fresh-round-2")]
         assert effect.read_text() == "fresh-effect\n"
         assert len(sockets) == 1
         sockets[0].assert_complete()
@@ -125,7 +125,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         assert "without matching durable proof" not in failures[0]["source_error"]
         print("installed_native_round_result=" + json.dumps({
             "installed_module": str(Path(__import__("agent_comms").__file__).resolve()),
-            "new_inputs": 1, "tool_calls": requests, "owner_admissions": admissions,
+            "new_inputs": 1, "tool_calls": requests, "owner_claims": claims,
             "effect_lines": 1, "failure_reason": str(terminal_failures[0].code),
             "original_fixture_history_preserved": True,
         }))

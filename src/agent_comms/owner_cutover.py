@@ -27,9 +27,9 @@ class OwnerCutover(ABC):
 
     def restart(self, lifecycle: OwnerLifecycle, request: OwnerRestartRequest) -> tuple[OwnerRestartResult, ...]:
         """The cutover member owns which runtime may decode original records."""
-        from .owner_restart import AdmittedOwnerBatch
+        from .owner_restart import ClaimedOwnerBatch
 
-        return AdmittedOwnerBatch.restart(lifecycle, request, self)
+        return ClaimedOwnerBatch.restart(lifecycle, request, self)
 
     @abstractmethod
     def require_selection(self, snapshot: RegistrySnapshot, owners: Sequence[Thread]) -> None:

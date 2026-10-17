@@ -32,7 +32,7 @@ from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations
-from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
+from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from .field_codec import FieldCodec
 from .native_input_record import FullNativeExecution, NativeInputIdentity, NativeInputIdText
 from .native_runtime_input import NativeRuntimeInput
@@ -79,7 +79,7 @@ class SelectedToolIntent(SelectedAction):
         return selected_tool_mode_for_owner(
             owner.comms,
             owner.store,
-            owner.admission,
+            owner.claim_scope,
             owner.owner_name,
             owner.session_dir,
             owner.input_id,
@@ -164,8 +164,8 @@ class SelectedToolRequest(NativeToolCall):
             raise SelectedToolDenied("Native Pi selected tool did not finish successfully")
         verify_selected_terminal(directory, input_id, self.call_id)
 
-    def admission_failed(self) -> None:
-        raise SelectedToolDenied("Native Pi selected tool admission failed; outcome UNKNOWN")
+    def claim_failed(self) -> None:
+        raise SelectedToolDenied("Native Pi selected tool claim_scope failed; outcome UNKNOWN")
 
 
 @dataclass(frozen=True)
@@ -238,7 +238,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
 
 
 def record_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:
-    """Only a synced terminal receipt lets the tool return success."""
+    """Only a synced terminal acknowledgement lets the tool return success."""
     result = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
     try:
         descriptor = os.open(result, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -248,13 +248,13 @@ def record_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
             os.fsync(output.fileno())
         fsync_directory(result.parent)
     except OSError as error:
-        raise SelectedToolDenied("Selected tool terminal receipt UNKNOWN; no retry") from error
+        raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error
 
 
 def selected_tool_mode_for_owner(
     comms: Comms,
     store: Coordination,
-    admission: WakeAdmission,
+    claim_scope: WakeClaim,
     owner_name: str,
     session_dir: Path,
     input_id: str,
@@ -277,18 +277,18 @@ def selected_tool_mode_for_owner(
         # FULL input before Pi can receive it. A socket token, PID, model text,
         # or context journal alone does not establish this source binding.
         with Coordination(path) as worker_store:
-            verify_sent_full_input(worker_store, admission, owner_name, input_id)
+            verify_sent_full_input(worker_store, claim_scope, owner_name, input_id)
             perform_selected_write(
-                comms, worker_store, admission, owner_name, session_dir, input_id, request
+                comms, worker_store, claim_scope, owner_name, session_dir, input_id, request
             )
 
     return SelectedToolMode(owner_action)
 
 
 def verify_sent_full_input(
-    store: Coordination, admission: WakeAdmission, owner_name: str, input_id: str
+    store: Coordination, claim_scope: WakeClaim, owner_name: str, input_id: str
 ) -> None:
-    """Only the exact FULL input admitted by the owner may call native tools.
+    """Only the exact FULL input authorized by the owner may call native tools.
 
     This is the first check of a tool call and it only reads. Other owners
     write the same database, so the read waits the coordinator's bounded
@@ -297,68 +297,68 @@ def verify_sent_full_input(
     """
     try:
         with CoordinationReadUnavailable.checking(), Coordination(str(store.session.path)) as scoped, scoped.session.read():
-            _require_sent_full_input(scoped, admission, owner_name, input_id)
+            _require_sent_full_input(scoped, claim_scope, owner_name, input_id)
     except CoordinationReadUnavailable as unavailable:
         raise CoordinationBusy() from unavailable
 
 
 def _require_sent_full_input(
-    scoped: Coordination, admission: WakeAdmission, owner_name: str, input_id: str
+    scoped: Coordination, claim_scope: WakeClaim, owner_name: str, input_id: str
 ) -> None:
     assert_native_runtime_schema(scoped.session._connection)
     row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
     if row is None:
         raise SelectedToolDenied("Selected tool has no reserved FULL input")
-    if admission.wake_assignment_id not in row.execution.source_assignment_ids(
+    if claim_scope.wake_assignment_id not in row.execution.source_assignment_ids(
         scoped.session._connection, input_id
     ):
         raise SelectedToolDenied("Selected tool source was not included in this native input")
     expected = NativeInputIdentity(
-        input_id, FullNativeExecution(admission.execution_id, admission.attempt_ordinal),
-        OwnerGenerations(owner_lookup=admission.recipient_lookup, owner_thread=owner_name, generation=admission.participant_generation),
+        input_id, FullNativeExecution(claim_scope.execution_id, claim_scope.attempt_ordinal),
+        OwnerGenerations(owner_lookup=claim_scope.recipient_lookup, owner_thread=owner_name, generation=claim_scope.participant_generation),
     )
     if row.identity != expected:
         raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
-    if not row.sent_owner_admission_generation.matches(admission.owner_admission_generation):
-        raise SelectedToolDenied("Selected tool names another sending admission")
+    if not row.sent_owner_claimed_generation.matches(claim_scope.owner_claimed_generation):
+        raise SelectedToolDenied("Selected tool names another sending claim_scope")
     if row.reference.recorded or row.verdict is not None:
         raise SelectedToolDenied("Selected input was already settled")
 
 
 def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:
-    """Corroborate a live owner result; a persisted receipt alone grants nothing."""
+    """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
     try:
         NativeInputIdText.decode(input_id)
     except (ValueError, TypeError) as error:
         raise SelectedToolDenied("Selected input identity is invalid") from error
-    receipt = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
-    info = receipt.lstat()
+    acknowledgement = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
+    info = acknowledgement.lstat()
     if PrivateFileRole.violation(info) is not None:
-        raise SelectedToolDenied("Selected tool receipt is not private")
-    if receipt.read_bytes() != (call_id + "\n").encode("ascii"):
-        raise SelectedToolDenied("Selected tool has no matching terminal receipt")
+        raise SelectedToolDenied("Selected tool acknowledgement is not private")
+    if acknowledgement.read_bytes() != (call_id + "\n").encode("ascii"):
+        raise SelectedToolDenied("Selected tool has no matching terminal acknowledgement")
 
 
 def perform_selected_write(
     comms: Comms,
     store: Coordination,
-    admission: WakeAdmission,
+    claim_scope: WakeClaim,
     owner_name: str,
     session_dir: Path,
     input_id: str,
     request: SelectedToolRequest,
 ) -> None:
     """Only the owner calls the existing selected claim and writer boundaries."""
-    if type(request) is not SelectedToolRequest or type(admission) is not WakeAdmission:
-        raise SelectedToolDenied("Selected tool has no typed owner admission")
+    if type(request) is not SelectedToolRequest or type(claim_scope) is not WakeClaim:
+        raise SelectedToolDenied("Selected tool has no typed owner claim_scope")
     consume_selected_slot(session_dir, input_id, request.call_id)
     # Any exception from here leaves the slot consumed. The caller reports
     # UNKNOWN and never automatically reissues the claim or mutation.
     claimed = publish_selected_resource_claim(
-        comms, store, admission, owner_name, request.arguments.claim
+        comms, store, claim_scope, owner_name, request.arguments.claim
     )
     write_selected_claimed_file(
-        comms, store, admission, owner_name, claimed, request.arguments.contents.encode("utf-8")
+        comms, store, claim_scope, owner_name, claimed, request.arguments.contents.encode("utf-8")
     )
     record_selected_terminal(session_dir, input_id, request.call_id)
 
@@ -508,7 +508,7 @@ class OwnerToolSocket(ABC, Generic[Call]):
         self.token = token
         self.expected_pid: int | None = None
         # Live owner-side completion only. A visible .done file after failed
-        # fsync is not a durable receipt and must never be promoted by itself.
+        # fsync is not a durable acknowledgement and must never be promoted by itself.
         self._server: asyncio.AbstractServer | None = None
         self._created = False
         self.calls: NativeToolCallTable[Call] = NativeToolCallTable()

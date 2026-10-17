@@ -58,9 +58,9 @@ def bound(tmp_path):
         goal=goal,
         lease=lease,
         turn_id=lease.turn_id,
-        admission=3,
+        claim_scope=3,
         current_owner=owner,
-        current_admission=3,
+        current_claim=3,
         reason=FailureReason.FINAL_STOP_MISSING,
     )
     assert observation is not None
@@ -80,7 +80,7 @@ def blocked(owner):
 
 def read(store, owner, **kwargs):
     return read_failed_turn_projection(
-        store.path, owner=owner, owner_status=IdleThreadStatus(), admission=3, **kwargs
+        store.path, owner=owner, owner_status=IdleThreadStatus(), claim_scope=3, **kwargs
     )
 
 
@@ -112,7 +112,7 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
         {"identity": TurnIdentity(RecordedThreadIncarnation("other", 10.0), 7)},
         {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 11.0), 7)},
         {"turn_id": "b" * 32},
-        {"admission_generation": 4},
+        {"claimed_generation": 4},
         {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 0)},
         {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 8)},
     ],
@@ -125,9 +125,9 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
         goal=owner.goal,
         lease=replace(lease, **mutation),
         turn_id=lease.turn_id,
-        admission=3,
+        claim_scope=3,
         current_owner=owner,
-        current_admission=3,
+        current_claim=3,
         reason=FailureReason.BACKEND_FAILED,
     )
     assert rejected is None
@@ -229,7 +229,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
     )
     before = store.path.read_bytes()
     projection = read_failed_turn_projection(
-        store.path, owner=owner, owner_status=IdleThreadStatus(), admission=3
+        store.path, owner=owner, owner_status=IdleThreadStatus(), claim_scope=3
     )
     assert projection.state == (
         "paused_uncertain" if isinstance(source, ModelPause) else "owner_paused"
@@ -276,7 +276,7 @@ def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
     before = {str(p): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     assert (
         read_failed_turn_projection(
-            path, owner=blocked(owner), owner_status=IdleThreadStatus(), admission=3
+            path, owner=blocked(owner), owner_status=IdleThreadStatus(), claim_scope=3
         ).state
         == "unavailable"
     )
@@ -328,7 +328,7 @@ def test_stopped_status_is_unavailable_even_with_retained_pid(bound, status):
     observation.reservation.fail(store, "failed", observation=observation)
     assert (
         read_failed_turn_projection(
-            store.path, owner=blocked(owner), owner_status=status, admission=3
+            store.path, owner=blocked(owner), owner_status=status, claim_scope=3
         ).state
         == "unavailable"
     )

@@ -37,7 +37,7 @@ class OrdinaryOwnerCheck(RuleCheck):
     current: Thread
     registry: RegistrySnapshot
     canonical: str
-    admission: int
+    claim_scope: int
     turn: TurnId
 
 
@@ -57,12 +57,12 @@ class OrdinaryRunningRule(ReservationRule):
         return not check.registry.statuses[check.canonical].running
 
 
-class OrdinaryAdmissionRule(ReservationRule):
+class OrdinaryClaimRule(ReservationRule):
     check_type = OrdinaryOwnerCheck
-    explanation = "The ordinary owner admission generation changed."
+    explanation = "The ordinary owner claim_scope generation changed."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
-        return check.registry.admission_generations.get(check.canonical) != check.admission
+        return check.registry.claimed_generations.get(check.canonical) != check.claim_scope
 
 
 class OrdinaryProcessRule(ReservationRule):
@@ -111,7 +111,7 @@ class MissingAcceptedInputCheck(RuleCheck):
 
 class MissingAcceptedInputRule(ReservationRule):
     check_type = MissingAcceptedInputCheck
-    explanation = "The accepted live input receipt is missing."
+    explanation = "The accepted live input acknowledgement is missing."
 
     def violated(self, check: MissingAcceptedInputCheck) -> bool:
         return True
@@ -119,9 +119,9 @@ class MissingAcceptedInputRule(ReservationRule):
 
 @dataclass(frozen=True, kw_only=True)
 class AcceptedInputCheck(RuleCheck):
-    receipt: QueuedInput
+    acknowledgement: QueuedInput
     current: Thread
-    admission: int
+    claim_scope: int
     input_id: str
     keys: tuple[str, ...]
     accepted_source: TurnInputSource | None
@@ -132,15 +132,15 @@ class AcceptedInputAuthorityRule(ReservationRule):
     explanation = "The live input's accepted owner or goal authority changed."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return not check.receipt.current(check.current, check.admission)
+        return not check.acknowledgement.current(check.current, check.claim_scope)
 
 
 class AcceptedInputKeyRule(ReservationRule):
     check_type = AcceptedInputCheck
-    explanation = "The input does not name its exact accepted ACP receipt."
+    explanation = "The input does not name its exact accepted ACP acknowledgement."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return (check.input_id, check.keys) != (check.receipt.input_id, (check.receipt.key,))
+        return (check.input_id, check.keys) != (check.acknowledgement.input_id, (check.acknowledgement.key,))
 
 
 class AcceptedInputSourceRule(ReservationRule):
@@ -148,7 +148,7 @@ class AcceptedInputSourceRule(ReservationRule):
     explanation = "The captured accepted input source is no longer live."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return check.accepted_source != check.receipt.source()
+        return check.accepted_source != check.acknowledgement.source()
 
 
 @dataclass(frozen=True, kw_only=True)

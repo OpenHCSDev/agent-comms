@@ -22,9 +22,9 @@ from agent_comms.coordinator import Coordination
 
 from .audience_manifest import FrozenRecipient
 from .bus_publication import CommittedDelivery
-from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema
+from .cohort_schema import ClaimBatchAcknowledgements, assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_cohort import AcceptedCohort, _receipt_matches
+from .coordination_cohort import AcceptedCohort, _claim_record
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
 from .private_bus_checkpoint import (
@@ -144,14 +144,14 @@ class SourceCoverage:
                     covered = seq
                     continue
                 recipient, decision = matches[0]
-                receipt = self._receipt(initial)
-                if receipt is None:
+                acknowledgement = self._accepted_cohort(initial)
+                if acknowledgement is None:
                     blocked = seq
                     break
                 if type(decision) is NoWakeDecision:
                     no_wake.append(seq)
                 elif type(decision) is WakeDecision:
-                    evidence = self._selected_inputs(seq, recipient, decision, receipt, source_reads)
+                    evidence = self._selected_inputs(seq, recipient, decision, acknowledgement, source_reads)
                     if not evidence:
                         blocked = seq
                         break
@@ -182,28 +182,28 @@ class SourceCoverage:
             if source.marker.root_id != self.wire_root_id:
                 raise IdentityConflict("source coverage private wire root changed")
             witness, initials, more = source.addressed_page(self.bus.log, request)
-            if request.after_seq > max(witness.latest_source_seq, source.marker.admission_after_seq):
+            if request.after_seq > max(witness.latest_source_seq, source.marker.claimed_after_seq):
                 raise IdentityConflict("source coverage prefix exceeds certified initials")
             request.require_exhausted(more)
         return witness, tuple(initials), more
 
-    def _receipt(self, initial: CommittedDelivery) -> AcceptedCohort | None:
+    def _accepted_cohort(self, initial: CommittedDelivery) -> AcceptedCohort | None:
         with self.store.session.read():
             db = self.store.session._connection
             assert_cohort_schema(db)
             assert_native_runtime_schema(db)
-            sealed = ClaimBatchReceipts.one(
+            sealed = ClaimBatchAcknowledgements.one(
                 db, wire_root_id=self.wire_root_id, wire_seq=initial.message.seq
             )
-            return _receipt_matches(db, initial) if sealed and sealed.sealed else None
+            return _claim_record(db, initial) if sealed and sealed.sealed else None
 
     def _selected_inputs(
-        self, seq: int, recipient: FrozenRecipient, decision: WakeDecision, receipt: AcceptedCohort,
+        self, seq: int, recipient: FrozenRecipient, decision: WakeDecision, acknowledgement: AcceptedCohort,
         source_reads: NativeEvidenceScope,
     ) -> tuple[HistoricalNativeInput, ...]:
         assignments = [
             a
-            for a in receipt.assignments
+            for a in acknowledgement.assignments
             if a.recipient_lookup == self.recipient_lookup
             and a.recipient == recipient.canonical_thread
         ]
@@ -237,8 +237,8 @@ class SourceCoverage:
             ) as source:
                 marker = source.marker
                 if marker.root_id != self.wire_root_id:
-                    raise IdentityConflict("current source admission root changed")
-                floor = marker.admission_after_seq
+                    raise IdentityConflict("current source claim_scope root changed")
+                floor = marker.claimed_after_seq
             if through_seq is not None and 0 < through_seq <= floor:
                 raise IdentityConflict("current source proof precedes this activation")
             covered, inputs, no_wake, witness = floor, [], [], None

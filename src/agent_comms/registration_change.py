@@ -32,7 +32,7 @@ class RegistrationChange(ABC):
 
     @property
     @abstractmethod
-    def needs_maintenance_admission(self) -> bool: ...
+    def needs_maintenance_claim(self) -> bool: ...
 
     @property
     @abstractmethod
@@ -40,7 +40,7 @@ class RegistrationChange(ABC):
 
     @property
     def installed_thread(self) -> Thread:
-        return self.thread.without_turn_admission()
+        return self.thread.without_turn_claim()
 
     @abstractmethod
     def restarted(self) -> RegistrationChange: ...
@@ -56,7 +56,7 @@ class RegistrationChange(ABC):
         document.statuses[thread.name] = self.status
         document.last_seen[thread.name] = time.time()
         if self.changes_owner:
-            document.admissions.advance(thread.name)
+            document.claims.advance(thread.name)
             document.owners.advance(thread.name)
 
 
@@ -65,7 +65,7 @@ class InitialRegistration(RegistrationChange):
     changes_owner = True
 
     @property
-    def needs_maintenance_admission(self) -> bool:
+    def needs_maintenance_claim(self) -> bool:
         return self.thread.role.executable and self.thread.has_process and self.status.active
 
     def restarted(self) -> RegistrationChange:
@@ -107,7 +107,7 @@ class UpdatedRegistration(RegistrationChange):
         return self.previous.goal
 
     @property
-    def needs_maintenance_admission(self) -> bool:
+    def needs_maintenance_claim(self) -> bool:
         return self.thread.role.executable and (
             self.previous.process_identity != self.thread.process_identity
             or self.previous_status.starts_owner(self.status)
@@ -126,7 +126,7 @@ class UpdatedRegistration(RegistrationChange):
     def installed_thread(self) -> Thread:
         if self.thread.active_turn == self.previous.active_turn:
             return self.thread
-        return self.thread.without_turn_admission()
+        return self.thread.without_turn_claim()
 
     def restarted(self) -> RegistrationChange:
         return OwnerRestartRegistration(
@@ -154,12 +154,12 @@ class ExplicitOwnerChange(RegistrationChange):
     changes_owner = True
 
     @property
-    def needs_maintenance_admission(self) -> bool:
+    def needs_maintenance_claim(self) -> bool:
         return self.thread.role.executable
 
     @property
     def installed_thread(self) -> Thread:
-        return self.thread.without_turn_admission()
+        return self.thread.without_turn_claim()
 
     def restarted(self) -> RegistrationChange:
         return self

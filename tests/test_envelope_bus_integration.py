@@ -98,7 +98,7 @@ def test_valid_json_without_newline_not_exposed_by_any_gated_read(
     with pytest.raises(RelationViolationError, match="Incomplete"):
         list(comms.bus.full_history_page().messages)
     with pytest.raises(RelationViolationError, match="Incomplete"):
-        comms.bus.log.messages_for_references((MessageReference(1, "receipt"),))
+        comms.bus.log.messages_for_references((MessageReference(1, "acknowledgement"),))
     with pytest.raises(RelationViolationError, match="Incomplete"):
         comms.bus.log.latest_sequence()
     with (
@@ -155,7 +155,7 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     assert sent.claim_transition.message_id == sent.message_id
     assert sent.claim_transition.seq == sent.seq
     assert comms.bus.log.latest_sequence() == sent.seq
-    # Durable claim history keeps its external shape, including absent admission.
+    # Durable claim history keeps its external shape, including absent claim_scope.
     stored = json.loads(comms.bus.log.path.read_text().splitlines()[0])
     assert stored["claim_transition"] == {
         "owner": "alice",
@@ -558,14 +558,14 @@ def test_large_transition_reopens_and_exports_without_a_second_parser_limit(
     assert comms.bus.log.messages_for_references((committed.reference,)) == (committed,)
     assert all(owner.owner == "alice" for owner in comms.bus.log.claim_projection().values())
     destination = tmp_path / "safe-export.jsonl"
-    receipt = comms.views.export_wire(
+    acknowledgement = comms.views.export_wire(
         destination,
         format=JsonlFormat(),
         scope=EverythingScope(),
         limit=FullLimit(),
     )
     exported = [json.loads(line) for line in destination.read_text().splitlines()]
-    assert receipt.exported_messages == 1
+    assert acknowledgement.exported_messages == 1
     assert len(exported) == 2 and exported[1]["record"] == "message"
     assert exported[1]["message"] == committed.to_wire()
 
