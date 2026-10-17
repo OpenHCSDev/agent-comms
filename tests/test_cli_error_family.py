@@ -54,12 +54,18 @@ def test_unknown_error_kind_is_not_a_retry():
         WATCH_LINE.validate_python({'type': 'new-unknown', 'error': 'database is locked'})
 
 
-@pytest.mark.parametrize('arguments', [[], ['not-a-command'], ['watch']])
+@pytest.mark.parametrize('arguments', [
+    [], ['not-a-command'], ['watch'],
+    ['configure', '--name', 'a', '--service-tier', 'fast'],
+])
 def test_argument_errors_use_the_same_single_line(arguments, capsys):
     assert main(arguments) == 1
-    output = capsys.readouterr().out
-    assert len(output.splitlines()) == 1
-    assert isinstance(WATCH_LINE.validate_json(output), FailedCoreError)
+    captured = capsys.readouterr()
+    assert captured.err == ''
+    assert len(captured.out.splitlines()) == 1
+    decoded = WATCH_LINE.validate_json(captured.out)
+    assert type(decoded) is FailedCoreError
+    assert decoded.error
 
 
 @pytest.mark.asyncio

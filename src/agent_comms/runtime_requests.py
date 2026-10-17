@@ -14,7 +14,8 @@ from abc import abstractmethod
 from functools import partial
 from .coordinator import Coordination
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Self
+from pydantic import JsonValue
 
 from .command import Command
 from .declared_family import DeclaredFamily
@@ -40,9 +41,6 @@ class RuntimeRequestContext:
     session_id: str
     name: str
 
-    async def send(self, payload: dict[str, Any]) -> None:
-        await self.client.send(payload)
-
 
 @dataclass(frozen=True, kw_only=True)
 class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
@@ -58,14 +56,14 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
         values["kind"] = values.pop("action", None)
         return cls.from_payload(values)
 
-    def to_wire(self) -> dict[str, Any]:
+    def to_wire(self) -> dict[str, JsonValue]:
         payload = FieldCodec.encode(self)
         return {"action": payload.pop("kind"), **payload}
 
     @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | None, parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+        cls, thread: str, controller_token: str | None, parameters: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
         # The owner decodes once; proxies preserve the owner's error envelope.
         return {"action": FieldCodec.encode(cls), "thread": thread,
                 **FieldCodec.encode(parameters)}
@@ -89,10 +87,10 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
 
 class ResultRuntimeRequest(RuntimeRequest):
     async def apply(self, ctx: RuntimeRequestContext) -> None:
-        await ctx.send({"result": await self.result(ctx)})
+        await ctx.client.send({"result": await self.result(ctx)})
 
     @abstractmethod
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]: ...
+    async def result(self, ctx: RuntimeRequestContext) -> JsonValue: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -140,7 +138,7 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
 class SubscribeRuntimeRequest(RuntimeRequest):
     async def apply(self, ctx: RuntimeRequestContext) -> None:
         agent = ctx.server.agent
-        await ctx.send(FieldCodec.encode(OwnerAnnouncement()))
+        await ctx.client.send(FieldCodec.encode(OwnerAnnouncement()))
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
         await agent.sessions.transcript.replay(
@@ -152,7 +150,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
         async with agent.sessions.config.session_options(ctx.name) as config_options:
             metadata = await agent.sessions.metadata(ctx.name)
-            await ctx.send(
+            await ctx.client.send(
                 {
                     "controllerToken": ctx.client.token,
                     "ready": {
@@ -177,19 +175,19 @@ class SubscribeRuntimeRequest(RuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class PromptRuntimeRequest(ResultRuntimeRequest):
-    prompt: list[dict[str, Any]]
-    meta: dict[str, Any] | None = None
+    prompt: list[dict[str, JsonValue]]
+    meta: dict[str, JsonValue] | None = None
     controller_token: str | None = field(default=None, metadata={"wire_name": "controllerToken"})
 
     @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | None, parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+        cls, thread: str, controller_token: str | None, parameters: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
         return super().proxy_payload(
             thread, controller_token, {"controllerToken": controller_token, **parameters}
         )
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, JsonValue]:
         controller = next(
             (
                 subscriber
@@ -210,7 +208,7 @@ class PromptRuntimeRequest(ResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class CancelRuntimeRequest(ResultRuntimeRequest):
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, JsonValue]:
         await ctx.server.agent.cancel(ctx.session_id)
         return {}
 
@@ -220,7 +218,7 @@ class SetConfigOptionRuntimeRequest(ResultRuntimeRequest):
     config_id: str
     value: str | bool
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, JsonValue]:
         result = await ctx.server.agent.set_config_option(
             self.config_id, ctx.session_id, self.value
         )
@@ -231,7 +229,7 @@ class SetConfigOptionRuntimeRequest(ResultRuntimeRequest):
 class CompactRuntimeRequest(ResultRuntimeRequest):
     instructions: str | None = None
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, JsonValue]:
         from .manual_compaction_bridge import compact_context
 
         return FieldCodec.encode(
@@ -243,7 +241,7 @@ class CompactRuntimeRequest(ResultRuntimeRequest):
 class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
     include_history: bool = False
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, JsonValue]:
         return await Coordination.run_worker(partial(ctx.server.agent._comms.goals.input_delivery,
             ctx.name,
             include_history=self.include_history,
@@ -253,7 +251,7 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, JsonValue]:
         result = await Coordination.run_worker(partial(ctx.server.agent._comms.goals.dismiss_historical_inputs,
             ctx.name, awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id)
         ))
@@ -265,7 +263,7 @@ class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
 class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
     goal_id: str | None = None
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, JsonValue]:
         history = await Coordination.run_worker(partial(
             ctx.server.agent._comms.goals.goal_history, ctx.name, goal_id=self.goal_id,
         ))
@@ -276,7 +274,7 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
     @abstractmethod
     async def change(self, ctx: RuntimeRequestContext) -> None: ...
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, JsonValue]:
         from .acp_extension import TurnChangedUpdate, encode_updates
         await self.change(ctx)
         goal, execution = await Coordination.run_worker(partial(
@@ -334,7 +332,7 @@ class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRun
 
 @dataclass(frozen=True, kw_only=True)
 class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, JsonValue]:
         goal = await ctx.server.agent.turns.goals.retry_goal(
             ctx.session_id, self.goal_id, self.expected_revision
         )
@@ -343,7 +341,7 @@ class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> dict[str, JsonValue]:
         goal = await ctx.server.agent.turns.goals.set_goal(ctx.session_id, self.text)
         return {"goal": goal.to_wire()}
 

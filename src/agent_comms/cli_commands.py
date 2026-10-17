@@ -14,12 +14,13 @@ import re
 import shlex
 import time
 import types
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import aclosing
-from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
+from dataclasses import Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, TextIO, Type, TYPE_CHECKING, get_args, get_origin, get_type_hints
+from typing import ClassVar, Literal, Self, TextIO, Type, TypedDict, Unpack, TYPE_CHECKING, get_args, get_origin, get_type_hints
+from pydantic import JsonValue
 
 from .activity import ActivityState
 from .channels import Channel
@@ -47,10 +48,10 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .importing import ImportFormat, ImportLimits
+from .importing import ImportFormat, ImportLimits, ImportedSessionMetadata
 from .historical_views import HistoryCursor
 from .launch_runtime import RestartEnvironment
-from .turn_context import ContextSegment
+from .turn_context import ContextSegment, NextContextTurn, TurnContext
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
@@ -77,16 +78,11 @@ def _duration_seconds(value: str) -> float:
     return amount * {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}[match.group(2)]
 
 
-def _json_object(value: str) -> dict[str, Any]:
+def _json_object(value: str) -> dict[str, JsonValue]:
     result = json.loads(value)
     if not isinstance(result, dict):
         raise ValueError("invoke --arguments must be a JSON object")
     return result
-
-
-def _report_fields(value: str | None) -> dict[str, Any] | None:
-    """The report JSON stays a raw object; its declared record decodes once."""
-    return None if value is None else _json_object(value)
 
 
 def _tags(value: str) -> list[str]:
@@ -97,10 +93,6 @@ def _tag_text(value: frozenset[str] | None) -> str:
     return ', '.join(sorted(value or ()))
 
 
-def _shell_words(value: str | None) -> list[str] | None:
-    return shlex.split(value) if value is not None else None
-
-
 def _message_reference(value: str) -> dict[str, object]:
     """CLI spelling decodes once into the original wire reference."""
     sequence, message_id = value.split(":", 1)
@@ -109,38 +101,46 @@ def _message_reference(value: str) -> dict[str, object]:
     return {"seq": int(sequence), "message_id": message_id}
 
 
-def option(
+class FieldDefaults[T](TypedDict, total=False):
+    default: T
+    default_factory: Callable[[], T]
+
+
+def option[T, Parsed](
     *flags: str,
-    default: Any = MISSING,
-    default_factory: Any = MISSING,
     group: str | None = None,
-    normalize: Callable[..., Any] | None = None,
+    normalize: Callable[[Parsed], JsonValue] | None = None,
     wire_name: str | None = None,
-    parser_default: Any = MISSING,
-    parser_default_factory: Any = MISSING,
+    parser: Field[JsonValue] = field(),
     multiline: bool = False,
     target_bound: bool = False,
-    editor_format: Callable[[Any], str] | None = None,
+    editor_format: Callable[[T], str] | None = None,
     catalog: type[CatalogConfigOption] | None = None,
-    **parser_options: Any,
-) -> Any:
+    help: str | None = None,
+    nargs: int | str | None = None,
+    metavar: str | tuple[str, ...] | None = None,
+    action: str | None = None,
+    choices: Sequence[str] | None = None,
+    type: Callable[[str], JsonValue] | None = None,
+    **defaults: Unpack[FieldDefaults[T]],
+) -> Field[T]:
     """One field owns both its CLI projection and JSON boundary conversion."""
     metadata = {
         "multiline": multiline,
         "target_bound": target_bound,
         "editor_format": editor_format,
         "flags": flags,
-        "parser_options": parser_options,
+        "parser_options": {key: value for key, value in dict(help=help, nargs=nargs,
+            metavar=metavar, action=action, choices=choices, type=type).items() if value is not None},
         "group": group,
         "normalize": normalize,
-        "parser_default": parser_default,
-        "parser_default_factory": parser_default_factory,
+        "parser": parser,
     }
     if wire_name is not None:
         metadata["wire_name"] = wire_name
     if catalog is not None:
         metadata[CatalogConfigOption] = catalog
-    return field(default=default, default_factory=default_factory, metadata=metadata)
+    return field(**defaults, metadata=metadata)
 
 
 @dataclass(frozen=True)
@@ -197,7 +197,7 @@ class TargetField:
 
     @property
     def required(self) -> bool:
-        return self.declaration.default is MISSING and self.declaration.default_factory is MISSING
+        return not FieldCodec.has_default(self.declaration)
 
     def json_schema(self) -> dict[str, object]:
         schema = (FieldCodec.value_schema(self.annotation) if self.catalog is None
@@ -273,10 +273,10 @@ class TargetOutcome:
 
 
 @dataclass(frozen=True)
-class TargetCompleted(TargetOutcome):
+class TargetCompleted[T](TargetOutcome):
     target: str
     command: CliCommand
-    result: Any
+    result: T
     successful: ClassVar[bool] = True
 
     def reconnect_targets(self) -> tuple[str, ...]:
@@ -399,16 +399,6 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return ()
 
     @classmethod
-    def member_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
-        """Use original roster membership and each command's thread eligibility."""
-        if snapshot is None:
-            snapshot = comms.registry.snapshot()
-        return tuple(bound for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
-                     if channel.matches(thread.tags)
-                     for bound in cls.thread_bindings(
-                         comms, thread, snapshot.status(thread.name), channel.name))
-
-    @classmethod
     def bindings(cls, comms: Comms, target: CommandTarget | str, channel: str | None = None,
                  *, snapshot: RegistrySnapshot | None = None,
                  catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
@@ -427,34 +417,24 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         # A catalog is one observation. Declarations borrow its original store
         # resources; execution still acquires and rebinds current state.
         snapshot = comms.registry.snapshot()
-        # View actors (including an implicit project actor) need not declare a
-        # thread. Discovery has no thread actions for absent members; execution
-        # still requires its original current binding. Resolve aliases through
-        # the acquired namespace rather than reserving a special actor spelling.
-        available_targets = tuple(item for item in selected if item.available(snapshot))
         catalog = (comms.channels.catalog.read()
                    if channel or any(item.needs_catalog for item in selected) else None)
-        grouped: dict[type[CliCommand], list[CliCommand]] = {}
+        available_targets = tuple(item.acquire(snapshot, catalog) for item in selected if item.available(snapshot))
+        grouped: dict[type[CliCommand], dict[tuple[type, str], CliCommand]] = {}
         for member in cls.members_with(cls):
             if len(selected) > 1 and not member.multiple_targets:
                 continue
             for name in available_targets:
                 for context in name.contexts(member, channel):
-                    try:
-                        available = member.bindings(
-                            comms, name, context, snapshot=snapshot, catalog=catalog)
-                    except ValueError:
-                        if len(selected) == 1:
-                            raise
-                        continue
+                    available = member.bindings(
+                        comms, name, context, snapshot=snapshot, catalog=catalog)
                     for command in available:
                         declaration = member.catalog_declaration() if len(selected) > 1 else member
-                        commands = grouped.setdefault(declaration, [])
+                        commands = grouped.setdefault(declaration, {})
                         bound = command.for_editor(comms, name.name, project)
-                        if bound not in commands:
-                            commands.append(bound)
+                        commands.setdefault((type(bound), json.dumps(FieldCodec.encode(bound), sort_keys=True)), bound)
         names = tuple(name for item in selected for name in item.names)
-        return tuple(TargetAction(tuple(commands), names) for commands in grouped.values())
+        return tuple(TargetAction(tuple(commands.values()), names) for commands in grouped.values())
 
     def for_editor(self, comms: Comms, target: str, project: str) -> Self:
         return self
@@ -597,9 +577,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
     @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
+    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
-        groups: dict[str, Any] = {}
+        groups: dict[str, argparse._MutuallyExclusiveGroup] = {}
         hints = get_type_hints(cls)
         for declared in fields(cls):
             metadata = declared.metadata
@@ -627,14 +607,11 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                 and issubclass(get_args(scalar)[0], DeclaredFamily)
             ):
                 options.setdefault("choices", get_args(scalar)[0].names())
-            if metadata["parser_default"] is not MISSING:
-                options["default"] = metadata["parser_default"]
-            elif metadata["parser_default_factory"] is not MISSING:
-                options["default"] = metadata["parser_default_factory"]()
-            elif declared.default is not MISSING:
-                options["default"] = declared.default
-            elif declared.default_factory is not MISSING:
-                options["default"] = declared.default_factory()
+            parser_default = metadata["parser"]
+            if FieldCodec.has_default(parser_default):
+                options["default"] = FieldCodec.default_value(parser_default)
+            elif FieldCodec.has_default(declared):
+                options["default"] = FieldCodec.default_value(declared)
             else:
                 options["required"] = True
             if isinstance(options.get("default"), DeclaredFamily):
@@ -659,7 +636,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             key = declared.metadata.get("wire_name", declared.name)
             value = getattr(args, key)
             normalize = declared.metadata["normalize"]
-            if normalize is not None:
+            if normalize is not None and value is not None:
                 value = normalize(value)
             elif isinstance(hints[declared.name], type) and issubclass(
                 hints[declared.name], DeclaredFamily
@@ -673,7 +650,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         from .tools import tool_catalog
 
         return {"tools": tool_catalog()}
@@ -697,13 +674,13 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
         default=None,
     )
     tags: frozenset[str] = option(
-        "--tags", default_factory=frozenset, parser_default="", normalize=_tags
+        "--tags", default_factory=frozenset, parser=field(default=""), normalize=_tags
     )
     max_messages: int = option("--max-messages", default=200)
     max_characters: int = option("--max-characters", default=120000)
     max_message_characters: int = option("--max-message-characters", default=12000)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         receipt = ctx.threads.import_thread(
             self.source,
             self.format,
@@ -726,15 +703,15 @@ class InvokeCliCommand(CliCommand):
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )
     tool: str = option("--tool")
-    arguments: dict[str, Any] = option(
+    arguments: dict[str, JsonValue] = option(
         "--arguments",
         help="Tool arguments as a JSON object",
         default_factory=dict,
-        parser_default="{}",
+        parser=field(default="{}"),
         normalize=_json_object,
     )
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         from .tools import invoke_tool
 
         from .tool_caller import ToolCaller
@@ -751,12 +728,12 @@ class SendCliCommand(CliCommand):
     type: Type[MessageKind] = option(
         "--type", default=InfoKind, choices=MessageKind.sendable_names()
     )
-    report: dict[str, Any] | None = option(
+    report: dict[str, JsonValue] | None = option(
         "--report", help="Change report fields as a JSON object", default=None,
-        normalize=_report_fields,
+        normalize=_json_object,
     )
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, str]:
         mid = ctx.messaging.send(
             self.sender, self.target, self.body, self.type,
             report=None if self.report is None
@@ -772,7 +749,7 @@ class UserSendCliCommand(CliCommand, declared_name="user-send"):
     body: str = option("--body")
     worktree: str = option("--worktree", default_factory=os.getcwd)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         from .field_codec import FieldCodec
 
         message = ctx.messaging.send_user_message(self.target, self.body, worktree=self.worktree)
@@ -787,7 +764,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
     thinking: str | None = option("--thinking", default=None)
     service_tier: ServiceTier | None = option("--service-tier", default=None)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
 
@@ -830,7 +807,7 @@ class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
     def pin_original(self, ctx: Comms, source):
         return ctx.messaging.pin_user_constraint(self.thread, source, worktree=self.worktree)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         from .field_codec import FieldCodec
 
         source = self.original_source(ctx)
@@ -907,7 +884,7 @@ class SupersedeConstraintCliCommand(CliCommand, declared_name="supersede-constra
     body: str = option("--body")
     worktree: str = option("--worktree", default_factory=os.getcwd)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         from .field_codec import FieldCodec
         from .task_sources import CorrectionTaskChange, UserTaskSupersession
 
@@ -923,7 +900,7 @@ class DropConstraintCliCommand(CliCommand, declared_name="drop-constraint"):
     source: MessageReference = option("--source", normalize=_message_reference)
     worktree: str = option("--worktree", default_factory=os.getcwd)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         from .field_codec import FieldCodec
         from .task_sources import CorrectionTaskChange, UserTaskDrop
 
@@ -940,7 +917,7 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
     output: str = option("--output")
     overwrite: bool = option("--overwrite", default=False)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
             self.output, overwrite=self.overwrite).to_wire()
 
@@ -950,7 +927,7 @@ class InboxCliCommand(CliCommand):
     help = "Undelivered messages for a thread"
     thread: str = option("--thread")
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return {"messages": [m.to_wire() for m in ctx.bus.inbox(self.thread)]}
 
 
@@ -979,7 +956,7 @@ class AckCliCommand(CliCommand):
     help = "Mark inbox delivered"
     thread: str = option("--thread")
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, int]:
         messages = ctx.bus.inbox(self.thread)
         return {
             "acknowledged": ctx.messaging.acknowledge(
@@ -992,7 +969,7 @@ class AckCliCommand(CliCommand):
 class WhoCliCommand(CliCommand):
     help = "Presence: who is in the chat"
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return {"who": list(ctx.views.who())}
 
 
@@ -1000,7 +977,7 @@ class WhoCliCommand(CliCommand):
 class StatusCliCommand(CliCommand):
     help = "Live activity: what each thread is doing right now"
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         snapshot = ctx.registry.snapshot()
         running = (
             thread for name, thread in snapshot.threads.items()
@@ -1031,7 +1008,7 @@ class HistoryCliCommand(CliCommand):
     limit: int = option("--limit", help="Maximum messages in this page", default=20)
     before: int | HistoryCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         if sum(bool(x) for x in (self.with_thread, self.channel, self.everything)) > 1:
             raise ValueError("history takes at most one of --with, --channel, --everything")
         paging = {"before": self.before, "limit": self.limit}
@@ -1041,11 +1018,11 @@ class HistoryCliCommand(CliCommand):
             page = ctx.views.channel_history_page(self.channel, **paging)
         else:
             page = ctx.views.full_history_page(**paging)
-        return {
+        return FieldCodec.encode({
             "messages": [{**m.to_wire(), **m.display_metadata} for m in reversed(page.messages)],
             "before": page.oldest_cursor,
             "has_older": page.has_older,
-        }
+        })
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1083,7 +1060,7 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
     )
     overwrite: bool = option("--overwrite", help="Replace an existing output", default=False)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         started_at = time.time()
         if self.everything:
             scope = EverythingScope()
@@ -1112,7 +1089,7 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
 class ChannelsCliCommand(CliCommand):
     help = "Derived channel list"
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return {"channels": list(ctx.channels.channels())}
 
 
@@ -1121,7 +1098,7 @@ class ThreadsCliCommand(CliCommand):
     help = "List threads"
     active_only: bool = option("--active-only", default=False)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return {"threads": list(ctx.views.list_threads(active_only=self.active_only))}
 
 
@@ -1133,7 +1110,7 @@ class ThreadCliCommand(CliCommand):
         "--no-pending", help="Skip the inbox count for fast metadata reads", default=False
     )
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return ctx.views.thread_detail(self.name, include_pending=not self.no_pending)
 
 
@@ -1143,15 +1120,15 @@ class RegisterCliCommand(CliCommand):
     name: str = option("--name")
     worktree: str = option("--worktree")
     tags: frozenset[str] = option(
-        "--tags", default_factory=frozenset, parser_default="", normalize=_tags
+        "--tags", default_factory=frozenset, parser=field(default=""), normalize=_tags
     )
     parent: str | None = option("--parent", default=None)
     task: str | None = option("--task", default=None)
     pid: int = option("--pid", default=0)
     execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution,
-                                            parser_default=FieldCodec.encode(ExternalThreadExecution))
+                                            parser=field(default=FieldCodec.encode(ExternalThreadExecution)))
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, str]:
         from .threads import Thread
 
         thread = Thread(
@@ -1172,7 +1149,7 @@ class HeartbeatCliCommand(CliCommand):
     help = "Mark thread running"
     name: str = option("--name")
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, str]:
         ctx.threads.heartbeat(self.name)
         return {"heartbeat": self.name}
 
@@ -1184,7 +1161,7 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
     session_file: str = option("--session-file")
     pid: int | None = option("--pid", default=None)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         attached = ctx.threads.attach_session(
             ctx.registry.require(self.name), self.session_file, pid=self.pid
         )
@@ -1199,7 +1176,7 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
 class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
     help = "Report declared DDL differences in existing SQLite stores (including retained copies)"
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> JsonValue:
         from .schema_report import StoreSchemaReport
 
         return FieldCodec.encode(StoreSchemaReport.scan(ctx))
@@ -1210,7 +1187,7 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     help = "Commit and push a thread's uncommitted worktree changes as a checkpoint branch"
     name: str = option("--name")
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, str]:
         import subprocess
 
         worktree = Path(ctx.registry.require(self.name).worktree).resolve()
@@ -1258,25 +1235,30 @@ class ActivityCliCommand(CliCommand):
     state: ActivityState = option("--state")
     detail: str = option("--detail", default="")
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, str]:
         ctx.agents.set_activity(self.name, self.state, self.detail)
         return {"activity": self.name, "state": self.state.value}
 
 
 @dataclass(frozen=True, kw_only=True)
-class StopCliCommand(CliCommand):
-    help = "Stop process"
+class ChannelMemberBindings:
     multiple_targets = True
-    name: str = option("--name", target_bound=True)
+    name: str = option('--name', target_bound=True)
+
+    @classmethod
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return tuple(bound for thread in target.members for bound in cls.thread_bindings(
+            comms, thread, snapshot.statuses[thread.name], target.channel.name))
+
+
+@dataclass(frozen=True, kw_only=True)
+class StopCliCommand(ChannelMemberBindings, CliCommand):
+    help = "Stop process"
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsStopTool
         return (cls(name=thread.name),) if CommsStopTool.available_for_thread(thread, status) else ()
-
-    @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return cls.member_bindings(comms, channel, snapshot=snapshot)
 
     def apply(self, ctx: Comms) -> ThreadStoppedResult:
         ctx.owners.stop(self.name)
@@ -1302,7 +1284,7 @@ class RestartCliCommand(CliCommand):
     agent_args: list[str] | None = option(
         "--agent-args",
         default=None,
-        normalize=_shell_words,
+        normalize=shlex.split,
     )
 
     @property
@@ -1322,7 +1304,7 @@ class RestartCliCommand(CliCommand):
             return ()
         return (cls(name=thread.name),)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         results = ctx.owners.restart_owners(
             None if self.all_ else [self.name], agent_bin=self.agent_bin, agent_args=self.agent_args
         )
@@ -1334,7 +1316,7 @@ class ReleaseCliCommand(CliCommand):
     help = "Voluntarily mark the calling thread stopped"
     name: str = option("--name")
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, str]:
         ctx.owners.release(self.name)
         return {"released": self.name}
 
@@ -1372,7 +1354,7 @@ class RenameSelfCliCommand(CliCommand, declared_name="rename-self"):
     caller: str = option("--from")
     new_name: str = option("--to")
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         from .tools import CommsRenameSelfTool
         from .tool_caller import ThreadCaller
 
@@ -1389,11 +1371,11 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     tags: frozenset[str] | None = option(
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
-    project: str = option("--project", parser_default_factory=os.getcwd)
-    model: str = option("--model", parser_default=NativeThreadDefaults.model,
+    project: str = option("--project", parser=field(default_factory=os.getcwd))
+    model: str = option("--model", parser=field(default=NativeThreadDefaults.model),
                         catalog=ModelConfigOption)
     thinking_level: type[ThinkingLevel] = option(
-        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level,
+        "--thinking-level", parser=field(default=NativeThreadDefaults.thinking_level),
         catalog=ThinkingLevelConfigOption)
 
     @classmethod
@@ -1437,7 +1419,7 @@ class LedgerCliCommand(CliCommand):
     merge_from: str | None = option("--merge-from", default=None)
     author: str | None = option("--author", default=None)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         if self.merge_from is not None:
             if not self.author:
                 raise ValueError("ledger merge requires --author")
@@ -1453,7 +1435,7 @@ class PollCliCommand(CliCommand):
     help = "Status snapshot: thread, inbox, ledger, peers"
     thread: str | None = option("--thread", default=None)
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return ctx.views.poll(self.thread)
 
 
@@ -1466,15 +1448,13 @@ class ContextCliCommand(CliCommand):
     imported: bool = option("--imported", default=False, action="store_true",
                             help="Original imported instruction references, not current context")
 
-    def apply(self, ctx: Comms) -> Any:
-        from .importing import ImportedSessionMetadata
-
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         if self.imported:
             if self.turn is not None or self.diff:
                 raise ValueError("Imported source references are not recorded native turns")
             owner = ctx.registry.require(self.thread)
-            return {"scope": "historical-imported-instructions; not current or recorded native context",
-                    "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)}
+            return FieldCodec.encode({"scope": "historical-imported-instructions; not current or recorded native context",
+                    "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)})
         if self.turn is not None or self.diff:
             selected = []
             cursor = None
@@ -1484,7 +1464,7 @@ class ContextCliCommand(CliCommand):
                     manifest = resource.value
                     if self.diff and selected:
                         if not selected[0].turn.same_recording(manifest.turn):
-                            return selected[0].changed_since(manifest)
+                            return FieldCodec.encode(selected[0].changed_since(manifest))
                     elif self.turn is None or manifest.turn.matches_generation(self.turn):
                         selected.append(manifest)
                 if not page.has_older():
@@ -1494,12 +1474,10 @@ class ContextCliCommand(CliCommand):
                 raise ValueError("No original context manifest exists for the requested turn")
             if self.diff:
                 raise ValueError("No preceding recorded turn exists for comparison")
-            return {"manifests": tuple(reversed(selected)),
-                    "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
-        from .field_codec import FieldCodec
+            return FieldCodec.encode({"manifests": tuple(reversed(selected)),
+                    "text_recorded": all(manifest.public_text_recorded for manifest in selected)})
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
-        from .turn_context import NextContextTurn, TurnContext
         from acp.exceptions import RequestError
 
         owner = ctx.registry.require(self.thread)
@@ -1529,9 +1507,9 @@ class ContextCliCommand(CliCommand):
                               text=segment.text()) for segment in context.segments],
         }
         if native is None:
-            return {**result, "native_error": native_error}
+            return FieldCodec.encode({**result, "native_error": native_error})
         native_context = native.for_turn(owner, NextContextTurn())
-        return {
+        return FieldCodec.encode({
             **result,
             "scope": "next-native-base-and-core-contributors; before future input and provider hooks",
             "input_supplied": False,
@@ -1542,7 +1520,7 @@ class ContextCliCommand(CliCommand):
                  "spans": FieldCodec.encode(segment.source_ranges())}
                 for position, segment in enumerate(native.segments)
             ],
-        }
+        })
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1569,8 +1547,8 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
     target: tuple[str, ...] = option('--target', '--targets', nargs='+', default_factory=tuple,
         normalize=list)
     operation: str = option('--operation')
-    arguments: dict[str, Any] = option('--arguments', default_factory=dict,
-                                     parser_default='{}', normalize=_json_object)
+    arguments: dict[str, JsonValue] = option('--arguments', default_factory=dict,
+                                     parser=field(default='{}'), normalize=_json_object)
     confirmed: bool = option('--confirmed', default=False)
 
     def apply(self, ctx: Comms) -> object:
@@ -1583,19 +1561,13 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StartCliCommand(CliCommand):
+class StartCliCommand(ChannelMemberBindings, CliCommand):
     help = 'Start thread'
-    multiple_targets = True
-    name: str = option('--name', target_bound=True)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsStartTool
         return (cls(name=thread.name),) if CommsStartTool.available_for_thread(thread, status) else ()
-
-    @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return cls.member_bindings(comms, channel, snapshot=snapshot)
 
     @classmethod
     def reconnect_targets(cls, result: OwnerStartResult | TargetBatchResult) -> tuple[str, ...]:
@@ -1632,8 +1604,8 @@ class ExactTagCliCommand(CliCommand):
         return cls(name=name)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls.for_tag(channel.name.removeprefix('#')),) if channel.exact else ()
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls.for_tag(target.channel.name.removeprefix('#')),) if target.channel.exact else ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1688,8 +1660,8 @@ class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
         return ArchiveCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(name=channel.name),) if channel.can_set_archived(cls.archived) else ()
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls(name=target.channel.name),) if target.channel.can_set_archived(cls.archived) else ()
 
     def confirmation(self):
         return (f"Archive {self.name}? Hide the channel without removing threads, tags or history. It can be restored."
@@ -1708,10 +1680,6 @@ class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-
     def catalog_declaration(cls):
         return cls
 
-    @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(name=channel.name),) if channel.can_set_archived(cls.archived) else ()
-
 
 @dataclass(frozen=True, kw_only=True)
 class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
@@ -1719,8 +1687,8 @@ class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
     name: str = option('--name', target_bound=True)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(name=channel.view.name),) if channel.view is not None else ()
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls(name=target.channel.view.name),) if target.channel.view is not None else ()
 
     def confirmation(self):
         return f"Delete saved view #{self.name}? Thread tags and messages are preserved."
@@ -1742,8 +1710,8 @@ class PinChannelCliCommand(CliCommand, declared_name='pin-channel'):
         return PinThreadCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(name=channel.name, pinned=not channel.pinned),) if channel.exact else ()
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls(name=target.channel.name, pinned=not target.channel.pinned),) if target.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:
         return ctx.channels.set_channel_pinned(self.name, self.pinned)
@@ -1756,8 +1724,8 @@ class ChannelActivityCliCommand(CliCommand, declared_name='channel-activity'):
     enabled: bool = option('--enabled', default=False, target_bound=True)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(name=channel.name, enabled=not channel.any_mode),) if channel.exact else ()
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls(name=target.channel.name, enabled=not target.channel.any_mode),) if target.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:
         return ctx.channels.set_channel_any_mode(self.name, self.enabled)
@@ -1785,8 +1753,8 @@ class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
         return (cls(target=thread.name),)
 
     @classmethod
-    def channel_bindings(cls, comms, channel, *, snapshot=None):
-        return (cls(target=channel.name),)
+    def channel_bindings(cls, comms, target, *, snapshot=None):
+        return (cls(target=target.channel.name),)
 
     def for_editor(self, comms, target, project):
         return replace(self, worktree=project)

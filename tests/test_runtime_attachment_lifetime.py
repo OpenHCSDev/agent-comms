@@ -7,6 +7,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
+from acp.schema import LoadSessionResponse
 
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms
@@ -17,7 +18,7 @@ from agent_comms.owner_protocol import (
     OwnerAnnouncement,
     UnannouncedOwner,
 )
-from agent_comms.session_load import FailedSessionLoadPlan
+from agent_comms.session_load import ExistingSessionLoadPlan, FailedSessionLoadPlan
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
 
@@ -131,23 +132,31 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
                 loading.cancel()
                 with pytest.raises(asyncio.CancelledError):
                     await loading
-            else:
+                assert not agent.sessions.proxies
+            elif ending == "invalid_ready":
                 with pytest.raises(RequestError) as raised:
                     await loading
-                owner = IncompatibleOwner.from_failure(raised.value.data)
-                if ending == "invalid_ready":
-                    assert owner is None
-                else:
-                    expected = (
-                        UnannouncedOwner(thread="owner")
-                        if ending == "unannounced"
-                        else OtherCoreOwner(thread="owner", core_commit=_OTHER_COMMIT)
-                    )
-                    assert owner == expected
-                    assert raised.value.data["reason"] == expected.line()
-                    assert FailedSessionLoadPlan.from_failure(raised.value.data) is not None
+                assert IncompatibleOwner.from_failure(raised.value.data) is None
+                assert FailedSessionLoadPlan.from_failure(raised.value.data) is not None
+                assert not agent.sessions.proxies
+            else:
+                loaded = await loading
+                assert isinstance(loaded, LoadSessionResponse)
+                expected = (
+                    UnannouncedOwner(thread="owner")
+                    if ending == "unannounced"
+                    else OtherCoreOwner(thread="owner", core_commit=_OTHER_COMMIT)
+                )
+                assert IncompatibleOwner.from_failure(loaded.field_meta) == expected
+                assert loaded.field_meta["reason"] == expected.line()
+                assert FailedSessionLoadPlan.from_failure(loaded.field_meta) is None
+                plan = ExistingSessionLoadPlan.at_response(loaded.field_meta)
+                assert plan == ExistingSessionLoadPlan(comms.registry.snapshot().owner_binding("owner"))
+                assert agent.sessions.proxies == {"owner": expected}
+                with pytest.raises(RequestError) as refused:
+                    await agent.sessions.proxies["owner"].request("prompt")
+                assert IncompatibleOwner.from_failure(refused.value.data) == expected
             await closed
-        assert not agent.sessions.proxies
     finally:
         loading.cancel()
         await asyncio.gather(loading, return_exceptions=True)

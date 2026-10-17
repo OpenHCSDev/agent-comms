@@ -244,6 +244,16 @@ class FieldCodec(Sealed):
         return representation
 
     @staticmethod
+    def has_default(declared: Field) -> bool:
+        return declared.default is not MISSING or declared.default_factory is not MISSING
+
+    @classmethod
+    def default_value(cls, declared: Field[T]) -> T:
+        if not cls.has_default(declared):
+            raise ValueError(f"Field {declared.name!r} requires a value")
+        return declared.default if declared.default is not MISSING else declared.default_factory()
+
+    @staticmethod
     @lru_cache(maxsize=_declaration_cache_capacity)
     def record_fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
         """The codec's record declarations and wire keys, in wire order."""
@@ -306,16 +316,8 @@ class FieldCodec(Sealed):
                 for field, key in cls.record_fields(type(value))
                 if not (
                     field.metadata.get("wire_omit_default")
-                    and getattr(value, field.name)
-                    == (
-                        field.default
-                        if field.default is not MISSING
-                        else (
-                            field.default_factory()
-                            if field.default_factory is not MISSING
-                            else MISSING
-                        )
-                    )
+                    and cls.has_default(field)
+                    and getattr(value, field.name) == cls.default_value(field)
                 )
             )
             result.update(
@@ -375,7 +377,7 @@ class FieldCodec(Sealed):
                 schema["description"] = metadata["description"]
             if "wire_choices" in metadata:
                 schema["enum"] = list(metadata["wire_choices"]())
-            if declared.default is MISSING and declared.default_factory is MISSING:
+            if not cls.has_default(declared):
                 required.append(key)
             elif declared.default is not MISSING and declared.default is not None:
                 schema["default"] = cls.encode(declared.default, annotation)
@@ -503,7 +505,7 @@ class FieldCodec(Sealed):
             required_keys=tuple(entry.key for entry in entries if entry.required),
             init_required_keys=tuple(
                 entry.key for entry, (field, _) in zip(entries, declared)
-                if field.default is MISSING and field.default_factory is MISSING
+                if not cls.has_default(field)
             ),
             reject_null_keys=frozenset(entry.key for entry in entries if entry.reject_null),
             accepted_keys=frozenset(entry.key for entry in entries) | computed,
