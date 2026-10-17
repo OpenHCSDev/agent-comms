@@ -9,7 +9,7 @@ from contextlib import ExitStack, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .bus_activity_index import BusActivityIndex, ChannelActivity
+from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts, WaitingRouteCounts
 from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
@@ -77,19 +77,14 @@ class MessageBus:
             private_claim_writes=private_claim_writes,
         )
 
-    def _activity_clocks(self, source: OpenedWireSnapshot | None = None):
+    def activity_clocks(self, source: OpenedWireSnapshot | None = None) -> ActivityClocks:
         """The existing index borrows the same opened source after release."""
         if source is not None:
             return self._activity.snapshot(source, self._bus_activity_fields)
         with self.log._opened_wire_snapshot(
             need_sequence=False, prepared_indexes=self.log.prepare_append_indexes(),
         ) as opened:
-            return self._activity_clocks(opened)
-
-    def channel_activity(self) -> Mapping[str, ChannelActivity]:
-        """Aggregate clocks from the single existing append-aware source cache."""
-        channels, _ = self._activity_clocks()
-        return {name: ChannelActivity(*clocks) for name, clocks in channels.items()}
+            return self.activity_clocks(opened)
 
     @staticmethod
     def _bus_activity_fields(record: Mapping[str, object]):
@@ -378,11 +373,6 @@ class MessageBus:
     ) -> bool:
         """Ask the scoped offset reader, newest first, stopping at the first unread."""
         return UnreadBeforeRequest(scope, before, seen).read(self.log)
-
-    def last_sent_timestamps(self, *, source: OpenedWireSnapshot | None = None) -> Mapping[str, float]:
-        """Reuse the same verified activity source; no second projection or body cache."""
-        _, sent = self._activity_clocks(source)
-        return dict(sent)
 
     def full_history_page(
         self,
