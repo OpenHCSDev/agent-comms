@@ -49,10 +49,14 @@ def _maintain_in_process(root: str, root_id: str, through_bytes: int, start, res
     start.wait()
     try:
         index = WakeCandidateIndex(Comms(Path(root)).bus.log)
+        hint = index.notify_committed_append(root_id=root_id, through_bytes=through_bytes)
         outcome = index.catch_up_committed_append(
-            index.notify_committed_append(root_id=root_id, through_bytes=through_bytes),
-            bootstrap_new=True, max_rows=256, max_bytes=8 * 1024 * 1024,
+            hint, bootstrap_new=True, max_rows=256, max_bytes=8 * 1024 * 1024,
         )
+        while not outcome.caught_up:
+            outcome = index.catch_up_committed_append(
+                hint, max_rows=256, max_bytes=8 * 1024 * 1024,
+            )
     except BaseException as error:
         results.put(("error", type(error).__name__, str(error)))
     else:
@@ -105,7 +109,7 @@ def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) ->
         process.join(timeout=15)
         assert process.exitcode == 0
     outcomes = [results.get(timeout=2) for _ in processes]
-    assert all(outcome[0] == "ok" for outcome in outcomes), outcomes
+    assert all(outcome == ("ok", True) for outcome in outcomes), outcomes
     with sqlite3.connect(index.path) as db:
         checkpoint = db.execute(
             "SELECT last_seq, byte_offset FROM candidate_checkpoint WHERE singleton=1"

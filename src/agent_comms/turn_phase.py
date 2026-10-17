@@ -138,7 +138,7 @@ class PromptAcceptancePhase(TurnPhase):
     label = "Waiting for input start"
 
 
-class PreparingPhase(TurnPhase):
+class PreparingPhase(LabeledActivity, TurnPhase):
     label = "Preparing input"
 
     def project_activity(self, activity):

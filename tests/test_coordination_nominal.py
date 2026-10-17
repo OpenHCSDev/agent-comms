@@ -127,7 +127,9 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path, mo
         yield from original_selection(self, event)
 
     monkeypatch.setattr(DurableTurn, "handlers_for", observed_selection)
+    from agent_comms.comms import Comms
 
+    Comms(tmp_path).messaging.initialize_private_initial_protocol()
     with Coordination(tmp_path / "coordination.sqlite3") as store:
         store.participants.register("owner", "owner", "owner", committed=True)
         created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
@@ -220,10 +222,9 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
             store.participants.register("p", "owner", "owner", committed=True)
             with store.session.transaction() as db:
                 db.execute(
-                    "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
-                    "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
-                    "ms) VALUES ('e','wire',json_object('kind','queued'),'requester','owner','p',"
-                    "1,2,NULL,0,0)"
+                    "INSERT INTO executions (execution_id,origin,lifecycle,owner_thread,"
+                    "owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) "
+                    "VALUES ('e','wire',json_object('kind','queued'),'owner','p',1,2,NULL,0,0)"
                 )
                 db.execute(
                     "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
