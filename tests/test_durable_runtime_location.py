@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.agent_backend import AgentBackend, RuntimeLocation
 from agent_comms.field_codec import FieldCodec
-from agent_comms.pi_durable_backend import DurableDatabase, DurableHost, PiDurableBackend, InspectHostCommand
+from agent_comms.pi_durable_backend import DurableDatabase, DurableHost, PiDurableBackend, Inspect
 from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.threads import Thread
 from agent_comms.turn_runner import TurnRunner
@@ -76,7 +76,7 @@ try {
     for (let index = 0; index < 260; index++) {
       const role = index % 2 ? 'assistant' : 'user';
       await tx.appendEntry(root.id, {kind: `pi.${role}`, data: null,
-        model: [{role, content: `entry ${index}`} ]});
+        model: [{role, content: [{type: 'text', text: `entry ${index}`}]} ]});
     }
   }, context);
 } finally { await harness.close(context); }
@@ -94,7 +94,7 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path):
                         session_file=location.path)
         await host.open(location, thread)
         try:
-            interrupted = await host.request(InspectHostCommand())
+            interrupted = await host.request(Inspect())
             def read():
                 source = location.history_source(tmp_path, thread.incarnation)
                 with source.reading() as reader:
@@ -110,7 +110,7 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path):
                 assert len(turns) == 1
                 assert [event.text for event in turns[0].events] == ['entry 258', 'entry 259']
             await asyncio.to_thread(read)
-            assert await host.request(InspectHostCommand()) == interrupted
+            assert await host.request(Inspect()) == interrupted
         finally:
             await host.close()
     asyncio.run(journey())

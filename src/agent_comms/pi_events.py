@@ -117,6 +117,14 @@ class NativePiEvent(PiEvent):
 class DurablePiEvent(PiEvent):
     declared_name = None
 
+    @classmethod
+    def wire_member(cls, wire):
+        members = tuple(member for member in cls.members_with(cls)
+                        if member.wire_kind() == wire.get("type"))
+        if len(members) > 1:
+            raise ValueError("Ambiguous durable event declaration")
+        return members[0] if members else UnknownPiEvent
+
 
 @dataclass(frozen=True)
 class UnreadPayload:
@@ -235,17 +243,18 @@ class ModelRequestProgress(NativePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AutoRetryEnd(NativePiEvent, DurablePiEvent):
-    @classmethod
-    def wire_case(cls, wire):
-        return cls if 'success' in wire else UnknownPiEvent
-
-    outcome: ProviderRetryOutcome = field(metadata={"wire_name": "success"})
+class RetryEnd(PiEvent):
+    declared_name = None
     attempt: int
 
     def __post_init__(self) -> None:
         if self.attempt < 0:
-            raise ValueError("Native retry count must be nonnegative")
+            raise ValueError("Retry count must be nonnegative")
+
+
+@dataclass(frozen=True, kw_only=True)
+class AutoRetryEnd(RetryEnd, NativePiEvent):
+    outcome: ProviderRetryOutcome = field(metadata={"wire_name": "success"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
@@ -638,7 +647,7 @@ class InputCommitted(NativePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageEnd(NativePiEvent, DurablePiEvent):
+class MessageEnd(NativePiEvent):
     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -675,11 +684,7 @@ class MessageStart(NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MessageUpdate(NativePiEvent, DurablePiEvent):
-    @classmethod
-    def wire_case(cls, wire):
-        return BatchMessageUpdate if 'changes' in wire else cls
-
+class MessageUpdate(NativePiEvent):
     assistant_message_event: PiDelta | None = field(
         default=None, metadata={"wire_name": "assistantMessageEvent"}
     )
@@ -723,9 +728,9 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class BatchMessageUpdate(MessageUpdate):
+class BatchMessageUpdate(MessageUpdate, DurablePiEvent):
     """Pi Durable batches the same Pi deltas in one committed update."""
-    changes: tuple[PiDelta, ...] = ()
+    changes: tuple[PiDelta, ...]
     wire_kind = MessageUpdate.wire_kind
 
     @property
@@ -823,7 +828,7 @@ class SummarizationRetryScheduled(RetryAttemptEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolExecutionEnd(NativePiEvent, DurablePiEvent):
+class ToolExecutionEnd(NativePiEvent):
     accepts_prompt = True
 
     is_error: bool | None = field(default=None, metadata={"wire_name": "isError"})

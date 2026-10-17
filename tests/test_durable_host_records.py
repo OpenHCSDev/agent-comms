@@ -1,19 +1,22 @@
 """Typed durable JSONL ingress and real-host replies, without provider work."""
 import asyncio
+import json
 
 import pytest
 
-from agent_comms.agent_backend import (
-    ContextUsage, FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction,
-)
+from agent_comms.agent_backend import FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction
 from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
-from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_durable_backend import (
-    CompactHostCommand, CompactionHostMessage, ContextUsageHostCommand,
-    DurableDatabase, DurableHost, HostMessage, InspectHostCommand, PendingHostRequest,
-    PiDurableBackend, SettleHostCommand,
+    CompactDurable, ContextUsageData, ContextUsageQuery, DurableDatabase, DurableHost,
+    DurablePiEvent, Inspect, PiDurableBackend, Settle,
 )
+from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.pi_events import PiEvent, UnknownPiEvent
 from agent_comms.threads import Thread
+
+
+def decode(wire):
+    return PiRpcChannel.decode_record((json.dumps(wire) + '\n').encode(), strict=True, event_type=DurablePiEvent)
 
 
 @pytest.mark.parametrize('result,expected', [
@@ -24,11 +27,10 @@ from agent_comms.threads import Thread
     ({'kind': 'failed', 'message': 'failure'}, FailedCompaction('failure')),
 ])
 def test_compaction_reply_decodes_directly_to_existing_outcome(result, expected):
-    wire = {'kind': 'compaction', 'id': 7, 'result': result}
-    decoded = FieldCodec.decode(HostMessage, wire)
-    assert isinstance(decoded, CompactionHostMessage)
-    assert decoded.result == expected
-    assert FieldCodec.encode(decoded) == wire
+    decoded = decode({'type': 'response', 'command': 'compact_durable', 'success': True,
+                      'id': '7', 'data': {'outcome': result}})
+    assert decoded.command is CompactDurable
+    assert decoded.data.outcome == expected
 
 
 @pytest.mark.parametrize('event,expected', [
@@ -38,46 +40,44 @@ def test_compaction_reply_decodes_directly_to_existing_outcome(result, expected)
     ]}, (Chunk('visible'), Thinking('reasoning'))),
     ({'type': 'tool_execution_start', 'toolCallId': 'call', 'toolName': 'read',
       'args': {'path': 'source.py'}},
-     (ToolStart(id='call', name='read', args={'path': 'source.py'}),)),
-    ({'type': 'task_failed', 'taskId': 3, 'kind': 'tool', 'message': 'failed'},
-     (Error('failed'),)),
+     (ToolStart(id='call', name='read', title='Read', kind='read', args={'path': 'source.py'}),)),
+    ({'type': 'task_failed', 'taskId': 3, 'kind': 'tool', 'message': 'failed'}, (Error('failed'),)),
 ])
 def test_event_fields_and_changes_are_decoded_at_frame_ingress(event, expected):
-    decoded = FieldCodec.decode(HostMessage, {'kind': 'event', 'event': event})
-    assert decoded.event.convert() == expected
-    assert not hasattr(decoded.event, 'payload')
+    decoded = decode(event)
+    assert decoded.convert() == expected
+    assert not hasattr(decoded, 'payload')
 
 
 def test_missing_delta_and_unknown_result_fields_fail_at_ingress():
     with pytest.raises((TypeError, ValueError), match='delta'):
-        FieldCodec.decode(HostMessage, {'kind': 'event', 'event': {
-            'type': 'message_update', 'usage': {}, 'changes': [
-                {'type': 'text_delta', 'contentIndex': 0},
-            ],
-        }})
+        decode({'type': 'message_update', 'usage': {}, 'changes': [
+            {'type': 'text_delta', 'contentIndex': 0},
+        ]})
     with pytest.raises(ValueError, match='Unknown fields'):
-        FieldCodec.decode(HostMessage, {'kind': 'compaction', 'id': 1,
-                                       'result': {'kind': 'stale', 'message': 'extra'}})
+        decode({'type': 'response', 'command': 'compact_durable', 'success': True,
+                'id': '1', 'data': {'outcome': {'kind': 'stale', 'message': 'extra'}}})
+    with pytest.raises((TypeError, ValueError), match='changes'):
+        decode({'type': 'message_update', 'usage': {}})
+    with pytest.raises((TypeError, ValueError), match='success'):
+        PiEvent.from_wire({'type': 'auto_retry_end', 'attempt': 1})
+    assert not isinstance(decode({'type': 'auto_retry_end', 'attempt': 1}), UnknownPiEvent)
 
 
 def test_result_kind_is_bound_to_its_pending_command():
     async def journey():
-        host = DurableHost()
-        future = asyncio.get_running_loop().create_future()
-        host.pending[9] = PendingHostRequest(CompactHostCommand(None), future)
-        wrong = FieldCodec.decode(HostMessage, {
-            'kind': 'context', 'id': 9, 'result': {'tokens': 0, 'window': None},
-        })
-        with pytest.raises(ValueError, match='Wrong reply to compact'):
-            wrong.deliver(host)
-        # The reader still owns the failed request, so its failure handler can
-        # finish this future too; it must not vanish from the pending requests.
-        assert host.pending[9].future is future
-        error = FieldCodec.decode(HostMessage, {'kind': 'error', 'id': 9, 'error': 'failed'})
-        error.deliver(host)
-        with pytest.raises(RuntimeError, match='failed'):
-            await future
-        assert not host.pending
+        channel = PiRpcChannel(asyncio.StreamReader(), event_type=DurablePiEvent)
+        command = CompactDurable(id='9')
+        future = channel.track(command)
+        with pytest.raises((TypeError, ValueError), match='outcome'):
+            decode({'type': 'response', 'command': 'compact_durable', 'id': '9',
+                    'success': True, 'data': {'tokens': 0, 'window': None}})
+        assert not future.done()
+        error = decode({'type': 'response', 'command': 'compact_durable', 'id': '9',
+                        'success': False, 'error': 'failed'})
+        assert channel.correlate(error) == command
+        assert (await future).error == 'failed'
+        assert channel.correlate(error) is None
     asyncio.run(journey())
 
 
@@ -88,12 +88,12 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path):
         thread = Thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
                         session_file=location.path)
         try:
-            assert await backend.context_usage(thread) == ContextUsage(0, None)
+            assert await backend.context_usage(thread) == ContextUsageData(0, None)
             assert await backend.interrupted(thread) == ()
             with pytest.raises(RuntimeError, match='Interrupted work does not exist'):
-                await backend.host.request(SettleHostCommand('task:missing', 'ABANDON'))
-            assert await backend.host.request(InspectHostCommand()) == ()
-            assert await backend.host.request(ContextUsageHostCommand()) == ContextUsage(0, None)
+                await backend.host.request(Settle('task:missing', 'ABANDON'))
+            assert (await backend.host.request(Inspect())).work == ()
+            assert await backend.host.request(ContextUsageQuery()) == ContextUsageData(0, None)
             assert not backend.host.reader.done()
         finally:
             await backend.close_idle()

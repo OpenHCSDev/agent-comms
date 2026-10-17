@@ -35,12 +35,13 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
 
     OBSERVATION_MAX_BYTES = 16 * 1024
 
-    def __init__(self, reader: asyncio.StreamReader):
+    def __init__(self, reader: asyncio.StreamReader, *, event_type=None):
         super().__init__(reader)
         self.pending = PendingRequests()
+        self.event_type = event_type
 
     @staticmethod
-    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:
+    def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None, event_type=None) -> PiEvent:
         from .pi_events import PiEvent
 
         if max_bytes is not None and len(raw) > max_bytes:
@@ -50,7 +51,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
         data = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_fields if strict else None)
         if not isinstance(data, dict):
             raise ValueError("Pi RPC record has wrong type")
-        return PiEvent.from_wire(data)
+        return (event_type or PiEvent).from_wire(data)
 
     async def receive(
         self, *, strict: bool = False, max_bytes: int | None = None
@@ -58,7 +59,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
         raw = await self.readline(max_bytes=max_bytes)
         if not raw:
             return None
-        return self.decode_record(raw, strict=strict, max_bytes=max_bytes)
+        return self.decode_record(raw, strict=strict, max_bytes=max_bytes, event_type=self.event_type)
 
     def encode(self, command: PiCommand) -> bytes:
         """Register before writing; correlated proof still requires its native input ID."""

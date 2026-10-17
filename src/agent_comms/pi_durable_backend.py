@@ -18,7 +18,7 @@ from .native_entries import StoredEntry
 from .native_session_files import NativeSessionFiles
 from .native_transcript import StoredRecord
 from .pi_commands import Compact, PiCommand
-from .pi_events import DurablePiEvent, Response
+from .pi_events import AutoRetryEnd, DurablePiEvent, MessageEnd, Response, RetryEnd, ToolExecutionEnd
 from .pi_payloads import PiPayload, PiResponseData
 from .pi_rpc import PiRpcChannel
 from .selected_session import SelectedSession
@@ -193,6 +193,22 @@ class OutcomeData(PiResponseData):
     outcome: CompactionOutcome
 
 
+class DurableRetryEnd(RetryEnd, DurablePiEvent):
+    wire_kind = AutoRetryEnd.wire_kind
+
+
+@dataclass(frozen=True, kw_only=True)
+class StoredMessageEnd(MessageEnd, DurablePiEvent):
+    entry: StoredEntry
+    wire_kind = MessageEnd.wire_kind
+
+
+@dataclass(frozen=True, kw_only=True)
+class StoredToolExecutionEnd(ToolExecutionEnd, DurablePiEvent):
+    entry: StoredEntry | None = None
+    wire_kind = ToolExecutionEnd.wire_kind
+
+
 class Snapshot(DurablePiEvent):
     pass
 
@@ -204,6 +220,7 @@ class AgentChanged(DurablePiEvent):
 
 @dataclass(frozen=True)
 class TaskFailed(DurablePiEvent):
+    task_id: int = field(metadata={'wire_name': 'taskId'})
     message: str
 
     def convert(self):
@@ -306,7 +323,7 @@ class DurableTurn:
 
 class DurableHost:
     def __init__(self):
-        self.child = self.lock_file = self.reader = self.stderr = self.channel = None
+        self.child = self.lock_file = self.reader = self.channel = None
         self.deliver_event = _event_without_turn
 
     async def open(self, location, thread):
@@ -336,18 +353,19 @@ class DurableHost:
 
     async def start(self, cwd, pass_fds=()):
         self.child = await AttachedChild.start(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))), cwd=cwd, pass_fds=pass_fds)
-        self.channel = PiRpcChannel(self.child.stdout)
+        self.channel = PiRpcChannel(self.child.stdout, event_type=DurablePiEvent)
         self.reader = asyncio.create_task(self.read())
-        self.stderr = asyncio.create_task(self.child.stderr_tail())
 
     async def read(self):
         try:
             while (event := await self.channel.receive(strict=True)) is not None:
                 if isinstance(event, Response):
-                    self.channel.correlate(event)
+                    if self.channel.correlate(event) is None:
+                        raise ValueError('Unsolicited durable response')
                 else:
                     self.deliver_event(event)
-            raise EOFError(f'Durable host closed: {await self.stderr}')
+            tail = '' if self.child.alive() else await self.child.stderr_tail()
+            raise EOFError(f'Durable host closed: {tail}')
         finally:
             self.channel.pending.cancel_all()
 
@@ -386,12 +404,12 @@ class DurableHost:
         try:
             if self.child is not None:
                 await self.child.stop()
-            for task in (self.reader, self.stderr):
+            for task in (self.reader,):
                 if task is not None:
                     task.cancel()
                     await asyncio.gather(task, return_exceptions=True)
         finally:
-            self.child = self.reader = self.stderr = self.channel = None
+            self.child = self.reader = self.channel = None
             if self.lock_file is not None:
                 self.lock_file.close()
                 self.lock_file = None
