@@ -170,11 +170,10 @@ class DmScope(WireExportScope):
             raise ValueError("A DM wire-export scope requires two distinct participants.")
 
     def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
-        first = registry.require(self.participants[0]).name
-        second = registry.require(self.participants[1]).name
-        canonical = DmScope((first, second))
-        first_names = registry.aliases_for(first)
-        second_names = registry.aliases_for(second)
+        first = registry.entry(self.participants[0]).entry
+        second = registry.entry(self.participants[1]).entry
+        canonical = DmScope((first.thread.name, second.thread.name))
+        first_names, second_names = first.names, second.names
 
         def matches(message: Message) -> bool:
             return (message.sender in first_names and message.target in second_names) or (
