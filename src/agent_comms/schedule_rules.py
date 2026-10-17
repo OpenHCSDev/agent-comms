@@ -148,36 +148,27 @@ class SelectedWakeCheck(SessionScheduleCheck):
         inputs, session_id = self.inputs, self.session_id
         effects = inputs.effects
         root_id = effects.configured_root_id
-        async with drain_failures(
-            inputs.comms, self.thread, self.owner,
-            partial(inputs.retry_observer, session_id),
-        ):
-            try:
-                # Selection may have been scheduled just before maintenance
-                # began. Keep its accepted assignment unselected for READY.
-                hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
-                if hold.turn_pending:
-                    return hold
-                before = await inputs._observe_private_revision(session_id, root_id)
-                result = await effects.turns.run_selected(session_id, self.execution)
-                if result is not None:
-                    # A disconnected client must not turn a settled claim into an
-                    # apparent model failure. Reconnect reads the same durable row.
-                    await effects.cursors.publish(
-                        session_id, self.thread, selected_status=result.cursor_status
-                    )
-                else:
-                    # N (or absent-audience) rows prove coverage, not an injected
-                    # input. Extend only an existing current generation or an all-N prefix;
-                    # old-generation Pi evidence cannot initialize this cursor on reconnect.
-                    await effects.cursors.publish(session_id, self.thread, advance=True)
-                    if before == await inputs._observe_private_revision(session_id, root_id):
-                        inputs._idle_private_revisions[session_id] = before
-            finally:
-                inputs.wake_tasks.pop(session_id, None)
-                # A selected wake can finish the turn which made a project
-                # resume due; start the queued resume after this wake retires.
-                WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
+        # Selection may have been scheduled just before maintenance began.
+        # A deferred admission is not a successful drain or diagnostic recovery.
+        hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
+        if hold.turn_pending:
+            return hold
+        async with drain_failures(inputs.comms, self.thread, self.owner):
+            before = await inputs._observe_private_revision(session_id, root_id)
+            result = await effects.turns.run_selected(session_id, self.execution)
+            if result is not None:
+                # A disconnected client must not turn a settled claim into an
+                # apparent model failure. Reconnect reads the same durable row.
+                await effects.cursors.publish(
+                    session_id, self.thread, selected_status=result.cursor_status
+                )
+            else:
+                # N (or absent-audience) rows prove coverage, not an injected
+                # input. Extend only an existing current generation or an all-N prefix;
+                # old-generation Pi evidence cannot initialize this cursor on reconnect.
+                await effects.cursors.publish(session_id, self.thread, advance=True)
+                if before == await inputs._observe_private_revision(session_id, root_id):
+                    inputs._idle_private_revisions[session_id] = before
             if result is not None:
                 # Messages this turn could not take are still pending.
                 await inputs.drain_inbox(session_id)

@@ -219,7 +219,7 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
 
 
 @pytest.mark.asyncio
-async def test_recoverable_drain_failure_retries_without_another_file_change(
+async def test_recoverable_drain_failure_waits_for_dependency_change(
     tmp_path, monkeypatch,
 ):
     config = tmp_path / "native-config"
@@ -252,6 +252,9 @@ async def test_recoverable_drain_failure_retries_without_another_file_change(
     agent.inputs.ensure_live_drain("owner")
     task = agent.inputs.drain_tasks["owner"]
     try:
+        await asyncio.sleep(0.15)
+        assert attempts == 1
+        (config / "auth.json").write_text("{}")
         await asyncio.wait_for(retried.wait(), 1)
         assert attempts == 2
     finally:

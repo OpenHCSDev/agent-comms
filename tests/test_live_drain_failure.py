@@ -72,7 +72,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         ]
         assert all("recorded_at" not in encoded for encoded in encoded_diagnostics)
         assert all(encoded["kind"] == "unavailable_drain" for encoded in encoded_diagnostics)
-        # Repeated retries must neither flood the log nor repair the broken schema.
+        # Without a real dependency change, failure neither retries nor repairs the schema.
         log = comms.root / "activity.jsonl"
         observed = log.read_bytes()
         await asyncio.sleep(1.3)
@@ -110,14 +110,12 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
     comms, agent, _ = _session(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
 
-    async def retry():
-        return None
-
-    async with drain_failures(comms, "beta", owner, retry):
-        raise OSError("past drain failed")
+    with pytest.raises(OSError, match="past drain failed"):
+        async with drain_failures(comms, "beta", owner):
+            raise OSError("past drain failed")
     lease = comms.agents.begin_turn("beta", "later-successful-turn").turn_lease
     try:
-        async with drain_failures(comms, "beta", owner, retry):
+        async with drain_failures(comms, "beta", owner):
             await agent.inputs.drain_inbox("beta")
         current = owner_view(comms)
         assert current.activity.readiness.source_diagnostic() is None
@@ -125,7 +123,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
         assert current.presentation.status.working
         assert not isinstance(current.presentation.status, AttentionThreadPresentationStatus)
         activity = (comms.root / "activity.jsonl").read_bytes()
-        async with drain_failures(comms, "beta", owner, retry):
+        async with drain_failures(comms, "beta", owner):
             await agent.inputs.drain_inbox("beta")
         assert (comms.root / "activity.jsonl").read_bytes() == activity
     finally:
@@ -180,11 +178,8 @@ async def test_successful_earlier_drain_preserves_newer_error(tmp_path, recurs):
     first = UnavailableDrainDiagnostic(owner, "OSError", "first failure", recorded_at=1.0)
     comms.agents.set_drain_diagnostic("beta", owner, first)
 
-    async def retry():
-        return None
-
     try:
-        async with drain_failures(comms, "beta", owner, retry):
+        async with drain_failures(comms, "beta", owner):
             await agent.inputs.drain_inbox("beta")
             newer = replace(first, reason="different failure", recorded_at=2.0)
             comms.agents.set_drain_diagnostic("beta", owner, newer)
@@ -196,7 +191,7 @@ async def test_successful_earlier_drain_preserves_newer_error(tmp_path, recurs):
         retained = owner_view(comms).activity.readiness.source_diagnostic()
         assert retained == newer
         assert retained.recorded_at == newer.recorded_at
-        async with drain_failures(comms, "beta", owner, retry):
+        async with drain_failures(comms, "beta", owner):
             await agent.inputs.drain_inbox("beta")
         assert owner_view(comms).activity.readiness.source_diagnostic() is None
     finally:
@@ -209,11 +204,8 @@ async def test_predecessor_success_cannot_clear_replacement_owner_failure(tmp_pa
     first = UnavailableDrainDiagnostic(owner, "OSError", "first failure", recorded_at=1.0)
     comms.agents.set_drain_diagnostic("beta", owner, first)
 
-    async def retry():
-        return None
-
     try:
-        async with drain_failures(comms, "beta", owner, retry):
+        async with drain_failures(comms, "beta", owner):
             await agent.inputs.drain_inbox("beta")
             comms.registry.register(comms.registry.require("beta"), new_owner=True)
             successor = comms.registry.snapshot().owner_identity("beta")
@@ -232,12 +224,9 @@ async def test_cancelled_drain_keeps_original_failure(tmp_path):
     comms.agents.set_drain_diagnostic("beta", owner, first)
     log = (comms.root / "activity.jsonl").read_bytes()
 
-    async def retry():
-        raise AssertionError("Cancellation must not retry")
-
     try:
         with pytest.raises(asyncio.CancelledError):
-            async with drain_failures(comms, "beta", owner, retry):
+            async with drain_failures(comms, "beta", owner):
                 raise asyncio.CancelledError()
         assert (comms.root / "activity.jsonl").read_bytes() == log
         assert owner_view(comms).activity.readiness.source_diagnostic() == first
@@ -249,13 +238,13 @@ async def test_unexpected_drain_failure_is_visible_and_propagates(tmp_path, monk
     comms, agent, _ = _session(tmp_path)
 
     async def broken(_session):
-        raise TypeError("unexpected drain implementation failure")
+        raise ValueError("unexpected drain implementation failure")
 
     monkeypatch.setattr(agent.inputs, "drain_inbox", broken)
     try:
         agent.inputs.ensure_live_drain("beta")
         task = agent.inputs.drain_tasks["beta"]
-        with pytest.raises(TypeError, match="unexpected drain implementation failure"):
+        with pytest.raises(ValueError, match="unexpected drain implementation failure"):
             await task
         assert isinstance(
             owner_view(comms).activity.readiness.source_diagnostic(),

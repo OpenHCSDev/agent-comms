@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sqlite3
 from dataclasses import dataclass, replace
 from contextlib import aclosing
 from functools import partial
@@ -24,8 +23,8 @@ from .acp_extension import (
 )
 from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox
 from .comms import Comms
-from .coordination_errors import CoordinationError, IdentityConflict
-from .drain_failures import drain_failures
+from .coordination_errors import IdentityConflict
+from .drain_failures import DEFERRED_DRAIN_ERRORS, UNAVAILABLE_DRAIN_ERRORS, drain_failures
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
@@ -211,19 +210,19 @@ class InputObservation:
         if watcher is not None:
             watcher.notify()
 
-    async def retry_observer(self, session_id: str) -> None:
-        await asyncio.sleep(0.05)
-        self.wake_observer(session_id)
-
     def register_wake(self, session_id: str, task: asyncio.Task[None]) -> None:
         self.wake_tasks[session_id] = task
 
         def finished(completed: asyncio.Task[None]) -> None:
+            if self.wake_tasks.get(session_id) is not completed:
+                return
+            self.wake_tasks.pop(session_id)
             # A deferred wake has not consumed its queue or assignment. The
             # maintenance witness itself wakes the observer on READY; waking
             # again now would spin on the same closed phase.
-            if (not completed.cancelled() and completed.exception() is None
-                    and isinstance(completed.result(), MaintenanceStatus)):
+            if completed.cancelled() or completed.exception() is not None:
+                return
+            if isinstance(completed.result(), MaintenanceStatus):
                 return
             self.wake_observer(session_id)
 
@@ -360,42 +359,43 @@ class InputObservation:
                     revision = replace(revision, registry=read.revision)
                     entry = read.entry
                 owner = entry.owner_identity
-                async with drain_failures(
-                    self.comms, thread, owner, partial(self.retry_observer, session_id),
-                ):
-                    # A stored model change precedes the messages the same tick hands over.
-                    await self.sessions.config.sync_thread(session_id)
-                    drained = await self.drain_inbox(session_id)
-                    if self._in_standby(session_id):
-                        # Recovery reads only stores in the revision, so it runs
-                        # when one of them changed, not on a clock.
-                        await Coordination.run_worker(partial(
-                            self.comms.goals.recover_closed_goal_wait, session_id,
-                        ))
-                    await ProjectResumeCheck(
-                        session_id=session_id, inputs=self, turns=self.effects.turns,
-                    ).schedule()
-                    await self.effects.turns.goals.schedule_goal(session_id)
-                    current = await Coordination.run_worker(partial(self.comms.registry.require, thread))
-                    if (
-                        not current.executing
-                        and session_id not in self.effects.turns.turn_tasks
-                        and session_id not in self.backend_inboxes
-                    ):
-                        if not current.executing and self._quiescent(session_id):
-                            marker = await Coordination.run_worker(self._bus_marker)
-                            settled = SettledTick(
-                                revision, entry, marker.admission_after_seq, marker.last_seq,
-                            )
-                        elif self._repeat_observation_ready(session_id, drained):
-                            # The first empty private observation may advance its
-                            # own durable cursor. Re-read that transition now;
-                            # healthy file notification remains event-driven.
-                            watcher.notify()
-                        elif self.effects.cursors.delivery(session_id).needs_refresh:
-                            # Cursor publication has process-local work even when
-                            # no wake task exists to produce another file change.
-                            watcher.notify()
+                try:
+                    async with drain_failures(self.comms, thread, owner):
+                        # A stored model change precedes the messages the same tick hands over.
+                        await self.sessions.config.sync_thread(session_id)
+                        drained = await self.drain_inbox(session_id)
+                        if self._in_standby(session_id):
+                            # Recovery reads only stores in the revision, so it runs
+                            # when one of them changed, not on a clock.
+                            await Coordination.run_worker(partial(
+                                self.comms.goals.recover_closed_goal_wait, session_id,
+                            ))
+                        await ProjectResumeCheck(
+                            session_id=session_id, inputs=self, turns=self.effects.turns,
+                        ).schedule()
+                        await self.effects.turns.goals.schedule_goal(session_id)
+                        current = await Coordination.run_worker(partial(self.comms.registry.require, thread))
+                        if (
+                            not current.executing
+                            and session_id not in self.effects.turns.turn_tasks
+                            and session_id not in self.backend_inboxes
+                        ):
+                            if not current.executing and self._quiescent(session_id):
+                                marker = await Coordination.run_worker(self._bus_marker)
+                                settled = SettledTick(
+                                    revision, entry, marker.admission_after_seq, marker.last_seq,
+                                )
+                            elif self._repeat_observation_ready(session_id, drained):
+                                # The first empty private observation may advance its
+                                # own durable cursor. Re-read that transition now;
+                                # healthy file notification remains event-driven.
+                                watcher.notify()
+                            elif self.effects.cursors.delivery(session_id).needs_refresh:
+                                # Cursor publication has process-local work even when
+                                # no wake task exists to produce another file change.
+                                watcher.notify()
+                except DEFERRED_DRAIN_ERRORS:
+                    continue
 
     def _bus_marker(self):
         return self.comms.bus.log._private_marker_unlocked()
@@ -433,14 +433,7 @@ class InputObservation:
             if revision.coordination != settled.revision.coordination:
                 if not await self._own_coordination_unchanged(session_id, entry):
                     return None
-        except (
-            OSError,
-            ValueError,
-            TypeError,
-            sqlite3.Error,
-            CoordinationError,
-            RelationViolationError,
-        ):
+        except (*UNAVAILABLE_DRAIN_ERRORS, RelationViolationError):
             return None
         return SettledTick(revision, entry, admission_after_seq, through_seq)
 
