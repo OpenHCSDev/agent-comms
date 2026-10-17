@@ -239,14 +239,15 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                     "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
                     "','reviewed'),NULL,0,0,1)"
                 )
-            obligation = store.snapshots.get("e").obligation
+            (obligation,) = store.snapshots.get("e").obligations
             assert isinstance(obligation.lifecycle, ReviewedResponse)
             assert FieldCodec.decode(type(obligation), FieldCodec.encode(obligation)) == obligation
             store.session._connection.execute(
                 "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
                 "RE execution_id='e'"
             )
-            assert isinstance(store.snapshots.get("e").obligation.lifecycle, SilentResponse)
+            (obligation,) = store.snapshots.get("e").obligations
+            assert isinstance(obligation.lifecycle, SilentResponse)
     finally:
         ResponseState.__registry__.pop("reviewed")
 

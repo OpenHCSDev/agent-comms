@@ -281,8 +281,8 @@ class TriageNativeSend(NativeSendStage):
             # All original CASes and the one reserved input commit before Pi.
             update = WakeAssignment.update(
                 db,
-                where="assignment_id=? AND revision=? AND disposition=?",
-                parameters=(current.assignment_id, current.revision, current.lifecycle.declared_name),
+                where="assignment_id=? AND revision=?",
+                parameters=(current.assignment_id, current.revision),
                 lifecycle=reserved,
                 revision=current.revision + 1,
                 updated_at_ms=store.session.now(current.updated_at_ms),
