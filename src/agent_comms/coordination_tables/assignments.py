@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
-from enum import StrEnum
 
 from agent_comms.assignment_states import AssignmentState
+from agent_comms.wake_policy import MessageAudience
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     POLICY_VERSION,
@@ -26,12 +26,6 @@ from agent_comms.typed_table import (
     Index,
     TypedTable,
 )
-
-
-class MessageAudience(StrEnum):
-    DIRECT = "direct"
-    MENTIONED = "mentioned"
-    COLLECTIVE = "collective"
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,7 +6,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
-from .channel_targets import BuiltinChannel, Tag
+from .channel_targets import BuiltinChannel, ChannelTarget, Tag
 from .channels import Channel, SavedView, ViewPredicate
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
 from .thread_identity import ThreadProvenance
@@ -48,7 +48,7 @@ class CatalogDocument:
 
     def validate(self) -> None:
         for tag in self.tags:
-            Tag(tag)
+            Tag.validate(tag)
         if any(name != view.name for name, view in self.saved_views.items()):
             raise ValueError("Saved view key must match its declared name")
         self.validate_parents()
@@ -84,6 +84,7 @@ class CatalogDocument:
         return result
 
     def resolve(self, target: str) -> Channel:
+        target = ChannelTarget.normalize_name(target)
         tag = target.removeprefix("#")
         view = self.saved_views.get(tag)
         members = (
@@ -100,12 +101,6 @@ class CatalogDocument:
         return frozenset(kind.value for kind in BuiltinChannel if kind.matches(tags)) | frozenset(
             f"#{tag}" for tag in tags
         )
-
-    def history_targets(self, target: str) -> frozenset[str] | None:
-        return self.resolve(target).history_targets
-
-    def is_view_target(self, target: str) -> bool:
-        return target.startswith("#") and target.removeprefix("#") in self.saved_views
 
     def pinned_threads(self, channel: str) -> frozenset[str]:
         return self.preferences.get(channel, ChannelPreferences()).pinned_threads
@@ -169,7 +164,7 @@ class CatalogDocument:
         self.remove_channel(f"#{name}")
 
     def set_preferences(self, name: str, threads: Mapping[str, ThreadProvenance], **changes) -> Channel:
-        name = name if name.startswith("#") else f"#{name}"
+        name = ChannelTarget.normalize_name(name)
         channel = self.views(threads).get(name)
         if channel is None:
             raise ValueError(f"Unknown channel: {name!r}")
@@ -180,7 +175,7 @@ class CatalogDocument:
     def set_metadata(
         self, name: str, threads: Mapping[str, ThreadProvenance], *, parent: str | None, archived: bool
     ) -> Channel:
-        name = name if name.startswith("#") else f"#{name}"
+        name = ChannelTarget.normalize_name(name)
         current = self.views(threads)
         if name not in current:
             raise ValueError(f"Unknown channel: {name!r}")
@@ -189,7 +184,7 @@ class CatalogDocument:
         if type(archived) is not bool:
             raise ValueError("Channel archived state must be boolean.")
         if parent is not None:
-            parent = parent if parent.startswith("#") else f"#{parent}"
+            parent = ChannelTarget.normalize_name(parent)
             if parent not in current:
                 raise ValueError(f"Unknown parent channel: {parent!r}")
             if current[parent].builtin is not None:
@@ -201,7 +196,7 @@ class CatalogDocument:
     def set_any_mode(self, name: str, enabled: bool, threads: Mapping[str, ThreadProvenance]) -> Channel:
         if type(enabled) is not bool:
             raise ValueError("Channel any_mode must be boolean.")
-        name = name if name.startswith("#") else f"#{name}"
+        name = ChannelTarget.normalize_name(name)
         channel = self.views(threads).get(name)
         if channel is None or not channel.exact or channel.builtin is not None:
             raise ValueError("Only existing exact tag channels support any_mode.")

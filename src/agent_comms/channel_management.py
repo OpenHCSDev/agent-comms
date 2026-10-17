@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 
 from .active_route import guard_original_root_write
-from .channel_targets import Tag
+from .channel_targets import ChannelTarget, Tag
 from .channels import Channel, SavedView
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
@@ -155,13 +155,13 @@ class ChannelManagement:
         self, name: str, *, add: frozenset[str] = frozenset(), remove: frozenset[str] = frozenset()
     ) -> Thread:
         for tag in add | remove:
-            Tag(tag)
+            Tag.validate(tag)
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             return self._update_tags_locked(name, add=add, remove=remove)
 
     def replace_tags(self, name: str, tags: frozenset[str]) -> Thread:
         for tag in tags:
-            Tag(tag)
+            Tag.validate(tag)
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             return self._update_tags_locked(thread.name, add=tags - thread.tags,
@@ -220,7 +220,7 @@ class ChannelManagement:
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             threads = self.registry.all_threads()
             with self.catalog.editing() as document:
-                target = name if name.startswith('#') else f'#{name}'
+                target = ChannelTarget.normalize_name(name)
                 channel = document.views(threads).get(target)
                 if channel is None:
                     raise ValueError(f'Unknown channel: {target!r}')
@@ -250,7 +250,7 @@ class ChannelManagement:
                 return document.set_preferences(name, threads, pinned=pinned)
 
     def set_thread_pinned(self, channel: str, name: str, pinned: bool) -> None:
-        canonical_channel = channel if channel.startswith("#") else f"#{channel}"
+        canonical_channel = ChannelTarget.normalize_name(channel)
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             snapshot = self.registry.snapshot()
@@ -269,7 +269,7 @@ class ChannelManagement:
                 document.set_thread_pinned(canonical_channel, thread.name, pinned)
 
     def rename_tag(self, name: str, new_name: str) -> None:
-        Tag(new_name)
+        Tag.validate(new_name)
         if name == new_name:
             if name not in self.catalog.read().all_tags(self.registry.all_threads()):
                 raise ValueError(f"Unknown tag: {name!r}")
@@ -278,7 +278,7 @@ class ChannelManagement:
 
     def delete_tag(self, name: str, *, disposition: TagDisposition = KeepThreadsTagDisposition(),
                    confirmed: bool = False) -> TagChangeResult:
-        Tag(name)
+        Tag.validate(name)
         if disposition.requires_confirmation and not confirmed:
             raise ValueError(disposition.confirmation(name))
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
@@ -289,7 +289,7 @@ class ChannelManagement:
             return disposition.apply(self, name, cohort)
 
     def _change_tag(self, name: str, replacement: str | None) -> None:
-        Tag(name)
+        Tag.validate(name)
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             if name not in self.catalog.read().all_tags(self.registry.all_threads()):
                 raise ValueError(f"Unknown tag: {name!r}")
