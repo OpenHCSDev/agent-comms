@@ -63,9 +63,19 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     def history_locations(self, thread, registry, visited):
         yield self, False
+        yield from self.inherited_history(thread, registry, visited)
+
+    def inherited_history(self, thread, registry, visited):
+        if thread.name in visited:
+            return
+        visited.add(thread.name)
+        if thread.parent is not None:
+            parent = registry.require(thread.parent)
+            for location, _ in parent.runtime.history_locations(parent, registry, visited):
+                yield location, True
 
     def external_records(self, root, incarnation):
-        raise ValueError("A saved runtime cannot publish an external transcript")
+        raise ValueError("A native session cannot publish an external transcript")
 
     @abstractmethod
     def select_session(self, directory, execution): ...
@@ -111,13 +121,7 @@ class UnstartedRuntime(RuntimeLocation):
         return {"resumable": False}
 
     def history_locations(self, thread, registry, visited):
-        if thread.name in visited:
-            return
-        visited.add(thread.name)
-        if thread.parent is not None:
-            parent = registry.require(thread.parent)
-            for location, _ in parent.runtime.history_locations(parent, registry, visited):
-                yield location, True
+        yield from self.inherited_history(thread, registry, visited)
         yield self, bool(thread.parent)
 
     def external_records(self, root, incarnation):

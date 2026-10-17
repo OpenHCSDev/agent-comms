@@ -69,11 +69,9 @@ class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
         if not receipt.current(snapshot, current, receipt.before):
             raise RelationViolationError("Unrecorded native send has no exact stopped release")
 
-    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
-        # Selection can launch before get_state/send admission records a session.
-        # The exact stopped declaration still owns an existing saved selection;
-        # an unopened owner instead has only its allocated session directory.
-        return tuple(files.session for files in receipt.thread.runtime.storage_files())
+    def recovery_session_files(self, row, stopped) -> tuple[Path, ...]:
+        # An unopened owner has no stored runtime files to recover.
+        return tuple(files.session for files in stopped.thread.runtime.storage_files())
 
 
 @dataclass(frozen=True)
