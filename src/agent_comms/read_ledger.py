@@ -7,7 +7,6 @@ identity still determine whether those reads apply.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -31,9 +30,9 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
-    messages: dict[str, ReadCursor] = field(default_factory=dict)
+    messages: dict[RecordedThreadIncarnation, dict[Conversation, ReadCursor]] = field(default_factory=dict)
     bus_identity: tuple[int, int] | None = None
-    transcripts: dict[str, int] = field(default_factory=dict)
+    transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
     notice: str | None = None
 
     def cursor(
@@ -45,14 +44,11 @@ class ReadDocument:
         recorded = FileIdentity(*self.bus_identity) if self.bus_identity is not None else None
         if recorded != source:
             return ReadCursor()
-        cursors = []
-        for key, cursor in self.messages.items():
-            name, created, raw = json.loads(key)
-            if snapshot.canonical_name(name) == viewer and created == thread.created_at:
-                conversation = Conversation.from_wire(raw)
-                if conversation.current(snapshot):
-                    cursors.append(cursor)
-        return ReadCursor.union(cursors)
+        return ReadCursor.union(
+            cursor for owner in thread.incarnation.recorded_names(snapshot)
+            for conversation, cursor in self.messages.get(owner, {}).items()
+            if conversation.current(snapshot)
+        )
 
 
 class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
@@ -91,10 +87,6 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
             participants=tuple(snapshot.participant(name).incarnation for name in names)
         )
 
-    @staticmethod
-    def _key(viewer: str, created_at: float, conversation: Conversation) -> str:
-        return json.dumps([viewer, created_at, conversation.to_wire()], separators=(",", ":"))
-
     def capture(
         self,
         viewer: str,
@@ -129,9 +121,10 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
             messages = (
                 dict(document.messages) if document.bus_identity == displayed.bus_identity else {}
             )
+            conversations = dict(messages.get(displayed.viewer_identity, {}))
             for item in displayed.conversations:
-                key = self._key(viewer, displayed.viewer_created_at, item.conversation)
-                messages[key] = messages.get(key, ReadCursor()).add(item.sequences)
+                conversations[item.conversation] = conversations.get(item.conversation, ReadCursor()).add(item.sequences)
+            messages[displayed.viewer_identity] = conversations
             return (
                 replace(document, messages=messages, bus_identity=displayed.bus_identity)
                 if messages != document.messages or document.bus_identity != displayed.bus_identity
@@ -206,17 +199,9 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
             str(Path(thread.session_file).resolve()) for thread in threads if thread.session_file
         }
 
-        def retained_message(key: str) -> bool:
-            name, created, _ = json.loads(key)
-            return RecordedThreadIncarnation(name, created) not in viewers
-
-        def retained_transcript(key: str) -> bool:
-            name, source, _ = json.loads(key)
-            return source not in sources and name not in viewer_names
-
         def remove(document: ReadDocument) -> ReadDocument:
-            messages = {k: v for k, v in document.messages.items() if retained_message(k)}
-            transcripts = {k: v for k, v in document.transcripts.items() if retained_transcript(k)}
+            messages = {k: v for k, v in document.messages.items() if k not in viewers}
+            transcripts = {k: v for k, v in document.transcripts.items() if k[1] not in sources and k[0] not in viewer_names}
             if messages == document.messages and transcripts == document.transcripts:
                 return document
             return replace(document, messages=messages, transcripts=transcripts)
@@ -224,8 +209,8 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         self.update(remove)
 
     @staticmethod
-    def _transcript_key(viewer: str, source: str, inode: int) -> str:
-        return json.dumps([viewer, str(Path(source).resolve()), inode])
+    def _transcript_key(viewer: str, source: str, inode: int) -> tuple[str, str, int]:
+        return viewer, str(Path(source).resolve()), inode
 
     def transcript_seen(
         self, viewer: str, source: str, inode: int, *, document: ReadDocument | None = None

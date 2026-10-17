@@ -9,6 +9,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.read_basis import ReadCursor
 
 
 def prepared(root):
@@ -18,32 +19,17 @@ def prepared(root):
     return comms
 
 
-def test_conversation_persisted_pairs_decode_once_without_an_encode_round_trip():
-    from unittest.mock import patch
-
+def test_typed_read_keys_round_trip_through_the_store_codec():
     from agent_comms.field_codec import FieldCodec
     from agent_comms.read_basis import Conversation
+    from agent_comms.read_ledger import ReadDocument
 
-    conversation = Conversation(participants=(RecordedThreadIncarnation("alice", 1.0),))
-    encoded = conversation.to_wire()
-    assert encoded == {"target": "", "participants": [["alice", 1.0]]}
-    with patch.object(FieldCodec, "encode", side_effect=AssertionError("Already decoded")):
-        assert Conversation.from_wire(encoded) == conversation
-    assert encoded == {"target": "", "participants": [["alice", 1.0]]}
-
-
-@pytest.mark.parametrize("raw", [
-    {"target": "#team", "participants": [], "unknown": 1},
-    {"target": 2, "participants": []},
-    {"participants": [["alice", True]]},
-    {"participants": [["alice"]]},
-    {"participants": {}},
-])
-def test_conversation_pair_boundary_retains_strict_codec_validation(raw):
-    from agent_comms.read_basis import Conversation
-
-    with pytest.raises((TypeError, ValueError)):
-        Conversation.from_wire(raw)
+    owner = RecordedThreadIncarnation("viewer", 1.0)
+    conversation = Conversation(participants=(owner,))
+    document = ReadDocument(messages={owner: {conversation: ReadCursor(2)}})
+    encoded = FieldCodec.encode(document)
+    assert encoded["messages"][0][0] == {"name": "viewer", "created_at": 1.0}
+    assert FieldCodec.decode(ReadDocument, encoded) == document
 
 
 def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
@@ -98,7 +84,7 @@ def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp
     comms.channels.update_tags("bob", add=frozenset({"team"}))
     reopened = wire(tmp_path)
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
-    seen = reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot())
+    seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
     assert hidden.seq not in seen and shown.seq in seen
     assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
 
@@ -188,7 +174,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     comms.registry.remove("alice")
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     fresh = comms.messaging.send_message("alice", viewer, "new incarnation unseen")
-    assert old.seq not in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert old.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     assert comms.bus.pending_count(viewer, "alice") == 1
     assert [row.seq for row in comms.bus.inbox(viewer, "alice")] == [fresh.seq]
 
@@ -222,8 +208,8 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
                 expected_scope=scope,
             )
         comms = wire(tmp_path)
-        seen = comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
-        assert seen == shown
+        seen = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
+        assert seen == ReadCursor().add(tuple(shown))
 
 
 def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
@@ -244,7 +230,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     )
     comms.bus.reads.mark_displayed(viewer, basis)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
-    assert comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot()) == {2, 4, 6}
+    assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor(exceptions=(2, 4, 6))
 
 
 def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
@@ -263,7 +249,7 @@ def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
 
     with pytest.raises(RelationViolationError, match="checkpoint root/inode/size changed"):
         comms.views.viewer_snapshot(str(tmp_path))
-    assert not comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert not comms.bus.reads.cursor(viewer, comms.registry.snapshot())
 
 
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
@@ -287,10 +273,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
         comms.registry.register(Thread("unrelated", frozenset(), str(tmp_path)))
     reopened = wire(tmp_path)
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
-    assert reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot()) == {
-        messages[2].seq,
-        messages[4].seq,
-    }
+    assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor(exceptions=(messages[2].seq, messages[4].seq))
     assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
 
 
@@ -401,6 +384,6 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
             )
             assert child.returncode == 9, child.stderr.decode()
             comms = wire(tmp_path)
-        seen = comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
-        assert seen <= current_sequences(painted), (seed, index, operation)
-        assert seen == current_sequences(acknowledged), (seed, index, operation)
+        seen = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
+        assert ReadCursor.union((seen, ReadCursor().add(tuple(current_sequences(painted))))) == ReadCursor().add(tuple(current_sequences(painted))), (seed, index, operation)
+        assert seen == ReadCursor().add(tuple(current_sequences(acknowledged))), (seed, index, operation)

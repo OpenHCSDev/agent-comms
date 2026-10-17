@@ -20,10 +20,9 @@ from typing import TYPE_CHECKING, TextIO
 from .channel_targets import is_channel_target
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec
 from .private_path import FileRevision
 from .store_files import _store_lock
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadIncarnationRecord
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 class DisplaySelection(ABC):
     """The conversation selected by an original page or store observation."""
@@ -170,24 +169,6 @@ class Conversation:
 
     def current(self, snapshot: RegistryProvenance) -> bool:
         return all(participant.current(snapshot) for participant in self.participants)
-
-    def to_wire(self) -> dict:
-        """Encode the persisted participant pair format."""
-        data = FieldCodec.encode(replace(self, participants=()))
-        data["participants"] = FieldCodec.encode(
-            tuple((p.name, p.created_at) for p in self.participants)
-        )
-        return data
-
-    @classmethod
-    def from_wire(cls, raw: dict) -> Conversation:
-        """Decode participant pairs once at the persisted-key boundary."""
-        data = dict(raw)
-        pairs = FieldCodec.decode(tuple[tuple[str, float], ...], data.pop("participants"))
-        return replace(
-            FieldCodec.decode(cls, data),
-            participants=tuple(ThreadIncarnationRecord.decode(*pair) for pair in pairs),
-        )
 
 
 @dataclass(frozen=True, slots=True)
