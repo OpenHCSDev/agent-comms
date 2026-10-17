@@ -1,6 +1,6 @@
 """S8 extension experiments and canonical saved-data contracts."""
 
-from agent_comms.goals import GoalProgress, GoalReport, ReportedGoalProgress, TextGoalProgress, Unfinished
+from agent_comms.goals import GoalProgress, GoalReport, NoGoalProgress, ReportedGoalProgress, TextGoalProgress, Unfinished
 from agent_comms.field_codec import FieldCodec
 import json
 from dataclasses import dataclass, replace
@@ -36,15 +36,23 @@ from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("progress, expected", [
-    (TextGoalProgress(), ()),
-    (TextGoalProgress("A saved note"), ("A saved note",)),
+    (NoGoalProgress(), [("hide",)]),
+    (TextGoalProgress("A saved note"), [("show", "A saved note")]),
     (ReportedGoalProgress(GoalReport("Cause", "Removed copy", Unfinished("Evidence"), "Next action")),
-     ("Stupid: Cause\nDeleted: Removed copy\nDelivery: Evidence\nNext: Next action",)),
+     [("show", "Stupid: Cause\nDeleted: Removed copy\nDelivery: Evidence\nNext: Next action")]),
 ])
-def test_progress_members_emit_their_display_text_after_wire_roundtrip(progress, expected):
+def test_progress_members_own_their_display_after_wire_roundtrip(progress, expected):
+    calls = []
+    class View:
+        def show_progress(self, text):
+            calls.append(("show", text))
+        def hide_progress(self):
+            calls.append(("hide",))
     decoded = FieldCodec.decode(GoalProgress, FieldCodec.encode(progress))
     assert type(decoded) is type(progress)
-    assert decoded.texts() == expected
+    decoded.present(View())
+    assert calls == expected
+    assert FieldCodec.decode(GoalProgress, "") == NoGoalProgress()
     assert "__bool__" not in GoalProgress.__dict__
 
 
@@ -169,7 +177,7 @@ def test_cas_rejects_aba_and_unknown_payload_without_effects(owner):
     comms, goal = owner
     previous = comms.goals.goal_snapshot("worker")
     current = comms.goals.update_goal("worker", ActiveGoalAction(progress=TextGoalProgress("same")))
-    current = comms.goals.update_goal("worker", ActiveGoalAction(progress=TextGoalProgress("")))
+    current = comms.goals.update_goal("worker", ActiveGoalAction(progress=NoGoalProgress()))
     assert current != goal
     action = GoalAction.from_payload({"kind": "completed", "progress": "done"})
     with pytest.raises(ValueError, match="changed during resume"):

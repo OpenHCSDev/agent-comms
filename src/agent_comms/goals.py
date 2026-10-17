@@ -77,24 +77,42 @@ class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
     def block_reason(self) -> str:
         return str(self)
 
-    @abstractmethod
-    def texts(self) -> tuple[str, ...]:
-        """Display text owned by this progress case; an empty case emits none."""
-        ...
+    def present(self, view) -> None:
+        view.show_progress(str(self))
+
+
+@dataclass(frozen=True)
+class NoGoalProgress(GoalProgress):
+    def __str__(self) -> str:
+        return ""
+
+    def to_wire(self):
+        return ""
+
+    def present(self, view) -> None:
+        view.hide_progress()
+
+    def noted(self, note: str) -> GoalProgress:
+        return TextGoalProgress.from_json_value(note)
 
 
 @dataclass(frozen=True)
 class TextGoalProgress(GoalProgress, JsonShapeMember):
-    value: str = ""
+    value: str
+
+    def __post_init__(self):
+        if self.value == "":
+            raise ValueError("Empty progress is NoGoalProgress, not a text note")
+
+    @classmethod
+    def from_json_value(cls, value):
+        return NoGoalProgress() if value == "" else cls(value)
 
     def __str__(self) -> str:
         return self.value
 
-    def texts(self) -> tuple[str, ...]:
-        return (self.value,) if self.value else ()
-
     def noted(self, note: str) -> TextGoalProgress:
-        return type(self)(f"{self.value}\n\n{note}" if self.value else note)
+        return type(self)(f"{self.value}\n\n{note}")
 
     def failed(self, diagnostic: str) -> TextGoalProgress:
         return type(self)(diagnostic)
@@ -109,9 +127,6 @@ class ReportedGoalProgress(GoalProgress, JsonShapeMember):
 
     def __str__(self) -> str:
         return str(self.value)
-
-    def texts(self) -> tuple[str, ...]:
-        return (str(self.value),)
 
     @property
     def block_reason(self) -> str:
@@ -362,7 +377,7 @@ class Goal:
 
     text: str
     id: str
-    progress: GoalProgress = field(default_factory=TextGoalProgress)
+    progress: GoalProgress = field(default_factory=NoGoalProgress)
     revision: int = 0
     reported_turn: str | None = None
     mention_source: GoalMentionSource | None = None
