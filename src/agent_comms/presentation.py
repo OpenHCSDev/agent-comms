@@ -819,13 +819,14 @@ class CoordinationSnapshot:
 
     def mention_candidates(self, channel: str) -> tuple[MentionCandidate, ...]:
         view = self.channels.get(channel)
-        members = frozenset(view.members) if view else frozenset()
+        if view is None:
+            return ()
         return tuple(
             sorted(
                 (
-                    MentionCandidate(person.thread.name, person.presentation.title)
-                    for person in self.threads.values()
-                    if person.thread.name in members
+                    MentionCandidate(name, person.presentation.title)
+                    for name in view.members
+                    if (person := self.threads.get(name)) is not None
                 ),
                 key=lambda candidate: candidate.name.casefold(),
             )
