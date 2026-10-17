@@ -12,6 +12,10 @@ from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from agent_comms.activity import ActivityState
+from agent_comms.field_codec import FieldCodec
+from agent_comms.native_tools import BashTool, ReadTool, EditTool, WriteTool, GrepTool, GlobTool
+from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.tool_results import ToolDiff
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -207,6 +211,68 @@ class ThinkingBlock(RedactedThinking):
             record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp),)))
 
 
+class ClaudeToolArguments(WireModel):
+    claude_names: ClassVar[tuple[str, ...]] = ()
+    declaration: ClassVar[type[ToolDeclaration]]
+    types: ClassVar[dict[str, type[ClaudeToolArguments]]] = {}
+    detail: str
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for name in cls.claude_names:
+            cls.types[name] = cls
+
+    def diff(self) -> ToolDiff | None:
+        return None
+
+
+class ClaudeCommandArguments(ClaudeToolArguments):
+    claude_names, declaration = ('Bash',), BashTool
+    detail: str = Field(alias='command')
+
+
+class ClaudePatternArguments(ClaudeToolArguments):
+    claude_names, declaration = ('Grep',), GrepTool
+    detail: str = Field(alias='pattern')
+
+
+class ClaudeGlobArguments(ClaudePatternArguments):
+    claude_names, declaration = ('Glob',), GlobTool
+
+
+class ClaudePathArguments(ClaudeToolArguments):
+    claude_names, declaration = ('Read',), ReadTool
+    detail: str = Field(alias='file_path')
+
+
+class ClaudeReplacement(WireModel):
+    old_string: str
+    new_string: str
+
+
+class ClaudeEditArguments(ClaudePathArguments):
+    claude_names, declaration = ('Edit', 'MultiEdit'), EditTool
+    edits: list[ClaudeReplacement]
+
+    @model_validator(mode='before')
+    @classmethod
+    def replacements(cls, value):
+        return value if 'edits' in value else {**value, 'edits': [value]}
+
+    def diff(self) -> ToolDiff:
+        return ToolDiff(''.join(patch.text for edit in self.edits
+            if (patch := ToolDiff.from_versions(self.detail, edit.old_string, edit.new_string)) is not None))
+
+
+class ClaudeWriteArguments(ClaudePathArguments):
+    claude_names, declaration = ('Write',), WriteTool
+    content: str
+
+    def diff(self) -> ToolDiff | None:
+        return ToolDiff.from_versions(self.detail, '', self.content,
+                                     before_path=self.detail + ' (previous content not supplied)')
+
+
 class ToolUse(AssistantBlock):
     wire_tag = 'tool_use'
     id: str
@@ -214,7 +280,12 @@ class ToolUse(AssistantBlock):
     input: JsonValue
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        call = ToolCall(self.id, self.name, self.input)
+        arguments_type = ClaudeToolArguments.types.get(self.name)
+        if arguments_type is None:
+            call = ToolCall(self.id, self.name, self.input)
+        else:
+            arguments = arguments_type.model_validate(self.input)
+            call = ToolCall(self.id, FieldCodec.encode(arguments.declaration), self.input, arguments.detail, arguments.diff())
         session.started(call)
         return (ActiveItem(session.turn, self.id, ActivityState.WORKING, call.title),)
 

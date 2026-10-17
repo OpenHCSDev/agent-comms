@@ -1,4 +1,5 @@
 """Canonical original-bus batch capture and one-use native reservation."""
+from binding_reads import binding_rows
 
 import asyncio
 import json
@@ -15,7 +16,7 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, pending_seal
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
-from agent_comms.native_prompt_binding import bind_expected_prompt, read_expected_prompt_binding
+from agent_comms.native_prompt_binding import bind_expected_prompt
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_send_stage import TriageNativeSend
 from agent_comms.selected_participant import SelectedParticipant
@@ -112,7 +113,7 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
                 owner=selected.owner.thread, generation=selected.identity.generation,
                 prompt=prompt,
             )
-            binding = read_expected_prompt_binding(store, input_id)
+            binding = binding_rows(store, (input_id,)).get(input_id)
             assert binding.input_id == input_id
             with store.session.read():
                 assert len(NativeRuntimeInput.select(store.session._connection)) == 1

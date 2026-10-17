@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from agent_comms import agent_events as events
 from agent_comms import backend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
 from agent_comms.comms import Comms
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun, join_retirement
@@ -146,7 +146,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         return True
 
     async def run(self, text, *, followup=None, queue=None, **options):
-        queue = queue if queue is not None else asyncio.Queue()
+        queue = queue if queue is not None else TurnInbox()
         result = []
         async with asyncio.timeout(25):
             async for event in backend.stream_agent_events(

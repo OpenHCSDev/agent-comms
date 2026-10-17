@@ -32,44 +32,29 @@ class PromptSendNotWritten(PromptSendFailure):  # noqa: N818 - original prebyte 
     """The writer never acquired its original admission or wrote this payload."""
 
 
-class PromptAdmissionBusy(RuntimeError):  # noqa: N818 - nominal pre-admission outcome
-    """Exclusion was unavailable before admission, mutation or any prompt byte."""
-
-
 def _enter_admission(
     fd: int,
     boundary: Callable[[], AbstractContextManager[None]],
     cancelled: threading.Event,
     measurements: PublicationMeasurements,
 ) -> ExitStack:
-    """Acquire cancellable admission without spending an irreversible-write budget.
-
-    Every refused probe closes its partial custody. Only the successful original
-    boundary can admit this payload; cancellation here proves no prompt write.
-    """
-    busy: PromptAdmissionBusy | None = None
+    """Let the lock owners wait before starting the pipe-write deadline."""
+    if cancelled.is_set():
+        raise PromptSendNotWritten("Native prompt cancelled before writing any bytes")
     pipe = select.poll()
     pipe.register(fd, select.POLLERR | select.POLLHUP | select.POLLNVAL)
-    while True:
+    if pipe.poll(0):
+        raise PromptSendNotWritten("Native pipe closed before writing any bytes")
+    scope = ExitStack()
+    try:
+        with measurements.operation("prompt_locks"):
+            scope.enter_context(boundary())
         if cancelled.is_set():
-            raise PromptSendNotWritten(
-                "Native prompt admission cancelled before writing any bytes"
-            ) from busy
-        if pipe.poll(0):
-            raise PromptSendNotWritten("Native pipe closed before prompt admission")
-        scope = ExitStack()
-        try:
-            with measurements.operation("admission_probe"):
-                scope.enter_context(boundary())
-        except PromptAdmissionBusy as error:
-            busy = error
-            scope.close()
-            cancelled.wait(0.01)
-        except BaseException:
-            scope.close()
-            raise
-        else:
-            return scope
+            raise PromptSendNotWritten("Native prompt cancelled before writing any bytes")
+        return scope
+    except BaseException:
+        scope.close()
+        raise
 
 
 def _write_fenced(
