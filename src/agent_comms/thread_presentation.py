@@ -18,29 +18,39 @@ if TYPE_CHECKING:
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
 
 
+@dataclass(frozen=True, kw_only=True)
 class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus"):
     """Display activity and warnings, not registry presence or turn authority."""
 
     working: ClassVar[bool] = False
-    details: ClassVar[tuple[str, ...]] = ()
+    details: tuple[str, ...] = ()
 
     def when_idle(self, ordinary: ThreadPresentation,
                   present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
         """Compose idle-only explanations without replacing genuine work."""
-        return ordinary if self.working else present(ordinary)
+        if self.working:
+            return ordinary
+        shown = present(ordinary)
+        return shown.status.with_attention(*self.details).present_attention(shown)
+
+    def present_attention(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        """Warnings change idle paint, never the summary of real work."""
+        if self.details and not self.working:
+            ordinary = replace(ordinary, marker="!", summary=self.details[0])
+        return replace(ordinary, status=self)
 
     def activity_presentation(self, title: str, activity: str, detail: str) -> ThreadPresentation:
-        return ThreadPresentation(title, "✓", "Ready", status=self)
+        return self.present_attention(ThreadPresentation(title, "✓", "Ready", status=self))
 
     def require_activity_detail(self, detail: str) -> None:
         if detail and not self.working:
             raise RelationViolationError("Idle activity cannot carry a detail.")
 
     def with_attention(self, *details: str) -> ThreadPresentationStatus:
-        return AttentionThreadPresentationStatus(self, details)
+        return replace(self, details=(*self.details, *details))
 
     def without_work(self) -> ThreadPresentationStatus:
-        return IdleThreadPresentationStatus()
+        return IdleThreadPresentationStatus(details=self.details)
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,27 +67,6 @@ class WorkingThreadPresentationStatus(ThreadPresentationStatus):
         if detail := " ".join(detail.split()):
             summary += f" · {detail}"
         return ThreadPresentation(title, "⌛", summary, status=self)
-
-
-@dataclass(frozen=True, slots=True)
-class AttentionThreadPresentationStatus(ThreadPresentationStatus):
-    activity: ThreadPresentationStatus
-    details: tuple[str, ...] = ()
-
-    @property
-    def working(self) -> bool:
-        return self.activity.working
-
-    def when_idle(self, ordinary: ThreadPresentation,
-                  present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
-        projected = self.activity.when_idle(ordinary, present)
-        return replace(projected, status=projected.status.with_attention())
-
-    def with_attention(self, *details: str) -> ThreadPresentationStatus:
-        return replace(self, details=(*self.details, *details)) if details else self
-
-    def without_work(self) -> ThreadPresentationStatus:
-        return replace(self, activity=self.activity.without_work())
 
 
 @dataclass(frozen=True, slots=True)
