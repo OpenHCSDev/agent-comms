@@ -40,7 +40,7 @@ class Comms:
         self.agents = AgentActivity(self.root, self.registry)
         self.ledger = CollaborationLedger(self.root / CollaborationLedger.filename, self.registry)
         self.owners = OwnerLifecycle(self.root, self.registry, self.bus)
-        self.goals = Goals(self.root, self.registry, self.bus)
+        self.goals = Goals(self.root, self.registry, self.bus, self.agents)
         self.transcripts = Transcripts(self.root, self.registry, self.bus, self.messaging)
         self.threads = ThreadManagement(
             self.root, self.registry, self.bus,

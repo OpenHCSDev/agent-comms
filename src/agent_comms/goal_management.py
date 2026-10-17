@@ -17,6 +17,7 @@ from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait
 from .registration import Registration
+from .agent_activity import AgentActivity
 
 if TYPE_CHECKING:
     from .agent_events import GoalChanged
@@ -33,10 +34,11 @@ _LOG = logging.getLogger(__name__)
 
 
 class Goals:
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus):
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus, agents: AgentActivity):
         self.root = root
         self.registry = registry
         self.bus = bus
+        self.agents = agents
         self._wire_lock_path = root / "wire"
         self.waits = GoalWaits(root / GoalWaits.filename)
         self.goal_store: GoalAttemptStore | None = None
@@ -192,7 +194,7 @@ class Goals:
             snapshot = self.registry.snapshot()
             canonical = snapshot.canonical_name(name)
             owner = snapshot.threads.get(canonical)
-            if owner is None or owner.executing:
+            if owner is None or self.agents.is_working(owner.incarnation, snapshot):
                 return ()
             goal = owner.active_goal
             if goal is None:
@@ -205,7 +207,7 @@ class Goals:
                 or not wait.current_for(goal, owner.created_at)
             ):
                 return ()
-            closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot)
+            closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot, self.agents)
             if not closed:
                 return ()
             # An unreadable bus raises to the drain loop, which records it as
@@ -270,7 +272,7 @@ class Goals:
                         for index, target in enumerate(wait.targets)
                     )
                     or any(
-                        GoalWaits.target_has_active_turn(target, snapshot)
+                        self.agents.is_working(target.incarnation, snapshot)
                         for target in wait.targets
                     )
                 ):
@@ -328,10 +330,7 @@ class Goals:
         snapshot = self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
         goal = snapshot.threads[canonical].goal
-        execution = (
-            GoalWaits.for_goal(goal, self.waits.read()).project(goal, snapshot)
-            if goal is not None else None
-        )
+        execution = GoalWaits.execution(goal, self.waits.read(), snapshot, self.agents)
         return goal, execution
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
