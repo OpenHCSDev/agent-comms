@@ -1,1 +1,0 @@
-Owner: core-pi-durable; purpose: P107 source/AST/ratchet and bounded UI checks; paths: /home/ts/wt/core-p107/.artifacts/p107, /home/ts/wt/toad-p107; preserve inherited UNKNOWN /home/ts/.cache/agent-scratch/core-commander-2/p107-runtime unchanged.
