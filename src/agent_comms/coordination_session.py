@@ -83,15 +83,13 @@ class CoordinationSession(CoordinationStore):
         if db.in_transaction:
             yield
             return
-        try:
+        with CoordinationReadUnavailable.checking():
             try:
                 self.begin_snapshot(db)
                 yield
             finally:
                 if db.in_transaction:
                     db.execute("ROLLBACK")
-        except sqlite3.OperationalError as error:
-            CoordinationReadUnavailable.raise_from(error)
 
 
 class NativeBoundary(ExitStack):
