@@ -35,32 +35,6 @@ def test_installed_owner_and_alias_use_route_and_full_package_verification(tmp_p
     assert verified == [package, package]
 
 
-def test_running_owner_keeps_its_start_launcher_after_runtime_relink(tmp_path, monkeypatch):
-    package = tmp_path / "package"
-    old = tmp_path / "old-runtime" / "bin" / "pi-comms-native"
-    new = tmp_path / "new-runtime" / "bin" / "pi-comms-native"
-    for executable in (old, new):
-        executable.parent.mkdir(parents=True)
-        executable.write_text("#!/bin/sh\nexit 1\n")
-        executable.chmod(0o700)
-    current = tmp_path / "bin" / "pi-comms-native"
-    current.parent.mkdir()
-    current.symlink_to(old)
-    route = PrivateNkLaunch(tmp_path, "f" * 32, package, None)
-    monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
-    monkeypatch.setattr(native_pi.sys, "executable", str(new.with_name("python")))
-    from agent_comms.native_arguments import NativeArguments
-    monkeypatch.setattr(
-        NativeArguments, "owner_launcher", classmethod(lambda cls, runtime: str(old))
-    )
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
-
-    current.unlink()
-    current.symlink_to(new)
-    assert NativePiRpcLaunch.package_for_command(str(old), LaunchRuntime.running()) == package
-
-
 def test_unconfigured_owner_launcher_cannot_fall_back_to_legacy_pi(tmp_path, monkeypatch):
     launcher(tmp_path, monkeypatch, None)
     with pytest.raises(NativePiUnavailable, match="configured pinned package"):
@@ -78,14 +52,37 @@ def test_route_does_not_override_native_package_commitment(tmp_path, monkeypatch
         NativePiRpcLaunch.package_for_command("pi-comms-native", LaunchRuntime.running())
 
 
-def test_direct_pinned_cli_uses_same_package_authority(tmp_path, monkeypatch):
-    package = tmp_path / "package"
-    cli = package / "dist" / "cli.js"
-    cli.parent.mkdir(parents=True)
-    cli.touch()
-    monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: PrivateNkLaunch(tmp_path, "f" * 32, package, None)))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
-    verified = []
-    monkeypatch.setattr(native_pi, "_trusted_package", verified.append)
-    assert NativePiRpcLaunch.package_for_command(str(cli), LaunchRuntime.running()) == package
-    assert verified == [package]
+async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch):
+    import os
+    import site
+    import venv
+    from pathlib import Path
+
+    from agent_comms.fresh_private_session import create_fresh_private_session
+    from agent_comms.pi_native_backend import PiNativeBackend
+    from agent_comms.threads import Thread
+
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    selected = tmp_path / "selected-core"
+    venv.EnvBuilder(with_pip=False, symlinks=True).create(selected)
+    (selected / "bin/pi-comms-native").symlink_to(LaunchRuntime.running().native_entrypoint)
+    library = next(selected.glob("lib/python*/site-packages"))
+    marker = tmp_path / "selected-python"
+    source = Path(__file__).resolve().parents[1] / "src"
+    (library / "core-source.pth").write_text("\n".join([
+        str(source), *site.getsitepackages(),
+        f"import pathlib, sys; pathlib.Path({str(marker)!r}).write_text(sys.prefix)",
+    ]) + "\n")
+    configuration = tmp_path / "native-config"
+    configuration.mkdir(mode=0o700)
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(configuration))
+    monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(configuration))
+    parent = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
+    original = parent.path.read_bytes()
+    copied = await PiNativeBackend.fork(
+        Thread("parent", tags=frozenset(), worktree=str(tmp_path), session_file=parent.session_file),
+        str(package / "dist/cli.js"), LaunchRuntime(selected / "bin/python"),
+    )
+    assert marker.read_text() == str(selected)
+    assert Path(copied.path).is_file() and copied.path != parent.session_file
+    assert parent.path.read_bytes() == original
