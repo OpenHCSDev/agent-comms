@@ -17,6 +17,7 @@ from agent_comms.selected_triage import FullSelectedTriage, IgnoreSelectedTriage
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_errors import StaleFence
 from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.notification_progress import SentProgress
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.historical_native_inputs import read_historical_native_inputs
@@ -143,7 +144,7 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
             )
         notices = comms.views.message_notifications_for_references((message.reference,))[(message.seq, message.message_id)]
         alpha = next(row for row in notices if row.recipient == "alpha")
-        assert not alpha.state.startswith(("Answered", "Read"))
+        assert isinstance(alpha.state, SentProgress)
         assert not alpha.busy
 
 
