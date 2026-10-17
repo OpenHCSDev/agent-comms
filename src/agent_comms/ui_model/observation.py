@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Generic, Self, TypeVar, final
 
 from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 from agent_comms.active_route import CommsRoute
+from agent_comms.activity import ObservedActivity
 from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.coordination_errors import (
     CoordinationError,
@@ -573,10 +574,16 @@ class ThreadReading(Observation[ObserveThreads]):
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         previous = self.observed
         presentations, unavailable, busy = {}, {}, set()
+        activity = {}
         names = self.request.names
         try:
+            snapshot = comms.registry.snapshot()
+            captured = comms.agents.all_activity(snapshot.visible_threads(
+                names=names, show_stopped=True, show_archived=False), snapshot=snapshot)
+            activity = {name: captured[canonical] for name in names
+                        if (canonical := snapshot.canonical_name(name)) in captured}
             if previous is not None:
-                names = (revision.changed_threads(previous, comms) | names - previous.changed_since(None)) & names
+                names = (revision.changed_threads(previous, comms, activity) | names - previous.changed_since(None)) & names
             if names:
                 batch = comms.views.thread_presentations(names)
         except UnreadableHistory.DEFERRED_READS:
@@ -598,7 +605,7 @@ class ThreadReading(Observation[ObserveThreads]):
             unavailable.update((name, value) for name, value in previous.unavailable.items()
                                if name in self.request.names and name not in names)
             busy.update(previous.busy & self.request.names - names)
-        observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset())
+        observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset(), activity)
         self.observed = observed
         changed = observed.changed_since(previous) | self.initial
         self.initial = frozenset()
@@ -725,6 +732,7 @@ class ThreadsObserved(Observed):
     unavailable: Mapping[str, UnreadableHistory]
     busy: frozenset[str]
     changed: frozenset[str]
+    activity: Mapping[str, ObservedActivity]
 
     def changed_since(self, previous: ThreadsObserved | None) -> frozenset[str]:
         """Read-state transitions and source-owned changes, independent of store churn."""
