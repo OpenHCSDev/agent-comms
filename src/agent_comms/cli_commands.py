@@ -165,7 +165,7 @@ class ChoiceTargetField(TargetField):
         return ()
 
     @property
-    def choices(self) -> tuple[tuple[str, str], ...]:
+    def choices(self) -> tuple[tuple[str, str | None], ...]:
         return compile_decoder(self.annotation).editor_options(tuple((choice.name, choice.value) for choice in self.options))
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
@@ -192,7 +192,7 @@ class CatalogTargetField(ChoiceTargetField):
             value=FieldCodec.encode_editor(self.annotation, item.value)) for item in options))
 
     def value_schema(self) -> dict[str, object]:
-        return {'type': 'string', 'configuration': FieldCodec.encode(self.catalog)}
+        return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
 
 
 def option(
@@ -262,7 +262,7 @@ class TargetAction:
         return '\n'.join(filter(None, (commands[0].selection_confirmation(tuple(commands))
                                        for commands in groups.values())))
 
-    def edited(self, arguments: dict[str, str]) -> TargetAction:
+    def edited(self, arguments: dict[str, str | None]) -> TargetAction:
         return replace(self, bound=tuple(command.edited(type(command).editor_arguments(arguments))
                                         for command in self.bound))
 
@@ -324,7 +324,7 @@ class TargetEdit(Command):
     """Accepted editor values use the original declaration and fresh binding."""
     declaration: type[CliCommand]
     target: CommandTarget | str | tuple[CommandTarget | str, ...]
-    arguments: dict[str, str]
+    arguments: dict[str, str | None]
     confirmed: bool = False
     channel: str | dict[str, tuple[str, ...]] | None = None
     project: str | None = None
@@ -513,7 +513,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return ()
 
     @classmethod
-    def editor_arguments(cls, values: dict[str, str]) -> dict[str, object]:
+    def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
         hints = get_type_hints(cls)
         declared = {item.metadata.get('wire_name', item.name): item for item in fields(cls)}
         result = {}
