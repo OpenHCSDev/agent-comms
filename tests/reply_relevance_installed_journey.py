@@ -139,7 +139,7 @@ async def run(stage, package):
                             replies = tuple(row for row in publications if row.execution_id == claims[0].lifecycle.execution_id)
                             reply, = replies
                             assert reply.exact_target == '#openhcs'
-                            actual = service.bus.log.message_by_id(reply.message_id)
+                            actual, = service.bus.log.messages_for_references((reply.reference,))
                             assert actual.sender == child.name and actual.body.strip()
                             history = read_historical_native_inputs(store, wire_root_id=root_id,
                                 recipient_lookup=RecordedThreadIncarnation("fixture", service.registry.require(child.name).created_at).lookup,

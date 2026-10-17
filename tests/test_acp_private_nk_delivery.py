@@ -32,13 +32,13 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantStore
+from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from agent_comms.tracked_turn import TrackedTurnSession
 from delivery_owner_fixture import drain_diagnostic, reply_turn_finished
-from test_coordinated_runtime import _fake_model
-from test_coordinated_runtime import tmp_path as private_root_fixture
+from test_coordinated_runtime import _fake_model, tmp_path as private_root_fixture
 from test_native_prompt_binding import _fake_model as separate_session_fake
 from test_backend_native_lifecycle import native_backend as native_backend
 from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
@@ -372,7 +372,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
     with comms.bus.log.locked():
         root_id = comms.bus.log.read_metadata_unlocked().root_id
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": sid, "body": "Compute 17+25"}, caller=NoThreadCaller())
-    original = comms.bus.log.message_by_id(sent["id"])
+    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     before = cursor_envelope((await agent.sessions.metadata(sid)))
     assert before.status == "none"
     assert before.revision >= 1
@@ -664,14 +664,14 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
             )
             assert original.stage is FullNativeExecution
             assert original.require_context_proof().input_id == original.input_id
-        assert comms.bus.log.message_by_id(sent.message_id) == sent
+        assert comms.bus.log.messages_for_references((sent.reference,)) == (sent,)
         assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes
 
 
 async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_path):
     comms, agent, root_id = _session(tmp_path, package=False)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
-    original = comms.bus.log.message_by_id(sent["id"])
+    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root"):
         await agent.inputs.drain_inbox("beta")
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
@@ -707,7 +707,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
         "comms_send",
         {"from": "sender", "to": "#team", "body": "@alpha review this."}, caller=NoThreadCaller(),
     )
-    original = comms.bus.log.message_by_id(sent["id"])
+    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     assert await agent.inputs.drain_inbox("beta") == 0
     assert calls == []
     cursor = cursor_envelope((await agent.sessions.metadata("beta")))
@@ -738,7 +738,7 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     fake, calls = _fake_model(fail_on=1)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
-    assert comms.bus.log.message_by_id(sent["id"]) is not None
+    assert len(comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))) == 1
     assert await agent.inputs.drain_inbox("beta") == 1
     await reply_turn_finished(agent, "beta")
     failure = drain_diagnostic(comms, "beta")
@@ -890,7 +890,7 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
 async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
-    original = comms.bus.log.message_by_id(sent["id"])
+    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     agent._private_nk_wire_root_id = "f" * 32
     with pytest.raises(IdentityConflict, match="original root changed"):
         await agent.inputs.drain_inbox("beta")

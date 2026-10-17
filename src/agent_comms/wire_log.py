@@ -708,15 +708,6 @@ class WireLog:
         with self._record_snapshot() as (through, records):
             yield through, (message for message, _ in records)
 
-    def message_by_id(self, message_id: str) -> Message | None:
-        """Resolve an ID-only request through the canonical opened wire stream.
-
-        Display callers carry original seq/id references and use their bounded
-        certified window. There is no second receipt-offset index or cache.
-        """
-        with self.full_history_snapshot() as (_, messages):
-            return next((message for message in messages if message.message_id == message_id), None)
-
     def messages_for_references(self, references):
         with self._opened_wire_snapshot(need_sequence=False) as opened:
             return opened.messages_for_references(references)
