@@ -102,6 +102,7 @@ def require_no_clients(audience, root):
     # argv spellings (notably multiprocessing's python -c) do not decide it.
     owned_family = {member for owner in audience
                     for member in platform.group_members(owner.process)}
+    refusals = []
     for entry in Path('/proc').iterdir():
         if not entry.name.isdecimal() or int(entry.name) == os.getpid():
             continue
@@ -127,13 +128,18 @@ def require_no_clients(audience, root):
             if identity in owned_family:
                 continue  # Exact incarnations in the original owned process groups only.
             if client or selected_root == os.fsencode(root):
-                raise RuntimeError(f'Unretired or unclassified client: exact process {identity}')
+                refusals.append(f'{identity}: {head!r}')
         except ProcessLookupError:
             continue
         except FileNotFoundError:
             continue
-        # Permission/decoding failures deliberately refuse rather than infer absence.
-
+        except (OSError, ValueError) as error:
+            refusals.append(f'Cannot classify process directory {entry.name}: {error!r}')
+        # Permission/decoding failures refuse with the complete known list;
+        # they never certify that an unreadable client is absent.
+    if refusals:
+        raise RuntimeError('Unretired or unclassified clients (complete observed list):\n'
+                           + '\n'.join(refusals))
 
 
 def require_publication_preimages(original, current):
