@@ -60,7 +60,7 @@ class RecoveryReader:
                 parameters=(execution_id,), order_by=("exact_target",)))
             intents = tuple(PublicationIntents.select(db, where="execution_id=?",
                 parameters=(execution_id,), order_by=("exact_target",)))
-            receipts = tuple(PublicationEvidence.select(db, where="execution_id=?",
+            evidence = tuple(PublicationEvidence.select(db, where="execution_id=?",
                 parameters=(execution_id,), order_by=("exact_target",)))
             connectivity = ConnectivityFacet.one(db, execution_id=execution_id)
             audit = next(
@@ -84,7 +84,7 @@ class RecoveryReader:
                 replay,
                 obligations,
                 intents,
-                receipts,
+                evidence,
                 connectivity,
                 audit,
                 pointer.execution_id,
