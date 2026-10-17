@@ -53,7 +53,7 @@ class AssignedSourceCursor(TranscriptSource, declared_name="wire"):
 
     def __post_init__(self):
         if self.sequence < 0:
-            raise ValueError("Receipt sequence cannot be negative")
+            raise ValueError("Wire sequence cannot be negative")
 
     def position(self, session_file: str, offset: int) -> TranscriptCursor:
         return WireTranscriptCursor(session_file, offset, self)
@@ -64,7 +64,7 @@ class AssignedSourceCursor(TranscriptSource, declared_name="wire"):
 
     def require_source(self, identity: AssignedSourceIdentity) -> None:
         if self.identity != identity:
-            raise ValueError("Receipt cursor belongs to a different transcript source")
+            raise ValueError("Wire cursor belongs to a different transcript source")
 
     def at(self, sequence: int) -> AssignedSourceCursor:
         return replace(self, sequence=sequence)
@@ -72,7 +72,7 @@ class AssignedSourceCursor(TranscriptSource, declared_name="wire"):
 
 @dataclass(frozen=True)
 class AssignedSourceWindow:
-    """Conversation and sent sources captured with one receipt frontier."""
+    """Conversation and sent sources captured with one wire frontier."""
 
     source: TranscriptSource
     sources: tuple[CommittedDelivery, ...]
@@ -113,7 +113,7 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     def wire_rows(self, records, traversal, cursor, *, limit):
         return ()
 
-    def receipt_predicate(self, traversal, through):
+    def wire_predicate(self, traversal, through):
         return traversal.native_prefix(through)
 
     def require_source(self, identity: AssignedSourceIdentity) -> None:
@@ -158,10 +158,10 @@ class WireTranscriptCursor(TranscriptCursor):
         return 0 < sequence <= self.wire.sequence
 
     def wire_rows(self, records, traversal, cursor, *, limit):
-        predicate, parameters = cursor.receipt_predicate(traversal, self.wire)
+        predicate, parameters = cursor.wire_predicate(traversal, self.wire)
         return records.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
 
-    def receipt_predicate(self, traversal, through):
+    def wire_predicate(self, traversal, through):
         return traversal.predicate(self.wire.sequence, through)
 
     def require_source(self, identity: AssignedSourceIdentity) -> None:
@@ -186,13 +186,13 @@ class TranscriptTraversal(ABC):
     def native_prefix(self, through): ...
 
     @abstractmethod
-    def chooses_native(self, native_time, receipt_time): ...
+    def chooses_native(self, native_time, wire_time): ...
 
     @abstractmethod
     def native_position(self, record): ...
 
     @abstractmethod
-    def receipt_position(self, message): ...
+    def wire_position(self, message): ...
 
     @abstractmethod
     def finish(self, records): ...
@@ -215,7 +215,7 @@ class TranscriptTraversal(ABC):
             {event.tool_call_id for event in batch if isinstance(event, closing)},
         )
 
-    def read_records(self, reader, project, receipts, initial, frontier,
+    def read_records(self, reader, project, source, initial, frontier,
                      *, max_messages, max_bytes):
         """Consume each original source coordinate only when its record is read."""
         consumed, records, used = initial, [], 0
@@ -228,7 +228,7 @@ class TranscriptTraversal(ABC):
         projected = project(native, max_records=max_messages + 1, max_bytes=max_bytes)
         try:
             record, events = next(projected, (None, ()))
-            source_rows = iter(frontier.wire_rows(receipts, self, consumed, limit=max_messages + 1))
+            source_rows = iter(frontier.wire_rows(source, self, consumed, limit=max_messages + 1))
             message = next(source_rows, None)
             while record is not None or message is not None:
                 if record is not None and not events:
@@ -243,7 +243,7 @@ class TranscriptTraversal(ABC):
                     message is None
                     or self.chooses_native(native_time, message.message.timestamp)
                 )
-                batch = events if choose_native else receipts.events(message)
+                batch = events if choose_native else source.events(message)
                 cost = record.size if choose_native else sum(event.text_size for event in batch)
                 if records and (len(records) >= max_messages or used + cost > max_bytes):
                     if not open_rounds or round_grace >= self.round_grace_limit:
@@ -258,7 +258,7 @@ class TranscriptTraversal(ABC):
                     consumed = consumed.at_offset(self.native_position(record))
                     record, events = next(projected, (None, ()))
                 else:
-                    consumed = frontier.at_sequence(self.receipt_position(message.message)).at_offset(consumed.offset)
+                    consumed = frontier.at_sequence(self.wire_position(message.message)).at_offset(consumed.offset)
                     message = next(source_rows, None)
             if record is None:
                 consumed = consumed.at_offset(frontier.offset if self.ascending else 0)
@@ -285,13 +285,13 @@ class EarlierTranscript(TranscriptTraversal):
     def native_prefix(self, through):
         return "FALSE", ()
 
-    def chooses_native(self, native_time, receipt_time):
-        return native_time is None or native_time >= receipt_time
+    def chooses_native(self, native_time, wire_time):
+        return native_time is None or native_time >= wire_time
 
     def native_position(self, record):
         return record.start
 
-    def receipt_position(self, message):
+    def wire_position(self, message):
         return message.seq - 1
 
     def finish(self, records):
@@ -314,13 +314,13 @@ class LaterTranscript(TranscriptTraversal):
     def native_prefix(self, through):
         return "w.seq<=?", (through.sequence,)
 
-    def chooses_native(self, native_time, receipt_time):
-        return native_time is None or native_time <= receipt_time
+    def chooses_native(self, native_time, wire_time):
+        return native_time is None or native_time <= wire_time
 
     def native_position(self, record):
         return record.end
 
-    def receipt_position(self, message):
+    def wire_position(self, message):
         return message.seq
 
     def finish(self, records):
