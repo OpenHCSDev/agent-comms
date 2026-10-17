@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
 from .publisher import Publisher
 from .wire_log import OpenedWireSnapshot, WireLog
+from .wire_watch import WatchSource, WireWatch
 
 
 class MessageBus:
@@ -126,7 +127,7 @@ class MessageBus:
 
     def inbox(
         self, name: str, target: str | None = None, *,
-        snapshot: RegistrySnapshot | None = None,
+        snapshot: RegistrySnapshot | None = None, after: MessageReference | None = None,
     ) -> Sequence[Message]:
         """Unread messages delivered to a thread, read without scanning the log.
 
@@ -140,10 +141,11 @@ class MessageBus:
         selection = delivery.selection(target, snapshot, catalog)
         seen = self.reads.cursor(delivery.actor, snapshot)
         with self.log._opened_wire_snapshot() as source:
+            source.messages_for_references((after,) if after is not None else ())
             with OpenedRouteCounts(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
             ) as index:
-                unread = index.unseen_deliveries(delivery.actor, seen)
+                unread = index.unseen_deliveries(delivery.actor, seen, after=after.seq if after else 0)
             if not unread:
                 return []
             listed = ListedDeliveries(
@@ -154,15 +156,12 @@ class MessageBus:
             page = MessagePageRequest.every(listed, after=min(listed.sequences) - 1).read_opened(source)
             return list(page.messages)
 
-    async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment]) -> AsyncIterator[Message]:
+    async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment], after: MessageReference | None = None) -> AsyncIterator[Message]:
         """Yield unread messages, recording only messages the caller takes.
 
         Notifications and inbox reads use the same owners as native delivery.
         Closing before the next read leaves the last message unread.
         """
-        from contextlib import aclosing
-        from .wire_watch import WatchSource, WireWatch
-
         reader = self._registry.require(name).incarnation
         async with aclosing(
             WireWatch.observations(WatchSource.wire(self.log.path.parent))
@@ -171,10 +170,11 @@ class MessageBus:
                 snapshot = self._registry.snapshot()
                 if not reader.current(snapshot):
                     raise UnregisteredThreadError("Watched thread was removed or replaced")
-                for message in self.inbox(name, snapshot=snapshot):
+                for message in self.inbox(name, snapshot=snapshot, after=after):
                     displayed = self.reads.capture(name, (message,), snapshot, self.log.path)
                     yield message
                     acknowledgment.taken(self.reads, displayed)
+                    after = message.reference
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""

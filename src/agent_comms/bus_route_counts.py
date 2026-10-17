@@ -534,12 +534,12 @@ class OpenedRouteCounts(BusRouteCounts):
                     add(actor, message.sender, message.target, 1)
         return counts
 
-    def unseen_deliveries(self, actor: str, seen: ReadCursor) -> tuple[UnseenDelivery, ...]:
+    def unseen_deliveries(self, actor: str, seen: ReadCursor, *, after: int = 0) -> tuple[UnseenDelivery, ...]:
         delivery = self.deliveries[actor]
-        return (*self._read_deliveries(actor, seen), *(
+        return (*self._read_deliveries(actor, seen, after), *(
             UnseenDelivery(item.message.seq, item.message.target)
             for item in self._appended
-            if delivery.unread(item, self.registry, seen)
+            if item.message.seq > after and delivery.unread(item, self.registry, seen)
         ))
 
     _requests = f"""request_targets AS MATERIALIZED (
@@ -623,14 +623,14 @@ class OpenedRouteCounts(BusRouteCounts):
                 - painted)
                 for actor,target,sender,since,full,prefix,painted in rows]
 
-    def _read_deliveries(self, actor: str, seen: ReadCursor) -> list[UnseenDelivery]:
+    def _read_deliveries(self, actor: str, seen: ReadCursor, after: int) -> list[UnseenDelivery]:
         return UnseenDelivery.read(self.connection.execute(
             f'''WITH {self._requests} SELECT row.seq,row.target
             FROM requests AS request JOIN "{RouteEntryRow.declared_name}" AS row
                 ON row.target=request.target AND row.sender=request.sender
                 AND row.sender_lookup=request.sender_lookup
             WHERE request.actor=:actor AND row.timestamp>=request.since
-                AND row.seq>:high_water AND row.seq<=:through
+                AND row.seq>max(:high_water,:after) AND row.seq<=:through
                 AND row.seq NOT IN (SELECT value FROM json_each(:exceptions)) ORDER BY row.seq''',
-            self._request_bindings((actor,)) | {"actor":actor,"high_water":seen.high_water,
+            self._request_bindings((actor,)) | {"actor":actor,"high_water":seen.high_water,"after":after,
                 "exceptions":json.dumps(seen.exceptions)}))
