@@ -89,17 +89,11 @@ def test_selected_lifetime_cannot_reintroduce_partial_runner_authority():
     for module in ("selected_participant", "selected_session", "selected_request", "selected_turn"):
         body = ast.parse((SOURCE / f"{module}.py").read_text())
         assert not any(
-            isinstance(node, ast.AnnAssign)
-            and any(isinstance(term, ast.Name) and term.id == "SelectedExecution"
-                    for term in ast.walk(node.annotation))
-            for node in ast.walk(body)
+            isinstance(node, ast.Name) and node.id == "SelectedExecution" for node in ast.walk(body)
         ), module
         assert not any(
             isinstance(node, ast.ImportFrom) and node.module == "coordinated_runtime"
-            for statement in body.body
-            if not (isinstance(statement, ast.If) and isinstance(statement.test, ast.Name)
-                    and statement.test.id == "TYPE_CHECKING")
-            for node in ast.walk(statement)
+            for node in ast.walk(body)
         ), module
 
 
