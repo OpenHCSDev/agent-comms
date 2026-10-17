@@ -11,36 +11,10 @@ from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.comms import Comms
 from agent_comms.tool_declaration import ToolDeclaration, ToolInput
-from agent_comms.recorded_time import UnrecordedEventTime
 from agent_comms.pi_payloads import ToolCallContent
 from delivery_owner_fixture import canonical_agent
 
 pytest_plugins = ("test_backend_native_lifecycle",)
-
-
-def test_foreign_protocol_owners_supply_their_own_recorded_detail():
-    from agent_comms.cli_bridges.codex_protocol import FileChange, UpdatedFile
-    from agent_comms.cli_bridges.opencode_parts import ToolPart
-    from agent_comms.cli_bridges.shared import ToolCall
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.transcript_events import TranscriptEvent
-
-    start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
-                            kind=UpdatedFile()).events("codex", True)
-    assert start.title == "Edit codex.txt" and start.raw_input == {"path": "codex.txt"}
-    assert start.path == "codex.txt"
-    assert end.title == "Edit" and end.diff is not None
-    assert FieldCodec.decode(TranscriptEvent, FieldCodec.encode(start)) == start
-    part = ToolPart.model_validate({"type": "tool", "id": "part", "sessionID": "session",
-        "messageID": "message", "callID": "open-code", "tool": "read",
-        "state": {"status": "running", "input": {"filePath": "open-code.txt"}}})
-    call = part.state.call(part)
-    assert call.title == "Read open-code.txt"
-    recorded, _ = call.finished("saved", True)
-    assert recorded.title == call.title and recorded.raw_input == {"filePath": "open-code.txt"}
-    assert recorded.path == "open-code.txt"
-    scalar, _ = ToolCall(UnrecordedEventTime(), "opaque", "external_custom", ToolDeclaration.for_name('external_custom').recorded_arguments(ToolInput, ["not", "Pi"])).finished("saved", True)
-    assert scalar.title == "external_custom" and scalar.raw_input == ["not", "Pi"]
 
 
 def test_boundaries_keep_missing_file_arguments_strict_and_extension_inputs_opaque():

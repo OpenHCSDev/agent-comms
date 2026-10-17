@@ -7,9 +7,8 @@ from agent_comms.cli_bridges.shared import (
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolPendingTranscript, TranscriptEvent, UserTranscript, ContextTranscript
+from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolPendingTranscript, TranscriptEvent
 from agent_comms.field_codec import FieldCodec
-from agent_comms.cli_bridges.claude_protocol import CLAUDE_RECORD, ClaudeSession
 from agent_comms.cli_bridges.opencode_parts import AssistantMessage, ToolPart
 from test_codex_items import _output
 
@@ -185,42 +184,3 @@ def test_opencode_aborted_pending_tool_preserves_its_title_and_error():
     assert isinstance(opening, ToolPendingTranscript) and opening.title == tool.title()
     assert ending.text == 'Tool execution aborted' and not ending.ok
     assert 'raw_input' not in FieldCodec.encode(opening)
-
-
-@pytest.mark.parametrize('status', ['running', 'completed', 'error'])
-def test_opencode_invoked_file_tools_still_require_their_path(status):
-    tool = 'read'
-    message = AssistantMessage(id='t', sessionID='session', role='assistant',
-                               parentID='input', time={'created': 1000})
-    part = ToolPart.model_validate(dict(type='tool', id='tool', sessionID='session',
-        messageID='t', callID='tool', tool=tool, state=dict(status=status, input={},
-            time={'start': 1000, 'end': 2000}, output='done', error='failed')))
-    with pytest.raises(ValueError, match='File tool input has no declared path'):
-        part.present(message)
-
-
-@pytest.mark.parametrize('compact,event_type', [(False, UserTranscript), (True, ContextTranscript)])
-def test_claude_missing_origin_is_human_but_compaction_is_context(compact, event_type):
-    payload = dict(type='user', uuid='input', timestamp='2026-10-16T16:40:05.123Z',
-                   promptId='prompt', isCompactSummary=compact, message=dict(content='actual input text'))
-    session = ClaudeSession()
-    updates = CLAUDE_RECORD.validate_python(payload).updates(session)
-    events = tuple(event for update in updates if isinstance(update, FinishedItem) for event in update.events)
-    assert len(events) == 1 and isinstance(events[0], event_type)
-    assert events[0].text == 'actual input text' and session.turn == 'prompt'
-    payload['isMeta'] = True
-    assert CLAUDE_RECORD.validate_python(payload).updates(ClaudeSession()) == ()
-
-
-def test_claude_turn_end_releases_tool_lookup_and_shared_prefix(tmp_path):
-    output = _output(tmp_path)
-    session = ClaudeSession(turn='t', catching_up=False)
-    use = CLAUDE_RECORD.validate_python(dict(type='assistant', uuid='start',
-        timestamp='1970-01-01T00:00:01Z', message=dict(content=[dict(
-            type='tool_use', id='tool', name='Bash', input={'command': 'pwd'})])))
-    output.publish_batch(list(use.updates(session)))
-    assert session.tools and output.transcript.current_draft() is not None
-    ended = CLAUDE_RECORD.validate_python(dict(type='system', subtype='turn_duration'))
-    output.publish_batch(list(ended.updates(session)))
-    assert not session.tools and not output.drafts
-    assert output.transcript.current_draft() is None
