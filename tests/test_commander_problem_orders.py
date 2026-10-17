@@ -14,7 +14,8 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
-from agent_comms.todos import (CleanHunt, CommitDelivery, FirstCall, Hunt, OperationDelivery, OrderedHunt,
+from agent_comms.todos import (AwaitingFirstCall, CleanHunt, CommitDelivery, FirstCall, Hunt,
+    LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     RecordHuntTodo, StrikeTodo, Todo)
 
@@ -142,16 +143,16 @@ def test_close_records_evidence_once_and_does_not_depend_on_artifact_lifetime(co
     assert comms.goals.todos.get('P1') == closed
 
 
-def test_first_call_receipt_preserves_started_and_prior_alarm_without_json_flags(commander):
+def test_first_call_state_retains_observation_and_prior_alarm(commander):
     comms, caller = commander
     todo = create(commander, 'P1')
-    assert not todo.order.first_call.started and not todo.order.first_call.notified
+    assert isinstance(todo.order.first_call, AwaitingFirstCall)
     for event in (NotifiedFirstCallEvent, ObservedFirstCallEvent):
         todo = comms.goals.todos.get('P1')
         CommsTodoTool(id='P1', operation=RecordFirstCallTodo(todo.revision,
             comms.registry.require('lead').incarnation, event)).apply(comms, caller)
     call = comms.goals.todos.get('P1').order.first_call
-    assert call.started and call.notified
+    assert isinstance(call, LateObservedFirstCall)
     assert FieldCodec.decode(FirstCall, FieldCodec.encode(call)) == call
     assert call.observe() == call and call.notify() == call
 

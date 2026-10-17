@@ -15,6 +15,7 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
+from typing import ClassVar
 
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
@@ -81,9 +82,6 @@ class OperationDelivery(OrderDelivery):
 
 @dataclass(frozen=True)
 class FirstCall(DeclaredFamily, affix="FirstCall"):
-    started = False
-    notified = False
-
     def observe(self):
         return self
 
@@ -100,12 +98,10 @@ class AwaitingFirstCall(FirstCall):
 
 
 class ObservedFirstCall(FirstCall):
-    started = True
+    pass
 
 
 class NotifiedFirstCall(FirstCall):
-    notified = True
-
     def observe(self):
         return LateObservedFirstCall()
 
@@ -154,9 +150,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         self.at.require_recorded("An order")
         self.first_call_deadline.require_deadline()
 
-    @property
-    @abstractmethod
-    def pending(self) -> bool: ...
+    pending: ClassVar[bool]
 
     def copy_as(self, kind, **evidence):
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
@@ -182,18 +176,13 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(ProblemOrder):
-    @property
-    def pending(self):
-        return True
+    pending: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
-
-    @property
-    def pending(self):
-        return False
+    pending: ClassVar[bool] = False
 
     def delivered(self, delivery):
         if delivery != self.delivery:
