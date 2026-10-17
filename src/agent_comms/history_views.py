@@ -125,13 +125,6 @@ class HistoryViews:
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.log, references)
 
-    def dm_history(self, a: str, b: str) -> Sequence[Message]:
-        return DMHistory(a, b).full_history(self.presentation)
-
-    def channel_history(self, target: str) -> Sequence[Message]:
-        targets = self.channels.catalog.read().history_targets(target)
-        return ChannelHistory(target, targets).full_history(self.presentation)
-
     def dm_history_page(
         self,
         a: str,
@@ -250,11 +243,6 @@ class HistoryViews:
             name = snapshot.canonical_name(sender)
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
-
-    def full_history(self) -> Sequence[Message]:
-        return ChannelHistory(
-            BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets
-        ).full_history(self.presentation)
 
     def full_history_page(
         self,
