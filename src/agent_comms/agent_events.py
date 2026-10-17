@@ -259,15 +259,28 @@ class RuntimeInfoObservation(AgentEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ContextInfo(RuntimeInfoObservation):
-    """Usage changes do not observe a session identity or model selection."""
+class ContextUsageObservation(RuntimeInfoObservation):
+    """Observe usage without claiming a model, identity or context window."""
 
     context_used: int | None = None
+
+    def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
+        return replace(super().project_runtime_info(current), context_used=self.context_used)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextSizeObservation(RuntimeInfoObservation):
+    """Observe the context window without restating unobserved usage."""
+
     context_size: int | None = None
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
-        return replace(super().project_runtime_info(current),
-                       context_used=self.context_used, context_size=self.context_size)
+        return replace(super().project_runtime_info(current), context_size=self.context_size)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextInfo(ContextUsageObservation, ContextSizeObservation):
+    """A usage snapshot carries both usage and the context window."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -290,8 +303,8 @@ class NativeMetadataObservation(RuntimeInfoObservation):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AgentInfo(NativeMetadataObservation, ContextInfo):
-    """A full native state observation composes both independent capabilities."""
+class AgentInfo(NativeMetadataObservation, ContextSizeObservation):
+    """Native state observes metadata and context size, never context usage."""
 
 
 @dataclass(frozen=True)

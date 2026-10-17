@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from agent_comms.agent_events import AgentInfo
+from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
 
@@ -21,8 +21,9 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, pinned_native_package())
     comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), session_file=str(session), storage_rule=StorageRule()))
+    comms.agents.observe_runtime_info("worker", ContextUsageObservation(context_used=23))
     comms.agents.observe_runtime_info(
-        "worker", AgentInfo(model="test/model", session_name="preserved", context_used=23, context_size=100)
+        "worker", AgentInfo(model="test/model", session_name="preserved", context_size=100)
     )
     comms.ledger.merge({"saved": {"worker": ["work remains", 23]}}, "worker")
     metadata = comms.agents.runtime_info.path.read_bytes()

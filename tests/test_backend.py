@@ -453,7 +453,7 @@ for line in sys.stdin:
             "completed reply"
         ]
         assert any(
-            event.context_used == 64330 for event in events if isinstance(event, ae.ContextInfo)
+            event.context_used == 64330 for event in events if isinstance(event, ae.ContextUsageObservation)
         )
         assert events[-1] == ae.Done(ok=True, text="completed reply", diagnostic={"exit_code": 0})
 
@@ -630,7 +630,7 @@ for line in sys.stdin:
         assert info[0].model == "openrouter/z-ai/glm"
         assert info[0].session_file == "/tmp/pi-session.jsonl"
         assert len(info) == 1
-        context = [event for event in events if isinstance(event, ae.ContextInfo)]
+        context = [event for event in events if isinstance(event, ae.ContextUsageObservation)]
         assert context[-1].context_used == 200
         assert context[-1].context_size == 1000
 
@@ -661,7 +661,7 @@ for line in sys.stdin:
             },
         ]
         events = await _rpc_events(tmp_path, records)
-        used = [e.context_used for e in events if isinstance(e, ae.ContextInfo)]
+        used = [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)]
         assert used == [None, 150, stats if type(stats) is int and stats > 0 else 150]
         assert isinstance(events[-1], ae.Done) and events[-1].ok is True
 
@@ -692,12 +692,12 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == [
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
             None,
             78330,
             78330,
         ]
-        assert all(e.context_size == 272000 for e in events if isinstance(e, ae.ContextInfo))
+        assert all(e.context_size == 272000 for e in events if isinstance(e, ae.ContextSizeObservation))
         assert events[-1] == ae.Done(ok=True, text="", diagnostic={"exit_code": 0})
 
     @pytest.mark.parametrize("nested", [False, True])
@@ -732,7 +732,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == [210, 150, 150]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [210, 150, 150]
 
     @pytest.mark.parametrize("prior", [None, 150])
     @pytest.mark.parametrize("invalid", ["missing", 0, -1, True, "200", None, 12.5])
@@ -774,7 +774,7 @@ for line in sys.stdin:
             ]
         )
         events = await _rpc_events(tmp_path, records)
-        used = [e.context_used for e in events if isinstance(e, ae.ContextInfo)]
+        used = [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)]
         assert used == (
             ([prior] if prior is not None else []) + [300, prior, 55 if stats == 55 else prior]
         )
@@ -816,7 +816,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == [
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
             150,
             310,
             150,
@@ -871,7 +871,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == [None, None]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [None, None]
 
     @pytest.mark.parametrize(
         "compaction",
@@ -905,7 +905,7 @@ for line in sys.stdin:
         )
         # An aborted or malformed compaction does not prove the old meter is
         # still current; typed usage stays unknown until fresh stats.
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == [
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
             250,
             None,
             None,
@@ -961,7 +961,7 @@ for line in sys.stdin:
             },
         ]
         events = await _rpc_events(tmp_path, records)
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == (
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == (
             [None, 250, None, None, 40, 30] if post_compaction else [None, 250, None, None, None]
         )
 
@@ -987,7 +987,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == [250, None, 35]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [250, None, 35]
 
     @pytest.mark.parametrize("changed_field", ["sessionId", "sessionFile"])
     @pytest.mark.parametrize("final_state_observed", [False, True])
@@ -1033,7 +1033,7 @@ for line in sys.stdin:
         owner = asyncio.current_task()
         events = await _rpc_events(tmp_path, records)
         info = [e for e in events if isinstance(e, ae.AgentInfo)]
-        context = [e for e in events if isinstance(e, ae.ContextInfo)]
+        context = [e for e in events if isinstance(e, ae.ContextUsageObservation)]
         assert [e.context_used for e in context] == [None, 250, None, None]
         assert len(info) == 1
         assert all(e.session_file == "/tmp/first.jsonl" for e in info)
@@ -1072,7 +1072,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == [
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
             None,
             250,
             None,
@@ -1114,7 +1114,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == [None, 250, None]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [None, 250, None]
         assert events[-1].reason_code == "session_identity_uncertain"
         assert events[-1].ok is False
         assert not any(isinstance(e, ae.StreamSettled) for e in events)
@@ -1214,7 +1214,7 @@ for line in sys.stdin:
                 process = backend.TurnSession.active[owner].native.proc
                 queue.put_nowait(pending)
         assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before"]
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == [None, 250, None]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [None, 250, None]
         assert all(
             e.session_file != "/tmp/second.jsonl" for e in events if isinstance(e, ae.AgentInfo)
         )
@@ -1281,7 +1281,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextInfo)] == [
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
             250,
             None,
             70,
@@ -2980,7 +2980,7 @@ class TestPrRpcParsing:
         assert info[0].model == "openrouter/z-ai/glm"
         assert info[0].session_file == "/tmp/pi-session.jsonl"
         assert len(info) == 1
-        context = [event for event in events if isinstance(event, ae.ContextInfo)]
+        context = [event for event in events if isinstance(event, ae.ContextUsageObservation)]
         assert context[-1].context_used == 200
         assert context[-1].context_size == 1000
 
@@ -3055,7 +3055,7 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
         assert next(
             event
             for event in events
-            if isinstance(event, ae.ContextInfo) and event.context_used == 83
+            if isinstance(event, ae.ContextUsageObservation) and event.context_used == 83
         )
         start = next(event for event in events if isinstance(event, ae.CompactionStart))
         end = next(event for event in events if isinstance(event, ae.CompactionEnd))
@@ -3064,7 +3064,7 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
         assert end.aborted is aborted
         assert end.context_used is None
         assert end.summary == (None if aborted else summary)
-        assert isinstance(events[-2], ae.ContextInfo) and events[-2].context_used is None
+        assert isinstance(events[-2], ae.ContextUsageObservation) and events[-2].context_used is None
         assert events[-1].ok is True
 
     async def test_failed_tool_does_not_fail_recovered_turn(self, tmp_path):
