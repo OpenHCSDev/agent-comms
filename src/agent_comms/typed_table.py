@@ -376,10 +376,9 @@ class TypedRow:
     @classmethod
     def _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:
         """Resolve a declared field subset, including an unfiltered query."""
-        unknown = set(names).difference(cls.columns())
-        if unknown:
-            raise ValueError(f"Unknown fields for {cls.__name__}: {sorted(unknown)}")
         declared = {item.name: item for item in cls._fields()}
+        if unknown := set(names).difference(declared):
+            raise ValueError(f"Unknown fields for {cls.__name__}: {sorted(unknown)}")
         return tuple(declared[name] for name in names)
 
     @classmethod

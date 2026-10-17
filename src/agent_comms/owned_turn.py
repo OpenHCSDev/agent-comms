@@ -139,9 +139,10 @@ class OwnedTurn:
             self.lease_custody, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
-        if self.autonomous_goal and self.thread.active_goal is None:
+        active_goal = self.thread.active_goal
+        if self.autonomous_goal and active_goal is None:
             return False
-        if self.thread.active_goal is not None and not self.original_owner_input:
+        if active_goal is not None and not self.original_owner_input:
             self.goal_permit = TurnGoalAccount.reserve(
                 owner=self.thread,
                 comms=self.runner.comms,
