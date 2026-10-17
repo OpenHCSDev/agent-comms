@@ -452,6 +452,8 @@ class OpenedRouteCounts(BusRouteCounts):
     remainder belong to this reader, never to an independently supplied cap.
     """
 
+    blocking: ClassVar[bool] = False
+
     def __init__(
         self, bus_path: Path, source: OpenedWireSnapshot,
         registry: RegistryProvenance, deliveries: Mapping[str, DeliveryScope],
@@ -468,10 +470,13 @@ class OpenedRouteCounts(BusRouteCounts):
     def _decode(self, record: Mapping) -> tuple[DeliveryMessage, ...]:
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
-    def _acquire(self) -> OpenedRouteCounts:
-        self._preparation = self.sync(
-            self.source.stream, self.source.revision, self._decode, blocking=False
+    def _sync_source(self) -> RouteIndexState:
+        return self.sync(
+            self.source.stream, self.source.revision, self._decode, blocking=self.blocking
         )
+
+    def _acquire(self) -> OpenedRouteCounts:
+        self._preparation = self._sync_source()
         super()._acquire()
         try:
             self._appended = self._appended_deliveries()
@@ -636,3 +641,17 @@ class OpenedRouteCounts(BusRouteCounts):
                 AND row.seq NOT IN (SELECT value FROM json_each(:exceptions)) ORDER BY row.seq''',
             self._request_bindings((actor,)) | {"actor":actor,"high_water":seen.high_water,"after":after,
                 "exceptions":json.dumps(seen.exceptions)}))
+
+
+class WaitingRouteCounts(OpenedRouteCounts):
+    """A stream waits for its projection writer, without replacing the stream."""
+
+    blocking = True
+
+    def _sync_source(self) -> RouteIndexState:
+        state = super()._sync_source()
+        # Each step commits the next bounded chunk; lock acquisition itself
+        # waits for a writer. Read failures propagate, never restart this read.
+        while not state.complete:
+            state = super()._sync_source()
+        return state
