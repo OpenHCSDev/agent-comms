@@ -1290,6 +1290,10 @@ class DetachedExitOutcome(ChildOutcome):
     """Exit observed; a non-parent cannot claim an exit code."""
 
     @property
+    def summary(self) -> str:
+        return "exited; status unavailable"
+
+    @property
     def successful(self) -> bool:
         return False
 
