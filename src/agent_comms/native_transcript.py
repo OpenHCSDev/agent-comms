@@ -106,6 +106,15 @@ class NativeRecord:
         entry = NativeEntry.read(raw) if complete else None
         return cls(start, end, entry, complete)
 
+    @property
+    def turn_id(self):
+        entry = self.entry
+        return entry.require_entry_id() if entry is not None and entry.input_boundary else None
+
+    @property
+    def turn_events(self):
+        return self.project(lambda original: original.entry.events(TranscriptProjection()))
+
     def project(self, projection):
         """A decoded record owns whether it can produce presentation events."""
         return projection(self) if self.entry is not None else ()
@@ -300,31 +309,6 @@ class NativeTranscript(TranscriptSource):
             self.require_publication_context(user)
             return record, user
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
-
-    def turns(self, last: int):
-        """Read newest input-bounded turns through the existing record decoder."""
-        cut = self.cut()
-        if cut.offset == 0:
-            return ()
-        turns, pending = [], []
-        with closing(self.reverse(cut.offset)) as records:
-            for record in records:
-                entry = record.entry
-                if entry is None:
-                    continue
-                pending.append(record)
-                if entry.input_boundary:
-                    turns.append(TurnDigest(entry.require_entry_id(), tuple(
-                        event
-                        for original in reversed(pending)
-                        for event in original.project(
-                            lambda source: source.entry.events(TranscriptProjection())))))
-                    pending.clear()
-                    if len(turns) >= last:
-                        break
-        if not cut.holds(self.cut(), cut.offset):
-            raise StaleRevision("Native turn source changed during its read")
-        return tuple(turns)
 
     def tail(self, *, max_bytes: int | None = None):
         end = self.path.stat().st_size

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -273,6 +273,28 @@ class TranscriptSource:
     Native and external stores supply their original records. An assigned
     source adds the separately acquired wire/publication capability below.
     """
+
+    def turns(self, last):
+        from .coordination_errors import StaleRevision
+        from .transcript_events import TurnDigest
+
+        turns, pending = [], []
+        with self.reading() as reader:
+            cut = reader.cut()
+            if cut.offset == 0:
+                return ()
+            with closing(reader.reverse(cut.offset)) as records:
+                for record in records:
+                    pending.append(record)
+                    if record.turn_id is not None:
+                        turns.append(TurnDigest(record.turn_id, tuple(
+                            event for item in reversed(pending) for event in item.turn_events)))
+                        pending.clear()
+                        if len(turns) >= last:
+                            break
+            if not cut.holds(reader.cut(), cut.offset):
+                raise StaleRevision('Turn source changed during its read')
+        return tuple(turns)
 
     def current_draft(self):
         """Saved records have no draft unless their reader supplies one."""

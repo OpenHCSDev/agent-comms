@@ -13,7 +13,7 @@ coverage.xml
 .test-tmp/
 
 # Packaged Node host dependencies are installed from package-lock.json
-node_modules/
+node_modules
 
 # venvs
 .venv/

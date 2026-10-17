@@ -30,9 +30,8 @@ from .selected_session import SelectedSession
 
 @dataclass(frozen=True)
 class DurableDatabase(RuntimeLocation):
-    """A private SQLite database, selected by the thread's runtime envelope."""
+    """A private SQLite database bound by the owning thread's backend."""
     path: str
-    available: ClassVar[bool] = True
 
     def __post_init__(self):
         if not Path(self.path).is_absolute():
@@ -83,17 +82,29 @@ class DurableDatabaseFiles(NativeSessionFiles):
 
 
 @dataclass(frozen=True)
+class DurableRecord(ExternalRecord):
+    turn_id: str | None
+
+    @property
+    def turn_events(self):
+        return self.events
+
+
+@dataclass(frozen=True)
 class DurableEntry(DeclaredFamily, affix='DurableEntry'):
     order: int
     text: str
     transcript_type: ClassVar = NoticeTranscript
+    input_boundary: ClassVar[bool] = False
 
     def record(self):
-        return ExternalRecord(self.order, (self.transcript_type(self.text),))
+        return DurableRecord(self.order, (self.transcript_type(self.text),),
+                             str(self.order) if self.input_boundary else None)
 
 
 class UserDurableEntry(DurableEntry):
     transcript_type = UserTranscript
+    input_boundary = True
 
 
 class AssistantDurableEntry(DurableEntry):
