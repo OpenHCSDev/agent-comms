@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import ClassVar
 from uuid import uuid4
 
+from pydantic import JsonValue
+
 from .agent_events import Chunk, Thinking, ToolStart, Error
 
 from .agent_backend import (
@@ -129,7 +131,7 @@ class ResetDurableEntry(DurableEntry): pass
 @dataclass(frozen=True)
 class DurableHistoryPage:
     items: tuple[DurableEntry, ...]
-    cursor: str | None = None
+    cursor: dict[str, JsonValue] | None = None
 
     @classmethod
     def read(cls, loop, host, *, limit=128, cursor=None, query=None):
