@@ -23,6 +23,8 @@ from agent_comms.turn_input_source import OriginalTurnInput
 from test_s1_event_behavior import owner_turn as owner_turn
 from stored_inputs import stored_inputs
 
+pytestmark = pytest.mark.usefixtures("fake_native_catalog")
+
 
 def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path):
     class SpecializedPausedGoal(PausedGoal):
