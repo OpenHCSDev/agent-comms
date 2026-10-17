@@ -71,7 +71,7 @@ class PiChild:
     async def shutdown(self, *, graceful: bool = False) -> ChildOutcome:
         """Join the one gateway, ingress, process, pipe and resource retirement.
 
-        A settled non-retained protocol gets its existing bounded EOF grace;
+        A settled child gets its existing bounded EOF grace;
         refusals and interruptions terminate immediately. The first request
         owns that choice and every caller joins the same complete operation.
         """

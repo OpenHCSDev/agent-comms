@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import AgentBackend, BackendDeclarationError, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation
+from .agent_backend import AgentBackend, BackendDeclarationError, Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation
 from .agent_events import Error
 from .native_custody import PiChild
 from .external_transcript import ExternalCut
@@ -193,7 +193,7 @@ class CompactDurable(Compact):
     response_payload = OutcomeData
 
 
-class PiDurableBackend(AgentBackend, ReportsContext, ConfiguresModel):
+class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
     serves_threads = False
     location_type = DurableDatabase
     unstarted_type = UnstartedRuntime
@@ -230,6 +230,10 @@ class PiDurableBackend(AgentBackend, ReportsContext, ConfiguresModel):
                 await self.child.shutdown()
                 self.child = None
 
+    async def compact(self, thread, instructions):
+        child = await self.open(thread)
+        return (await child.request(CompactDurable(custom_instructions=instructions))).outcome
+
     async def context_usage(self, thread):
         child = await self.open(thread)
         usage = (await child.request(GetSessionStats())).context_usage
@@ -248,6 +252,5 @@ class PiDurableBackend(AgentBackend, ReportsContext, ConfiguresModel):
         if thinking is not None:
             await child.request(SetThinkingLevel(level=thinking))
         state = await child.request(GetState())
-        if state.model.display_name is None:
-            raise ValueError('Durable session has no configured model')
-        return state.model.display_name, ThinkingLevel.optional_name(state.thinking_level)
+        reported = state.model.require_selection(model if model is not None else state.model.display_name)
+        return reported.display_name, ThinkingLevel.optional_name(state.thinking_level)
