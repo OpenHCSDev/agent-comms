@@ -278,14 +278,14 @@ def test_state_generation_requires_exact_matching_positive_int(
     gate.state_path.write_text(json.dumps(state))
     if type(generation) is int and generation == 1:
         assert gate.read().phase == MaintenancePhase.decode("ready")
-        with gate.admit_ingress() as hold:
+        with gate.allow_input() as hold:
             assert hold.phase == MaintenancePhase.decode("ready")
     else:
         with pytest.raises(RelationViolationError, match="Maintenance witness"):
             gate.read()
         with (
             pytest.raises(RelationViolationError, match="Maintenance witness"),
-            gate.admit_ingress(),
+            gate.allow_input(),
         ):
             pytest.fail("Malformed generation must never admit ingress")
 

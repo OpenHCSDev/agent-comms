@@ -295,12 +295,12 @@ class MaintenanceBarrier:
             )
 
     @contextmanager
-    def admit_ingress(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:
-        """Share open-root custody through one synchronous ingress operation.
+    def allow_input(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:
+        """Hold the root lock through one synchronous input operation.
 
         Do not await while inside this context. A child still needs to perform
         its own claim/send checks, and old-import children are not protected.
-        Maintenance, stop and rename take exclusive wire custody. Independent
+        Maintenance, stop and rename take the exclusive wire lock. Independent
         inputs share this gate; their registry, input and journal owners retain
         their own determining locks.
         """
