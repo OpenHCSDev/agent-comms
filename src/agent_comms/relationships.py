@@ -776,6 +776,24 @@ class ThreadRelationships:
             key=cmp_to_key(PeerRelation.order),
         ))
 
+    def context_relations(self, owner: str) -> tuple[PeerRelation, ...]:
+        """Open contacts, the parent and current-incarnation recent direct work."""
+        registry = self.registry.snapshot()
+        thread = registry.require(owner)
+        messages, _ = self._recent_messages()
+        correspondents = set()
+        for message in messages:
+            if message.notice or message.membership is not None or is_channel_target(message.target):
+                continue
+            sender, target = registry.canonical_name(message.sender), registry.canonical_name(message.target)
+            peer = target if sender == thread.name else sender if target == thread.name else None
+            person = registry.threads.get(peer)
+            if person is not None and message.timestamp >= max(thread.created_at, person.created_at):
+                correspondents.add(person.incarnation)
+        return tuple(relation for relation in self.peer_relations(owner)
+                     if relation.records or relation.peer.name == thread.parent
+                     or relation.peer in correspondents)
+
     def relevance(self, owner: str, peer: str) -> type[PeerRelevance]:
         """The most derived relevance ``peer`` has to ``owner``."""
         identity = self.registry.require(peer).incarnation
