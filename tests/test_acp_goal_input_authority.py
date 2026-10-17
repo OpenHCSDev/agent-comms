@@ -6,8 +6,10 @@ The callbacks, private goal ledger, ACP prompt queue, and transcript replay are 
 
 import json
 import logging
+from contextlib import nullcontext
 
 import pytest
+from acp import RequestError
 from acp.schema import TextContentBlock
 
 from agent_comms import agent_events as ae
@@ -202,9 +204,10 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
-        await agent.turns.run_agent_turn(
-            "project", "project", "Continue working toward the active goal.", autonomous_goal=True
-        )
+        with nullcontext() if change is None else pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn(
+                "project", "project", "Continue working toward the active goal.", autonomous_goal=True
+            )
         key = "acp:" + observed["public_id"]
         row = stored_inputs(comms.root).lookup(key)
         assert row.declared_name == ("started" if change is None else "reserved")
