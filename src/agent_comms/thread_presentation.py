@@ -30,7 +30,7 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
         """Compose idle-only explanations without replacing genuine work."""
         if self.working:
             return ordinary
-        shown = present(ordinary)
+        shown = present(replace(ordinary, status=replace(self, details=())))
         return shown.status.with_attention(*self.details).present_attention(shown)
 
     def present_attention(self, ordinary: ThreadPresentation) -> ThreadPresentation:

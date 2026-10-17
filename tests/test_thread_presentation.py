@@ -41,6 +41,19 @@ def test_status_renders_attention_without_hiding_work(status):
     assert row.status is status
 
 
+@pytest.mark.parametrize("replacement", [False, True])
+def test_idle_attention_is_carried_once_through_idle_presentation(replacement):
+    status = IdleThreadPresentationStatus().with_attention("Inbox unavailable")
+    ordinary = status.activity_presentation("worker", "idle", "")
+    shown = status.when_idle(ordinary, lambda current: (
+        IdleThreadPresentationStatus().activity_presentation(current.title, "idle", "")
+        if replacement else current
+    ))
+    assert shown.status.details == ("Inbox unavailable",)
+    assert shown.summary == "Inbox unavailable"
+    assert shown.marker == "!"
+
+
 @pytest.mark.parametrize("working", [False, True])
 def test_input_delivery_keeps_its_explanation_and_original_work(working):
     status = WorkingThreadPresentationStatus() if working else IdleThreadPresentationStatus()
