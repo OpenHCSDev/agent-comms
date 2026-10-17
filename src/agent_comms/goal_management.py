@@ -66,26 +66,25 @@ class Goals:
         return goal
 
     def _notify_transition(self, original, previous, goal, activity, targets):
-        summary = goal.commander_update(activity)
         same_order = goal.same_order_as(previous)
-        if same_order and (summary is None or previous.commander_update(activity) == summary):
+        updates = goal.commander_updates(activity) if same_order else ("Order assigned",)
+        if same_order and previous.commander_updates(activity) == updates:
             return
-        with _store_lock(self._wire_lock_path):
-            snapshot = self.registry.snapshot()
-            if not original.current(snapshot):
-                return
-            unit = snapshot.require(original.name)
-            summary = summary if same_order else "Order assigned"
-            for target in targets:
-                if not target.current(snapshot):
-                    continue
-                message = Message(
-                    sender=unit.name, target=target.name, type=AlertKind,
-                    body=f"{unit.name}: {summary}. Goal {goal.id}: {goal.text}",
-                )
-                # The publisher owns send results, including uncertainty. Do
-                # not mirror those results in Goal or automatically resend.
-                self.bus.publisher.publish_ordinary(message)
+        for summary in updates:
+            with _store_lock(self._wire_lock_path):
+                snapshot = self.registry.snapshot()
+                if not original.current(snapshot):
+                    return
+                unit = snapshot.require(original.name)
+                for target in targets:
+                    if not target.current(snapshot):
+                        continue
+                    message = Message(
+                        sender=unit.name, target=target.name, type=AlertKind,
+                        body=f"{unit.name}: {summary}. Goal {goal.id}: {goal.text}",
+                    )
+                    # The publisher owns send results, including uncertainty.
+                    self.bus.publisher.publish_ordinary(message)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

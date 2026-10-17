@@ -382,10 +382,10 @@ class Goal:
     def same_order_as(self, other: Goal | None) -> bool:
         return other is not None and self.id == other.id
 
-    def commander_update(self, activity) -> str | None:
+    def commander_updates(self, activity) -> tuple[str, ...]:
         if self.delivery_complete:
-            return "Works in app"
-        return self.state.commander_update(self.deadline, activity)
+            return ("Works in app",)
+        return self.state.commander_updates(self.deadline, activity)
 
     def after_failed_turn(self, diagnostic: str) -> Goal:
         return self._failure_projection(
