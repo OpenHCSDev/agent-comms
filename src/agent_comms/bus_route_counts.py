@@ -280,13 +280,16 @@ class RouteIndexBehind(RouteIndexState):
 
 
 @dataclass(frozen=True)
-class RouteIndexBlocked(RouteIndexState):
+class RouteIndexBlocked(RouteIndexState, CoordinationReadUnavailable):
     """Another writer holds the lock; this call could not make progress."""
 
     complete: ClassVar[bool] = False
 
     def defer_read(self, through: int, size: int) -> NoReturn:
-        raise CoordinationReadUnavailable("Route projection writer is busy")
+        raise self
+
+    def __str__(self) -> str:
+        return "Route projection writer is busy"
 
 
 class RouteIndexRebuilding(CoordinationReadUnavailable):
@@ -636,3 +639,17 @@ class OpenedRouteCounts(BusRouteCounts):
                 AND row.seq NOT IN (SELECT value FROM json_each(:exceptions)) ORDER BY row.seq''',
             self._request_bindings((actor,)) | {"actor":actor,"high_water":seen.high_water,"after":after,
                 "exceptions":json.dumps(seen.exceptions)}))
+
+
+class WaitingRouteCounts(OpenedRouteCounts):
+    """A stream waits for its projection writer, without replacing the stream."""
+
+    def _acquire(self):
+        while True:
+            try:
+                return super()._acquire()
+            except RouteIndexBlocked:
+                with _store_lock(self.path, shared=True):
+                    pass
+            except RouteIndexRebuilding:
+                pass

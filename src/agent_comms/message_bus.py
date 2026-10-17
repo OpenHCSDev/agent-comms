@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import ExitStack, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_activity_index import BusActivityIndex, ChannelActivity
-from .bus_route_counts import OpenedRouteCounts
+from .bus_route_counts import OpenedRouteCounts, WaitingRouteCounts
 from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
@@ -128,6 +130,7 @@ class MessageBus:
     def inbox(
         self, name: str, target: str | None = None, *,
         snapshot: RegistrySnapshot | None = None, after: MessageReference | None = None,
+        projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ) -> Sequence[Message]:
         """Unread messages delivered to a thread, read without scanning the log.
 
@@ -142,7 +145,7 @@ class MessageBus:
         seen = self.reads.cursor(delivery.actor, snapshot)
         with self.log._opened_wire_snapshot() as source:
             source.messages_for_references((after,) if after is not None else ())
-            with OpenedRouteCounts(
+            with projection(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
             ) as index:
                 unread = index.unseen_deliveries(delivery.actor, seen, after=after.seq if after else 0)
@@ -170,7 +173,9 @@ class MessageBus:
                 snapshot = self._registry.snapshot()
                 if not reader.current(snapshot):
                     raise UnregisteredThreadError("Watched thread was removed or replaced")
-                for message in self.inbox(name, snapshot=snapshot, after=after):
+                messages = await asyncio.to_thread(
+                    self.inbox, name, snapshot=snapshot, after=after, projection=WaitingRouteCounts)
+                for message in messages:
                     displayed = self.reads.capture(name, (message,), snapshot, self.log.path)
                     yield message
                     acknowledgment.taken(self.reads, displayed)

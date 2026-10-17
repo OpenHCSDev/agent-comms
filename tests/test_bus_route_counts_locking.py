@@ -80,6 +80,30 @@ def test_reader_counts_uncommitted_append_while_writer_decodes_without_index_loc
         assert comms.bus.pending_counts_opened(source, basis) == {"sender": 2}
 
 
+def test_stream_waits_for_route_writer_then_finishes_the_same_cut(tmp_path, monkeypatch):
+    from agent_comms.bus_route_counts import RouteIndexBlocked, WaitingRouteCounts
+    from agent_comms.store_files import _store_lock
+
+    comms = _case(tmp_path, monkeypatch)
+    comms.messaging.send_message("sender", "recipient", "second")
+    comms.messaging.send_message("sender", "recipient", "third")
+    monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
+    blocked = threading.Event()
+    defer = RouteIndexBlocked.defer_read
+
+    def observed(state, through, size):
+        blocked.set()
+        return defer(state, through, size)
+
+    monkeypatch.setattr(RouteIndexBlocked, "defer_read", observed)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with _store_lock(BusRouteCounts(comms.bus.log.path).path):
+            result = executor.submit(comms.bus.inbox, "recipient", projection=WaitingRouteCounts)
+            assert blocked.wait(5)
+            assert not result.done()
+        assert [message.body for message in result.result(5)] == ["first", "second", "third"]
+
+
 def test_reader_beyond_rebuild_bound_is_rebuilding(tmp_path, monkeypatch):
     comms = _case(tmp_path, monkeypatch)
     comms.messaging.send_message("sender", "recipient", "appended")

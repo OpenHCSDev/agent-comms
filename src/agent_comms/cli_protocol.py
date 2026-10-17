@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import builtins
-import sys
+import os
 from abc import ABC, abstractmethod
 from graphlib import TopologicalSorter
-from typing import TYPE_CHECKING, Annotated, ClassVar, Union
+from typing import TYPE_CHECKING, Annotated, AsyncIterator, BinaryIO, ClassVar, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
 from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field
@@ -97,15 +97,13 @@ class WatchLine(TaggedWire):
     )
 
     @abstractmethod
-    async def handle(self, bridge: CliBridge) -> None: ...
+    async def handle(self, bridge: CliBridge, child: AttachedChild, errors: BinaryIO) -> None: ...
 
     @staticmethod
-    async def read_next(child: AttachedChild) -> WatchLine | None:
-        line = await child.stdout.readline()
-        if not line:
-            await child.wait()
-            raise RuntimeError(f'Core watch ended, exit {child.returncode}')
-        return WATCH_LINE.validate_json(line)
+    async def stream(child: AttachedChild) -> AsyncIterator[WatchLine]:
+        async for line in child.stdout:
+            yield WATCH_LINE.validate_json(line)
+        yield FailedCoreError(error='Watch stream closed without a declared handoff')
 
 
 class CoreError(WatchLine):
@@ -128,28 +126,23 @@ class CoreError(WatchLine):
                 return members[declaration](error=message)
         raise TypeError('No declared Core error handles this exception')
 
-    @staticmethod
-    async def read_next(child: AttachedChild) -> None:
-        """An error is the final record, never another message subscription."""
-        return None
+    async def handle(self, bridge: CliBridge, child: AttachedChild, errors: BinaryIO) -> None:
+        """An unrecognized terminal state fails with the original process evidence."""
+        await child.wait()
+        errors.seek(0, os.SEEK_END)
+        errors.seek(max(0, errors.tell() - 8192))
+        tail = errors.read().decode('utf-8', errors='replace')
+        raise ChildProcessError(f'Core watch ended, exit {child.returncode}: {self.error}\n{tail}')
 
 
 class UnavailableCoreError(CoreError):
     wire_tag = 'unavailable'
     exception_type = CoordinationReadUnavailable
 
-    async def handle(self, bridge: CliBridge) -> None:
-        print(f'Core watch unavailable: {self.error}; reconnecting read stream',
-              file=sys.stderr, flush=True)
-        await asyncio.sleep(0.25)
-
 
 class FailedCoreError(CoreError):
     wire_tag = 'failed'
     exception_type = BaseException
-
-    async def handle(self, bridge: CliBridge) -> None:
-        raise RuntimeError(f'Core watch: {self.error}')
 
 
 class ArrivedMessage(WatchLine):
@@ -157,7 +150,7 @@ class ArrivedMessage(WatchLine):
     wire_tag = 'message'
     message: InstanceOf[Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(Message.to_wire)]]
 
-    async def handle(self, bridge: CliBridge) -> None:
+    async def handle(self, bridge: CliBridge, child: AttachedChild, errors: BinaryIO) -> None:
         await bridge.accept(self.message)
 
 
