@@ -163,8 +163,8 @@ class StorageDecision:
     removed: tuple[Path, ...]
     registry: Registration
 
-    def complete(self, is_error):
-        if is_error or not self.removed:
+    def complete(self):
+        if not self.removed:
             return
         gone = tuple(path for path in self.removed if not path.exists())
         if not gone:

@@ -49,7 +49,7 @@ class CodingCall(NativeToolCall):
         self, is_error: bool, directory: Path, input_id: str, round_number: int
     ) -> None:
         for decision in self.storage_decisions:
-            decision.complete(is_error)
+            decision.complete()
         slot = self.slot(input_id, round_number)
         record_selected_terminal(directory, slot, slot)
 
