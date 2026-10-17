@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import sqlite3
 import stat
 import time
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -576,9 +577,9 @@ class WireLog:
         if certificate_enabled(self.path):
             try:
                 append_private_bus_checkpoint_unlocked(self, metadata, encoded, record)
-            except Exception as error:
-                # The bus may already contain this fsynced row. Never retry an
-                # uncertain input or report publication as definitely absent.
+            except (OSError, sqlite3.Error, ValueError) as error:
+                # This append owns the already-fsynced bus row. Checkpoint
+                # storage or validation failure cannot mean the row is absent.
                 raise RelationViolationError(
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
