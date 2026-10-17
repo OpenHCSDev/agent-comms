@@ -19,6 +19,7 @@ from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
+from .store_files import _store_lock
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .wire_record import WireRecord
 
@@ -108,21 +109,21 @@ class BusPageIndex:
 
     @contextmanager
     def prepared(self, opened: OpenedWireSnapshot):
-        if not self.covers(opened):
-            opened.metadata.access.require_append()
-            self.prepare(opened)
-        with self.snapshot():
+        with _store_lock(self.bus_path, shared=True):
+            if self.covers(opened):
+                with self.snapshot():
+                    yield
+                return
+        opened.metadata.access.require_append()
+        self.sync()
+        with _store_lock(self.bus_path, shared=True), self.snapshot():
             if not self.covers(opened):
                 raise StaleBusPageIndexError("Page index does not cover its opened source")
             yield
 
     @contextmanager
     def snapshot(self):
-        """Pin coverage and offsets to one SQLite revision.
-
-        Queries share one read transaction for coverage and selected offsets.
-        Preparation uses a separate, short-lived writer connection.
-        """
+        """Pin coverage and offsets to one SQLite revision."""
         borrowed = self.connection.in_transaction
         try:
             if not borrowed:
@@ -136,7 +137,7 @@ class BusPageIndex:
         """Prepare a freshly opened source; incomplete source is an error."""
         from .wire_log import WireLog
 
-        with WireLog(self.bus_path)._opened_wire_snapshot(need_sequence=False) as source:
+        with WireLog(self.bus_path)._opened_wire_snapshot(need_sequence=False) as source, _store_lock(self.bus_path):
             self.prepare(source)
         return True
 
@@ -150,8 +151,6 @@ class BusPageIndex:
             if saved == source:
                 return
             with self._writing() as db:
-                if BusPageSource.one(db, singleton=1) != saved:
-                    continue
                 if offset == 0:
                     db.execute(f"DELETE FROM {BusPageRow.declared_name}")
                 for row in rows:
@@ -188,8 +187,6 @@ class BusPageIndex:
         )
         if not valid:
             offset = 0
-        if valid and offset == size:
-            return saved, saved, offset, ()
         rows: list[BusPageRow] = []
         last_sequence = last_rows[0].seq if valid and last_rows else None
         stream.seek(offset)
@@ -218,7 +215,7 @@ class BusPageIndex:
 
     def invalidate(self) -> None:
         """Discard damaged derived coverage; prepare owns the subsequent rebuild."""
-        with self._writing() as db:
+        with _store_lock(self.bus_path), self._writing() as db:
             BusPageSource.delete(db, singleton=1)
 
     @contextmanager
