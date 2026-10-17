@@ -4,7 +4,6 @@ from __future__ import annotations
 from agent_comms.native_package import pinned_native_package
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path

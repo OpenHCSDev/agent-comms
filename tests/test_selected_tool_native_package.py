@@ -4,7 +4,6 @@ from agent_comms.native_package import pinned_native_package
 import json
 import os
 import subprocess
-from pathlib import Path
 
 import pytest
 

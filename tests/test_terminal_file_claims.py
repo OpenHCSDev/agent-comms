@@ -5,7 +5,6 @@ import asyncio
 import json
 import os
 from dataclasses import replace
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest

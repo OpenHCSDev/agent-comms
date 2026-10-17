@@ -1,8 +1,6 @@
 """Canonical bus setup for owner lifecycle tests with no automatic model work."""
 from agent_comms.native_package import pinned_native_package
 
-import os
-from pathlib import Path
 
 from agent_comms.comms import Comms
 

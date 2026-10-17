@@ -5,7 +5,6 @@ import asyncio
 import json
 import os
 from contextlib import suppress
-from pathlib import Path
 
 import pytest
 from acp.schema import SessionNotification

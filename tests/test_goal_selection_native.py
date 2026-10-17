@@ -1,7 +1,6 @@
 """Actual saved SDK/OwnedTurn settlement, with only localhost HTTP controlled."""
 
 import asyncio
-import os
 
 import pytest
 

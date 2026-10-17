@@ -7,7 +7,6 @@ from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
-import os
 from pathlib import Path
 
 import pytest

@@ -1,9 +1,7 @@
 """Canonical ACP owners sharing the production bus, SQL stores and owner socket."""
 from agent_comms.native_package import pinned_native_package
 
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from agent_comms.acp import CommsAgent
 

@@ -83,10 +83,8 @@ def test_awareness_refuses_changed_checkpoint_without_rebuild(tmp_path):  # noqa
 
 
 async def test_natural_owned_turn_prepares_observer_pointer_without_native_start(tmp_path):  # noqa: F811
-    import os
     from pathlib import Path
 
-    import pytest
 
     from agent_comms.acp import CommsAgent
     from agent_comms.owned_turn import OwnedTurn

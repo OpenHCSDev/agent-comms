@@ -54,7 +54,6 @@ def test_route_does_not_override_native_package_commitment(tmp_path, monkeypatch
 
 
 async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch):
-    import os
     import site
     import venv
     from pathlib import Path
