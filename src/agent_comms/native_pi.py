@@ -289,7 +289,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
             parameters += (generation,)
         rows = cls.read(
             db.execute(
-                f"SELECT {cls._column_list(cls.columns())} FROM {cls.declared_name} "
+                f"SELECT {cls._column_list(tuple(cls.projection()))} FROM {cls.declared_name} "
                 f"WHERE {where} ORDER BY request_generation DESC LIMIT 1",
                 parameters,
             )
