@@ -145,7 +145,7 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
         notices = comms.views.message_notifications_for_references((message.reference,))[(message.seq, message.message_id)]
         alpha = next(row for row in notices if row.recipient == "alpha")
         assert isinstance(alpha.state, SentProgress)
-        assert not alpha.busy
+        assert not alpha.state.working
 
 
 @pytest.mark.parametrize("revocation", ["goal", "project", "stop"])
