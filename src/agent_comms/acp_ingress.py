@@ -1,11 +1,11 @@
-"""ACP client ingress admission: route and maintenance custody for one child.
+"""ACP client ingress locking: route and maintenance locks for one child.
 
 A client (Toad) never takes these locks itself. It awaits this owner, which
 acquires every lock in a worker thread so the client's event loop never waits
 on a file lock, and then performs its guarded write on its own loop because
 asyncio streams are loop-owned. Release only closes descriptors.
 
-Lock order is fixed: route custody precedes the maintenance/wire gates, and
+Lock order is fixed: the route lock precedes the maintenance/wire gates, and
 the gates of the selected and attached roots are taken in registry-path order,
 so attachments of different clients cannot deadlock across roots.
 """
@@ -35,7 +35,7 @@ class AcpIngress:
     """One ACP child's ingress: its selected route plus an attached wire root.
 
     ``attached`` is a coordination root reported by the child. It cannot
-    redirect admission away from the selected root; both are admitted.
+    redirect locking away from the selected root; both are locked.
     """
 
     selection: RouteSelection
@@ -49,25 +49,25 @@ class AcpIngress:
             roots.add(attached if attached.is_absolute() else self.cwd / attached)
         return sorted({root.resolve() / "registry.json" for root in roots})
 
-    def _admit(self, custody: ExitStack) -> None:
-        """Share open-root wire custody; maintenance takes it exclusively."""
+    def _lock_roots(self, locks: ExitStack) -> None:
+        """Hold shared root locks; maintenance takes them exclusively."""
         for registry in self._registries():
-            custody.enter_context(MaintenanceBarrier(registry).admit_ingress())
+            locks.enter_context(MaintenanceBarrier(registry).allow_input())
 
-    def _admit_prompt(self, custody: ExitStack) -> None:
-        custody.enter_context(
+    def _lock_prompt(self, locks: ExitStack) -> None:
+        locks.enter_context(
             selected_write(self.selection.root, implicit=self.selection.implicit)
         )
-        self._admit(custody)
+        self._lock_roots(locks)
 
     @staticmethod
-    async def _acquire(admit) -> ExitStack:
-        """Acquire custody in a worker; a cancelled waiter never leaks it."""
+    async def _acquire(lock_roots) -> ExitStack:
+        """Acquire locks in a worker; a cancelled waiter never leaks it."""
 
         def acquire() -> ExitStack:
-            with ExitStack() as custody:
-                admit(custody)
-                return custody.pop_all()
+            with ExitStack() as locks:
+                lock_roots(locks)
+                return locks.pop_all()
 
         task = asyncio.ensure_future(asyncio.to_thread(acquire))
         try:
@@ -78,19 +78,19 @@ class AcpIngress:
 
     async def preflight(self) -> None:
         """Early denial only: the later spawn or prompt holds the actual gate."""
-        (await self._acquire(self._admit)).close()
+        (await self._acquire(self._lock_roots)).close()
 
     @asynccontextmanager
     async def prompt(self) -> AsyncIterator[None]:
-        """Hold route and wire admission through one synchronous stdin write.
+        """Hold route and wire locks through one synchronous stdin write.
 
         Do not await inside: release before pipe drain or any native response.
         """
-        with await self._acquire(self._admit_prompt):
+        with await self._acquire(self._lock_prompt):
             yield
 
     def _project_launch(self, child_env: dict[str, str]) -> None:
-        """Publish the captured root into the child only after locked admission."""
+        """Publish the captured root into the child only after acquiring the locks."""
         from .active_route import read_active_route
         from .private_nk_entrypoint import PrivateNkLaunch
         from .launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
@@ -122,9 +122,9 @@ class AcpIngress:
         self, argv: tuple[str, ...], *, env: Mapping[str, str],
         pass_fds: tuple[int, ...] = (), stdio: ChildStdio = StreamingChildStdio(),
     ) -> AttachedChild:
-        """Hold route and wire admission until the asynchronous spawn settles.
+        """Hold route and wire locks until the asynchronous spawn settles.
 
-        A worker owns the synchronous admission while the subprocess starts on
+        A worker owns the synchronous locking while the subprocess starts on
         the caller's loop. A cancelled caller still waits for the exact spawn
         and retires its child; the gate is never dropped while an unobserved
         spawn can complete later. A permanently stuck OS spawn can prevent a
@@ -151,8 +151,8 @@ class AcpIngress:
                     raise ValueError("ACP child environment conflicts with its selected route")
                 # Route SH precedes the wire gate, matching the publisher's
                 # route EX -> private-root preflight order.
-                with self.selection.route.admit_client(), ExitStack() as admission:
-                    self._admit(admission)
+                with self.selection.route.hold_client_route(), ExitStack() as locks:
+                    self._lock_roots(locks)
                     self._project_launch(child_env)
                     process = asyncio.run_coroutine_threadsafe(
                         AttachedChild.start(

@@ -52,7 +52,7 @@ async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, di
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", race)
     with pytest.raises(StaleFence):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
         ).run()
     assert calls == []
 
@@ -151,7 +151,7 @@ async def test_actual_raw_writes_follow_committed_admission_without_global_exclu
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
         ).run()
     if revoke:
         assert observed == []
@@ -261,7 +261,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
                 root=root,
                 wire_root_id=root_id,
                 owner_name=owner.name,
-                native_package=directory,
+                native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
             ).run()
         )
         error = asyncio.CancelledError if "cancel" in mode else native_pi.NativePiUnavailable
@@ -283,7 +283,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         if mode not in {"lifecycle", "preflight-drain"}:
             assert (
                 await SelectedExecution(
-                    root=root, wire_root_id=root_id, owner_name=owner.name, native_package=directory
+                    root=root, wire_root_id=root_id, owner_name=owner.name, native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
                 ).run()
                 is None
             )
@@ -397,7 +397,7 @@ async def test_short_admission_contention_sends_once_after_release(
     # admission only, not a native context or successful model response.
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
         ).run()
     if revoke:
         assert not received.exists() or not received.read_text()
@@ -523,7 +523,7 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
     # the expected downstream error is NOT a post-write admission failure.
     with pytest.raises(native_pi.NativePiUnavailable) as caught:
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
         ).run()
     assert "post-write" not in str(caught.value)
     assert observations == [
