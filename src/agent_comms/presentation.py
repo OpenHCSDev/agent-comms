@@ -6,7 +6,6 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
-from functools import cached_property
 from itertools import zip_longest
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -48,6 +47,8 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
+    from .comms import Comms
+    from .ui_model.observation import ThreadsObserved
     from .bus_publication import CommittedDelivery
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -689,6 +690,23 @@ class ThreadView:
         )
 
     @classmethod
+    def roster(
+        cls, snapshot: RegistrySnapshot, agents: AgentActivity,
+        activities: Mapping[str, ObservedActivity] | None, goal_waits: GoalWaits,
+        *, show_stopped: bool, show_archived: bool, names: Iterable[str] | None = None,
+    ) -> tuple[ThreadView, ...]:
+        threads = tuple(cls.visible_threads(
+            snapshot, names=names, show_stopped=show_stopped, show_archived=show_archived,
+        ))
+        if not threads:
+            return ()
+        runtime, waits = agents.runtime_info.read(), goal_waits.read()
+        if activities is None:
+            activities = agents.all_activity(threads, snapshot=snapshot)
+        return tuple(cls.capture(thread, snapshot, activities[thread.name], runtime.get(thread.name), waits)
+                     for thread in threads)
+
+    @classmethod
     def capture(
         cls,
         thread: Thread,
@@ -749,48 +767,6 @@ class ThreadView:
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadViewSources:
-    """One acquired metadata cut, shared by attribution and selected row construction."""
-
-    registry: RegistrySnapshot
-    activities: Mapping[str, ObservedActivity]
-    runtime: Mapping[str, AgentRuntimeInfo]
-    waits: Mapping[str, GoalWait]
-
-    @classmethod
-    def capture(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
-                activities: Mapping[str, ObservedActivity] | None, goal_waits: GoalWaits):
-        if activities is None:
-            activities = agents.all_activity(
-                (thread for thread in snapshot.threads.values() if thread.role.executable),
-                snapshot=snapshot,
-            )
-        return cls(snapshot, activities, agents.runtime_info.read(), goal_waits.read())
-
-    def changed_names(self, previous: ThreadViewSources) -> frozenset[str]:
-        changed = set()
-        for current, before in ((self.activities, previous.activities),
-                                (self.runtime, previous.runtime)):
-            changed.update(name for name in current.keys() | before.keys()
-                           if current.get(name) != before.get(name))
-        if self.registry is not previous.registry or self.waits != previous.waits:
-            for name in self.registry.threads.keys() | previous.registry.threads.keys():
-                current, before = self.registry.threads.get(name), previous.registry.threads.get(name)
-                if GoalWaits.execution(current.goal if current else None, self.waits, self.registry) != (
-                    GoalWaits.execution(before.goal if before else None, previous.waits, previous.registry)
-                ):
-                    changed.add(name)
-        return frozenset(changed)
-
-    def roster(self, threads: Iterable[Thread]) -> tuple[ThreadView, ...]:
-        return tuple(
-            ThreadView.capture(thread, self.registry, self.activities[thread.name],
-                               self.runtime.get(thread.name), self.waits)
-            for thread in threads
-        )
-
-
-@dataclass(frozen=True, slots=True)
 class CoordinationSnapshot:
     threads: tuple[ThreadView, ...]
     channels: tuple[ChannelView, ...]
@@ -824,9 +800,10 @@ class CoordinationSnapshot:
                 activities, sent, messages,
                 show_stopped=show_stopped, show_archived=show_archived,
             ),
-            threads=ThreadViewSources.capture(
+            threads=ThreadView.roster(
                 registry, agents, activities, GoalWaits(root / GoalWaits.filename),
-            ).roster(visible),
+                show_stopped=show_stopped, show_archived=show_archived,
+            ),
             unread=unread, last_sent=sent, channel_unread=channel_unread,
             references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, show_stopped=show_stopped,
@@ -838,9 +815,8 @@ class CoordinationSnapshot:
         if view is None:
             return ()
         people = {
-            person.thread.name: person
-            for view in self.threads if view.status.active
-            for person in view.presentation.status.working_members(view)
+            view.thread.name: view for view in self.threads
+            if view.status.active and view.presentation.status.busy
         }
         return tuple(people[name] for name in view.members if name in people)
 
@@ -859,7 +835,7 @@ class CoordinationSnapshot:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WireRevision:
     """One observation of every Comms store a view derives from, by name."""
 
@@ -901,7 +877,6 @@ class WireRevision:
     })
     expiry_tick: int
     through_seq: int
-    _views: HistoryViews | None = field(default=None, compare=False, repr=False)
 
     expiry_seconds: ClassVar[int] = 30
 
@@ -922,73 +897,54 @@ class WireRevision:
                             if (revision := FileRevision.capture(path)) is not None)
                 for name, group in paths.items()
             }
-        return cls(**captured, expiry_tick=expiry_tick, through_seq=through_seq, _views=views)
+        return cls(**captured, expiry_tick=expiry_tick, through_seq=through_seq)
 
-    def __reduce__(self):
-        # Backend metadata snapshots stay with this revision, not on the UI pipe.
-        return type(self), tuple(getattr(self, source.name) for source in fields(self) if source.compare)
-
-    @property
-    def resources(self) -> HistoryViews:
-        if self._views is None:
-            raise RuntimeError("Wire source resources belong to the observing process")
-        return self._views
-
-    def require_source(self, paths: tuple[Path, ...], expected: tuple[FileRevision, ...]) -> None:
-        current = tuple(revision for path in paths
-                        if (revision := FileRevision.capture(path)) is not None)
-        if current != expected:
-            raise StaleRevision(f"Observed source changed during preparation: {paths}")
-
-    @cached_property
-    def registration(self):
-        store = self.resources.registry.store
-        self.require_source((store.path,), self.registry)
-        revision = store.revision()
-        self.require_source((store.path,), self.registry)
-        return revision
-
-    @cached_property
-    def thread_sources(self) -> ThreadViewSources:
-        views = self.resources
-        waits = GoalWaits(views.root / GoalWaits.filename)
-        checks = (
-            ((views.registry.store.path,), self.registry),
-            ((views.agents.activity._path,), self.activity),
-            ((views.agents.runtime_info.path,), self.runtime_info),
-            ((waits.path,), self.goal_waits),
-        )
-        for paths, expected in checks:
-            self.require_source(paths, expected)
-        sources = ThreadViewSources.capture(self.registration.snapshot, views.agents, None, waits)
-        for paths, expected in checks:
-            self.require_source(paths, expected)
-        return sources
-
-    def changed_threads(self, earlier: WireRevision) -> frozenset[str]:
-        changed = set(self.registration.changed_names(earlier.registration))
-        changed.update(self.thread_sources.changed_names(earlier.thread_sources))
-        if self.through_seq < earlier.through_seq or (
-            earlier.through_seq and self.bus_source_changed_since(earlier)
-        ):
-            changed.update(self.registration.document.threads)
-            changed.update(earlier.registration.document.threads)
-        elif self.through_seq > earlier.through_seq:
-            snapshot = self.registration.snapshot
-            log = self.resources.bus.log
-            with log.certified_read() as source:
-                if (source.witness.revision,) != self.bus_log:
+    def changed_threads(self, previous: ThreadsObserved, comms: Comms) -> frozenset[str]:
+        """Attribute changes using the retained view's originals and existing route rows."""
+        earlier = previous.revision
+        names = previous.presentations.keys() | previous.unavailable.keys() | previous.busy
+        if (self.registry != earlier.registry or self.through_seq < earlier.through_seq
+                or self.bus_source_changed_since(earlier)
+                or not any(view is not None for view in previous.presentations.values())):
+            return frozenset(names)
+        changed = set(previous.busy)
+        if self.through_seq > earlier.through_seq:
+            snapshot = comms.registry.snapshot()
+            with comms.bus.log._opened_wire_snapshot() as source:
+                if (source.revision,) != self.bus_log:
                     raise StaleRevision("Wire source changed before route attribution")
-                changed.update(snapshot.by_lookup[row.lookup].name for row in source.addressed_between(
-                    snapshot.by_lookup, earlier.through_seq, self.through_seq,
-                ))
-                opened = OpenedWireSnapshot(source.marker, source.committed_sequence(),
-                                            source.stream, source.witness.revision)
-                with OpenedRouteCounts(log.path, opened, snapshot, {}) as routes:
-                    changed.update(routes.senders_between(earlier.through_seq, self.through_seq))
-        for document in (self.registration.document, earlier.registration.document):
-            changed.update(alias for alias, target in document.aliases.items() if target in changed)
-        return frozenset(changed)
+                with OpenedRouteCounts(comms.bus.log.path, source, snapshot, {}) as routes:
+                    actors = routes.participants_between(earlier.through_seq, self.through_seq)
+            channels = tuple(comms.channels.catalog.read().resolve(name)
+                             for name in actors if is_channel_target(name))
+            changed.update(snapshot.canonical_name(name) for name in actors if not is_channel_target(name))
+            changed.update(name for name in names if (thread := snapshot.threads.get(name)) is not None
+                           and any(channel.matches(thread.tags) for channel in channels))
+            changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
+        if (self.activity, self.goal_waits, self.expiry_period) != (
+            earlier.activity, earlier.goal_waits, earlier.expiry_period
+        ):
+            batch = comms.views.thread_presentations(names)
+            changed.update(name for name, view in batch.views.items()
+                           if not view.presentation.same_status(previous.presentations.get(name)))
+        if self.notifications_changed_since(earlier):
+            remaining = {name: view for name, view in previous.presentations.items()
+                         if name not in changed and view is not None}
+            references = tuple(dict.fromkeys(reference for view in remaining.values()
+                                            for reference in (*view.incoming_references, *view.sent_references)))
+            if references:
+                outcomes = MessageNotification.references(comms.root, comms.registry, comms.bus.log, references)
+                for name, view in remaining.items():
+                    lookup = view.read_identity.thread.incarnation.lookup
+                    current = tuple(replace(item, message=None)
+                                    for reference in (*view.incoming_references, *view.sent_references)
+                                    for item in outcomes[reference.seq, reference.message_id]
+                                    if reference in view.sent_references or item.recipient_identity.recipient_lookup == lookup)
+                    before = tuple(replace(item, message=None)
+                                   for item in (*view.notifications, *view.sent_notifications))
+                    if current != before:
+                        changed.add(name)
+        return frozenset(changed & names)
 
     def bus_source_changed_since(self, earlier: WireRevision) -> bool:
         return any(FileRevision.source_changed(before, current)
@@ -1027,9 +983,6 @@ class WireRevision:
 
     def notifications_changed_since(self, earlier: WireRevision) -> bool:
         """Recipient state depends on assignments, presence, bus replies and read marks."""
-        return replace(
-            self, catalog=earlier.catalog, history=earlier.history, bus_log=earlier.bus_log,
-            native_unread=earlier.native_unread, goal_waits=earlier.goal_waits,
-            relationships=earlier.relationships, external_transcripts=earlier.external_transcripts,
-            expiry_tick=earlier.expiry_tick,
-        ) != earlier or self.expiry_period != earlier.expiry_period
+        return (self.registry, self.activity, self.reads, self.notifications) != (
+            earlier.registry, earlier.activity, earlier.reads, earlier.notifications
+        ) or self.expiry_period != earlier.expiry_period

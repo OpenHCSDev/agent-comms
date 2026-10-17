@@ -364,7 +364,8 @@ class Registration:
 
     def snapshot(self) -> RegistrySnapshot:
         """Read related declarations and statuses from exactly one store revision."""
-        return self.store.snapshot()
+        with self.store.reading() as document:
+            return document.snapshot()
 
     def active_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:

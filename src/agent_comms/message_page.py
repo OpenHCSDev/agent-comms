@@ -5,13 +5,11 @@ from __future__ import annotations
 import sys
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .bus_page_index import BusPageIndex
-from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import (
@@ -22,6 +20,7 @@ from .wire_log import OpenedWireSnapshot
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoryCursor
+    from .bus_page_index import BusPageRow
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,9 +106,6 @@ class PageTraversal(ABC):
     @abstractmethod
     def result(self, window: PageWindow, more: bool, opposite: bool) -> MessagePage: ...
 
-    @abstractmethod
-    def collect(self, request: MessagePageRequest, records) -> MessagePage: ...
-
 
 @dataclass(frozen=True, slots=True)
 class OlderTraversal(PageTraversal):
@@ -141,23 +137,6 @@ class OlderTraversal(PageTraversal):
     def result(self, window, more, opposite):
         return MessagePage(window.messages, more, opposite)
 
-    def collect(self, request, records):
-        window = PageWindow(request.limit, request.max_bytes)
-        more = opposite = False
-        for message, size in records:
-            if not request.includes(message):
-                continue
-            if self.cursor is not None and message.seq >= self.cursor:
-                opposite = True
-                continue
-            window.rows.append((message, size))
-            window.bytes += size
-            while window.exceeded:
-                _, removed_size = window.rows.popleft()
-                window.bytes -= removed_size
-                more = True
-        return self.result(window, more, opposite)
-
 
 @dataclass(frozen=True, slots=True)
 class NewerTraversal(PageTraversal):
@@ -184,21 +163,6 @@ class NewerTraversal(PageTraversal):
     def result(self, window, more, opposite):
         return MessagePage(window.messages, opposite, more)
 
-    def collect(self, request, records):
-        window = PageWindow(request.limit, request.max_bytes)
-        opposite = False
-        for message, size in records:
-            if not request.includes(message):
-                continue
-            if message.seq <= self.cursor:
-                opposite = True
-                continue
-            if window.full_with(size):
-                # Leave this row for the next page; never skip to a smaller row.
-                return self.result(window, True, opposite)
-            self.append(window, message, size)
-        return self.result(window, False, opposite)
-
 
 @dataclass(slots=True)
 class PageWindow:
@@ -217,10 +181,6 @@ class PageWindow:
         return len(self.rows) >= self.limit or bool(
             self.rows and self.bytes + size > self.max_bytes
         )
-
-    @property
-    def exceeded(self) -> bool:
-        return len(self.rows) > self.limit or len(self.rows) > 1 and self.bytes > self.max_bytes
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,11 +238,8 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
         """
         return cls(scope, NewerTraversal(after), sys.maxsize, sys.maxsize)
 
-    def collect(self, records: Iterator[tuple[Message, int]]) -> MessagePage:
-        return self.traversal.collect(self, records)
-
     def empty(self) -> MessagePage:
-        return self.collect(iter(()))
+        return MessagePage((), False, False)
 
     def indexed(self, index, source: OpenedWireSnapshot) -> MessagePage:
         window = PageWindow(self.limit, self.max_bytes)
@@ -296,30 +253,6 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
                     break
                 self.traversal.append(window, message, size)
         return self.traversal.result(window, more, opposite)
-
-
-@dataclass(frozen=True, slots=True)
-class ReferencedMessagesRequest(MessageReadRequest[tuple[Message, ...]]):
-    """Exactly the named messages of a scope, found by sequence in the page index."""
-
-    references: frozenset[MessageReference]
-
-    def includes(self, message: Message) -> bool:
-        return message.reference in self.references and self.scope.includes(message)
-
-    def empty(self) -> tuple[Message, ...]:
-        return ()
-
-    def indexed(self, index, source: OpenedWireSnapshot) -> tuple[Message, ...]:
-        if not self.references:
-            return ()
-        sequences = frozenset(reference.seq for reference in self.references)
-        with closing(self.scope.offsets(
-            index, lower=min(sequences) - 1, upper=max(sequences) + 1,
-            descending=False, before_offset=source.boundary,
-        )) as rows:
-            named = (row for row in rows if row.seq in sequences)
-            return tuple(message for message, _ in self.indexed_records(index, source, named))
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,9 +270,7 @@ class UnreadBeforeRequest(MessageReadRequest[bool]):
         return False
 
     def indexed(self, index, source: OpenedWireSnapshot) -> bool:
-        with closing(self.scope.offsets(
-            index, lower=None, upper=self.before, descending=True, before_offset=source.boundary
-        )) as rows:
+        with closing(OlderTraversal(self.before).offsets(index, self.scope, source.boundary)) as rows:
             candidates = (row for row in rows if self.includes(row))
             return any(True for _ in self.indexed_records(index, source, candidates))
 

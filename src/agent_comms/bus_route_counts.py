@@ -513,14 +513,15 @@ class OpenedRouteCounts(BusRouteCounts):
             target, {direct} if direct in self.deliveries else set()
         )
 
-    def senders_between(self, after_seq: int, through_seq: int) -> frozenset[str]:
-        """Read appended senders from the acquired route projection, not message bodies."""
-        changed = {row.sender for row in RouteEntryRow.select(
+    def participants_between(self, after_seq: int, through_seq: int) -> frozenset[str]:
+        """Names and channel targets of appended rows in this acquired projection."""
+        actors = {actor for row in RouteEntryRow.select(
             self.connection, where="seq>? AND seq<=?", parameters=(after_seq, through_seq),
-        )}
-        changed.update(delivery.message.sender for delivery in self._appended
-                       if after_seq < delivery.message.seq <= through_seq)
-        return frozenset(changed)
+        ) for actor in (row.sender, row.target)}
+        actors.update(actor for delivery in self._appended
+                      if after_seq < delivery.message.seq <= through_seq
+                      for actor in (delivery.message.sender, delivery.message.target))
+        return frozenset(actors)
 
     def unseen_counts(self, seen: Mapping[str, frozenset[int]]) -> dict[str, dict[str, int]]:
         counts: dict[str, dict[str, int]] = {actor: {} for actor in self.deliveries}

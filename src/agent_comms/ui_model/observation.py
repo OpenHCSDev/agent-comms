@@ -39,7 +39,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
-from agent_comms.presentation import MessageNotification, WireRevision
+from agent_comms.presentation import WireRevision
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.history_views import RetiredViews
     from agent_comms.message_reference import MessageReference
-    from agent_comms.presentation import CoordinationSnapshot
+    from agent_comms.presentation import CoordinationSnapshot, MessageNotification
     from agent_comms.runtime import RuntimeConnection
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
@@ -577,9 +577,9 @@ class ThreadReading(Observation[ObserveThreads]):
         names = self.request.names
         try:
             if previous is not None:
-                names = previous.changed_threads(revision) & names
+                names = revision.changed_threads(previous, comms) & names
             if names:
-                batch = comms.views.thread_presentations(names, revision=revision)
+                batch = comms.views.thread_presentations(names)
         except UnreadableHistory.DEFERRED_READS:
             busy.update(names)
         except StoredHistoryUnreadable as error:
@@ -727,40 +727,6 @@ class ThreadsObserved(Observed):
         """A busy result stays pending; a successful cut owns its read frontier."""
         return (not self.busy and not revision.status_changed_since(self.revision)
                 and revision.expiry_period == self.revision.expiry_period)
-
-    def changed_threads(self, revision: WireRevision) -> frozenset[str]:
-        """The retained result owns the exact originals its views currently present."""
-        names = self.presentations.keys() | self.unavailable.keys() | self.busy
-        if not any(view is not None for view in self.presentations.values()):
-            return frozenset(names)
-        affected = revision.changed_threads(self.revision)
-        namespace = revision.registration.snapshot
-        changed = set(self.busy)
-        changed.update(name for name in names
-                       if name in affected or namespace.canonical_name(name) in affected)
-        if revision.notifications_changed_since(self.revision):
-            remaining = {name: view for name, view in self.presentations.items()
-                         if name not in changed and view is not None}
-            references = tuple(dict.fromkeys(
-                reference for view in remaining.values()
-                for reference in (*view.incoming_references, *view.sent_references)
-            ))
-            if references:
-                views = revision.resources
-                outcomes = MessageNotification.references(views.root, views.registry, views.bus.log, references)
-                for name, view in remaining.items():
-                    lookup = view.read_identity.thread.incarnation.lookup
-                    current = tuple(
-                        replace(item, message=None)
-                        for reference in (*view.incoming_references, *view.sent_references)
-                        for item in outcomes[reference.seq, reference.message_id]
-                        if reference in view.sent_references or item.recipient_identity.recipient_lookup == lookup
-                    )
-                    before = tuple(replace(item, message=None)
-                                   for item in (*view.notifications, *view.sent_notifications))
-                    if current != before:
-                        changed.add(name)
-        return frozenset(changed)
 
     def changed_since(self, previous: ThreadsObserved | None) -> frozenset[str]:
         """Read-state transitions and source-owned changes, independent of store churn."""

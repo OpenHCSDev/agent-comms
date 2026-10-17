@@ -45,7 +45,6 @@ from .presentation import (
     CoordinationSnapshot,
     MessageNotification,
     ThreadView,
-    ThreadViewSources,
     WireRevision,
 )
 from .read_basis import ChannelDisplayScope, DMDisplayBasis
@@ -328,14 +327,10 @@ class HistoryViews:
         self, *, show_stopped: bool = True, show_archived: bool = False
     ) -> tuple[ThreadView, ...]:
         snapshot = self.registry.snapshot()
-        visible = tuple(ThreadView.visible_threads(
-            snapshot, show_stopped=show_stopped, show_archived=show_archived,
-        ))
-        if not visible:
-            return ()
-        return ThreadViewSources.capture(
+        return ThreadView.roster(
             snapshot, self.agents, None, GoalWaits(self.root / GoalWaits.filename),
-        ).roster(visible)
+            show_stopped=show_stopped, show_archived=show_archived,
+        )
 
     def retired_views(self, threads: Iterable[ThreadIncarnation], channels: Iterable[str]) -> RetiredViews:
         """Which of these thread incarnations and channel views no longer exist.
@@ -358,15 +353,13 @@ class HistoryViews:
 
     def thread_presentations(
         self, names: Iterable[str], *, sent_source_limit: int = 5,
-        revision: WireRevision | None = None,
     ) -> ThreadPresentations:
-        """Selected rows use the same acquired metadata as their revision attribution."""
-        revision = revision or self.revision()
-        snapshot = revision.registration.snapshot
-        visible = tuple(ThreadView.visible_threads(
-            snapshot, names=names, show_stopped=True, show_archived=False,
-        ))
-        views = revision.thread_sources.roster(visible) if visible else ()
+        """Read status once for only the requested rows, before their original sources."""
+        snapshot = self.registry.snapshot()
+        views = ThreadView.roster(
+            snapshot, self.agents, None, GoalWaits(self.root / GoalWaits.filename),
+            names=names, show_stopped=True, show_archived=False,
+        )
         return ThreadPresentations(
             snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
         )

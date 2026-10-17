@@ -13,7 +13,7 @@ from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
 from .message_page import (
-    ConversationMessagePageRequest, MessagePage, MessagePageRequest, ReferencedMessagesRequest,
+    ConversationMessagePageRequest, MessagePage, MessagePageRequest,
     UnreadBeforeRequest,
 )
 from .message_reference import MessageReference
@@ -229,16 +229,16 @@ class MessageBus:
     ) -> DisplayBasis:
         """The named messages this reader received and has not yet read.
 
-        The page index finds each one by its sequence, so this costs the named
-        rows only: no route projection, unread listing or other body is read.
+        The canonical original-reference reader supplies only the named rows;
+        acknowledgement needs no disposable page index or unread listing.
         The caller marks the returned basis read.
         """
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
         seen = self.reads.seen_sequences(delivery.actor, snapshot)
-        messages = ReferencedMessagesRequest(delivery, frozenset(references)).read(self.log)
+        messages = self.log.messages_for_references(references)
         return self.reads.capture(
-            name, tuple(message for message in messages if message.seq not in seen),
+            name, tuple(message for message in messages if delivery.includes(message) and message.seq not in seen),
             snapshot, self.log.path,
         )
 
