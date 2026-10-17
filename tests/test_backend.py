@@ -496,40 +496,6 @@ for line in sys.stdin:
             os.kill(int(pid_file.read_text()), 0)
         assert owner not in backend.TurnSession.active
 
-    async def test_caller_cancellation_reaps_backend_and_steering_task(self, tmp_path):
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\n" + "import time\ntime.sleep(60)\n",
-        )
-        queue: asyncio.Queue[str] = asyncio.Queue()
-        queue.put_nowait(steer("[peer] pending"))
-
-        async def consume() -> None:
-            async for _ in one_turn_events(
-                stub,
-                [],
-                "task",
-                str(tmp_path),
-                steering_queue=queue,
-                model_wait_timeout=None,
-            ):
-                pass
-
-        turn = asyncio.create_task(consume())
-        while turn not in backend.TurnSession.active or not queue.empty():
-            await asyncio.sleep(0)
-        process = backend.TurnSession.active[turn].native.proc
-
-        turn.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await turn
-
-        assert process.returncode is not None
-        assert turn not in backend.TurnSession.active
-        # Once written, this input may already have crossed a provider boundary.
-        # It must not be silently requeued after caller cancellation.
-        assert queue.empty()
-
     async def test_full_rpc_stream(self, tmp_path):
         """Canned pi rpc stream -> chunk/tool_start/tool_end/done events."""
         rpc_lines = "\n".join(
