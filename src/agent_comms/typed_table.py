@@ -370,8 +370,12 @@ class TypedRow:
         )
 
     @classmethod
+    def projection(cls) -> dict[str, str]:
+        return {item.name: item.wire_name for item in cls._fields()}
+
+    @classmethod
     def columns(cls) -> tuple[str, ...]:
-        return tuple(item.name for item in cls._fields())
+        return tuple(cls.projection().values())
 
     @classmethod
     def _fields_named(cls, names: tuple[str, ...]) -> tuple[_Field, ...]:
@@ -382,14 +386,15 @@ class TypedRow:
         return tuple(declared[name] for name in names)
 
     @classmethod
-    def _positions(cls, cursor: sqlite3.Cursor, extra: tuple[_Field, ...] = ()) -> dict[str, int]:
+    def _positions(cls, cursor: sqlite3.Cursor,
+                   extra: Mapping[str, str] = types.MappingProxyType({})) -> dict[str, int]:
         if cursor.description is None:
             raise ValueError("Typed read requires a result set")
         names = tuple(item[0] for item in cursor.description)
-        declared = (*cls._fields(), *extra)
-        if len(set(names)) != len(names) or set(names) != {item.wire_name for item in declared}:
+        projection = {**cls.projection(), **extra}
+        if len(set(names)) != len(names) or set(names) != set(projection.values()):
             raise ValueError(f"Query columns do not match {cls.__name__}: {names!r}")
-        return {item.name: names.index(item.wire_name) for item in declared}
+        return {key: names.index(column) for key, column in projection.items()}
 
     @classmethod
     def _decode_row(
@@ -423,7 +428,7 @@ class TypedRow:
         This reads one SQLite snapshot and never re-encodes a stored row as JSON.
         """
         try:
-            positions = cls._positions(cursor, related._fields())
+            positions = cls._positions(cursor, related.projection())
             return [(cls._decode_row(row, positions), related._decode_row(row, positions))
                     for row in cursor]
         finally:
@@ -604,7 +609,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         where, parameters = cls._condition(where, parameters, key)
         direction = " DESC" if descending else ""
         return db.execute(
-            f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
+            f"SELECT {cls._column_list(tuple(cls.projection()))} FROM {_identifier(cls.declared_name)} "
             f"WHERE {where}"
             + (" ORDER BY " + ", ".join(cls._column_list((name,)) + direction for name in order_by)
                if order_by else ""),

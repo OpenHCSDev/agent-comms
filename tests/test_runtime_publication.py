@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.active_route import LocalRoute
-from tools.cutover.publish_runtime import RuntimePublication
+from tools.publish_runtime import RuntimePublication
 
 
 @pytest.mark.parametrize("command", ["exit 17", "echo broken >&2; exit 0"])
