@@ -430,7 +430,7 @@ async def test_discard_stderr_drains_past_transport_capacity_to_real_eof():
         "[os.write(2,payload) for _ in range(128)]; print('drained',flush=True)",
     )
     async with BoundedRun.session(command, timeout=10) as child:
-        drain = asyncio.create_task(child.discard_stderr())
+        drain = asyncio.create_task(child.stderr_tail())
         try:
             assert await child.stdout.readline() == b"drained\n"
             outcome = await child.wait()
