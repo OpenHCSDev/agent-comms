@@ -63,7 +63,11 @@ class ArgumentTool(ToolDeclaration):
                 (name, hint), = marked
                 read = attrgetter(name)
                 validate = TypeAdapter(hint, config=ConfigDict(strict=True)).validate_python
-                cls.caption_reader = staticmethod(lambda value: validate(read(value)))
+                def caption(value):
+                    if name not in value.model_fields_set and name not in type(value).model_fields:
+                        raise ValueError(f'Tool input has no declared caption argument: {name}')
+                    return validate(read(value))
+                cls.caption_reader = staticmethod(caption)
                 return
 
     @classmethod

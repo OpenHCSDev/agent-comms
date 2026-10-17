@@ -51,7 +51,7 @@ def test_boundaries_keep_missing_file_arguments_strict_and_extension_inputs_opaq
     update, = unknown.updates(record, ClaudeSession(turn='turn'))
     assert update.accumulator.title == 'external_custom'
     assert update.accumulator.arguments.raw_input == opaque and update.accumulator.path is None
-    with pytest.raises((AttributeError, ValueError)):
+    with pytest.raises(ValueError, match='no declared caption argument: command'):
         ToolUse(id='missing', name='Bash', input={}).updates(record, ClaudeSession(turn='turn'))
 
 
