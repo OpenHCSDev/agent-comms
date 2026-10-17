@@ -461,6 +461,7 @@ BridgeOptions = TypeVar('BridgeOptions', bound=Options)
 OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
 
 
+@dataclass(frozen=True)
 class Operation(ABC, Generic[OperationBridge]):
     """A decoded CLI command owns its execution."""
 
@@ -477,7 +478,7 @@ class Operation(ABC, Generic[OperationBridge]):
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Operation:
-        return cls()
+        return FieldCodec.decode(cls, {key: vars(arguments).pop(key) for _, key in FieldCodec.record_fields(cls)})
 
     @abstractmethod
     async def run(self, bridge: OperationBridge) -> None: ...
@@ -485,21 +486,15 @@ class Operation(ABC, Generic[OperationBridge]):
 
 @dataclass(frozen=True)
 class Send(Operation):
-    target: str
+    target: str = field(metadata={'wire_name': 'to'})
     body: str
-    kind: type[MessageKind]
+    kind: type[MessageKind] = field(metadata={'wire_name': 'type'})
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--to', required=True)
         parser.add_argument('--body', required=True)
         parser.add_argument('--type', default=FieldCodec.encode(InfoKind), choices=MessageKind.sendable_names())
-
-    @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> Send:
-        send = cls(arguments.to, arguments.body, FieldCodec.decode(type[MessageKind], arguments.type))
-        del arguments.to, arguments.body, arguments.type
-        return send
 
     async def run(self, bridge: CliBridge) -> None:
         result = await asyncio.to_thread(bridge.comms.messaging.send, bridge.binding.bus,
@@ -810,7 +805,7 @@ def shared_parser(description: str | None, state: Path,
     common.add_argument('--state', type=Path, default=state)
     bridge_type.add_arguments(common)
     parser = argparse.ArgumentParser(description=description)
-    commands = parser.add_subparsers(dest='command', required=True)
+    commands = parser.add_subparsers(required=True)
     for operation in bridge_type.operations:
         command = commands.add_parser(operation.__name__.lower(), parents=[common])
         operation.add_arguments(command)
@@ -821,7 +816,6 @@ def shared_parser(description: str | None, state: Path,
 def parse_options(parser: argparse.ArgumentParser,
                   options_type: type[BridgeOptions]) -> BridgeOptions:
     arguments = parser.parse_args()
-    del arguments.command
     arguments.operation = arguments.operation.from_arguments(arguments)
     return options_type(**vars(arguments))
 

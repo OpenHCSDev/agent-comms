@@ -61,12 +61,6 @@ class Attach(Watch):
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--pid', type=int, required=True)
 
-    @classmethod
-    def from_arguments(cls, arguments: argparse.Namespace) -> Attach:
-        operation = cls(arguments.pid)
-        del arguments.pid
-        return operation
-
     def binding(self, options: OpenCodeOptions) -> Binding:
         from agent_comms.comms import wire
 

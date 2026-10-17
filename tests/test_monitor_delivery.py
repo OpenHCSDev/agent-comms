@@ -1,5 +1,4 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
-from contextlib import closing
 from html import escape
 import json
 
@@ -11,8 +10,8 @@ from agent_comms.cli_bridges.claude_protocol import (
     ForeignAttachment,
 )
 from agent_comms.cli_bridges.shared import (
-    Binding, DeliveryJournal, DeliveryRow, MonitorAttemptRow, MonitorPartRow, MonitorPart,
-    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, NO_MONITOR_ATTEMPT, Watch,
+    Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
+    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch,
 )
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
@@ -41,18 +40,21 @@ async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, r
     state=tmp_path/'state'
     acknowledgments=[]
     class Core:
-        async def acknowledge(self,message):
-            acknowledgments.append(message.reference)
-    with closing(DeliveryJournal(state)) as journal:
+        def __init__(self):
+            self.messaging=self
+        def acknowledge(self,thread,references):
+            acknowledgments.extend(references)
+    with Binding.open(state) as db:
         binding=Binding(str(tmp_path),'viewer','session')
-        journal.bind(binding)
-        bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,journal)
-        bridge.core=Core()
+        Binding.bind(db, binding)
+        bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,db)
+        bridge.comms=Core()
         message=Message(sender='claude-code',target='viewer',type=InfoKind,body='x'*3000,timestamp=1.,seq=1)
-        assert journal.begin(message,UnconfirmedOutcome)
+        with db:
+            assert DeliveryRow(message.message_id,json.dumps(message.to_wire()),UnconfirmedOutcome).insert_if_absent(db).rowcount
         parts=ClaudeMonitorFrame(message).parts
-        journal.emitting(message,len(parts))
-        journal.finish(message,EmittedOutcome)
+        with db:
+            DeliveryRow.update(db, where='id=?', parameters=(message.message_id,), monitor=ReceivingMonitor(len(parts)), outcome=EmittedOutcome)
         lines=[json.dumps(part,ensure_ascii=False) for part in parts]
         assert len(lines)==7
         assert all(len(line.encode('utf-16-le'))//2 <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
@@ -61,10 +63,10 @@ async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, r
             for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(bridge)
         assert not acknowledgments
-        assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
-    with closing(DeliveryJournal(state)) as journal:
-        bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,journal)
-        bridge.core=Core()
+        assert DeliveryRow.select(db)[0].outcome is EmittedOutcome
+    with Binding.open(state) as db:
+        bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,db)
+        bridge.comms=Core()
         for number in (0,4):
             for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(bridge)
@@ -73,10 +75,10 @@ async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, r
             for update in record_factory(line,record_id='later-overlap').updates(ClaudeSession()):
                 await update.observed(bridge)
         assert acknowledgments==[message.reference]
-    with closing(DeliveryJournal(state)) as reopened:
-        assert DeliveryRow.select(reopened.db)[0].outcome is DeliveredOutcome
-        assert MonitorAttemptRow.select(reopened.db)[0].evidence==ObservedMonitor('record-4',1792168805.123)
-        assert len(MonitorPartRow.select(reopened.db))==7
+    with Binding.open(state) as db:
+        assert DeliveryRow.select(db)[0].outcome is DeliveredOutcome
+        assert DeliveryRow.select(db)[0].monitor==ObservedMonitor('record-4',1792168805.123)
+        assert len(ObservedPart.select(db))==7
 
 
 @pytest.mark.parametrize('body', ['x'*3000, ('\n"\\😀\t')*500, 'short'])
@@ -120,28 +122,28 @@ def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
 
 @pytest.mark.asyncio
 async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(tmp_path,capsys):
-    with closing(DeliveryJournal(tmp_path)) as journal:
+    with Binding.open(tmp_path) as db:
         binding=Binding(str(tmp_path),'viewer','session')
-        bridge=ClaudeBridge(Options(Watch(),None,None,None,tmp_path),binding,journal)
+        bridge=ClaudeBridge(Options(Watch(),None,None,None,tmp_path),binding,db)
         message=Message(sender='peer',target='viewer',type=InfoKind,body='original',timestamp=1.,seq=1)
-        journal.begin(message,EmittedOutcome)
-        journal.emitting(message,1)
+        with db:
+            DeliveryRow(message.message_id,json.dumps(message.to_wire()),EmittedOutcome,ReceivingMonitor(1)).insert(db)
         frame=MonitorPart(id=message.message_id,sender='peer',number=1,total=1,body='different')
         await frame.confirm(bridge,ObservedMonitor('record',1.))
-        assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
-        assert isinstance(MonitorAttemptRow.select(journal.db)[0].evidence,MismatchedMonitor)
+        assert DeliveryRow.select(db)[0].outcome is EmittedOutcome
+        assert isinstance(DeliveryRow.select(db)[0].monitor,MismatchedMonitor)
         assert 'message remains pending' in capsys.readouterr().err
 
 
 def test_old_emission_has_no_invented_evidence_or_replay(tmp_path):
     message=Message(sender='peer',target='viewer',type=InfoKind,body='retained',timestamp=1.,seq=1)
-    with closing(DeliveryJournal(tmp_path)) as journal:
-        journal.begin(message,EmittedOutcome)
+    with Binding.open(tmp_path) as db:
+        DeliveryRow(message.message_id,json.dumps(message.to_wire()),EmittedOutcome).insert(db)
         frame=MonitorPart(id=message.message_id,sender='peer',number=1,total=1,body='retained')
-        assert journal.monitor_attempt(frame) is NO_MONITOR_ATTEMPT
-        assert not journal.begin(message,UnconfirmedOutcome)
-        assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
-        assert MonitorAttemptRow.select(journal.db)==[]
+        assert isinstance(DeliveryRow.select(db)[0].monitor,UnrecordedMonitor)
+        assert not DeliveryRow(message.message_id,json.dumps(message.to_wire()),UnconfirmedOutcome).insert_if_absent(db).rowcount
+        assert DeliveryRow.select(db)[0].outcome is EmittedOutcome
+        assert ObservedPart.select(db)==[]
 
 
 @pytest.mark.asyncio

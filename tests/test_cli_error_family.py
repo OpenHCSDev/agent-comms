@@ -12,12 +12,7 @@ from pydantic import ValidationError
 
 from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.cli import _fail, main
-from agent_comms.cli_bridges.shared import (
-    Binding,
-    DeliveryJournal,
-    DeliveryRow,
-    MonitorAttemptRow,
-)
+from agent_comms.cli_bridges.shared import Binding, DeliveryRow
 from agent_comms.cli_protocol import (
     WATCH_LINE, FailedCoreError, UnavailableCoreError, UnconfirmedOutcome, DeliveredOutcome,
 )
@@ -69,15 +64,12 @@ def test_argument_errors_use_the_same_single_line(arguments, capsys):
 
 @pytest.mark.asyncio
 async def test_journal_concurrent_initialization_and_reopen_preserve_rows(tmp_path):
-    # Pause both real processes immediately before their first table CREATE.
-    # The old present()/create() implementation then deterministically races:
-    # both have observed absence before either is allowed to create the table.
     worker = r'''
 import sqlite3
 import sys
 from pathlib import Path
 from unittest.mock import patch
-from agent_comms.cli_bridges.shared import DeliveryJournal
+from agent_comms.cli_bridges.shared import Binding
 
 connect = sqlite3.connect
 class PausedConnection(sqlite3.Connection):
@@ -90,8 +82,8 @@ class PausedConnection(sqlite3.Connection):
         return super().execute(statement, *args, **kwargs)
 
 with patch('sqlite3.connect', side_effect=lambda *a, **k: connect(*a, factory=PausedConnection, **k)):
-    journal = DeliveryJournal(Path(sys.argv[1]))
-    journal.close()
+    with Binding.open(Path(sys.argv[1])):
+        pass
 print('opened', flush=True)
 '''
 
@@ -120,20 +112,15 @@ print('opened', flush=True)
     binding = Binding(str(tmp_path), 'viewer', 'external-session')
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
-    journal = DeliveryJournal(tmp_path)
-    try:
-        assert journal.bind(binding) == binding
-        assert journal.begin(message, UnconfirmedOutcome)
-        pending, = DeliveryRow.select(journal.db)
-    finally:
-        journal.close()
+    pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
+    with Binding.open(tmp_path) as db:
+        assert Binding.bind(db, binding) == binding
+        with db:
+            assert pending.insert_if_absent(db).rowcount
     await open_together()
-    journal = DeliveryJournal(tmp_path)
-    try:
-        assert journal.bind(None) == binding
-        assert DeliveryRow.select(journal.db) == [pending]
-    finally:
-        journal.close()
+    with Binding.open(tmp_path) as db:
+        assert Binding.bind(db, None) == binding
+        assert DeliveryRow.select(db) == [pending]
 
 
 @pytest.mark.parametrize('conflicting', [False, True])
@@ -144,67 +131,36 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
     other = Binding(str(tmp_path), 'other-viewer', 'external-session')
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='retained delivery', timestamp=1.0, seq=1)
-    journal = DeliveryJournal(tmp_path)
-    try:
-        assert journal.begin(message, UnconfirmedOutcome)
-        pending, = DeliveryRow.select(journal.db)
-    finally:
-        journal.close()
+    pending = DeliveryRow(message.message_id, json.dumps(message.to_wire()), UnconfirmedOutcome)
+    with Binding.open(tmp_path) as db, db:
+        pending.insert(db)
     results = concurrent_bindings(tmp_path, (first, other if conflicting else first))
     assert sum(kind == 'bound' for kind, _ in results) == (1 if conflicting else 2)
     assert sum(kind == 'rejected' for kind, _ in results) == int(conflicting)
-    journal = DeliveryJournal(tmp_path)
-    try:
-        rows = Binding.select(journal.db)
-        assert len(rows) == 1
-        winner, = rows
+    with Binding.open(tmp_path) as db:
+        winner, = Binding.select(db)
         assert winner in (first, other)
-        assert journal.bind(None) == journal.bind(winner) == winner
+        assert Binding.bind(db, None) == Binding.bind(db, winner) == winner
         loser = other if winner == first else first
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
-            journal.bind(loser)
-        assert not journal.begin(message, DeliveredOutcome)
-        assert DeliveryRow.select(journal.db) == [pending]
-        assert Binding.select(journal.db) == [winner]
-    finally:
-        journal.close()
+            Binding.bind(db, loser)
+        with db:
+            assert not DeliveryRow(message.message_id, 'unused', DeliveredOutcome).insert_if_absent(db).rowcount
+        assert DeliveryRow.select(db) == [pending]
+        assert Binding.select(db) == [winner]
 
 
 def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
     binding = Binding(str(tmp_path), 'viewer', 'external-session')
-    journal = DeliveryJournal(tmp_path)
-    try:
-        assert journal.bind(binding) == binding
+    with Binding.open(tmp_path) as db:
+        assert Binding.bind(db, binding) == binding
         statements = []
-        journal.db.set_trace_callback(statements.append)
-        with closing(CoordinationStore.writer(journal.path)) as writer:
+        db.set_trace_callback(statements.append)
+        with closing(CoordinationStore.writer(tmp_path / 'delivery.sqlite3')) as writer:
             writer.execute('BEGIN IMMEDIATE')
-            assert journal.bind(None) == binding
+            assert Binding.bind(db, None) == binding
             assert writer.in_transaction
         assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
-    finally:
-        journal.close()
-
-
-def test_legacy_journal_reopen_preserves_schema_binding_and_delivery(tmp_path):
-    binding = Binding(str(tmp_path), 'viewer', 'external-session')
-    pending = DeliveryRow('pending-id', 'original payload', UnconfirmedOutcome)
-    with closing(CoordinationStore.writer(tmp_path / 'delivery.sqlite3')) as db:
-        db.execute('CREATE TABLE binding (root TEXT, bus TEXT, thread TEXT)')
-        db.execute('CREATE TABLE delivery (id TEXT PRIMARY KEY, payload TEXT NOT NULL, outcome TEXT NOT NULL)')
-        binding.insert(db)
-        pending.insert(db)
-        db.commit()
-        schema = db.execute('SELECT name, sql FROM sqlite_master ORDER BY name').fetchall()
-    journal = DeliveryJournal(tmp_path)
-    try:
-        assert journal.bind(binding) == journal.bind(None) == binding
-        assert DeliveryRow.select(journal.db) == [pending]
-        current = dict(journal.db.execute('SELECT name, sql FROM sqlite_master ORDER BY name').fetchall())
-        assert {name: current[name] for name, _ in schema} == dict(schema)
-        assert MonitorAttemptRow.select(journal.db) == []
-    finally:
-        journal.close()
 
 
 def test_journal_initialization_failure_closes_owned_connection(tmp_path, monkeypatch):
@@ -213,6 +169,7 @@ def test_journal_initialization_failure_closes_owned_connection(tmp_path, monkey
     connection = CoordinationStore.writer(path)
     monkeypatch.setattr(CoordinationStore, 'writer', lambda *_args, **_options: connection)
     with pytest.raises(sqlite3.DatabaseError):
-        DeliveryJournal(tmp_path)
+        with Binding.open(tmp_path):
+            pass
     with pytest.raises(sqlite3.ProgrammingError, match='closed'):
         connection.execute('SELECT 1')

@@ -25,9 +25,8 @@ from .codex_protocol import (
 class CodexConnection:
     """One WebSocket owns JSON-RPC initialization and response matching."""
 
-    def __init__(self, socket: aiohttp.ClientWebSocketResponse, thread: str) -> None:
+    def __init__(self, socket: aiohttp.ClientWebSocketResponse) -> None:
         self.socket = socket
-        self.thread = thread
         self.sequence = 0
         self.pending: deque[RpcNotification] = deque()
 
@@ -65,10 +64,10 @@ class CodexConnection:
 
     @classmethod
     @asynccontextmanager
-    async def open(cls, path: str, thread: str) -> AsyncIterator[CodexConnection]:
+    async def open(cls, path: str) -> AsyncIterator[CodexConnection]:
         async with aiohttp.ClientSession(connector=aiohttp.UnixConnector(path=path)) as client:
             async with client.ws_connect('http://localhost/') as socket:
-                connection = cls(socket, thread)
+                connection = cls(socket)
                 await connection.call(Initialize(
                     clientInfo=ClientInfo(), capabilities=Capabilities()))
                 await socket.send_str(Initialized().model_dump_json())
@@ -85,7 +84,7 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
         parser.add_argument('--socket', default=str(Path.home() / '.codex/app-server-control/app-server-control.sock'))
 
     async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
-        async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
+        async with CodexConnection.open(self.options.socket) as codex:
             resumed = ResumedThread.model_validate(
                 await codex.call(ResumeThread(threadId=self.binding.thread)))
             page = ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.binding.thread)))
@@ -98,30 +97,24 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
             # Codex's own thread status says whether its newest turn still runs.
             yield resumed.thread.status.update()
             stream = ItemStream(self.binding.thread)
-            buffered = tuple(codex.pending)
-            codex.pending.clear()
-            for notification in buffered:
-                update = stream.receive(notification)
-                if update is not None:
-                    yield update
             async for notification in codex.notifications():
                 update = stream.receive(notification)
                 if update is not None:
                     yield update
 
     async def deliver(self, message: Message) -> type[Outcome]:
-        async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
+        async with CodexConnection.open(self.options.socket) as codex:
             await codex.call(BusInput.for_message(self.binding.thread, message.message_id, IncomingFrame(message).text))
         return DeliveredOutcome
 
     async def show_sent(self, result: str, target: str, body: str) -> None:
-        async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
+        async with CodexConnection.open(self.options.socket) as codex:
             await codex.call(DisplayOutput(
                 threadId=self.binding.thread, clientUserMessageId=f'comms-out:{result}',
                 toolOutput=ToolOutput(output=self.sent_text(result, target, body))))
 
     async def report_failure(self, text: str) -> None:
-        async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
+        async with CodexConnection.open(self.options.socket) as codex:
             await codex.call(MessageInput(
                 threadId=self.binding.thread, clientUserMessageId=f'bridge-error:{uuid4()}',
                 input=(TextInput(text=text),)))
