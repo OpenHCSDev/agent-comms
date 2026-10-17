@@ -425,15 +425,16 @@ class DeliveredInput(QueuedInput):
         name: str, root_id: str, live_keys: frozenset[str],
     ) -> int:
         """Acquire, recover and release entirely inside the joined worker."""
-        owner = comms.registry.require(name)
-        document = dispositions.unresolved(comms.registry.aliases_for(owner.name))
+        entry = comms.registry.entry(name).entry
+        owner = entry.thread
+        document = dispositions.unresolved(entry.names)
         if not any(row.key not in live_keys
                    for row in document.unbound_wire_inputs(root_id).values()):
             return 0
         with _store_lock(comms._wire_lock_path):
-            snapshot = comms.registry.snapshot()
-            owner = snapshot.require(name)
-            document = dispositions.unresolved(comms.registry.aliases_for(owner.name))
+            entry = comms.registry.entry(name).entry
+            owner = entry.thread
+            document = dispositions.unresolved(entry.names)
             rows = {
                 reference: row
                 for reference, row in document.unbound_wire_inputs(root_id).items()

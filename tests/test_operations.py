@@ -149,7 +149,7 @@ class TestThreadOps:
             )
         )
 
-        events = wired.transcripts.thread_transcript("transcript-thread")
+        events = wired.transcripts.thread_transcript_page("transcript-thread").events
 
         assert [event.declared_name for event in events] == [
             "user",
@@ -529,9 +529,9 @@ class TestLedgerOps:
         wired.registry.declare(
             Thread(name="large", tags=frozenset(), worktree=str(tmp_path), session_file=str(path))
         )
-        events = wired.transcripts.thread_transcript("large")
-        assert events[0].declared_name == "notice"
-        assert [event.text for event in events[1:]] == [str(index) for index in range(80, 100)]
+        page = wired.transcripts.thread_transcript_page("large")
+        assert page.has_older
+        assert [event.text for event in page.events] == [str(index) for index in range(80, 100)]
         assert _session_model(path) == ("test", "one")
 
     def test_merge_requires_registered_author(self, wired):

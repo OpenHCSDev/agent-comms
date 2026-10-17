@@ -419,16 +419,9 @@ class DMDisplayScope(MessageDisplayScope):
     first_names: frozenset[str]
     second_names: frozenset[str]
 
-    @staticmethod
-    def names_for(name: str, snapshot: RegistryProvenance) -> frozenset[str]:
-        canonical = snapshot.canonical_name(name)
-        return frozenset(
-            {canonical, *(alias for alias, owner in snapshot.aliases.items() if owner == canonical)}
-        )
-
     @classmethod
     def capture(cls, a: str, b: str, snapshot: RegistryProvenance) -> DMDisplayScope:
-        return cls(cls.names_for(a, snapshot), cls.names_for(b, snapshot))
+        return cls(snapshot.names_for(a), snapshot.names_for(b))
 
     @classmethod
     def capture_human(cls, viewer: str, peer: str, snapshot: RegistrySnapshot) -> DMDisplayScope:

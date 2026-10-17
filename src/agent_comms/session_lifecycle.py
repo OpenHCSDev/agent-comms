@@ -290,13 +290,15 @@ class SessionLifecycle:
         """Publish each observed identity generation once across concurrent consumers."""
         async with self._identity_lock:
             cached_name = self.require(session_id)
-            snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
-            thread = snapshot.require(cached_name)
+            entry = (await Coordination.run_worker(partial(
+                self.comms.registry.entry, cached_name,
+            ))).entry
+            thread = entry.thread
             name = thread.name
             if (
                 name != cached_name
                 or thread.pid != os.getpid()
-                or not snapshot.status(name).running
+                or not entry.status.running
             ):
                 await self.effects.turns.close_idle_backend(session_id, thread)
             self.bindings[session_id] = name
