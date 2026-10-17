@@ -86,6 +86,65 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert {row["inputId"] for row in proofs} == {row[1] for row in owner.starts}
 
 
+async def test_actual_native_parked_followup_settles_without_stats_spin(native_backend, monkeypatch):
+    from contextlib import contextmanager
+    from agent_comms.agent_backend import TurnInbox
+    from agent_comms.send_outcome import GrantedSend, HeldSend
+    from agent_comms.turn_stats import StatsRequest
+
+    owner = native_backend
+    inbox = TurnInbox()
+    permit_followup = False
+    stats = []
+    request = StatsRequest.request
+
+    async def counted_request(self, session):
+        if not self.requested:
+            stats.append((session.task, inbox.ready.is_set()))
+        await request(self, session)
+
+    monkeypatch.setattr(StatsRequest, "request", counted_request)
+
+    @contextmanager
+    def boundary(public_id, native_id, text):
+        yield HeldSend() if public_id == "queued" and not permit_followup else GrantedSend()
+
+    first = await owner.run("finished original", followup="parked followup", queue=inbox,
+                            send_boundary=boundary)
+    assert first[-1].ok, first[-1]
+    assert sum(isinstance(event, events.StreamSettled) for event in first) == 1
+    assert stats == [("finished original", False)]  # One terminal query pair; no re-requests.
+    assert inbox.qsize() == 1 and not inbox.ready.is_set() and not inbox.has_ready_work
+    assert [row[2] for row in owner.starts] == ["finished original"]
+    assert len(owner.saved_inputs()) == owner.provider.posts == 1
+    retained = owner.persistent.child_state.child.proc
+    assert retained.alive()
+
+    # The next distinct turn borrows the same inbox and child. Neither its original
+    # nor the parked follow-up may cross the native send seam before READY.
+    continuation = asyncio.create_task(owner.run("next original", queue=inbox, send_boundary=boundary))
+    try:
+        await wait_for(lambda: continuation in backend.TurnSession.active)
+        running = backend.TurnSession.active[continuation]
+        assert not running.inputs.pending and not inbox.has_ready_work
+        assert len(owner.starts) == 1 and len(stats) == 1
+        permit_followup = True
+        GrantedSend().resume(inbox)
+        second = await continuation
+        assert second[-1].ok, second[-1]
+        assert [row[2] for row in owner.starts] == ["finished original", "next original", "parked followup"]
+        assert [row[0] for row in owner.starts] == [None, None, "queued"]
+        assert len(owner.saved_inputs()) == owner.provider.posts == 3
+        assert len(stats) == 2 and inbox.empty()
+        assert owner.persistent.child_state.child.proc is retained
+        print(json.dumps({"parked_turn_settled": True, "parked_unstarted": True,
+                          "terminal_stats_pairs": 1, "stats_re_requests": 0,
+                          "ready_resumed_exactly_once": True, "same_native_child": True}))
+    finally:
+        continuation.cancel()
+        await asyncio.gather(continuation, return_exceptions=True)
+
+
 async def test_actual_native_failure_after_tool_keeps_terminal_and_effect_once(
     native_backend, monkeypatch
 ):
