@@ -764,8 +764,9 @@ class WireRevision:
             }
         return cls(**captured, expiry_tick=expiry_tick, through_seq=through_seq)
 
-    def changed_threads(self, previous: ThreadsObserved, comms: Comms) -> frozenset[str]:
-        """Attribute changes using the retained view's originals and existing route rows."""
+    def changed_threads(self, previous: ThreadsObserved, comms: Comms,
+                        activity: Mapping[str, ObservedActivity]) -> frozenset[str]:
+        """Attribute changes using the retained observation and existing route rows."""
         earlier = previous.revision
         names = previous.changed_since(None)
         if (self.registry != earlier.registry or self.bus_source_changed_since(earlier)
@@ -783,11 +784,13 @@ class WireRevision:
             for actor in actors:
                 changed.update(CommandTarget.named(actor).changed_threads(names, snapshot, catalog))
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
-        if (self.activity, self.goal_waits, self.expiry_period) != (
-            earlier.activity, earlier.goal_waits, earlier.expiry_period
-        ):
-            batch = comms.views.thread_presentations(names)
-            changed.update(name for name in names if (view := batch.view(name)) is None
+        status_names = names if (self.goal_waits, self.expiry_period) != (
+            earlier.goal_waits, earlier.expiry_period) else ()
+        if not status_names and self.activity != earlier.activity:
+            status_names = tuple(name for name in names if activity.get(name) != previous.activity.get(name))
+        if status_names:
+            status_batch = comms.views.thread_presentations(status_names)
+            changed.update(name for name in status_names if (view := status_batch.view(name)) is None
                            or not view.presentation.same_status(previous.presentations.get(name)))
         if self.notifications_changed_since(earlier):
             remaining = {name: view for name, view in previous.presentations.items()

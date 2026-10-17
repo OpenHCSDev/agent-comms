@@ -138,7 +138,7 @@ async def test_explicit_failed_terminal_is_not_a_missing_final_stop(tmp_path, re
     ]
     stub = _stub_with(tmp_path, records)
     observed = [event async for event in one_turn_events(
-        stub, [], "distinct terminal mapping input", str(tmp_path), require_input_id=True,
+        stub, [], "distinct terminal mapping input", str(tmp_path),
     )]
     done = observed[-1]
     assert isinstance(done, ae.Done) and not done.ok
@@ -155,7 +155,7 @@ async def test_failed_native_retry_end_without_assistant_still_declares_failure(
         *_settled_records(),
     ])
     observed = [event async for event in one_turn_events(
-        stub, [], "distinct retry-end-only input", str(tmp_path), require_input_id=True,
+        stub, [], "distinct retry-end-only input", str(tmp_path),
     )]
     done = observed[-1]
     assert isinstance(done, ae.Done) and not done.ok
@@ -205,7 +205,7 @@ async def test_exhausted_native_retries_report_the_existing_failure_once(tmp_pat
     events = [
         event
         async for event in one_turn_events(
-            stub, [], "task", str(tmp_path), require_input_id=True
+            stub, [], "task", str(tmp_path)
         )
     ]
 
