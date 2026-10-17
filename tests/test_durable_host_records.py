@@ -88,15 +88,18 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path):
         thread = Thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
                         session_file=location.path)
         try:
-            assert await backend.context_usage(thread) == ContextUsage(0, None)
-            assert (await (await backend.open(thread)).request(Inspect())).work == ()
-            with pytest.raises(RuntimeError, match='Interrupted work does not exist'):
-                await backend.child.request(Settle('task:missing', 'ABANDON'))
-            assert (await backend.child.request(Inspect())).work == ()
-            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(0, None)
             outcome = await backend.compact(thread, 'retain the empty plan')
             assert isinstance(outcome, FailedCompaction)
             assert 'model' in outcome.message.lower()
+            await backend.close_idle()
+            first, second = await asyncio.gather(backend.open(thread), backend.open(thread))
+            assert first is second
+            assert await backend.context_usage(thread) == ContextUsage(0, None)
+            assert (await (await backend.open(thread)).request(Inspect())).work == ()
+            with pytest.raises(RuntimeError, match='Recovery is only available before resume'):
+                await backend.child.request(Settle('task:missing', 'ABANDON'))
+            assert (await backend.child.request(Inspect())).work == ()
+            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(0, None)
             assert (await backend.child.request(Inspect())).work == ()
             assert backend.child.proc.alive()
         finally:

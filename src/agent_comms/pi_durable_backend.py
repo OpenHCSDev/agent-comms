@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import AgentBackend, BackendDeclarationError, Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation
+from .agent_backend import AgentBackend, Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation
 from .agent_events import Error
 from .native_custody import PiChild
 from .external_transcript import ExternalCut
@@ -36,9 +36,6 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
 
     def require_forkable(self):
         raise ValueError('Durable database forking is not implemented')
-
-    def select_session(self, directory, execution):
-        raise BackendDeclarationError('Durable databases cannot select native sessions')
 
     def history_source(self, root, incarnation):
         return DurableTranscript(self)
@@ -212,17 +209,21 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
         return DurableDatabase(str(Path(root).absolute() / 'durable-sessions' / f'{uuid4().hex}.sqlite3'))
 
     async def open(self, thread):
-        if self.child is None:
-            path = Path(thread.runtime.path)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with ExitStack() as resources:
-                lock = resources.enter_context(thread.runtime.writer_lock.open('a+b'))
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                self.child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
-                    cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
-            model = SetModel.from_name(thread.model)
-            await self.child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
-        return self.child
+        async with self.lock:
+            if self.child is None:
+                path = Path(thread.runtime.path)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with ExitStack() as resources:
+                    lock = resources.enter_context(thread.runtime.writer_lock.open('a+b'))
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+                        cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
+                async with child.failures():
+                    model = SetModel.from_name(thread.model)
+                    await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
+                    await child.request(Resume())
+                self.child = child
+            return self.child
 
     async def close_idle(self):
         async with self.lock:
@@ -232,7 +233,6 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
 
     async def compact(self, thread, instructions):
         child = await self.open(thread)
-        await child.request(Resume())
         return (await child.request(CompactDurable(custom_instructions=instructions))).outcome
 
     async def context_usage(self, thread):
