@@ -11,6 +11,7 @@ import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 from .agent_events import CompactionEvent
 from .pi_native_backend import PersistentPiSession
@@ -21,6 +22,7 @@ from .coordination_errors import (
     RetryScheduled,
 )
 from .coordinator import Coordination
+from .coordination_snapshot import RecoverySnapshot
 from .following_inputs import FollowingInputs
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
 from .selected_actions import CodingSelectedAction, SelectedAction
@@ -28,12 +30,14 @@ from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
 from .selected_tool_broker import SelectedToolIntent
-from .selected_turn import SelectedConsideration
+from .selected_turn import SelectedAttempt, SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
 
 
 @dataclass(kw_only=True)
 class SelectedExecution:
+    max_attempts: ClassVar[int] = 3
+
     root: Path
     wire_root_id: str
     owner_name: str
@@ -107,6 +111,12 @@ class SelectedExecution:
         if self.selected_existing_file_write is not None:
             return self.selected_existing_file_write
         return CodingSelectedAction()
+
+    async def full(self, participant: SelectedParticipant, session: SelectedSession,
+                   snapshot: RecoverySnapshot) -> CoordinatedTurn:
+        """Direct work and a FULL verdict share one attempt and tool selection."""
+        attempt = await SelectedAttempt.engage(participant, snapshot)
+        return await attempt.run(self, session, self.action(), self.write_authority)
 
     async def run(
         self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,

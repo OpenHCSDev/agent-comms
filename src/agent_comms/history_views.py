@@ -425,7 +425,7 @@ class HistoryViews:
         # Native file IO never holds the display/bus snapshot locks.
         unread = self.transcript_reads.counts(
             captured_viewer,
-            {view.thread.name: view.thread.session_file or "" for view in snapshot.threads},
+            {name: view.thread.session_file or "" for name, view in snapshot.threads.items()},
             document=basis.document,
         )
         return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
