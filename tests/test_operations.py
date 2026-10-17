@@ -492,7 +492,7 @@ class TestLedgerOps:
     def test_recent_transcript_is_bounded_and_ordered(self, wired, tmp_path):
         import json
 
-        from agent_comms.thread_management import _session_model
+        from agent_comms.pi_native_backend import PiSessionFile
 
         path = tmp_path / "large-session.jsonl"
         with path.open("w") as stream:
@@ -532,7 +532,7 @@ class TestLedgerOps:
         page = wired.transcripts.thread_transcript_page("large")
         assert page.has_older
         assert [event.text for event in page.events] == [str(index) for index in range(80, 100)]
-        assert _session_model(path) == ("test", "one")
+        assert PiSessionFile(str(path)).model_choice == ("test", "one")
 
     def test_merge_requires_registered_author(self, wired):
         with pytest.raises(UnregisteredThreadError, match="Author"):

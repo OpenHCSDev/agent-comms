@@ -76,7 +76,6 @@ class Thread(ThreadProvenance):
     role: ThreadRole = ThreadRole.AGENT
     execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
                                             metadata={"wire_omit_default": True})
-    # The runtime that holds this thread's history; it never changes on re-registration.
     backend: type[AgentBackend] = field(
         default_factory=AgentBackend.for_new_threads, kw_only=True,
         metadata={"wire_omit_default": True, "registration_inheritance": InheritPrevious},
@@ -85,6 +84,15 @@ class Thread(ThreadProvenance):
     channel_scope_generation: int = 0
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
+
+    def inherited_history(self, registry, visited):
+        if self.name in visited:
+            return
+        visited.add(self.name)
+        if self.parent is not None:
+            parent = registry.require(self.parent)
+            for location, _ in parent.runtime.history_locations(parent, registry, visited):
+                yield location, True
 
     def contains_worktree(self, worktree: str) -> bool:
         """This conversation's current and retained project directories."""
@@ -239,24 +247,6 @@ class Thread(ThreadProvenance):
             raise RelationViolationError(f"Thread {self.name!r} has no owner process")
         return self.process_identity
 
-    def require_saved_session(self) -> str:
-        if self.session_file is None:
-            raise ValueError("Canonical saved session required")
-        return self.session_file
-
-    @property
-    def native_transcripts(self):
-        """The saved native session's records; a thread without one has none yet."""
-        from pathlib import Path
-        from .native_transcript import NativeTranscript
-
-        if self.session_file is None:
-            return ()
-        return (NativeTranscript(Path(self.session_file)),)
-
-    def imported_sources(self):
-        return tuple(source for transcript in self.native_transcripts
-                     for source in transcript.imported_sources())
 
     def require_idle(self) -> None:
         if self.active_turn is not None:
@@ -362,7 +352,7 @@ class Thread(ThreadProvenance):
         other only when this holds. Titles, tags, goals and turns do not change it.
         """
         def launch(thread: Thread):
-            return (thread.incarnation, thread.process_identity, thread.role, thread.session_file,
+            return (thread.incarnation, thread.process_identity, thread.role, thread.runtime,
                     thread.worktree, thread.execution, thread.model, thread.thinking_level)
         return launch(self) == launch(other)
 

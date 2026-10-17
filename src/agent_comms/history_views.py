@@ -398,20 +398,20 @@ class HistoryViews:
                 read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
-        unread = self.transcript_reads.counts(
-            captured_viewer,
-            {name: view.thread.session_file or "" for name, view in snapshot.threads.items()},
-            document=basis.document,
-        )
+        sources = {}
+        for name, view in snapshot.threads.items():
+            sources.update((name, key) for key in view.thread.runtime.read_keys())
+        unread = self.transcript_reads.counts(captured_viewer, sources, document=basis.document)
         return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge only the native transcript boundary actually displayed."""
         viewer = self.messaging.user_identity(worktree).name
         thread = self.registry.require(name)
-        if through.session_file != thread.session_file:
+        if through.session_file != thread.runtime.read_key:
             raise ValueError("Transcript changed; refresh before marking it read.")
-        self.transcript_reads.mark_read(viewer, through.session_file, through.offset)
+        for key in thread.runtime.read_keys():
+            self.transcript_reads.mark_read(viewer, key, through.offset)
 
     def mark_channel_view_read(
         self,
@@ -456,8 +456,8 @@ class HistoryViews:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(target)
             checkpoint = self.transcripts.transcript_checkpoint(thread.name)
-            if checkpoint.session_file and Path(checkpoint.session_file).is_file():
-                self.transcript_reads.mark_read(viewer, checkpoint.session_file, checkpoint.offset)
+            for key in thread.runtime.read_keys():
+                self.transcript_reads.mark_read(viewer, key, checkpoint.offset)
             messages = self.bus.inbox(viewer, thread.name)
             self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 

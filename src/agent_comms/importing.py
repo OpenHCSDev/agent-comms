@@ -137,7 +137,7 @@ class ImportedSessionMetadata:
             raise ValueError("Imported context thread incarnation changed")
         if current.session_file != owner.session_file:
             raise ValueError("Imported context selected session changed")
-        return current.imported_sources()
+        return current.runtime.imported_sources()
 
     @classmethod
     def public_source_text(cls, registry, owner, source, comms):

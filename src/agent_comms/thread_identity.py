@@ -14,6 +14,7 @@ from enum import StrEnum
 from functools import cached_property
 from typing import TYPE_CHECKING, Callable, ClassVar, TypeVar
 
+from .agent_backend import AgentBackend, RuntimeLocation
 from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
 from .errors import RelationViolationError
@@ -213,6 +214,15 @@ class ThreadProvenance:
     created_at: float = field(metadata={"wire_required": True})
     session_file: str | None = None
     title: str | None = None
+    backend: type[AgentBackend] = field(
+        default_factory=AgentBackend.for_new_threads, metadata={"wire_omit_default": True},
+    )
+
+    @cached_property
+    def runtime(self) -> RuntimeLocation:
+        """The codec decoded both stored fields; their record owns this binding."""
+        return (self.backend.unstarted_type(self.backend) if self.session_file is None
+                else self.backend.location_type(self.session_file))
 
     @property
     def display_title(self) -> str:

@@ -24,21 +24,23 @@ from .agent_backend import (
     CompactionOutcome,
     ConfiguresModel,
     ContextUsage,
-    EntryPage,
-    EntryRef,
     FailedCompaction,
     Forks,
     InputContent,
     Interrupts,
     NothingToCompaction,
     PlacedCompaction,
-    ReadsHistory,
     ReportsContext,
     RuntimeLocation,
-    TranscriptEntry,
     TurnDelivery,
 )
+from .unstarted_runtime import UnstartedRuntime
 from .native_pi import NativePiRpcLaunch
+from .native_transcript import NativeTranscript
+from .native_session_files import NativeSessionFiles
+from .native_session_reopen import SessionIdentityHelper
+from .selected_session import SavedSelectedSession
+from .fresh_private_session import create_fresh_private_session
 
 if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
@@ -77,13 +79,36 @@ PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
 
 @dataclass(frozen=True)
 class PiSessionFile(RuntimeLocation):
-    """A Pi session JSONL file; derived from ``Thread.session_file``, never stored apart."""
+    """The native backend's stored Pi transcript."""
 
     path: str
 
-    @classmethod
-    def of(cls, thread: Thread) -> Self:
-        return cls(thread.require_saved_session())
+    def select_session(self, directory, execution):
+        path = Path(self.path).absolute()
+        retained = execution.retained_source(path)
+        identity = (retained.identity if retained is not None else
+                    SessionIdentityHelper.locate(execution.native_package, str(path)))
+        return SavedSelectedSession(directory, identity=identity)
+
+    def history_source(self, root, incarnation):
+        return NativeTranscript(Path(self.path))
+
+    def imported_sources(self):
+        return NativeTranscript(Path(self.path)).imported_sources()
+
+    @property
+    def read_key(self) -> str:
+        return self.path
+
+    def storage_files(self):
+        return (NativeSessionFiles(Path(self.path)),)
+
+    @property
+    def model_choice(self):
+        for entry in NativeTranscript(Path(self.path)).tail():
+            if entry.model_choice is not None:
+                return entry.model_choice
+        return None
 
 
 class PersistentPiSession:
@@ -108,12 +133,12 @@ class PersistentPiSession:
         if child is None:
             await self.close()
             attestation = launch.session.attestation()
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
+            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
             with startup.measurements.operation("native_spawn"):
                 child = await PiSessionChild.start(key, attestation)
             self.custody = BorrowedNative(child, self.custody)
         else:
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
+            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
             self.custody = BorrowedNative(child, EmptyNative())
         watchdog.spawned(reused)
         return child
@@ -152,7 +177,6 @@ class PiNativeBackend(
     Interrupts,
     Compacts,
     ReportsContext,
-    ReadsHistory,
     Forks,
     ConfiguresModel,
 ):
@@ -164,6 +188,7 @@ class PiNativeBackend(
     """
 
     location_type: ClassVar[type[RuntimeLocation]] = PiSessionFile
+    unstarted_type: ClassVar[type[RuntimeLocation]] = UnstartedRuntime
     serves_new_threads: ClassVar[bool] = True
     event_kinds: ClassVar[frozenset[str]] = PI_0_85_1_EVENT_KINDS
 
@@ -185,6 +210,10 @@ class PiNativeBackend(
             partial(runner.observe_selected_preparation, session_id),
         )
 
+    @classmethod
+    def new_location(cls, root, worktree) -> PiSessionFile:
+        return PiSessionFile(str(create_fresh_private_session(root / "sessions", worktree=worktree).path))
+
     def arguments(self, thread: Thread) -> tuple[str, ...]:
         """Pi's command-line arguments for this thread's model and thinking level."""
         from .pi_vocabulary import ThinkingLevel
@@ -200,8 +229,6 @@ class PiNativeBackend(
         from .coordinator import Coordination
         from .native_session_prepare import NativeSessionPreparation
 
-        if thread.session_file is None:
-            raise ValueError("Native preparation requires a saved session")
         if open_native is None:
             open_native = NativeSessionPreparation.open
         environment = await Coordination.run_worker(lambda: thread.native_environment(
@@ -213,7 +240,7 @@ class PiNativeBackend(
             self.arguments(thread),
             worktree=thread.worktree,
             environment=environment,
-            session_file=thread.session_file,
+            session_file=thread.runtime.read_key,
             observe=partial(self.observe, thread),
         )
 
@@ -237,7 +264,7 @@ class PiNativeBackend(
             delivery.environment,
             **images,
             context_contributions=content.contributions,
-            session_file=thread.session_file,
+            **thread.runtime.arguments(),
             steering_queue=delivery.inbox,
             finish_event=delivery.finish_event,
             send_boundary=delivery.send_boundary,
@@ -284,39 +311,6 @@ class PiNativeBackend(
             tokens_before=data.tokens_before,
         )
 
-    # -- ReadsHistory -----------------------------------------------------
-
-    async def entries(self, thread: Thread, before: EntryRef | None, limit: int) -> EntryPage:
-        """Decoded session-file entries, newest first; incomplete tails are skipped."""
-        from .coordinator import Coordination
-
-        return await Coordination.run_worker(
-            partial(self.read_entries, Path(PiSessionFile.of(thread).path), before, limit)
-        )
-
-    @staticmethod
-    def read_entries(path: Path, before: EntryRef | None, limit: int) -> EntryPage:
-        from .native_transcript import NativeTranscript
-
-        if limit <= 0:
-            raise ValueError("A history page needs a positive limit")
-        start = path.stat().st_size if before is None else before.order
-        page: list[TranscriptEntry] = []
-        for record in NativeTranscript(path).reverse(start):
-            if record.entry is None:
-                continue
-            entry = record.entry
-            page.append(TranscriptEntry(
-                ref=EntryRef(record.start, entry.source_coordinates.id or ""),
-                kind=entry.transcript_kind(),
-                text=entry.transcript_text(),
-                at=entry.recorded_at,
-            ))
-            if len(page) == limit:
-                break
-        older = page[-1].ref if len(page) == limit and page[-1].ref.order > 0 else None
-        return EntryPage(tuple(page), older)
-
     # -- Forks ------------------------------------------------------------
 
     @classmethod
@@ -329,7 +323,7 @@ class PiNativeBackend(
             NativePiRpcLaunch.package_for_command, launcher, runtime,
         ))
         identity = await RuntimeForkHelper.run(
-            RuntimeForkRequest(str(package), parent.require_saved_session(), parent.worktree,
+            RuntimeForkRequest(str(package), parent.runtime.path, parent.worktree,
                                runtime=runtime), cwd=Path(parent.worktree),
         )
         return PiSessionFile(identity.session_file)

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
-from .native_session_reopen import NativeSessionIdentity, SessionIdentityHelper
+from .native_session_reopen import NativeSessionIdentity
 from .native_pi import _session_location
 from .launch_runtime import RestartEnvironment
 
@@ -101,15 +101,9 @@ class SelectedSession:
             if not worktree.is_dir():
                 raise IdentityConflict("registered participant worktree is unavailable")
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
-            selected = path if path is not None else participant.owner.thread.session_file
-            if selected is None:
-                return cls(directory)
-            retained = execution.retained_source(Path(selected).absolute())
-            if retained is not None:
-                return SavedSelectedSession(directory, identity=retained.identity)
-            return SavedSelectedSession(directory, identity=SessionIdentityHelper.locate(
-                execution.native_package, str(Path(selected).absolute()),
-            ))
+            thread = participant.owner.thread
+            runtime = thread.runtime if path is None else thread.backend.location_type(str(path))
+            return runtime.select_session(directory, execution)
 
         return await Coordination.run_worker(acquire)
 
