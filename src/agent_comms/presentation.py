@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
@@ -30,7 +31,7 @@ from .message_reference import MessageReference
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .messages import Message
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, DMDisplayScope
+from .read_basis import ChannelDisplayScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock, _store_read_lock
@@ -377,7 +378,7 @@ class DisplaySelection:
     @property
     def viewer_names(self) -> frozenset[str]:
         return (
-            DMDisplayScope.names_for(self.viewer, self.registry)
+            self.registry.names_for(self.viewer)
             if self.viewer is not None
             else frozenset()
         )
@@ -433,14 +434,10 @@ class BusPresentation:
                 {}, {}, unread={}, channel_unread={}, show_stopped=show_stopped,
                 show_archived=show_archived, read_marker_notice=basis.document.notice,
             )
-        pending = {
-            *(view.thread.name for view in snapshot.threads),
-            *(view.channel.name for view in snapshot.channels),
-        }
-        snapshot = replace(
-            snapshot, read_marker_notice=self.bus.reads.take_notice(basis.document.notice)
+        return replace(
+            snapshot, read_marker_notice=self.bus.reads.take_notice(basis.document.notice),
+            unread_pending=frozenset(snapshot.threads.keys() | snapshot.channels.keys()),
         )
-        return replace(snapshot, unread_pending=frozenset(pending))
 
     def channel_page(
         self,
@@ -554,14 +551,9 @@ class ChannelView:
         show_stopped: bool,
         show_archived: bool,
     ) -> tuple[ChannelView, ...]:
-        people = {
-            name: thread
-            for name, thread in snapshot.threads.items()
-            if snapshot.statuses[name].in_view(
-                show_stopped=show_stopped, show_archived=show_archived
-            )
-            and thread.role.executable
-        }
+        people = {thread.name: thread for thread in snapshot.visible_threads(
+            show_stopped=show_stopped, show_archived=show_archived,
+        )}
         views: list[ChannelView] = []
         for channel in channels.values():
             if channel.archived and not show_archived:
@@ -629,11 +621,9 @@ class ThreadView:
         goal_waits: GoalWaits,
         *, show_stopped: bool, show_archived: bool, names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
-        selected = (snapshot.threads.values() if names is None else
-                    (snapshot.threads.get(name) for name in {snapshot.canonical_name(name) for name in names}))
-        threads = tuple(thread for thread in selected if thread is not None and thread.role.executable
-                        and snapshot.statuses[thread.name].in_view(
-                            show_stopped=show_stopped, show_archived=show_archived))
+        threads = tuple(snapshot.visible_threads(
+            names=names, show_stopped=show_stopped, show_archived=show_archived,
+        ))
         if not threads:
             return ()
         runtime, waits = agents.runtime_info.read(), goal_waits.read()
@@ -686,8 +676,8 @@ class ThreadView:
 
 @dataclass(frozen=True, slots=True)
 class CoordinationSnapshot:
-    threads: tuple[ThreadView, ...]
-    channels: tuple[ChannelView, ...]
+    threads: Mapping[str, ThreadView]
+    channels: Mapping[str, ChannelView]
     unread: Mapping[str, int]
     last_sent: Mapping[str, float]
     references: DisplayReferences
@@ -708,17 +698,17 @@ class CoordinationSnapshot:
         show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
-        threads = ThreadView.roster(
+        threads = OrderedDict((view.thread.name, view) for view in ThreadView.roster(
             registry, agents, GoalWaits(root / GoalWaits.filename),
             show_stopped=show_stopped, show_archived=show_archived,
-        )
-        activities = {view.thread.name: view.activity for view in threads}
+        ))
+        activities = {name: view.activity for name, view in threads.items()}
         return cls(
-            channels=ChannelView.roster(
+            channels=OrderedDict((view.channel.name, view) for view in ChannelView.roster(
                 registry, declarations, catalog.pinned_members(), catalog.list_order,
                 activities, sent, messages,
                 show_stopped=show_stopped, show_archived=show_archived,
-            ),
+            )),
             threads=threads,
             unread=unread, last_sent=sent, channel_unread=channel_unread,
             references=DisplayReferences.capture(root, registry, declarations),
@@ -727,24 +717,25 @@ class CoordinationSnapshot:
         )
 
     def participants(self, channel: str) -> tuple[ThreadView, ...]:
-        view = next((view for view in self.channels if view.channel.name == channel), None)
+        view = self.channels.get(channel)
         if view is None:
             return ()
-        people = {
-            view.thread.name: view for view in self.threads
-            if view.status.active and view.presentation.status.busy
-        }
-        return tuple(people[name] for name in view.members if name in people)
+        return tuple(
+            person for name in view.members
+            if (person := self.threads.get(name)) is not None and person.status.active
+            and person.presentation.status.working
+        )
 
     def mention_candidates(self, channel: str) -> tuple[MentionCandidate, ...]:
-        view = next((view for view in self.channels if view.channel.name == channel), None)
-        members = frozenset(view.members) if view else frozenset()
+        view = self.channels.get(channel)
+        if view is None:
+            return ()
         return tuple(
             sorted(
                 (
-                    MentionCandidate(person.thread.name, person.presentation.title)
-                    for person in self.threads
-                    if person.thread.name in members
+                    MentionCandidate(name, person.presentation.title)
+                    for name in view.members
+                    if (person := self.threads.get(name)) is not None
                 ),
                 key=lambda candidate: candidate.name.casefold(),
             )

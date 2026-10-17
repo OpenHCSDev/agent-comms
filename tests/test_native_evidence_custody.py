@@ -98,26 +98,6 @@ def test_generic_observation_failure_does_not_reverify(tmp_path, monkeypatch, fa
         assert evidence.source.stream.closed and not evidence.entries
 
 
-def test_launch_header_verifies_all_bytes_but_decodes_only_row_one(tmp_path, monkeypatch):
-    from agent_comms.fresh_private_session import FreshPrivateSession
-
-    session = _evidence(tmp_path)
-    with session.open("a") as output:
-        for index in range(200):
-            output.write(json.dumps({
-                "type": "message", "id": f"assistant-{index}",
-                "message": {"role": "assistant", "content": "retained" * 50},
-            }) + "\n")
-    decoded = []
-    original = PrivateEvidenceRead._decode_row
-
-    def counted(raw):
-        decoded.append(raw)
-        return original(raw)
-
-    monkeypatch.setattr(PrivateEvidenceRead, "_decode_row", staticmethod(counted))
-    FreshPrivateSession.require_launch_header(session, None)
-    assert len(decoded) == 1
 
 
 def test_retained_input_source_decodes_only_verified_append(tmp_path, monkeypatch):

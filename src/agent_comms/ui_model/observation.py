@@ -953,7 +953,7 @@ class ObservationProcess(AbstractContextManager):
         except BaseException:
             process.close()
             raise
-        process._resources.callback(loop.remove_reader, descriptor)
+        process._reader.callback(loop.remove_reader, descriptor)
         return process
 
     def __init__(self, route: CommsRoute):
@@ -976,6 +976,7 @@ class ObservationProcess(AbstractContextManager):
             self.abandon_reads,
             StaleRevision("The Comms observation retired before the read was answered"),
         )
+        self._reader = self._resources.enter_context(ExitStack())
 
     def __exit__(self, *exc) -> None:
         self.close()
@@ -998,6 +999,7 @@ class ObservationProcess(AbstractContextManager):
 
     def ended(self, error: str | None) -> ObserverDied:
         """The service ended (``error``: the traceback it sent): fail its awaited reads and say how it exited."""
+        self._reader.close()
         self.process.join(timeout=2)
         self.died = ObserverDied(self.process.pid, self.process.exitcode, error)
         self.abandon_reads(self.died)
@@ -1036,10 +1038,8 @@ class ObservationProcess(AbstractContextManager):
         """Every observation waiting on the pipe; answered reads resolve their waiters.
 
         The service's end (its failure, or its pipe closing) is raised here
-        as ``ObserverDied``; the UI stops reading this pipe then.
+        as ``ObserverDied``; its owned readiness reader is retired then.
         """
-        if self.died is not None:
-            raise self.died
         observed: list[Observed] = []
         while not self.connection.closed and self.connection.poll():
             try:

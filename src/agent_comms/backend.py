@@ -43,7 +43,7 @@ from .native_attestation import AttestationError
 from .native_custody import PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .coordinator import Coordination
-from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
+from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import SelectedToolDenied
 from .turn_admission import UnwrittenPrompt
@@ -217,7 +217,7 @@ class TurnSession:
         persistent_session: PersistentPiSession | None = None,
         native_session: PersistentPiSession | None = None,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
-        startup: NativeStartupAdmission | None = None,
+        startup: NativeStartup | None = None,
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
         request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
     ):
@@ -243,7 +243,7 @@ class TurnSession:
             raise ValueError("A Pi turn runs on its thread's Pi session child")
         self.native_session: PersistentPiSession = session
         self.extension_ui = ExtensionUiSession(ui_request)
-        self.startup = startup if startup is not None else NativeStartupAdmission.for_launch(launch)
+        self.startup = startup if startup is not None else NativeStartup.for_launch(launch)
         self.inputs = InputForwarding(steering_queue)
         self.admission = UnwrittenPrompt()
         self.stats = StatsRequest()

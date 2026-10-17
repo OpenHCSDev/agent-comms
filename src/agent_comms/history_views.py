@@ -310,8 +310,8 @@ class HistoryViews:
             catalog.pinned_members(),
             catalog.list_order,
             self.agents.all_activity(
-                ThreadView.visible_threads(
-                    snapshot, show_stopped=show_stopped, show_archived=show_archived
+                snapshot.visible_threads(
+                    show_stopped=show_stopped, show_archived=show_archived
                 ), snapshot=snapshot,
             ),
             self.last_sent_timestamps(),
@@ -412,7 +412,7 @@ class HistoryViews:
         # Native file IO never holds the display/bus snapshot locks.
         unread = self.transcript_reads.counts(
             captured_viewer,
-            {view.thread.name: view.thread.session_file or "" for view in snapshot.threads},
+            {name: view.thread.session_file or "" for name, view in snapshot.threads.items()},
             document=basis.document,
         )
         return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)

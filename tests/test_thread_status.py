@@ -44,7 +44,7 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
         assert transferred.presentation == displayed
         fresh, = comms.views.thread_views()
         assert fresh.presentation.summary == "Owner exited"
-        assert not fresh.presentation.status.busy
+        assert not fresh.presentation.status.working
     finally:
         if child.poll() is None:
             child.terminate()

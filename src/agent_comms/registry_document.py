@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -68,6 +68,15 @@ class RegistryPresence(RegistryNames[Thread]):
     def seen_at(self, name: str) -> float:
         return self.last_seen[self.require(name).name]
 
+    def visible_threads(
+        self, *, show_stopped: bool, show_archived: bool, names: Iterable[str] | None = None,
+    ) -> Iterator[Thread]:
+        selected = (self.threads.values() if names is None else
+                    (self.threads.get(name) for name in {self.canonical_name(name) for name in names}))
+        return (thread for thread in selected if thread is not None and thread.role.executable
+                and self.statuses[thread.name].in_view(
+                    show_stopped=show_stopped, show_archived=show_archived))
+
 
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence):
@@ -102,8 +111,11 @@ class RegistryDocument(RegistryPresence):
             last_seen=self.last_seen[thread.name],
             owner_generation=self.owners.generations[thread.name],
             admission_generation=self.admissions.generations[thread.name],
-            names=RegistryEntry.names_for(thread, self.aliases),
+            names=self.names_for(thread.name),
         )
+
+    def entry_if_present(self, name: str) -> RegistryEntry | None:
+        return self.entry(name) if self.canonical_name(name) in self.threads else None
 
     @classmethod
     def entry_from_wire(cls, raw: dict, name: str) -> RegistryEntry:
@@ -527,14 +539,15 @@ class RegistryEntry:
     admission_generation: int
     names: frozenset[str]
 
-    @staticmethod
-    def names_for(thread: Thread, aliases: Mapping[str, str]) -> frozenset[str]:
-        return frozenset({thread.name, *(
-            alias for alias, target in aliases.items() if target == thread.name
-        )})
-
     def matches_name(self, name: str) -> bool:
         return name in self.names
+
+    def owned_by(self, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
+        return (
+            self.status.active
+            and self.matches_name(owner.incarnation.name)
+            and owner.owns(self.thread, self.owner_generation, process)
+        )
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> Thread:
         """The exact saved owner lease, current name and process still agree."""

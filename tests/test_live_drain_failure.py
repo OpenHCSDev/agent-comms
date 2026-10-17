@@ -61,7 +61,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         diagnostic = failed.activity.readiness.source_diagnostic()
         assert isinstance(diagnostic, UnavailableDrainDiagnostic)
         assert isinstance(failed.presentation.status, AttentionThreadPresentationStatus)
-        assert not failed.presentation.status.busy
+        assert not failed.presentation.status.working
         assert "Inbox unavailable" in failed.presentation.summary
         assert diagnostic.error_type in failed.presentation.summary
         assert "Ready" not in failed.presentation.summary
@@ -122,7 +122,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
         current = owner_view(comms)
         assert current.activity.readiness.source_diagnostic() is None
         assert current.thread.executing
-        assert current.presentation.status.busy
+        assert current.presentation.status.working
         assert not isinstance(current.presentation.status, AttentionThreadPresentationStatus)
         activity = (comms.root / "activity.jsonl").read_bytes()
         async with drain_failures(comms, "beta", owner, retry):

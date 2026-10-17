@@ -12,7 +12,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .pi_vocabulary import ThinkingLevel
 from .agent_events import CompactionEvent
 from .pi_native_backend import PersistentPiSession
 from .comms import Comms
@@ -24,7 +23,7 @@ from .coordination_errors import (
 from .coordinator import Coordination
 from .following_inputs import FollowingInputs
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
-from .selected_actions import SelectedAction
+from .selected_actions import CodingSelectedAction, SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
@@ -42,8 +41,6 @@ class SelectedExecution:
     opt_in: bool = True
     after_seq: int = 0
     session_file: Path | None = None
-    fresh_private_enrollment: bool = False
-    selected_thinking_level: str | None = None
     selected_existing_file_write: SelectedAction | None = None
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
@@ -91,21 +88,6 @@ class SelectedExecution:
         if not self.opt_in:
             raise PublicationActivationBlocked("coordinated runtime requires explicit activation")
         _private_session_dir(self.root)
-        if type(self.fresh_private_enrollment) is not bool:
-            raise IdentityConflict("Fresh private enrollment requires an explicit boolean")
-        if self.fresh_private_enrollment and self.session_file is not None:
-            raise IdentityConflict("Fresh private enrollment requires a new, explicit session")
-        if self.selected_thinking_level is not None:
-            if not self.fresh_private_enrollment:
-                raise IdentityConflict(
-                    "Selected level requires explicitly supported fresh enrollment"
-                )
-            if type(
-                self.selected_thinking_level
-            ) is not str or not ThinkingLevel.supports_selected(self.selected_thinking_level):
-                raise IdentityConflict(
-                    "Selected level requires explicitly supported fresh enrollment"
-                )
         if self.selected_tool_intent is not None:
             if type(self.selected_tool_intent) is not SelectedToolIntent:
                 raise TypeError("selected tool requires a nominal owner intent")
@@ -119,12 +101,12 @@ class SelectedExecution:
             raise IdentityConflict("Worker's verified launcher is for a different package")
         self._tracked_factory = launcher
 
-    def action(self, session: SelectedSession) -> SelectedAction:
+    def action(self) -> SelectedAction:
         if self.selected_tool_intent is not None:
             return self.selected_tool_intent
         if self.selected_existing_file_write is not None:
             return self.selected_existing_file_write
-        return session.default_action()
+        return CodingSelectedAction()
 
     async def run(
         self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
@@ -157,8 +139,6 @@ class SelectedExecution:
                     session = await SelectedSession.prepare(
                         participant,
                         self.session_file,
-                        self.fresh_private_enrollment,
-                        self.selected_thinking_level,
                         self,
                     )
                     try:

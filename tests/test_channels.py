@@ -513,9 +513,9 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     comms.messaging.send("b", "#zeta", "Later agent output")
     invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"}, caller=NoThreadCaller())
     assert names(wire(tmp_path))[0] == "#alpha"
-    assert [view.channel.name for view in comms.views.coordination_snapshot("a").channels] == [
-        view.channel.name for view in wire(tmp_path).views.coordination_snapshot("b").channels
-    ]
+    assert tuple(comms.views.coordination_snapshot("a").channels) == tuple(
+        wire(tmp_path).views.coordination_snapshot("b").channels
+    )
     assert comms.views.coordination_snapshot().channel_order is LastUserInputChannelSort
     # Reading or re-sorting must never redefine a channel's creation time.
     assert comms.channels.catalog.read().resolve("#alpha").created_at == 300
@@ -568,11 +568,11 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
         result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True}, caller=NoThreadCaller())
         assert result["pinned"]
     views = observer.views.coordination_snapshot().channels
-    assert [view.channel.name for view in views] == (
+    assert list(views) == (
         [name for name in original if name in {"#ui", "#none"}]
         + [name for name in original if name not in {"#ui", "#none"}]
     )
-    assert all(view.to_wire()["pinned"] for view in views[:2])
+    assert all(views[name].to_wire()["pinned"] for name in list(views)[:2])
     assert observer.channels.catalog.read().list_order is order
     for channel in ("#ui", "#none"):
         observer.channels.set_channel_pinned(channel, False)

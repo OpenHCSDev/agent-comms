@@ -59,7 +59,7 @@ class ActivityState(Enum):
 
     @property
     def busy(self) -> bool:
-        return self.presentation_status.busy
+        return self.presentation_status.working
 
     @property
     def retires_thread(self) -> bool:
