@@ -25,7 +25,7 @@ def test_goal_family_survives_registry_and_history_reopen(tmp_path):
             BlockedGoal(block_reason="Waiting for the fixture dependency")
             if state_type is BlockedGoal else state_type()
         )
-        goal = Goal("Keep the objective", name, state=state)
+        goal = Goal("Keep the objective", name, published_seq=0, state=state)
         owner = Thread(name, frozenset(), str(tmp_path), goal=goal)
         registry.register(owner)
         assert FieldCodec.decode(Goal, goal.to_wire()) == goal

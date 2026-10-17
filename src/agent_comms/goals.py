@@ -310,6 +310,7 @@ class Goal:
 
     text: str
     id: str
+    published_seq: int
     progress: str = ""
     revision: int = 0
     reported_turn: str | None = None
@@ -348,6 +349,8 @@ class Goal:
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
         GoalRevision(self.id, self.revision)
+        if self.published_seq < 0:
+            raise ValueError("Goal publication requires a nonnegative bus sequence.")
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
 

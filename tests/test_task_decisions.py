@@ -117,7 +117,7 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
 
     comms.messaging.initialize_private_initial_protocol()
     owner = comms.registry.declare(Thread("recipient", frozenset(), str(comms.root),
-                                         goal=Goal("Original goal", "goal-one")))
+                                         goal=Goal("Original goal", "goal-one", published_seq=0)))
     subject = comms.messaging.send_user_message(owner.name, "Use the original coordinates.",
                                                 worktree=owner.worktree)
     pin = comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree)
@@ -129,7 +129,7 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     with pytest.raises(RelationViolationError, match="original recipient"):
         comms.messaging.send_user_message("#team", "wrong audience", worktree=owner.worktree, task=pin.task)
     assert (comms.root / "bus.jsonl").read_bytes() == before
-    comms.registry.register(replace(owner, goal=Goal("Replacement goal", "goal-two")))
+    comms.registry.register(replace(owner, goal=Goal("Replacement goal", "goal-two", published_seq=0)))
     new_subject = comms.messaging.send_user_message(owner.name, "Use the replacement coordinates.",
                                                     worktree=owner.worktree)
     with pytest.raises(RelationViolationError, match="original scope"):
@@ -154,7 +154,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     comms.messaging.initialize_private_initial_protocol()
     owner = admit(comms, "alpha")
     admit(comms, "beta")
-    comms.registry.register(replace(owner, goal=Goal("Bounded source task", "original-goal")))
+    comms.registry.register(replace(owner, goal=Goal("Bounded source task", "original-goal", published_seq=0)))
     owner = comms.registry.require(owner.name)
     monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     exact = "Never replay UNKNOWN.\nPreserve λ and original /artifacts/source."
@@ -203,7 +203,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     comms.registry.rename(owner.name, "renamed-alpha")
     renamed = comms.registry.require("renamed-alpha")
     assert retained.current_authored_sources(renamed, comms.registry.snapshot()) == (human,)
-    comms.registry.register(replace(renamed, goal=Goal("Replacement scope", "new-goal")))
+    comms.registry.register(replace(renamed, goal=Goal("Replacement scope", "new-goal", published_seq=0)))
     assert retained.current_authored_sources(comms.registry.require(renamed.name),
                                             comms.registry.snapshot()) == ()
     assert list(comms.bus.full_history_page().messages)[0] == original
@@ -272,7 +272,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     from agent_comms.retained_task_facts import CurrentDecisionTaskFact, RetainedTaskFacts
 
     owner = admit(comms, "alpha")
-    owner = replace(owner, goal=Goal("Keep certified root", "goal", revision=1))
+    owner = replace(owner, goal=Goal("Keep certified root", "goal", published_seq=0, revision=1))
     comms.registry.register(owner)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "/artifacts/exact", "rejected": ["/scratch/guess"], "to": "#team"}
@@ -299,7 +299,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
                  if isinstance(fact, CurrentDecisionTaskFact)) == (rows[1].reference, rows[2].reference)
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
     before = (comms.root / "bus.jsonl").read_bytes()
-    replacement = replace(renamed, goal=Goal("New task", "replacement", revision=1))
+    replacement = replace(renamed, goal=Goal("New task", "replacement", published_seq=0, revision=1))
     comms.registry.register(replacement)
     stale = retained.for_owner(replacement, comms.registry.snapshot())
     assert not any(isinstance(fact, CurrentDecisionTaskFact) for fact in stale.facts)
@@ -311,7 +311,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
 
 def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
     owner = admit(comms, "alpha")
-    owner = replace(owner, goal=Goal("Keep exact scope", "goal", revision=1))
+    owner = replace(owner, goal=Goal("Keep exact scope", "goal", published_seq=0, revision=1))
     comms.registry.register(owner)
     declaration = Decision(
         chosen="A", rejected=("B",), scope=owner.task_scope,

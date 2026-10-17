@@ -11,7 +11,7 @@ item finishes is the thread's activity, reported through Core's activity log.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from sqlite3 import Connection
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +22,11 @@ from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest
 from .transcript_receipts import TranscriptSource
 from .typed_table import Column, TypedRow, TypedStore, TypedTable
+
+
+@dataclass(frozen=True)
+class ExternalTurn(TypedRow):
+    turn_id: str
 
 
 @dataclass(frozen=True)
@@ -38,18 +43,13 @@ class ExternalItemRow(TypedTable):
     @classmethod
     def recent_turn_ids(cls, connection: Connection, thread: str, last: int) -> tuple[str, ...]:
         """Find recent identities without decoding bodies or grouping the full history."""
-        turn_field, = cls._fields_named(("turn_id",))
-        cursor = connection.execute(
-            f'SELECT {cls._column_list(("turn_id",))} FROM "{cls.declared_name}" '
-            'WHERE thread = ? ORDER BY seq DESC', (thread,))
         identities: dict[str, None] = {}
-        try:
-            for value, in cursor:
-                identities[turn_field.decode(value)] = None
+        with closing(cls.stream(connection, row_type=ExternalTurn, thread=thread,
+                                order_by=("seq",), descending=True)) as rows:
+            for row in rows:
+                identities[row.turn_id] = None
                 if len(identities) >= last:
                     break
-        finally:
-            cursor.close()
         return tuple(identities)
 
 
@@ -90,7 +90,7 @@ class ExternalRecord:
 class ExternalCut(RecordsCut, TypedRow):
     """The thread's newest finished item sequence when read."""
 
-    offset: int
+    offset: int = field(metadata={"sql": Column(generated="coalesce(max({seq}), 0)")})
 
     def contains(self, current: ExternalCut, through: int) -> bool:
         # Finished items are append-only: later items belong to the next update.
@@ -181,10 +181,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
             if events and ExternalItemRow.one(connection, **key) is None:
                 ExternalItemRow(seq=self._cut(connection).offset + 1, events=events,
                                 **key).insert(connection)
-            connection.execute(
-                f'DELETE FROM "{ExternalDraftRow.declared_name}" '
-                'WHERE thread = ? AND turn_id = ? AND item_id = ?',
-                (self.lookup, turn_id, item_id))
+            ExternalDraftRow.delete(connection, **key)
 
     def draft(self, *, turn_id: str, item_id: str,
               events: tuple[TranscriptEvent, ...]) -> None:
@@ -195,8 +192,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         if not self.path.exists():
             return
         with self.writing() as connection:
-            connection.execute(f'DELETE FROM "{ExternalDraftRow.declared_name}" WHERE thread = ?',
-                               (self.lookup,))
+            ExternalDraftRow.delete(connection, thread=self.lookup)
 
     @contextmanager
     def reading(self):
@@ -208,9 +204,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
             yield ExternalTranscriptRead(self, connection)
 
     def _cut(self, connection) -> ExternalCut:
-        return ExternalCut.read(connection.execute(
-            f'SELECT coalesce(max(seq), 0) AS offset FROM "{ExternalItemRow.declared_name}" '
-            'WHERE thread = ?', (self.lookup,)))[0]
+        return ExternalItemRow.select(connection, row_type=ExternalCut, thread=self.lookup)[0]
 
     def current_draft(self) -> ExternalDraftRow | None:
         with self.reading() as records:

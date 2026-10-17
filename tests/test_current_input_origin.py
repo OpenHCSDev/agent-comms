@@ -155,7 +155,7 @@ def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_p
     assert FieldCodec.encode(absent)["goal"] == {"kind": "absent"}
 
     owner = comms.registry.require("beta")
-    goal = Goal("Recorded scope", "original-goal", revision=4, state=state)
+    goal = Goal("Recorded scope", "original-goal", published_seq=0, revision=4, state=state)
     comms.registry.register(replace(owner, goal=goal))
     present = capture(comms)
     assert present.goal == PresentGoalCheckpoint(goal.checkpoint)

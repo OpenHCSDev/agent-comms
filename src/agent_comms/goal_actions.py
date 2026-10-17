@@ -449,7 +449,10 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
                 raise ValueError("Goal identity already has different instructions.")
             return ctx.require_goal()
         ctx.thread.require_goal_replacement(ctx.goals)
-        goal = Goal(text=self.text.strip(), id=self.goal_id, revision=1, order=self.order)
+        goal = Goal(
+            text=self.text.strip(), id=self.goal_id, revision=1, order=self.order,
+            published_seq=ctx.goals.bus.log.latest_sequence(),
+        )
         goal = replace(
             goal,
             mention_source=bind_goal_mentions(

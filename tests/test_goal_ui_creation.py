@@ -90,7 +90,7 @@ async def test_explicit_retry_cannot_invent_missing_launch_authority(tmp_path, m
     comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
     try:
         # An explicitly retained historical row, not a new goal through the API.
-        blocked = Goal("Goal without authority", "historical-missing",
+        blocked = Goal("Goal without authority", "historical-missing", published_seq=0,
                        state=BlockedGoal("Goal attempt unresolved"))
         goal = blocked
         comms.registry.register(replace(comms.registry.require(session), goal=blocked))

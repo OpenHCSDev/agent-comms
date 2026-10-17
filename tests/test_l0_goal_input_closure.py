@@ -48,7 +48,7 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
     comms = wire(tmp_path)
     register(comms, "owner")
     goal = Goal(
-        "Retained objective", "retained", progress="Unrelated progress", state=UnrecordedBlockGoal()
+        "Retained objective", "retained", published_seq=0, progress="Unrelated progress", state=UnrecordedBlockGoal()
     )
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
     history = comms.goals.goal_history("owner")
@@ -84,7 +84,7 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
 def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, state):
     comms = wire(tmp_path / "wire")
     register(comms, "owner")
-    goal = Goal("Objective", "goal", state=state)
+    goal = Goal("Objective", "goal", published_seq=0, state=state)
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
     store = comms.goals.open_goal_store()
     retry = RetryGoalAction(
@@ -222,7 +222,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
         } == before
         assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
         goal = Goal(
-            "Retained goal without private authority", "missing", state=UnrecordedBlockGoal()
+            "Retained goal without private authority", "missing", published_seq=0, state=UnrecordedBlockGoal()
         )
         comms.registry.register(replace(comms.registry.require(session), goal=goal))
         with pytest.raises(RuntimeError, match="Retry cannot create a grant"):

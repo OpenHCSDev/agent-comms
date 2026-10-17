@@ -38,7 +38,7 @@ def bound(tmp_path):
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(root)
-    goal = Goal("private goal prose", "goal", revision=2)
+    goal = Goal("private goal prose", "goal", published_seq=0, revision=2)
     owner = Thread(
         "owner",
         frozenset(),
@@ -245,8 +245,8 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         {"created_at": 11.0},
         {"worktree": "/changed"},
         {"process_identity": None},
-        {"goal": Goal("replacement", "replacement", state=BlockedGoal("Explicit fixture refusal"))},
-        {"goal": Goal("active", "goal")},
+        {"goal": Goal("replacement", "replacement", published_seq=0, state=BlockedGoal("Explicit fixture refusal"))},
+        {"goal": Goal("active", "goal", published_seq=0)},
         {"turn_generation": 8},
         {"last_finished_turn_id": "b" * 32},
     ],
