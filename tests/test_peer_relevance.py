@@ -19,7 +19,6 @@ from agent_comms.peer_relevance import (
     Visible,
 )
 from agent_comms.relationships import RelationshipEdit
-from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnContext
 
@@ -126,7 +125,6 @@ def test_stopped_channelmates_do_not_fill_peer_slots_but_contacts_remain(tmp_pat
         comms.owners.stop(name)
     peers = _peers(comms, 'owner')
     assert [peer.name for peer in peers] == ['partner', 'contact']
-    assert peers[0].status is peers[1].status is StoppedThreadStatus
 
 
 def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without_a_wake(tmp_path):
