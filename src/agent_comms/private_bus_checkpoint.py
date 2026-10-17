@@ -35,7 +35,7 @@ from .coordination_tables.publications import PublicationIntents
 from .errors import HumanAdmissionBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
-from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedRow, TypedTable
+from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
 from .thread_identity import ThreadIncarnation
@@ -53,14 +53,6 @@ OriginalSource = TypeVar("OriginalSource")
 
 _SEED = hashlib.sha256(b"agent-comms:private-bus-prefix:v1\0").digest()
 _TAIL_BYTES = 4096
-
-
-@dataclass(frozen=True)
-class ContextByteRange(TypedRow):
-    """The byte ranges skipped by the certified public-row iterator."""
-
-    offset: int
-    length: int
 
 
 @dataclass(frozen=True)
@@ -209,43 +201,6 @@ class CertifiedSourceRead:
         self.require_open_prefix()
         return self.witness.through_seq
 
-    def message_rows(self) -> Iterator[Mapping]:
-        """Every certified row that is not a context manifest, in bus order.
-
-        The checkpoint records the byte ranges of context-manifest rows, which
-        carry no message and are nearly all of the bus, so only the rows
-        between them are read (kilobytes instead of the whole bus). Appending
-        validated each row; a reader borrows that result instead of checking
-        the whole stream again. Rows are read through this source's one
-        stream, so finish the iteration before using the source again.
-        """
-        from .store_files import _iter_jsonl_stream
-
-        self.require_open_prefix()
-        try:
-            context_rows = ContextByteRange.read(self.connection.execute(
-                f'SELECT DISTINCT offset,length FROM ('
-                f'SELECT offset,length FROM "{ContextEntrySources.declared_name}" '
-                f'UNION ALL SELECT offset,length FROM "{RecordedContextManifestSources.declared_name}"'
-                f') WHERE offset < ? ORDER BY offset',
-                (self.witness.offset,),
-            ))
-        except sqlite3.Error as error:
-            raise RelationViolationError("Checkpoint context-row index is unavailable.") from error
-        position = 0
-        for region in (*context_rows, ContextByteRange(self.witness.offset, 0)):
-            offset, length = region.offset, region.length
-            if offset < position:
-                raise RelationViolationError("Checkpoint context-row ranges overlap.")
-            if offset > position:
-                self.stream.seek(position)
-                for row, _ in _iter_jsonl_stream(self.stream, boundary=offset):
-                    yield row
-                if self.stream.tell() != offset:
-                    raise RelationViolationError("Checkpoint context row is not at a row boundary.")
-            position = offset + length
-        self.require_open_prefix()
-
     def require_new_human_message(self, sender: str, message_id: str) -> None:
         """Check publication against the sealed index, without reading history.
 
@@ -261,11 +216,6 @@ class CertifiedSourceRead:
                 "human send blocked, do not retry."
             )
         PublicMessages.require_unused(self.connection, sender, message_id)
-
-    def messages(self) -> Iterator[Message]:
-        """Every committed message; its certified row is not checked a second time."""
-        for row in self.message_rows():
-            yield from WireRecord.certified_public_messages(row)
 
     def claim(self, resource: str) -> ClaimOwner | None:
         """One current normalized resource, through the certified checkpoint."""
