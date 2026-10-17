@@ -796,7 +796,7 @@ def compile_decoder(annotation: object) -> ValueDecoder:
 def _structural_decoder(target: object) -> ValueDecoder:
     if target is type(None):
         return _NullDecoder(target)
-    if any(target is scalar for scalar in (str, int, bool, float)):
+    if type(target) is type and target in (str, int, bool, float):
         return _ScalarDecoder(target)
     if target is Any:
         return _AnyDecoder()
