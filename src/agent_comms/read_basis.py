@@ -8,10 +8,11 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TextIO
 
 from .channel_targets import is_channel_target
 from .declared_family import DeclaredFamily
@@ -73,6 +74,10 @@ class WatchAcknowledgment(DeclaredFamily, affix="WatchAcknowledgment"):
     """Who confirms that a streamed message reached its receiver."""
 
     @classmethod
+    def line_output(cls, output: TextIO) -> Callable[[str], None]:
+        return partial(print, file=output, flush=True)  # Visibility precedes implicit acknowledgment.
+
+    @classmethod
     @abstractmethod
     def taken(cls, reads, displayed: DisplayBasis) -> None: ...
 
@@ -84,6 +89,11 @@ class OnReadWatchAcknowledgment(WatchAcknowledgment):
 
 
 class ExplicitWatchAcknowledgment(WatchAcknowledgment):
+    @classmethod
+    def line_output(cls, output: TextIO) -> Callable[[str], None]:
+        from .cli_protocol import LineOutput
+        return LineOutput(output).write
+
     @classmethod
     def taken(cls, reads, displayed: DisplayBasis) -> None:
         """The receiver confirms exact references through the existing read owner."""

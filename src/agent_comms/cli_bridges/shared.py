@@ -25,7 +25,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
-    DeliveredOutcome, EmittedOutcome, Outcome, TaggedWire,
+    DeliveredOutcome, EmittedOutcome, LineOutput, Outcome, TaggedWire,
     UnconfirmedOutcome, WatchLine, WireModel,
 )
 from agent_comms.declared_family import DeclaredFamily
@@ -716,9 +716,6 @@ class CliBridge(ABC, Generic[BridgeOptions]):
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
 
-    async def settle(self, message: Message, result: type[Outcome]) -> None:
-        await self.finish_delivery(message, result)
-
     async def finish_delivery(self, message: Message, outcome: type[Outcome],
                               evidence: MonitorEvidence = UnrecordedMonitor()) -> None:
         self.journal.finish(message, outcome, evidence)
@@ -858,9 +855,10 @@ class LineMonitorBridge(TranscriptBridge[Options]):
         self.monitor_ready = asyncio.Event()
         self.pending_parts: dict[tuple[str, int], int] = {}
         self.window_changed = asyncio.Condition()
+        self.output = LineOutput(sys.stdout)
 
     async def prepare_delivery(self) -> None:
-        print(self.probe.model_dump_json(), flush=True)
+        self.output.write(self.probe.model_dump_json())
         print('Waiting for this session to observe the monitor probe; inbox remains unread.',
               file=sys.stderr, flush=True)
         # The harness owns notification scheduling. Missing proof never opens
@@ -870,9 +868,6 @@ class LineMonitorBridge(TranscriptBridge[Options]):
     def confirm_probe(self, probe: MonitorProbe) -> None:
         if probe == self.probe:
             self.monitor_ready.set()
-
-    async def settle(self, message: Message, result: type[Outcome]) -> None:
-        return  # The session evidence already completed delivery.
 
     async def part_observed(self, message_id: str, number: int) -> None:
         async with self.window_changed:
@@ -895,15 +890,14 @@ class LineMonitorBridge(TranscriptBridge[Options]):
                     lambda: not self.pending_parts
                     or sum(self.pending_parts.values()) + size <= self.window_bytes)
                 self.pending_parts[message.message_id, number] = size
-                print(line, flush=True)
-        self.journal.finish(message, EmittedOutcome)
-        return self.journal.outcome(message)
+                self.output.write(line)
+        return EmittedOutcome
 
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
-        print(self.encode(self.sent_text(result, target, body)), flush=True)
+        self.output.write(self.encode(self.sent_text(result, target, body)))
 
     async def report_failure(self, text: str) -> None:
-        print(self.encode(text), flush=True)
+        self.output.write(self.encode(text))
 
 
 def shared_parser(description: str | None, state: Path,

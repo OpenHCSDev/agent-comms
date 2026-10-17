@@ -6,7 +6,7 @@ import builtins
 import sys
 from abc import ABC, abstractmethod
 from graphlib import TopologicalSorter
-from typing import TYPE_CHECKING, Annotated, ClassVar, Union
+from typing import TYPE_CHECKING, Annotated, ClassVar, TextIO, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
 from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field
@@ -18,6 +18,23 @@ from .messages import Message
 if TYPE_CHECKING:
     from .child_process import AttachedChild
     from .cli_bridges.shared import CliBridge, CoreConnection, LineMonitorBridge, ObservedMonitor
+
+
+class LineOutput:
+    """Flush the current admitted read batch, without a clock or another buffer."""
+
+    def __init__(self, stream: TextIO) -> None:
+        self.stream = stream
+        self.pending: asyncio.Handle | None = None
+
+    def write(self, line: str) -> None:
+        self.stream.write(line + '\n')
+        if self.pending is None:
+            self.pending = asyncio.get_running_loop().call_soon(self.flush)
+
+    def flush(self) -> None:
+        self.pending = None
+        self.stream.flush()
 
 
 class WireModel(BaseModel):
@@ -176,7 +193,7 @@ class ArrivedMessage(WatchLine):
             await bridge.finish_delivery(message, outcome)
             return
         result = await bridge.deliver(message)
-        await bridge.settle(message, result)
+        await bridge.finish_delivery(message, result)
         print(f'{result.declared_name}: {message.message_id} from {message.sender}',
               file=sys.stderr, flush=True)
 
