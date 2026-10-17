@@ -96,15 +96,9 @@ class SelectedSession:
             if not worktree.is_dir():
                 raise IdentityConflict("registered participant worktree is unavailable")
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
-            selected = path if path is not None else participant.owner.thread.runtime.path if participant.owner.thread.runtime.available else None
-            if selected is None:
-                return cls(directory)
-            retained = execution.retained_source(Path(selected).absolute())
-            if retained is not None:
-                return SavedSelectedSession(directory, identity=retained.identity)
-            return SavedSelectedSession(directory, identity=SessionIdentityHelper.locate(
-                execution.native_package, str(Path(selected).absolute()),
-            ))
+            thread = participant.owner.thread
+            runtime = thread.runtime if path is None else thread.backend.location_type(str(path))
+            return runtime.select_session(directory, execution)
 
         return await Coordination.run_worker(acquire)
 

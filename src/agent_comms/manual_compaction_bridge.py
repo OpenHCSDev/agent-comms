@@ -72,39 +72,45 @@ async def compact_context(
         if await Coordination.run_worker(partial(runner.session_busy, session_id)):
             return FailedCompaction("Wait for the current response before compacting.")
         thread = await Coordination.run_worker(partial(runner.comms.registry.require, thread_name))
-        task = asyncio.current_task()
-        assert task is not None
-        async with AsyncExitStack() as resources:
-            owner = await Coordination.run_worker(partial(
-                runner.acquire_turn, resources, session_id, thread_name,
-                f"compaction-{uuid4().hex}", "Compacting context", task=task,
+        return await thread.runtime.compact(partial(
+            _compact_started, runner, session_id, thread_name, instructions,
+        ))
+
+
+async def _compact_started(runner, session_id, thread_name, instructions):
+    task = asyncio.current_task()
+    assert task is not None
+    async with AsyncExitStack() as resources:
+        owner = await Coordination.run_worker(partial(
+            runner.acquire_turn, resources, session_id, thread_name,
+            f"compaction-{uuid4().hex}", "Compacting context", task=task,
+        ))
+        runner.turn_tasks[session_id] = task
+        await runner.transition_turn(
+            session_id, owner.turn_lease, CompactionPhase(resume=PublishingPhase())
+        )
+        await runner.effects._emit_event(
+            session_id, events.CompactionStart(reason=ManualCompactionReason)
+        )
+        outcome = FailedCompaction("Compaction did not finish.")
+        try:
+            outcome = await runner.backend_for(session_id, owner.thread).compact(
+                owner.thread, instructions.strip() if instructions else None,
+            )
+        finally:
+            placed = isinstance(outcome, PlacedCompaction)
+            await runner.effects._emit_event(session_id, events.CompactionEnd(
+                reason=ManualCompactionReason,
+                aborted=not placed,
+                summary=outcome.summary if placed else None,
             ))
-            runner.turn_tasks[session_id] = task
-            await runner.transition_turn(
-                session_id, owner.turn_lease, CompactionPhase(resume=PublishingPhase())
+        if placed:
+            await runner.runtime.session_update(
+                session_id=session_id,
+                update=AgentMessageChunk(
+                    session_update="agent_message_chunk",
+                    content=TextContentBlock(type="text", text=""),
+                    field_meta=encode_updates(TranscriptChangedUpdate(None)),
+                ),
             )
-            await runner.effects._emit_event(
-                session_id, events.CompactionStart(reason=ManualCompactionReason)
-            )
-            outcome = FailedCompaction("Compaction did not finish.")
-            try:
-                outcome = await runner.backend_for(session_id, owner.thread).compact(
-                    owner.thread, instructions.strip() if instructions else None,
-                )
-            finally:
-                placed = isinstance(outcome, PlacedCompaction)
-                await runner.effects._emit_event(session_id, events.CompactionEnd(
-                    reason=ManualCompactionReason,
-                    aborted=not placed,
-                    summary=outcome.summary if placed else None,
-                ))
-            if placed:
-                await runner.runtime.session_update(
-                    session_id=session_id,
-                    update=AgentMessageChunk(
-                        session_update="agent_message_chunk",
-                        content=TextContentBlock(type="text", text=""),
-                        field_meta=encode_updates(TranscriptChangedUpdate(None)),
-                    ),
-                )
-            return outcome
+        return outcome

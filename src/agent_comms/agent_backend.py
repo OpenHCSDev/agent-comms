@@ -57,6 +57,12 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
                     if backend.location_type is type(self))
         return owner
 
+    def require_forkable(self):
+        pass
+
+    async def compact(self, operation):
+        return await operation()
+
     def new_location(self, root, worktree):
         return self
 
@@ -77,6 +83,9 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     def external_records(self, root, incarnation):
         raise ValueError("A saved runtime cannot publish an external transcript")
+
+    @abstractmethod
+    def select_session(self, directory, execution): ...
 
     @abstractmethod
     def history_source(self, root, incarnation): ...
@@ -102,6 +111,14 @@ class UnstartedRuntime(RuntimeLocation):
     @property
     def backend(self) -> type[AgentBackend]:
         return self.owner
+
+    def require_forkable(self):
+        from .errors import RelationViolationError
+
+        raise RelationViolationError("An unstarted runtime has no saved history to fork")
+
+    async def compact(self, operation):
+        return FailedCompaction("This thread has no saved session to compact.")
 
     def new_location(self, root, worktree):
         return self.owner.new_location(root, worktree)
@@ -133,6 +150,11 @@ class UnstartedRuntime(RuntimeLocation):
     @classmethod
     def default(cls) -> UnstartedRuntime:
         return cls(AgentBackend.for_new_threads())
+
+    def select_session(self, directory, execution):
+        from .selected_session import SelectedSession
+
+        return SelectedSession(directory)
 
     def history_source(self, root, incarnation):
         from .external_transcript import ExternalTranscript

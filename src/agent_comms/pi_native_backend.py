@@ -81,6 +81,16 @@ class PiSessionFile(RuntimeLocation):
 
     path: str
 
+    def select_session(self, directory, execution):
+        from .selected_session import SavedSelectedSession
+        from .native_session_reopen import SessionIdentityHelper
+
+        path = Path(self.path).absolute()
+        retained = execution.retained_source(path)
+        identity = (retained.identity if retained is not None else
+                    SessionIdentityHelper.locate(execution.native_package, str(path)))
+        return SavedSelectedSession(directory, identity=identity)
+
     def history_source(self, root, incarnation):
         from .native_transcript import NativeTranscript
 

@@ -107,7 +107,7 @@ class ForkSpec(NewThreadSpec):
             raise RelationViolationError(
                 f"Thread {self.name!r} already exists; reuse it instead of creating it again."
             )
-        parent.runtime.read_key
+        parent.runtime.require_forkable()
         return parent
 
     @contextmanager
