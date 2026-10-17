@@ -825,13 +825,13 @@ class PeerState:
     goal: str | None
 
     @classmethod
-    def from_view(cls, view: ThreadView, relation: PeerRelation) -> PeerState:
+    def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
         goal = view.thread.active_goal if relation.relevance.grants(GoalShown) else None
         return cls(
             view.thread.name,
             relation.relevance,
             relation.note,
-            goal.instructions if goal is not None else None,
+            goal.instructions(goal.order.todos(goals, view.thread.incarnation, goal.id)) if goal is not None else None,
         )
 
 
@@ -852,13 +852,13 @@ class CoordinationSegment(InstructionSegment):
 
     @classmethod
     def capture(
-        cls, owner: Thread, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...]
+        cls, owner: Thread, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], goals
     ) -> CoordinationSegment:
         from .wake_policy import WakePolicy
 
         response_instruction = WakePolicy.relevance_instruction()
         viewed = {view.thread.incarnation: view for view in views}
-        peers = tuple(PeerState.from_view(viewed[r.peer], r)
+        peers = tuple(PeerState.from_view(viewed[r.peer], r, goals)
                       for r in relations if r.peer in viewed and r.relevance.grants(AlwaysListed))
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
         return super().capture(
@@ -882,13 +882,17 @@ class CoordinationSegment(InstructionSegment):
 @dataclass(frozen=True, kw_only=True)
 class GoalSegment(InstructionSegment):
     goal: Goal
+    orders_text: str = ""
 
     @classmethod
-    def capture(cls, owner: Thread, goal: Goal) -> GoalSegment:
-        return super().capture((OwnerProvenance(owner.incarnation, str(goal.revision)),), goal=goal)
+    def capture(cls, owner: Thread, goal: Goal, goals) -> GoalSegment:
+        todos = goal.order.todos(goals, owner.incarnation, goal.id)
+        orders_text = goal.order.instructions(todos)
+        revision = hashlib.sha256(json.dumps(FieldCodec.encode((goal, orders_text))).encode()).hexdigest()
+        return super().capture((OwnerProvenance(owner.incarnation, revision),), goal=goal, orders_text=orders_text)
 
     def values(self) -> dict[str, object]:
-        return dict(goal_id=self.goal.id, goal_text=self.goal.instructions, progress=self.goal.progress)
+        return dict(goal_id=self.goal.id, goal_text=self.goal.render_instructions(self.orders_text), progress=self.goal.progress)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1064,8 +1068,8 @@ class TurnContext:
         preparation. It is never a recorded SDK request or an input grant.
         """
         relations = comms.relationships.context_relations(owner.name)
-        context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations)
-        for segment in owner.context_goal_segments():
+        context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
+        for segment in owner.context_goal_segments(comms.goals):
             context = context.prepend(segment)
         return context.with_awareness(comms, owner, relations, blocking=True)
 
@@ -1115,6 +1119,7 @@ class TurnContext:
         task: str,
         views: tuple[ThreadView, ...],
         relations: tuple[PeerRelation, ...],
+        goals,
         origins: tuple[MessageReference, ...] = (),
         inputs: tuple[StoredInput, ...] = (),
     ) -> TurnContext:
@@ -1126,7 +1131,7 @@ class TurnContext:
             owner.incarnation,
             turn,
             (
-                CoordinationSegment.capture(owner, views, relations),
+                CoordinationSegment.capture(owner, views, relations, goals),
                 UserInputSegment(provenance=source, content=task),
             ),
         )

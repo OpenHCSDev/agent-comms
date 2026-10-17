@@ -61,7 +61,7 @@ async def drain_failures(
     except UNAVAILABLE_DRAIN_ERRORS as error:
         await record(UnavailableDrainDiagnostic, error)
         raise
-    except Exception as error:
+    except ValueError as error:
         diagnostic = StoppedDrainDiagnostic(
             owner, type(error).__name__, str(error), recorded_at=time.time()
         )

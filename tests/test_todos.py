@@ -8,18 +8,14 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.change_report import FileLine
 from agent_comms.field_codec import FieldCodec
+from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    Assignment,
-    ChangeTodoState,
-    DoneTodoState,
-    GoalRef,
-    TodoConflict,
-    TodoError,
-    TodoState,
-    TodoStore,
+    Assignment, ChangeTodoState, DoneTodoState, GoalRef, PendingProblemOrder,
+    TodoConflict, TodoError, TodoState, TodoStore,
 )
 
 
@@ -27,17 +23,21 @@ def thread(name: str, root: Path, created: float) -> Thread:
     return Thread(name, frozenset(), str(root), created_at=created)
 
 
+def order(root: Path):
+    return PendingProblemOrder(id="checked-order", owner=FileLine(__file__, 1),
+        check=OrderCheck(str(root), "true"), edits=("Fix the problem",),
+        banned=("No extra store",), report="Report the delivered commit",
+        at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
+
+
 def _assign_process(root: str, name: str, created: float, gate) -> tuple[str, str]:
     store = TodoStore(Path(root))
     gate.wait(timeout=5)
     try:
         row = store.assign(
-            "todo-1",
-            expected_revision=1,
-            owner=thread(name, Path(root), created),
-            parent=thread("lead", Path(root), 1.0),
-            generation=f"generation-{name}",
-            deadline=RecordedEventTime(1000.0),
+            "todo-1", expected_revision=1,
+            owner=thread(name, Path(root), created), parent=thread("lead", Path(root), 1.0),
+            generation=f"generation-{name}", deadline=RecordedEventTime(1000.0), order=order(Path(root)),
         )
         return "won", row.assignment.owner
     except TodoConflict as error:
@@ -50,7 +50,7 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
     goal = GoalRef("lead", 1.0, "goal-1")
     original = store.create(
         "todo-1", "OpenHCSDev/agent-comms", "Fix the sidebar", creator=lead, goal=goal,
-        owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
+        owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
     )
     assert original.repo == "openhcsdev/agent-comms"
     assert original.revision == 1
@@ -58,17 +58,16 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
     assert (
         store.create(
             "todo-1", "openhcsdev/agent-comms", "Fix the sidebar", creator=lead, goal=goal,
-            owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
+            owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
         )
         == original
     )
     with pytest.raises(TodoConflict):
         store.create(
             "todo-1", "openhcsdev/agent-comms", "A different task", creator=lead,
-            owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
+            owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
         )
     assert TodoStore(tmp_path).list("openhcsdev/agent-comms") == (original,)
-    # A new same-name goal owner does not rebind this todo's saved old goal.
     newer = thread("lead", tmp_path, 2.0)
     assert store.get(original.id).goal == goal
     with pytest.raises(TodoConflict):
@@ -80,10 +79,8 @@ def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Pa
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     store.create(
-        "todo-1",
-        "OpenHCSDev/agent-comms",
-        "One implementation",
-        creator=lead, owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
+        "todo-1", "OpenHCSDev/agent-comms", "One implementation", creator=lead,
+        owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
     )
     with Manager() as manager, ProcessPoolExecutor(max_workers=2) as pool:
         gate = manager.Event()
@@ -108,13 +105,13 @@ def test_validation_rejects_ambiguous_identity_and_bad_state(tmp_path: Path) -> 
         with pytest.raises(TodoError):
             store.create(
                 f"invalid-{index}", repo, "task", creator=lead,
-                owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
+                owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
             )
     with pytest.raises(TodoError):
         GoalRef("lead", float("nan"), "goal-1")
     store.create(
         "todo-1", "org/repo", "task", creator=lead,
-        owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
+        owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
     )
     with pytest.raises(ValueError):
         FieldCodec.decode(type[TodoState], "unverified")

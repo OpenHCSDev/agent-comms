@@ -561,7 +561,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                               if member.catalog_declaration() is cls)
                         if cls.catalog_declaration() is cls else (cls,))
         outcomes: list[tuple[int, TargetCompleted | TargetFailed]] = []
-        planned: list[tuple[int, CommandTarget, str | None, CliCommand]] = []
+        planned: dict[CliCommand, tuple[int, CommandTarget, str | None]] = {}
         for name in selected:
             for context in name.contexts(cls, channel):
                 try:
@@ -571,23 +571,22 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                     if not bindings:
                         scope = f' in {context}' if context is not None else ''
                         raise ValueError(f'This action is no longer available for {name}{scope}')
-                except Exception as error:
+                except ValueError as error:
                     outcomes.append((len(planned) + len(outcomes),
                                      TargetFailed(name.name, type(error).__name__, str(error))))
                     continue
                 for command in bindings:
-                    if not any(command == previous for _, _, _, previous in planned):
-                        planned.append((len(planned) + len(outcomes), name, context, command))
+                    planned.setdefault(command, (len(planned) + len(outcomes), name, context))
         # Parameters and every existing warning are authorized before any write.
         edited = tuple(command.for_editor(comms, name.name, project).edited(arguments).with_confirmation(confirmed)
-                       for _, name, _, command in planned)
-        for (position, name, context, original), command in zip(planned, edited, strict=True):
+                       for command, (_, name, _) in planned.items())
+        for (original, (position, name, context)), command in zip(planned.items(), edited, strict=True):
             try:
                 if original not in type(original).bindings(comms, name, context):
                     scope = f' in {context}' if context is not None else ''
                     raise ValueError(f'The original binding for {name}{scope} changed; refresh the selection')
                 result = TargetCompleted(name.name, command, command.apply(comms))
-            except Exception as error:
+            except ValueError as error:
                 result = TargetFailed(name.name, type(error).__name__, str(error))
             outcomes.append((position, result))
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))

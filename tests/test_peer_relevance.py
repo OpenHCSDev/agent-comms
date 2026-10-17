@@ -36,7 +36,7 @@ def _peers(comms, name):
     owner = comms.registry.require(name)
     context = TurnContext.for_owner(
         owner, NextContextTurn(), "", comms.views.thread_views(),
-        comms.relationships.context_relations(name),
+        comms.relationships.context_relations(name), comms.goals,
     )
     return next(s for s in context.segments if isinstance(s, CoordinationSegment)).peers
 
@@ -105,7 +105,7 @@ def test_peer_list_keeps_every_related_peer_whatever_its_name_or_the_thread_coun
 def _coordination_text(comms, name):
     owner = comms.registry.require(name)
     return CoordinationSegment.capture(
-        owner, comms.views.thread_views(), comms.relationships.context_relations(name)
+        owner, comms.views.thread_views(), comms.relationships.context_relations(name), comms.goals
     ).text()
 
 

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-import time
 from collections.abc import AsyncIterator, Mapping
 from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass
@@ -139,11 +138,12 @@ class AcpIngress:
         async def settle(task: asyncio.Future) -> tuple[object, bool]:
             """Repeated caller cancellation cannot abandon a lock-held spawn."""
             cancelled = False
-            while True:
+            while not task.done():
                 try:
-                    return await asyncio.shield(task), cancelled
+                    await asyncio.wait((task,))
                 except asyncio.CancelledError:
                     cancelled = True
+            return task.result(), cancelled
 
         def spawn_under_lock() -> None:
             try:
@@ -163,15 +163,7 @@ class AcpIngress:
                     # The caller accepts the observed process or asks for its
                     # retirement before the gate is released to maintenance.
                     if not decision.result():
-                        while True:
-                            try:
-                                asyncio.run_coroutine_threadsafe(process.stop(), loop).result()
-                            except Exception:
-                                # Uncertain retirement must not certify a safe
-                                # pause; retry only this child's cleanup.
-                                time.sleep(0.1)
-                                continue
-                            break
+                        asyncio.run_coroutine_threadsafe(process.stop(), loop).result()
             except BaseException as error:
                 if not process_ready.done():
                     process_ready.set_exception(error)

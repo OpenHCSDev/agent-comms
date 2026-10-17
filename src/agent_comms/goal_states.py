@@ -99,6 +99,9 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def require_order_slot(self) -> None:
         raise ValueError("Finish or release the current Goal before assigning an order.")
 
+    def after_order_delivery(self, pending: bool) -> GoalState:
+        return self
+
     def transition_refusal(self) -> str:
         return "This goal cannot make that transition."
 
@@ -142,6 +145,9 @@ class OpenGoal(BlockingOnFailure, GoalState):
 @dataclass(frozen=True)
 class ActiveGoal(OpenGoal, FromOpenGoal):
     active = True
+
+    def after_order_delivery(self, pending):
+        return self if pending else CompletedGoal()
 
     def require_active(self) -> None:
         pass

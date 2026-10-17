@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-import asyncio
 from collections.abc import Awaitable, Callable
-from pathlib import Path
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
-from .child_process import BoundedRun, ExitedOutcome, ProcessIdentity
+from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
 from .goal_mentions import bind_goal_mentions
@@ -28,6 +26,7 @@ from .goal_waits import GoalWaits, RecordedGoalWait
 from .goals import Goal, GoalOrder, ProblemGoalOrder, UnorderedGoalOrder
 from .threads import Thread
 from .recorded_time import EventTime
+from .todos import DeliverTodo, PendingProblemOrder
 
 if TYPE_CHECKING:
     from .goal_presentation import GoalSnapshot
@@ -342,50 +341,26 @@ class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, 
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliveredOrderGoalAction(CompletionGoalAction, RuntimeInvocable):
-    commit: str
+class DeliveredOrderGoalAction(GoalAction, RuntimeInvocable):
+    problem: str
+    operation: DeliverTodo
+    progress: str = ""
 
     def prepare(self, goals, name, actor):
         ctx = GoalActionContext(goals, goals.registry.require(name), actor)
         self.expect.check(ctx)
         goal = ctx.require_goal()
-        check = goal.order.delivery_check()
-        asyncio.run(self.verify(check))
-        return replace(self, expect=replace(self.expect, expected_goal=goal))
-
-    async def verify(self, check):
-        if not 7 <= len(self.commit) <= 40 or self.commit.strip("0123456789abcdef"):
-            raise ValueError("Delivery requires a commit hash.")
-
-        async def run(*command):
-            result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
-            if result.outcome != ExitedOutcome(0):
-                raise ValueError(result.stderr.decode(errors="replace") or "The order check failed.")
-            return result.stdout.decode(errors="replace")
-
-        async def require_commit():
-            head = (await run("git", "rev-parse", "HEAD", f"{self.commit}^{{commit}}")).split()
-            dirty = await run("git", "status", "--porcelain", "--untracked-files=no")
-            if len(head) != 2 or head[0] != head[1] or dirty.strip():
-                raise ValueError("Run the order check on its clean delivered commit.")
-
-        await require_commit()
-        if await run("bash", "-c", check.command):
-            raise ValueError("The order check must print nothing and exit zero.")
-
-
-@dataclass(frozen=True, kw_only=True)
-class InstalledOrderGoalAction(GoalAction, RuntimeInvocable):
-    works: str
-    artifact: str
+        todo = goals.todos.get(self.problem)
+        todo.require_assignee(ctx.thread.incarnation, goal.id)
+        operation = self.operation.prepare(goals, todo)
+        return replace(self, operation=operation, expect=replace(self.expect, expected_goal=goal))
 
     def change(self, ctx):
+        ctx.goals.todos.apply(self.problem, self.operation)
         goal = ctx.require_goal()
-        goal.state.require_order_slot()
-        if not Path(self.artifact).is_file():
-            raise ValueError("Retain the installed application artifact before closing.")
-        return replace(goal, order=goal.order.installed(self.works, self.artifact),
-                       revision=goal.revision + 1)
+        pending = any(todo.pending for todo in ctx.goals.todos.for_goal(ctx.thread.incarnation, goal.id))
+        return replace(goal, state=goal.state.after_order_delivery(pending),
+                       progress=self.progress, revision=goal.revision + 1)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -456,7 +431,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         goal = replace(
             goal,
             mention_source=bind_goal_mentions(
-                goal.instructions, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot()
+                goal.text, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot()
             ),
         )
         ctx.goals.open_goal_store().create_goal(goal.id)
@@ -465,7 +440,8 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
-    order: ProblemGoalOrder
+    problem: str
+    order: PendingProblemOrder
     goal_id: str
     deadline: EventTime
     commander: str
@@ -474,13 +450,15 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
     def reserve(self, ctx): ...
 
     def change(self, ctx):
-        ctx.thread.require_order_slot(self.goal_id, self.order.problem)
+        ctx.thread.require_order_slot(self.goal_id, self.problem)
         self.deadline.require_deadline()
         self.order.owner.require_exists()
         self.order.check.require_directory()
         todo = self.reserve(ctx)
-        return SetGoalAction(text=todo.text, goal_id=self.goal_id,
-            order=self.order.copy_as(ProblemGoalOrder)).change(ctx)
+        current = ctx.thread.goal_for(self.goal_id)
+        if current is not None:
+            return replace(current, order=ProblemGoalOrder(), revision=current.revision + 1)
+        return SetGoalAction(text="Complete the assigned problems.", goal_id=self.goal_id, order=ProblemGoalOrder()).change(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -488,9 +466,9 @@ class OrderGoalAction(ProblemOrderGoalAction):
     expected_revision: int
 
     def reserve(self, ctx):
-        return ctx.goals.todos.assign(self.order.problem, expected_revision=self.expected_revision,
+        return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
-            generation=self.goal_id, deadline=self.deadline)
+            generation=self.goal_id, deadline=self.deadline, order=self.order)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -499,9 +477,9 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
     text: str
 
     def reserve(self, ctx):
-        return ctx.goals.todos.create(self.order.problem, self.repo, self.text,
+        return ctx.goals.todos.create(self.problem, self.repo, self.text,
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
-            generation=self.goal_id, deadline=self.deadline)
+            generation=self.goal_id, deadline=self.deadline, order=self.order)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -530,7 +508,7 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
             text=text,
             revision=revision,
             mention_source=bind_goal_mentions(
-                goal.order.instructions(text), goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
+                text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
             ),
         )
 
