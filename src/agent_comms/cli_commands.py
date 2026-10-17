@@ -129,16 +129,12 @@ class TargetField:
             'help', self.name.replace('_', ' ').capitalize())
 
     @property
-    def editor_default(self) -> str:
-        formatter = self.declaration.metadata['editor_format']
-        if formatter is not None:
-            return formatter(self.value)
-        if self.value is None:
-            return ''
-        if isinstance(self.value, DeclaredFamily):
-            return FieldCodec.encode(type(self.value))
-        encoded = FieldCodec.encode(self.value)
-        return encoded if isinstance(encoded, str) else json.dumps(encoded)
+    def editor_annotation(self):
+        return compile_decoder(self.annotation).editor_annotation
+
+    @property
+    def editor_default(self):
+        return FieldCodec.encode_editor(self.annotation, self.value, self.declaration.metadata['editor_format'])
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
         """An unrestricted field does not declare a finite-choice editor."""
@@ -170,10 +166,10 @@ class ChoiceTargetField(TargetField):
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
-        return tuple((choice.name, choice.value) for choice in self.options)
+        return compile_decoder(self.annotation).editor_options(tuple((choice.name, choice.value) for choice in self.options))
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
-        options = (SessionConfigSelectOption(name=label, value=str(FieldCodec.encode(value)))
+        options = (SessionConfigSelectOption(name=label, value=FieldCodec.encode_editor(self.annotation, value))
                    for label, value in compile_decoder(self.annotation).editor_choices())
         return replace(self, options=tuple(options))
 
@@ -192,7 +188,8 @@ class CatalogTargetField(ChoiceTargetField):
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
         options = await catalogs.catalog_for(self.catalog).choices(selection)
-        return replace(self, options=tuple(options))
+        return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
+            value=FieldCodec.encode_editor(self.annotation, item.value)) for item in options))
 
     def value_schema(self) -> dict[str, object]:
         return {'type': 'string', 'configuration': FieldCodec.encode(self.catalog)}
@@ -522,18 +519,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         result = {}
         for key, text in values.items():
             item = declared[key]
-            annotation = hints[item.name]
-            normalize = item.metadata['normalize']
-            if not text and type(None) in get_args(annotation):
-                result[key] = None
-            elif normalize is not None:
-                result[key] = normalize(text)
-            elif isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-                result[key] = {'kind': text}
-            elif FieldCodec.value_schema(annotation).get('type') == 'string' or str in get_args(annotation):
-                result[key] = text
-            else:
-                result[key] = json.loads(text)
+            result[key] = FieldCodec.decode_editor(hints[item.name], text, item.metadata['normalize'])
         return result
 
     def confirmation(self) -> str:
@@ -1409,9 +1395,9 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     project: str = option("--project", parser_default_factory=os.getcwd)
-    model: str = option("--model", parser_default=NativeThreadDefaults.model,
+    model: str | None = option("--model", parser_default=NativeThreadDefaults.model,
                         catalog=ModelConfigOption)
-    thinking_level: type[ThinkingLevel] = option(
+    thinking_level: type[ThinkingLevel] | None = option(
         "--thinking-level", parser_default=NativeThreadDefaults.thinking_level,
         catalog=ThinkingLevelConfigOption)
 

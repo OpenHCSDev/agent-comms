@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import json
 import types
 from abc import ABC, abstractmethod
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
@@ -343,6 +344,14 @@ class FieldCodec(Sealed):
         return cast(T, compile_decoder(target).decode(data))
 
     @classmethod
+    def encode_editor(cls, annotation, value, formatter=None):
+        return compile_decoder(annotation).encode_editor(value, formatter)
+
+    @classmethod
+    def decode_editor(cls, annotation, value, normalize=None):
+        return compile_decoder(annotation).decode_editor(value, normalize)
+
+    @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
         """Instance values carry their selector inside the encoded object."""
         alternatives = []
@@ -549,6 +558,18 @@ class ValueDecoder(ABC):
     @abstractmethod
     def decode(self, data: object) -> object: ...
 
+    editor_annotation = str
+
+    def encode_editor(self, value, formatter=None):
+        encoded = formatter(value) if formatter else FieldCodec.encode(value)
+        return encoded if encoded is None or isinstance(encoded, str) else json.dumps(encoded)
+
+    def decode_editor(self, value, normalize=None):
+        return normalize(value) if normalize else json.loads(value)
+
+    def editor_options(self, options):
+        return options
+
     def editor_choices(self) -> tuple[tuple[str, object], ...]:
         raise TypeError("The declared decoder does not offer finite choices")
 
@@ -558,6 +579,21 @@ class _ScalarDecoder(ValueDecoder):
 
     def decode(self, data):
         return FieldCodec._decode_scalar(self.target, data)
+
+    def decode_editor(self, value, normalize=None):
+        return value if self.target is str and normalize is None else super().decode_editor(value, normalize)
+
+class _NullDecoder(_ScalarDecoder):
+    editor_annotation = type(None)
+
+    def encode_editor(self, value, formatter=None):
+        return self.decode(value)
+
+    def decode_editor(self, value, normalize=None):
+        return value
+
+    def editor_options(self, options):
+        return (("Not set", None),)
 
 @dataclass(frozen=True, slots=True)
 class _RepresentedDecoder(ValueDecoder):
@@ -610,6 +646,9 @@ class _FamilyNameDecoder(ValueDecoder):
     def editor_choices(self):
         return tuple((name, name) for name in self.family.names())
 
+    def decode_editor(self, value, normalize=None):
+        return normalize(value) if normalize else value
+
     def decode(self, data):
         if type(data) is not str:
             raise ValueError("Expected a declared family name.")
@@ -623,6 +662,9 @@ class _LiteralDecoder(ValueDecoder):
     def editor_choices(self):
         return tuple((str(value), value) for value in self.values)
 
+    def decode_editor(self, value, normalize=None):
+        return compile_decoder(type(self.values[0])).decode_editor(value, normalize)
+
     def decode(self, data):
         if any(type(data) is type(value) and data == value for value in self.values):
             return data
@@ -633,12 +675,28 @@ class _UnionDecoder(ValueDecoder):
     target: object
     alternatives: tuple[ValueDecoder, ...]
 
+    @property
+    def editor_annotation(self):
+        return Union[tuple(item.editor_annotation for item in self.alternatives)]
+
+    def encode_editor(self, value, formatter=None):
+        return self._read(lambda item: item.encode_editor(item.decode(FieldCodec.encode(value)), formatter))
+
+    def editor_options(self, options):
+        return tuple(dict.fromkeys(choice for item in self.alternatives for choice in item.editor_options(options)))
+
+    def decode_editor(self, value, normalize=None):
+        return FieldCodec.encode(self._read(lambda item: item.decode(item.decode_editor(value, normalize))))
+
     def decode(self, data):
+        return self._read(lambda item: item.decode(data))
+
+    def _read(self, read):
         first_error = None
         try:
             for alternative in self.alternatives:
                 try:
-                    return alternative.decode(data)
+                    return read(alternative)
                 except (TypeError, ValueError) as error:
                     if first_error is None:
                         first_error = error
@@ -709,6 +767,12 @@ class _FamilyRecordDecoder(ValueDecoder):
     def editor_choices(self):
         return tuple((member.label, member) for member in self.family.members_with(self.family))
 
+    def encode_editor(self, value, formatter=None):
+        return formatter(value) if formatter else value.declared_name
+
+    def decode_editor(self, value, normalize=None):
+        return normalize(value) if normalize else {self.family.family_discriminator: value}
+
     def decode(self, data):
         if not isinstance(data, dict):
             raise ValueError("Expected a family object.")
@@ -768,6 +832,9 @@ class _EnumDecoder(ValueDecoder):
     def editor_choices(self):
         return tuple((str(member.value), member.value) for member in self.target)
 
+    def decode_editor(self, value, normalize=None):
+        return compile_decoder(type(next(iter(self.target)).value)).decode_editor(value, normalize)
+
     def decode(self, data):
         return self.target(data)
 
@@ -785,9 +852,11 @@ def compile_decoder(annotation: object) -> ValueDecoder:
     )
 
 def _structural_decoder(target: object) -> ValueDecoder:
+    if target is type(None):
+        return _NullDecoder(target)
     if (
         target is str or target is int or target is bool
-        or target is type(None) or target is float
+        or target is float
     ):
         return _ScalarDecoder(target)
     if target is Any:
