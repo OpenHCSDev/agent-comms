@@ -36,8 +36,7 @@ class TurnDigestRead(ConversationPreparation):
                            self.thread.execution.prepare_conversation(self))
 
     def native(self) -> tuple[TurnDigest, ...]:
-        return tuple(turn for transcript in self.thread.native_transcripts
-                     for turn in transcript.turns(self.last))
+        return self.thread.runtime.history_source(self.root, self.thread.incarnation).turns(self.last)
 
     def external(self) -> tuple[TurnDigest, ...]:
         with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:

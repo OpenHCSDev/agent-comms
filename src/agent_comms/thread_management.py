@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import os
 import re
 import stat
@@ -34,7 +33,6 @@ from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
-from .native_session_files import NativeSessionFiles
 from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
 from .pi_vocabulary import ServiceTier, ThinkingLevel
@@ -43,23 +41,7 @@ from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
-
-_LOG = logging.getLogger(__name__)
-
-
-def _session_model(session_file: Path) -> tuple[str, str] | None:
-    """Read the last model choice once while attaching an existing Pi session.
-
-    Returns ``(provider, model_id)`` or ``None`` when no choice was recorded.
-    New threads and forks already carry their selected model in NewThreadSpec.
-    """
-    from .native_transcript import NativeTranscript
-
-    for entry in NativeTranscript(session_file).tail():
-        if entry.model_choice is not None:
-            return entry.model_choice
-    return None
-
+from .agent_backend import RuntimeLocation
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
@@ -82,14 +64,12 @@ class NewThreadSpec:
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
-        from .fresh_private_session import create_fresh_private_session
-
         project = Path(self.project).expanduser().resolve(strict=True)
         thread = self.declaration(str(project))
         threads.registry.require_declaration_available(thread)
-        fresh = create_fresh_private_session(threads.root / "sessions", worktree=project)
+        location = thread.runtime.new_location(threads.root, project)
         with _store_lock(threads._wire_lock_path):
-            yield replace(thread, session_file=str(fresh.path))
+            yield replace(thread, session_file=location.read_key)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -101,26 +81,28 @@ class ForkSpec(NewThreadSpec):
     def _parent(self, threads: ThreadManagement) -> Thread:
         parent = threads.registry.require(self.parent)
         parent.execution.require_native()
+        parent.runtime.require_forkable()
         return parent
 
-    def child(self, parent: Thread, session_file: str) -> Thread:
+    def child(self, parent: Thread, runtime: RuntimeLocation) -> Thread:
         return replace(self.declaration(self.project), parent=parent.name,
-                       tags=parent.tags if self.tags is None else self.tags, session_file=session_file)
+                       tags=parent.tags if self.tags is None else self.tags,
+                       backend=parent.backend, session_file=runtime.read_key)
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         # Copy saved history outside the wire lock, retaining writer→wire order.
         parent = self._parent(threads)
-        threads.registry.require_declaration_available(self.child(parent, parent.require_saved_session()))
+        threads.registry.require_declaration_available(self.child(parent, parent.runtime))
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
         with _store_lock(threads._wire_lock_path):
             current = self._parent(threads)
-            if current.incarnation != parent.incarnation or current.session_file != parent.session_file:
+            if current.incarnation != parent.incarnation or current.runtime != parent.runtime:
                 raise RelationViolationError(
                     f"Parent thread {self.parent!r} changed its saved session during the fork; "
-                    f"the created fork {location.path} was not registered."
+                    f"the created fork {location} was not registered."
                 )
-            yield self.child(current, location.path)
+            yield self.child(current, location)
 
 
 @dataclass(frozen=True, slots=True)
@@ -521,12 +503,13 @@ class ThreadManagement:
         info = self.agents.agent_info_of(thread.name)
         return info.model_or(default)
 
-    def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
+    def attach_session(self, original: Thread, source_path: str, *, pid: int | None = None) -> Thread:
         """Attach Pi state and retain its model once, outside the wire lock."""
-        path = Path(session_file).expanduser().resolve()
+        path = Path(source_path).expanduser().resolve()
+        location = original.backend.location_type(str(path))
         saved_model = None
         if original.needs_model_observation() and path.is_file():
-            choice = _session_model(path)
+            choice = location.model_choice
             saved_model = "/".join(choice) if choice is not None else None
         with _store_lock(self._wire_lock_path):
             current = self.registry.require(original.name)
@@ -541,7 +524,7 @@ class ThreadManagement:
                     if pid > 0
                     else None
                 ),
-                session_file=str(path),
+                session_file=location.read_key,
             )
             self.registry.register(attached)
             return attached
@@ -589,20 +572,20 @@ class ThreadManagement:
         refusal happens before the registry fences admission.
         """
         states = self.thread_owned_states
-        sessions: dict[str, NativeSessionFiles] = {}
+        sessions = {}
         for original in originals:
             if original.process_alive:
                 raise RelationViolationError(
                     f"Thread {original.name!r} still has a live process; stop it first."
                 )
-            if original.session_file:
-                sessions[original.name] = NativeSessionFiles.of(original.session_file)
-                sessions[original.name].require_unreferenced()
+            sessions[original.name] = original.runtime.storage_files()
+            for files in sessions[original.name]:
+                files.require_unreferenced()
         self.registry.begin_delete_originals(originals)
         for state in states:
             state.remove_threads(originals)
         # A failure from here leaves a Deleting declaration to retry, not orphans.
-        freed = {name: files.delete() for name, files in sessions.items()}
+        freed = {name: sum(item.delete() for item in files) for name, files in sessions.items()}
         detached = self.registry.remove_originals(originals)
         return tuple(
             ThreadDeleted(original.name, freed.get(original.name, 0), detached[original.name])

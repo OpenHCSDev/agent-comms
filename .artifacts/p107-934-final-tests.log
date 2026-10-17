@@ -1,0 +1,94 @@
+.............F...................F..                                     [100%]
+=================================== FAILURES ===================================
+_______ test_missing_or_blank_block_reason_rejects_without_side_effects ________
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/core-commander-2/p107-934-accepted/test_missing_or_blank_block_re0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fadf073dff0>
+
+    def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, monkeypatch):
+        comms, original = _owner(tmp_path)
+        progressed = comms.goals.update_goal(
+            "worker", ActiveGoalAction(progress=TextGoalProgress("Verified 2 of 3 items"))
+        )
+        assert progressed is not None
+        before_history = comms.goals.goal_history("worker", goal_id=original.id)
+        before_registry = (tmp_path / "registry.json").read_bytes()
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
+        tool = next(
+            tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
+        )
+    
+        for kwargs in (
+            {},
+            {"progress": " \n "},
+            {"block_reason": "  ", "progress": "old progress must not become a reason"},
+            {"block_reason": "x" * 1025},
+        ):
+            with pytest.raises(ValueError, match="reason"):
+>               comms.goals.update_goal(
+                    "worker", BlockedGoalAction(expect=GoalPrecondition(goal_id=original.id), **kwargs)
+                )
+
+tests/test_goal_block_reason.py:57: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/goal_management.py:417: in update_goal
+    return action.apply(self, name, actor=actor)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/goal_actions.py:145: in apply
+    prepared._apply_locked(GoalActionContext(
+src/agent_comms/goal_actions.py:157: in _apply_locked
+    goal = self.change(ctx)
+           ^^^^^^^^^^^^^^^^
+src/agent_comms/goal_actions.py:186: in change
+    state = self.next_state(ctx)
+            ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = BlockedGoalAction(expect=GoalPrecondition(goal_id='52f776b582c74d4dae90f40eaecd4824', expected_state=None, expected_goal=None, expected_owner=None), progress=' \n ', block_reason=None)
+ctx = GoalActionContext(goals=<agent_comms.goal_management.Goals object at 0x7fadef55c310>, thread=Thread(name='worker', tag..., actor=<class 'agent_comms.goal_actions.RuntimeInvocable'>, completed=<contextlib.ExitStack object at 0x7fadef556760>)
+
+    def next_state(self, ctx: GoalActionContext) -> GoalState:
+        return BlockedGoal(
+            required_block_reason(
+                self.block_reason if self.block_reason is not None else (
+>                   self.progress.block_reason if self.progress is not None else None
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+                )
+            )
+        )
+E       AttributeError: 'str' object has no attribute 'block_reason'
+
+src/agent_comms/goal_actions.py:375: AttributeError
+_____________ test_automatic_failure_block_advances_goal_revision ______________
+
+comms = <agent_comms.comms.Comms object at 0x7fadef54a5f0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fadf11b9710>
+
+    def test_automatic_failure_block_advances_goal_revision(comms, monkeypatch):
+        started = _goal(comms, monkeypatch)
+        snapshot = comms.registry.require("owner").goal
+        assert snapshot is not None
+        newer = Comms(comms.root).goals.update_goal(
+            "owner",
+            ActiveGoalAction(
+                expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("verified newer step")
+            ),
+        )
+        assert newer is not None
+        blocked = comms.goals.block_goal_after_failed_turn(
+            "owner",
+            started_goal=snapshot,
+            expected_worktree="/wt",
+            diagnostic="Backend outcome uncertain.",
+        )
+        assert blocked is not None and blocked.state.declared_name == "blocked"
+        assert blocked.revision == newer.revision + 1
+>       assert blocked.progress.startswith("verified newer step\n\n")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'TextGoalProgress' object has no attribute 'startswith'
+
+tests/test_goal_resume.py:376: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_goal_block_reason.py::test_missing_or_blank_block_reason_rejects_without_side_effects
+FAILED tests/test_goal_resume.py::test_automatic_failure_block_advances_goal_revision
+2 failed, 34 passed in 11.85s

@@ -19,6 +19,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
 from agent_comms.threads import Thread
+from agent_comms.unstarted_runtime import UnstartedRuntime
 
 
 # -- registry ---------------------------------------------------------------
@@ -50,19 +51,38 @@ def test_pi_native_serves_threads_with_every_thread_capability():
     assert PiNativeBackend.location_type is PiSessionFile
 
 
+@pytest.mark.parametrize("location", [
+    PiSessionFile("/home/ts/wt/test/session.jsonl"), UnstartedRuntime(PiNativeBackend),
+])
+def test_runtime_location_round_trip_uses_declared_backend(location):
+    thread = Thread("location", frozenset(), "/home/ts/wt/test", session_file=location.read_key)
+    restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
+    assert restored.runtime == location
+    assert restored.runtime is restored.runtime
+    assert restored.backend is PiNativeBackend
+
+
+@pytest.mark.parametrize("row", json.loads((Path(__file__).parent / "fixtures/p117/main-registry-rows.json").read_text()))
+def test_main_written_registry_location_round_trip(row):
+    restored = FieldCodec.decode(Thread, row)
+    expected = (UnstartedRuntime(PiNativeBackend) if row["session_file"] is None
+                else PiSessionFile(row["session_file"]))
+    assert restored.runtime == expected
+    assert restored.to_wire() == row
+    assert json.dumps(restored.to_wire()) == json.dumps(row)
+
+
 # -- declaration checks -------------------------------------------------------
 
 
 class _Location(ab.RuntimeLocation):
-    @classmethod
-    def of(cls, thread):
-        return cls()
+    def location_payload(self):
+        return None
 
 
 class _OtherLocation(ab.RuntimeLocation):
-    @classmethod
-    def of(cls, thread):
-        return cls()
+    def location_payload(self):
+        return None
 
 
 def _declared(name, *roles, location=_Location, new_threads=False, serves=True, kinds=frozenset()):
@@ -83,7 +103,7 @@ def test_validation_names_missing_roles_and_abstract_methods():
     with pytest.raises(ab.BackendDeclarationError) as error:
         ab.validate_backends([HalfBackend])
     message = str(error.value)
-    for role in ("ReportsContext", "ReadsHistory", "ConfiguresModel"):
+    for role in ("ReportsContext", "ConfiguresModel"):
         assert role in message
     assert "leaves methods abstract" in message
     for method in ("compact", "run_turn", "abort", "close_idle"):
@@ -166,10 +186,13 @@ def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration():
     thread = Thread("owner", frozenset(), "/tmp/owner")
     assert thread.backend is PiNativeBackend
     encoded = FieldCodec.encode(thread)
-    assert "backend" not in encoded  # the default backend is not spelled on the wire
+    assert "backend" not in encoded
+    assert "runtime" not in encoded
+    assert encoded["session_file"] is None
+    assert FieldCodec.decode(Thread, encoded) == thread
     assert FieldCodec.decode(Thread, {**encoded, "backend": "pi_native"}) == thread
     with pytest.raises(ValueError):
-        FieldCodec.decode(Thread, {**encoded, "backend": "pi_durable"})
+        FieldCodec.decode(Thread, {**encoded, "runtime": {"backend": "pi_durable", "location": None}})
     assert thread.for_registration("owner", thread).backend is PiNativeBackend
 
 
@@ -248,20 +271,18 @@ def _session_lines(path: Path) -> None:
 def test_session_entries_convert_to_transcript_entries_newest_first(tmp_path):
     session = tmp_path / "s.jsonl"
     _session_lines(session)
-    page = PiNativeBackend.read_entries(session, None, 4)
-    assert [(entry.kind, entry.text, entry.ref.backend_id) for entry in page.entries] == [
-        (ab.SystemEntry, "", "l1"),
-        (ab.CompactionEntry, "earlier work", "c1"),
-        (ab.ToolResultEntry, "file body", "t1"),
-        (ab.AssistantEntry, "hi back", "a1"),
-    ]
-    assert page.entries[2].at is None  # an invalid external time stays undated
-    assert page.entries[3].at.isoformat() == "2026-10-10T10:00:02+00:00"
-    older = PiNativeBackend.read_entries(session, page.older, 4)
-    assert [(entry.kind, entry.text) for entry in older.entries] == [
-        (ab.UserEntry, "hello there"), (ab.SystemEntry, ""),
-    ]
-    assert older.older is None
+    source = PiSessionFile(str(session)).history_source(tmp_path, None)
+    records = tuple(source.reverse(session.stat().st_size))
+    page = records[:4]
+    assert [record.entry.source_coordinates.id for record in page] == ["l1", "c1", "t1", "a1"]
+    assert page[1].entry.summary == "earlier work"
+    assert page[2].entry.message.text == "file body"
+    assert page[3].entry.message.text == "hi back"
+    assert page[2].entry.recorded_at is None  # an invalid external time stays undated
+    assert page[3].entry.recorded_at.isoformat() == "2026-10-10T10:00:02+00:00"
+    older = tuple(source.reverse(page[-1].start))
+    assert [record.entry.source_coordinates.id for record in older] == ["u1", "s"]
+    assert older[0].entry.message.text == "hello there"
 
 
 def _pi_stub(tmp_path: Path, session: Path) -> Path:
@@ -336,7 +357,7 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
     starts = []
     finish = asyncio.Event()
     delivery = ab.TurnDelivery(
-        worktree=str(project), environment={}, inbox=asyncio.Queue(), finish_event=finish,
+        worktree=str(project), environment={}, inbox=ab.TurnInbox(), finish_event=finish,
         send_boundary=None, interrupt_boundary=None,
         input_started=lambda public_id, native_id, text: starts.append(text) or True,
         request_progress=lambda progress, process: None,

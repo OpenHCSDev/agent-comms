@@ -13,7 +13,6 @@ from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
 from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
-from . import agent_backend as pivot
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
@@ -524,7 +523,6 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     assistant: ClassVar[bool] = False
     user: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
-    transcript_kind: ClassVar[type[pivot.TranscriptKind]] = pivot.SystemEntry
     content: tuple[PiContent, ...] | str | None = None
     usage: PiUsage | None = None
     input_id: str | None = wire_field("inputId")
@@ -597,7 +595,6 @@ class AbsentMessage(PiMessage):
 
 @dataclass(frozen=True)
 class AssistantMessage(PiMessage):
-    transcript_kind = pivot.AssistantEntry
 
     def annotation_disclosure(self):
         from .working_memory_disclosure import PublicInstructionDisclosure
@@ -682,7 +679,6 @@ class AssistantMessage(PiMessage):
 
 class UserMessage(PiMessage):
     user = True
-    transcript_kind = pivot.UserEntry
 
     def matches_input(self, text, native_id):
         return self.text == text and self.input_id == native_id
@@ -737,7 +733,6 @@ class ToolDetailsPayload(PiPayload):
 
 @dataclass(frozen=True)
 class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult"):
-    transcript_kind = pivot.ToolResultEntry
     tool_call_id: str = wire_field("toolCallId", "")
     tool_name: str = wire_field("toolName", "tool")
     is_error: bool = wire_field("isError", False)

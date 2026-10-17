@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/core-commander-2/.artifacts/p107-installed-proof.py", line 32, in <module>
+    schema = NativeSchemaDeclaration.observe()
+  File "/home/ts/.cache/agent-scratch/core-commander-2/p107-runtime/export/tools/cutover/native_schema_carry.py", line 57, in observe
+    from agent_comms.compaction_records import JournalTable
+ModuleNotFoundError: No module named 'agent_comms.compaction_records'

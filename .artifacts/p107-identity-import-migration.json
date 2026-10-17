@@ -1,0 +1,9 @@
+[
+  "src/agent_comms/threads.py",
+  "src/agent_comms/goal_scheduler.py",
+  "src/agent_comms/todos.py",
+  "src/agent_comms/goal_actions.py",
+  "src/agent_comms/task_sources.py",
+  "src/agent_comms/context_segments/partner_activity.py",
+  "tests/test_current_input_origin.py"
+]

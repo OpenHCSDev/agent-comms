@@ -24,6 +24,12 @@ from .read_ledger import ReadLedger
 from .registration import Registration
 from .tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
+# Compose backends only after their shared record dependencies have loaded.
+from . import pi_native_backend
+from .agent_backend import AgentBackend
+
+AgentBackend.seal()
+
 __all__ = [
     "ReadLedger",
     "DisplayedConversation",
