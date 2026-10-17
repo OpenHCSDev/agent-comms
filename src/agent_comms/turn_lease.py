@@ -57,6 +57,10 @@ class TurnState:
     def phase(self) -> TurnPhase:
         return self.active.phase if self.active is not None else IdlePhase()
 
+    @property
+    def settled(self) -> bool:
+        return self.active is None and self.finished_turn_id is not None
+
     def project_activity(self, activity):
         """The turn start is activity even before its first phase observation."""
         projected = self.phase.project_activity(activity)
