@@ -18,9 +18,9 @@ from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
 from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
 from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, projected
-from .mro_dispatch import MroDispatch, handles
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec, projected
+from agent_comms.mro_dispatch import MroDispatch, handles
 
 
 class Measure(DeclaredFamily, affix="Measure"):
@@ -129,6 +129,10 @@ class ChangedSource:
     def tree(self) -> ast.Module:
         return ast.parse(self.source, self.path)
 
+    @cached_property
+    def tokens(self) -> tuple[tokenize.TokenInfo, ...]:
+        return tuple(tokenize.tokenize(io.BytesIO(self.source).readline))
+
     @classmethod
     def read(cls, repo: Path, base: str, head: str, path: str) -> ChangedSource:
         patch = git(repo, "diff", "--no-renames", "--no-ext-diff", "--no-textconv",
@@ -186,15 +190,15 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
         return range(line, line + 1)
 
     @classmethod
-    def prose_lines(cls, source: bytes, tree: ast.Module) -> frozenset[int]:
+    def prose_lines(cls, source: ChangedSource) -> frozenset[int]:
         docstrings: set[int] = set()
-        for node in ast.walk(tree):
+        for node in ast.walk(source.tree):
             if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 match node.body:
                     case [ast.Expr(value=ast.Constant(value=str()) as value), *_]:
                         docstrings.update(range(value.lineno, value.end_lineno + 1))
         found: set[int] = set()
-        for token in tokenize.tokenize(io.BytesIO(source).readline):
+        for token in source.tokens:
             if token.type == tokenize.COMMENT or (
                 token.type == tokenize.STRING and token.start[0] in docstrings
             ):
@@ -205,12 +209,12 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        tree = ast.parse(source, filename)
-        return sum(cls.occurrences(node) for node in ast.walk(tree)) + len(cls.prose_lines(source, tree))
+        module = ChangedSource(filename, source, frozenset())
+        return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(cls.prose_lines(module))
 
     @classmethod
     def count_changed(cls, source: ChangedSource) -> int:
-        return super().count_changed(source) + len(cls.prose_lines(source.source, source.tree) & source.lines)
+        return super().count_changed(source) + len(cls.prose_lines(source) & source.lines)
 
 
 class FunctionLocalImport(PerFileMeasure):
@@ -444,12 +448,7 @@ class TypeSwitchArms(DispatchArms, TypeSwitch):
 
 
 class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileOccurrenceMeasure):
-    """Admit the canonical audit collector through the original packaged ratchet.
-
-    Per-file identities keep moving primitive cases into another method/file
-    from cancelling growth. Parsing is the existing Git/source boundary; the
-    shared collector owns primitive arms and codec admission.
-    """
+    """Share the audit collector; per-file counts prevent moving primitive debt."""
 
     @classmethod
     def occurrences(cls, node: ast.AST) -> int:
