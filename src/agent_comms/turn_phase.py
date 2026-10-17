@@ -141,10 +141,6 @@ class PromptAcceptancePhase(TurnPhase):
 class PreparingPhase(TurnPhase):
     label = "Preparing input"
 
-    def project_activity(self, activity):
-        projected = super().project_activity(activity)
-        return projected.readiness.preparing_activity(projected)
-
 
 class IdlePhase(TurnPhase):
     busy = False

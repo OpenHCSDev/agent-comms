@@ -296,6 +296,7 @@ class TurnProgress(events.AgentEventConsumer):
                         self.thread_name, target, "".join(self.reply_parts)
                     )
                     published.append(message.reference)
+        self.comms.agents.recover_completed_turn(self.turn_lease, self.thread.backend)
 
     def publish_checkpoint(self):
         """Close terminal publication and its original read before ACP delivery."""
