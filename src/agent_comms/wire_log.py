@@ -283,6 +283,7 @@ class ConversationSourceWindowRequest:
     parameters: tuple
     limit: int
     ascending: bool
+    sequences: tuple[int, ...] = ()
 
     def capture(self, source, lookup: str) -> Iterator[CommittedDelivery]:
         """Copy selected bytes now; decode them only as the consumer advances."""
@@ -293,6 +294,7 @@ class ConversationSourceWindowRequest:
                 self.parameters,
                 limit=self.limit,
                 ascending=self.ascending,
+                sequences=self.sequences,
             )
             if self.limit
             else iter(())
@@ -395,9 +397,12 @@ class WireLog:
         yield source
         source.require_current()
 
-    def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
+    def conversation_sources(
+        self, lookup, predicate="1", parameters=(), *, limit, ascending,
+        sequences: tuple[int, ...] = (),
+    ):
         """Copy a bounded window under the lock; decode after releasing it."""
-        request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending)
+        request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending, sequences)
         return request.capture_many(self, lookup, (request,))[0]
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:

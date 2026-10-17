@@ -154,8 +154,7 @@ class Goals:
             for sequence in row.bus_sequences_through(after_seq)
         })
         earlier = self.bus.log.conversation_sources(
-            lookup, f"w.seq IN ({','.join('?' for _ in sequences)})", sequences,
-            limit=len(sequences), ascending=True,
+            lookup, sequences=sequences, limit=len(sequences), ascending=True,
         ) if sequences else ()
         # Keep older UNKNOWNs, but discover unreserved replies only after this
         # dependency scope's recorded wait. Certification owns both identities.
