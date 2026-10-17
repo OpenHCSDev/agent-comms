@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -34,20 +35,18 @@ test('native branch summary consumes the store range and preserves its budget', 
 });
 
 test('HTML exports full retained entries and custom rendering without consuming history twice', async () => {
-    const scratch = resolve(process.env.TMPDIR ?? '.artifacts');
-    mkdirSync(scratch,{recursive:true});
-    const directory=mkdtempSync(join(scratch,'native-html-'));
-    const session=join(directory,'session.jsonl');
-    const header={type:'session',version:3,id:'export-test',cwd:directory,timestamp:'2026-09-28T17:00:00Z'};
-    const rows=[
-        {type:'message',id:'a',parentId:null,message:{role:'user',content:'multibyte 🐸 日本語'}},
-        {type:'message',id:'b',parentId:'a',message:{role:'assistant',content:[{type:'toolCall',id:'tool',name:'custom',arguments:{path:'🐸'}}]}},
-        {type:'message',id:'c',parentId:'b',message:{role:'toolResult',toolCallId:'tool',toolName:'custom',content:[{type:'text',text:'success'}]}},
-    ];
-    writeFileSync(session,[header,...rows].map(row=>JSON.stringify(row)+'\n').join(''));
-    const original=readFileSync(session);
-    const decode=(path)=>JSON.parse(Buffer.from(readFileSync(path,'utf8').match(/<script id="session-data" type="application\/json">([^<]*)<\/script>/)[1],'base64').toString());
+    const directory=mkdtempSync(join(tmpdir(),'native-history-consumers-'));
     try {
+        const session=join(directory,'session.jsonl');
+        const header={type:'session',version:3,id:'export-test',cwd:directory,timestamp:'2026-09-28T17:00:00Z'};
+        const rows=[
+            {type:'message',id:'a',parentId:null,message:{role:'user',content:'multibyte 🐸 日本語'}},
+            {type:'message',id:'b',parentId:'a',message:{role:'assistant',content:[{type:'toolCall',id:'tool',name:'custom',arguments:{path:'🐸'}}]}},
+            {type:'message',id:'c',parentId:'b',message:{role:'toolResult',toolCallId:'tool',toolName:'custom',content:[{type:'text',text:'success'}]}},
+        ];
+        writeFileSync(session,[header,...rows].map(row=>JSON.stringify(row)+'\n').join(''));
+        const original=readFileSync(session);
+        const decode=(path)=>JSON.parse(Buffer.from(readFileSync(path,'utf8').match(/<script id="session-data" type="application\/json">([^<]*)<\/script>/)[1],'base64').toString());
         const plain=join(directory,'plain.html');
         await exportFromFile(session,{outputPath:plain});
         assert.deepEqual(decode(plain).entries,rows);
