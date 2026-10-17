@@ -789,9 +789,10 @@ class ThreadRelationships:
                 continue
             sender, target = registry.canonical_name(message.sender), registry.canonical_name(message.target)
             peer = target if sender == thread.name else sender if target == thread.name else None
-            person = registry.threads.get(peer)
-            if person is not None and message.timestamp >= max(thread.created_at, person.created_at):
-                correspondents.add(person.incarnation)
+            if peer in registry.threads:
+                person = registry.threads[peer]
+                if message.timestamp >= max(thread.created_at, person.created_at):
+                    correspondents.add(person.incarnation)
         return tuple(relation for relation in relations
                      if relation.records or relation.peer.name == thread.parent
                      or relation.peer in correspondents)

@@ -203,3 +203,23 @@ def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_p
         s for s in context.segments if isinstance(s, RelationshipsSegment)
     ).text().splitlines()[-1])
     assert shown[0]["history"] == [{"note": "First plan", "at": created.updated_at}]
+
+
+def test_recent_direct_work_keeps_a_stopped_peer_but_not_a_reused_name(tmp_path):
+    from test_private_bus_checkpoint import _root
+
+    comms, _ = _root(tmp_path)
+    original = comms.messaging.send_initial_cohort("Bob", "Alice", "Current work")
+    assert [p.name for p in _peers(comms, "Alice")] == ["Bob"]
+    comms.owners.stop("Bob")
+    assert [p.name for p in _peers(comms, "Alice")] == ["Bob"]
+    comms.registry.remove("Bob")
+    comms.registry.declare(Thread("Bob", frozenset(), str(tmp_path),
+                                  created_at=original.timestamp + 1))
+    assert _peers(comms, "Alice") == ()
+
+
+def test_parent_is_context_even_without_tags_or_messages(tmp_path):
+    comms = _wire(tmp_path, ("parent", ()), ("unrelated", ()))
+    comms.registry.declare(Thread("child", frozenset(), str(tmp_path), parent="parent"))
+    assert [p.name for p in _peers(comms, "child")] == ["parent"]
