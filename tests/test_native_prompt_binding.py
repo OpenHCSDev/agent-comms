@@ -523,13 +523,15 @@ async def test_old_input_id_cannot_directly_seed_new_claim_cursor(tmp_path, monk
             is None
         )
         old_generation = store.session._connection.execute(
-            "SELECT sent_owner_claimed_generation FROM native_runtime_input WHERE input_id=?",
+            f"SELECT {NativeRuntimeInput.column_projection()['sent_owner_claimed_generation']} "
+            f"FROM {NativeRuntimeInput.declared_name} WHERE input_id=?",
             (turn.input_id,),
         ).fetchone()[0]
         assert old_generation != claimed_generation
         with pytest.raises(sqlite3.IntegrityError, match="input identity is frozen"):
             store.session._connection.execute(
-                "UPDATE native_runtime_input SET sent_owner_claimed_generation=? "
+                f"UPDATE {NativeRuntimeInput.declared_name} "
+                f"SET {NativeRuntimeInput.column_projection()['sent_owner_claimed_generation']}=? "
                 "WHERE input_id=?",
                 (claimed_generation, turn.input_id),
             )
@@ -648,7 +650,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
         )
         assert evidence == ()
         binding = store.session._connection.execute(
-            f"SELECT n.input_id,n.session_id FROM native_runtime_input n "
+            f"SELECT n.input_id,n.session_id FROM {NativeRuntimeInput.declared_name} n "
             f"JOIN ({NativeRuntimeInput.source_membership_sql()}) m ON m.input_id=n.input_id "
             "JOIN wake_claims c ON c.assignment_id=m.assignment_id WHERE c.wire_seq=?",
             (initial.message.seq,),
@@ -693,7 +695,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
         assert [type(row.execution) for row in evidence] == [TriageNativeExecution]
         assert evidence[0].expected_prompt_equality_established
         rows = store.session._connection.execute(
-            "SELECT stage,session_id FROM native_runtime_input ORDER BY stage"
+            f"SELECT stage,session_id FROM {NativeRuntimeInput.declared_name} ORDER BY stage"
         ).fetchall()
         assert [(row["stage"], row["session_id"] is not None) for row in rows] == [
             ("full", True),
@@ -761,7 +763,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
         assert [type(row.execution) for row in evidence] == ([] if stage == "triage" else [TriageNativeExecution])
         assert (
             store.session._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_input WHERE stage=? AND session_id IS NOT NULL",
+                f"SELECT COUNT(*) FROM {NativeRuntimeInput.declared_name} WHERE stage=? AND session_id IS NOT NULL",
                 (stage,),
             ).fetchone()[0]
             == 1

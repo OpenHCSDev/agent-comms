@@ -89,7 +89,8 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
         assert (
             current.owner_claimed_generation
             == store.session._connection.execute(
-                f"SELECT sent_owner_claimed_generation FROM {NativeRuntimeInput.declared_name} WHERE input_id=?",
+                f"SELECT {NativeRuntimeInput.column_projection()['sent_owner_claimed_generation']} "
+                f"FROM {NativeRuntimeInput.declared_name} WHERE input_id=?",
                 (second.input_id,),
             ).fetchone()[0]
         )

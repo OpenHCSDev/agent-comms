@@ -319,7 +319,8 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
         assert (
             len(
                 NativeRuntimeInput.select(
-                    store.session._connection, where="sent_owner_claimed_generation IS NOT NULL"
+                    store.session._connection,
+                    where=f"{NativeRuntimeInput.column_projection()['sent_owner_claimed_generation']} IS NOT NULL"
                 )
             )
             == 0
