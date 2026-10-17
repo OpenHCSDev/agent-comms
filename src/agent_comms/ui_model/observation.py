@@ -568,8 +568,6 @@ class ThreadReading(Observation[ObserveThreads]):
     def for_interest(self, previous: Self | None) -> Self:
         if previous is not None:
             self.observed = previous.observed
-            if self.observed is not None:
-                self.initial = self.request.names - self.observed.changed_since(None) or self.request.names
         return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
