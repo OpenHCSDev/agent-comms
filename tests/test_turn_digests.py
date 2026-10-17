@@ -78,7 +78,7 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
 
 def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, monkeypatch):
     from agent_comms.cli_bridges.claude import ClaudeBridge
-    from agent_comms.cli_bridges.shared import Binding, DeliveryJournal, Options, Watch
+    from agent_comms.cli_bridges.shared import Binding, Options, Watch
     from agent_comms.wire_watch import WatchSource, WireWatch
 
     home = tmp_path / 'home'
@@ -97,9 +97,10 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
     comms = prepared(tmp_path / 'wire')
     comms.registry.declare(Thread('claude', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     state = tmp_path / 'state'
-    journal = DeliveryJournal(state)
-    bridge = ClaudeBridge(Options(Watch(), str(comms.root), 'claude', 'session', state),
-                          Binding(str(comms.root), 'claude', 'session'), journal)
+    store = Binding.open(state)
+    db = store.__enter__()
+    binding = Binding(str(comms.root), 'claude', 'session')
+    bridge = ClaudeBridge(Options(Watch(), binding, state), binding, db)
 
     async def publish():
         task = asyncio.create_task(bridge.publish_transcript())
@@ -117,7 +118,7 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
-            journal.close()
+            store.__exit__(None, None, None)
 
     asyncio.run(publish())
     answer = endpoint(comms, 'claude', 1)

@@ -9,19 +9,20 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Collection
+from bisect import bisect_left
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field, replace
 from functools import partial
+from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from .channel_targets import is_channel_target
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec
 from .private_path import FileRevision
 from .store_files import _store_lock
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadIncarnationRecord
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 class DisplaySelection(ABC):
     """The conversation selected by an original page or store observation."""
@@ -128,30 +129,46 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
+class ReadCursor:
+    high_water: int = 0
+    exceptions: tuple[int, ...] = ()
+
+    @classmethod
+    def union(cls, cursors: Iterable[ReadCursor]) -> ReadCursor:
+        cursors = tuple(cursors)
+        through = max((cursor.high_water for cursor in cursors), default=0)
+        exceptions = sorted({seq for cursor in cursors for seq in cursor.exceptions if seq > through})
+        consumed = 0
+        while consumed < len(exceptions) and exceptions[consumed] == through + 1:
+            through += 1
+            consumed += 1
+        return cls(through, tuple(exceptions[consumed:]))
+
+    def add(self, sequences: tuple[int, ...]) -> ReadCursor:
+        return self.union((self, type(self)(exceptions=sequences)))
+
+    def __len__(self) -> int:
+        return self.high_water + len(self.exceptions)
+
+    def __contains__(self, sequence: int) -> bool:
+        index = bisect_left(self.exceptions, sequence)
+        return 0 < sequence <= self.high_water or (index < len(self.exceptions) and self.exceptions[index] == sequence)
+
+    def changed(self, other: ReadCursor) -> Iterable[int]:
+        lower, upper = sorted((self.high_water, other.high_water))
+        for sequence in chain(range(lower + 1, upper + 1),
+                              (seq for seq in sorted(set(self.exceptions) | set(other.exceptions)) if seq > upper)):
+            if (sequence in self) != (sequence in other):
+                yield sequence
+
+
+@dataclass(frozen=True, slots=True)
 class Conversation:
     target: str = ""
     participants: tuple[ThreadIncarnation, ...] = ()
 
     def current(self, snapshot: RegistryProvenance) -> bool:
         return all(participant.current(snapshot) for participant in self.participants)
-
-    def to_wire(self) -> dict:
-        """Encode the persisted participant pair format."""
-        data = FieldCodec.encode(replace(self, participants=()))
-        data["participants"] = FieldCodec.encode(
-            tuple((p.name, p.created_at) for p in self.participants)
-        )
-        return data
-
-    @classmethod
-    def from_wire(cls, raw: dict) -> Conversation:
-        """Decode participant pairs once at the persisted-key boundary."""
-        data = dict(raw)
-        pairs = FieldCodec.decode(tuple[tuple[str, float], ...], data.pop("participants"))
-        return replace(
-            FieldCodec.decode(cls, data),
-            participants=tuple(ThreadIncarnationRecord.decode(*pair) for pair in pairs),
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,7 +295,7 @@ class DMDisplayBasis:
         )
         older_unread = False
         if page.has_older and page.messages:
-            seen = bus.reads.seen_sequences(viewer_name, snapshot)
+            seen = bus.reads.cursor(viewer_name, snapshot)
             older_unread = bus.conversation_older_unread(
                 scope, before=page.messages[0].seq, seen=seen
             )
@@ -454,7 +471,7 @@ class DMDisplayScope(MessageDisplayScope):
     def inbound(self, message: Message | BusPageRow) -> bool:
         return message.sender in self.second_names and message.target in self.first_names
 
-    def unread_before(self, message: Message | BusPageRow, before: int, seen: frozenset[int]) -> bool:
+    def unread_before(self, message: Message | BusPageRow, before: int, seen: ReadCursor) -> bool:
         return message.seq < before and message.seq not in seen and self.inbound(message)
 
     def offsets(self, index, *, lower, upper, descending, before_offset):

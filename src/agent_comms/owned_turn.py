@@ -206,7 +206,7 @@ class OwnedTurn:
             RecordedContextTurn,
         )
 
-        self.relations = self.runner.comms.relationships.peer_relations(self.thread.name)
+        self.relations = self.runner.comms.relationships.context_relations(self.thread.name)
         self.context = TurnContext.for_owner(
             self.thread,
             RecordedContextTurn(TurnId(self.turn_id), self.turn_lease.identity),

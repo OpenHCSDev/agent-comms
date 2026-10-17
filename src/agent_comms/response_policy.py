@@ -37,6 +37,9 @@ class ResponsePolicy(DeclaredFamily, affix="Policy"):
     def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
         """Instructions included in a queued input."""
 
+    def context_peer(self, owner: str, sender: str, target: str) -> str | None:
+        return None
+
     def disposition_key(self, message: Message, owner: Thread) -> str:
         return f"bus:{message.seq}:owner:{float(owner.created_at).hex()}"
 
@@ -53,6 +56,9 @@ class DirectPolicy(NoChannelRecipients, ResponsePolicy):
 
     def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
         return "direct; reply to the sender"
+
+    def context_peer(self, owner: str, sender: str, target: str) -> str | None:
+        return target if sender == owner else sender if target == owner else None
 
     def disposition_key(self, message: Message, owner: Thread) -> str:
         return f"bus:{message.seq}"

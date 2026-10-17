@@ -10,7 +10,7 @@ from .channel_targets import BuiltinChannel, is_channel_target
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .messages import Message
-from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
+from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope, ReadCursor
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
@@ -239,7 +239,7 @@ class DeliveryScope(MessageDisplayScope):
         return max(source.created_at, snapshot.threads[self.actor].created_at)
 
     def unread(
-        self, delivery: DeliveryMessage, snapshot: RegistryProvenance, seen: frozenset[int]
+        self, delivery: DeliveryMessage, snapshot: RegistryProvenance, seen: ReadCursor
     ) -> bool:
         message = delivery.message
         if message.seq in seen:
