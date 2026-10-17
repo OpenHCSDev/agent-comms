@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -32,7 +31,7 @@ class GoalWait(ABC):
     def matches_id(self, wait_id: str) -> bool:
         return False
 
-    def owner_matches(self, created_at: float) -> bool:
+    def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
         return False
 
     def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
@@ -65,7 +64,7 @@ class RecordedGoalWait(GoalWait):
     revision: int
     after_seq: int
     targets: tuple[GoalWaitTarget, ...]
-    owner_created_at: float
+    owner: RecordedThreadIncarnation
     # An idle dependency has no turn generation at the moment of declaration.
     target_turn_generations: tuple[int | None, ...]
     # Runtime declarations outside a turn explicitly carry no reporting turn.
@@ -74,10 +73,7 @@ class RecordedGoalWait(GoalWait):
 
     def __post_init__(self) -> None:
         if (
-            type(self.owner_created_at) not in (int, float)
-            or not math.isfinite(self.owner_created_at)
-            or self.owner_created_at <= 0
-            or len(self.target_turn_generations) != len(self.targets)
+            len(self.target_turn_generations) != len(self.targets)
             or any(
                 generation is not None and (type(generation) is not int or generation <= 0)
                 for generation in self.target_turn_generations
@@ -100,8 +96,8 @@ class RecordedGoalWait(GoalWait):
     def matches_id(self, wait_id: str) -> bool:
         return self.wait_id == wait_id
 
-    def owner_matches(self, created_at: float) -> bool:
-        return self.owner_created_at == created_at
+    def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
+        return self.owner.same_publication_birth(owner)
 
     def consume_dependency(self, comms, canonical: str) -> bool:
         return comms.goals.consume_goal_wait(canonical, self.wait_id)
@@ -120,20 +116,20 @@ class RecordedGoalWait(GoalWait):
         )
         return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
 
-    def current_for(self, goal: Goal, owner_created_at: float) -> bool:
+    def current_for(self, goal: Goal, owner: RecordedThreadIncarnation) -> bool:
         """A retained wait can survive edits, but not replacement of its owner.
 
         Callers select the row by goal ID before asking this question. A newer
         goal revision preserves the declared wait; a future wait revision does
         not belong to the observed goal snapshot.
         """
-        return self.owner_created_at == owner_created_at and goal.accepts_observation(
+        return self.owner_matches(owner) and goal.accepts_observation(
             self.goal_id, self.revision
         )
 
     def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
         """Join original sender and the actual addressed owner through its source."""
-        if not self.owner_matches(owner.created_at):
+        if not self.owner_matches(owner):
             return False
         return (
             original.message.seq > self.after_seq
@@ -142,7 +138,7 @@ class RecordedGoalWait(GoalWait):
         )
 
     def has_reply(self, bus: WireLog, owner: RecordedThreadIncarnation) -> bool:
-        if not self.owner_matches(owner.created_at):
+        if not self.owner_matches(owner):
             return False
         return any(
             self.matches(original, owner)
@@ -206,11 +202,11 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """A wait belongs to its owner's goal, which ends with the declaration."""
-        goals = {thread.goal.id for thread in threads if thread.goal is not None}
+        owners = {thread.incarnation.require_recorded().lookup for thread in threads}
         self.update(
             lambda rows: (
-                {key: row for key, row in rows.items() if key not in goals}
-                if goals & rows.keys()
+                {key: row for key, row in rows.items() if row.owner.lookup not in owners}
+                if any(row.owner.lookup in owners for row in rows.values())
                 else rows
             )
         )
@@ -272,7 +268,7 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
             wait = rows.get(goal.id) if goal is not None else None
             if wait is not None and (
                 goal is None
-                or not wait.current_for(goal, thread.created_at)
+                or not wait.current_for(goal, thread.incarnation.require_recorded())
             ):
                 wait = None
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
@@ -292,7 +288,7 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
                 )
                 if peer_wait is not None and (
                     peer_goal is None
-                    or not peer_wait.current_for(peer_goal, peer.created_at)
+                    or not peer_wait.current_for(peer_goal, peer.incarnation.require_recorded())
                 ):
                     peer_wait = None
                 if agents.is_working(target.incarnation, snapshot):
