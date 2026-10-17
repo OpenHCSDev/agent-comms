@@ -13,7 +13,7 @@ def test_all_is_the_only_global_target(tmp_path):
     assert BuiltinChannel.lookup("broadcast") is None
     with pytest.raises(UnregisteredThreadError):
         comms.messaging.send("sender", "broadcast", "must not become a global message")
-    assert not comms.bus.log.full_history()
+    assert not list(comms.bus.full_history_page().messages)
 
     global_message = comms.messaging.send_message("sender", "#all", "global")
     assert global_message.target == "#all"

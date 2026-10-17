@@ -5,16 +5,18 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from typing import ClassVar
+from typing import ClassVar, TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .message_reference import MessageReference
-from .notification_progress import UnrecordedProgress
+from .notification_progress import (
+    UnrecordedProgress, ContextualProgress, PassiveProgress, IgnoredProgress,
+    EngagedProgress, CompletedProgress, InterruptedProgress, FailedProgress,
+)
 from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
@@ -96,10 +98,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
                        recipient: str) -> WakeAssignment | None:
         return None
 
-    notification_state: ClassVar[str] = "Sent"
-    notification_detail: ClassVar[str] = ""
-    notification_priority: ClassVar[int] = 3
-    notification_busy: ClassVar[bool] = False
+    notification_state: ClassVar[type[ContextualProgress]] = ContextualProgress
     notification_changed: ClassVar[bool] = False
     records_conversation_response: ClassVar[bool] = False
 
@@ -119,12 +118,8 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
 
         return MessageNotification(
             recipient,
-            self.notification_state,
-            self.notification_detail,
-            self.notification_priority,
-            self.notification_busy,
+            self.notification_state(UnrecordedProgress() if activity is None else activity.progress),
             changed=self.notification_changed,
-            progress=UnrecordedProgress() if activity is None else activity.progress,
         )
 
     policy: ClassVar[type[WakePolicy]]
@@ -202,8 +197,7 @@ class InitialAssignment:
 
 class PassiveAssignment(InitialAssignment, AssignmentState):
     policy = PassiveWake
-    notification_state = "Passive"
-    notification_detail = "Available as context; no automatic response requested."
+    notification_state = PassiveProgress
 
 
     @classmethod
@@ -322,9 +316,7 @@ class IgnoredAssignment(PreEngagementAssignment, AssignmentState):
         )
         return activity.progress.read_notification(notification)
 
-    notification_priority = 2
-    notification_state = "Read"
-    notification_detail = ""
+    notification_state = IgnoredProgress
 
     @property
     def verdict(self):
@@ -391,6 +383,8 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
 
 
 class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
+    notification_state = EngagedProgress
+
     def accepts_binding_from(self, previous_execution: str | None) -> bool:
         return True
 
@@ -416,10 +410,6 @@ class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
     def require_engagement(self) -> Engagement:
         return self.decision
 
-    notification_state = "Sent"
-    notification_detail = ""
-    notification_priority = 1
-    notification_busy = True
 
 
     @classmethod
@@ -445,9 +435,7 @@ class CompletedAssignment(BoundAssignment):
     def completion(self) -> Engagement:
         return self.decision
 
-    notification_priority = 2
-    notification_state = "Answered"
-    notification_detail = "The response workflow completed."
+    notification_state = CompletedProgress
 
 
     @classmethod
@@ -473,8 +461,7 @@ class DeferredAssignment(SelectedResponseNotification, InterruptedAssignment):
             return False
         return super().requires_selected_triage()
 
-    notification_state = "Interrupted before read"
-    notification_detail = ""
+    notification_state = InterruptedProgress
 
 
     @classmethod
@@ -524,9 +511,7 @@ class DeliveredAssignment(PreEngagementAssignment, AssignmentDecision, Assignmen
         )
         return activity.delivered_notification(notification, updated_at_ms)
 
-    notification_priority = 2
-    notification_state = "Read"
-    notification_detail = ""
+    notification_state = IgnoredProgress
 
 
     @classmethod
@@ -555,7 +540,7 @@ class FailedAssignment(InterruptedAssignment):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return replace(notification, state="Failed", detail="")
+        return replace(notification, state=FailedProgress(notification.state))
 
     def rejected_triage_history(self, execution, **source):
         """A proved rejected result is delivered source, never an IGNORE decision."""
@@ -563,8 +548,7 @@ class FailedAssignment(InterruptedAssignment):
 
         return FailedTriageHistoricalNativeInput(execution=execution, **source)
 
-    notification_state = "Failed"
-    notification_detail = ""
+    notification_state = FailedProgress
 
 
     @classmethod

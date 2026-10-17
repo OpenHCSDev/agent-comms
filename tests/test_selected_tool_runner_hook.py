@@ -177,7 +177,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
     assert len(calls) == 1
     assert path.read_text(encoding="utf-8") == "after"
     assert (root / "native-sessions").is_dir()
-    assert comms.views.full_history()[-1].body == "42"
+    assert list(comms.views.full_history_page().messages)[-1].body == "42"
 
 
 @pytest.mark.asyncio
@@ -218,7 +218,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
     assert input_id == kwargs_seen[0]["input_id"] and session_dir == kwargs_seen[0]["session_dir"]
     assert "selected_claimed_write at most once" in calls[0][1]
     assert "using no tools" not in calls[0][1]
-    assert not any(message.claim_transition for message in comms.views.full_history())
+    assert not any(message.claim_transition for message in list(comms.views.full_history_page().messages))
 
 
 @pytest.mark.asyncio
@@ -319,4 +319,4 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
         is None
     )
     assert len(calls) == len(bound) == 1
-    assert not any(message.claim_transition for message in comms.views.full_history())
+    assert not any(message.claim_transition for message in list(comms.views.full_history_page().messages))

@@ -33,7 +33,6 @@ from .peer_relevance import (
 )
 from .wire_record import WireRecord
 from .messages import Message
-from .presentation import ThreadView, WireRevision
 from .private_path import FileRevision
 from .registry_document import RegistrySnapshot
 from .routing import DeliveryScope
@@ -45,6 +44,7 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .message_bus import MessageBus
+    from .presentation import ThreadView, WireRevision
     from .registration import Registration
 
 
@@ -775,6 +775,24 @@ class ThreadRelationships:
             ),
             key=cmp_to_key(PeerRelation.order),
         ))
+
+    def context_relations(self, owner: str) -> tuple[PeerRelation, ...]:
+        """Open contacts, the parent and current-incarnation recent direct work."""
+        with _store_lock(self._wire_lock_path, shared=True):
+            registry = self.registry.snapshot()
+            thread = registry.require(owner)
+            relations = self.peer_relations(owner)
+        messages, _ = self._recent_messages()
+        correspondents: dict[str, float] = {}
+        for message in messages:
+            peer = message.response_policy.context_peer(
+                thread.name, registry.canonical_name(message.sender),
+                registry.canonical_name(message.target))
+            if peer is not None:
+                correspondents[peer] = max(correspondents.get(peer, 0), message.timestamp)
+        return tuple(r for r in relations if r.records or r.peer.name == thread.parent
+                     or correspondents.get(r.peer.name, 0) >= max(
+                         thread.created_at, r.peer.require_recorded().created_at))
 
     def relevance(self, owner: str, peer: str) -> type[PeerRelevance]:
         """The most derived relevance ``peer`` has to ``owner``."""

@@ -611,7 +611,7 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
     assert [row.seq for row in messages] == [1, 2, 3]
     assert len({row.message_id for row in messages}) == 3
     reopened = Comms(tmp_path)
-    assert reopened.views.full_history() == messages
+    assert list(reopened.views.full_history_page().messages) == messages
     reopened.registry.rename("a", "renamed")
     monkeypatch.setattr(reopened.bus.log, "full_history", lambda: pytest.fail("full scan"))
     newest = reopened.bus.dm_history_page("renamed", "b", limit=1)

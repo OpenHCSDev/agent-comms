@@ -131,7 +131,7 @@ async def test_native_user_dm_reply_ignores_earlier_channel_route(
     earlier = comms.messaging.send_user_message(
         "#test", "Earlier channel context", worktree=str(project)
     )
-    channel_context = comms.views.channel_history("#test")
+    channel_context = list(comms.views.channel_history_page("#test").messages)
     assert channel_context[-1] == earlier
     prompts: list[str] = []
 
@@ -167,8 +167,8 @@ async def test_native_user_dm_reply_ignores_earlier_channel_route(
         assert len(prompts) == 1
         assert "Unrelated private question" in prompts[0]
         assert f"delivered automatically to {human.name}" in prompts[0]
-        assert comms.views.channel_history("#test") == channel_context
-        assert comms.views.dm_history("worker", human.name) == []
+        assert list(comms.views.channel_history_page("#test").messages) == channel_context
+        assert list(comms.views.dm_history_page("worker", human.name).messages) == []
     finally:
         await agent.shutdown()
 

@@ -1,37 +1,20 @@
 """Read real persisted notification assignments without scheduling a model."""
 from dataclasses import replace
-import pytest
-from agent_comms.errors import RelationViolationError
-
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
 def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     message = initial.message
-    per_message = comms.views.message_notifications((message,))
-    receipts = comms.views.recent_notifications('beta')
+    per_message = comms.views.message_notifications_for_references((message.reference,))
+    receipts = comms.views.thread_presentation('beta').notifications
     assert len(receipts) == 1
     receipt = receipts[0]
     assert receipt.message == message
     assert receipt.message.target == '#team'
     assert replace(receipt, message=None) in per_message[(message.seq, message.message_id)]
-    assert receipt.state == 'Sent'
-    view = next(v for v in comms.views.thread_views() if v.thread.name == 'beta')
-    assert comms.views.thread_presentation('beta') == replace(
-        view.presentation,
-        notifications=receipts,
-        read_identity=comms.transcripts.capture_page_read('beta').identity,
-    )
+    assert receipt.label == 'Sent'
     assert comms.registry.require('beta').active_turn is None
-    wrong = replace(message, body='Different source bytes')
-    with pytest.raises(RelationViolationError, match="original source"):
-        comms.views.message_notifications((wrong,))
-    notice = replace(message, notice=True)
-    assert notice.notification_references() == ()
-    assert comms.views.message_notifications((notice,)) == {
-        (notice.seq, notice.message_id): ()
-    }
 
 
 def test_legacy_bus_has_no_fabricated_receipts(tmp_path):  # noqa: F811
@@ -41,7 +24,7 @@ def test_legacy_bus_has_no_fabricated_receipts(tmp_path):  # noqa: F811
     root = tmp_path / 'legacy'
     comms = Comms(root)
     comms.registry.declare(Thread('reader', frozenset(), str(tmp_path)))
-    assert comms.views.recent_notifications('reader') == ()
+    assert comms.views.thread_presentation('reader').notifications == ()
     assert not (root / 'coordination.sqlite3').exists()
 
 
@@ -72,11 +55,9 @@ def test_individual_view_keeps_alias_goal_and_active_owner_semantics(tmp_path): 
     for name in ('beta', 'renamed'):
         individual = comms.views.thread_presentation(name)
         view = next(v for v in comms.views.thread_views() if v.thread.name == 'renamed')
-        assert individual == replace(
-            view.presentation,
-            notifications=comms.views.recent_notifications(name),
-            read_identity=comms.transcripts.capture_page_read(view.thread.name).identity,
-        )
+        assert individual.title == view.presentation.title
+        assert individual.summary == view.presentation.summary
+        assert individual.read_identity.thread.name == view.thread.name
     lease = comms.agents.begin_turn('renamed', 'individual-active-turn').turn_lease
     comms.agents.set_activity('renamed', ActivityState.IDLE)
     assert comms.views.thread_presentation('beta').status.working

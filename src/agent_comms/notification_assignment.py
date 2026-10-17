@@ -16,7 +16,7 @@ from .coordination_tables.publications import PublicationReceipts
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
-from .notification_progress import AssignmentProgress, QueuedProgress, SentProgress, ShownToModelProgress
+from .notification_progress import AnsweredProgress, AssignmentProgress, QueuedProgress, SentProgress, ShownToModelProgress
 from .typed_table import BooleanStorage, SQLiteUserVersion, TypedRow, sql_literal
 
 if TYPE_CHECKING:
@@ -94,10 +94,8 @@ class UnansweredResponse(AssignmentResponse):
     def delivered_notification(self, notification, delivered_at_ms):
         return replace(
             notification,
-            state=notification.timed_state(ShownToModelProgress.label, delivered_at_ms),
-            detail="",
-            busy=False,
-            progress=ShownToModelProgress(delivered_at_ms),
+            state=ShownToModelProgress(delivered_at_ms),
+
         )
 
 
@@ -114,11 +112,9 @@ class AnsweredResponse(AssignmentResponse):
     def delivered_notification(self, notification, delivered_at_ms):
         return replace(
             notification,
-            state=notification.timed_state(AssignmentProgress.answered_label, self.received_at_ms),
-            detail="",
-            busy=False,
+            state=AnsweredProgress(ShownToModelProgress(delivered_at_ms)),
+
             answer=self.reference,
-            progress=ShownToModelProgress(delivered_at_ms),
             answered_at_ms=self.received_at_ms,
         )
 
@@ -126,12 +122,8 @@ class AnsweredResponse(AssignmentResponse):
 @dataclass(frozen=True)
 class AssignmentActivity:
     triage_inflight: bool
-    context_progress: AssignmentProgress
+    progress: AssignmentProgress
     response: AssignmentResponse
-
-    @property
-    def progress(self) -> AssignmentProgress:
-        return self.context_progress
 
     def pending_notification(self, notification, queued_at_ms):
         return self.progress.selected_notification(notification, busy=False)
@@ -256,17 +248,10 @@ class NotificationAssignment(NotificationSource):
         return root / "coordination.sqlite3"
 
     @classmethod
-    def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        """SQLite and the certified bus own assignment and delivered-response changes."""
+    def handling_paths(cls, root: Path) -> tuple[Path, ...]:
+        """Handling changes belong to SQLite; wire changes have their own revision."""
         database = cls.database_path(root)
-        bus = root / "bus.jsonl"
-        return (
-            database,
-            database.with_name(database.name + "-wal"),
-            bus,
-            bus.with_name("bus_meta.json"),
-            bus.with_name("private_bus_checkpoint.sqlite3"),
-        )
+        return database, database.with_name(database.name + "-wal")
 
     @classmethod
     def _recorded_conversation_responses(

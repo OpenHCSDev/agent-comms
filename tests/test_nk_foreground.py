@@ -193,7 +193,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
                 ).fetchone()[0]
                 == 1
             )
-        assert comms.views.channel_history("#team")[-1].sender == "beta"
+        assert list(comms.views.channel_history_page("#team").messages)[-1].sender == "beta"
         assert not (root / "read_markers.json").exists()
     finally:
         for child in (*children, duplicate):

@@ -129,7 +129,7 @@ async def test_direct_message_answered_in_plain_text_is_delivered(tmp_path) -> N
                 while native.provider.posts < 1 or agent.turns.turn_state(session).busy:
                     await asyncio.sleep(0.01)
             replies = [
-                (m.target, m.body) for m in comms.views.full_history() if m.sender == session
+                (m.target, m.body) for m in list(comms.views.full_history_page().messages) if m.sender == session
             ]
             assert replies == [("sender", "Blocked: the edit did not run.")]
             assert not comms.registry.require(session).executing

@@ -37,7 +37,7 @@ def _peers(comms, name):
     owner = comms.registry.require(name)
     context = TurnContext.for_owner(
         owner, NextContextTurn(), "", comms.views.thread_views(),
-        comms.relationships.peer_relations(name),
+        comms.relationships.context_relations(name),
     )
     return next(s for s in context.segments if isinstance(s, CoordinationSegment)).peers
 
@@ -82,25 +82,23 @@ def test_a_thread_reusing_a_deleted_name_inherits_no_relevance(tmp_path):
 
 
 def test_peer_list_keeps_every_related_peer_whatever_its_name_or_the_thread_count(tmp_path):
-    slots = CoordinationSegment.PEER_SLOTS
     comms = _wire(
         tmp_path, ("owner", {"team"}), ("zz-partner", ()), ("zy-mentioned", ()),
-        ("aa-stranger", ()), *((f"mate-{index:03}", {"team"}) for index in range(slots + 10)),
+        ("aa-stranger", ()), *((f"mate-{index:03}", {"team"}) for index in range(20)),
     )
     comms.relationships.edit("owner", RelationshipEdit.decode("add"), "zz-partner", "Shared review")
     comms.goals.update_goal("zz-partner", SetGoalAction(text="Review the parser."))
     comms.goals.update_goal("owner", SetGoalAction(text="Ship it with @zy-mentioned."))
     comms.goals.update_goal("mate-000", SetGoalAction(text="Unrelated work."))
     peers = _peers(comms, "owner")
-    assert [peer.name for peer in peers[:3]] == ["zz-partner", "zy-mentioned", "mate-000"]
-    assert len(peers) == slots and "aa-stranger" not in {peer.name for peer in peers}
-    partner, mentioned, mate = peers[:3]
+    assert [peer.name for peer in peers] == ["zz-partner", "zy-mentioned"]
+    assert not {"aa-stranger", "mate-000"} & {peer.name for peer in peers}
+    partner, mentioned = peers
     assert (partner.relevance, partner.note, partner.goal) == (
         CollaboratorRelevance, "Shared review", "Review the parser.")
     assert mentioned.relevance is GoalContactRelevance and "owner's goal" in mentioned.note
-    assert (mate.relevance, mate.note, mate.goal) == (ChannelmateRelevance, "", None)
     assert all(peer.relevance.grants(Visible) for peer in peers)
-    assert [peer.relevance.grants(AlwaysListed) for peer in peers[:3]] == [True, True, False]
+    assert all(peer.relevance.grants(AlwaysListed) for peer in peers)
     shown = json.loads(_coordination_text(comms, "owner").split("Peer state: ")[1])
     assert shown[0]["relevance"] == "collaborator" and shown[0]["goal"] == "Review the parser."
 
@@ -108,7 +106,7 @@ def test_peer_list_keeps_every_related_peer_whatever_its_name_or_the_thread_coun
 def _coordination_text(comms, name):
     owner = comms.registry.require(name)
     return CoordinationSegment.capture(
-        owner, comms.views.thread_views(), comms.relationships.peer_relations(name)
+        owner, comms.views.thread_views(), comms.relationships.context_relations(name)
     ).text()
 
 
@@ -127,9 +125,8 @@ def test_stopped_channelmates_do_not_fill_peer_slots_but_contacts_remain(tmp_pat
     for name in ('partner', 'contact', 'stopped-mate'):
         comms.owners.stop(name)
     peers = _peers(comms, 'owner')
-    assert [peer.name for peer in peers] == ['partner', 'contact', 'live-mate']
+    assert [peer.name for peer in peers] == ['partner', 'contact']
     assert peers[0].status is peers[1].status is StoppedThreadStatus
-    assert peers[2].status.active
 
 
 def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without_a_wake(tmp_path):
@@ -149,7 +146,7 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
     shown = json.loads(_partner_activity(comms, "owner")[0].text().splitlines()[-1])
     assert shown[0]["peer"] == "partner" and shown[0]["state"] == "completed"
     # The change is read at the partner's next turn: nothing was sent and nobody was woken.
-    assert comms.views.full_history() == []
+    assert list(comms.views.full_history_page().messages) == []
     assert comms.bus.pending_counts_all(["owner", "partner", "mate"]) == dict.fromkeys(
         ("owner", "partner", "mate"), 0
     )
@@ -206,3 +203,23 @@ def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_p
         s for s in context.segments if isinstance(s, RelationshipsSegment)
     ).text().splitlines()[-1])
     assert shown[0]["history"] == [{"note": "First plan", "at": created.updated_at}]
+
+
+def test_recent_direct_work_keeps_a_stopped_peer_but_not_a_reused_name(tmp_path):
+    from test_private_bus_checkpoint import _root
+
+    comms, _ = _root(tmp_path)
+    original = comms.messaging.send_initial_cohort("Bob", "Alice", "Current work")
+    assert [p.name for p in _peers(comms, "Alice")] == ["Bob"]
+    comms.owners.stop("Bob")
+    assert [p.name for p in _peers(comms, "Alice")] == ["Bob"]
+    comms.registry.remove("Bob")
+    comms.registry.declare(Thread("Bob", frozenset(), str(tmp_path),
+                                  created_at=original.timestamp + 1))
+    assert _peers(comms, "Alice") == ()
+
+
+def test_parent_is_context_even_without_tags_or_messages(tmp_path):
+    comms = _wire(tmp_path, ("parent", ()), ("unrelated", ()))
+    comms.registry.declare(Thread("child", frozenset(), str(tmp_path), parent="parent"))
+    assert [p.name for p in _peers(comms, "child")] == ["parent"]

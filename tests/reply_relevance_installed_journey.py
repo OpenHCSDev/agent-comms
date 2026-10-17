@@ -20,7 +20,6 @@ from agent_comms.native_input_record import FullNativeExecution, TriageNativeExe
 from agent_comms.native_package import verify_native_package
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.presentation import MessageNotification
 from agent_comms.selected_triage import FullSelectedTriage
 from agent_comms.threads import Thread
 from shared_bus_restart_native import attach
@@ -140,16 +139,16 @@ async def run(stage, package):
                             replies = tuple(row for row in publications if row.execution_id == claims[0].lifecycle.execution_id)
                             reply, = replies
                             assert reply.exact_target == '#openhcs'
-                            actual = service.bus.log.message_by_id(reply.message_id)
+                            actual, = service.bus.log.messages_for_references((reply.reference,))
                             assert actual.sender == child.name and actual.body.strip()
                             history = read_historical_native_inputs(store, wire_root_id=root_id,
                                 recipient_lookup=RecordedThreadIncarnation("fixture", service.registry.require(child.name).created_at).lookup,
                                 source_seq=original.seq)
                             assert len(history) == 2 and all(row.expected_prompt_equality_established for row in history)
-                            handling = MessageNotification.window(service.root, service.registry,
-                                service.bus.log, [original])[(original.seq, original.message_id)]
+                            handling = service.views.message_notifications_for_references(
+                                (original.reference,))[(original.seq, original.message_id)]
                             notification, = handling
-                            assert notification.state == 'Responded'
+                            assert notification.label == 'Responded'
                             receipt['proof'] = {'assignment': FieldCodec.encode(claims[0]),
                                 'native_inputs': FieldCodec.encode(inputs),
                                 'original_publication': FieldCodec.encode(reply),

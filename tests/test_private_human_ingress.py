@@ -51,7 +51,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     comms, store, root_id, lookups = _root(tmp_path)
     channel = comms.messaging.send_user_message("#team", "hello @alice", worktree=str(tmp_path))
     assert channel.sender_role is ThreadRole.USER
-    assert [row.body for row in comms.views.channel_history("#team")] == ["hello @alice"]
+    assert [row.body for row in list(comms.views.channel_history_page("#team").messages)] == ["hello @alice"]
     initial = comms.bus.log.read_delivery_cohort(root_id, channel.seq)
     assert initial.message == channel
     assert {member.recipient_lookup for member in initial.audience.recipients} == set(
@@ -63,7 +63,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     assert receipt.value.assignment_count == 1  # Bob is a frozen unmentioned observer.
     dm = comms.messaging.send_user_message("bob", "direct", worktree=str(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
-    assert comms.views.dm_history(channel.sender, "bob")[-1] == dm
+    assert list(comms.views.dm_history_page(channel.sender, "bob").messages)[-1] == dm
     dm_initial = comms.bus.log.read_delivery_cohort(root_id, dm.seq)
     assert [
         (member.canonical_thread, member.recipient_lookup)
@@ -112,7 +112,7 @@ def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
     first = comms.bus.publisher.publish_ordinary(message, _human_origin=origin)
     with pytest.raises(RelationViolationError, match="already exists"):
         comms.bus.publisher.publish_ordinary(message, _human_origin=origin)
-    assert [row.message_id for row in comms.bus.log.full_history()] == [first.message_id]
+    assert [row.message_id for row in list(comms.bus.full_history_page().messages)] == [first.message_id]
 
 
 def test_post_append_error_is_unknown_and_never_automatically_replayed(
@@ -136,7 +136,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
     assert error.wire_root_id == root_id
     initial = comms.bus.log.read_delivery_cohort(root_id, error.wire_seq)
     assert initial.message.message_id == error.message_id
-    assert len(comms.bus.log.full_history()) == 1
+    assert len(list(comms.bus.full_history_page().messages)) == 1
     monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', original)
     user = comms.registry.require(initial.message.sender)
     same_input = Message(
@@ -151,7 +151,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
             same_input,
             _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
-    assert len(comms.bus.log.full_history()) == 1
+    assert len(list(comms.bus.full_history_page().messages)) == 1
 
 
 def test_reservation_only_unknown_blocks_same_id_and_later_gap(
@@ -177,7 +177,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
         comms.messaging.send_user_message("alice", "first input", worktree=str(tmp_path))
     assert raised.value.wire_root_id == root_id
     assert captured["id"] == raised.value.message_id
-    assert comms.bus.log.full_history() == []
+    assert list(comms.bus.full_history_page().messages) == []
     assert comms.bus.log._private_marker_unlocked().last_seq == 1
     monkeypatch.setattr(os, "open", original_open)
     second = Comms(comms.root)
@@ -188,15 +188,15 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
             same,
             _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
-    assert second.bus.log.full_history() == []
+    assert list(second.bus.full_history_page().messages) == []
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
         second.messaging.send_user_message("alice", "different new human input", worktree=str(tmp_path))
-    assert second.bus.log.full_history() == []
+    assert list(second.bus.full_history_page().messages) == []
     later_agent = second.messaging.send_initial_cohort("alice", "bob", "unrelated agent input")
     assert later_agent.seq == 2
     with pytest.raises(RelationViolationError, match="sequence gap has UNKNOWN"):
         second.messaging.send_user_message("alice", "new human input", worktree=str(tmp_path))
-    assert len(second.bus.log.full_history()) == 1
+    assert len(list(second.bus.full_history_page().messages)) == 1
 
 
 def test_cancellation_after_append_entry_is_typed_unknown(
@@ -215,7 +215,7 @@ def test_cancellation_after_append_entry_is_typed_unknown(
     assert comms.bus.log.read_delivery_cohort(root_id, raised.value.wire_seq).message.message_id == (
         raised.value.message_id
     )
-    assert len(comms.bus.log.full_history()) == 1
+    assert len(list(comms.bus.full_history_page().messages)) == 1
 
 
 def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None:

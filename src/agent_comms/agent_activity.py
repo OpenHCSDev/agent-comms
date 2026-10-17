@@ -76,16 +76,13 @@ class ExternalRecipientActivity(RecipientActivity):
     incarnation: ThreadIncarnation
 
     def after_inbox_read(self, notification, source, reads, document, snapshot):
-        if self.incarnation.current(snapshot) and source.message.seq in reads.seen_sequences(
+        if self.incarnation.current(snapshot) and source.message.seq in reads.cursor(
             self.incarnation.name, snapshot, document=document
         ):
             return replace(
                 notification,
-                state="Acknowledged",
-                detail="",
-                progress=AcknowledgedProgress(),
-                priority=2,
-                busy=False,
+                state=AcknowledgedProgress(),
+
                 changed=True,
             )
         return notification

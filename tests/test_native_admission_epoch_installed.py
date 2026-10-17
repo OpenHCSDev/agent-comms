@@ -164,7 +164,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
             assert source == next(row for row in owned.records() if row.input_id == input_id)
             assert native_path.read_bytes().startswith(native_before)
             assert any(
-                row.body == "NEW_NATIVE_EPOCH_COMPLETED" for row in comms.views.full_history()
+                row.body == "NEW_NATIVE_EPOCH_COMPLETED" for row in list(comms.views.full_history_page().messages)
             )
         receipt = {
             "provider": "localhost-only",
