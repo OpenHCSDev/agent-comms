@@ -48,7 +48,7 @@ class CandidateTable:
 @dataclass(frozen=True)
 class CandidateCheckpoint(CandidateTable, TypedTable):
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
-    version: Literal[3]
+    version: Literal[4]
     root_id: str
     device: int
     inode: int
@@ -202,7 +202,7 @@ class WakeCandidateIndex(TypedStore):
         if checkpoint is None and not (rebuild or bootstrap_new):
             raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
         if rebuild or checkpoint is None:
-            return CandidateCheckpoint(1, 3, root_id, stat.st_dev, stat.st_ino, 0, "", 0)
+            return CandidateCheckpoint(1, 4, root_id, stat.st_dev, stat.st_ino, 0, "", 0)
         checkpoint.require_source(stream, stat, root_id)
         return checkpoint
 
@@ -314,7 +314,7 @@ class WakeCandidateIndex(TypedStore):
             row.insert(db)
         CandidateCheckpoint(
             1,
-            3,
+            4,
             root_id,
             stat.st_dev,
             stat.st_ino,

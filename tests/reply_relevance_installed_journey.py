@@ -1,4 +1,5 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
+from agent_comms.assignment_states import CompletedAssignment
 import asyncio
 import hashlib
 import json
@@ -131,7 +132,7 @@ async def run(stage, package):
                             claims = WakeAssignment.select(db, where='wire_seq=?', parameters=(original.seq,))
                             inputs = NativeRuntimeInput.select(db)
                             publications = PublicationReceipts.select(db)
-                        if len(claims) == 1 and claims[0].lifecycle.completed:
+                        if len(claims) == 1 and isinstance(claims[0].lifecycle, CompletedAssignment):
                             triage = tuple(row for row in inputs if row.reference_stage is TriageNativeExecution)
                             full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                             assert len(triage) == len(full) == 1
@@ -158,7 +159,7 @@ async def run(stage, package):
                                 'original_historical_source_proofs': 2}
                             persist('configured-saved-triage-full-canonical-channel-reply-handling-PASS')
                             break
-                    if claims and claims[0].lifecycle.terminal:
+                    if claims and not claims[0].lifecycle.successors():
                         receipt['terminal_assignment'] = FieldCodec.encode(claims[0])
                         raise AssertionError('Original request ended without a canonical reply')
                     diagnostics = tuple((service.root / 'diagnostics').glob('*.json'))

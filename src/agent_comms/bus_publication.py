@@ -90,15 +90,15 @@ def reject_private_wire_fields(record: Mapping[str, object]) -> None:
 def _decision_wire(decision: WakeDecision) -> dict[str, str]:
     from .wake import WakeDecision
 
+    if type(decision) is not WakeDecision:
+        raise TypeError("Only typed, pure full-cohort decisions may be committed.")
     if decision.audience.observer:
         return {"recipient_lookup": decision.recipient, "no_wake": "unmentioned_observer"}
-    if type(decision) is WakeDecision:
-        return {
-            "recipient_lookup": decision.recipient,
-            "audience": decision.audience.value,
-            "wake_mode": decision.wake_mode.declared_name,
-        }
-    raise TypeError("Only typed, pure full-cohort decisions may be committed.")
+    return {
+        "recipient_lookup": decision.recipient,
+        "audience": decision.audience.value,
+        "wake_mode": decision.wake_mode.declared_name,
+    }
 
 
 def decisions_wire(decisions: tuple[WakeDecision, ...]) -> list[dict[str, str]]:

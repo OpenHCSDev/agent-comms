@@ -30,7 +30,7 @@ from agent_comms.wake_candidate_index import (
     ProjectionUnavailableError,
     WakeCandidateIndex,
 )
-from agent_comms.wake_policy import FullWake
+from agent_comms.coordination_tables.assignments import MessageAudience
 
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="private N/K bus requires POSIX")
 
@@ -146,7 +146,7 @@ def test_existing_candidate_schema_reopens_in_wal_through_the_store_owner(tmp_pa
     assert index.maintain()
     with index.snapshot() as db:
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 3
+        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 4
 
 
 def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
@@ -167,7 +167,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     assert index.maintain(rebuild=True)
     with sqlite3.connect(index.path) as db:
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 3
+        assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 4
     selected = index.page(
         root_id=root_id,
         recipient_lookup=lookup["Alice"],
@@ -175,7 +175,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
         required_through_seq=message.seq,
     )
     assert len(selected.entries) == 1
-    assert selected.entries[0].wake_mode is FullWake
+    assert selected.entries[0].audience is MessageAudience.MENTIONED
     assert selected.entries[0].source_seq == message.seq
     assert not selected.has_more
     assert (
@@ -194,7 +194,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
         required_through_seq=message.seq,
         delivery_only=True,
     )
-    assert len(passive.entries) == 1 and passive.entries[0].wake_mode is None
+    assert len(passive.entries) == 1 and passive.entries[0].audience is MessageAudience.OBSERVER
     # Bus projection is only a candidate: coordinator has not sealed ANY wake.
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         for name in ("Alice", "Bob"):

@@ -3,6 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 admission, native process, source proof and response publication remain real.
 """
+from agent_comms.assignment_states import CompletedAssignment
 import argparse
 import hashlib
 import shutil
@@ -244,7 +245,7 @@ async def configured_pure_channel(arguments):
                     overlap |= len({row.owner_thread for row in dispatched}) == len(names)
                     triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
                     full = [row for row in inputs if row.reference_stage is FullNativeExecution]
-                    if len(claims) == len(names)*len(originals) and all(row.lifecycle.completed for row in claims) and not active:
+                    if len(claims) == len(names)*len(originals) and all(isinstance(row.lifecycle, CompletedAssignment) for row in claims) and not active:
                         assert len(triage) == len(full) == len(names)
                         assert all(row.verdict is FullSelectedTriage for row in triage)
                         assert all(row.session_id and row.session_entry_id for row in inputs)
@@ -412,7 +413,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 and not row.reference.recorded)
             if admitted:
                 break
-            assert not (claims and all(claim.lifecycle.completed for claim in claims)), \
+            assert not (claims and all(isinstance(claim.lifecycle, CompletedAssignment) for claim in claims)), \
                 'Original completed before cancellation; cancellation was not exercised'
             await asyncio.sleep(.03)
         await attachment.cancel(name)
@@ -424,7 +425,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
         continuation = publish('NEW_CONTINUATION_ORIGINAL')
         while True:
             claims, inputs, receipts = observe(continuation)
-            if claims and all(claim.lifecycle.completed for claim in claims) and \
+            if claims and all(isinstance(claim.lifecycle, CompletedAssignment) for claim in claims) and \
                     service.registry.require(name).active_turn is None:
                 full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                 assert len(full) == 1 and full[0].reference.recorded
@@ -520,7 +521,7 @@ async def configured_mixed_routes(arguments):
                     assignments = WakeAssignment.select(db,order_by=('wire_seq',))
                     cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
                     if late is not None and len(assignments) == len(originals)+1 and all(
-                            row.lifecycle.completed for row in assignments) and len(cursors) == 1 and (
+                            isinstance(row.lifecycle, CompletedAssignment) for row in assignments) and len(cursors) == 1 and (
                             cursors[0].covered_seq >= late.seq) and service.registry.require(name).active_turn is None:
                         assert len(inputs) == 2 and all(row.reference_stage is FullNativeExecution for row in inputs)
                         links = ExecutionAssignmentLink.select(db,order_by=('execution_id','ordinal'))
@@ -1059,7 +1060,7 @@ async def run(arguments):
                                     ','.join('?' for _ in (*cutover.originals, late_original))+')',
                                     parameters=tuple(message.seq for message in (*cutover.originals, late_original)))
                                 completed = len(rows) == arguments.wave_size+1 and all(
-                                    row.lifecycle.completed for row in rows)
+                                    isinstance(row.lifecycle, CompletedAssignment) for row in rows)
                             else:
                                 completed = len(rows)==len(names) and all(
                                     row.lifecycle.declared_name=='ignored' for row in rows)

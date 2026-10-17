@@ -44,6 +44,8 @@ class WakeDecision:
             raise ValueError("decision recipient requires a stable lookup.")
         if type(self.audience) is not MessageAudience or not isinstance(self.wake_mode, WakePolicy):
             raise TypeError("wake decision requires MessageAudience and a nominal WakePolicy.")
+        if self.audience.observer and self.wake_mode.active:
+            raise ValueError("observer decisions must be passive")
 
     def initial_notification(self, recipient, *, observation):
         return self.wake_mode.initial_state().notification(

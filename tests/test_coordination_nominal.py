@@ -1,5 +1,6 @@
 """Stored lifecycle names, graph/data ownership, and current codec paths."""
 
+from agent_comms.assignment_states import FailedAssignment
 from dataclasses import fields, replace
 
 import pytest
@@ -279,7 +280,7 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
                 FailedAssignment,
                 expected_revision=1,
             ).value
-            assert settled.lifecycle.failed and settled.lifecycle.mode == assignment.lifecycle.mode
+            assert isinstance(settled.lifecycle, FailedAssignment) and settled.lifecycle.mode == assignment.lifecycle.mode
             assert store.assignments.get("assignment") == settled
     finally:
         AssignmentState.__registry__.pop("awaiting")

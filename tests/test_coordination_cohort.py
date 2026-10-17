@@ -105,7 +105,7 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
         (lookups["Alice"], lookups["Bob"])
     )
     assert len(verified.decisions) == 2
-    assert [type(decision).__name__ for decision in verified.decisions].count("NoWakeDecision") == 1
+    assert sum(decision.audience.observer for decision in verified.decisions) == 1
     first = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator)
     assert isinstance(first, Applied)
     assert (first.value.member_count, first.value.assignment_count) == (2, 1)

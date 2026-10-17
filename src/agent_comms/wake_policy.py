@@ -4,20 +4,17 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from .coordination_errors import IntegrityViolationError
 from .declared_family import DeclaredFamily
+from .lifecycle import LifecycleState
 from .source_proof_requirement import FullSourceProof, NoSourceProof, SourceProofRequirement, TriageSourceProof
 from .typed_table import sql_literal
 
-if TYPE_CHECKING:
-    from .assignment_states import AssignmentState
-
-
 @dataclass(frozen=True)
 class WakePolicy(DeclaredFamily, SourceProofRequirement, affix="Wake"):
-    initial_state: ClassVar[type[AssignmentState]]
+    initial_state: ClassVar[type[LifecycleState]]
     engagement_type: ClassVar[type[Engagement]]
 
     active: ClassVar[bool] = True

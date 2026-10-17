@@ -165,7 +165,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
         initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         assert len(initial.audience.recipients) == 2
         assert (
-            sum(decision.__class__.__name__ == "NoWakeDecision" for decision in initial.decisions)
+            sum(decision.audience.observer for decision in initial.decisions)
             == 1
         )
         _accept(root, root_id, comms, message)

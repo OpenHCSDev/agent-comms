@@ -361,7 +361,7 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
     root, root_id, comms, initial, _ = _root(tmp_path, mentioned=True)
     assert len(initial.audience.recipients) == 2
     assert (
-        sum(decision.__class__.__name__ == "NoWakeDecision" for decision in initial.decisions) == 1
+        sum(decision.audience.observer for decision in initial.decisions) == 1
     )
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()

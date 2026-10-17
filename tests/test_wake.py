@@ -17,8 +17,6 @@ from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
 from agent_comms.wake import (
     ControlClassification,
-    NoWakeDecision,
-    NoWakeReason,
     WakeDecision,
     resolve_wake,
     resolve_wake_cohort,
@@ -58,7 +56,7 @@ def decide(
     lookup: str = "lookup-alpha",
     members: tuple[FrozenRecipient, ...] = MEMBERS,
     control: ControlClassification = ControlClassification.ORDINARY,
-) -> WakeDecision | NoWakeDecision | None:
+) -> WakeDecision | None:
     recipient = next(
         (member for member in members if member.recipient_lookup == lookup),
         FrozenRecipient(lookup, "outsider"),
@@ -109,7 +107,7 @@ def test_valid_mention_selects_canonical_name_and_leaves_other_member_unaddresse
     assert decide(message, "lookup-beta") == WakeDecision(
         "lookup-beta", MessageAudience.MENTIONED, FullWake()
     )
-    assert decide(message, "lookup-alpha") == NoWakeDecision("lookup-alpha")
+    assert decide(message, "lookup-alpha") == WakeDecision("lookup-alpha", MessageAudience.OBSERVER, PassiveWake())
     assert decide(message, "lookup-outsider") is None  # Not in the frozen audience.
     assert MEMBERS[0] in audience(message).recipients  # The bus must retain both identities.
     assert message.exact_reply_target == "#team"
@@ -124,7 +122,7 @@ def test_renamed_mentioned_member_preserves_stable_lookup_not_old_alias() -> Non
     assert decide(message, "stable-beta", members) == WakeDecision(
         "stable-beta", MessageAudience.MENTIONED, FullWake()
     )
-    assert decide(message, "stable-alpha", members) == NoWakeDecision("stable-alpha")
+    assert decide(message, "stable-alpha", members) == WakeDecision("stable-alpha", MessageAudience.OBSERVER, PassiveWake())
     assert members[0] in audience(message, members).recipients
     # The textual old alias and mutable current tags are not consulted.
     assert "beta" not in audience(message, members).canonical_members
@@ -156,7 +154,7 @@ def test_mixed_in_and_out_of_scope_mentions_only_name_valid_frozen_member() -> N
     assert decide(message, "lookup-beta") == WakeDecision(
         "lookup-beta", MessageAudience.MENTIONED, FullWake()
     )
-    assert decide(message, "lookup-alpha") == NoWakeDecision("lookup-alpha")
+    assert decide(message, "lookup-alpha") == WakeDecision("lookup-alpha", MessageAudience.OBSERVER, PassiveWake())
     assert MEMBERS[0] in audience(message).recipients
 
 
@@ -207,22 +205,22 @@ def test_system_control_must_be_explicit_not_guessed_from_body_or_ack_type() -> 
 def test_no_wake_is_not_a_passive_claim_and_decisions_are_strictly_typed() -> None:
     mentioned = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
     observer = decide(mentioned, "lookup-alpha")
-    assert observer == NoWakeDecision("lookup-alpha", NoWakeReason.UNMENTIONED_OBSERVER)
-    assert isinstance(observer, NoWakeDecision)
-    assert not hasattr(observer, "wake_mode")
-    assert not hasattr(observer, "audience")
+    assert observer == WakeDecision("lookup-alpha", MessageAudience.OBSERVER, PassiveWake())
+    assert isinstance(observer, WakeDecision)
+    assert observer.wake_mode == PassiveWake()
+    assert observer.audience is MessageAudience.OBSERVER
     assert MEMBERS[0] in audience(mentioned).recipients
     assert decide(mentioned, "lookup-outsider") is None
     with pytest.raises(ValueError, match="stable lookup"):
         WakeDecision("", MessageAudience.DIRECT, FullWake())
     with pytest.raises(ValueError, match="stable lookup"):
-        NoWakeDecision("")
+        WakeDecision("", MessageAudience.OBSERVER, PassiveWake())
     with pytest.raises(TypeError, match="MessageAudience and a nominal WakePolicy"):
         WakeDecision("lookup-alpha", "direct", FullWake())  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="MessageAudience and a nominal WakePolicy"):
         WakeDecision("lookup-alpha", MessageAudience.DIRECT, "full")  # type: ignore[arg-type]
-    with pytest.raises(TypeError, match="NoWakeReason"):
-        NoWakeDecision("lookup-alpha", "unmentioned_observer")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="MessageAudience"):
+        WakeDecision("lookup-alpha", "observer", PassiveWake())  # type: ignore[arg-type]
 
 
 def test_excluded_recipient_and_bad_identity_fail_closed() -> None:
@@ -334,7 +332,7 @@ def test_full_cohort_validates_large_frozen_n_with_one_envelope_digest(monkeypat
     assert [decision.recipient for decision in decisions] == [
         member.recipient_lookup for member in manifest.recipients
     ]
-    assert decisions[0] == NoWakeDecision("lookup-0000")
+    assert decisions[0] == WakeDecision("lookup-0000", MessageAudience.OBSERVER, PassiveWake())
     assert decisions[-1] == WakeDecision("lookup-1023", MessageAudience.MENTIONED, FullWake())
 
 

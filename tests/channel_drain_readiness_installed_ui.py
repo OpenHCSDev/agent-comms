@@ -4,6 +4,7 @@ Reuse the existing application/native journey. Only the localhost provider HTTP
 status is controlled; UI, registry, source, ACP and native processes remain real. The application runs
 under Textual Pilot; external st/Linux entrypoint acceptance is a separate gate.
 """
+from agent_comms.assignment_states import DeferredAssignment
 import argparse
 import asyncio
 from http.server import BaseHTTPRequestHandler
@@ -122,7 +123,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
         assert NativeRuntimeInput.one(db,input_id=retained_input.input_id) == retained_input
         rows = WakeAssignment.select(db)
     assert len(requests) == 2
-    assert any(row.wire_seq==failure_source.seq and row.lifecycle.deferred for row in rows)
+    assert any(row.wire_seq==failure_source.seq and isinstance(row.lifecycle, DeferredAssignment) for row in rows)
     assert not any(row.wire_seq == pending_source.seq for row in rows)
     original, = comms.bus.log.deliveries_for_references((pending_source.reference,))
     assert original.message == pending_source
