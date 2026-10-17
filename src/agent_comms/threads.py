@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
 
-from .agent_backend import AgentBackend
+from .agent_backend import RuntimeLocation, UnstartedRuntime
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
@@ -44,8 +44,9 @@ class Thread(ThreadProvenance):
     parent: str | None = None
     task: str | None = None
     process_identity: ProcessIdentity | None = None
-    session_file: str | None = field(
-        default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
+    runtime: RuntimeLocation = field(
+        default_factory=UnstartedRuntime.default, kw_only=True,
+        metadata={"registration_inheritance": InheritEmpty},
     )
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     thinking_level: type[ThinkingLevel] | None = field(
@@ -76,11 +77,6 @@ class Thread(ThreadProvenance):
     role: ThreadRole = ThreadRole.AGENT
     execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
                                             metadata={"wire_omit_default": True})
-    # The runtime that holds this thread's history; it never changes on re-registration.
-    backend: type[AgentBackend] = field(
-        default_factory=AgentBackend.for_new_threads, kw_only=True,
-        metadata={"wire_omit_default": True, "registration_inheritance": InheritPrevious},
-    )
     active_turn: ActiveTurn | None = None
     channel_scope_generation: int = 0
     turn_generation: int = 0
@@ -239,24 +235,6 @@ class Thread(ThreadProvenance):
             raise RelationViolationError(f"Thread {self.name!r} has no owner process")
         return self.process_identity
 
-    def require_saved_session(self) -> str:
-        if self.session_file is None:
-            raise ValueError("Canonical saved session required")
-        return self.session_file
-
-    @property
-    def native_transcripts(self):
-        """The saved native session's records; a thread without one has none yet."""
-        from pathlib import Path
-        from .native_transcript import NativeTranscript
-
-        if self.session_file is None:
-            return ()
-        return (NativeTranscript(Path(self.session_file)),)
-
-    def imported_sources(self):
-        return tuple(source for transcript in self.native_transcripts
-                     for source in transcript.imported_sources())
 
     def require_idle(self) -> None:
         if self.active_turn is not None:
@@ -362,7 +340,7 @@ class Thread(ThreadProvenance):
         other only when this holds. Titles, tags, goals and turns do not change it.
         """
         def launch(thread: Thread):
-            return (thread.incarnation, thread.process_identity, thread.role, thread.session_file,
+            return (thread.incarnation, thread.process_identity, thread.role, thread.runtime,
                     thread.worktree, thread.execution, thread.model, thread.thinking_level)
         return launch(self) == launch(other)
 

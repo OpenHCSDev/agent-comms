@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.agent_backend import UnstartedRuntime
+from agent_comms.pi_native_backend import PiSessionFile
+
 import asyncio
 import json
 import os
@@ -181,10 +184,14 @@ def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration():
     thread = Thread("owner", frozenset(), "/tmp/owner")
     assert thread.backend is PiNativeBackend
     encoded = FieldCodec.encode(thread)
-    assert "backend" not in encoded  # the default backend is not spelled on the wire
-    assert FieldCodec.decode(Thread, {**encoded, "backend": "pi_native"}) == thread
+    assert "backend" not in encoded
+    assert "session_file" not in encoded
+    assert encoded["runtime"] == {"backend": "pi_native", "location": None}
+    assert FieldCodec.decode(Thread, encoded) == thread
     with pytest.raises(ValueError):
-        FieldCodec.decode(Thread, {**encoded, "backend": "pi_durable"})
+        FieldCodec.decode(Thread, {**encoded, "backend": "pi_native"})
+    with pytest.raises(ValueError):
+        FieldCodec.decode(Thread, {**encoded, "runtime": {"backend": "pi_durable", "location": None}})
     assert thread.for_registration("owner", thread).backend is PiNativeBackend
 
 
@@ -339,7 +346,7 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         "cwd": str(project),
     }) + "\n")
     thread = comms.registry.declare(Thread(
-        "owner", frozenset(), str(project), session_file=str(session), model="p/m",
+        "owner", frozenset(), str(project), runtime=PiSessionFile(str(session)), model="p/m",
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
     published = []

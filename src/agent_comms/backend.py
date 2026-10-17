@@ -94,7 +94,7 @@ async def stream_agent_events(
     task: str,
     cwd: str,
     env_extra: dict[str, str] | None = None,
-    session_file: str | None = None,
+    source_path: str | None = None,
     steering_queue: TurnInbox | None = None,
     finish_event: asyncio.Event | None = None,
     images: Sequence[ImageInput] = (),
@@ -127,7 +127,7 @@ async def stream_agent_events(
                     tuple(agent_args),
                     worktree=Path(cwd),
                     environment=env_extra,
-                    session_file=session_file,
+                    source_path=source_path,
                 ))
             except (OSError, ValueError, NativePiUnavailable) as error:
                 yield events.Error(text=str(error), reason_code="native_launch_invalid")
@@ -135,7 +135,7 @@ async def stream_agent_events(
                 return
             from .session_fence import session_writer_fence
 
-            async with session_writer_fence(launch.session.session_file):
+            async with session_writer_fence(launch.session.path):
                 try:
                     async with aclosing(
                         TurnSession(
@@ -564,7 +564,7 @@ class TurnSession:
         self.rejected_commands: list[events.AgentEvent] = []
         self.model_name: str | None = None
         self.session_name: str | None = None
-        self.active_session_file = self.launch.session.session_file
+        self.active_source_path = self.launch.session.path
         self.settlement_count = 0
         self.watchdog.reading()
         self.active_tools: set[str] = set()

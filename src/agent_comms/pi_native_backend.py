@@ -90,9 +90,29 @@ class PiSessionFile(RuntimeLocation):
     def location_payload(self) -> dict[str, str]:
         return {"path": self.path}
 
-    @classmethod
-    def of(cls, thread: Thread) -> Self:
-        return cls(thread.require_saved_session())
+    def history_source(self, root, incarnation):
+        from .native_transcript import NativeTranscript
+
+        return NativeTranscript(Path(self.path))
+
+    def imported_sources(self):
+        return self.history_source(None, None).imported_sources()
+
+    @property
+    def read_key(self) -> str:
+        return self.path
+
+    def storage_files(self):
+        from .native_storage import NativeSessionFiles
+
+        return (NativeSessionFiles(Path(self.path)),)
+
+    @property
+    def model_choice(self):
+        for entry in self.history_source(None, None).tail():
+            if entry.model_choice is not None:
+                return entry.model_choice
+        return None
 
 
 class PersistentPiSession:
@@ -117,12 +137,12 @@ class PersistentPiSession:
         if child is None:
             await self.close()
             attestation = launch.session.attestation()
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
+            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
             with startup.measurements.operation("native_spawn"):
                 child = await PiSessionChild.start(key, attestation)
             self.custody = BorrowedNative(child, self.custody)
         else:
-            watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
+            watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
             self.custody = BorrowedNative(child, EmptyNative())
         watchdog.spawned(reused)
         return child
@@ -194,6 +214,12 @@ class PiNativeBackend(
             partial(runner.observe_selected_preparation, session_id),
         )
 
+    @classmethod
+    def new_location(cls, root, worktree) -> PiSessionFile:
+        from .fresh_private_session import create_fresh_private_session
+
+        return PiSessionFile(str(create_fresh_private_session(root / "sessions", worktree=worktree).path))
+
     def arguments(self, thread: Thread) -> tuple[str, ...]:
         """Pi's command-line arguments for this thread's model and thinking level."""
         from .pi_vocabulary import ThinkingLevel
@@ -209,7 +235,7 @@ class PiNativeBackend(
         from .coordinator import Coordination
         from .native_session_prepare import NativeSessionPreparation
 
-        if thread.session_file is None:
+        if not thread.runtime.available:
             raise ValueError("Native preparation requires a saved session")
         if open_native is None:
             open_native = NativeSessionPreparation.open
@@ -222,7 +248,7 @@ class PiNativeBackend(
             self.arguments(thread),
             worktree=thread.worktree,
             environment=environment,
-            session_file=thread.session_file,
+            source_path=thread.runtime.path,
             observe=partial(self.observe, thread),
         )
 
@@ -246,7 +272,7 @@ class PiNativeBackend(
             delivery.environment,
             **images,
             context_contributions=content.contributions,
-            session_file=thread.session_file,
+            source_path=thread.runtime.path if thread.runtime.available else None,
             steering_queue=delivery.inbox,
             finish_event=delivery.finish_event,
             send_boundary=delivery.send_boundary,
@@ -300,7 +326,7 @@ class PiNativeBackend(
         from .coordinator import Coordination
 
         return await Coordination.run_worker(
-            partial(self.read_entries, Path(PiSessionFile.of(thread).path), before, limit)
+            partial(self.read_entries, Path(thread.runtime.path), before, limit)
         )
 
     @staticmethod
@@ -338,7 +364,7 @@ class PiNativeBackend(
             NativePiRpcLaunch.package_for_command, launcher, runtime,
         ))
         identity = await RuntimeForkHelper.run(
-            RuntimeForkRequest(str(package), parent.require_saved_session(), parent.worktree,
+            RuntimeForkRequest(str(package), parent.runtime.path, parent.worktree,
                                runtime=runtime), cwd=Path(parent.worktree),
         )
         return PiSessionFile(identity.session_file)

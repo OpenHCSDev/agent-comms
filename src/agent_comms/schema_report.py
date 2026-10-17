@@ -7,7 +7,7 @@ from pathlib import Path
 import sqlite3
 
 from .coordination_database import CoordinationStore
-from .native_session_files import NativeSessionFiles
+from .native_storage import NativeSessionFiles
 from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedRow, TypedTable
 
 
@@ -30,9 +30,9 @@ class StoreSchemaReport:
         from another database's rows.
         """
         paths = set(comms.root.rglob("*.sqlite3"))
-        paths.update(NativeSessionFiles(Path(thread.session_file)).input_proof
+        paths.update(NativeSessionFiles(Path(thread.runtime.path)).input_proof
                      for thread in comms.registry.all_threads().values()
-                     if thread.session_file)
+                     if thread.runtime.available)
         reports = []
         for path in sorted(paths):
             if not path.is_file():

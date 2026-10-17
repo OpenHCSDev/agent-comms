@@ -1023,7 +1023,7 @@ class StateData(NativeSessionSnapshot, PiResponseData):
             model=self.model.display_name,
             thinking_level=ThinkingLevel.optional_name(self.thinking_level),
             session_name=self.session_name,
-            session_file=session.active_session_file,
+            session_file=str(session.active_source_path) if session.active_source_path is not None else None,
             context_used=session.usage.used,
             context_size=session.usage.size,
         )

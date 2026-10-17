@@ -191,7 +191,7 @@ class TurnRunner:
 
     async def inspect_native_request(self, session_id, thread, request):
         context = await self.backend_for(session_id, thread).inspect(thread, request)
-        return context.require_session_file(thread.require_saved_session())
+        return context.require_session_file(thread.runtime.path)
 
     async def prompt_owned(
         self, session_id: str, prompt: list[Any], *, display_text: str | None = None,

@@ -14,6 +14,7 @@ from enum import StrEnum
 from functools import cached_property
 from typing import TYPE_CHECKING, Callable, ClassVar, TypeVar
 
+from .agent_backend import RuntimeLocation, UnstartedRuntime
 from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
 from .errors import RelationViolationError
@@ -211,8 +212,12 @@ class ThreadProvenance:
     tags: frozenset[str]
     worktree: str
     created_at: float = field(metadata={"wire_required": True})
-    session_file: str | None = None
+    runtime: RuntimeLocation = field(default_factory=UnstartedRuntime.default)
     title: str | None = None
+
+    @property
+    def backend(self):
+        return self.runtime.backend
 
     @property
     def display_title(self) -> str:

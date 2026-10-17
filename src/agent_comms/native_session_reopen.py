@@ -41,7 +41,7 @@ class NativeSessionIdentity:
             raise NativeReopenError("Native saved source identity changed")
 
     def require_context(self, context) -> None:
-        self.require_same_session(NativeSessionIdentity(context.session_id, str(context.session_file)))
+        self.require_same_session(NativeSessionIdentity(context.session_id, str(context.source_path)))
 
     def same_session(self, other: NativeSessionIdentity) -> bool:
         """A cutpoint may extend this identity without changing its meaning."""

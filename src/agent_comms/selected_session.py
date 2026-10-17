@@ -31,11 +31,6 @@ class SelectedSession:
     def path(self) -> Path | None:
         return None
 
-    @property
-    def session_file(self) -> str | None:
-        """Wire projection of the original selected source, not another field."""
-        return None
-
     def attestation(self):
         from .native_attestation import PendingAttestation
 
@@ -68,12 +63,12 @@ class SelectedSession:
         return self.attest(actual)
 
     def require_context(self, context) -> None:
-        self.attest(NativeSessionIdentity(context.session_id, str(context.session_file)))
+        self.attest(NativeSessionIdentity(context.session_id, str(context.source_path)))
 
     def continued(self, context) -> SelectedSession:
         self.require_context(context)
         return SavedSelectedSession(self.directory,
-            identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
+            identity=NativeSessionIdentity(context.session_id, str(context.source_path)))
 
     @classmethod
     def for_launch(cls, directory: Path, path: Path | None, package: Path) -> SelectedSession:
@@ -101,7 +96,7 @@ class SelectedSession:
             if not worktree.is_dir():
                 raise IdentityConflict("registered participant worktree is unavailable")
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
-            selected = path if path is not None else participant.owner.thread.session_file
+            selected = path if path is not None else participant.owner.thread.runtime.path if participant.owner.thread.runtime.available else None
             if selected is None:
                 return cls(directory)
             retained = execution.retained_source(Path(selected).absolute())
@@ -122,10 +117,6 @@ class SavedSelectedSession(SelectedSession):
     @property
     def path(self) -> Path:
         return self.identity.path
-
-    @property
-    def session_file(self) -> str:
-        return self.identity.session_file
 
     def attestation(self):
         from .native_attestation import PendingAttestation

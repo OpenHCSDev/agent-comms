@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .declared_family import DeclaredFamily
-from .native_session_files import NativeSessionFiles
+from .native_storage import NativeSessionFiles
 from .private_path import FileRevision
 
 
@@ -58,7 +58,7 @@ class SessionRevision(SessionObservation):
 
     @classmethod
     def observe(cls, session_file: str | None) -> SessionObservation:
-        if not isinstance(session_file, str) or not session_file:
+        if not session_file:
             return UnavailableSessionObservation(ValueError("No selected native session"))
         try:
             native = FileRevision.from_stat(Path(session_file).stat())

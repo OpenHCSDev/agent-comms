@@ -212,17 +212,17 @@ class TranscriptRoutes:
         thread = RegistryOwner.capture_local(initial, incarnation.name).thread
         if thread.turn_lease != lease.renamed(incarnation.name):
             raise RelationViolationError("Native publication has no current original turn")
-        path = Path(thread.require_saved_session())
+        path = Path(thread.runtime.path)
         revision = FileRevision.capture(path)
         if revision is None:
             raise RelationViolationError("Native publication has no retained session")
         reader = NativeTranscript(path)
-        floor = checkpoint.offset if str(path) == checkpoint.session_file else 0
+        floor = checkpoint.offset if thread.runtime == checkpoint.runtime else 0
         try:
             final, user = reader.publication_input(after=floor, through=revision.size)
         except (ValueError, TypeError) as error:
             raise RelationViolationError("Native publication evidence is invalid") from error
-        ids = routing.annotation_ids(reader, checkpoint, str(path), final.end)
+        ids = routing.annotation_ids(reader, checkpoint, thread.runtime, final.end)
         inputs = InputDispositions(log.path.parent)
         lookup = incarnation.lookup
         with log.certified_read() as source, registry.store.reading() as document:
@@ -231,7 +231,7 @@ class TranscriptRoutes:
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
             if current.turn_lease != lease.renamed(incarnation.name):
                 raise RelationViolationError("Native publication turn lease changed")
-            if current.session_file != str(path) or FileRevision.capture(path) != revision:
+            if current.runtime != thread.runtime or FileRevision.capture(path) != revision:
                 raise RelationViolationError("Native publication session changed")
             if not inputs.in_turn(lease.turn_id).started_for_native(
                     lease, user.input_id, user.message.text, snapshot=snapshot):

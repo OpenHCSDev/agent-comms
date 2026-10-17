@@ -49,6 +49,9 @@ class RuntimeLocation(WireValue):
 
     available = True
 
+    def __bool__(self) -> bool:
+        return self.available
+
     @property
     def backend(self) -> type[AgentBackend]:
         (owner,) = (backend for backend in AgentBackend.members_with(AgentBackend)
@@ -67,6 +70,23 @@ class RuntimeLocation(WireValue):
     @abstractmethod
     def location_payload(self) -> object: ...
 
+    @abstractmethod
+    def history_source(self, root, incarnation): ...
+
+    def imported_sources(self):
+        return ()
+
+    @property
+    @abstractmethod
+    def read_key(self) -> str: ...
+
+    @abstractmethod
+    def storage_files(self): ...
+
+    @property
+    def model_choice(self):
+        return None
+
 
 @dataclass(frozen=True)
 class UnstartedRuntime(RuntimeLocation):
@@ -83,6 +103,18 @@ class UnstartedRuntime(RuntimeLocation):
     @classmethod
     def default(cls) -> UnstartedRuntime:
         return cls(AgentBackend.for_new_threads())
+
+    def history_source(self, root, incarnation):
+        from .external_transcript import ExternalTranscript
+
+        return ExternalTranscript(root, incarnation)
+
+    def storage_files(self):
+        return ()
+
+    @property
+    def read_key(self) -> str:
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +532,10 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         """An instance holding this runtime for one thread session in this worker."""
 
     @classmethod
+    @abstractmethod
+    def new_location(cls, root, worktree) -> RuntimeLocation: ...
+
+    @classmethod
     def for_new_threads(cls) -> type[AgentBackend]:
         """The backend a newly declared thread gets."""
         (member,) = (m for m in AgentBackend.members_with(AgentBackend) if m.serves_new_threads)
@@ -561,8 +597,3 @@ def validate_backends(members: Iterable[type]) -> None:
     if problems:
         raise BackendDeclarationError("; ".join(problems))
 
-
-# Every backend module is declared before the registry seals.
-from . import pi_native_backend  # noqa: E402,F401
-
-AgentBackend.seal()

@@ -63,9 +63,9 @@ class TurnRouting:
     def requires_annotation(self, published: tuple[MessageReference, ...]) -> bool:
         return bool(self.requests or published)
 
-    def annotation_ids(self, reader, checkpoint, session_file: str, through: int):
+    def annotation_ids(self, reader, checkpoint, runtime, through: int):
         return (reader.annotation_ids(checkpoint.offset, through)
-                if self.requests and session_file == checkpoint.session_file else ())
+                if self.requests and runtime == checkpoint.runtime else ())
 
     def require_publications(self, originals, owner_lookup: str) -> None:
         """Only committed originals addressed by this reply intent can be joined."""

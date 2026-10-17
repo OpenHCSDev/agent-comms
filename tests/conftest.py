@@ -149,7 +149,7 @@ def native_rpc_fixture(monkeypatch):
     original_retained = NativePiRpcLaunch.retained_managed
 
     def prepare(
-        command, arguments, *, worktree, environment=None, session_file=None
+        command, arguments, *, worktree, environment=None, source_path=None
     ):
         script = Path(command)
         if not script.is_file():
@@ -158,11 +158,11 @@ def native_rpc_fixture(monkeypatch):
                 arguments,
                 worktree=worktree,
                 environment=environment,
-                session_file=session_file,
+                source_path=source_path,
             )
         args = NativeArguments.parse(arguments).rpc()
-        if session_file:
-            args += ("--session", session_file)
+        if source_path:
+            args += ("--session", source_path)
         inherited = RestartEnvironment.inherit(os.environ)
         env = inherited.encode()
         env.update(environment or {})
@@ -172,7 +172,7 @@ def native_rpc_fixture(monkeypatch):
             env,
             SelectedSession.for_launch(
                 Path(worktree),
-                Path(session_file) if session_file is not None else None,
+                Path(source_path) if source_path is not None else None,
                 Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
             ),
             Path(worktree),
@@ -180,14 +180,14 @@ def native_rpc_fixture(monkeypatch):
         )
 
     def retained(
-        launch, command, arguments, *, worktree, environment=None, session_file=None
+        launch, command, arguments, *, worktree, environment=None, source_path=None
     ):
         if (
             Path(command).is_file()
             and Path(command).resolve() == Path(launch.argv[0]).resolve()
             and Path(worktree).resolve() == launch.cwd.resolve()
             and (
-                Path(session_file).resolve() if session_file is not None else None
+                Path(source_path).resolve() if source_path is not None else None
             ) == launch.session.path
         ):
             return launch
@@ -197,7 +197,7 @@ def native_rpc_fixture(monkeypatch):
             arguments,
             worktree=worktree,
             environment=environment,
-            session_file=session_file,
+            source_path=source_path,
         )
 
     monkeypatch.setattr(NativePiRpcLaunch, "managed", prepare)

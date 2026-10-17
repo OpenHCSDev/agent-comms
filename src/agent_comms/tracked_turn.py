@@ -424,7 +424,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         )
         if self.native.attestation.observed:
             identity = self.native.attestation.require_identity()
-            self.active_session_file = self.launch.session.attest(identity)
+            self.active_source_path = self.launch.session.attest(identity)
             return
         request = self.native.attestation.request
         with self.startup.measurements.operation("get_state_send"):
@@ -445,7 +445,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         state = observed.state
         if observed.identity is None:
             raise NativePiUnavailable("Native Pi omitted its private session identity")
-        self.active_session_file = self.launch.session.attest(observed.identity)
+        self.active_source_path = self.launch.session.attest(observed.identity)
         self.native.attestation = observed
         if self.observe_event is not None:
             with self.startup.measurements.operation("attestation_publication"):
@@ -498,7 +498,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             self.input_commit = self.input_commit.capture(event)
             self.prompt_state = self.prompt_state.start(event)
             self.evidence = self.custody.enter_context(
-                NativeEntry.open_input_evidence(self.active_session_file)
+                NativeEntry.open_input_evidence(self.active_source_path)
             )
             await Coordination.run_worker(self.evidence.observe)
             await self.following.open(self)
@@ -564,7 +564,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         # The original event consumer serializes observations. Cancellation
         # joins this read before the acquired evidence/custody can close.
         return await Coordination.run_worker(partial(_verify_context,
-            self.active_session_file,
+            self.active_source_path,
             self.command.input_id,
             self.native.attestation.identity.session_id,
             self.input_commit.require(),

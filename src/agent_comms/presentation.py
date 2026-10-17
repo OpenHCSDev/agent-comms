@@ -644,7 +644,7 @@ class ThreadView:
             **self.thread.to_wire(),
             "status": self.status.declared_name,
             "is_fork": self.thread.is_fork,
-            "resumable": bool(self.thread.session_file),
+            "resumable": self.thread.runtime.available,
             "last_seen": self.last_seen,
             "last_activity": self.activity.timestamp,
             "activity": self.activity.state.value,
