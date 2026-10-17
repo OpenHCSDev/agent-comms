@@ -41,6 +41,12 @@ from .wire_log import OpenedWireSnapshot, WireLog
 
 
 class MessageBus:
+    lock_rank = 0
+
+    @property
+    def path(self) -> Path:
+        return self.log.path.parent / "wire"
+
     def __init__(
         self,
         bus_path: Path,

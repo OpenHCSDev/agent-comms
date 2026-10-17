@@ -45,7 +45,6 @@ from .store_files import (
     _iter_jsonl_stream,
     _store_lock,
     _store_lock_file,
-    _store_read_lock,
     _held_store_source,
 )
 from .wire_metadata import WireMetadata
@@ -321,6 +320,8 @@ class ConversationSourceWindowRequest:
 
 
 class WireLog:
+    lock_rank = 1
+
     def __init__(self, path: Path):
         # Construction is read-only and needs no registry or publication settings.
         self.path = Path(path)
@@ -334,18 +335,16 @@ class WireLog:
             self._append_indexes.append(index)
         return index
 
-    @contextmanager
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
-               contention: StoreLockContention | None = None):
+               shared: bool = False, contention: StoreLockContention | None = None):
         """The existing canonical bus lock and durability read barrier."""
-        with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
-                         contention=contention) as lock:
-            yield lock
+        return _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
+                           shared=shared, contention=contention)
 
     @contextmanager
     def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
         """Borrow the original source verified by the canonical reader barrier."""
-        with _store_read_lock(self.path, blocking=blocking, contention=contention) as lock:
+        with self.locked(shared=True, blocking=blocking, contention=contention) as lock:
             with self._certified_source(lock) as source:
                 yield source
 
@@ -640,7 +639,7 @@ class WireLog:
     ):
         """Own one fixed opened inode/byte boundary beyond physical custody."""
         with ExitStack() as resources:
-            with _store_read_lock(self.path) as lock:
+            with self.locked(shared=True) as lock:
                 metadata = (
                     self._private_marker_unlocked()
                     if self.path.exists() or self.metadata_path.exists()
@@ -722,7 +721,7 @@ class WireLog:
 
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""
-        with _store_read_lock(self.path) as lock:
+        with self.locked(shared=True) as lock:
             return self._committed_sequence_unlocked(lock)
 
     def _committed_sequence_unlocked(self, lock: StoreLock) -> int:
