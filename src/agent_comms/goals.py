@@ -255,10 +255,10 @@ class ProblemGoalOrder(GoalOrder):
     report: str
 
     def __post_init__(self):
-        if not self.problem or not self.edits or not self.banned or not self.report.strip():
-            raise ValueError("An order requires its problem, edits, banned actions and report.")
-        if any(not text.strip() for text in (*self.edits, *self.banned)):
-            raise ValueError("Order edits and banned actions cannot be empty.")
+        if not self.edits or not self.banned:
+            raise ValueError("An order requires edits and banned actions.")
+        if any(not text.strip() for text in (self.problem, self.report, *self.edits, *self.banned)):
+            raise ValueError("Order text cannot be empty.")
 
     def require_slot(self, goal, goal_id, problem):
         if (goal.id, self.problem) != (goal_id, problem):
