@@ -219,7 +219,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     owner_token_digest: str = field(metadata={"sql": Column(check="length(owner_token_digest)=64")})
     sent_owner_claimed_generation: NativeClaimEpoch = field(
         default_factory=UnrecordedNativeClaim,
-        metadata={"wire_name": 'sent_owner_admission_generation', "sql": Column(check="{sent_owner_claimed_generation}>0",
+        metadata={"wire_name": 'sent_owner_admission_generation', "sql": Column(record_key=True, check="{sent_owner_claimed_generation}>0",
                                  storage=IntegerStorage, nullable=True)},
     )
     session_id: str | None = None
@@ -326,7 +326,7 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
         metadata={"sql": Column(primary_key=True, check="owner_generation>0")}
     )
     owner_claimed_generation: int = field(
-        metadata={"wire_name": 'owner_admission_generation', "sql": Column(primary_key=True, check="{owner_claimed_generation}>0")}
+        metadata={"wire_name": 'owner_admission_generation', "sql": Column(record_key=True, primary_key=True, check="{owner_claimed_generation}>0")}
     )
     @property
     def owner_identity(self):

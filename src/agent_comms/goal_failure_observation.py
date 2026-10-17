@@ -58,7 +58,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
     owner: str
     owner_created_at: float
     worktree: str
-    claim_scope: int = field(metadata={"wire_name": 'admission', "sql": Column(check="{claim_scope}>0")})
+    claim_scope: int = field(metadata={"wire_name": 'admission', "sql": Column(record_key=True, check="{claim_scope}>0")})
     turn_generation: int = field(metadata={"sql": Column(check="turn_generation>0")})
     goal_revision: int = field(metadata={"sql": Column(check="goal_revision>=0")})
     turn_id: str = field(metadata={"sql": Column(unique=True, check="length(turn_id)=32")})

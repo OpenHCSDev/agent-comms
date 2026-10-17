@@ -242,6 +242,7 @@ class Column:
     """Constraints on a field; its name and type remain on the dataclass field."""
 
     primary_key: bool = False
+    record_key: bool = False
     auto_increment: bool = False
     unique: bool = False
     references: tuple[type[TypedTable], str] | None = None
@@ -356,7 +357,8 @@ class TypedRow:
         return tuple(
             _Field(
                 name=item.name,
-                wire_name=item.metadata.get("wire_name", item.name),
+                wire_name=(item.metadata.get("wire_name", item.name)
+                           if item.metadata.get("sql", Column()).record_key else item.name),
                 init=item.init,
                 annotation=hints[item.name],
                 nullable=_base_type(hints[item.name])[1] or item.metadata.get("sql", Column()).nullable,
