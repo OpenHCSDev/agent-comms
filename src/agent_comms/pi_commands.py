@@ -274,12 +274,7 @@ class CatalogQuery(NativeQuery):
             async with BoundedRun.session(
                 launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
             ) as child:
-                stderr = asyncio.create_task(child.stderr_tail())
-                try:
-                    yield PiRpcChannel(child.stdout), child.stdin
-                finally:
-                    stderr.cancel()
-                    await asyncio.gather(stderr, return_exceptions=True)
+                yield PiRpcChannel(child.stdout), child.stdin
         except TimeoutError as error:
             raise NativePiUnavailable(
                 f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
