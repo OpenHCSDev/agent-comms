@@ -40,7 +40,7 @@ from .image_inputs import ImageInput
 from .turn_context import InputContributionCoordinates
 from .send_outcome import SendBoundary
 from .native_attestation import AttestationError
-from .native_custody import PiSessionChild
+from .native_child import PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup

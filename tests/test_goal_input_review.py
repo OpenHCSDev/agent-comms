@@ -1,5 +1,4 @@
 """Canonical inspection unblocks standby without fabricating native delivery."""
-from agent_comms.storage_rules import StorageRule
 
 import os
 
@@ -27,12 +26,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     comms = wire(tmp_path / "wire")
     for name in ("worker", "parent", "other"):
         comms.registry.declare(
-            Thread.create(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_rule=StorageRule())
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
@@ -132,23 +126,13 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     comms = wire(tmp_path)
     for name in ("worker", "parent"):
         comms.registry.declare(
-            Thread.create(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_rule=StorageRule())
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     old = comms.messaging.send_message("parent", "worker", "Old incarnation")
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
     comms.registry.declare(
-        Thread.create(
-            rebound,
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        comms.registry.new_thread(rebound, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.agents.begin_turn("parent", "new-turn")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Current goal"))

@@ -1,5 +1,4 @@
 """A contended trusted load must not suppress its later real cursor recovery."""
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -21,9 +20,7 @@ from agent_comms.threads import Thread
 
 async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monkeypatch):
     comms = Comms(tmp_path / "wire")
-    owner = Thread.create(
-        "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
-    , storage_rule=StorageRule())
+    owner = comms.registry.new_thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
     seen = []
@@ -44,9 +41,7 @@ async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monke
 
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
     comms = Comms(tmp_path / "wire")
-    owner = Thread.create(
-        "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
-    , storage_rule=StorageRule())
+    owner = comms.registry.new_thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:

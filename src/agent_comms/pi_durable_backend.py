@@ -13,7 +13,7 @@ from pydantic import JsonValue
 
 from .agent_backend import AgentBackend, Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation
 from .agent_events import Error
-from .native_custody import PiChild
+from .native_child import PiChild
 from .external_transcript import ExternalCut
 from .native_entries import StoredEntry
 from .native_session_files import SessionFiles

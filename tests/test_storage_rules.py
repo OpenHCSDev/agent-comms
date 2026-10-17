@@ -28,7 +28,7 @@ def test_registry_rule_supplies_new_thread_roots(tmp_path):
     }))
     comms = Comms(tmp_path)
     rule = comms.registry.storage_rule
-    thread = Thread.create('worker', frozenset(), str(tmp_path / 'home'), storage_rule=rule)
+    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path / 'home'))
     assert thread.storage_roots.scratch == tmp_path / 'scratch' / 'worker'
     assert rule.floor_gib == 47
     assert comms.registry.declare(thread).storage_roots == thread.storage_roots
@@ -36,7 +36,7 @@ def test_registry_rule_supplies_new_thread_roots(tmp_path):
 
 def test_ordinary_write_neither_walks_usage_nor_opens_registry_edit(tmp_path, monkeypatch):
     comms = Comms(tmp_path)
-    thread = Thread.create('worker', frozenset(), str(tmp_path), storage_rule=comms.registry.storage_rule)
+    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path))
     comms.registry.declare(thread)
     def forbidden(*args, **kwargs):
         raise AssertionError('ordinary write performed allocation/registry work')
@@ -50,7 +50,7 @@ def test_any_registered_extra_can_be_removed_including_after_shell_error(tmp_pat
     from agent_comms.channel_coding_tools import CodingCall
     from agent_comms.native_tools import ReadTool
     comms = Comms(tmp_path)
-    thread = Thread.create('worker', frozenset(), str(tmp_path / 'home'), storage_rule=comms.registry.storage_rule)
+    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path / 'home'))
     roots = thread.storage_roots.adding(tmp_path / 'first').adding(tmp_path / 'second')
     comms.registry.declare(replace(thread, storage_roots=roots))
     removed = roots.checkouts[index]
@@ -79,3 +79,57 @@ def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
     with pytest.raises(SelectedToolDenied):
         for effect in shell_storage_effects(command, tmp_path):
             effect.check(rule, roots)
+
+
+def test_programs_do_not_claim_to_be_effect_values():
+    from agent_comms.storage_rules import ShellProgram, StorageEffect
+    assert all(not issubclass(program, StorageEffect)
+               for program in set(ShellProgram.programs.values()))
+
+
+def test_new_program_is_one_declaration_and_composes_both_decoders(tmp_path, monkeypatch):
+    from agent_comms.storage_rules import (
+        ShellProgram, ForbidsCommands, AllocatesOnCommands, ForbiddenStorageEffect,
+    )
+    monkeypatch.setattr(ShellProgram, 'programs', dict(ShellProgram.programs))
+    class TestProgram(ForbidsCommands, AllocatesOnCommands):
+        names = frozenset({'unit-program'})
+        forbidden = prefixes = (('both',),)
+    effects = shell_storage_effects('unit-program both', tmp_path)
+    assert tuple(type(effect) for effect in effects) == (ForbiddenStorageEffect, AllocateStorageEffect)
+
+
+def test_inherited_decoder_is_collected_once_in_a_diamond(tmp_path, monkeypatch):
+    from agent_comms.storage_rules import ShellProgram, ForbidsCommands, ForbiddenStorageEffect
+    monkeypatch.setattr(ShellProgram, 'programs', dict(ShellProgram.programs))
+    class Left(ForbidsCommands):
+        pass
+    class Right(ForbidsCommands):
+        pass
+    class Diamond(Left, Right):
+        names = frozenset({'diamond-program'})
+    effects = shell_storage_effects('diamond-program anything', tmp_path)
+    assert len(effects) == 1
+    assert isinstance(effects[0], ForbiddenStorageEffect)
+
+
+@pytest.mark.parametrize('command,kind', [
+    ('python3.14.7 -m venv env', 'ForbiddenStorageEffect'),
+    ('python /scripts/build_runtime.py', 'AllocateStorageEffect'),
+    ('python -m pip install package', 'AllocateStorageEffect'),
+    ('uv pip install package', 'AllocateStorageEffect'),
+    ('npm ci', 'AllocateStorageEffect'),
+    ('ffmpeg -i input output', 'AllocateStorageEffect'),
+    ('git -C repo worktree add --detach extra origin/main', 'CheckoutStorageEffect'),
+    ('git worktree remove --force extra', 'RemoveCheckoutStorageEffect'),
+    ('mkdir -p target', 'WriteStorageEffect'),
+    ('cp source target', 'WriteStorageEffect'),
+    ("cat <<'PY'\ngit clone remote target\nPY\nmkdir target", 'WriteStorageEffect'),
+    ("echo '<<' 'EOF'\npython -m venv env", 'ForbiddenStorageEffect'),
+    ("cat <<'A' <<'B'\ngit clone remote target\nA\nuv sync\nB\nmkdir target", 'WriteStorageEffect'),
+    ("echo 'git clone remote target'\nmkdir target", 'WriteStorageEffect'),
+])
+def test_program_decoders_preserve_command_shapes(tmp_path, command, kind):
+    effects = shell_storage_effects(command, tmp_path)
+    assert len(effects) == 1
+    assert type(effects[0]).__name__ == kind

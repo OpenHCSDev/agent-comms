@@ -79,6 +79,11 @@ class PathTool:
     path: str
 
 
+class PatternSearchTool:
+    acp_kind = "search"
+    preview_fields: ClassVar[tuple[str, ...]] = ('pattern',)
+
+
 @dataclass(frozen=True, kw_only=True)
 class CodingTool(ArgumentTool, NativeExecutableTool):
     """Typed Pi fields own mutation paths; the existing SDK executes the tools."""
@@ -136,6 +141,7 @@ class ReplacementEdit:
 
 
 class MutatingPathTool(PathTool):
+    acp_kind = "edit"
     claim_type: ClassVar[type[FileClaimPath]]
 
     def _parse_resource(self):
@@ -147,7 +153,6 @@ class MutatingPathTool(PathTool):
 
 @dataclass(frozen=True, kw_only=True)
 class EditTool(MutatingPathTool, CodingTool):
-    acp_kind = "edit"
     label = "Edit"
     edits: tuple[ReplacementEdit, ...]
 
@@ -165,20 +170,15 @@ class EditTool(MutatingPathTool, CodingTool):
 
 @dataclass(frozen=True, kw_only=True)
 class WriteTool(MutatingPathTool, CodingTool):
-    acp_kind = "edit"
     label = "Write"
     content: str
 
     claim_type = WritableFileClaim
 
 
-class GrepTool(ToolDeclaration):
-    acp_kind = "search"
+class GrepTool(PatternSearchTool, ToolDeclaration):
     label = "Search"
-    preview_fields = ('pattern',)
 
 
-class GlobTool(ToolDeclaration):
-    acp_kind = "search"
+class GlobTool(PatternSearchTool, ToolDeclaration):
     label = "Find"
-    preview_fields = ('pattern',)

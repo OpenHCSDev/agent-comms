@@ -1,5 +1,4 @@
 """Actual pinned CLI through ordinary TurnSession; localhost provider only."""
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -221,10 +220,10 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
         await asyncio.gather(turn, return_exceptions=True)
 
 
-async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
+async def test_actual_native_cancelled_owner_stop_keeps_cleanup_resources(
     native_backend, monkeypatch
 ):
-    from agent_comms.native_custody import PiSessionChild, RetiringNative
+    from agent_comms.native_child import PiSessionChild, RetiringNative
 
     owner = native_backend
     owner.provider.status = 0
@@ -285,7 +284,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
         owner = comms.registry.require(session)
 
         def declare_sender():
-            comms.registry.declare(Thread.create("sender", frozenset(), str(native.project), storage_rule=StorageRule()))
+            comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(native.project)))
             with Coordination(str(native.root / "coordination.sqlite3")) as store:
                 install_private_cohort_schema(store)
                 store.participants.register(owner.incarnation.lookup, session, session, committed=True)

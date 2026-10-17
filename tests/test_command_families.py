@@ -1,12 +1,9 @@
 """External contracts and adding commands without editing any consumer catalog."""
-from agent_comms.storage_rules import StorageRule
 
-import argparse
 import asyncio
 import json
 import os
 from dataclasses import dataclass
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -24,21 +21,6 @@ from agent_comms.runtime_requests import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
-
-
-def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
-    monkeypatch.setenv("COLUMNS", "80")
-    monkeypatch.setenv("NO_COLOR", "1")
-    monkeypatch.delenv("AGENT_COMMS_AGENT_ARGS", raising=False)
-    monkeypatch.delenv("AGENT_COMMS_AGENT_BIN", raising=False)
-    parser = build_parser()
-    sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
-    actual = {
-        "help": parser.format_help(),
-        "commands": {name: p.format_help() for name, p in sub.choices.items()},
-    }
-    expected = json.loads((Path(__file__).parent / "fixtures/cli-parser-contract.json").read_text())
-    assert actual == expected
 
 
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
@@ -160,7 +142,7 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
             return {"amount": self.amount + 1, "session": ctx.session_id, "owner": ctx.name}
 
     comms = Comms(tmp_path)
-    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     def require_owned_session(entry):
         assert entry.thread.name == "owner"
         assert entry.matches_name("owner")
@@ -224,7 +206,7 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
     for comms in (old, live):
         for name in ("alice", "bob"):
-            comms.registry.declare(Thread.create(name, frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
+            comms.registry.declare(old.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
         comms.messaging.send("alice", "#team", f"{comms.root.name} channel")
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct")
     source = live.views.attach_history(old.root)

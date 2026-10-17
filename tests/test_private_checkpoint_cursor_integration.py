@@ -4,7 +4,6 @@ Provider-free native fake only: a source certificate is not an ACK or input perm
 """
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import os
 import tempfile
@@ -44,25 +43,9 @@ def _root(tmp_path: Path):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread.create(
-            "sender",
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule()),
-        Thread.create(
-            "alpha",
-            frozenset({"team"}),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            model="openai-codex/gpt-6-sol",
-        storage_rule=StorageRule()),
-        Thread.create(
-            "other",
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule()),
+        comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='openai-codex/gpt-6-sol'),
+        comms.registry.new_thread('other', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
     ]
     for person in people:
         comms.registry.declare(person)

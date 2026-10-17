@@ -4,7 +4,6 @@ The controlled stop member supplies process exit; actual registry/selection
 validation and FencedOwnerBatch failure/resource dispatch remain production.
 This is not an OFD, process retirement or installed central-batch qualification.
 """
-from agent_comms.storage_rules import StorageRule
 
 from contextlib import contextmanager
 import pytest
@@ -26,10 +25,9 @@ class AuthoredRetirement(OwnerLifecycle):
         comms = Comms(root)
         super().__init__(comms.root, comms.registry, comms.bus)
         self.mode = mode
-        self.originals = tuple(Thread.create(
+        self.originals = tuple(self.registry.new_thread(
             name, frozenset(), '/authored', created_at=float(index + 1),
-            process_identity=ProcessIdentity(2147483647 - index, 1),
-        storage_rule=StorageRule()) for index, name in enumerate(('first', 'second')))
+            process_identity=ProcessIdentity(2147483647 - index, 1)) for index, name in enumerate(('first', 'second')))
         for thread in self.originals:
             self.registry.register(thread, StoppedThreadStatus())
         self.alive = {t.require_process(): True for t in self.originals}
@@ -100,7 +98,7 @@ class CapturedFailure(PreserveOwnerRuntime):
 
 
 @pytest.mark.parametrize('mode', ['second_guard', 'post_stop_witness', 'final_witness'])
-def test_partial_retirement_transfers_original_custody_and_refuses_launch(mode, monkeypatch, tmp_path):
+def test_partial_retirement_transfers_original_input_and_refuses_launch(mode, monkeypatch, tmp_path):
     lifecycle = AuthoredRetirement(tmp_path, mode, monkeypatch)
     batch = lifecycle.batch()
     operation = CapturedFailure()

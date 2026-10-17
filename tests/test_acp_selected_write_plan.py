@@ -1,7 +1,6 @@
 """Default-OFF public ACP operator preplan; selected file bytes are not model tools."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -80,14 +79,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
         for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
             comms.registry.declare(
-                Thread.create(
-                    name,
-                    frozenset({"team"}),
-                    str(work),
-                    process_identity=ProcessIdentity.capture(os.getpid()),
-                    created_at=incarnation,
-                    model="test/fake",
-                storage_rule=StorageRule())
+                comms.registry.new_thread(name, frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(os.getpid()), created_at=incarnation, model='test/fake')
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
         with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -268,23 +260,10 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
         sender_pid = os.getpid()
         comms.registry.declare(
-            Thread.create(
-                "sender",
-                frozenset(),
-                str(work),
-                process_identity=ProcessIdentity.capture(sender_pid),
-                created_at=61001.0,
-            storage_rule=StorageRule())
+            comms.registry.new_thread('sender', frozenset(), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61001.0)
         )
         comms.registry.declare(
-            Thread.create(
-                "alpha",
-                frozenset({"team"}),
-                str(work),
-                process_identity=ProcessIdentity.capture(sender_pid),
-                created_at=61002.0,
-                model="test/fake",
-            storage_rule=StorageRule())
+            comms.registry.new_thread('alpha', frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61002.0, model='test/fake')
         )
         root_id = comms.messaging.initialize_private_initial_protocol()
         with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -320,14 +299,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         try:
             assert process.pid != sender_pid
             comms.registry.declare(
-                Thread.create(
-                    "beta",
-                    frozenset({"team"}),
-                    str(work),
-                    process_identity=ProcessIdentity.capture(process.pid),
-                    created_at=61003.0,
-                    model="test/fake",
-                storage_rule=StorageRule())
+                comms.registry.new_thread('beta', frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(process.pid), created_at=61003.0, model='test/fake')
             )
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 store.participants.register(

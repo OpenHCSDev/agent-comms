@@ -1,5 +1,4 @@
 """Owner intent survives failed execution; private attempt fences still fail closed."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 
@@ -110,7 +109,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
 
 @pytest.mark.parametrize("attribution", ["model", "runtime", "missing", "stale_owner"])
 def test_nonowner_or_stale_pause_does_not_bypass_failure_block(wired, tmp_path, attribution):
-    wired.registry.declare(Thread.create(name="project", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule()))
+    wired.registry.declare(wired.registry.new_thread(name='project', tags=frozenset(), worktree=str(tmp_path)))
     initial = wired.goals.update_goal("project", SetGoalAction(text="Work"))
     if attribution == "stale_owner":
         wired.goals.update_goal(

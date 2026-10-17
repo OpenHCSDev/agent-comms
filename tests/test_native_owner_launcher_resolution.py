@@ -1,5 +1,4 @@
 """Native launcher identity, route and package authority remain independent."""
-from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import pytest
@@ -54,7 +53,7 @@ def test_route_does_not_override_native_package_commitment(tmp_path, monkeypatch
         NativePiRpcLaunch.package_for_command("pi-comms-native", LaunchRuntime.running())
 
 
-async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch):
+async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch, *, thread_registration):
     import site
     import venv
     from pathlib import Path
@@ -89,7 +88,7 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
     parent = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
     original = parent.path.read_bytes()
     copied = await PiNativeBackend.fork(
-        Thread.create("parent", tags=frozenset(), worktree=str(tmp_path), session_file=parent.session_file, storage_rule=StorageRule()),
+        thread_registration.new_thread('parent', tags=frozenset(), worktree=str(tmp_path), session_file=parent.session_file),
         str(package / "dist/cli.js"), LaunchRuntime(selected / "bin/python"),
     )
     assert marker.read_text() == str(selected)

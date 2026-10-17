@@ -30,7 +30,7 @@ class FailedInputDeliveryReadState(InputDeliveryReadState):
     error: str = field()
 
     def present_status(self, status: ThreadPresentationStatus) -> ThreadPresentationStatus:
-        return status.with_attention()
+        return status.with_attention(self.error)
 
 
 @dataclass(frozen=True)
@@ -59,8 +59,8 @@ class InputDelivery:
 
     def presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         """Pending input or a failed read warns without erasing genuine work."""
-        status = ordinary.status.with_attention() if self.current else ordinary.status
-        return replace(ordinary, status=self.read_state.present_status(status))
+        status = ordinary.status.with_attention(self.summary) if self.current else ordinary.status
+        return self.read_state.present_status(status).present_attention(ordinary)
 
     SCOPES = {"owner_queue": True, "unobserved": False}
 

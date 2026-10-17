@@ -571,9 +571,10 @@ def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
     assert report["introduced"][identity] == 0
 
 
-def test_net_reduction_does_not_pay_for_a_new_identifier(repo):
+@pytest.mark.parametrize("word", BannedVocabulary.words)
+def test_net_reduction_does_not_pay_for_a_new_identifier(repo, word):
     base = repo.commit({"names.py": "old_admit = 1\nold_receipt = 2\n"})
-    head = repo.commit({"names.py": "new_custody = 3\n"})
+    head = repo.commit({"names.py": f"new_{word} = 3\n"})
     status, report = repo.compare(base, head)
     identity = f"BannedVocabulary:{repo.root}/names.py"
     assert status == 1
@@ -582,9 +583,10 @@ def test_net_reduction_does_not_pay_for_a_new_identifier(repo):
     assert report["introduced"][identity] == 1
 
 
-def test_old_function_name_and_multiline_attribute_have_their_own_lines(repo):
-    base = repo.commit({"names.py": "def old_admit():\n    return (\n        peer\n        .custody\n    )\n"})
-    head = repo.commit({"names.py": "def old_admit():\n    return (\n        other\n        .custody\n    )\n"})
+@pytest.mark.parametrize("word", BannedVocabulary.words)
+def test_old_function_name_and_multiline_attribute_have_their_own_lines(repo, word):
+    base = repo.commit({"names.py": f"def old_admit():\n    return (\n        peer\n        .{word}\n    )\n"})
+    head = repo.commit({"names.py": f"def old_admit():\n    return (\n        other\n        .{word}\n    )\n"})
     status, report = repo.compare(base, head)
     identity = f"BannedVocabulary:{repo.root}/names.py"
     assert status == 0
@@ -602,8 +604,9 @@ def test_changed_argument_still_changes_a_multiline_frozen_write(repo):
     assert report["introduced"][identity] == 1
 
 
-def test_vocabulary_includes_identifiers_comments_and_docstring_lines_only():
-    source = b'''"""Receipt and custody share one prose line.\nAdmitted work.\n"""\n# admission\nkey = "admission_generation"\ndef admit_receipt(Custody, **clean):\n    return peer.receipt(Custody, admission=1)\n'''
+@pytest.mark.parametrize("word", BannedVocabulary.words)
+def test_vocabulary_includes_identifiers_comments_and_docstring_lines_only(word):
+    source = f'''"""Receipt and {word} share one prose line.\nAdmitted work.\n"""\n# admission\nkey = "admission_generation"\ndef admit_receipt({word.title()}, **clean):\n    return peer.receipt({word.title()}, admission=1)\n'''.encode()
     # Three prose lines; function, parameter, attribute, loaded parameter and keyword.
     assert BannedVocabulary.count(source, "values.py") == 8
     assert FrozenFieldWrite.count(b'text = "object.__setattr__(x, y, z)"\n', "values.py") == 0

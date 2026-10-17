@@ -1,5 +1,4 @@
 """A new history declaration crosses real current and retained-source boundaries."""
-from agent_comms.storage_rules import StorageRule
 
 from agent_comms.comms import Comms
 from agent_comms.historical_views import HistoryView
@@ -18,10 +17,10 @@ class ReviewHistory(HistoryView):
         ).read(presentation.bus.log)
 
 
-def test_new_history_case_owns_both_source_interpretations_without_reader_dispatch(tmp_path):
+def test_new_history_case_owns_both_source_interpretations_without_reader_dispatch(tmp_path, *, thread_registration):
     roots = [Comms(tmp_path / name) for name in ("prior", "current")]
     for comms in roots:
-        comms.registry.declare(Thread.create("writer", frozenset({"review", "other"}), str(comms.root), storage_rule=StorageRule()))
+        comms.registry.declare(thread_registration.new_thread('writer', frozenset({'review', 'other'}), str(comms.root)))
         for number in range(3):
             comms.messaging.send("writer", "#review", f"{comms.root.name} {number}")
             comms.messaging.send("writer", "#other", f"excluded {number}")

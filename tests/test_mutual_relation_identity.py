@@ -1,15 +1,14 @@
 """Shared relation behavior extends without endpoint-comparison consumer edits."""
-from agent_comms.storage_rules import StorageRule
 
 from agent_comms.peer_relevance import GoalContactRelevance
 from agent_comms.relationships import MutualThreadRelation, RelationRecord
 from agent_comms.threads import Thread
 
 
-def test_new_relation_reuses_owned_incident_and_counterpart_behavior():
-    first = Thread.create("first", frozenset(), "/wt", created_at=1, storage_rule=StorageRule())
-    second = Thread.create("second", frozenset(), "/wt", created_at=2, storage_rule=StorageRule())
-    replacement = Thread.create("second", frozenset(), "/wt", created_at=3, storage_rule=StorageRule())
+def test_new_relation_reuses_owned_incident_and_counterpart_behavior(*, thread_registration):
+    first = thread_registration.new_thread('first', frozenset(), '/wt', created_at=1)
+    second = thread_registration.new_thread('second', frozenset(), '/wt', created_at=2)
+    replacement = thread_registration.new_thread('second', frozenset(), '/wt', created_at=3)
 
     class ReviewRelation(MutualThreadRelation):
         relevance = GoalContactRelevance

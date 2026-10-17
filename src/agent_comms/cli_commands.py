@@ -1141,7 +1141,7 @@ class RegisterCliCommand(CliCommand):
     def apply(self, ctx: Comms) -> Any:
         from .threads import Thread
 
-        thread = Thread.create(
+        thread = ctx.registry.new_thread(
             name=self.name,
             tags=self.tags,
             worktree=self.worktree,
@@ -1149,7 +1149,6 @@ class RegisterCliCommand(CliCommand):
             task=self.task,
             process_identity=ProcessIdentity.capture(self.pid) if self.pid > 0 else None,
             execution=self.execution,
-            storage_rule=ctx.registry.storage_rule,
         )
         ctx.registry.declare(thread)
         return {"registered": self.name}

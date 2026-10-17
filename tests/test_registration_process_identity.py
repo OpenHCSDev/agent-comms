@@ -1,5 +1,4 @@
 """Actual process birth is the registration/claim_scope authority, never PID alone."""
-from agent_comms.storage_rules import StorageRule
 
 import os
 from dataclasses import replace
@@ -40,7 +39,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
 def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     comms = wire(tmp_path)
     identity = ProcessIdentity.capture(os.getpid())
-    owner = Thread.create("owner", frozenset(), str(tmp_path), process_identity=identity, storage_rule=StorageRule())
+    owner = comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=identity)
     comms.registry.declare(owner)
     before = comms.registry.snapshot()
     stale = replace(identity, start_time=identity.start_time + 1)
@@ -60,8 +59,7 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
 
 def test_project_request_entry_retains_original_birth_across_rename(tmp_path):
     comms = wire(tmp_path)
-    owner = Thread.create("owner", frozenset(), str(tmp_path),
-                   process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
+    owner = comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
     request = ProjectRuntimeRequest.for_native(
         comms.registry.snapshot(), comms.registry.require("owner")
@@ -87,7 +85,7 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     with pytest.raises(RelationViolationError, match="replace an executor"):
         comms.registry.declare(replace(owner, process_identity=stale))
     assert comms.registry.require(owner.name) == leased
-    comms.registry.declare(Thread.create("owner", frozenset(), str(tmp_path), title="metadata", storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), title='metadata'))
     current = comms.registry.require(owner.name)
     assert current.process_identity == identity and current.active_turn == leased.active_turn
     comms.registry.release_turn(current.turn_lease)

@@ -1,7 +1,6 @@
 """Goal mentions are incarnation-bound contact awareness, not accepted work."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import json
 from dataclasses import asdict
@@ -32,9 +31,9 @@ from agent_comms.tool_caller import ThreadCaller
 def _wire(tmp_path: Path) -> Comms:
     comms = Comms(tmp_path / "wire")
     for name, created in (("owner", 17001.0), ("peer", 17002.0), ("other", 17003.0)):
-        comms.registry.declare(Thread.create(name, frozenset(), str(tmp_path), created_at=created, storage_rule=StorageRule()))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=created))
     comms.registry.declare(
-        Thread.create("human", frozenset(), str(tmp_path), role=ThreadRole.USER, created_at=17004.0, storage_rule=StorageRule())
+        comms.registry.new_thread('human', frozenset(), str(tmp_path), role=ThreadRole.USER, created_at=17004.0)
     )
     return comms
 
@@ -148,7 +147,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
     assert _rows(comms, "reviewer")[0][0].target == "owner"
     comms.owners.stop("reviewer")
     comms.registry.remove("reviewer")
-    comms.registry.declare(Thread.create("peer", frozenset(), str(tmp_path), created_at=18002.0, storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(tmp_path), created_at=18002.0))
     # The old token must not grant a link to a new peer with the same spelling.
     assert _rows(comms, "owner")[0] == ()
     assert _rows(comms, "peer")[0] == ()
@@ -280,7 +279,7 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
     comms.owners.stop("owner")
     comms.registry.remove("owner")
     comms.registry.declare(
-        Thread.create("owner", frozenset(), str(tmp_path), goal=goal, created_at=18001.0, storage_rule=StorageRule())
+        comms.registry.new_thread('owner', frozenset(), str(tmp_path), goal=goal, created_at=18001.0)
     )
     assert _rows(comms, "peer")[0] == ()
     assert _rows(comms, "owner")[0] == ()

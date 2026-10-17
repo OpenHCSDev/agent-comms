@@ -7,7 +7,6 @@ and the answer was never delivered.
 """
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -45,10 +44,7 @@ def alice_batch(*sent: tuple[str, str]):
         root.mkdir(mode=0o700)
         comms = Comms(root)
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
-            comms.registry.declare(Thread.create(
-                name, frozenset({"team"}), dirname,
-                process_identity=ProcessIdentity.capture(os.getpid()), created_at=created,
-            storage_rule=StorageRule()))
+            comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), dirname, process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
         root_id = comms.messaging.initialize_private_initial_protocol()
         messages = [comms.messaging.send_initial_cohort("sender", target, text) for target, text in sent]
         with Coordination(str(root / "coordination.sqlite3")) as store:

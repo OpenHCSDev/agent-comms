@@ -1,5 +1,4 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 import secrets
@@ -30,7 +29,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         work.mkdir()
         c = Comms(root)
         for name, created in [("a", 21.0), ("b", 22.0)]:
-            c.registry.declare(Thread.create(name, frozenset({"team"}), str(work), created_at=created, storage_rule=StorageRule()))
+            c.registry.declare(c.registry.new_thread(name, frozenset({'team'}), str(work), created_at=created))
         c.messaging.initialize_private_initial_protocol()
         resource = WritableFileClaim(Path("new/nested/file.py"))
         committed = c.messaging.send_message("a", "#team", "Claim before create", claims=[resource])
@@ -98,20 +97,20 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
         CodingCall.decode("bad-argument-shape", name, arguments)
 
 
-@pytest.mark.parametrize("name,arguments", [
-    ("read", {"path": "x", "offset": 2, "limit": 3}),
-    ("bash", {"command": "pwd", "timeout": 2}),
-    ("edit", {"path": "x", "edits": [{"oldText": "old", "newText": "new"}]}),
-    ("write", {"path": "x", "content": "value"}),
+@pytest.mark.parametrize("name,arguments,title", [
+    ("read", {"path": "x", "offset": 2, "limit": 3}, "Read x"),
+    ("bash", {"command": "pwd", "timeout": 2}, "Run pwd"),
+    ("edit", {"path": "x", "edits": [{"oldText": "old", "newText": "new"}]}, "Edit x"),
+    ("write", {"path": "x", "content": "value"}, "Write x"),
 ])
-def test_pi_argument_fields_own_roundtrip_and_display(name, arguments):
+def test_pi_argument_fields_own_roundtrip_and_display(name, arguments, title):
     from dataclasses import fields
     from agent_comms.tool_declaration import ToolDeclaration
 
     call = CodingCall.decode("typed-argument-shape", name, arguments)
     assert "arguments" not in {item.name for item in fields(call.tool)}
     assert call.tool.arguments == arguments
-    assert call.tool.detail in ToolDeclaration.start("typed", name, arguments, detail=call.tool.detail).title
+    assert ToolDeclaration.start("typed", name, arguments).title == title
 
 
 @pytest.mark.asyncio

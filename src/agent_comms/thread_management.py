@@ -41,7 +41,6 @@ from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
-from .storage_rules import StorageRule
 from .agent_backend import RuntimeLocation
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -59,14 +58,14 @@ class NewThreadSpec:
     def from_task(cls, *, task: str = "", **values) -> NewThreadSpec:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
-    def declaration(self, project: str, storage_rule: StorageRule) -> Thread:
-        return Thread.create(name=self.name, task=self.task.text, tags=self.tags or frozenset(),
-                      worktree=project, model=self.model, thinking_level=self.thinking_level, storage_rule=storage_rule)
+    def declaration(self, project: str, registry: Registration) -> Thread:
+        return registry.new_thread(name=self.name, task=self.task.text, tags=self.tags or frozenset(),
+                      worktree=project, model=self.model, thinking_level=self.thinking_level)
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         project = Path(self.project).expanduser().resolve(strict=True)
-        thread = self.declaration(str(project), threads.registry.storage_rule)
+        thread = self.declaration(str(project), threads.registry)
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
         with _store_lock(threads._wire_lock_path):
@@ -85,8 +84,8 @@ class ForkSpec(NewThreadSpec):
         parent.runtime.require_forkable()
         return parent
 
-    def child(self, parent: Thread, runtime: RuntimeLocation, storage_rule: StorageRule) -> Thread:
-        return replace(self.declaration(self.project, storage_rule), parent=parent.name,
+    def child(self, parent: Thread, runtime: RuntimeLocation, registry: Registration) -> Thread:
+        return replace(self.declaration(self.project, registry), parent=parent.name,
                        tags=parent.tags if self.tags is None else self.tags,
                        backend=parent.backend, session_file=runtime.read_key)
 
@@ -94,7 +93,7 @@ class ForkSpec(NewThreadSpec):
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         # Copy saved history outside the wire lock, retaining writer→wire order.
         parent = self._parent(threads)
-        threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads.registry.storage_rule))
+        threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads.registry))
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
         with _store_lock(threads._wire_lock_path):
             current = self._parent(threads)
@@ -103,7 +102,7 @@ class ForkSpec(NewThreadSpec):
                     f"Parent thread {self.parent!r} changed its saved session during the fork; "
                     f"the created fork {location} was not registered."
                 )
-            yield self.child(current, location, threads.registry.storage_rule)
+            yield self.child(current, location, threads.registry)
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,14 +169,13 @@ class ThreadManagement:
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
         session_path = self.root / "imported_sessions" / f"{uuid4().hex}.jsonl"
-        thread = Thread.create(
+        thread = self.registry.new_thread(
             name,
             tags,
             str(project),
             session_file=str(session_path),
             title=snapshot.title,
             model=model,
-            storage_rule=self.registry.storage_rule,
         )
         with _store_lock(self._wire_lock_path):
             if self.registry.name_reserved(name):
@@ -254,7 +252,7 @@ class ThreadManagement:
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
         with _store_lock(self._wire_lock_path):
-            thread = Thread.create(
+            thread = self.registry.new_thread(
                 name=base_name,
                 tags=tags,
                 worktree=worktree,
@@ -262,7 +260,6 @@ class ThreadManagement:
                 model=model,
                 thinking_level=thinking_level,
                 auto_title_pending=auto_title_pending,
-                storage_rule=self.registry.storage_rule,
             )
             return self.registry._claim_unlocked(thread)
 
@@ -617,5 +614,5 @@ class ThreadManagement:
 
     def adopt_current(self) -> Thread:
         """Declare and register the current process's thread from env."""
-        thread = current_thread(self.registry.storage_rule)
+        thread = current_thread(self.registry)
         return self.registry.declare(thread)

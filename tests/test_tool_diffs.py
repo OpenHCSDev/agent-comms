@@ -1,5 +1,4 @@
 """Native edit evidence survives RPC, ACP, paging and transcript serialization."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 from agent_comms.tool_caller import NoThreadCaller
@@ -128,7 +127,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
         + "\n"
     )
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread.create("worker", frozenset(), str(tmp_path), session_file=str(session), storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(session)))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=1)
     assert len(page.events) == 1
     saved = FieldCodec.decode(TranscriptEvent, FieldCodec.encode(page.events[0]))
@@ -169,8 +168,8 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     from agent_comms.transcript_events import SentTranscript
 
     comms = wire(tmp_path / "wire")
-    comms.registry.declare(Thread.create("sender", frozenset(), str(tmp_path), storage_rule=StorageRule()))
-    comms.registry.declare(Thread.create("recipient", frozenset(), str(tmp_path), storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
+    comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(tmp_path)))
     published = invoke_tool(comms, "comms_send", {
         "from": "sender", "to": "recipient", "body": "Original private publication"}, caller=NoThreadCaller())
     raw = {"content": [{"type": "text", "text": json.dumps(published)}], "details": published}

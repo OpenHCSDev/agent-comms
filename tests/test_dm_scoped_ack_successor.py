@@ -1,7 +1,7 @@
 """Additional no-provider identity and lock-order probes for scoped DM basis."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
+from agent_comms.registration import Registration
 
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -18,7 +18,8 @@ from agent_comms.threads import Thread
 
 
 def _peer(root: Path, name: str) -> Thread:
-    return Thread.create(name, frozenset({"talk"}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
+    thread_registration = Registration(Path(root) / "registry.json")
+    return thread_registration.new_thread(name, frozenset({'talk'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
 def _mark(comms, peer, root, page):
@@ -121,7 +122,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
         )
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
-    comms.registry.declare(Thread.create(viewer, frozenset(), str(tmp_path), role=ThreadRole.USER, storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread(viewer, frozenset(), str(tmp_path), role=ThreadRole.USER))
     comms.messaging.send("peer", viewer, "new viewer unseen")
     before = comms.bus.pending_count(viewer, "peer")
     assert before == 1
@@ -137,7 +138,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     comms.messaging.send("peer", old_viewer, "old viewer painted")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert page.display_basis is not None and page.display_basis.viewer == old_viewer
-    comms.registry.declare(Thread.create("new_user", frozenset(), str(tmp_path), role=ThreadRole.USER, storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('new_user', frozenset(), str(tmp_path), role=ThreadRole.USER))
     # Normal registry rename retains the old human declaration but moves its
     # insertion position behind new_user. user_identity now selects new_user.
     comms.registry.rename(old_viewer, "old_user")

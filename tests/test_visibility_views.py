@@ -1,5 +1,4 @@
 """Viewer-only presence flags reveal archived threads without reviving owners."""
-from agent_comms.storage_rules import StorageRule
 
 from agent_comms.comms import wire
 from agent_comms.thread_identity import ThreadRole
@@ -11,11 +10,11 @@ def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
     comms = wire(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     for name in ("active", "stopped", "archived"):
-        comms.registry.declare(Thread.create(name, frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     comms.owners.stop("stopped")
     comms.owners.stop("archived")
     comms.threads.archive("archived")
-    comms.registry.declare(Thread.create("human", frozenset({"team"}), str(tmp_path), role=ThreadRole.USER, storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('human', frozenset({'team'}), str(tmp_path), role=ThreadRole.USER))
 
     def names(snapshot):
         return set(snapshot.threads)
