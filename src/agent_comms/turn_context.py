@@ -128,7 +128,8 @@ class WireProvenance(Provenance):
         return f"Wire message {self.source.seq} · {self.source.message_id}"
 
     def public_text(self, comms) -> str:
-        (original,) = comms.bus.log.messages_for_references((self.source,))
+        with comms.bus.log._opened_wire_snapshot(need_sequence=False) as opened:
+            (original,) = opened.messages_for_references((self.source,))
         return original.body
 
 
