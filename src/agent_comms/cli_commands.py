@@ -52,7 +52,6 @@ from .turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
-from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .change_report import ChangeReport
