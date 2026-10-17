@@ -31,7 +31,7 @@ from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
 from .cli_protocol import ArrivedMessage
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, compile_decoder
 from .comms import Comms
 from .config_options import (
     CatalogConfigOption, CatalogSelection, ConfigOptions,
@@ -173,12 +173,8 @@ class ChoiceTargetField(TargetField):
         return tuple((choice.name, choice.value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
-        if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
-            options = (SessionConfigSelectOption(name=member.label, value=FieldCodec.encode(member))
-                       for member in self.annotation.members_with(self.annotation))
-        else:
-            options = (SessionConfigSelectOption(name=str(value), value=str(value))
-                       for value in FieldCodec.value_schema(self.annotation)['enum'])
+        options = (SessionConfigSelectOption(name=label, value=str(FieldCodec.encode(value)))
+                   for label, value in compile_decoder(self.annotation).editor_choices())
         return replace(self, options=tuple(options))
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
