@@ -730,6 +730,10 @@ class PosixLaunch(ChildLaunch):
 class ChildOutcome(DeclaredFamily, affix="Outcome"):
     @property
     @abstractmethod
+    def summary(self) -> str: ...
+
+    @property
+    @abstractmethod
     def successful(self) -> bool: ...
 
     @classmethod
@@ -742,6 +746,10 @@ class ExitedOutcome(ChildOutcome):
     code: int
 
     @property
+    def summary(self) -> str:
+        return f"exited with code {self.code}"
+
+    @property
     def successful(self) -> bool:
         return self.code == 0
 
@@ -749,6 +757,10 @@ class ExitedOutcome(ChildOutcome):
 @dataclass(frozen=True)
 class SignaledOutcome(ChildOutcome):
     signal_number: int
+
+    @property
+    def summary(self) -> str:
+        return f"stopped by {signal.Signals(self.signal_number).name}"
 
     @property
     def successful(self) -> bool:
@@ -760,6 +772,10 @@ class TimedOutOutcome(ChildOutcome):
     termination: ChildOutcome
 
     @property
+    def summary(self) -> str:
+        return f"timed out; {self.termination.summary}"
+
+    @property
     def successful(self) -> bool:
         return False
 
@@ -767,6 +783,10 @@ class TimedOutOutcome(ChildOutcome):
 @dataclass(frozen=True)
 class GracefulStopOutcome(ChildOutcome):
     termination: ChildOutcome
+
+    @property
+    def summary(self) -> str:
+        return self.termination.summary
 
     @property
     def successful(self) -> bool:
@@ -781,6 +801,10 @@ class ForcedStopOutcome(GracefulStopOutcome):
 @dataclass(frozen=True)
 class FailedToStartOutcome(ChildOutcome):
     error: str
+
+    @property
+    def summary(self) -> str:
+        return f"failed to start: {self.error}"
 
     @property
     def successful(self) -> bool:
@@ -1030,15 +1054,13 @@ class AttachedChild(ChildProcess):
         # don't decode, accumulate, or replay abandoned output to unblock wait.
         self.process._transport.close()
 
-    async def discard_stderr(self) -> None:
-        """Drain unwanted output through EOF without retaining the child's output.
-
-        Chunk size controls read allocation only, never total accepted output.
-        The caller owns cancellation together with the child session lifetime.
-        """
+    async def stderr_tail(self) -> str:
+        """Drain through EOF, retaining only the existing native diagnostic tail."""
+        tail = b""
         if self.stderr is not None:
-            while await self.stderr.read(io.DEFAULT_BUFFER_SIZE):
-                pass
+            while chunk := await self.stderr.read(4096):
+                tail = (tail + chunk)[-16000:]
+        return tail.decode(errors="replace").strip()
 
     def close_input(self) -> None:
         if self.stdin is not None:

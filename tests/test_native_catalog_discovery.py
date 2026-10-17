@@ -381,7 +381,7 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
 
     async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=30) as child:
         channel = PiRpcChannel(child.stdout)
-        errors = asyncio.create_task(PiSessionChild.stderr_tail(child.stderr))
+        errors = asyncio.create_task(child.stderr_tail())
 
         async def state():
             request = GetState(id=uuid4().hex)
