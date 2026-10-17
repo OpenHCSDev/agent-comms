@@ -961,10 +961,11 @@ class InboxCliCommand(CliCommand):
 class WatchCliCommand(CliCommand, declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
     thread: str = option("--thread")
+    after: MessageReference | None = option("--after", default=None, normalize=json.loads, help="Exclusive original message reference already attempted by this receiver (JSON)")
     acknowledgment: type[WatchAcknowledgment] = option("--acknowledgment", default=OnReadWatchAcknowledgment, editor=ChoiceTargetField)
 
     def apply(self, ctx: Comms) -> AsyncIterator[Message]:
-        return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
+        return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment, after=self.after)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         emit = self.acknowledgment.line_output(output)
