@@ -1034,7 +1034,7 @@ for line in sys.stdin:
         events = await _rpc_events(tmp_path, records)
         info = [e for e in events if isinstance(e, ae.AgentInfo)]
         context = [e for e in events if isinstance(e, ae.ContextUsageObservation)]
-        assert [e.context_used for e in context] == [None, 250, None, None]
+        assert [e.context_used for e in context] == [250, None, None]
         assert len(info) == 1
         assert all(e.session_file == "/tmp/first.jsonl" for e in info)
         assert all(e.context_size == 1000 for e in context)
@@ -1073,7 +1073,6 @@ for line in sys.stdin:
             ],
         )
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
-            None,
             250,
             None,
         ]
@@ -1114,7 +1113,7 @@ for line in sys.stdin:
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [None, 250, None]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [250, None]
         assert events[-1].reason_code == "session_identity_uncertain"
         assert events[-1].ok is False
         assert not any(isinstance(e, ae.StreamSettled) for e in events)
