@@ -99,6 +99,20 @@ def test_new_program_is_one_declaration_and_composes_both_decoders(tmp_path, mon
     assert tuple(type(effect) for effect in effects) == (ForbiddenStorageEffect, AllocateStorageEffect)
 
 
+def test_inherited_decoder_is_collected_once_in_a_diamond(tmp_path, monkeypatch):
+    from agent_comms.storage_rules import ShellProgram, ForbidsCommands, ForbiddenStorageEffect
+    monkeypatch.setattr(ShellProgram, 'programs', dict(ShellProgram.programs))
+    class Left(ForbidsCommands):
+        pass
+    class Right(ForbidsCommands):
+        pass
+    class Diamond(Left, Right):
+        names = frozenset({'diamond-program'})
+    effects = shell_storage_effects('diamond-program anything', tmp_path)
+    assert len(effects) == 1
+    assert isinstance(effects[0], ForbiddenStorageEffect)
+
+
 @pytest.mark.parametrize('command,kind', [
     ('python3.14.7 -m venv env', 'ForbiddenStorageEffect'),
     ('python /scripts/build_runtime.py', 'AllocateStorageEffect'),

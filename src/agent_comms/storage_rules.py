@@ -119,7 +119,9 @@ class ShellProgram:
         return any(tuple(args[:len(prefix)]) == prefix for prefix in prefixes)
 
     def effects(self, args, cwd):
-        return ()
+        return tuple(effect for owner in type(self).__mro__
+                     if (decode := owner.__dict__.get('decode')) is not None
+                     for effect in decode(self, args, cwd))
 
 
 class StorageEffect:
@@ -241,47 +243,42 @@ class ForbidsCommands(ShellProgram):
     forbidden = ((),)
     reason = 'virtualenv creation and uv sync are forbidden; use the shared environment'
 
-    def effects(self, args, cwd):
-        own = (ForbiddenStorageEffect(self.reason),) if self.matches(args, self.forbidden) else ()
-        return own + super().effects(args, cwd)
+    def decode(self, args, cwd):
+        return (ForbiddenStorageEffect(self.reason),) if self.matches(args, self.forbidden) else ()
 
 
 class AllocatesOnCommands(ShellProgram):
     prefixes = ((),)
 
-    def effects(self, args, cwd):
-        own = (AllocateStorageEffect(),) if self.matches(args, self.prefixes) else ()
-        return own + super().effects(args, cwd)
+    def decode(self, args, cwd):
+        return (AllocateStorageEffect(),) if self.matches(args, self.prefixes) else ()
 
 
 class WritesTargets(ShellProgram):
     targets = slice(None)
     minimum = 1
 
-    def effects(self, args, cwd):
+    def decode(self, args, cwd):
         paths = [arg for arg in args if not arg.startswith('-')]
-        own = tuple(WriteStorageEffect(physical_path(p, cwd)) for p in paths[self.targets]) if len(paths) >= self.minimum else ()
-        return own + super().effects(args, cwd)
+        return tuple(WriteStorageEffect(physical_path(p, cwd)) for p in paths[self.targets]) if len(paths) >= self.minimum else ()
 
 
 class AddsCheckout(ShellProgram):
-    def effects(self, args, cwd):
-        own = ()
-        if args[:2] == ['worktree', 'add']:
-            tail = args[2:]
-            while tail and tail[0].startswith('-'):
-                tail = tail[2:] if tail[0] in ('-b', '-B', '--reason') else tail[1:]
-            if not tail:
-                raise SelectedToolDenied('StorageRule: worktree destination is missing')
-            own = (CheckoutStorageEffect(physical_path(tail[0], cwd)),)
-        return own + super().effects(args, cwd)
+    def decode(self, args, cwd):
+        if args[:2] != ['worktree', 'add']:
+            return ()
+        tail = args[2:]
+        while tail and tail[0].startswith('-'):
+            tail = tail[2:] if tail[0] in ('-b', '-B', '--reason') else tail[1:]
+        if not tail:
+            raise SelectedToolDenied('StorageRule: worktree destination is missing')
+        return (CheckoutStorageEffect(physical_path(tail[0], cwd)),)
 
 
 class RemovesCheckout(ShellProgram):
-    def effects(self, args, cwd):
+    def decode(self, args, cwd):
         paths = [p for p in args[2:] if not p.startswith('-')] if args[:2] == ['worktree', 'remove'] else []
-        own = (RemoveCheckoutStorageEffect(physical_path(paths[0], cwd)),) if paths else ()
-        return own + super().effects(args, cwd)
+        return (RemoveCheckoutStorageEffect(physical_path(paths[0], cwd)),) if paths else ()
 
 
 class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout):
