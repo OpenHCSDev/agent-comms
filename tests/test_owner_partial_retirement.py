@@ -1,4 +1,4 @@
-"""Authored in-memory retirement boundaries, with no OS signal, root or launch.
+"""Authored retirement boundaries, with an isolated real root and no OS signal or launch.
 
 The controlled stop member supplies process exit; actual registry/selection
 validation and FencedOwnerBatch failure/resource dispatch remain production.
@@ -6,42 +6,31 @@ This is not an OFD, process retirement or installed central-batch qualification.
 """
 
 from contextlib import contextmanager
-from dataclasses import replace
-from pathlib import Path
-from types import SimpleNamespace
-
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_cutover import PreserveOwnerRuntime
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.owner_lifecycle import OwnerLifecycle
 from agent_comms.owner_restart import FencedOwnerBatch, OwnerRestartRequest, StoppedOwnerFailure
-from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
 class AuthoredRetirement(OwnerLifecycle):
-    def __init__(self, mode, monkeypatch):
-        self.root = Path('/authored')
+    def __init__(self, root, mode, monkeypatch):
+        comms = Comms(root)
+        super().__init__(comms.root, comms.registry, comms.bus)
         self.mode = mode
         self.originals = tuple(Thread(
             name, frozenset(), '/authored', created_at=float(index + 1),
             process_identity=ProcessIdentity(2147483647 - index, 1),
         ) for index, name in enumerate(('first', 'second')))
-        self.snapshot = RegistrySnapshot(
-            threads={t.name: t for t in self.originals},
-            statuses={t.name: StoppedThreadStatus() for t in self.originals},
-            last_seen={t.name: 1.0 for t in self.originals}, aliases={},
-            owner_generations={t.name: 4 for t in self.originals},
-            claimed_generations={t.name: 5 for t in self.originals},
-            by_lookup={t.incarnation.lookup: t for t in self.originals},
-        )
-        self.registry = SimpleNamespace(snapshot=lambda: self.snapshot)
-        self.releases = SimpleNamespace(read=lambda: {})
+        for thread in self.originals:
+            self.registry.register(thread, StoppedThreadStatus())
         self.alive = {t.require_process(): True for t in self.originals}
         monkeypatch.setattr(ProcessIdentity, 'alive', lambda identity: self.alive[identity])
         self.stop_attempts = []
@@ -55,6 +44,8 @@ class AuthoredRetirement(OwnerLifecycle):
         # Context lifetime only: this sentinel is never presented as a real FD.
         self.active_wire_contexts += 1
         try:
+            if self.mode == 'post_stop_witness' and self.stop_attempts:
+                self.registry.register(self.originals[0], RunningThreadStatus())
             yield 91
         finally:
             self.active_wire_contexts -= 1
@@ -62,9 +53,7 @@ class AuthoredRetirement(OwnerLifecycle):
     def _stop_process(self, thread, generation):
         self.stop_attempts.append(thread.name)
         if self.mode == 'second_guard' and thread.name == 'second':
-            self.snapshot = replace(self.snapshot, claimed_generations={
-                **self.snapshot.claimed_generations, 'second': 6,
-            })
+            self.registry.unregister('second')
         try:
             self._require_same_stop_owner(thread, generation)
         except BaseException as error:
@@ -72,14 +61,8 @@ class AuthoredRetirement(OwnerLifecycle):
             raise
         self.signal_boundaries.append(thread.name)
         self.alive[thread.require_process()] = False
-        if self.mode == 'post_stop_witness':
-            self.snapshot = replace(self.snapshot, statuses={
-                **self.snapshot.statuses, thread.name: RunningThreadStatus(),
-            })
         if self.mode == 'final_witness' and thread.name == 'second':
-            self.snapshot = replace(self.snapshot, claimed_generations={
-                **self.snapshot.claimed_generations, 'first': 6,
-            })
+            self.registry.unregister('first')
 
     def _launch_owner_unlocked(self, *args, **kwargs):
         self.launches.append((args, kwargs))
@@ -90,7 +73,8 @@ class AuthoredRetirement(OwnerLifecycle):
             t.require_process(), '/authored/python', {'AGENT_COMMS_AGENT_BIN': '/authored/pi'},
         ) for t in self.originals)
         return FencedOwnerBatch(
-            self, tuple((t, 5) for t in self.originals), launches,
+            self, tuple((t, self.registry.snapshot().claimed_generations[t.name])
+                        for t in self.originals), launches,
             OwnerRestartRequest(), RestartEnvironment.inherit({}),
         )
 
@@ -115,8 +99,8 @@ class CapturedFailure(PreserveOwnerRuntime):
 
 
 @pytest.mark.parametrize('mode', ['second_guard', 'post_stop_witness', 'final_witness'])
-def test_partial_retirement_transfers_original_custody_and_refuses_launch(mode, monkeypatch):
-    lifecycle = AuthoredRetirement(mode, monkeypatch)
+def test_partial_retirement_transfers_original_custody_and_refuses_launch(mode, monkeypatch, tmp_path):
+    lifecycle = AuthoredRetirement(tmp_path, mode, monkeypatch)
     batch = lifecycle.batch()
     operation = CapturedFailure()
     with pytest.raises(StoppedOwnerFailure) as caught:
