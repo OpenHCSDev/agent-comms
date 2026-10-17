@@ -105,6 +105,9 @@ class RegistryDocument(RegistryPresence):
             names=self.names_for(thread.name),
         )
 
+    def entry_if_present(self, name: str) -> RegistryEntry | None:
+        return self.entry(name) if self.canonical_name(name) in self.threads else None
+
     @classmethod
     def entry_from_wire(cls, raw: dict, name: str) -> RegistryEntry:
         """Decode one thread's entry without decoding the other declarations.
@@ -529,6 +532,13 @@ class RegistryEntry:
 
     def matches_name(self, name: str) -> bool:
         return name in self.names
+
+    def owned_by(self, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
+        return (
+            self.status.active
+            and self.matches_name(owner.incarnation.name)
+            and owner.owns(self.thread, self.owner_generation, process)
+        )
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> Thread:
         """The exact saved owner lease, current name and process still agree."""

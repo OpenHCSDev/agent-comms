@@ -98,7 +98,7 @@ class RegistryNames(Generic[Member]):
 
     def names_for(self, name: str) -> frozenset[str]:
         """Current and retained names of one declared member."""
-        canonical = self.require(name).name
+        canonical = self.canonical_name(name)
         return frozenset({canonical, *(
             alias for alias, target in self.aliases.items() if target == canonical
         )})
