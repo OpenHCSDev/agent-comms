@@ -123,8 +123,7 @@ class CommittedDelivery(MessageWireRecord):
         for recipient, decision in zip(self.audience.recipients, self.decisions, strict=True):
             if recipient.recipient_lookup != decision.recipient:
                 raise IntegrityViolationError("bus decision does not match frozen N")
-            if not decision.audience.observer:
-                yield recipient, decision, decision.wake_mode.initial_state()
+            yield from decision.audience.assignments(recipient, decision)
 
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and its original addressed incarnation agree."""

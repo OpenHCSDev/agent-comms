@@ -39,6 +39,10 @@ class MessageAudience(StrEnum):
     def observer(self) -> bool:
         return self is self.OBSERVER
 
+    def assignments(self, recipient, decision):
+        if self is not self.OBSERVER:
+            yield recipient, decision, decision.wake_mode.initial_state()
+
 
 @dataclass(frozen=True, slots=True)
 class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
