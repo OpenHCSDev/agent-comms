@@ -68,24 +68,29 @@ class CatalogDocument:
         return self.tags.union(*(thread.tags for thread in threads.values()))
 
     def views(self, threads: Mapping[str, ThreadProvenance]) -> dict[str, Channel]:
+        first_seen: dict[str, float] = {}
+        for thread in threads.values():
+            for tag in thread.tags:
+                first_seen[tag] = min(first_seen.get(tag, thread.created_at), thread.created_at)
         result = {kind.value: self.resolve(kind.value) for kind in BuiltinChannel}
-        for tag in sorted(self.all_tags(threads)):
+        for tag in sorted(self.tags.union(first_seen)):
             name = f"#{tag}"
-            result[name] = self.resolve(name, threads=threads)
+            result[name] = self.resolve(name, created_at=first_seen.get(tag, 0.0))
         result.update((f"#{name}", self.resolve(f"#{name}")) for name in self.saved_views)
         return result
 
     def require_channel(self, target: str, threads: Mapping[str, ThreadProvenance]) -> Channel:
         target = ChannelTarget.normalize_name(target)
         tag = target.removeprefix("#")
+        first_seen = min(
+            (thread.created_at for thread in threads.values() if tag in thread.tags), default=None
+        )
         declared = tag in self.tags or tag in self.saved_views or BuiltinChannel.lookup(target) is not None
-        if not declared and not any(tag in thread.tags for thread in threads.values()):
+        if not declared and first_seen is None:
             raise UnknownChannelError(f"Unknown channel: {target!r}")
-        return self.resolve(target, threads=threads)
+        return self.resolve(target, created_at=first_seen or 0.0)
 
-    def resolve(
-        self, target: str, *, threads: Mapping[str, ThreadProvenance] | None = None
-    ) -> Channel:
+    def resolve(self, target: str, *, created_at: float = 0.0) -> Channel:
         target = ChannelTarget.normalize_name(target)
         tag = target.removeprefix("#")
         view = self.saved_views.get(tag)
@@ -94,13 +99,9 @@ class CatalogDocument:
             if view
             else (frozenset() if BuiltinChannel.lookup(target) else frozenset({tag}))
         )
-        preference = self.preferences.get(target)
-        if preference is None:
-            created_at = view.created_at if view else min(
-                (thread.created_at for thread in threads.values() if tag in thread.tags)
-                if threads is not None else (), default=0.0,
-            )
-            preference = ChannelPreferences(created_at=created_at)
+        preference = self.preferences.get(
+            target, ChannelPreferences(created_at=view.created_at if view else created_at)
+        )
         return preference.channel(target, members, view)
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:

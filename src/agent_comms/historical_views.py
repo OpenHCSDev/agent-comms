@@ -140,8 +140,7 @@ class ChannelHistory(HistoryView):
 
 @dataclass(frozen=True, slots=True)
 class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
-    target: str
-    views: HistoryViews
+    channel: Channel
     viewer: str | None = None
 
     @classmethod
@@ -156,12 +155,10 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
         )
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
-        return presentation.channel_page(self.target, viewer=self.viewer, **paging)
+        return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
-        with self.views.registry.store.reading() as registry, self.views.channels.catalog.reading() as catalog:
-            channel = catalog.require_channel(self.target, registry.snapshot().threads)
-        return ChannelDisplayScope.capture(channel, snapshot)
+        return ChannelDisplayScope.capture(self.channel, snapshot)
 
 
 @dataclass(frozen=True, slots=True)

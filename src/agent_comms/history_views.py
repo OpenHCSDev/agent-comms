@@ -191,7 +191,8 @@ class HistoryViews:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree).name if worktree is not None else None
-        return ChannelDisplayHistory(target, self, viewer).page(
+        channel = self.channels.catalog.read().require_channel(target, self.registry.snapshot().threads)
+        return ChannelDisplayHistory(channel, viewer).page(
             self.presentation,
             before=before,
             after=after,
