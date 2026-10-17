@@ -92,6 +92,11 @@ class Assignment:
 
 class TodoState(DeclaredFamily, affix="TodoState"):
     @classmethod
+    def require_owner(cls, current: Todo) -> None:
+        if current.assignment is None:
+            raise TodoError("An open problem requires its owner and order at creation.")
+
+    @classmethod
     def assign(cls, current: Todo, proposed: Assignment) -> Todo:
         raise TodoConflict(current)
 
@@ -147,6 +152,10 @@ class BlockedTodoState(TodoState):
 
 
 class DoneTodoState(TodoState):
+    @classmethod
+    def require_owner(cls, current):
+        pass
+
     @classmethod
     def release(cls, current, command):
         raise TodoConflict(current)
@@ -274,6 +283,9 @@ class Todo(TypedTable):
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
     strikes: tuple[StrikeTodo, ...] = ()
 
+    def __post_init__(self) -> None:
+        self.state.require_owner(self)
+
     @property
     def creator_identity(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.creator, self.creator_created)
@@ -327,6 +339,11 @@ class Todo(TypedTable):
                 goal=proposed.goal,
             )
         )
+
+
+@dataclass(frozen=True)
+class TodoReference(TypedRow):
+    id: str
 
 
 @dataclass(frozen=True)
@@ -424,6 +441,19 @@ class TodoStore:
         with closing(self._connect()) as db:
             return self._current(db, todo_id)
 
+    def unowned(self) -> tuple[str, ...]:
+        state, = Todo._fields_named(("state",))
+        with closing(self._connect()) as db:
+            return tuple(row.id for row in TodoReference.read(db.execute(
+                f'SELECT id FROM "{Todo.declared_name}" WHERE assignment IS NULL AND state<>?',
+                (state.encode(DoneTodoState),))))
+
+    def open_problems(self) -> tuple[Todo, ...]:
+        state, = Todo._fields_named(("state",))
+        with closing(self._connect()) as db:
+            return tuple(Todo.select(db, where="state<>? AND assignment IS NOT NULL",
+                                     parameters=(state.encode(DoneTodoState),)))
+
     def list(self, repo: str) -> tuple[Todo, ...]:
         with closing(self._connect()) as db:
             return tuple(
@@ -442,12 +472,16 @@ class TodoStore:
         text: str,
         *,
         creator: Thread,
+        owner: Thread,
+        generation: str,
+        deadline: EventTime,
         goal: GoalRef | None = None,
     ) -> Todo:
         _text(todo_id, "Todo ID", 128)
         _text(text, "Todo text", 2000)
         repo_id = _repo(repo)
-        identity = _participant(creator)
+        identity, assignee = _participant(creator), _thread(owner)
+        deadline.require_deadline()
         if goal is not None and type(goal) is not GoalRef:
             raise TodoError("Goal reference must be a typed GoalRef.")
         proposed = Todo(
@@ -459,12 +493,15 @@ class TodoStore:
             state=OpenTodoState,
             revision=1,
             goal=goal,
-            assignment=None,
+            assignment=Assignment(assignee.name, assignee.created_at,
+                                  identity.name, identity.created_at, generation),
+            deadline=deadline,
         )
         with self._write() as db:
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)
+            current.require_assignment(proposed.assignment)
             return current
 
     def apply(self, todo_id: str, command: TodoOperation) -> Todo:

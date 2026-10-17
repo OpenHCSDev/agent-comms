@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Literal
+from pathlib import Path
+import re
+from typing import ClassVar, Literal
+
+from .change_report import FileLine
 from abc import abstractmethod
 
 from .declared_family import DeclaredFamily
@@ -192,7 +196,23 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
     revision: GoalRevision
 
 
+@dataclass(frozen=True)
+class OrderCheck:
+    directory: str
+    command: str
+    expected: int
+
+    def __post_init__(self):
+        if not Path(self.directory).is_dir() or not self.command.strip():
+            raise ValueError("An order check requires an existing directory and command.")
+
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
+    def require_completion(self) -> None:
+        pass
+
+    def check(self, text: str) -> OrderCheck:
+        raise ValueError("This goal is not a problem order.")
+
     @abstractmethod
     def require_order(self, goal, goals, owner) -> None: ...
 
@@ -212,6 +232,32 @@ class UnorderedGoalOrder(GoalOrder):
 @dataclass(frozen=True)
 class ProblemGoalOrder(GoalOrder):
     problem: str
+    soft: ClassVar[re.Pattern] = re.compile(
+        r"\b(please|could you|would you|can you|if possible|consider|maybe|perhaps|"
+        r"when you get a chance|feel free|if you (think|agree|want)|thoughts|"
+        r"what do you think|thanks|thank you|sorry|no rush|optional(ly)?|up to you|"
+        r"might want|suggest)\b", re.I)
+
+    def check(self, text: str) -> OrderCheck:
+        problem = re.search(r"(?m)^Problems?:\s*(P\d+(?:\s*,\s*P\d+)*)\s*$", text)
+        owner = re.search(r"(?m)^Owner:\s*(\S+:\d+)\s*$", text)
+        check = re.search(r"(?m)^Check:\s*(\S+)\s*::\s*(.+?)\s*->\s*(\d+)\s*$", text)
+        if not problem or re.findall(r"P\d+", problem[1]) != [self.problem]:
+            raise ValueError("The order must name its one problem; split unrelated work.")
+        if not owner or not check:
+            raise ValueError("An order requires Owner: path:line and Check: dir :: command -> count.")
+        FileLine.from_wire(owner[1]).require_exists()
+        unquoted = re.sub(r'"[^"\n]*"|“[^”\n]*”', '', text)
+        if self.soft.search(unquoted):
+            raise ValueError("An order states the edit; soft requests are refused.")
+        if not re.search(r"(?m)^\s*\d+[.)] ", text):
+            raise ValueError("An order requires numbered edits.")
+        if not re.search(r"(?mi)^Report:", text) or not re.search(r"(?mi)^Banned:", text):
+            raise ValueError("An order requires Banned: and Report: lines.")
+        return OrderCheck(check[1], check[2], int(check[3]))
+
+    def require_completion(self) -> None:
+        raise ValueError("Complete a problem order with its checked delivered commit.")
 
     def require_order(self, goal, goals, owner) -> None:
         goals.todos.get(self.problem).require_assignee(owner, goal.id)

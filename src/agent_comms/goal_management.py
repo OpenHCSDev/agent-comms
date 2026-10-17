@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import time
 from collections.abc import Sequence
 from dataclasses import replace
 from functools import cached_property
@@ -48,6 +49,25 @@ class Goals:
     @cached_property
     def todos(self):
         return TodoStore(self.root)
+
+    def fleet_orders(self) -> dict:
+        """Read current problem/owner facts; never launch or replay work."""
+        snapshot = self.registry.snapshot()
+        idle, overdue, missing_orders = [], [], []
+        now = time.time()
+        for problem in self.todos.open_problems():
+            assignment = problem.assignment
+            owner = snapshot.threads.get(snapshot.canonical_name(assignment.owner))
+            row = {"problem": problem.id, "owner": assignment.owner,
+                   "goal_id": assignment.generation}
+            if not self.agents.is_working(assignment.owner_identity, snapshot):
+                idle.append(row)
+            if problem.deadline.overdue(now):
+                overdue.append(row)
+            if owner is None or owner.goal_for(assignment.generation) is None:
+                missing_orders.append(row)
+        return {"unowned_problems": self.todos.unowned(), "idle_owners": idle,
+                "overdue_orders": overdue, "unpublished_orders": missing_orders}
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
@@ -377,7 +397,8 @@ class Goals:
         *,
         actor: type = RuntimeInvocable,
     ) -> Goal | None:
-        """Apply one declared command; external ingress owns decoding."""
+        """Prepare outside custody, then recheck the captured goal at publication."""
+        action = action.prepare(self, name, actor)
         with _store_lock(self._wire_lock_path):
             return action.apply(
                 GoalActionContext(self, self.registry.require(name), actor)

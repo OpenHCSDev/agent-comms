@@ -18,6 +18,8 @@ from .field_codec import FieldCodec
 from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
+    CreateProblemGoalAction,
+    DeliveredOrderGoalAction,
     EditGoalAction,
     GoalAction,
     GoalPrecondition,
@@ -27,6 +29,7 @@ from .goal_actions import (
 )
 from .goal_states import ActiveGoal
 from .todos import TodoOperation
+from .recorded_time import EventTime
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -590,14 +593,19 @@ class CommsGoalHistoryTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsTodoCreateTool(ThreadToolRequest):
     label = "Create problem"
-    description = "Create a Todo problem; its creator owns assignment and strike decisions."
+    description = "Create a problem with its owner, checked order and deadline in one command."
     id: str = tool_field("Unique problem ID")
     repo: str = tool_field("Repository owner/name")
-    text: str = tool_field("Problem and requested repair")
+    text: str = tool_field("Complete Problem/Owner/Check/numbered edits/Banned/Report order")
+    owner: str = tool_field("Assignee thread; a problem cannot be born unowned")
+    goal_id: str = tool_field("Unique execution goal identity")
+    deadline: EventTime = tool_field("Recorded deadline")
 
     def apply(self, comms, caller):
-        return {"todo": FieldCodec.encode(comms.goals.todos.create(
-            self.id, self.repo, self.text, creator=comms.registry.require(caller.name)))}
+        goal = comms.goals.update_goal(self.owner, CreateProblemGoalAction(
+            problem=self.id, repo=self.repo, text=self.text, goal_id=self.goal_id,
+            deadline=self.deadline, expected_revision=1, commander=caller.name))
+        return {"todo": FieldCodec.encode(comms.goals.todos.get(self.id)), "goal": goal.to_wire()}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -623,6 +631,32 @@ class CommsOrderTool(ThreadToolRequest):
     def apply(self, comms, caller):
         goal = comms.goals.update_goal(self.owner, replace(self.order, commander=caller.name))
         return {"goal": goal.to_wire()}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderDoneTool(ThreadToolRequest):
+    label = "Check delivered order"
+    description = "Verify the order's check on its clean delivered commit before completing its Goal."
+    problem: str = tool_field("Problem ID")
+    commit: str = tool_field("Delivered commit hash")
+
+    def apply(self, comms, caller):
+        todo = comms.goals.todos.get(self.problem)
+        todo.require_commander(comms.registry.require(caller.name).incarnation)
+        assignment = todo.assignment
+        goal = comms.goals.update_goal(assignment.owner, DeliveredOrderGoalAction(
+            expect=GoalPrecondition(goal_id=assignment.generation), commit=self.commit,
+            progress=f"Delivered {self.commit}; the order check passed."))
+        return {"goal": goal.to_wire()}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsFleetOrdersTool(ToolRequest):
+    label = "Fleet order alarms"
+    description = "Read unowned problems, idle owners, overdue and unpublished orders; never starts work."
+
+    def apply(self, comms, caller):
+        return comms.goals.fleet_orders()
 
 
 @dataclass(frozen=True, kw_only=True)
