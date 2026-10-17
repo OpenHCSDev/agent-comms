@@ -11,7 +11,6 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
-from typing import ClassVar
 
 from .declared_family import DeclaredFamily
 
@@ -49,8 +48,12 @@ class AssignedSourceIdentity:
 @dataclass(frozen=True)
 class AssignedSourceCursor(TranscriptSource, declared_name="wire"):
     root: str
-    recipient: ThreadIncarnation
+    recipient: RecordedThreadIncarnation
     sequence: int
+
+    def __post_init__(self):
+        if self.sequence < 0:
+            raise ValueError("Receipt sequence cannot be negative")
 
     def position(self, session_file: str, offset: int) -> TranscriptCursor:
         return WireTranscriptCursor(session_file, offset, self)
@@ -82,8 +85,6 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
 
     session_file: str
     offset: int
-    source_identity: ClassVar[AssignedSourceIdentity | None] = None
-    wire_seq: ClassVar[int] = 0
 
     @staticmethod
     def at(session_file: str, offset: int, source: TranscriptSource) -> TranscriptCursor:
@@ -106,6 +107,15 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     def wire_within(self, parent: TranscriptCursor) -> bool:
         return True
 
+    def holds_wire(self, cursor: WireTranscriptCursor) -> bool:
+        return False
+
+    def wire_rows(self, records, traversal, cursor, *, limit):
+        return ()
+
+    def receipt_predicate(self, traversal, through):
+        return traversal.native_prefix(through)
+
     def require_source(self, identity: AssignedSourceIdentity) -> None:
         """A native-only cursor fits every source."""
 
@@ -116,7 +126,7 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
         return tuple(reports)
 
     def covers_incoming(self, sequence: int) -> bool:
-        return 0 < sequence <= self.wire_seq
+        return False
 
     def over_native(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
         """Retain this wire position over the furthest committed native prefix."""
@@ -135,19 +145,24 @@ class NativeTranscriptCursor(TranscriptCursor):
 class WireTranscriptCursor(TranscriptCursor):
     wire: AssignedSourceCursor
 
-    @property
-    def source_identity(self) -> AssignedSourceIdentity:
-        return self.wire.identity
-
-    @property
-    def wire_seq(self) -> int:
-        return self.wire.sequence
-
     def at_sequence(self, sequence: int) -> TranscriptCursor:
         return replace(self, wire=self.wire.at(sequence))
 
     def wire_within(self, parent: TranscriptCursor) -> bool:
-        return parent.source_identity == self.source_identity and self.wire_seq <= parent.wire_seq
+        return parent.holds_wire(self)
+
+    def holds_wire(self, cursor: WireTranscriptCursor) -> bool:
+        return self.wire.identity == cursor.wire.identity and cursor.wire.sequence <= self.wire.sequence
+
+    def covers_incoming(self, sequence: int) -> bool:
+        return 0 < sequence <= self.wire.sequence
+
+    def wire_rows(self, records, traversal, cursor, *, limit):
+        predicate, parameters = cursor.receipt_predicate(traversal, self.wire)
+        return records.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
+
+    def receipt_predicate(self, traversal, through):
+        return traversal.predicate(self.wire.sequence, through)
 
     def require_source(self, identity: AssignedSourceIdentity) -> None:
         self.wire.require_source(identity)
@@ -156,7 +171,8 @@ class WireTranscriptCursor(TranscriptCursor):
         raise ValueError("Recorded items cannot acquire an assigned wire cursor")
 
     def resolve_sent(self, reports):
-        return AssignedTranscriptSource.open(self.source_identity).resolve_sent(reports)
+        root = Path(self.wire.root)
+        return AssignedTranscriptSource(root, self.wire.recipient, WireLog(root / "bus.jsonl")).resolve_sent(reports)
 
 
 class TranscriptTraversal(ABC):
@@ -209,11 +225,7 @@ class TranscriptTraversal(ABC):
         projected = project(native, max_records=max_messages + 1, max_bytes=max_bytes)
         try:
             record, events = next(projected, (None, ()))
-            source_rows = iter(
-                receipts.page_rows(
-                    self, consumed.wire_seq, frontier, limit=max_messages + 1
-                )
-            )
+            source_rows = iter(frontier.wire_rows(receipts, self, consumed, limit=max_messages + 1))
             message = next(source_rows, None)
             while record is not None or message is not None:
                 if record is not None and not events:
@@ -243,12 +255,12 @@ class TranscriptTraversal(ABC):
                     consumed = consumed.at_offset(self.native_position(record))
                     record, events = next(projected, (None, ()))
                 else:
-                    consumed = consumed.at_sequence(self.receipt_position(message.message))
+                    consumed = frontier.at_sequence(self.receipt_position(message.message)).at_offset(consumed.offset)
                     message = next(source_rows, None)
             if record is None:
                 consumed = consumed.at_offset(frontier.offset if self.ascending else 0)
             if message is None:
-                consumed = consumed.at_sequence(frontier.wire_seq if self.ascending else 0)
+                consumed = frontier.at_offset(consumed.offset) if self.ascending else consumed.at_sequence(0)
             return consumed, records
         finally:
             projected.close()
@@ -266,6 +278,9 @@ class EarlierTranscript(TranscriptTraversal):
 
     def predicate(self, sequence, through):
         return "w.seq<=?", (sequence,)
+
+    def native_prefix(self, through):
+        return "FALSE", ()
 
     def chooses_native(self, native_time, receipt_time):
         return native_time is None or native_time >= receipt_time
@@ -291,7 +306,10 @@ class LaterTranscript(TranscriptTraversal):
         return reader.forward(cursor.offset, through.offset)
 
     def predicate(self, sequence, through):
-        return "w.seq>? AND w.seq<=?", (sequence, through.wire_seq)
+        return "w.seq>? AND w.seq<=?", (sequence, through.sequence)
+
+    def native_prefix(self, through):
+        return "w.seq<=?", (through.sequence,)
 
     def chooses_native(self, native_time, receipt_time):
         return native_time is None or native_time <= receipt_time
@@ -312,10 +330,6 @@ class LaterTranscript(TranscriptTraversal):
 class TranscriptRecords:
     """Project original records; capture their native or assigned wire source."""
 
-    def resolve_sent(self, messages):
-        """Records without a sender assignment cannot qualify Send reports."""
-        return tuple(messages)
-
     def capture_source(self) -> TranscriptSource:
         return NativeTranscriptSource()
 
@@ -324,9 +338,6 @@ class TranscriptRecords:
 
     def require_cursor(self, cursor):
         cursor.require_native()
-
-    def page_rows(self, traversal, sequence, through, *, limit):
-        return iter(())
 
     def reply_revision(self, records):
         from .native_runtime_input import PublishedReplyRevision
@@ -358,15 +369,6 @@ class AssignedTranscriptSource(TranscriptRecords):
     @classmethod
     def for_thread(cls, root, thread, log):
         return cls(root, thread.incarnation.require_recorded(), log)
-
-    @classmethod
-    def open(cls, identity: AssignedSourceIdentity):
-        """Open only the recorded wire, without current registry or SQL authority."""
-        root = Path(identity.root)
-        return identity.recipient.recorded_or(
-            lambda recorded: cls(root, recorded, WireLog(root / "bus.jsonl")),
-            TranscriptRecords,
-        )
 
     def resolve_sent(self, messages):
         """Qualify reports against exact full rows in one bounded wire read.
@@ -441,10 +443,6 @@ class AssignedTranscriptSource(TranscriptRecords):
             str(self.root), self.recipient, rows[0].message.seq if rows else 0
         )
         return AssignedSourceWindow(cursor, rows, tuple(sent))
-
-    def page_rows(self, traversal, sequence, through, *, limit):
-        predicate, parameters = traversal.predicate(sequence, through)
-        return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
 
     def native_events(self, record, routes, project_events, references):
         entry = record.entry

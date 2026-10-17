@@ -550,7 +550,7 @@ class Transcripts:
                     raise ValueError("Cursor is outside the transcript window.")
             frontier = through or TranscriptCursor.at(session_file, size, source.capture_source())
             source.require_cursor(frontier)
-            if frontier.wire_seq < 0 or (cursor is not None and not frontier.contains(cursor)):
+            if cursor is not None and not frontier.contains(cursor):
                 raise ValueError("Cursor is outside the combined transcript source")
             traversal = LaterTranscript() if after is not None else EarlierTranscript()
             initial = cursor or frontier
@@ -567,7 +567,7 @@ class Transcripts:
         return (
             TranscriptPage(
                 events, start, end,
-                start.offset > 0 or start.wire_seq > 0,
+                start.offset > 0 or start.covers_incoming(1),
                 end != frontier,
             ),
             draft,
