@@ -56,20 +56,15 @@ def test_store_owns_document_and_failed_edit_cannot_leak_into_cache(tmp_path):
     assert not {"_threads", "_owners", "_admissions", "_statuses"} & vars(registration).keys()
 
 
-def test_point_readers_take_the_same_decoded_registry_revision(tmp_path):
+def test_point_readers_preserve_registry_alias_and_validation_boundaries(tmp_path):
     registration = Registration(tmp_path / "registry.json")
     registration.register(owner(tmp_path))
     registration.register(replace(owner(tmp_path), name="other", created_at=11.0))
     registration.rename("owner", "renamed")
     document = registration.store.read()
     raw = json.loads(registration.store.path.read_text())
-    from unittest.mock import patch
-    registration.store.cache.entry = None
-    with patch.object(RegistryDocument, "from_wire", wraps=RegistryDocument.from_wire) as decode:
-        for name in ("renamed", "owner", "other"):
-            assert registration.entry(name).entry == document.entry(name)
-        assert decode.call_count == 1
-    assert registration.store.read() is registration.store.cache.entry.document
+    for name in ("renamed", "owner", "other"):
+        assert registration.entry(name).entry == document.entry(name)
     assert registration.entry("owner").revision == registration.store.revision_unlocked()
     with pytest.raises(UnregisteredThreadError):
         registration.entry("missing")

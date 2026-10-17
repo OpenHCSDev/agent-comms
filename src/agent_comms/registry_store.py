@@ -18,6 +18,7 @@ from .locked_store import LockedStore
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
 from .registry_document import RegistryDocument, RegistryEntry
+from .thread_identity import ThreadRole
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,7 +35,7 @@ class RegistryRevision:
 
     @classmethod
     def capture(cls, revision: FileRevision | None, document: RegistryDocument, raw: dict):
-        user_name = next((name for name, thread in document.threads.items() if not thread.role.executable), None)
+        user_name = next((name for name, thread in document.threads.items() if thread.role is ThreadRole.USER), None)
         return cls(revision, document, raw, user_name)
 
     @property
