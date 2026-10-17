@@ -12,7 +12,6 @@ from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
-from agent_comms.coordination_database import StoreBusy
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
@@ -333,12 +332,10 @@ def write_selected_claimed_file(
         if marker.root_id != admission.wire_root_id:
             raise IdentityConflict("Selected write belongs to another private root")
         initial = _committed_source(bus_lock, admission, "Selected write source is not committed")
-        # A separate fail-fast coordinator connection holds the transaction
+        # The coordinator connection holds the transaction
         # through fsync. A concurrently settling attempt must not slip between
         # verification and irreversible file mutation.
-        with Coordination(
-            str(store.session.path), contention=StoreBusy()
-        ) as scoped, scoped.session.transaction():
+        with Coordination(str(store.session.path)) as scoped, scoped.session.transaction():
             _verify_selected_wake_state(initial, owner, generation, scoped, admission)
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
             with bus_lock.current_source(bus.log, marker) as source:
