@@ -341,7 +341,7 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
             == wire(tmp_path).views.viewer_snapshot(str(tmp_path)))
 
 
-def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
+def test_display_index_rebuilds_after_bus_replacement(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
@@ -362,8 +362,7 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
     replacement.write_bytes(bus_path.read_bytes())
     replacement.chmod(0o600)
     os.replace(replacement, bus_path)
-    with pytest.raises(RelationViolationError, match="checkpoint root/inode/size changed"):
-        wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
 
 
 def test_display_read_progress_aggregates_sparse_cursor_without_decoding(tmp_path):
