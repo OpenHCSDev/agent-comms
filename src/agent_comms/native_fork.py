@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
 from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
 from .native_session_reopen import NativeSessionIdentity
-from .field_codec import FieldCodec
 from .launch_runtime import LaunchRuntime
 from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
 
@@ -60,26 +58,17 @@ class ForkSessionHelper(PiHelper):
 
 @dataclass(frozen=True, kw_only=True)
 class RuntimeForkRequest(ForkSessionRequest):
-    runtime: LaunchRuntime
+    runtime: LaunchRuntime = field(metadata={"wire_exclude": True})
 
 
 class RuntimeForkHelper(ForkSessionHelper):
-    request = RuntimeForkRequest
-
     @classmethod
     def launch(cls, request, environment):
         return ((str(request.runtime.interpreter), "-I", "-c",
-                 "from agent_comms.native_fork import main; main()"),
+                 "from agent_comms.native_fork import main; main()", request.package),
                 request.runtime.environment(environment))
 
 
 def main():
-    payload = sys.stdin.buffer.read()
-    request = FieldCodec.decode(RuntimeForkRequest, json.loads(payload))
-    command, environment = ForkSessionHelper.launch(request, dict(os.environ))
-    reader, writer = os.pipe()
-    os.write(writer, payload)
-    os.close(writer)
-    os.dup2(reader, sys.stdin.fileno())
-    os.close(reader)
+    command, environment = ForkSessionHelper.node_launch(Path(sys.argv[1]), dict(os.environ))
     os.execvpe(command[0], command, environment)

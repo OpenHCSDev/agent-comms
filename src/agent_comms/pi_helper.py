@@ -71,6 +71,10 @@ class PiHelper(DeclaredFamily, affix="Helper"):
 
     @classmethod
     def launch(cls, request, environment: dict[str, str]):
+        return cls.node_launch(Path(request.package), environment)
+
+    @classmethod
+    def node_launch(cls, package: Path, environment: dict[str, str]):
         node = shutil.which("node")
         if node is None:
             raise PiHelperError("Pi helper needs Node")
@@ -82,7 +86,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         environment["PI_OFFLINE"] = "1"
         command = (node, "--no-global-search-paths")
         # Every current caller supplies the verified native deployment.
-        fence = Path(request.package) / "dist/agent-comms-import-fence.mjs"
+        fence = package / "dist/agent-comms-import-fence.mjs"
         command += ("--import", str(fence))
         return (*command, "--input-type=module", "--eval", cls.script.read_text()), environment
 
