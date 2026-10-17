@@ -9,7 +9,7 @@ import time
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.goals import Deadline
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.plain_text import PlainText, PlainTextError
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
@@ -53,7 +53,7 @@ def test_commander_accepts_sends_back_and_strikes_until_the_order_is_taken_away(
                  bus=comms.bus)
     store.assign('P1', expected_revision=1, owner=comms.registry.require('unit'),
                  parent=comms.registry.require('lead'), generation='order-1',
-                 deadline=Deadline(time.time() + 3600), goals=comms.goals)
+                 deadline=RecordedEventTime(time.time() + 3600), goals=comms.goals)
     order_text = comms.registry.require('unit').goal.text
     comms.transcripts.external('unit').finish(turn_id='t1', item_id='i1', events=(
         ToolStartTranscript(tool_call_id='edit-1', tool_name='edit',
@@ -81,7 +81,7 @@ def test_commander_accepts_sends_back_and_strikes_until_the_order_is_taken_away(
     assert status == 0, back
     assert (back['strikes'], back['fired']) == (1, False)
     goal = comms.registry.require('unit').goal
-    assert goal.text.startswith('Delete the whole line') and goal.author.revision_count == 1
+    assert goal.text.startswith('Delete the whole line') and goal.revision == 2
 
     refused, error = invoke(comms, 'lead', 'comms_strike', unit='unit', goal_id='order-1', struck='unit',
                             cause='false_done', caught='review',

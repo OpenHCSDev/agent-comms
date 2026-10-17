@@ -10,7 +10,7 @@ input or the story: the Goal history, the transcripts and these rows are read.
 from __future__ import annotations
 
 import time
-from contextlib import closing
+from contextlib import closing, contextmanager
 from itertools import islice
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -150,8 +150,7 @@ class SendBackGoalAction(EditGoalAction):
 
     def require_author(self, goal: Goal, ctx: GoalActionContext) -> None:
         goal.author.require_commander(self.judge, ctx.goals.registry.snapshot())
-        if goal.state.terminal:
-            raise OrderRecordError("A finished order cannot be sent back; issue a new order.")
+        goal.state.require_send_back()
 
 
 class OrderCall(DeclaredFamily, affix="OrderCall"):
@@ -248,6 +247,17 @@ class JudgedOrder(HeldOrder):
         goal.author.require_commander(commander, snapshot)
         return cls(goals, thread, reference, goal, commander)
 
+    def _require_current(self) -> Thread:
+        snapshot = self.goals.registry.snapshot()
+        if not self.reference.owner.current(snapshot):
+            raise OrderRecordError("The order's unit incarnation changed.")
+        unit = snapshot.require(self.unit.name)
+        goal = unit.require_goal(self.reference.goal_id)
+        if goal != self.goal:
+            raise OrderRecordError("The order changed before the judgment was written.")
+        goal.author.require_commander(self.judge, snapshot)
+        return unit
+
     def _verdict(self, turns: ThreadTurns, outcome: type[VerdictOutcome], tool_call: str,
                  quoted: str, reason: str) -> VerdictRow:
         if not turns.tool_call(tool_call).quotes(quoted):
@@ -263,26 +273,32 @@ class JudgedOrder(HeldOrder):
                 f"Quote {self.serves_words}+ exact words of the order the call serves; "
                 "a call no order asked for is not accepted.")
         row = self._verdict(turns, AcceptedVerdict, tool_call, quoted, reason)
-        self.records.record(row)
+        with self.goals.writing():
+            self._require_current()
+            self.records.record(row)
         return row
 
     def send_back(self, turns: ThreadTurns, tool_call: str, quoted: str, reason: str,
                   text: str) -> Struck:
         row = self._verdict(turns, SentBackVerdict, tool_call, quoted, reason)
         with self.goals.writing() as completed:
-            SendBackGoalAction(expect=GoalPrecondition(goal_id=self.reference.goal_id),
-                               judge=self.judge, text=text)._apply_locked(
-                GoalActionContext(self.goals, self.unit, RuntimeInvocable, completed=completed))
-            strikes = self.records.record(row)
+            unit = self._require_current()
+            with self.records.recording(row) as strikes:
+                SendBackGoalAction(expect=GoalPrecondition(expected_goal=self.goal),
+                                   judge=self.judge, text=text)._apply_locked(
+                    GoalActionContext(self.goals, unit, RuntimeInvocable, completed=completed))
         return Struck.counted(self.goals, row, strikes)
 
     def strike(self, struck: str, cause: type[StrikeCause], what_happened: str,
                caught: type[CaughtStage]) -> Struck:
-        row = StrikeRow(id=None, goal=self.reference,
-                        struck=self.goals.registry.require(struck).incarnation.require_recorded(),
-                        cause=cause, what_happened=what_happened, caught=caught,
-                        judge=self.judge, at=time.time())
-        return Struck.counted(self.goals, row, self.records.record(row))
+        with self.goals.writing():
+            self._require_current()
+            row = StrikeRow(id=None, goal=self.reference,
+                            struck=self.goals.registry.require(struck).incarnation.require_recorded(),
+                            cause=cause, what_happened=what_happened, caught=caught,
+                            judge=self.judge, at=time.time())
+            strikes = self.records.record(row)
+        return Struck.counted(self.goals, row, strikes)
 
 
 @dataclass(frozen=True)
@@ -355,8 +371,13 @@ class OrderRecords(TypedStore):
                 *self._newest(StrikeRow, limit))
         return tuple(sorted(rows, key=lambda row: row.at, reverse=True)[:limit])
 
-    def record(self, row: VerdictRow | StrikeRow) -> int:
-        """Insert one row; answer the unit's strike count in the same transaction."""
+    @contextmanager
+    def recording(self, row: VerdictRow | StrikeRow):
+        """Reject duplicate verdicts before changing an order; commit afterward."""
         with self.writing() as connection:
             row.add(connection)
-            return self._count(connection, row.counted_against)
+            yield self._count(connection, row.counted_against)
+
+    def record(self, row: VerdictRow | StrikeRow) -> int:
+        with self.recording(row) as strikes:
+            return strikes
