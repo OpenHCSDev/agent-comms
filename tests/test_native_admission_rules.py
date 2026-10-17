@@ -88,7 +88,7 @@ async def test_durable_private_claim_names_each_changed_authority(
             rules.RegistrySessionRule: replace(registry, actual=replace(current, session_file=str(tmp_path / "changed.jsonl"))),
             rules.RegistryTurnRule: replace(registry, actual=replace(current, active_turn=None)),
             rules.RegistryGoalRule: replace(
-                registry, actual=replace(current, goal=Goal("changed", "changed"))
+                registry, actual=replace(current, goal=Goal("changed", "changed", published_seq=0))
             ),
             rules.NativeInputIdentityRule: replace(
                 reservation, row=replace(row, owner_generation=expected.generation + 1)

@@ -17,7 +17,7 @@ def registered(root):
     comms = wire(root)
     comms.registry.register(Thread(
         'owner', frozenset({'team'}), str(root),
-        process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g'),
+        process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g', published_seq=0),
     ))
     return comms.registry
 
@@ -44,7 +44,7 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path):
 
 @pytest.mark.parametrize('mutation', [
     {'created_at': 200.0}, {'worktree': '/different'}, {'role': ThreadRole.USER},
-    {'goal': Goal('replacement', 'other')},
+    {'goal': Goal('replacement', 'other', published_seq=0)},
 ])
 def test_raw_registry_writer_cannot_cross_captured_claim_identity(tmp_path, mutation):
     registry = registered(tmp_path)

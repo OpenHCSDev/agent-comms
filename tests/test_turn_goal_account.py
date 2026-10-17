@@ -36,6 +36,7 @@ def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path)
             goal = Goal(
                 "work",
                 f"{settlement.__name__}-{state.declared_name}",
+                published_seq=0,
                 reported_turn=turn.value,
                 state=state,
             )

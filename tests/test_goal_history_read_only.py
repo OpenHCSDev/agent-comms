@@ -16,7 +16,7 @@ def authored_history(root):
     registry = Registration(root / 'registry.json')
     thread = Thread('author', frozenset(), str(root))
     registry.register(thread)
-    registry.register(replace(thread, goal=Goal('Authored acquisition', 'first')))
+    registry.register(replace(thread, goal=Goal('Authored acquisition', 'first', published_seq=0)))
     return registry
 
 

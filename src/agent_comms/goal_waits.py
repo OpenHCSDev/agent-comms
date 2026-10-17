@@ -38,9 +38,9 @@ class GoalWait(ABC):
         return False
 
     def review_after_seq(
-        self, owner: RecordedThreadIncarnation, targets: tuple[GoalWaitTarget, ...]
+        self, goal: Goal, owner: RecordedThreadIncarnation, targets: tuple[GoalWaitTarget, ...]
     ) -> int:
-        return 0
+        return goal.published_seq
 
     def consume_dependency(self, comms, canonical: str) -> bool:
         return True
@@ -142,12 +142,12 @@ class RecordedGoalWait(GoalWait):
             and any(target.sent(original) for target in self.targets)
         )
 
-    def review_after_seq(self, owner, targets) -> int:
+    def review_after_seq(self, goal, owner, targets) -> int:
         if self.owner_matches(owner) and {
             target.incarnation.lookup for target in targets
         } == {target.incarnation.lookup for target in self.targets}:
             return self.after_seq
-        return 0
+        return super().review_after_seq(goal, owner, targets)
 
     def has_reply(self, bus: WireLog, owner: RecordedThreadIncarnation) -> bool:
         if not self.owner_matches(owner):

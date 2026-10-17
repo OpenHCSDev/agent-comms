@@ -129,7 +129,7 @@ def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_
     comms, goal = _owner(tmp_path)
     thread = comms.registry.require("worker")
     recorded = Goal(
-        goal.text, goal.id, state=UnrecordedBlockGoal(), progress="Unrelated old progress"
+        goal.text, goal.id, published_seq=goal.published_seq, state=UnrecordedBlockGoal(), progress="Unrelated old progress"
     )
     comms.registry.register(replace(thread, goal=recorded), comms.registry.status("worker"))
     observed = wire(tmp_path).goals.goal_execution("worker")
