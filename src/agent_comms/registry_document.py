@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -67,6 +67,15 @@ class RegistryPresence(RegistryNames[Thread]):
 
     def seen_at(self, name: str) -> float:
         return self.last_seen[self.require(name).name]
+
+    def visible_threads(
+        self, *, show_stopped: bool, show_archived: bool, names: Iterable[str] | None = None,
+    ) -> Iterator[Thread]:
+        selected = (self.threads.values() if names is None else
+                    (self.threads.get(name) for name in {self.canonical_name(name) for name in names}))
+        return (thread for thread in selected if thread is not None and thread.role.executable
+                and self.statuses[thread.name].in_view(
+                    show_stopped=show_stopped, show_archived=show_archived))
 
 
 @dataclass(slots=True)

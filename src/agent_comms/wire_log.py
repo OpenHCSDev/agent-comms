@@ -103,11 +103,11 @@ class OpenedWireSnapshot:
             stream.seek(position)
 
     def query_page_index[T](
-        self, read: Callable[[BusPageIndex], T], *, empty: Callable[[], T]
+        self, read: Callable[[BusPageIndex], T], *, empty: T
     ) -> T:
         """Prepare/query this cut; source absence and index repair stay owned here."""
         if self.stream is None:
-            return empty()
+            return empty
         access = self.metadata.access
         with BusPageIndex(Path(self.stream.name)) as index:
             try:
@@ -259,7 +259,7 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
             )
             return tuple(self.indexed_records(index, rows, before_offset=before_offset))
 
-        yield from self.query_page_index(read, empty=tuple)
+        yield from self.query_page_index(read, empty=())
 
 
 @dataclass(frozen=True, slots=True)

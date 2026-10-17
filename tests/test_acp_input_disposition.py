@@ -350,11 +350,11 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             ))
             await wait_for(lambda: session in owner.inputs._idle_private_revisions)
             key = message.seq, message.message_id
-            pending, = comms.views.message_notifications([message])[key]
+            pending, = comms.views.message_notifications_for_references((message.reference,))[key]
             assert pending.state == "Sent" and not pending.busy
             open_release.set()
             await asyncio.wait_for(started.wait(), 30)
-            in_flight, = comms.views.message_notifications([message])[key]
+            in_flight, = comms.views.message_notifications_for_references((message.reference,))[key]
             assert in_flight.state == "Sent"
             assert in_flight.read_at_ms is None
             started_release.set()
@@ -373,7 +373,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 initial.seq, message.seq,
             ]
             assert type(assignments[-1].lifecycle) is DeliveredAssignment
-            read, = comms.views.message_notifications([message])[key]
+            read, = comms.views.message_notifications_for_references((message.reference,))[key]
             assert read.state.startswith("Read ") and not read.busy
             assert read.read_at_ms == assignments[-1].updated_at_ms
             assert native.provider.posts == 2

@@ -91,7 +91,7 @@ class TestChangeReportKind:
     def test_declared_report_publishes_and_round_trips(self, reporter, reporter_repo):
         committed = reporter.messaging.send_message(
             "reporter", "fixer", "review this", ChangeReportKind, report=report(reporter_repo))
-        stored, = reporter.bus.dm_history("reporter", "fixer")
+        stored, = reporter.views.dm_history("reporter", "fixer")
         assert stored.report == report(reporter_repo)
         assert stored.type is ChangeReportKind
         assert Message.from_committed_wire(committed.to_wire()) == stored

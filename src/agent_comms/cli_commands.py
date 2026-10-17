@@ -52,7 +52,6 @@ from .turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
-from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .change_report import ChangeReport
@@ -400,12 +399,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     @classmethod
     def member_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
         """Use original roster membership and each command's thread eligibility."""
-        from .presentation import ThreadView
         if snapshot is None:
             snapshot = comms.registry.snapshot()
-        return tuple(bound for thread in snapshot.threads.values()
-                     if channel.matches(thread.tags) and ThreadView.visible(
-                         thread, snapshot, show_stopped=True, show_archived=False)
+        return tuple(bound for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
+                     if channel.matches(thread.tags)
                      for bound in cls.thread_bindings(
                          comms, thread, snapshot.status(thread.name), channel.name))
 

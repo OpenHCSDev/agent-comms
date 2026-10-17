@@ -5,20 +5,26 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
+from itertools import zip_longest
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .activity import ActivityState, ObservedActivity
+from .coordination_errors import StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
+from .bus_route_counts import OpenedRouteCounts
 from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import is_channel_target
 from .channels import Channel
 from .display_order import ChannelSort, NameChannelSort
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
+from .external_transcript import ExternalTranscript
+from .notification_assignment import NotificationAssignment
+from .relationships import RelationshipStore
 from .mentions import MentionCandidate
 from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
@@ -28,7 +34,8 @@ from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
-from .store_files import _store_lock
+from .store_files import _store_lock, _store_read_lock
+from .wire_log import OpenedWireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
 from .display_references import DisplayReferences
 from .thread_presentation import (
@@ -41,10 +48,12 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
+    from .comms import Comms
+    from .ui_model.observation import ThreadsObserved
     from .bus_publication import CommittedDelivery
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
-    from .goal_waits import GoalWait
+    from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .messages import Message
     from .notification_assignment import NotificationAssignmentRead
@@ -52,7 +61,6 @@ if TYPE_CHECKING:
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
-    from .wire_log import OpenedWireSnapshot, WireLog
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,29 +137,6 @@ class MessageNotification:
         if recorded.date() != now.date():
             when = recorded.strftime("%b %d %H:%M").replace(" 0", " ")
         return f"{label} {when}"
-
-    @classmethod
-    def window(
-        cls, root: Path, registry: Registration, log: WireLog, messages: Sequence[Message]
-    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
-        """Read one visible window's actual recipient outcomes; never schedule work.
-
-        Display uses the coordinator's existing assignment decoder and lifecycle.
-        A missing coordination store or absent row supplies no receipt. Errors remain
-        visible to the caller instead of becoming false successful delivery.
-        """
-        if len(messages) > cls.window_limit:
-            raise ValueError("Notification reads require a bounded visible message window")
-        references = tuple(reference for message in messages
-                           for reference in message.notification_references())
-        sources = log.deliveries_for_references(references)
-        from .notification_assignment import NotificationAssignment
-
-        projected = cls.delivery_window(
-            root, registry, sources, NotificationAssignment.read(root, sources)
-        )
-        return {(message.seq,message.message_id):projected.get((message.seq,message.message_id), ())
-                for message in messages}
 
     @classmethod
     def references(
@@ -303,28 +288,6 @@ class MessageNotification:
             displayed_to=displayed_to,
             progress=HumanReadProgress(),
             changed=True,
-        )
-
-    @classmethod
-    def recent(
-        cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
-    ) -> tuple[MessageNotification, ...]:
-        """Recent assigned messages, including channel work, for one agent view.
-
-        Reads the original assignments and source messages. This is not a DM
-        delivery or a read acknowledgement, and never schedules another turn.
-        """
-        if not 1 <= limit <= 20:
-            raise ValueError("Recent notification limit must be between 1 and 20")
-        owner = registry.require(name)
-        from .transcript_receipts import AssignedTranscriptSource
-
-        sources = tuple(AssignedTranscriptSource.for_thread(root, owner, log).rows(limit=limit))
-        from .notification_assignment import NotificationAssignment
-
-        return cls.for_sources(
-            root, registry, owner, sources,
-            assignment_read=NotificationAssignment.read(root, sources),
         )
 
     @classmethod
@@ -588,14 +551,9 @@ class ChannelView:
         show_stopped: bool,
         show_archived: bool,
     ) -> tuple[ChannelView, ...]:
-        people = {
-            name: thread
-            for name, thread in snapshot.threads.items()
-            if snapshot.statuses[name].in_view(
-                show_stopped=show_stopped, show_archived=show_archived
-            )
-            and thread.role.executable
-        }
+        people = {thread.name: thread for thread in snapshot.visible_threads(
+            show_stopped=show_stopped, show_archived=show_archived,
+        )}
         views: list[ChannelView] = []
         for channel in channels.values():
             if channel.archived and not show_archived:
@@ -657,71 +615,24 @@ class ThreadView:
     goal_execution: GoalExecution | None = None
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
 
-    @staticmethod
-    def visible(
-        thread: Thread, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
-    ) -> bool:
-        return thread.role.executable and snapshot.statuses[thread.name].in_view(
-            show_stopped=show_stopped, show_archived=show_archived
-        )
-
-    @classmethod
-    def visible_threads(
-        cls, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
-    ) -> Iterator[Thread]:
-        return (
-            thread for thread in snapshot.threads.values()
-            if cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
-        )
-
-    @classmethod
-    def capture(
-        cls,
-        thread: Thread,
-        snapshot: RegistrySnapshot,
-        activity: ObservedActivity,
-        runtime: AgentRuntimeInfo | None,
-        waits: dict[str, GoalWait],
-    ) -> ThreadView:
-        """Roster and individual readers join the same captured authorities."""
-        return cls(
-            thread,
-            snapshot.statuses[thread.name],
-            activity,
-            runtime,
-            snapshot.seen_at(thread.name),
-            GoalWaits.execution(thread.goal, waits, snapshot),
-            snapshot.owner_binding(thread.name),
-        )
-
     @classmethod
     def roster(
-        cls,
-        snapshot: RegistrySnapshot,
-        agents: AgentActivity,
-        activities: Mapping[str, ObservedActivity] | None,
+        cls, snapshot: RegistrySnapshot, agents: AgentActivity,
         goal_waits: GoalWaits,
-        *,
-        show_stopped: bool,
-        show_archived: bool,
-        names: Iterable[str] | None = None,
+        *, show_stopped: bool, show_archived: bool, names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
-        selected = None if names is None else {snapshot.canonical_name(name) for name in names}
-        threads = tuple(
-            thread for thread in cls.visible_threads(
-                snapshot, show_stopped=show_stopped, show_archived=show_archived
-            ) if selected is None or thread.name in selected
-        )
+        threads = tuple(snapshot.visible_threads(
+            names=names, show_stopped=show_stopped, show_archived=show_archived,
+        ))
         if not threads:
             return ()
-        runtime = agents.runtime_info.read()
-        waits = goal_waits.read()
-        if activities is None:
-            activities = agents.all_activity(threads, snapshot=snapshot)
-        return tuple(
-            cls.capture(thread, snapshot, activities[thread.name], runtime.get(thread.name), waits)
-            for thread in threads
-        )
+        runtime, waits = agents.runtime_info.read(), goal_waits.read()
+        activities = agents.all_activity(threads, snapshot=snapshot)
+        return tuple(cls(
+            thread, snapshot.statuses[thread.name], activities[thread.name], runtime.get(thread.name),
+            snapshot.seen_at(thread.name), GoalWaits.execution(thread.goal, waits, snapshot),
+            snapshot.owner_binding(thread.name),
+        ) for thread in threads)
 
     @property
     def presentation(self) -> ThreadPresentation:
@@ -787,20 +698,18 @@ class CoordinationSnapshot:
         show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
-        visible = ThreadView.visible_threads(
-            registry, show_stopped=show_stopped, show_archived=show_archived
-        )
-        activities = agents.all_activity(visible, snapshot=registry)
+        threads = OrderedDict((view.thread.name, view) for view in ThreadView.roster(
+            registry, agents, GoalWaits(root / GoalWaits.filename),
+            show_stopped=show_stopped, show_archived=show_archived,
+        ))
+        activities = {name: view.activity for name, view in threads.items()}
         return cls(
             channels=OrderedDict((view.channel.name, view) for view in ChannelView.roster(
                 registry, declarations, catalog.pinned_members(), catalog.list_order,
                 activities, sent, messages,
                 show_stopped=show_stopped, show_archived=show_archived,
             )),
-            threads=OrderedDict((view.thread.name, view) for view in ThreadView.roster(
-                registry, agents, activities, GoalWaits(root / GoalWaits.filename),
-                show_stopped=show_stopped, show_archived=show_archived,
-            )),
+            threads=threads,
             unread=unread, last_sent=sent, channel_unread=channel_unread,
             references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, show_stopped=show_stopped,
@@ -833,25 +742,100 @@ class CoordinationSnapshot:
         )
 
 
+def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]]):
+    return field(metadata={"paths": paths})
+
+
 @dataclass(frozen=True, slots=True)
 class WireRevision:
     """One observation of every Comms store a view derives from, by name."""
 
-    registry: FileRevision | None
-    catalog: FileRevision | None
-    bus_log: FileRevision | None
-    history: FileRevision | None
-    activity: FileRevision | None
-    runtime_info: FileRevision | None
-    reads: FileRevision | None
-    native_unread: FileRevision | None
-    goal_waits: FileRevision | None
-    relationships: FileRevision | None
-    notifications: tuple[FileRevision | None, ...]
-    external_transcripts: tuple[FileRevision | None, ...]
+    registry: tuple[FileRevision, ...] = revision_source(lambda views: (views.registry.store.path,))
+    catalog: tuple[FileRevision, ...] = revision_source(lambda views: (views.channels.catalog.path,))
+    bus_log: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.log.path,))
+    history: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.history.path,))
+    activity: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.activity._path,))
+    runtime_info: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.runtime_info.path,))
+    reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,))
+    native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,))
+    goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: (views.root / GoalWaits.filename,))
+    relationships: tuple[FileRevision, ...] = revision_source(lambda views: (views.root / RelationshipStore.filename,))
+    notifications: tuple[FileRevision, ...] = revision_source(lambda views: NotificationAssignment.handling_paths(views.root))
+    external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root))
     expiry_tick: int
+    through_seq: int
 
     expiry_seconds: ClassVar[int] = 30
+
+    @classmethod
+    def source_paths(cls, views: HistoryViews) -> dict[str, tuple[Path, ...]]:
+        """Stat and watch the sources declared by the revision fields themselves."""
+        return {source.name: paths(views) for source in fields(cls)
+                if (paths := source.metadata.get("paths")) is not None}
+
+    @classmethod
+    def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
+        """Every source is a group; missing files contribute no revision."""
+        paths = cls.source_paths(views)
+        with _store_read_lock(views.bus.log.path) as source:
+            through_seq = views.bus.log._committed_sequence_unlocked(source)
+            captured = {
+                name: tuple(revision for path in group
+                            if (revision := FileRevision.capture(path)) is not None)
+                for name, group in paths.items()
+            }
+        return cls(**captured, expiry_tick=expiry_tick, through_seq=through_seq)
+
+    def changed_threads(self, previous: ThreadsObserved, comms: Comms) -> frozenset[str]:
+        """Attribute changes using the retained view's originals and existing route rows."""
+        earlier = previous.revision
+        names = previous.presentations.keys() | previous.unavailable.keys() | previous.busy
+        if (self.registry != earlier.registry or self.bus_source_changed_since(earlier)
+                or not any(view is not None for view in previous.presentations.values())):
+            return frozenset(names)
+        changed = set(previous.busy)
+        if self.through_seq > earlier.through_seq:
+            snapshot = comms.registry.snapshot()
+            with comms.bus.log._opened_wire_snapshot() as source:
+                if (source.revision,) != self.bus_log:
+                    raise StaleRevision("Wire source changed before route attribution")
+                with OpenedRouteCounts(comms.bus.log.path, source, snapshot, {}) as routes:
+                    actors = routes.participants_between(earlier.through_seq, self.through_seq)
+            channels = tuple(comms.channels.catalog.read().resolve(name)
+                             for name in actors if is_channel_target(name))
+            changed.update(snapshot.canonical_name(name) for name in actors if not is_channel_target(name))
+            changed.update(name for name in names if (thread := snapshot.threads.get(name)) is not None
+                           and any(channel.matches(thread.tags) for channel in channels))
+            changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
+        if (self.activity, self.goal_waits, self.expiry_period) != (
+            earlier.activity, earlier.goal_waits, earlier.expiry_period
+        ):
+            batch = comms.views.thread_presentations(names)
+            changed.update(name for name in names if (view := batch.view(name)) is None
+                           or not view.presentation.same_status(previous.presentations.get(name)))
+        if self.notifications_changed_since(earlier):
+            remaining = {name: view for name, view in previous.presentations.items()
+                         if name not in changed and view is not None}
+            references = tuple(dict.fromkeys(reference for view in remaining.values()
+                                            for reference in (*view.incoming_references, *view.sent_references)))
+            if references:
+                outcomes = MessageNotification.references(comms.root, comms.registry, comms.bus.log, references)
+                for name, view in remaining.items():
+                    lookup = view.read_identity.thread.incarnation.lookup
+                    current = tuple(replace(item, message=None)
+                                    for reference in (*view.incoming_references, *view.sent_references)
+                                    for item in outcomes[reference.seq, reference.message_id]
+                                    if reference in view.sent_references or item.recipient_identity.recipient_lookup == lookup)
+                    before = tuple(replace(item, message=None)
+                                   for item in (*view.notifications, *view.sent_notifications))
+                    if current != before:
+                        changed.add(name)
+        return frozenset(changed & names)
+
+    def bus_source_changed_since(self, earlier: WireRevision) -> bool:
+        return self.through_seq < earlier.through_seq or any(
+            FileRevision.source_changed(before, current)
+            for before, current in zip_longest(earlier.bus_log, self.bus_log))
 
     @property
     def expiry_period(self) -> int:
@@ -886,9 +870,6 @@ class WireRevision:
 
     def notifications_changed_since(self, earlier: WireRevision) -> bool:
         """Recipient state depends on assignments, presence, bus replies and read marks."""
-        return replace(
-            self, catalog=earlier.catalog, history=earlier.history,
-            native_unread=earlier.native_unread, goal_waits=earlier.goal_waits,
-            relationships=earlier.relationships, external_transcripts=earlier.external_transcripts,
-            expiry_tick=earlier.expiry_tick,
-        ) != earlier or self.expiry_period != earlier.expiry_period
+        return (self.registry, self.activity, self.reads, self.notifications) != (
+            earlier.registry, earlier.activity, earlier.reads, earlier.notifications
+        ) or self.expiry_period != earlier.expiry_period

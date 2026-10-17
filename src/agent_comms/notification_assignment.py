@@ -256,17 +256,10 @@ class NotificationAssignment(NotificationSource):
         return root / "coordination.sqlite3"
 
     @classmethod
-    def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        """SQLite and the certified bus own assignment and delivered-response changes."""
+    def handling_paths(cls, root: Path) -> tuple[Path, ...]:
+        """Handling changes belong to SQLite; wire changes have their own revision."""
         database = cls.database_path(root)
-        bus = root / "bus.jsonl"
-        return (
-            database,
-            database.with_name(database.name + "-wal"),
-            bus,
-            bus.with_name("bus_meta.json"),
-            bus.with_name("private_bus_checkpoint.sqlite3"),
-        )
+        return database, database.with_name(database.name + "-wal")
 
     @classmethod
     def _recorded_conversation_responses(

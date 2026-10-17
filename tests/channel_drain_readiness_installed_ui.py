@@ -80,7 +80,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     await until(pilot, lambda: isinstance(comms.agents.activity_of('beta').readiness,
                                         UnavailableDrainReadiness), 25)
     assert len(requests) == 2
-    failure_source = next(message for message in comms.bus.channel_history('#team')
+    failure_source = next(message for message in comms.views.channel_history('#team')
                           if message.body == 'NEW_PRIVATE_CONTROLLED_PROVIDER_FAILURE')
     with closing(sqlite3.connect((comms.root/'coordination.sqlite3').as_uri()+'?mode=ro',uri=True)) as db:
         retained_input, = NativeRuntimeInput.select(db)
@@ -90,8 +90,8 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     channel.prompt.prompt_text_area.focus()
     await pilot.press('enter')
     await until(pilot, lambda: any(message.body == 'NEW_PRIVATE_INDEPENDENT_PENDING_CHANNEL'
-                                 for message in comms.bus.channel_history('#team')))
-    pending_source = next(message for message in comms.bus.channel_history('#team')
+                                 for message in comms.views.channel_history('#team')))
+    pending_source = next(message for message in comms.views.channel_history('#team')
                           if message.body == 'NEW_PRIVATE_INDEPENDENT_PENDING_CHANNEL')
     await until(pilot, lambda: any('Not read yet' in str(item.title)
                                  for item in channel.query(MessageNotifications)))

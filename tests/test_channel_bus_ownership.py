@@ -12,7 +12,7 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  # noqa: F811
     root, root_id, comms, original, _people = _root(tmp_path)
     # The initial agent-authored ordinary message addresses both channel peers.
-    receipts = comms.views.message_notifications((original.message,))
+    receipts = comms.views.message_notifications_for_references((original.message.reference,))
     assert {
         row.recipient for row in receipts[(original.message.seq, original.message.message_id)]
     } == {"alpha", "beta"}
@@ -27,7 +27,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
     assert [assignment.recipient for assignment in accepted.assignments] == ["beta"]
-    current = comms.views.message_notifications((message,))[(message.seq, message.message_id)]
+    current = comms.views.message_notifications_for_references((message.reference,))[(message.seq, message.message_id)]
     assert [(row.recipient, row.state) for row in current] == [("beta", "Sent")]
     assert comms.registry.require("beta").active_turn is None
     assert original.message in comms.views.channel_history("#team")
