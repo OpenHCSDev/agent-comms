@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import builtins
-import sys
 from abc import ABC, abstractmethod
 from graphlib import TopologicalSorter
-from typing import TYPE_CHECKING, Annotated, ClassVar, Union
+from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
 from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field
@@ -18,6 +17,12 @@ from .messages import Message
 if TYPE_CHECKING:
     from .child_process import AttachedChild
     from .cli_bridges.shared import CliBridge
+
+
+async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
+    await child.wait()
+    tail = await child.stderr_tail(max_bytes=8192)
+    raise ChildProcessError(f'Core watch ended, exit {child.returncode}\n{reason}\n{tail}')
 
 
 class WireModel(BaseModel):
@@ -91,21 +96,18 @@ class EmittedOutcome(UnconfirmedOutcome):
 
 
 class WatchLine(TaggedWire):
-    """One declared Core watch line, including its continuation behavior."""
+    """One declared line from a Core watch child."""
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
     )
 
     @abstractmethod
-    async def handle(self, bridge: CliBridge) -> None: ...
+    async def handle(self, bridge: CliBridge, child: AttachedChild) -> None: ...
 
     @staticmethod
-    async def read_next(child: AttachedChild) -> WatchLine | None:
-        line = await child.stdout.readline()
-        if not line:
-            await child.wait()
-            raise RuntimeError(f'Core watch ended, exit {child.returncode}')
-        return WATCH_LINE.validate_json(line)
+    async def stream(child: AttachedChild) -> AsyncIterator[WatchLine]:
+        async for line in child.stdout:
+            yield WATCH_LINE.validate_json(line)
 
 
 class CoreError(WatchLine):
@@ -128,28 +130,18 @@ class CoreError(WatchLine):
                 return members[declaration](error=message)
         raise TypeError('No declared Core error handles this exception')
 
-    @staticmethod
-    async def read_next(child: AttachedChild) -> None:
-        """An error is the final record, never another message subscription."""
-        return None
+    async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
+        await raise_child_exit(child, self.error)
 
 
 class UnavailableCoreError(CoreError):
     wire_tag = 'unavailable'
     exception_type = CoordinationReadUnavailable
 
-    async def handle(self, bridge: CliBridge) -> None:
-        print(f'Core watch unavailable: {self.error}; reconnecting read stream',
-              file=sys.stderr, flush=True)
-        await asyncio.sleep(0.25)
-
 
 class FailedCoreError(CoreError):
     wire_tag = 'failed'
     exception_type = BaseException
-
-    async def handle(self, bridge: CliBridge) -> None:
-        raise RuntimeError(f'Core watch: {self.error}')
 
 
 class ArrivedMessage(WatchLine):
@@ -157,7 +149,7 @@ class ArrivedMessage(WatchLine):
     wire_tag = 'message'
     message: InstanceOf[Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(Message.to_wire)]]
 
-    async def handle(self, bridge: CliBridge) -> None:
+    async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
         await bridge.accept(self.message)
 
 
