@@ -1029,7 +1029,7 @@ class HistoryCliCommand(CliCommand):
     everything: bool = option("--everything", help="Every message scope (the default)", default=False)
     me: str | None = option("--as", help="DM participant (default: calling thread)", default=None)
     limit: int = option("--limit", help="Maximum messages in this page", default=20)
-    before: int | HistoryCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", default=None)
+    before: int | HistoryCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
     def apply(self, ctx: Comms) -> Any:
         if sum(bool(x) for x in (self.with_thread, self.channel, self.everything)) > 1:
