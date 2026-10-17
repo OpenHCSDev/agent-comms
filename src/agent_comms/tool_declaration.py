@@ -12,6 +12,7 @@ from .declared_family import DeclaredFamily
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
     acp_kind: ClassVar[str] = "other"
     label: ClassVar[str]
+    preview_fields: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     def _member_declarations(cls):
@@ -29,14 +30,15 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def caption(cls, name: str, detail: str = "") -> str:
+    def caption(cls, name: str, arguments: dict[str, object]) -> str:
         declaration = cls.for_name(name)
-        return declaration.label + (" " + detail.strip() if detail else "")
+        preview = ' '.join(word for key in declaration.preview_fields for word in str(arguments.get(key, '')).split())
+        return declaration.label + (' ' + preview if preview else '')
 
     @classmethod
-    def start(cls, call_id: str, name: str, arguments: dict[str, object], *, detail: str = "") -> ToolStart:
+    def start(cls, call_id: str, name: str, arguments: dict[str, object]) -> ToolStart:
         declaration = cls.for_name(name)
-        return ToolStart(call_id, name, cls.caption(name, detail), arguments, declaration.acp_kind)
+        return ToolStart(call_id, name, cls.caption(name, arguments), arguments, declaration.acp_kind)
 
     @classmethod
     def result_diff(cls, result, ok):

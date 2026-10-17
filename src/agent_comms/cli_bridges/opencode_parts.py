@@ -126,7 +126,7 @@ class ToolArguments(WireModel):
     """Retain arbitrary tool inputs, declaring OpenCode's native path spelling."""
     model_config = ConfigDict(strict=True, extra='allow')
     __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
-    filePath: str | None = None
+    path: str | None = Field(default=None, alias='filePath')
 
 
 class StatusHeader(WireHeader):
@@ -145,7 +145,7 @@ class ToolState(TaggedWire, ABC):
 
     def call(self, part: ToolPart) -> ToolCall:
         return ToolCall(part.callID, part.tool,
-                        self.input.model_dump(exclude_unset=True), self.input.filePath or '')
+                        self.input.model_dump(exclude_unset=True))
 
 
 class PendingTool(ToolState):

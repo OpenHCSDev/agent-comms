@@ -21,9 +21,9 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     class InspectFixtureTool(ToolDeclaration):
         acp_kind = "search"
         label = "Inspect"
+        preview_fields = ('query',)
 
-    event = ToolDeclaration.start("case", "inspect_fixture", {"query": "new declaration"},
-                                  detail="new declaration")
+    event = ToolDeclaration.start("case", "inspect_fixture", {"query": "new declaration"})
     assert (event.title, event.kind) == ("Inspect new declaration", "search")
     owner, received = acp_tools
     await owner._emit_event("declared-tool", event, owner.sessions.client)
@@ -43,9 +43,9 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
     for tool in examples:
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
-        event = ToolDeclaration.start("case", tool.declared_name, call.tool.arguments, detail=call.tool.detail)
+        event = ToolDeclaration.start("case", tool.declared_name, call.tool.arguments)
         assert event.kind == tool.acp_kind and event.args == tool.arguments
-        assert call.tool == tool and tool.detail in event.title
+        assert call.tool == tool and tool.arguments[tool.preview_fields[0]] in event.title
     unknown = ToolDeclaration.start("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
         "external_extension",
@@ -69,12 +69,15 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
     assert (start.title, start.kind, start.raw_input) == (label, kind, foreign)
     assert (end.title, end.kind) == (label, kind)
     assert ToolDeclaration.start("saved", name, foreign).title == label
-    assert ToolStartTranscript(tool_call_id="scalar", tool_name=name, raw_input=17).title == label
+    from agent_comms.field_codec import FieldCodec
+    for invalid in (17, None, [["path", "external.txt"]]):
+        with pytest.raises((TypeError, ValueError)):
+            FieldCodec.decode(ToolStartTranscript, {**FieldCodec.encode(start), "raw_input": invalid})
     with pytest.raises(SelectedToolDenied):
         CodingCall.decode("execution", name, foreign)
 
 
-def test_foreign_protocol_owners_supply_their_own_recorded_detail():
+def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.cli_bridges.codex_protocol import FileChange, UpdatedFile
     from agent_comms.cli_bridges.opencode_parts import ToolPart
     from agent_comms.cli_bridges.shared import ToolCall
@@ -83,7 +86,7 @@ def test_foreign_protocol_owners_supply_their_own_recorded_detail():
 
     start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
                             kind=UpdatedFile()).events("codex", True)
-    assert start.title == "Edit codex.txt" and start.raw_input == {"file_path": "codex.txt"}
+    assert start.title == "Edit codex.txt" and start.raw_input == {"path": "codex.txt"}
     assert end.title == "Edit" and end.diff is not None
     assert FieldCodec.decode(TranscriptEvent, FieldCodec.encode(start)) == start
     part = ToolPart.model_validate({"type": "tool", "id": "part", "sessionID": "session",
@@ -92,9 +95,10 @@ def test_foreign_protocol_owners_supply_their_own_recorded_detail():
     call = part.state.call(part)
     assert call.title == "Read open-code.txt"
     recorded, _ = call.finished("saved", True)
-    assert recorded.title == call.title and recorded.raw_input == {"filePath": "open-code.txt"}
-    scalar, _ = ToolCall("opaque", "external_custom", ["not", "Pi"]).finished("saved", True)
-    assert scalar.title == "external_custom" and scalar.raw_input == ["not", "Pi"]
+    assert recorded.title == call.title and recorded.raw_input == {"path": "open-code.txt"}
+    opaque = {"external": ["not", "Pi"]}
+    scalar, _ = ToolCall("opaque", "external_custom", opaque).finished("saved", True)
+    assert scalar.title == "external_custom" and scalar.raw_input == opaque
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
@@ -214,10 +218,10 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     starts = [event for event in records if isinstance(event, events.ToolStart)]
     ends = [event for event in records if isinstance(event, events.ToolEnd)]
     assert len(starts) == len(ends) == 1
-    # The declared label/detail own the title; rawInput retains the native argument.
+    # Declaration-owned argument fields supply the title without execution parsing.
     # The SDK reports raw arguments, not a caption. Presentation does not validate
     # or reinterpret that object as an execution request; disclosure retains it.
-    expected_title = "Read"
+    expected_title = f"Read {source}"
     assert starts[0].kind == "read" and starts[0].title == expected_title
     assert ends[0].ok and "ACTUAL_READ_CONTENT" in ends[0].output
     assert len(native.starts) == len(native.saved_inputs()) == 1

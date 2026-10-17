@@ -49,19 +49,18 @@ class ToolCall:
     """A CLI invocation uses the same preview and history as a native tool."""
     id: str
     name: str
-    arguments: JsonValue
-    detail: str = ""
+    arguments: dict[str, JsonValue]
     diff: ToolDiff | None = None
 
     @property
     def title(self) -> str:
-        return ToolDeclaration.caption(self.name, self.detail)
+        return ToolDeclaration.caption(self.name, self.arguments)
 
-    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
+    def finished(self, text: str, ok: bool) -> tuple[TranscriptEvent, ...]:
         return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=self.arguments, detail=self.detail),
+                                    raw_input=self.arguments),
                 ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
-                                  text=text, ok=ok, diff=diff if diff is not None else self.diff))
+                                  text=text, ok=ok, diff=self.diff))
 
 
 @dataclass(frozen=True)
