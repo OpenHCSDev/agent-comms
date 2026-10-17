@@ -67,7 +67,7 @@ class CommandTarget(ABC):
     def bindings(self, declaration, comms, channel, snapshot, catalog): ...
 
     def contexts(self, declaration, channel):
-        return declaration.selection_channels(channel, self.name)
+        return (None,)
 
 
 @dataclass(frozen=True)
@@ -136,6 +136,9 @@ class ThreadTarget(NamedTarget):
 
     def require_dm_peer(self):
         return self.name
+
+    def contexts(self, declaration, channel):
+        return declaration.selection_channels(channel, self.name)
 
     def available(self, snapshot) -> bool:
         return self.canonical_name(snapshot.canonical_name) in snapshot.threads
@@ -274,9 +277,6 @@ class ProjectTarget(CommandTarget):
     @property
     def names(self) -> tuple[str, ...]:
         return ()
-
-    def contexts(self, declaration, channel):
-        return (None,)
 
     def bindings(self, declaration, comms, channel, snapshot, catalog):
         return declaration.project_bindings(comms, self.project)
