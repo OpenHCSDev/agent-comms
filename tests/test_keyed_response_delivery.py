@@ -65,7 +65,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
             required_through_seq=response.seq,
         )
         assert [entry.source_seq for entry in page.entries] == [response.seq]
-        assert page.entries[0].wake_mode is BoundedTriageWake
+        assert page.entries[0].audience is MessageAudience.COLLECTIVE
         # Repeating the publisher/recipient poll does not duplicate the row or K.
         publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         await _accept_visible_deliveries(
