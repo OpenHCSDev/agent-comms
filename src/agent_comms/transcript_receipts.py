@@ -7,24 +7,29 @@ A display cursor advances each only when that source's record is consumed.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import ClassVar
 
-if TYPE_CHECKING:
-    from .transcript_events import TranscriptEvent
+from .declared_family import DeclaredFamily
 
 from .bus_publication import CommittedDelivery
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, UserTranscript
+from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, TranscriptEvent, UserTranscript
+from .wire_log import ConversationSourceWindowRequest, WireLog
 
-from .wire_log import ConversationSourceWindowRequest
 
-if TYPE_CHECKING:
-    from .wire_log import WireLog
+@dataclass(frozen=True)
+class TranscriptSource(DeclaredFamily, affix="TranscriptSource"):
+    def position(self, session_file: str, offset: int) -> TranscriptCursor:
+        return NativeTranscriptCursor(session_file, offset)
+
+
+class NativeTranscriptSource(TranscriptSource, declared_name="native"):
+    pass
 
 
 @dataclass(frozen=True)
@@ -42,10 +47,13 @@ class AssignedSourceIdentity:
 
 
 @dataclass(frozen=True)
-class AssignedSourceCursor:
+class AssignedSourceCursor(TranscriptSource, declared_name="wire"):
     root: str
     recipient: ThreadIncarnation
     sequence: int
+
+    def position(self, session_file: str, offset: int) -> TranscriptCursor:
+        return WireTranscriptCursor(session_file, offset, self)
 
     @property
     def identity(self) -> AssignedSourceIdentity:
@@ -63,9 +71,92 @@ class AssignedSourceCursor:
 class AssignedSourceWindow:
     """Conversation and sent sources captured with one receipt frontier."""
 
-    cursor: AssignedSourceCursor | None
+    source: TranscriptSource
     sources: tuple[CommittedDelivery, ...]
     sent_sources: tuple[CommittedDelivery, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
+    """A native transcript position; its wire member adds an assigned source."""
+
+    session_file: str
+    offset: int
+    source_identity: ClassVar[AssignedSourceIdentity | None] = None
+    wire_seq: ClassVar[int] = 0
+
+    @staticmethod
+    def at(session_file: str, offset: int, source: TranscriptSource) -> TranscriptCursor:
+        return source.position(session_file, offset)
+
+    def at_offset(self, offset: int) -> TranscriptCursor:
+        return replace(self, offset=offset)
+
+    def at_sequence(self, sequence: int) -> TranscriptCursor:
+        if sequence:
+            raise ValueError("Native-only cursor cannot advance an assigned wire source")
+        return self
+
+    def contains(self, other: TranscriptCursor) -> bool:
+        return other.native_within(self) and other.wire_within(self)
+
+    def native_within(self, parent: TranscriptCursor) -> bool:
+        return self.session_file == parent.session_file and self.offset <= parent.offset
+
+    def wire_within(self, parent: TranscriptCursor) -> bool:
+        return True
+
+    def require_source(self, identity: AssignedSourceIdentity) -> None:
+        """A native-only cursor fits every source."""
+
+    def require_native(self) -> None:
+        """A native-only cursor is what recorded items carry."""
+
+    def resolve_sent(self, reports):
+        return tuple(reports)
+
+    def covers_incoming(self, sequence: int) -> bool:
+        return 0 < sequence <= self.wire_seq
+
+    def over_native(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
+        """Retain this wire position over the furthest committed native prefix."""
+        within = tuple(prefix for prefix in prefixes if prefix.wire_within(self))
+        prefix = max((prefix for prefix in within if prefix.session_file == self.session_file),
+                     key=lambda prefix: prefix.offset, default=next(iter(within), self.at_offset(0)))
+        return replace(self, session_file=prefix.session_file, offset=prefix.offset)
+
+
+@dataclass(frozen=True, slots=True)
+class NativeTranscriptCursor(TranscriptCursor):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class WireTranscriptCursor(TranscriptCursor):
+    wire: AssignedSourceCursor
+
+    @property
+    def source_identity(self) -> AssignedSourceIdentity:
+        return self.wire.identity
+
+    @property
+    def wire_seq(self) -> int:
+        return self.wire.sequence
+
+    def at_sequence(self, sequence: int) -> TranscriptCursor:
+        return replace(self, wire=self.wire.at(sequence))
+
+    def wire_within(self, parent: TranscriptCursor) -> bool:
+        return parent.source_identity == self.source_identity and self.wire_seq <= parent.wire_seq
+
+    def require_source(self, identity: AssignedSourceIdentity) -> None:
+        self.wire.require_source(identity)
+
+    def require_native(self) -> None:
+        raise ValueError("Recorded items cannot acquire an assigned wire cursor")
+
+    def resolve_sent(self, reports):
+        return AssignedTranscriptSource.open(self.source_identity).resolve_sent(reports)
 
 
 class TranscriptTraversal(ABC):
@@ -218,23 +309,18 @@ class LaterTranscript(TranscriptTraversal):
         return initial, consumed
 
 
-class TranscriptSource:
-    """Recorded items alone carry no assigned-wire or publication authority.
-
-    Native and external stores supply their original records. An assigned
-    source adds the separately acquired wire/publication capability below.
-    """
+class TranscriptRecords:
+    """Project original records; capture their native or assigned wire source."""
 
     def resolve_sent(self, messages):
         """Records without a sender assignment cannot qualify Send reports."""
         return tuple(messages)
 
-    @property
-    def frontier(self) -> AssignedSourceCursor | None:
-        return None
+    def capture_source(self) -> TranscriptSource:
+        return NativeTranscriptSource()
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
-        return AssignedSourceWindow(None, (), ())
+        return AssignedSourceWindow(self.capture_source(), (), ())
 
     def require_cursor(self, cursor):
         cursor.require_native()
@@ -264,7 +350,7 @@ class TranscriptSource:
 
 
 @dataclass(frozen=True)
-class AssignedTranscriptSource(TranscriptSource):
+class AssignedTranscriptSource(TranscriptRecords):
     root: Path
     recipient: RecordedThreadIncarnation
     log: WireLog
@@ -276,12 +362,10 @@ class AssignedTranscriptSource(TranscriptSource):
     @classmethod
     def open(cls, identity: AssignedSourceIdentity):
         """Open only the recorded wire, without current registry or SQL authority."""
-        from .wire_log import WireLog
-
         root = Path(identity.root)
         return identity.recipient.recorded_or(
             lambda recorded: cls(root, recorded, WireLog(root / "bus.jsonl")),
-            TranscriptSource,
+            TranscriptRecords,
         )
 
     def resolve_sent(self, messages):
@@ -335,8 +419,7 @@ class AssignedTranscriptSource(TranscriptSource):
             ascending=ascending,
         )
 
-    @property
-    def frontier(self):
+    def capture_source(self) -> AssignedSourceCursor:
         lookup = self.recipient.lookup
         return AssignedSourceCursor(
             str(self.root), self.recipient,
