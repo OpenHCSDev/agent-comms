@@ -69,6 +69,9 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def require_engagement(self) -> Engagement:
         raise IdentityConflict("wake assignment is not engaged")
 
+    def reserve_triage(self) -> AssignmentState:
+        raise IdentityConflict("triage claim changed before native batch reservation")
+
     def require_completion(self) -> Engagement:
         raise IdentityConflict("wake assignment is not completed")
 
@@ -253,6 +256,9 @@ class TriagePendingAssignment(InitialAssignment, PendingNotification, Assignment
 
     def requires_selected_triage(self) -> bool:
         return True
+
+    def reserve_triage(self) -> AssignmentState:
+        return self.advance(DeferredAssignment)
 
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         if obligation is not None:

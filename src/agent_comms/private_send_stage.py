@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 from collections.abc import Iterator
 
-from .assignment_states import DeferredAssignment, FailedAssignment, TriagePendingAssignment
+from .assignment_states import DeferredAssignment, FailedAssignment
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination_tables.assignments import WakeAssignment
@@ -270,8 +270,9 @@ class TriageNativeSend(NativeSendStage):
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         for captured in self.assignments:
             current = store.assignments.get(captured.assignment_id)
-            if current != captured or not isinstance(current.lifecycle, TriagePendingAssignment):
+            if current != captured:
                 raise IdentityConflict("triage claim changed before native batch reservation")
+            reserved = current.lifecycle.reserve_triage()
             if SqlValue.for_annotation(int).read(db.execute(
                 f"SELECT 1 FROM ({self.execution.source_membership_sql()}) members "
                 "WHERE members.assignment_id=? LIMIT 1", (captured.assignment_id,),
@@ -281,8 +282,8 @@ class TriageNativeSend(NativeSendStage):
             update = WakeAssignment.update(
                 db,
                 where="assignment_id=? AND revision=? AND disposition=?",
-                parameters=(current.assignment_id, current.revision, TriagePendingAssignment.declared_name),
-                lifecycle=DeferredAssignment.build(current.lifecycle.mode, None, None),
+                parameters=(current.assignment_id, current.revision, current.lifecycle.declared_name),
+                lifecycle=reserved,
                 revision=current.revision + 1,
                 updated_at_ms=store.session.now(current.updated_at_ms),
             )
