@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 from collections.abc import Iterator
 
-from .assignment_states import DeferredAssignment, EngagedAssignment, FailedAssignment, TriagePendingAssignment
+from .assignment_states import DeferredAssignment, FailedAssignment, TriagePendingAssignment
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination_tables.assignments import WakeAssignment
@@ -390,7 +390,7 @@ class FullNativeSend(NativeSendStage):
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
         snapshot, attempt = store.attempts.require_fence(self.fence)
         if (
-            not isinstance(current.lifecycle, EngagedAssignment)
+            not isinstance(current.lifecycle, snapshot.execution.lifecycle.assignment_state())
             or not snapshot.execution.lifecycle.active
             or not attempt.lifecycle.starting
             or attempt.lifecycle.backend_done

@@ -109,7 +109,8 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> Acce
     row = ClaimBatchReceipts.one(db, wire_root_id=initial.wire_root_id, wire_seq=message.seq)
     if row is None or not row.sealed:
         raise IdentityConflict("cohort receipt is absent or unsealed")
-    expected_count = sum(not decision.audience.observer for decision in initial.decisions)
+    expected = _expected_assignments(initial, row.accepted_at_ms)
+    expected_count = len(expected)
     if any(
         getattr(row, field) != expected
         for field, expected in (
@@ -126,7 +127,6 @@ def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> Acce
         )
     ):
         raise IdentityConflict("sealed cohort receipt conflicts with committed bus")
-    expected = _expected_assignments(initial, row.accepted_at_ms)
     members = ClaimBatchMembers.select(
         db,
         where="wire_root_id=? AND wire_seq=?",
