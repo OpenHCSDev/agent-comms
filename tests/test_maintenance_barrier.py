@@ -335,8 +335,9 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
     proc.join(10)
     assert proc.exitcode == 0
     assert q.get(timeout=2)[0] == "denied"
-    async with MaintenanceBarrier(root / "registry.json").send(None, None, "native", "original") as outcome:
-        assert isinstance(outcome, HeldSend)
+    async with MaintenanceBarrier(root / "registry.json").admit_ingress_async() as status:
+        with status.phase.send(None, None, "native", "original") as outcome:
+            assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
     assert comms.registry.require("owner").active_turn is None
 
@@ -460,9 +461,10 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
     entered = asyncio.Event()
 
     async def native_write():
-        async with MaintenanceBarrier(root / "registry.json").send(None, None, "native", "original") as allowed:
-            assert allowed
-            entered.set()
+        async with MaintenanceBarrier(root / "registry.json").admit_ingress_async() as status:
+            with status.phase.send(None, None, "native", "original") as allowed:
+                assert allowed
+                entered.set()
 
     async with _async_store_lock(root / "wire"):
         send = asyncio.create_task(native_write())
@@ -491,10 +493,11 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     changed = threading.Event()
 
     async def fake_send() -> None:
-        async with MaintenanceBarrier(root / "registry.json").send(None, None, "id", "text") as allowed:
-            assert allowed
-            entered.set()
-            assert release.wait(5)
+        async with MaintenanceBarrier(root / "registry.json").admit_ingress_async() as status:
+            with status.phase.send(None, None, "id", "text") as allowed:
+                assert allowed
+                entered.set()
+                assert release.wait(5)
 
     def pause() -> None:
         control.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))

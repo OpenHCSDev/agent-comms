@@ -6,6 +6,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never
 
+from .agent_backend import TurnInboxItem
+from .maintenance_barrier import MaintenanceBarrier
+from . import turn_failure as failures
+
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import AgentSettled, InputCommitted, MessageStart, Response
@@ -50,7 +54,7 @@ class UnacknowledgedPrompt(PromptAdmission):
         return AcknowledgedPrompt(response)
 
 
-class UnwrittenPrompt(PromptAdmission):
+class UnwrittenPrompt(PromptAdmission, TurnInboxItem):
     """The owning send seam has not yet admitted this prompt to its writer."""
 
     acknowledged = False
@@ -58,6 +62,20 @@ class UnwrittenPrompt(PromptAdmission):
 
     def dispatch(self):
         return UnacknowledgedPrompt()
+
+    async def deliver_to(self, inputs, session):
+        def write():
+            session.grant_prompt()
+            session.stdin.write(session.native.reader.encode(session.command))
+        async with MaintenanceBarrier(session.startup.root / "registry.json").admit_ingress_async() as status:
+            with status.phase.send(session.send_boundary, None, session.command.input_id, session.command.message) as outcome:
+                completion = outcome.dispatch(inputs, session, self, write)
+        return await completion
+
+    def refuse(self, session):
+        session.output.record_failure(failures.InputMissing("Original input was cleared before send."))
+        session.finished = True
+        session.rejected_signal.set()
 
     def raise_native_failure(self, error, attestation) -> Never:
         from .native_pi import NativePiInputNotSent

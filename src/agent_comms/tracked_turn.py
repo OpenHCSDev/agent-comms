@@ -48,7 +48,7 @@ from .turn_context import InputContributionCoordinates
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
-    from .agent_backend import TurnInboxItem
+    from .agent_backend import TurnInbox
     from .coordinated_runtime import SelectedExecution
     from .owned_send_admission import OwnedSendAdmission
     from .private_send_admission import PrivateSendAdmission
@@ -476,10 +476,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     measurements=self.startup.measurements,
                 )
 
-    @property
-    def prompt_id(self) -> str:
-        return self.command.id
-
     @handles(pi.Response)
     async def response(self, event: pi.Response) -> None:
         request = self.native.reader.correlate(event)
@@ -507,7 +503,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             await Coordination.run_worker(self.evidence.observe)
             await self.following.open(self)
 
-    def forward_inbox(self, inbox: asyncio.Queue[TurnInboxItem], admission: OwnedSendAdmission) -> None:
+    def forward_inbox(self, inbox: TurnInbox, admission: OwnedSendAdmission) -> None:
         """Later inputs go to the running child under the owner's write checks."""
         self.inputs.queue = inbox
         self.send_boundary = admission

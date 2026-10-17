@@ -27,6 +27,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
 from .declared_family import DeclaredFamily
+from .send_outcome import SendBoundary
 
 if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
@@ -110,10 +111,14 @@ class TurnInbox(asyncio.Queue):
     def unstarted_inputs(self):
         return any(item.carried_inputs for item in self._queue)
 
+    def begin(self, item):
+        self._queue.appendleft(item)
+        self._wakeup_next(self._getters)
+
     def hold(self, item):
         # Called inside shared wire custody, before READY can be published.
         self.ready.clear()
-        self._queue.appendleft(item)
+        self.begin(item)
 
     def maintenance_changed(self, status):
         if not status.turn_pending:
@@ -308,10 +313,10 @@ class TurnDelivery:
 
     worktree: str
     environment: dict[str, str]
-    inbox: asyncio.Queue[TurnInboxItem]
+    inbox: TurnInbox
     finish_event: asyncio.Event
-    send_boundary: Callable[..., Any]
-    interrupt_boundary: Callable[..., Any]
+    send_boundary: SendBoundary
+    interrupt_boundary: SendBoundary
     input_started: Callable[..., bool]
     request_progress: Callable[..., None]
     ui_request: Callable[..., Awaitable[Any]]

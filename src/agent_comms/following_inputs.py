@@ -8,7 +8,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from .acp_extension import QueueScope
-from .agent_backend import TurnInboxItem
+from .agent_backend import TurnInbox
 from .coordinator import Coordination
 from .owned_send_admission import OwnedSendAdmission
 from .queued_input import DeliveredInput, InputHandoffRefused
@@ -56,11 +56,8 @@ class OwnerFollowingInputs(FollowingInputs):
     inputs: InputDrain
     session_id: str
     owner: Thread
-    inbox: asyncio.Queue[TurnInboxItem]
+    inbox: TurnInbox
     scope: QueueScope = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.inputs.sessions.config.turn_started(self.session_id, self.owner)
 
     async def pass_on_unread(self, turns: TurnRunner) -> None:
         """Inputs the ended turn never read start the next turn or are refused, never replayed."""
@@ -86,7 +83,6 @@ class OwnerFollowingInputs(FollowingInputs):
         inputs = self.inputs
         thread = await Coordination.run_worker(partial(inputs.comms.registry.require, self.owner.name))
         lease = thread.require_turn_lease()
-        inputs.bind_native_turn(self.session_id, thread)
         original = SelectedOriginalInput.answering(session.command.message)
         admission = OwnedSendAdmission(
             comms=inputs.comms,

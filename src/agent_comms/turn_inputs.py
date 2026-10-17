@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import pi_commands as commands
-from . import turn_failure as failures
 from .maintenance_barrier import MaintenanceBarrier
 from .agent_backend import ClearQueue, InputId, InputRequest, SendNow, UseSettings, WhenBusy, TurnInbox, TurnInboxItem
 
@@ -27,19 +26,9 @@ if TYPE_CHECKING:
 _PI_STREAMING_BEHAVIOR = {WhenBusy.STEER: "steer", WhenBusy.FOLLOW_UP: "followUp"}
 
 
-class InitialPrompt(TurnInboxItem):
-    async def deliver_to(self, receiver, turn):
-        await turn.input_ready()
-        return True
-
-    def refuse(self, turn):
-        turn.output.record_failure(failures.InputMissing("Original input was cleared before send."))
-        turn.finished = True
-
-
 @dataclass
 class InputForwarding:
-    queue: TurnInbox | None = None
+    queue: TurnInbox = field(default_factory=TurnInbox)
     pending: dict[str, commands.Prompt] = field(default_factory=dict)
     accepted: set[str] = field(default_factory=set)
     changed: asyncio.Event = field(default_factory=asyncio.Event)
@@ -53,18 +42,15 @@ class InputForwarding:
         """Observed authority loss blocks another native interaction."""
         return not self.uncertain
 
-    def can_forward(self, writer):
-        return self.queue is not None and writer is not None
-
     @property
     def unresolved(self) -> bool:
-        return self.current is not None or bool(self.pending) or (self.queue is not None and not self.queue.empty())
+        return self.current is not None or bool(self.pending) or not self.queue.empty()
 
     @property
     def all_written_started(self) -> bool:
         """The child holds no input it has not started yet."""
         return (not self.pending and not (self.current and self.current.carried_inputs)
-                and (self.queue is None or not self.queue.unstarted_inputs))
+                and not self.queue.unstarted_inputs)
 
     @property
     def settled(self) -> bool:
@@ -140,17 +126,12 @@ class InputForwarding:
         if not candidates:
             return True
         first = self.pending[candidates[0]]
-        boundary = MaintenanceBarrier(session.startup.root / "registry.json").send(
-            session.interrupt_boundary,
-            first.id,
-            candidates[0],
-            first.message,
-        )
-        async with boundary as outcome:
-            outcome.dispatch(self, session, item, lambda: session.stdin.write(
-                session.native.reader.encode(commands.InterruptSteering(input_ids=list(candidates)))
-            ))
-        return await outcome.complete(session)
+        async with MaintenanceBarrier(session.startup.root / "registry.json").admit_ingress_async() as status:
+            with status.phase.send(session.interrupt_boundary, first.id, candidates[0], first.message) as outcome:
+                completion = outcome.dispatch(self, session, item, lambda: session.stdin.write(
+                    session.native.reader.encode(commands.InterruptSteering(input_ids=list(candidates)))
+                ))
+        return await completion
 
     async def place(self, session: TurnSession, item: InputRequest) -> bool:
         public_id = item.input_id.value
@@ -164,12 +145,6 @@ class InputForwarding:
             context_contributions=item.content.contributions,
             streaming_behavior=_PI_STREAMING_BEHAVIOR[item.when_busy],
         )
-        boundary = MaintenanceBarrier(session.startup.root / "registry.json").send(
-            session.send_boundary,
-            public_id,
-            native_id,
-            text,
-        )
         def write():
             if command.images:
                 session.output.sensitive = True
@@ -177,9 +152,10 @@ class InputForwarding:
             self.pending[native_id] = command
             self.generation += 1
 
-        async with boundary as outcome:
-            outcome.dispatch(self, session, item, write)
-        return await outcome.complete(session)
+        async with MaintenanceBarrier(session.startup.root / "registry.json").admit_ingress_async() as status:
+            with status.phase.send(session.send_boundary, public_id, native_id, text) as outcome:
+                completion = outcome.dispatch(self, session, item, write)
+        return await completion
 
     def mark_started(self, session: TurnSession, payload: MessageStart) -> tuple[bool, str | None]:
         message = payload.message

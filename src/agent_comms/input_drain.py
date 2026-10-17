@@ -22,7 +22,7 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
-from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
+from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
 from .drain_failures import drain_failures
@@ -553,7 +553,7 @@ class InputDrain(InputObservation):
         self.runtime = runtime
         self.effects = effects
         self.drain_tasks: dict[str, asyncio.Task[None]] = {}
-        self.backend_inboxes: dict[str, asyncio.Queue[TurnInboxItem]] = {}
+        self.backend_inboxes: dict[str, TurnInbox] = {}
         self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.queue_lock = asyncio.Lock()
         self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
@@ -769,13 +769,13 @@ class InputDrain(InputObservation):
             field_meta=encode_updates(InputDeliveryChangedUpdate(item.input_id)),
         )
 
-    def require_inbox(self, session_id: str, inbox: asyncio.Queue[TurnInboxItem]) -> None:
+    def require_inbox(self, session_id: str, inbox: TurnInbox) -> None:
         if self.backend_inboxes.get(session_id) is not inbox:
             raise InputHandoffRefused("Running turn inbox retired before input placement")
 
     def bind_native_turn(
         self, session_id: str, owner: Thread,
-    ) -> asyncio.Queue[TurnInboxItem]:
+    ) -> TurnInbox:
         """Open the live turn inbox and capture its configured settings."""
         inbox = self.backend_inboxes.setdefault(session_id, TurnInbox())
         self.sessions.config.turn_started(session_id, owner)
@@ -867,7 +867,7 @@ class InputDrain(InputObservation):
             return self.dispositions.settle_unbound(keys)
 
     async def finish_turn_inputs(
-        self, session_id: str, inbox: asyncio.Queue[TurnInboxItem]
+        self, session_id: str, inbox: TurnInbox
     ) -> None:
         """Retire this turn's live capabilities; retain UNKNOWN only as notices."""
         if self.backend_inboxes.get(session_id) is inbox:

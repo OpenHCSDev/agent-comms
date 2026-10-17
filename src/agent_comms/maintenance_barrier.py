@@ -28,13 +28,19 @@ from .send_outcome import GrantedSend, HeldSend
 from .store_files import _async_store_lock, _atomic_write_text, _store_lock, store_lock_path
 
 
-class MaintenancePhase(HeldSend, DeclaredFamily, LifecycleState, affix="Phase"):
+class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
     turn_pending = True
 
     @classmethod
     @contextmanager
     def send(cls, delegate, *args):
-        yield cls()
+        if cls.turn_pending:
+            yield HeldSend()
+        elif delegate is None:
+            yield GrantedSend()
+        else:
+            with delegate(*args) as outcome:
+                yield outcome
 
     @classmethod
     def require_open(cls) -> None:
@@ -62,17 +68,8 @@ class InstallingPhase(MaintenancePhase):
         return (ReadyPhase,)
 
 
-class ReadyPhase(GrantedSend, MaintenancePhase):
+class ReadyPhase(MaintenancePhase):
     turn_pending = False
-
-    @classmethod
-    @contextmanager
-    def send(cls, delegate, *args):
-        if delegate is None:
-            yield cls()
-        else:
-            with delegate(*args) as outcome:
-                yield outcome
 
     @classmethod
     def successors(cls):
@@ -309,12 +306,6 @@ class MaintenanceBarrier:
         """
         with _store_lock(self.wire_path, shared=True, blocking=blocking):
             yield self.assert_open_unlocked()
-
-    @asynccontextmanager
-    async def send(self, delegate, *args):
-        async with self.admit_ingress_async() as status:
-            with status.phase.send(delegate, *args) as outcome:
-                yield outcome
 
     @asynccontextmanager
     async def admit_ingress_async(self):

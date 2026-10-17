@@ -28,25 +28,27 @@ class PreparedSession(UnwrittenPrompt):
         return session.output.clean
 
 
-class NativeSessionPreparation(backend.TurnSession):
-    """Share native launch/attestation with turns; retain an idle child, send no prompt."""
-
-    async def input_ready(self) -> None:
-        state = self.native.attestation.state
+    async def deliver_to(self, inputs, session):
+        state = session.native.attestation.state
         assert state is not None
-        identity = self.native.attestation.identity
+        identity = session.native.attestation.identity
         if identity is None:
             raise NativePiUnavailable("Native preparation did not attest the saved session")
-        self.launch.session.attest(identity)
+        session.launch.session.attest(identity)
         if (
             state.is_streaming is not False
             or state.is_compacting is not False
             or state.pending_message_count != 0
         ):
             raise NativePiUnavailable("Native preparation did not attest the idle saved session")
-        self.active_session_file = identity.session_file
-        self.prompt_state = PreparedSession()
-        await self.stats.request(self)
+        session.active_session_file = identity.session_file
+        await session.stats.request(session)
+        return True
+
+
+class NativeSessionPreparation(backend.TurnSession):
+    """Share native launch/attestation with turns; retain an idle child, send no prompt."""
+    admission_type = PreparedSession
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
         if not self.native_session.custody.retained:

@@ -5,8 +5,8 @@ import asyncio
 import pytest
 
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, DrainingPhase
-from agent_comms.send_outcome import AuthorityChangedSend, RefusedSend
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.send_outcome import AuthorityChangedSend, RefusedSend, HeldSend
 from agent_comms.turn_inputs import InputForwarding
 
 
@@ -30,8 +30,9 @@ async def test_held_input_retains_queue_and_registers_pending_only_after_write(t
     assert await inputs.place(session, request)
     assert inbox.qsize() == 1 and not inputs.pending and writes == []
     assert not inputs.all_written_started
-    async with gate.send(None, None, 'id', 'text') as outcome:
-        assert isinstance(outcome, DrainingPhase)
+    async with gate.admit_ingress_async() as status:
+        with status.phase.send(None, None, 'id', 'text') as outcome:
+            assert isinstance(outcome, HeldSend)
     gate.clear(hold)
     async with gate.admit_ingress_async() as status:
         inbox.maintenance_changed(status)
