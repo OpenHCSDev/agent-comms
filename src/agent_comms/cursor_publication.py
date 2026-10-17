@@ -1,6 +1,6 @@
 """Read durable native evidence and order its informational ACP publication.
 
-Delivery bookkeeping belongs to the connection, never to input admission or
+Delivery bookkeeping belongs to the connection, never to input permission or
 the durable cursor. Every observation reads NativeSourceCursor's original proof.
 """
 
@@ -85,7 +85,7 @@ class CursorPublication:
         try:
             owner, generation = self.comms.registry.live_owner_with_admission(thread_name)
         except RelationViolationError:
-            return None  # No live owner admission in this process.
+            return None  # This process has no live owner input grant.
         if owner.pid != os.getpid():
             return None
         return CursorScope(
@@ -186,7 +186,7 @@ class CursorPublication:
     async def refresh(self, session_id: str, thread_name: str) -> None:
         if self.delivery(session_id).needs_refresh:
             # Resume only the cursor projection. The immutable native receipt
-            # supplies its original admission; no claim or input is resumed.
+            # supplies its recorded input grant; no claim or input is resumed.
             await self.publish(session_id, thread_name, advance=True)
 
     def close(self) -> None:

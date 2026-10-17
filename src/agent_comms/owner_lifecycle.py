@@ -126,7 +126,7 @@ class OwnerReleaseReceipt:
 
 
     def require_native_loss(self, snapshot, source) -> None:
-        """The original release attests only its exact dead process and admission.
+        """A recorded release confirms only its exact dead process and input generation.
 
         A recorded send can be fenced by a later release in the same incarnation.
         An unrecorded epoch instead needs the exact current stopped receipt. Both
@@ -307,7 +307,7 @@ class OwnerLifecycle:
     ) -> tuple[OwnerRestartResult, ...]:
         """Retain one batch through stop, optional quiet maintenance and launch.
 
-        The declared cutover runs under the wire admission lock after every
+        The declared update runs under the wire input lock after every
         original exits and before any replacement launches. It owns its writer
         proof and operation; failure leaves the fenced batch stopped for review.
         """
@@ -467,7 +467,7 @@ class OwnerLifecycle:
 
     def _require_same_stop_owner(self, thread: Thread, admission_generation: int) -> None:
         snapshot = self.registry.snapshot()
-        # Voluntary release advances admission and marks STOPPED before Python
+        # Voluntary release advances the input generation and marks STOPPED before Python
         # finishes shutting down. Its exact receipt preserves the signaled
         # incarnation; it does not prove OS exit or authorize a replacement PID.
         if self._released_same_owner(snapshot, thread, admission_generation):

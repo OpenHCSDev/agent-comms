@@ -19,15 +19,18 @@ from .field_codec import FieldCodec
 from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
+    CreateProblemGoalAction,
+    DeliveredOrderGoalAction,
     EditGoalAction,
     GoalAction,
     GoalPrecondition,
+    InstalledOrderGoalAction,
     ModelInvocable,
     OrderGoalAction,
     SetGoalAction,
 )
 from .goal_states import ActiveGoal
-from .todos import TodoOperation
+from .todos import ChangeTodoState, DoneTodoState, TodoOperation
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -589,19 +592,6 @@ class CommsGoalHistoryTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTodoCreateTool(ThreadToolRequest):
-    label = "Create problem"
-    description = "Create a Todo problem; its creator owns assignment and strike decisions."
-    id: str = tool_field("Unique problem ID")
-    repo: str = tool_field("Repository owner/name")
-    text: str = tool_field("Problem and requested repair")
-
-    def apply(self, comms, caller):
-        return {"todo": FieldCodec.encode(comms.goals.todos.create(
-            self.id, self.repo, self.text, creator=comms.registry.require(caller.name)))}
-
-
-@dataclass(frozen=True, kw_only=True)
 class CommsTodoTool(ThreadToolRequest):
     label = "Change problem"
     description = "Apply an exact revision-checked Todo command; only its commander may invoke this tool."
@@ -609,8 +599,7 @@ class CommsTodoTool(ThreadToolRequest):
     operation: TodoOperation = tool_field("Typed assignment, strike, release or state command")
 
     def apply(self, comms, caller):
-        comms.goals.todos.get(self.id).require_commander(comms.registry.require(caller.name).incarnation)
-        todo = comms.goals.todos.apply(self.id, self.operation)
+        todo = comms.goals.change_problem(self.id, self.operation, caller.name)
         return {"todo": FieldCodec.encode(todo), "strike_count": todo.strike_count}
 
 
@@ -623,7 +612,52 @@ class CommsOrderTool(ThreadToolRequest):
 
     def apply(self, comms, caller):
         goal = comms.goals.update_goal(self.owner, replace(self.order, commander=caller.name))
+        return {"goal": goal.to_wire(), "todo": FieldCodec.encode(comms.goals.todos.get(self.order.order.problem))}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodoCreateTool(CommsOrderTool):
+    label = "Create problem"
+    description = "Create a problem with its owner, checked order and deadline in one command."
+    order: CreateProblemGoalAction = tool_field("Typed problem creation and order")
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderDoneTool(ThreadToolRequest):
+    label = "Check delivered order"
+    description = "Verify the order's check on its clean delivered commit before completing its Goal."
+    problem: str = tool_field("Problem ID")
+    commit: str = tool_field("Delivered commit hash")
+
+    def apply(self, comms, caller):
+        todo = comms.goals.todos.get(self.problem)
+        todo.require_commander(comms.registry.require(caller.name).incarnation)
+        assignment = todo.assignment
+        goal = comms.goals.update_goal(assignment.owner, DeliveredOrderGoalAction(
+            expect=GoalPrecondition(goal_id=assignment.generation), commit=self.commit,
+            progress=f"Delivered {self.commit}; the order check passed."))
         return {"goal": goal.to_wire()}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsProblemCloseTool(ThreadToolRequest):
+    label = "Close installed problem"
+    description = "Record installed application evidence and close only a problem with no open order."
+    problem: str = tool_field("Problem ID")
+    works: str = tool_field("What worked in the installed application, 8+ words")
+    artifact: str = tool_field("Existing verification artifact file")
+
+    def apply(self, comms, caller):
+        todo = comms.goals.todos.get(self.problem)
+        actor = comms.registry.require(caller.name).incarnation
+        todo.require_commander(actor)
+        assignment = todo.assignment
+        comms.goals.update_goal(assignment.owner, InstalledOrderGoalAction(
+            expect=GoalPrecondition(goal_id=assignment.generation),
+            works=self.works, artifact=self.artifact))
+        closed = comms.goals.change_problem(self.problem, ChangeTodoState(
+            todo.revision, DoneTodoState, actor, assignment.generation), caller.name)
+        return {"todo": FieldCodec.encode(closed)}
 
 
 @dataclass(frozen=True, kw_only=True)

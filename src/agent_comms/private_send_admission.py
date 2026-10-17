@@ -1,4 +1,4 @@
-"""One-use selected admission commits before the original raw pipe writer.
+"""Record permission for selected input once, before the raw pipe writer runs.
 
 Lock owners wait before the one-use token is consumed. An uncertain write
 or commit never becomes a fresh send attempt.
@@ -205,9 +205,9 @@ class PrivateSendAdmission:
     def _start_once(self, identity: NativeSessionIdentity) -> None:
         """Commit the exact grant under original fences, then release them.
 
-        Stop, rename and maintenance before this grant refuse admission. After
-        it, they are ordered after the original admitted attempt, whose raw
-        writer retains its own pipe and token. The recorded admission remains
+        Stop, rename and maintenance before this grant refuse the input. After
+        it, they are ordered after the permitted attempt, whose raw
+        writer retains its own pipe and token. The recorded send grant remains
         the original recovery evidence; neither successful pipe completion nor
         subsequent owner loss permits replay.
         """

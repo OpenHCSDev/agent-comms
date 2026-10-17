@@ -300,7 +300,7 @@ class UserTaskDrop(UserTaskSupersession):
 
 @dataclass(frozen=True, kw_only=True)
 class ScopedTaskDeclaration(TaskAttachment):
-    """The original source scope and lineage; admission belongs to each author kind."""
+    """The source and its history; each author type decides whether work may start."""
     scope: TaskScope
     change: TaskChange = field(default_factory=OriginalTaskChange,
                               metadata={"wire_omit_default": True})

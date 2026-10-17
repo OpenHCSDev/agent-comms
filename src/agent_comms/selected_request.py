@@ -39,7 +39,7 @@ class SelectedRequest:
         try:
             yield
         except NativePiTerminalFailure as error:
-            # The existing admission has already corroborated the live failure
+            # The current input operation has already confirmed the live failure
             # and settled this stage after raw writer, child and tool cleanup.
             await Coordination.run_worker(partial(publish_native_failure,
                 self.participant, error.context.input_id, error.public_message, source_error=error

@@ -61,7 +61,7 @@ class SelectedParticipant(MroDispatch):
         """Publish the original child identity before its one input is admitted.
 
         The registry remains the current-source owner. This acquired operation
-        receives its returned snapshot; admission references this SAME context,
+        receives its returned snapshot; input checks use this SAME context,
         rather than maintaining another independently refreshed owner snapshot.
         """
         identity = event.identity
@@ -241,7 +241,7 @@ class SelectedParticipant(MroDispatch):
 
     @staticmethod
     def lease(comms: Comms, owner: RegistryOwner) -> Generator[RegistryOwner, None, None]:
-        # Registry CAS owns admission/turn identity; never borrow another ACP
+        # Registry compare-and-swap checks input and turn identity; never borrow another ACP
         # instance's turn or revive an owner through a registration side effect.
         try:
             owner.thread.require_idle()

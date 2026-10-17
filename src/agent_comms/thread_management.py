@@ -569,7 +569,7 @@ class ThreadManagement:
 
         The bus, goal history and uncertain-input records are the record and
         stay; their readers resolve a removed name as a deleted thread. Every
-        refusal happens before the registry fences admission.
+        refusal happens before the registry withdraws input permission.
         """
         states = self.thread_owned_states
         sessions = {}

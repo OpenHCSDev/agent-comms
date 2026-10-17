@@ -176,7 +176,7 @@ class PreviewProvenance(Provenance):
         return (self,)
 
     def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
-        """Original SDK identity for read corroboration, never input admission."""
+        """SDK identity for checking a read, never permission to start input."""
         return (self.identity,)
 
 
@@ -831,7 +831,7 @@ class PeerState:
             view.thread.name,
             relation.relevance,
             relation.note,
-            goal.text if goal is not None else None,
+            goal.instructions if goal is not None else None,
         )
 
 
@@ -888,7 +888,7 @@ class GoalSegment(InstructionSegment):
         return super().capture((OwnerProvenance(owner.incarnation, str(goal.revision)),), goal=goal)
 
     def values(self) -> dict[str, object]:
-        return dict(goal_id=self.goal.id, goal_text=self.goal.text, progress=self.goal.progress)
+        return dict(goal_id=self.goal.id, goal_text=self.goal.instructions, progress=self.goal.progress)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -964,7 +964,7 @@ class ContextManifest:
     segments: tuple[SegmentManifest, ...]
     counter: str
     # Original request-owner correlation, absent for previews and captures that
-    # never observed dispatch. It grants neither admission nor replay.
+    # never observed dispatch. It permits neither new input nor replay.
     request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
 
     @property

@@ -169,7 +169,7 @@ async def stream_agent_events(
 
 
 class TurnSession:
-    """One Pi turn: owns input admission, native identity, settlement and child lifetime."""
+    """One Pi turn: checks input, tracks native identity and results, and owns the child."""
 
     active: ClassVar[dict[asyncio.Task[Any], TurnSession]] = {}
     prompt_type = UnwrittenPrompt
@@ -519,7 +519,7 @@ class TurnSession:
             raise
 
     def grant_prompt(self) -> None:
-        """Original granted write starts both admission and its input-start clock."""
+        """The permitted write starts sending input and starts its timer."""
         self.prompt_state = self.prompt_state.dispatch()
         self.watchdog.await_input()
 

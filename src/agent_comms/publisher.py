@@ -239,7 +239,7 @@ class Publisher:
             sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
             with bus_lock.current_source(self.log, metadata) as source:
                 # The checkpoint high-water also covers a prior visible append;
-                # no historical message or claim replay participates in admission.
+                # accepting new input never replays a historical message or claim.
                 last_sequence = max(metadata.last_seq, source.committed_sequence())
                 if last_sequence >= MAX_WIRE_SEQ:
                     raise RelationViolationError("Claim bus sequence is exhausted.")

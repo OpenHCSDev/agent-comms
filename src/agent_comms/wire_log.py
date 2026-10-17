@@ -438,7 +438,7 @@ class WireLog:
 
         Capture original bytes under the existing wire/bus/registry/input cut,
         then release the bus locks before decoding. This is an observation, never
-        a current admission or compaction permit.
+        permission to start input or compact history.
         """
         from .exporting import WireExportBoundary
         from .input_disposition import InputDispositions
@@ -659,7 +659,7 @@ class WireLog:
                 if lock.source is not None:
                     source = lock.certified_read()
                     source.require_marker(metadata)
-                    # A reserved but unappended sequence revokes admission,
+                    # A reserved but unappended sequence blocks new input,
                     # not the original committed bytes of this read-only cut.
                     source.require_open_prefix()
                     # Bind the separate retained descriptor to the exact admitted
@@ -680,7 +680,7 @@ class WireLog:
         """Run the strict WireScan after releasing the bus locks.
 
         Uncertified streams retain the same complete validation algorithm.
-        This resource is a fixed read, not a current append/admission permit.
+        This resource is a fixed read, not permission to append or start input.
         """
         with self._opened_wire_snapshot(need_sequence=False) as opened:
             yield self._snapshot_records(opened.metadata, opened.stream, opened.boundary)

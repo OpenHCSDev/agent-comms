@@ -112,7 +112,7 @@ def read_historical_native_inputs(
     particular, do NOT derive max-seq or a cursor from these rows alone: gaps
     and PASSIVE/no-wake deliveries have different semantics. A separate
     current-owner cursor additionally verifies the canonical bus prefix and
-    requires a just-settled input in the live admission epoch.
+    requires a just-settled input in the owner's current input generation.
     """
     from .native_entries import NativeEvidenceScope
 

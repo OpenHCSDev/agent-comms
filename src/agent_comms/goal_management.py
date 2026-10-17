@@ -49,6 +49,14 @@ class Goals:
     def todos(self):
         return TodoStore(self.root)
 
+    def change_problem(self, problem, operation, commander):
+        with _store_lock(self._wire_lock_path):
+            current = self.todos.get(problem)
+            current.require_commander(self.registry.require(commander).incarnation)
+            operation.prepare(self, current)
+            result = self.todos.apply(problem, operation)
+        return result
+
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
             private = self.root / "goal-private"
@@ -377,7 +385,9 @@ class Goals:
         *,
         actor: type = RuntimeInvocable,
     ) -> Goal | None:
-        """Apply one declared command; external ingress owns decoding."""
+        """Run checks before locking, then recheck the original goal at publication."""
+        action.require_actor(actor)
+        action = action.prepare(self, name, actor)
         with _store_lock(self._wire_lock_path):
             return action.apply(
                 GoalActionContext(self, self.registry.require(name), actor)

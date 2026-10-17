@@ -1,7 +1,7 @@
 """Live accepted input and the registry context that permits its handoff.
 
 These values never recover prompts from disk. A renamed thread retains the same
-incarnation birth and admission; the registry resolves its name before comparison.
+birth identity and input generation; the registry resolves its name before comparison.
 """
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ class QueuedInput:
         return self.input_id
 
     def queue_items(self, scope: QueueScope) -> tuple[QueueItem, ...]:
-        """Only this acceptance's original admission can appear in its queue."""
+        """Show the item only when its recorded input generation matches the queue."""
         from .acp_extension import QueueItem
 
         return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.admission) else ()

@@ -164,8 +164,8 @@ class ExecutionWaitingObservation(PrivateObservation):
 class SettledTick:
     """The revision a settled tick started from, and this owner's registry entry then.
 
-    admission_after_seq is this owner's admitted floor, read from the durable
-    marker at settle time.
+    Read the owner's accepted-input floor from the stored marker when
+    the tick settles.
     """
 
     revision: TickRevision

@@ -1,4 +1,4 @@
-"""Declaration-owned owner admission at the external ACP load boundary."""
+"""The declared session type checks owner permission when handling an ACP load."""
 from abc import abstractmethod
 from functools import partial
 from .coordinator import Coordination

@@ -200,7 +200,7 @@ class ObservationWireRecord(WireRecord):
         return previous
 
     def require_admission(self, metadata: WireMetadata) -> None:
-        # Decoding validates the observation; it grants no delivery admission.
+        # Decoding validates the observation; it cannot permit delivery.
         return None
 
     def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
