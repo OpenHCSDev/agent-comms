@@ -589,7 +589,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             # Nothing is left to start another turn for, and the sender got one answer.
             await wait_for(lambda: session not in owner.inputs.wake_tasks)
             assert native.provider.posts == 2
-            assert len([m for m in comms.views.full_history() if m.sender == session]) == 1
+            assert len([m for m in list(comms.views.full_history_page().messages) if m.sender == session]) == 1
         finally:
             held.set()
 

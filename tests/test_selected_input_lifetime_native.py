@@ -180,7 +180,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     assert caught.value.context.session_file == Path(seed.session_file)
     assert all(not child.alive() for child in journey.children)
     assert journey.comms.registry.require("beta").active_turn is None
-    notice = journey.comms.views.full_history()[-1]
+    notice = list(journey.comms.views.full_history_page().messages)[-1]
     assert notice.notice and "No automatic retry" in notice.body
     delivery = journey.comms.bus.log.read_delivery_cohort(journey.root_id, notice.seq)
     assert all(decision.wake_mode == PassiveWake() for decision in delivery.decisions)
@@ -210,7 +210,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     assert result.input_id != caught.value.context.input_id
     assert all(row in journey.records() for row in before)
     assert not journey.replies
-    assert any(m.body == "NEW_INPUT_COMPLETED" for m in journey.comms.views.full_history())
+    assert any(m.body == "NEW_INPUT_COMPLETED" for m in list(journey.comms.views.full_history_page().messages))
     print(
         "SAVED_NATIVE_TERMINAL",
         "direct",

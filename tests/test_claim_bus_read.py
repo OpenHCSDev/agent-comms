@@ -168,7 +168,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert resource.read_bytes() == b"value = 2\n"
         # The strict whole-bus reader agrees with what the claim path left.
         assert dict(log.claim_projection()) == {}
-        claims = [m for m in comms.views.full_history() if m.claim_transition is not None]
+        claims = [m for m in list(comms.views.full_history_page().messages) if m.claim_transition is not None]
         assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
             ((str(resource),), 0), ((), 1),
         ]
@@ -244,7 +244,7 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
                         await asyncio.sleep(0.01)
             assert target.read_text() == "value = 2\n"
             assert [
-                (m.sender, m.target, m.body) for m in comms.views.full_history()
+                (m.sender, m.target, m.body) for m in list(comms.views.full_history_page().messages)
             ] == [
                 ("sender", session, "Change the value"),
                 (session, "sender", "Resource claim admitted"),

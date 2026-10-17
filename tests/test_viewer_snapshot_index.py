@@ -570,7 +570,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
         second = comms.messaging.send_initial_cohort('sender', '#team', '@Alice next')
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
     assert source.stream.closed
-    assert [message.message_id for message in comms.bus.log.full_history()] == [
+    assert [message.message_id for message in list(comms.bus.full_history_page().messages)] == [
         first.message_id, second.message_id
     ]
 

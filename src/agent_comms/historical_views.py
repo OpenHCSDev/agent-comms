@@ -71,14 +71,6 @@ class HistoryView(ABC):
             ),
         )
 
-    def full_history(self, presentation: BusPresentation) -> list[Message]:
-        page = self.page(presentation, limit=1000)
-        pages = [page.messages]
-        while page.has_older:
-            page = self.page(presentation, before=page.oldest_cursor, limit=1000)
-            pages.append(page.messages)
-        return [message for rows in reversed(pages) for message in rows]
-
     @abstractmethod
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
         """Retain the source's aliases/membership without borrowing live identity."""

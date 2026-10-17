@@ -20,7 +20,7 @@ def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tm
     with sqlite3.connect(database) as db:
         db.execute(f'DROP TABLE "{CohortSchemaMeta.declared_name}"')
         before = db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall()
-    assert Comms(comms.root).views.full_history() == []
+    assert list(Comms(comms.root).views.full_history_page().messages) == []
     with Coordination(str(database)):
         pass  # Opening a store is not explicit private-runtime installation.
     with pytest.raises(SchemaVersionError):

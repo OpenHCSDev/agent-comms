@@ -43,8 +43,8 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, rebound)
     consistent(current, "sender", "recipient")
     assert current.bus.pending_counts("recipient") == {"sender": 1, "#team": 1}
     assert [row.seq for row in current.bus.inbox("recipient", "sender")] == [new.seq]
-    assert old in current.bus.log.full_history()
-    assert [row.body for row in current.views.dm_history("sender", "recipient")] == [
+    assert old in list(current.bus.full_history_page().messages)
+    assert [row.body for row in list(current.views.dm_history_page("sender", "recipient").messages)] == [
         "retained history",
         "current input",
     ]

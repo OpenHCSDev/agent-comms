@@ -136,7 +136,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         )
 
     def replies():
-        return [message for message in comms.views.full_history() if message.sender == "recipient"]
+        return [message for message in list(comms.views.full_history_page().messages) if message.sender == "recipient"]
 
     try:
         comms.owners.start("recipient")

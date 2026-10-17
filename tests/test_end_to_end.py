@@ -205,10 +205,10 @@ class TestEndToEndLifecycle:
 
         # Both adapters project the same canonical source. Notification/native
         # consumption is tested by the dedicated ACP owner-path tests.
-        assert [m.body for m in comms.views.dm_history("cli-agent", "proj")] == [
+        assert [m.body for m in list(comms.views.dm_history_page("cli-agent", "proj").messages)] == [
             "from the cli side"
         ]
         # And the CLI side can reply, visible in the thread's DM history.
         cli(root, "send", "--from", "cli-agent", "--to", "proj", "--body", "roger")
-        dm = [m.body for m in wire(root).views.dm_history("cli-agent", "proj")]
+        dm = [m.body for m in list(wire(root).views.dm_history_page("cli-agent", "proj").messages)]
         assert dm == ["from the cli side", "roger"]

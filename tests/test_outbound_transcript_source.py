@@ -186,7 +186,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     comms.registry.rename("beta", "renamed")
     reopened = wire(comms.root).transcripts.capture_page_read("renamed").read()
     assert reopened.events == events
-    assert comms.bus.log.full_history()[-1] == message
+    assert list(comms.bus.full_history_page().messages)[-1] == message
 
 
 def test_original_target_handling_revokes_open_sender_read_without_new_message(
