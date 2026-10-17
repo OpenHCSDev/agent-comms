@@ -25,11 +25,12 @@ from acp.exceptions import RequestError
 from acp.schema import RequestPermissionResponse
 
 from .jsonl_stream import JsonlStreamReader
+from .owner_protocol import OwnerAnnouncement
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistryEntry
 from .child_process import ProcessIdentity
 from .thread_identity import OwnerIdentity
-from .errors import RelationViolationError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .private_path import PrivateSocketRole
 
 
@@ -295,14 +296,14 @@ class RuntimeConnection:
         self._comms = comms
         self._closed = False
         self._requests: set[asyncio.Task] = set()
-        self._identity = comms.registry.require(session_id).incarnation
+        self._identity = comms.registry.entry(session_id).entry.thread.incarnation
         self._root_identity = comms.root.stat()
 
     @property
     def controller_token(self):
         return None
 
-    def _owner_snapshot(self) -> RegistrySnapshot:
+    def _owner_entry(self) -> RegistryEntry:
         if self._closed:
             raise ConnectionError("Owner attachment was closed before request dispatch")
         try:
@@ -311,14 +312,20 @@ class RuntimeConnection:
             same_root = False
         if not same_root:
             raise OwnerIdentityChangedError("Wire root changed; open a new attachment.")
-        snapshot = self._comms.registry.snapshot()
-        if not self._identity.current(snapshot):
+        try:
+            entry = self._comms.registry.entry(self.session_id).entry
+        except UnregisteredThreadError as error:
+            raise OwnerIdentityChangedError(
+                "Thread identity changed; open a new attachment."
+            ) from error
+        if (not entry.matches_name(self._identity.name)
+                or self._identity.renamed(entry.thread.name) != entry.thread.incarnation):
             raise OwnerIdentityChangedError("Thread identity changed; open a new attachment.")
-        return snapshot
+        return entry
 
     def _require_connect_owner(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
         try:
-            self._owner_snapshot().require_owner_process(owner, process)
+            self._owner_entry().require_owner_process(owner, process)
         except RelationViolationError as error:
             raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
         if not process.alive():
@@ -330,12 +337,13 @@ class RuntimeConnection:
     async def _connect_current(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         # Startup has no elapsed-time expiry. The registered process and lease
         # own its lifetime; caller cancellation also ends this unsent operation.
-        snapshot = await Coordination.run_worker(self._owner_snapshot)
+        entry = await Coordination.run_worker(self._owner_entry)
         try:
-            process = snapshot.require_active(self.session_id).require_process()
+            entry.status.require_active()
+            process = entry.thread.require_process()
         except RelationViolationError as error:
             raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
-        owner = snapshot.owner_identity(self.session_id)
+        owner = entry.owner_identity
         path = socket_path(self._comms.root, process.pid)
 
         while True:
@@ -445,6 +453,12 @@ class RuntimeProxy(RuntimeConnection):
                 ).encode()
             )
             await writer.drain()
+            announcement = await reader.readline()
+            if not announcement:
+                raise RuntimeError("Thread owner disconnected during attachment")
+            data = json.loads(announcement)
+            _raise_owner_error(data)
+            OwnerAnnouncement().require_same_core(self.session_id, data)
             while line := await reader.readline():
                 data = json.loads(line)
                 _raise_owner_error(data)

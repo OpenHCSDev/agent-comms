@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from abc import abstractmethod
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
@@ -16,13 +15,11 @@ from .field_codec import TextRepresentation
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Iterator
     from pathlib import Path
     from typing import BinaryIO
 
-    from .bus_page_index import BusPageIndex
     from .private_bus_checkpoint import PrefixWitness
-    from .wire_log import OpenedWireSnapshot, WireLog
+    from .wire_log import WireLog
 
 
 class WireRootIdText(TextRepresentation):
@@ -50,22 +47,6 @@ class WireAccess(DeclaredFamily, affix="Access"):
     def verify_checkpoint(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
                           stream: BinaryIO, path: Path, *, shared: bool) -> PrefixWitness: ...
 
-    @abstractmethod
-    def open_page_index(self, path: Path) -> BusPageIndex: ...
-
-    @contextmanager
-    def prepare_page_index(self, index: BusPageIndex, source: OpenedWireSnapshot) -> Iterator[None]:
-        self._prepare_index(index, source)
-        with index.snapshot():
-            source.require_page_index_coverage(index)
-            yield
-
-    @abstractmethod
-    def _prepare_index(self, index: BusPageIndex, source: OpenedWireSnapshot) -> None: ...
-
-    @abstractmethod
-    def repair_page_index(self, index: BusPageIndex) -> None: ...
-
 
 @dataclass(frozen=True)
 class WritableAccess(WireAccess):
@@ -86,17 +67,6 @@ class WritableAccess(WireAccess):
         if shared:
             return _check_final_checkpoint_read_only(bus, marker, db, stream, path)
         return _verify_open_checkpoint_unlocked(bus, marker, db, stream, path)
-
-    def open_page_index(self, path):
-        from .bus_page_index import BusPageIndex
-
-        return BusPageIndex(path)
-
-    def _prepare_index(self, index, source):
-        index.prepare(source)
-
-    def repair_page_index(self, index):
-        index.invalidate()
 
 
 @dataclass(frozen=True)
@@ -120,18 +90,6 @@ class ArchivedAccess(WireAccess):
         if _tail(stream, saved.offset) != saved.tail:
             raise RelationViolationError("Archived source prefix tail changed.")
         return saved
-
-    def open_page_index(self, path):
-        from .bus_page_index import BusPageIndex
-
-        return BusPageIndex(path, readonly=True)
-
-    def _prepare_index(self, index, source):
-        # Published archive indexes are immutable; the parent checks coverage.
-        return None
-
-    def repair_page_index(self, index):
-        raise RelationViolationError("Published archive page index requires offline preparation")
 
 
 @dataclass

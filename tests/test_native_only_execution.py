@@ -201,7 +201,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
                     "headless", [{"type": "text", "text": "!relay #all headless native route"}]
                 )
                 assert response.stop_reason == "end_turn"
-                assert [m.body for m in comms.views.channel_history("#all")] == [
+                assert [m.body for m in list(comms.views.channel_history_page("#all").messages)] == [
                     "headless native route"
                 ]
                 assert comms.registry.require("headless").active_turn is None

@@ -11,36 +11,22 @@ item finishes is the thread's activity, reported through Core's activity log.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from sqlite3 import Connection
 from dataclasses import dataclass, field
-from itertools import islice
 from pathlib import Path
 from typing import ClassVar
 
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
-from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
+from .transcript_events import TranscriptEvent, TurnDigest
 from .transcript_receipts import TranscriptSource
-from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable, sql_literal
+from .typed_table import Column, TypedRow, TypedStore, TypedTable
 
 
 @dataclass(frozen=True)
-class ExternalToolEvents:
-    """Tool calls lead their CLI item; their original time owns indexed ordering."""
-
-    tool_selector: ClassVar[str] = (
-        f"json_extract(events, '$[0].{ToolStartTranscript.family_discriminator}')"
-        f" = {sql_literal(ToolStartTranscript)}"
-    )
-    tool_at: float | None = field(init=False, compare=False, repr=False, metadata={"sql": Column(
-        generated="json_extract(events, '$[0].timestamp')"
-    )})
-
-
-@dataclass(frozen=True)
-class ExternalItemRow(ExternalToolEvents, TypedTable):
+class ExternalItemRow(TypedTable):
     """One finished CLI item, at the position it took when it finished."""
 
     thread: str = field(metadata={"sql": Column(primary_key=True)})
@@ -49,21 +35,6 @@ class ExternalItemRow(ExternalToolEvents, TypedTable):
     seq: int
     events: tuple[TranscriptEvent, ...]
     unique = (("thread", "seq"),)
-    indexes = (Index(("thread", "tool_at", "seq"), where=ExternalToolEvents.tool_selector),)
-
-    @classmethod
-    def latest_tool_events(cls, connection: Connection, thread: str) -> tuple[TranscriptEvent, ...]:
-        # Unknown selection time cannot be ordered behind a known one. Keep one
-        # indexed candidate from each partition; never turn unknown into epoch 0.
-        events = []
-        for condition in ("IS NULL", "IS NOT NULL"):
-            with closing(cls.stream(
-                connection, thread=thread,
-                where=f"({cls.tool_selector}) AND tool_at {condition}",
-                order_by=("tool_at", "seq"), descending=True,
-            )) as rows:
-                events.extend(event for row in islice(rows, 1) for event in row.events)
-        return tuple(events)
 
     @classmethod
     def recent_turn_ids(cls, connection: Connection, thread: str, last: int) -> tuple[str, ...]:
@@ -84,7 +55,7 @@ class ExternalItemRow(ExternalToolEvents, TypedTable):
 
 
 @dataclass(frozen=True)
-class ExternalDraftRow(ExternalToolEvents, TypedTable):
+class ExternalDraftRow(TypedTable):
     """The current CLI item, replaced as it grows and retired at completion."""
 
     thread: str = field(metadata={"sql": Column(primary_key=True)})
@@ -147,15 +118,6 @@ class ExternalTranscriptRead:
         if self.connection is None:
             return None
         return ExternalDraftRow.one(self.connection, thread=self.lookup)
-
-    def latest_tool(self):
-        from .tool_activity import NoToolActivity, ToolActivity
-
-        if self.connection is None:
-            return NoToolActivity()
-        events = ExternalItemRow.latest_tool_events(self.connection, self.lookup)
-        draft = self.current_draft()
-        return ToolActivity.from_events(events + (draft.events if draft is not None else ()))
 
     def cut(self) -> ExternalCut:
         if self.connection is None:
@@ -226,11 +188,6 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
         with self.writing() as connection:
             if events and ExternalItemRow.one(connection, **key) is None:
-                draft = ExternalDraftRow.one(connection, **key)
-                if draft is not None:
-                    for original in draft.events:
-                        for call in original.tool_calls:
-                            events = tuple(event.with_tool_start(call) for event in events)
                 ExternalItemRow(seq=self._cut(connection).offset + 1, events=events,
                                 **key).insert(connection)
             connection.execute(
@@ -267,10 +224,6 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     def current_draft(self) -> ExternalDraftRow | None:
         with self.reading() as records:
             return records.current_draft()
-
-    def latest_tool(self):
-        with self.reading() as records:
-            return records.latest_tool()
 
     def cut(self) -> ExternalCut:
         with self.reading() as records:

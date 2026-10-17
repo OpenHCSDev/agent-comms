@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import acp, cohort_foreground, coordinated_runtime, native_pi
+from agent_comms import acp, cohort_foreground, coordinated_runtime, native_pi, private_nk_entrypoint
 from agent_comms import agent_events as events
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinator import Coordination
@@ -159,7 +159,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             await progress.chunk(events.Chunk("committed progress"))
             await progress.committed_progress(events.CommittedProgress("committed progress"))
             assert progress.reply_parts == []
-            assert [(row.body, row.notice) for row in comms.bus.log.full_history()] == [
+            assert [(row.body, row.notice) for row in list(comms.bus.full_history_page().messages)] == [
                 ("committed progress", True),
             ]
             progress.result = events.Done("refused", False)
@@ -186,7 +186,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
                 finish.set()
             with pytest.raises(asyncio.CancelledError):
                 await task
-            rows = comms.bus.log.full_history()
+            rows = list(comms.bus.full_history_page().messages)
             assert len(rows) == 2 and rows[-1].notice
             assert "[Open diagnostic]" in rows[-1].body
             assert comms.registry.require("beta").turn_lease == execution.turn_lease
@@ -229,7 +229,7 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
 
     monkeypatch.setattr(acp, "_accept_visible_deliveries", accepted)
     monkeypatch.setattr(NativeSourceCursor, "advance", covered)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", no_package)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", no_package)
     monkeypatch.setattr(native_pi, "_trusted_package", no_package)
     assert await agent.inputs.drain_inbox("beta") == 0
     # Advancing the durable cursor changes the first before/after observation.

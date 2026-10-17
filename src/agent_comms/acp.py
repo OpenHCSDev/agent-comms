@@ -333,7 +333,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
-    def _configured_root_id(self) -> str:
+    @property
+    def configured_root_id(self) -> str:
         """The configured bus root ID; the bus reader checks it against the marker."""
         if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
             raise PublicationActivationBlocked(
@@ -343,9 +344,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     def _private_nk_marker(self) -> str:
         """Require the configured, certified root before any selected request."""
-        self._configured_root_id()
+        configured_root_id = self.configured_root_id
         with self._comms.bus.log.certified_read() as source:
-            if source.marker.root_id != self._private_nk_wire_root_id:
+            if source.marker.root_id != configured_root_id:
                 raise PublicationActivationBlocked(
                     "private N/K ACP root does not match configuration"
                 )

@@ -1,4 +1,5 @@
 import pytest
+from agent_comms.tool_caller import NoThreadCaller
 
 from agent_comms import MentionQuery
 from agent_comms.comms import Comms, wire
@@ -23,7 +24,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert [message.body[item.start : item.end] for item in message.mentions] == ["@alpha", "@beta"]
     assert [item.message_id for item in comms.bus.inbox("alpha")] == [message.message_id]
     assert [item.message_id for item in comms.bus.inbox("beta")] == [message.message_id]
-    assert Comms(tmp_path).views.channel_history("#team")[0].mentions == message.mentions
+    assert list(Comms(tmp_path).views.channel_history_page("#team").messages)[0].mentions == message.mentions
     assert Message.from_wire(message.to_wire()) == message
     scheduled = ScheduledTurn.incoming(message)
     assert scheduled.origin.exact_reply_target == "#team"
@@ -162,7 +163,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
     comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, notice=True)
-    notice = comms.views.channel_history("#team")[-1]
+    notice = list(comms.views.channel_history_page("#team").messages)[-1]
     assert notice.notice is True and not notice.starts_turn
     assert "sender" not in comms.views.last_sent_timestamps()
     assert Message.from_wire(notice.to_wire()) == notice
@@ -212,7 +213,7 @@ def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp
     assert comms.bus.pending_count("alpha", "#team") == 1
     assert comms.bus.pending_count("beta", "#team") == 1
     result = invoke_tool(
-        comms, "comms_inbox", {"thread": "beta", "target": "#team"}
+        comms, "comms_inbox", {"thread": "beta", "target": "#team"}, caller=NoThreadCaller()
     )
     assert [message["text"] for message in result["messages"]] == ["@alpha please review"]
     assert result["messages"][0]["mentions"][0]["thread"] == "alpha"
@@ -230,7 +231,7 @@ def test_inbox_rejects_an_empty_target(tmp_path):
     comms = Comms(tmp_path)
     comms.registry.declare(Thread("beta", frozenset({"team"}), str(tmp_path)))
     with pytest.raises(ValueError, match="inbox target"):
-        invoke_tool(comms, "comms_inbox", {"thread": "beta", "target": ""})
+        invoke_tool(comms, "comms_inbox", {"thread": "beta", "target": ""}, caller=NoThreadCaller())
 
 
 def test_committed_channel_mention_follows_recipient_renames_without_expanding_audience(tmp_path):

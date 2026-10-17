@@ -15,21 +15,21 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class SessionLoadAdmission(DeclaredFamily, affix="SessionLoadAdmission"):
+class SessionLoadPlan(DeclaredFamily, affix='SessionLoadPlan'):
     @classmethod
-    def at_ingress(cls, metadata: object) -> "SessionLoadAdmission":
-        return EnsuringSessionLoadAdmission() if metadata is None else FieldCodec.decode(cls, metadata)
+    def at_ingress(cls, metadata: object) -> 'SessionLoadPlan':
+        return EnsuringSessionLoadPlan() if metadata is None else FieldCodec.decode(cls, metadata)
 
     def metadata(self) -> dict:
         return {"agentCommsLoad": FieldCodec.encode(self)}
 
     @classmethod
-    def at_response(cls, metadata: object) -> "SessionLoadAdmission":
+    def at_response(cls, metadata: object) -> 'SessionLoadPlan':
         if not isinstance(metadata, dict):
-            return EnsuringSessionLoadAdmission()
+            return EnsuringSessionLoadPlan()
         witness = metadata.get("agentCommsLoad")
-        return (EnsuringSessionLoadAdmission() if witness is None
-                else FieldCodec.decode(ExistingSessionLoadAdmission, witness))
+        return (EnsuringSessionLoadPlan() if witness is None
+                else FieldCodec.decode(ExistingSessionLoadPlan, witness))
 
     def superseded_by(self, binding: ThreadOwnerBinding) -> bool:
         return False
@@ -39,7 +39,7 @@ class SessionLoadAdmission(DeclaredFamily, affix="SessionLoadAdmission"):
 
 
 @dataclass(frozen=True, slots=True)
-class EnsuringSessionLoadAdmission(SessionLoadAdmission):
+class EnsuringSessionLoadPlan(SessionLoadPlan):
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
         return await Coordination.run_worker(partial(
             lifecycle.comms.owners.ensure_owner, thread.name,
@@ -48,7 +48,7 @@ class EnsuringSessionLoadAdmission(SessionLoadAdmission):
 
 
 @dataclass(frozen=True, slots=True)
-class WitnessedSessionLoadAdmission(SessionLoadAdmission):
+class WitnessedSessionLoadPlan(SessionLoadPlan):
     """Original load command/response evidence, never current registry state."""
 
     binding: ThreadOwnerBinding
@@ -58,25 +58,27 @@ class WitnessedSessionLoadAdmission(SessionLoadAdmission):
 
 
 @dataclass(frozen=True, slots=True)
-class ExistingSessionLoadAdmission(WitnessedSessionLoadAdmission):
+class ExistingSessionLoadPlan(WitnessedSessionLoadPlan):
     binding: LiveThreadOwnerBinding
 
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
-        snapshot = await Coordination.run_worker(lifecycle.comms.registry.snapshot)
+        entry = (await Coordination.run_worker(partial(
+            lifecycle.comms.registry.entry, thread.name,
+        ))).entry
         if thread.incarnation != self.binding.owner.incarnation:
             raise RelationViolationError("Read-only attachment targets a different thread incarnation")
-        snapshot.require_owner_process(self.binding.owner, self.binding.process)
+        current = entry.require_owner_process(self.binding.owner, self.binding.process)
         if not self.binding.process.alive():
             raise RelationViolationError("Read-only attachment owner exited; no owner was started")
-        return snapshot.require_active(thread.name)
+        return current
 
 
 @dataclass(frozen=True, slots=True)
-class FailedSessionLoadAdmission(WitnessedSessionLoadAdmission):
+class FailedSessionLoadPlan(WitnessedSessionLoadPlan):
     """The original failed load command's witness; never an input permission."""
 
     @classmethod
-    def from_failure(cls, data: object) -> "FailedSessionLoadAdmission | None":
+    def from_failure(cls, data: object) -> 'FailedSessionLoadPlan | None':
         if not isinstance(data, dict):
             return None
         witness = data.get("agentCommsLoadFailure")

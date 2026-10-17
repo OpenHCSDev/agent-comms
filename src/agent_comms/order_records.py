@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
-from .goal_actions import GoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable
+from .goal_actions import EditGoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable
 from .field_codec import FieldCodec, projected
 from .goal_history import GoalHistoryEntry
 from .goals import GoalRef
@@ -142,19 +142,16 @@ class StrikeRow(TypedTable):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendBackGoalAction(GoalAction, RuntimeInvocable):
+class SendBackGoalAction(EditGoalAction):
     """The order's commander replaces its text; the Goal counts the revision."""
 
     judge: RecordedThreadIncarnation
-    text: str
+    preserve_wait = False
 
-    def change(self, ctx: GoalActionContext) -> Goal:
-        goal = ctx.require_goal()
+    def require_author(self, goal: Goal, ctx: GoalActionContext) -> None:
+        goal.author.require_commander(self.judge, ctx.goals.registry.snapshot())
         if goal.state.terminal:
             raise OrderRecordError("A finished order cannot be sent back; issue a new order.")
-        snapshot = ctx.goals.registry.snapshot()
-        author = goal.author.revised(self.judge, snapshot, time.time())
-        return goal.with_text(self.text, ctx.thread, snapshot, author=author)
 
 
 class OrderCall(DeclaredFamily, affix="OrderCall"):

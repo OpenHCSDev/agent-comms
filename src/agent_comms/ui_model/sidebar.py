@@ -9,14 +9,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
 from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.thread_presentation import ThreadPresentationStatus
+from agent_comms.thread_presentation import SessionDisconnected, ThreadPresentationStatus
 from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
@@ -54,6 +54,10 @@ class ThreadRowModel:
     def name(self) -> str:
         return self.incarnation.name
 
+    def disconnected(self, status: SessionDisconnected) -> ThreadRowModel:
+        shown = status.presentation(self.title)
+        return replace(self, label=shown.label, summary=shown.summary, status=status)
+
     @classmethod
     def of(cls, person: ThreadView, snapshot: CoordinationSnapshot | None) -> ThreadRowModel:
         presentation = person.presentation
@@ -87,7 +91,7 @@ class ChannelRowModel:
             f" · tags: {', '.join(sorted(channel.tags)) or 'all'}",
             UnreadPresentation.for_channel(snapshot, channel.name),
             any(name in working for name in view.members),
-            tuple(name for name in view.members if name in {person.thread.name for person in snapshot.threads}),
+            tuple(name for name in view.members if name in snapshot.threads),
             frozenset(view.pinned_members),
             channel.order,
         )
@@ -177,11 +181,10 @@ class SidebarModel:
 
     @staticmethod
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
-        threads = {person.thread.name: ThreadRowModel.of(person, snapshot) for person in snapshot.threads}
-        working = frozenset(member for name, row in threads.items()
-                            for member in row.status.working_members(name))
-        channels = {view.channel.name: ChannelRowModel.of(view, snapshot, working)
-                    for view in snapshot.channels}
+        threads = {name: ThreadRowModel.of(person, snapshot) for name, person in snapshot.threads.items()}
+        working = frozenset(name for name, row in threads.items() if row.status.working)
+        channels = {name: ChannelRowModel.of(view, snapshot, working)
+                    for name, view in snapshot.channels.items()}
         return channels, threads
 
     def clear(self, error: Exception) -> None:

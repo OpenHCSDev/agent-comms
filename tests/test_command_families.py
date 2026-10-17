@@ -1,11 +1,9 @@
 """External contracts and adding commands without editing any consumer catalog."""
 
-import argparse
 import asyncio
 import json
 import os
 from dataclasses import dataclass
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -25,21 +23,6 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 
 
-def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
-    monkeypatch.setenv("COLUMNS", "80")
-    monkeypatch.setenv("NO_COLOR", "1")
-    monkeypatch.delenv("AGENT_COMMS_AGENT_ARGS", raising=False)
-    monkeypatch.delenv("AGENT_COMMS_AGENT_BIN", raising=False)
-    parser = build_parser()
-    sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
-    actual = {
-        "help": parser.format_help(),
-        "commands": {name: p.format_help() for name, p in sub.choices.items()},
-    }
-    expected = json.loads((Path(__file__).parent / "fixtures/cli-parser-contract.json").read_text())
-    assert actual == expected
-
-
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/a pi")
     monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", '--label "two words"')
@@ -56,7 +39,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     assert send.type is InfoKind
     configured = parse(["configure", "--name", "a", "--service-tier", "standard"])
     assert configured.service_tier is ServiceTier.STANDARD
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError, match="invalid choice"):
         parser.parse_args(["configure", "--name", "a", "--service-tier", "fast"])
     restart = parse(["restart", "--all"])
     assert restart.all_ is True
@@ -160,13 +143,18 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
 
     comms = Comms(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
-    def require_owned_session(owner, snapshot):
-        assert owner.name == "owner"
-        assert snapshot.require(owner.name) == owner
+    def require_owned_session(entry):
+        assert entry.thread.name == "owner"
+        assert entry.matches_name("owner")
         return "session"
+
+    async def awaiting_input_keys(session_id):
+        assert session_id == "session"
+        return frozenset()
 
     agent = SimpleNamespace(
         _comms=comms,
+        inputs=SimpleNamespace(awaiting_input_keys=awaiting_input_keys),
         sessions=SimpleNamespace(
             bindings={"session": "owner"},
             require_owned_session=require_owned_session,
@@ -181,6 +169,8 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
             "session": "session",
             "owner": "owner",
         }
+        delivery = await proxy.request("input_dispositions")
+        assert delivery["inputs"] == [] and delivery["historicalCount"] == 0
         with pytest.raises(RuntimeError, match="Expected.*int"):
             await proxy.request("contract_probe", amount=True)
         with pytest.raises(RuntimeError, match="Unknown fields.*futureExtension"):

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -43,6 +44,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return False
 
     @classmethod
+    def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
+        """The lifecycle a registration installs; Core launched this owner."""
+        return requested
+
+    @classmethod
     def restart_candidates(cls, thread: Thread, status):
         return ()
 
@@ -68,32 +74,8 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         """External participants report their own activity events."""
         return activity
 
-    @classmethod
-    def busy_time(cls, thread: Thread, activity):
-        return activity.state.busy_time(activity)
-
-    @classmethod
-    def latest_tool(cls, root, thread: Thread):
-        from .external_transcript import ExternalTranscript
-
-        return ExternalTranscript(root, thread.incarnation).latest_tool()
-
 
 class NativeThreadExecution(ThreadExecution):
-    @classmethod
-    def busy_time(cls, thread: Thread, activity):
-        return thread.turn_state.busy_time
-
-    @classmethod
-    def latest_tool(cls, root, thread: Thread):
-        from pathlib import Path
-        from .native_transcript import NativeTranscript
-        from .tool_activity import NativeToolSelectorUnavailable
-
-        if not thread.session_file:
-            return NativeToolSelectorUnavailable()
-        return NativeTranscript(Path(thread.session_file)).latest_tool()
-
     @classmethod
     def native_command_available(cls, command, status, *, owner_pid: int) -> bool:
         return command.available_for(status, owner_pid=owner_pid)
@@ -147,9 +129,16 @@ class ExternalThreadExecution(ThreadExecution):
         pass
 
     @classmethod
+    def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
+        """Core launches no process here: the inbox is connected while its bridge lives."""
+        if requested.active and thread.process_alive:
+            return ConnectedThreadStatus()
+        return NoBridgeThreadStatus()
+
+    @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        # The CLI reports its own activity; between turns it is a participant.
+        # Its inbox state is the bridge's registration: connected or no bridge.
         if not status.active:
             return ordinary
         # A stale busy report cannot keep a known-dead CLI working.

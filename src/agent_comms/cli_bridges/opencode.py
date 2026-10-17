@@ -12,9 +12,10 @@ from urllib.parse import quote
 
 import aiohttp
 from agent_comms.messages import Message
+from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
 from .shared import (
-    TranscriptBridge, TranscriptUpdate, Options, Outcome, DeliveredOutcome, SendResult, parse_options, run_bridge, shared_parser,
+    TranscriptBridge, TranscriptUpdate, Options, SendResult, parse_options, run_bridge, shared_parser,
     Watch, Binding,
 )
 from .opencode_protocol import (

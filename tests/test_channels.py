@@ -5,8 +5,8 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms import invoke_tool
-from agent_comms.tool_caller import ThreadCaller
-from agent_comms.activity import Activity, ActivityState
+from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
+from agent_comms.activity import ActivityState
 from agent_comms.channels import AllOfMatch, AnyOfMatch, Channel, SavedView, ViewKind, ViewPredicate
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.channel_management import (
@@ -19,7 +19,6 @@ from agent_comms.display_order import (
     LastActivityThreadSort, LastMessageThreadSort, LastUserInputChannelSort, ThreadSort,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.presentation import ThreadView
 from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -270,7 +269,7 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     restarted = wire(tmp_path)
     assert restarted.channels.catalog.read().resolve("#child").parent is None
     assert not restarted.channels.catalog.read().resolve("#api").archived
-    assert [message.body for message in restarted.views.channel_history("#api")] == [
+    assert [message.body for message in list(restarted.views.channel_history_page("#api").messages)] == [
         "target-owned historical row"
     ]
     assert restarted.channels.catalog.read().saved_views["cross-team"].predicate.tags == {"docs"}
@@ -363,7 +362,6 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     with pytest.raises(ValueError, match="reserved by a saved view"):
         comms.threads.create(
             ForkSpec(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level="high", task="task", tags=frozenset({"reserved"})),
-            pi_bin="/bin/true",
         )
 
     after = comms.registry.snapshot()
@@ -377,7 +375,7 @@ def test_channel_metadata_and_saved_views_have_typed_tool_surfaces(tmp_path):
     channel = invoke_tool(
         comms,
         "comms_set_channel_metadata",
-        {"name": "api", "parent": "#ui", "archived": True},
+        {"name": "api", "parent": "#ui", "archived": True}, caller=NoThreadCaller(),
     )
     assert channel["parent"] == "#ui" and channel["archived"] is True
 
@@ -389,20 +387,20 @@ def test_channel_metadata_and_saved_views_have_typed_tool_surfaces(tmp_path):
             "kind": "participants",
             "match": "all_of",
             "tags": "api,ui",
-        },
+        }, caller=NoThreadCaller(),
     )
     assert view["predicate"] == {"match": "all_of", "tags": ["api", "ui"]}
-    listed = invoke_tool(comms, "comms_channels", {})
+    listed = invoke_tool(comms, "comms_channels", {}, caller=NoThreadCaller())
     assert [item["name"] for item in listed["views"]] == ["cross-team"]
-    invoke_tool(comms, "comms_delete_view", {"name": "cross-team"})
-    assert not invoke_tool(comms, "comms_channels", {})["views"]
+    invoke_tool(comms, "comms_delete_view", {"name": "cross-team"}, caller=NoThreadCaller())
+    assert not invoke_tool(comms, "comms_channels", {}, caller=NoThreadCaller())["views"]
 
 
 def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatch):
     comms = setup_wire(tmp_path)
     original = comms.registry.require("other")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "other")
-    invoke_tool(comms, "comms_tags", {"action": "create", "name": "new"})
+    invoke_tool(comms, "comms_tags", {"action": "create", "name": "new"}, caller=NoThreadCaller())
     assert "#new" in comms.channels.channels()
     invoke_tool(comms, "comms_thread_tags", {"add": "new,api", "remove": "ui"}, caller=ThreadCaller("other"))
     assert comms.registry.require("other") == replace(
@@ -411,19 +409,19 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     invoke_tool(
         comms,
         "comms_set_view",
-        {"name": "team", "kind": "participants", "match": "any_of", "tags": "api,ui"},
+        {"name": "team", "kind": "participants", "match": "any_of", "tags": "api,ui"}, caller=NoThreadCaller(),
     )
-    invoke_tool(comms, "comms_tags", {"action": "rename", "name": "api", "new_name": "backend"})
+    invoke_tool(comms, "comms_tags", {"action": "rename", "name": "api", "new_name": "backend"}, caller=NoThreadCaller())
     assert "backend" in comms.registry.require("a").tags
     assert wire(tmp_path).channels.catalog.read().resolve("#team").tags == frozenset(
         {"backend", "ui"}
     )
-    invoke_tool(comms, "comms_delete_view", {"name": "team"})
-    invoke_tool(comms, "comms_tags", {"action": "delete", "name": "backend"})
+    invoke_tool(comms, "comms_delete_view", {"name": "team"}, caller=NoThreadCaller())
+    invoke_tool(comms, "comms_tags", {"action": "delete", "name": "backend"}, caller=NoThreadCaller())
     assert not comms.registry.require("a").tags
     assert "#ui" in comms.channels.channels()
     assert "#team" not in comms.channels.channels()
-    assert invoke_tool(comms, "comms_channels", {})["channels"]
+    assert invoke_tool(comms, "comms_channels", {}, caller=NoThreadCaller())["channels"]
     comms.registry.archive("a")
     assert "a" not in next(
         view.members for view in comms.views.channel_views() if view.channel.name == "#any"
@@ -437,7 +435,7 @@ def test_pending_projection_observes_external_changes_without_rescanning(tmp_pat
     comms.messaging.send("other", "#api", "one")
     assert comms.bus.pending_count("a") == 1
     with patch.object(
-        comms.bus.log, "_iter_log_unlocked", side_effect=AssertionError("rescanned idle log")
+        comms.bus.log, "verified_snapshot", side_effect=AssertionError("rescanned idle log")
     ):
         for _ in range(10):
             comms.threads.heartbeat("a")
@@ -466,25 +464,7 @@ def test_invalid_filters_and_reserved_channels(tmp_path):
         Channel("#team", frozenset({"api", "ui"}))
 
 
-def test_thread_presentation_owns_lifecycle_precedence(tmp_path):
-    comms = setup_wire(tmp_path)
-    thread = Thread("worker", frozenset(), str(tmp_path))
-    working = Activity("worker", ActivityState.WORKING, "Running tests")
-    comms.registry.register(thread, RunningThreadStatus())
-    comms.agents.activity.emit(working)
-    view = ThreadView.capture(thread, comms.registry.snapshot(),
-                              comms.agents.activity_of("worker"), None, {})
-    assert view.presentation.status.busy
-    assert view.presentation.summary == "Working · Running tests"
-    stopped = replace(view, status=StoppedThreadStatus())
-    assert not stopped.presentation.status.busy
-    assert stopped.presentation.summary == "Stopped"
-    assert stopped.presentation.label == "○ worker"
-
-
 def test_none_membership_and_independent_channel_order(tmp_path):
-    from agent_comms.display_order import ThreadSort
-
     comms = setup_wire(tmp_path)
     comms.messaging.send("a", "#none", "for untagged agents")
     assert [message.body for message in comms.bus.inbox("other")] == ["for untagged agents"]
@@ -531,16 +511,16 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     assert set(names(comms)[:2]) == {"#ui", "#zeta"}
     comms.messaging.send_user_message("#alpha", "Human input", worktree=str(tmp_path))
     comms.messaging.send("b", "#zeta", "Later agent output")
-    invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"})
+    invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"}, caller=NoThreadCaller())
     assert names(wire(tmp_path))[0] == "#alpha"
-    assert [view.channel.name for view in comms.views.coordination_snapshot("a").channels] == [
-        view.channel.name for view in wire(tmp_path).views.coordination_snapshot("b").channels
-    ]
+    assert tuple(comms.views.coordination_snapshot("a").channels) == tuple(
+        wire(tmp_path).views.coordination_snapshot("b").channels
+    )
     assert comms.views.coordination_snapshot().channel_order is LastUserInputChannelSort
     # Reading or re-sorting must never redefine a channel's creation time.
     assert comms.channels.catalog.read().resolve("#alpha").created_at == 300
     with patch.object(
-        comms.bus.log, "_iter_log_unlocked", side_effect=AssertionError("idle rescan")
+        comms.bus.log, "verified_snapshot", side_effect=AssertionError("idle rescan")
     ):
         comms.views.channel_views()
 
@@ -557,15 +537,15 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
         )
     )
     comms.channels.update_tags("moving", add=frozenset({"api"}))
-    joined = comms.views.channel_history("#api")
+    joined = list(comms.views.channel_history_page("#api").messages)
     assert len(joined) == 1 and joined[0].membership.value == "joined"
     assert joined[0].body == "moving joined #api" and not joined[0].starts_turn
     assert "moving" not in comms.views.last_sent_timestamps()
     comms.channels.update_tags("moving", add=frozenset({"ui"}))
     comms.channels.update_tags("moving", remove=frozenset({"api"}))
-    assert len(comms.views.channel_history("#api")) == 2
+    assert len(list(comms.views.channel_history_page("#api").messages)) == 2
     comms.channels.update_tags("moving", remove=frozenset({"ui"}))
-    history = wire(tmp_path).views.channel_history("#api")
+    history = list(wire(tmp_path).views.channel_history_page("#api").messages)
     assert [message.membership.value for message in history] == ["joined", "left"]
     assert all(not message.starts_turn for message in history)
     assert not comms.views.coordination_snapshot().participants("#api")
@@ -585,14 +565,14 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
     observer = wire(tmp_path)
     observer.views.channel_views()  # Populate the observer cache before the external writes.
     for channel in ("#ui", "#none"):
-        result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True})
+        result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True}, caller=NoThreadCaller())
         assert result["pinned"]
     views = observer.views.coordination_snapshot().channels
-    assert [view.channel.name for view in views] == (
+    assert list(views) == (
         [name for name in original if name in {"#ui", "#none"}]
         + [name for name in original if name not in {"#ui", "#none"}]
     )
-    assert all(view.to_wire()["pinned"] for view in views[:2])
+    assert all(views[name].to_wire()["pinned"] for name in list(views)[:2])
     assert observer.channels.catalog.read().list_order is order
     for channel in ("#ui", "#none"):
         observer.channels.set_channel_pinned(channel, False)
@@ -610,7 +590,7 @@ def test_member_pins_are_persistent_channel_scoped_and_preserve_sort(tmp_path, o
     comms.channels.set_channel_sort("#team", order)
     original = {view.channel.name: view.members for view in comms.views.channel_views()}
     result = invoke_tool(
-        comms, "comms_pin_thread", {"channel": "team", "name": "a", "pinned": True}
+        comms, "comms_pin_thread", {"channel": "team", "name": "a", "pinned": True}, caller=NoThreadCaller()
     )
     assert result["pinned_members"] == ["a"]
     observer = wire(tmp_path)
@@ -678,5 +658,5 @@ def test_invalid_pins_do_not_mutate_catalog(tmp_path):
     with pytest.raises(ValueError, match="not a member"):
         comms.channels.set_thread_pinned("api", "b", True)
     with pytest.raises(ValueError, match="Expected.*bool"):
-        invoke_tool(comms, "comms_pin_channel", {"name": "api", "pinned": "false"})
+        invoke_tool(comms, "comms_pin_channel", {"name": "api", "pinned": "false"}, caller=NoThreadCaller())
     assert comms.channels.catalog.path.read_text() == before

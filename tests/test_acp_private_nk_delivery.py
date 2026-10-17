@@ -5,6 +5,7 @@ activate private processing for existing public sessions.
 """
 
 from __future__ import annotations
+from agent_comms.tool_caller import NoThreadCaller
 
 import asyncio
 import json
@@ -12,7 +13,7 @@ import os
 
 import pytest
 
-from agent_comms import cohort_foreground, coordinated_runtime, native_pi
+from agent_comms import coordinated_runtime, native_pi, private_nk_entrypoint
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
@@ -31,13 +32,13 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.message_bus import MessageBus
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantStore
+from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from agent_comms.tracked_turn import TrackedTurnSession
 from delivery_owner_fixture import drain_diagnostic, reply_turn_finished
-from test_coordinated_runtime import _fake_model
-from test_coordinated_runtime import tmp_path as private_root_fixture
+from test_coordinated_runtime import _fake_model, tmp_path as private_root_fixture
 from test_native_prompt_binding import _fake_model as separate_session_fake
 from test_backend_native_lifecycle import native_backend as native_backend
 from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
@@ -125,7 +126,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     monkeypatch.setattr(agent._runtime, "start", noop)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(agent.sessions.config, "options", no_options)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -137,7 +138,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     invoke_tool(
         comms,
         "comms_send",
-        {"from": "sender", "to": owner.name, "body": "Compute 17+25"},
+        {"from": "sender", "to": owner.name, "body": "Compute 17+25"}, caller=NoThreadCaller(),
     )
     assert await agent.inputs.drain_inbox(session.session_id) == 1
     await reply_turn_finished(agent, session.session_id)
@@ -165,11 +166,11 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
     assert comms.registry.require("beta").name == "gamma"
     assert not (comms.root / ".private-owner-rename.pending").exists()
 
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "new owner"})
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "new owner"}, caller=NoThreadCaller())
     assert await agent.inputs.drain_inbox("beta") == 1
     await reply_turn_finished(agent, "beta")
     assert len(calls) == 1
@@ -183,14 +184,14 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
 ):
     comms, agent, root_id = _session(tmp_path)
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old-before-rename"})
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old-before-rename"}, caller=NoThreadCaller())
     if seal_old:
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             await _accept_visible_deliveries(bus, root_id, store.session.path, lookup, 0, owner_name="beta")
     comms.threads._rename_thread("beta", "gamma")
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new-after-rename"})
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new-after-rename"}, caller=NoThreadCaller())
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -209,8 +210,8 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
     for index in range(101):
         comms.messaging.send_message("sender", "beta", f"old {index}")
     comms.threads._rename_thread("beta", "gamma")
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new canonical"})
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new canonical"}, caller=NoThreadCaller())
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -293,7 +294,7 @@ async def test_private_rename_compensates_registry_failure_with_new_old_owner_ge
 
 async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     entered, release = asyncio.Event(), asyncio.Event()
@@ -305,7 +306,7 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
 
     monkeypatch.setattr(TrackedTurnSession, "execute", held_before_raw_send)
     invoke_tool(
-        comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected before rename"}
+        comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected before rename"}, caller=NoThreadCaller()
     )
     running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
@@ -370,8 +371,8 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
     native.provider.response_chunks = controlled_response
     with comms.bus.log.locked():
         root_id = comms.bus.log.read_metadata_unlocked().root_id
-    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": sid, "body": "Compute 17+25"})
-    original = comms.bus.log.message_by_id(sent["id"])
+    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": sid, "body": "Compute 17+25"}, caller=NoThreadCaller())
+    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     before = cursor_envelope((await agent.sessions.metadata(sid)))
     assert before.status == "none"
     assert before.revision >= 1
@@ -437,11 +438,11 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
     This tests the backend contract, not a Toad widget or provider acceptance.
     """
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     entered = asyncio.Event()
     release = asyncio.Event()
     delivered = []
@@ -489,7 +490,7 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
 async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_path, monkeypatch):
     """No reattach is required for a registry stop/heartbeat admission bump."""
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -502,7 +503,7 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
             updates.append(cursor.envelope)
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "first"})
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "first"}, caller=NoThreadCaller())
     assert await agent.inputs.drain_inbox("beta") == 1
     await reply_turn_finished(agent, "beta")
     proven = cursor_envelope((await agent.sessions.metadata("beta")))
@@ -518,7 +519,7 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
     )
     assert renewed.scope.admission_generation > proven.scope.admission_generation
     assert renewed.revision > proven.revision
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "second"})
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "second"}, caller=NoThreadCaller())
     before_second = len(updates)
     assert await agent.inputs.drain_inbox("beta") == 1
     await reply_turn_finished(agent, "beta")
@@ -545,7 +546,7 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     tmp_path, monkeypatch
 ):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -663,14 +664,14 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
             )
             assert original.stage is FullNativeExecution
             assert original.require_context_proof().input_id == original.input_id
-        assert comms.bus.log.message_by_id(sent.message_id) == sent
+        assert comms.bus.log.messages_for_references((sent.reference,)) == (sent,)
         assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes
 
 
 async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_path):
     comms, agent, root_id = _session(tmp_path, package=False)
-    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    original = comms.bus.log.message_by_id(sent["id"])
+    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
+    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root"):
         await agent.inputs.drain_inbox("beta")
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
@@ -697,16 +698,16 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
         store.participants.register(
             RecordedThreadIncarnation("fixture", alpha.created_at).lookup, "alpha", "alpha", committed=True
         )
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     sent = invoke_tool(
         comms,
         "comms_send",
-        {"from": "sender", "to": "#team", "body": "@alpha review this."},
+        {"from": "sender", "to": "#team", "body": "@alpha review this."}, caller=NoThreadCaller(),
     )
-    original = comms.bus.log.message_by_id(sent["id"])
+    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     assert await agent.inputs.drain_inbox("beta") == 0
     assert calls == []
     cursor = cursor_envelope((await agent.sessions.metadata("beta")))
@@ -732,12 +733,12 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
 
 async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(fail_on=1)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    assert comms.bus.log.message_by_id(sent["id"]) is not None
+    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
+    assert len(comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))) == 1
     assert await agent.inputs.drain_inbox("beta") == 1
     await reply_turn_finished(agent, "beta")
     failure = drain_diagnostic(comms, "beta")
@@ -767,7 +768,7 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
     second.sessions.bindings["beta"] = "beta"
     second.sessions.titles["beta"] = "beta"
     second.sessions.worktrees["beta"] = str(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = separate_session_fake(decision="FULL")
     entered, release = asyncio.Event(), asyncio.Event()
@@ -781,7 +782,7 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
 
     monkeypatch.setattr(TrackedTurnSession, "execute", suspended)
     for body in ("one", "two"):
-        invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": body})
+        invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": body}, caller=NoThreadCaller())
     running = asyncio.create_task(first.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     try:
@@ -817,11 +818,11 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
 
 async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     comms.agents.begin_turn("beta", "human-live-turn")
     assert await agent.inputs.drain_inbox("beta") == 0
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
@@ -840,7 +841,7 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
 
 async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     entered, release = asyncio.Event(), asyncio.Event()
@@ -851,7 +852,7 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
         return await fake(package, **kwargs)
 
     monkeypatch.setattr(TrackedTurnSession, "execute", suspended_before_send)
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     running = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     try:
@@ -874,12 +875,12 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
 
 async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     original = comms.goals.update_goal("beta", SetGoalAction(text="Separate ongoing goal"))
-    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
+    invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     assert await agent.inputs.drain_inbox("beta") == 1
     await reply_turn_finished(agent, "beta")
     assert len(calls) == 1
@@ -888,8 +889,8 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
 
 async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
-    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
-    original = comms.bus.log.message_by_id(sent["id"])
+    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
+    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     agent._private_nk_wire_root_id = "f" * 32
     with pytest.raises(IdentityConflict, match="original root changed"):
         await agent.inputs.drain_inbox("beta")

@@ -5,11 +5,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
-from .thread_identity import ThreadIncarnation, ThreadProvenance, ThreadProvenanceRecord
+from .thread_identity import ThreadIncarnation, ThreadProvenance
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
@@ -96,6 +96,13 @@ class RegistryNames(Generic[Member]):
         for alias in self.aliases:
             yield alias, self.require(alias)
 
+    def names_for(self, name: str) -> frozenset[str]:
+        """Current and retained names of one declared member."""
+        canonical = self.canonical_name(name)
+        return frozenset({canonical, *(
+            alias for alias, target in self.aliases.items() if target == canonical
+        )})
+
     def retired(self, name: str) -> bool:
         """Whether this namespace records that canonical ``name`` was declared and removed.
 
@@ -126,7 +133,7 @@ class RegistryNames(Generic[Member]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RegistryProvenance(RegistryNames[ThreadProvenance]):
-    threads: dict[str, Annotated[ThreadProvenance, ThreadProvenanceRecord]]
+    threads: dict[str, ThreadProvenance]
     aliases: dict[str, str]
 
     def __post_init__(self) -> None:

@@ -66,7 +66,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     before = ledger.path.read_bytes()
     messages = comms.bus.inbox("worker")
     comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))
-    result = inbox.invoke(comms, {"thread": "worker", "goal_id": goal.id, "wait_for": ["parent"]})
+    result = inbox.invoke(comms, {"thread": "worker", "goal_id": goal.id, "wait_for": ["parent"]}, caller=ThreadCaller("worker"))
     assert result["messages"] == []  # Display ACK is not handling evidence.
     review = result["standby_review"]
     assert [row["sequence"] for row in review["messages"]] == [m.seq for m in messages]
@@ -158,4 +158,4 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     comms.registry.rename("parent", "renamed-parent")
     review = comms.goals.goal_input_review("worker", goal.id, ["renamed-parent"])
     assert review["reviewed_inputs"] == [f"bus:{current.seq}"]
-    assert old in comms.bus.dm_history("renamed-parent", "worker")
+    assert old in list(comms.views.dm_history_page("renamed-parent", "worker").messages)

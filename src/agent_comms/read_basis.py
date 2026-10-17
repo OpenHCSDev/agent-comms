@@ -7,11 +7,13 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TextIO
 
 from .channel_targets import is_channel_target
 from .declared_family import DeclaredFamily
@@ -69,8 +71,29 @@ class HistoricalSelection(SelectedDisplay):
     """The original viewer and attached-source revision select an archive page."""
 
 
+class LineOutput:
+    """Flush once per event-loop pass."""
+
+    def __init__(self, stream: TextIO) -> None:
+        self.stream = stream
+        self.pending: asyncio.Handle | None = None
+
+    def write(self, line: str) -> None:
+        self.stream.write(line + '\n')
+        if self.pending is None:
+            self.pending = asyncio.get_running_loop().call_soon(self.flush)
+
+    def flush(self) -> None:
+        self.pending = None
+        self.stream.flush()
+
+
 class WatchAcknowledgment(DeclaredFamily, affix="WatchAcknowledgment"):
     """Who confirms that a streamed message reached its receiver."""
+
+    @classmethod
+    def line_output(cls, output: TextIO) -> Callable[[str], None]:
+        return partial(print, file=output, flush=True)  # Visibility precedes implicit acknowledgment.
 
     @classmethod
     @abstractmethod
@@ -84,6 +107,10 @@ class OnReadWatchAcknowledgment(WatchAcknowledgment):
 
 
 class ExplicitWatchAcknowledgment(WatchAcknowledgment):
+    @classmethod
+    def line_output(cls, output: TextIO) -> Callable[[str], None]:
+        return LineOutput(output).write
+
     @classmethod
     def taken(cls, reads, displayed: DisplayBasis) -> None:
         """The receiver confirms exact references through the existing read owner."""
@@ -143,6 +170,10 @@ class DisplayBasis:
     @property
     def viewer_identity(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.viewer, self.viewer_created_at)
+
+    @property
+    def message_count(self) -> int:
+        return sum(len(item.sequences) for item in self.conversations)
 
     def select(self, sequences: Collection[int]) -> DisplayBasis:
         """Retain painted members of this proof; never introduce new sequences."""
@@ -405,16 +436,9 @@ class DMDisplayScope(MessageDisplayScope):
     first_names: frozenset[str]
     second_names: frozenset[str]
 
-    @staticmethod
-    def names_for(name: str, snapshot: RegistryProvenance) -> frozenset[str]:
-        canonical = snapshot.canonical_name(name)
-        return frozenset(
-            {canonical, *(alias for alias, owner in snapshot.aliases.items() if owner == canonical)}
-        )
-
     @classmethod
     def capture(cls, a: str, b: str, snapshot: RegistryProvenance) -> DMDisplayScope:
-        return cls(cls.names_for(a, snapshot), cls.names_for(b, snapshot))
+        return cls(snapshot.names_for(a), snapshot.names_for(b))
 
     @classmethod
     def capture_human(cls, viewer: str, peer: str, snapshot: RegistrySnapshot) -> DMDisplayScope:

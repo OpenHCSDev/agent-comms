@@ -60,7 +60,7 @@ def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp
     assert after.channel_unread["#team"] == 1
     assert after.channel_unread["#extra"] == 2
     def clock(snapshot):
-        return next(v.last_activity for v in snapshot.channels if v.channel.name == "#team")
+        return snapshot.channels["#team"].last_activity
 
     assert clock(after) == clock(before)
 
@@ -468,7 +468,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
 
     monkeypatch.setattr(comms.bus.log, '_opened_wire_snapshot', append_before_open)
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
-    team = next(view for view in snapshot.channels if view.channel.name == "#team")
+    team = snapshot.channels["#team"]
     assert snapshot.channel_unread["#team"] == 2
     assert team.last_activity == appended[0].timestamp
 
@@ -570,7 +570,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
         second = comms.messaging.send_initial_cohort('sender', '#team', '@Alice next')
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
     assert source.stream.closed
-    assert [message.message_id for message in comms.bus.log.full_history()] == [
+    assert [message.message_id for message in list(comms.bus.full_history_page().messages)] == [
         first.message_id, second.message_id
     ]
 

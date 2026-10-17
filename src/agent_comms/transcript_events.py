@@ -6,11 +6,14 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import Any
+from urllib.parse import quote
 
+from . import tool_declaration
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
-from .tool_results import ToolDiff, ToolText
+from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 
 
@@ -26,11 +29,8 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
         return self
 
     @property
-    def tool_calls(self) -> tuple[ToolStartTranscript, ...]:
+    def tool_calls(self):
         return ()
-
-    def with_tool_start(self, original: ToolStartTranscript) -> TranscriptEvent:
-        return self
 
     @property
     def text_size(self) -> int:
@@ -51,6 +51,22 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     @abstractmethod
     def routed(self) -> bool:
         return False
+
+
+@dataclass(frozen=True)
+class TranscriptCoverage:
+    """The incoming wire sequences and native inputs a run of events carries."""
+
+    events: tuple[TranscriptEvent, ...]
+
+    @property
+    def sequences(self) -> frozenset[int]:
+        return frozenset(source.seq for event in self.events
+                         for source in event.incoming_sources if source.seq > 0)
+
+    @property
+    def native_inputs(self) -> frozenset[str]:
+        return frozenset(native_id for event in self.events for native_id in event.native_inputs)
 
 
 @dataclass(frozen=True)
@@ -151,11 +167,6 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
 
     def tool_content(self, tool_call_id):
         """Encode the Send report only at its actual ACP output boundary."""
-        import json
-        from urllib.parse import quote
-        from .field_codec import FieldCodec
-        from .tool_results import SENT_MESSAGE_MIME
-
         return {"type": "content", "content": {
             "type": "resource", "resource": {
                 "uri": f"agent-comms:///messages/{self.source.seq}/{quote(self.source.message_id, safe='')}",
@@ -187,15 +198,11 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
 
     @property
     def title(self) -> str:
-        from .tool_declaration import ToolDeclaration
-
-        return ToolDeclaration.caption(self.tool_name)
+        return tool_declaration.ToolDeclaration.caption(self.tool_name)
 
     @property
     def kind(self) -> str:
-        from .tool_declaration import ToolDeclaration
-
-        return ToolDeclaration.for_name(self.tool_name).acp_kind
+        return tool_declaration.ToolDeclaration.for_name(self.tool_name).acp_kind
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -205,9 +212,7 @@ class ToolStartTranscript(ToolTranscript):
 
     @property
     def title(self) -> str:
-        from .tool_declaration import ToolDeclaration
-
-        return ToolDeclaration.caption(self.tool_name, self.detail)
+        return tool_declaration.ToolDeclaration.caption(self.tool_name, self.detail)
 
     @property
     def tool_calls(self):
@@ -218,28 +223,8 @@ class ToolStartTranscript(ToolTranscript):
         return self.timestamp is not None and self.timestamp < at
 
     def quotes(self, text: str) -> bool:
-        """Whether one string the caller sent contains this exact text.
-
-        JSON escapes each character alone, so an escaped substring cannot span
-        two strings or a key and its value.
-        """
+        """An exact quoted input string cannot cross JSON field boundaries."""
         return json.dumps(text)[1:-1] in json.dumps(self.raw_input)
-
-    @property
-    def selection_order(self) -> tuple[bool, float]:
-        # Without a recorded selection time, no known call proves it is newer.
-        return self.timestamp is None, self.timestamp or 0
-
-    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None):
-        return (self, ToolEndTranscript(
-            tool_call_id=self.tool_call_id, tool_name=self.tool_name,
-            timestamp=self.timestamp, text=text, ok=ok, diff=diff,
-        ))
-
-    def with_tool_start(self, original):
-        if self.tool_call_id == original.tool_call_id and self.timestamp is None:
-            return replace(self, timestamp=original.timestamp)
-        return self
 
 
 @dataclass(frozen=True, kw_only=True)

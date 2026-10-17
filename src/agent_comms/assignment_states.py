@@ -5,15 +5,17 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from typing import ClassVar
+from typing import ClassVar, TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
-from .notification_progress import UnrecordedProgress
+from .notification_progress import (
+    UnrecordedProgress, ContextualProgress, PassiveProgress, IgnoredProgress,
+    EngagedProgress, CompletedProgress, InterruptedProgress, FailedProgress,
+)
 from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
@@ -74,10 +76,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def require_completion(self) -> Engagement:
         raise IdentityConflict("wake assignment is not completed")
 
-    notification_state: ClassVar[str] = "Sent"
-    notification_detail: ClassVar[str] = ""
-    notification_priority: ClassVar[int] = 3
-    notification_busy: ClassVar[bool] = False
+    notification_state: ClassVar[type[ContextualProgress]] = ContextualProgress
     notification_changed: ClassVar[bool] = False
     records_conversation_response: ClassVar[bool] = False
 
@@ -97,12 +96,8 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
 
         return MessageNotification(
             recipient,
-            self.notification_state,
-            self.notification_detail,
-            self.notification_priority,
-            self.notification_busy,
+            self.notification_state(UnrecordedProgress() if activity is None else activity.progress),
             changed=self.notification_changed,
-            progress=UnrecordedProgress() if activity is None else activity.progress,
         )
 
     terminal: ClassVar[bool] = False
@@ -182,8 +177,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
 
 
 class PassiveAssignment(AssignmentState):
-    notification_state = "Passive"
-    notification_detail = "Available as context; no automatic response requested."
+    notification_state = PassiveProgress
 
     terminal = True
 
@@ -229,14 +223,32 @@ class PendingNotification:
         )
 
 
+class SelectedResponseNotification:
+    """An engaged or deferred decision shows its selected response's progress."""
+
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return observation.selected_response(
+            notification, updated_at_ms, activity.progress
+        )
+
+
 class TriagePendingAssignment(PendingNotification, AssignmentState):
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         if obligation is not None:
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
         return self.mode.triage_expectation(), "No response obligation exists until triage engages."
 
-    notification_state = "Sent"
-    notification_detail = ""
 
     triage_pending = True
     preengagement_target = True
@@ -252,8 +264,6 @@ class TriagePendingAssignment(PendingNotification, AssignmentState):
 
 
 class FullPendingAssignment(PendingNotification, AssignmentState):
-    notification_state = "Sent"
-    notification_detail = ""
 
     full_pending = True
     preengagement_target = True
@@ -285,9 +295,7 @@ class IgnoredAssignment(AssignmentState):
         )
         return activity.progress.read_notification(notification)
 
-    notification_priority = 2
-    notification_state = "Read"
-    notification_detail = ""
+    notification_state = IgnoredProgress
 
     terminal = True
     preengagement_target = True
@@ -355,19 +363,6 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
     notification_changed = True
     decision: Engagement
 
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
-        return super().notification(
-            recipient, observation=observation, activity=activity
-        )
-
     @classmethod
     def binding_expression(cls) -> str:
         return "execution_id IS NOT NULL AND exact_target IS NOT NULL"
@@ -377,23 +372,8 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
         return cls(mode.engage(execution_id, target))
 
 
-class EngagedAssignment(BoundAssignment):
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
-        notification = super().notification(
-            recipient, observation=observation, activity=activity
-        )
-        return observation.selected_response(
-            notification, updated_at_ms, activity.progress
-        )
-
+class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
+    notification_state = EngagedProgress
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         if obligation is None:
             raise IdentityConflict("full wake frame requires the current response obligation")
@@ -416,10 +396,6 @@ class EngagedAssignment(BoundAssignment):
     def require_engagement(self) -> Engagement:
         return self.decision
 
-    notification_state = "Sent"
-    notification_detail = ""
-    notification_priority = 1
-    notification_busy = True
 
     engaged = True
 
@@ -446,9 +422,7 @@ class CompletedAssignment(BoundAssignment):
     def require_completion(self) -> Engagement:
         return self.decision
 
-    notification_priority = 2
-    notification_state = "Answered"
-    notification_detail = "The response workflow completed."
+    notification_state = CompletedProgress
 
     terminal = True
     completed = True
@@ -471,30 +445,13 @@ class InterruptedAssignment(AssignmentDecision, AssignmentState):
         )
 
 
-class DeferredAssignment(InterruptedAssignment):
+class DeferredAssignment(SelectedResponseNotification, InterruptedAssignment):
     def requires_selected_triage(self) -> bool:
         if self.execution_id is not None:
             return False
         return super().requires_selected_triage()
 
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
-        notification = super().notification(
-            recipient, observation=observation, activity=activity
-        )
-        return observation.selected_response(
-            notification, updated_at_ms, activity.progress
-        )
-
-    notification_state = "Interrupted before read"
-    notification_detail = ""
+    notification_state = InterruptedProgress
 
     deferred = True
     engageable = True
@@ -551,9 +508,7 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         )
         return activity.delivered_notification(notification, updated_at_ms)
 
-    notification_priority = 2
-    notification_state = "Read"
-    notification_detail = ""
+    notification_state = IgnoredProgress
 
     terminal = True
     preengagement_target = True
@@ -584,7 +539,7 @@ class FailedAssignment(InterruptedAssignment):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return replace(notification, state="Failed", detail="")
+        return replace(notification, state=FailedProgress(notification.state))
 
     def rejected_triage_history(self, execution, **source):
         """A proved rejected result is delivered source, never an IGNORE decision."""
@@ -592,8 +547,7 @@ class FailedAssignment(InterruptedAssignment):
 
         return FailedTriageHistoricalNativeInput(execution=execution, **source)
 
-    notification_state = "Failed"
-    notification_detail = ""
+    notification_state = FailedProgress
 
     terminal = True
     failed = True

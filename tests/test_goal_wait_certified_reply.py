@@ -1,6 +1,7 @@
 """Dependency replies retain original certified identities across registry changes."""
 
 import os
+from agent_comms.tool_caller import NoThreadCaller
 import asyncio
 import json
 from dataclasses import replace
@@ -16,6 +17,7 @@ from agent_comms.threads import Thread
 from goal_owner_fixture import canonical_goal_wire
 from stored_inputs import stored_inputs
 from agent_comms.goal_waits import NoGoalWait
+from agent_comms.pi_payloads import PublishedMessageToolDetails
 
 
 def register(comms, name):
@@ -142,8 +144,8 @@ async def test_native(retained_native_acp_owner):
     agent.inputs.auto_wake = True
     sent = invoke_tool(comms, "comms_send", {
         "from": "peer", "to": sid, "body": "Original dependency reply",
-    })
-    original = comms.bus.log.message_by_id(sent["id"])
+    }, caller=NoThreadCaller())
+    original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     with comms.bus.log.certified_read() as source:
         assert wait.matches(source.delivery(original.seq), owner.incarnation.require_recorded())
         root_id = source.marker.root_id
@@ -198,7 +200,7 @@ async def test_native(retained_native_acp_owner):
         reopened = Comms(comms.root, private_initial_writes=False, private_claim_writes=False)
         assert isinstance(reopened.goals.goal_wait(sid), NoGoalWait)
         assert reopened.registry.require(sid).goal == parked_goal
-        assert reopened.bus.log.message_by_id(original.message_id).reference == original.reference
+        assert reopened.bus.log.messages_for_references((original.reference,)) == (original,)
         assert stored_inputs(comms.root).lookup(old_key) == old
     finally:
         gate.set()

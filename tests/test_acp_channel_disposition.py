@@ -9,7 +9,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import cohort_foreground
+from agent_comms import private_nk_entrypoint
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
@@ -35,7 +35,7 @@ tmp_path = private_root_fixture
 
 
 async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_path, monkeypatch):
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, first, root_id):
         alpha, alpha_calls = native_model(decision="IGNORE")
@@ -99,7 +99,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
         before = len(alpha_calls), len(beta_calls)
         assert await owner.inputs.drain_inbox("alpha") == 0
         assert (len(alpha_calls), len(beta_calls)) == before
-        outcomes = comms.views.message_notifications([first])[(first.seq, first.message_id)]
+        outcomes = comms.views.message_notifications_for_references((first.reference,))[(first.seq, first.message_id)]
         by_recipient = {row.recipient: row for row in outcomes}
         assert by_recipient["alpha"].state.startswith("Read ")
         assert by_recipient["beta"].state.startswith("Answered ")
@@ -108,7 +108,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
 
 
 async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_path, monkeypatch):
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     model, calls = native_model(fail_on=1)
     monkeypatch.setattr(TrackedTurnSession, "execute", model)
@@ -138,7 +138,7 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
                 )
                 == ()
             )
-        notices = comms.views.message_notifications([message])[(message.seq, message.message_id)]
+        notices = comms.views.message_notifications_for_references((message.reference,))[(message.seq, message.message_id)]
         alpha = next(row for row in notices if row.recipient == "alpha")
         assert not alpha.state.startswith(("Answered", "Read"))
         assert not alpha.busy
@@ -148,7 +148,7 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
 async def test_selected_owner_revocation_before_send_never_creates_receipt(
     tmp_path, monkeypatch, revocation
 ):
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     model, calls = native_model()
     entered, release = asyncio.Event(), asyncio.Event()
@@ -188,7 +188,7 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
                     store.session._connection.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}")
                 )
                 assert len(rows) == 1 and rows[0].session_id is None
-            assert comms.bus.log.message_by_id(message.message_id) == message
+            assert comms.bus.log.messages_for_references((message.reference,)) == (message,)
             assert not owner.inputs.pending_turns
         finally:
             release.set()
@@ -197,7 +197,7 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
 
 
 async def test_notification_busy_requires_matching_live_process_identity(tmp_path, monkeypatch):
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     model, calls = native_model()
     entered, release = asyncio.Event(), asyncio.Event()
@@ -214,11 +214,11 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
         try:
             await asyncio.wait_for(entered.wait(), 5)
             key = message.seq, message.message_id
-            notices = comms.views.message_notifications([message])[key]
+            notices = comms.views.message_notifications_for_references((message.reference,))[key]
             assert len(notices) == 1
             assert notices[0].state == "Sent"
             assert notices[0].detail == "" and notices[0].busy
-            assert comms.views.recent_notifications("beta") == (
+            assert comms.views.thread_presentation("beta").notifications == (
                 replace(notices[0], message=message),
             )
             assert calls == []  # Projection never launches or resends an input.
@@ -237,7 +237,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
                     )
             # Output is not a competing read authority. Until the native
             # context receipt exists, even output evidence remains not-read.
-            working = comms.views.message_notifications([message])[key]
+            working = comms.views.message_notifications_for_references((message.reference,))[key]
             assert working[0].state == "Sent"
             assert working[0].detail == "" and working[0].busy
 
@@ -247,7 +247,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:
                 accepted = accept_delivery_cohort(comms.bus, root_id, held.seq, store)
                 assert accepted.value.member_count == 1
-            queued, = comms.views.message_notifications([held])[
+            queued, = comms.views.message_notifications_for_references((held.reference,))[
                 held.seq, held.message_id
             ]
             assert queued.state.startswith("Queued ")
@@ -263,12 +263,10 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
                     current, process_identity=replace(identity, start_time=identity.start_time + 1)
                 )
                 edit.commit()
-            paused = comms.views.message_notifications([message])[key]
+            paused = comms.views.message_notifications_for_references((message.reference,))[key]
             assert paused[0].state == "Sent"
             assert paused[0].detail == "" and not paused[0].busy
-            assert replace(paused[0], message=message) in comms.views.recent_notifications(
-                "beta"
-            )
+            assert replace(paused[0], message=message) in comms.views.thread_presentation("beta").notifications
             assert calls == []
         finally:
             turn.cancel()

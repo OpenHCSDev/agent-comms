@@ -6,11 +6,11 @@ import json
 import logging
 from abc import abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, ClassVar
+from typing import Callable, ClassVar
 
 from .channel_targets import is_channel_target
 from .errors import RelationViolationError
@@ -35,68 +35,99 @@ from .turn_digests import ThreadTurns, TurnDigestRead
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_receipts import (
-    AssignedSourceCursor, AssignedSourceIdentity, AssignedTranscriptSource,
-    LiveAssignedTranscriptSource, TranscriptSource,
+    AssignedSourceCursor, AssignedSourceIdentity, AssignedTranscriptSource, EarlierTranscript,
+    LaterTranscript, LiveAssignedTranscriptSource, TranscriptSource,
 )
 from .coordination_errors import StaleRevision, TranscriptChanged
-
-if TYPE_CHECKING:
-    from .wire_log import WireLog
+from .coordination_database import CoordinationStore
+from .coordinated_runtime_schema import assert_native_runtime_schema
+from .coordination_response import _assert_response_schema
+from .presentation import MessageNotification
+from .wire_log import WireLog
 
 _LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
-class TranscriptCursor:
+class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
+    """A native transcript position; WireTranscriptCursor adds an assigned wire source."""
+
     session_file: str
     offset: int
-    receipts: AssignedSourceCursor | None = None
+    source_identity: ClassVar[AssignedSourceIdentity | None] = None
+    wire_seq: ClassVar[int] = 0
 
-    @property
-    def source_identity(self) -> AssignedSourceIdentity | None:
-        return self.receipts.identity if self.receipts is not None else None
-
-    @property
-    def wire_seq(self) -> int:
-        return self.receipts.sequence if self.receipts is not None else 0
+    @staticmethod
+    def at(session_file: str, offset: int, wire: AssignedSourceCursor | None) -> TranscriptCursor:
+        """A source's optional wire frontier selects the cursor member here, once."""
+        if wire is None:
+            return NativeTranscriptCursor(session_file, offset)
+        return WireTranscriptCursor(session_file, offset, wire)
 
     def at_offset(self, offset: int) -> TranscriptCursor:
-        from dataclasses import replace
-
         return replace(self, offset=offset)
 
     def at_sequence(self, sequence: int) -> TranscriptCursor:
-        from dataclasses import replace
-
-        if self.receipts is None:
-            if sequence == 0:
-                return self
+        if sequence:
             raise ValueError("Native-only cursor cannot advance an assigned wire source")
-        return replace(self, receipts=self.receipts.at(sequence))
+        return self
 
     def contains(self, other: TranscriptCursor) -> bool:
-        return other.native_within(self) and other.receipts_within(self)
+        return other.native_within(self) and other.wire_within(self)
 
     def native_within(self, parent: TranscriptCursor) -> bool:
         return self.session_file == parent.session_file and self.offset <= parent.offset
 
-    def receipts_within(self, parent: TranscriptCursor) -> bool:
-        return self.receipts is None or parent.includes_receipts(self.receipts)
-
-    def includes_receipts(self, receipts: AssignedSourceCursor) -> bool:
-        return self.receipts is not None and self.receipts.contains(receipts)
+    def wire_within(self, parent: TranscriptCursor) -> bool:
+        return True
 
     def require_source(self, identity: AssignedSourceIdentity) -> None:
-        if self.receipts is not None:
-            self.receipts.require_source(identity)
+        """A native-only cursor fits every source."""
 
     def require_native(self) -> None:
-        if self.receipts is not None:
-            raise ValueError("Recorded items cannot acquire an assigned wire cursor")
+        """A native-only cursor is what recorded items carry."""
 
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
-        return self.receipts is not None and self.receipts.covers(sequence)
+        return 0 < sequence <= self.wire_seq
+
+    def over_native(self, prefixes: Sequence[TranscriptCursor]) -> TranscriptCursor:
+        """This wire position over the furthest committed native prefix within it: wire
+        assignment can advance without transferring anonymous native output."""
+        within = tuple(prefix for prefix in prefixes if prefix.wire_within(self))
+        prefix = max((prefix for prefix in within if prefix.session_file == self.session_file),
+                     key=lambda prefix: prefix.offset, default=next(iter(within), self.at_offset(0)))
+        return replace(self, session_file=prefix.session_file, offset=prefix.offset)
+
+
+@dataclass(frozen=True, slots=True)
+class NativeTranscriptCursor(TranscriptCursor):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class WireTranscriptCursor(TranscriptCursor):
+    wire: AssignedSourceCursor
+
+    @property
+    def source_identity(self) -> AssignedSourceIdentity:
+        return self.wire.identity
+
+    @property
+    def wire_seq(self) -> int:
+        return self.wire.sequence
+
+    def at_sequence(self, sequence: int) -> TranscriptCursor:
+        return replace(self, wire=self.wire.at(sequence))
+
+    def wire_within(self, parent: TranscriptCursor) -> bool:
+        return parent.source_identity == self.source_identity and self.wire_seq <= parent.wire_seq
+
+    def require_source(self, identity: AssignedSourceIdentity) -> None:
+        self.wire.require_source(identity)
+
+    def require_native(self) -> None:
+        raise ValueError("Recorded items cannot acquire an assigned wire cursor")
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,7 +188,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     )
     reply_revision: PublishedReplyRevision
     read_revision: FileRevision | None = field(metadata={"content_exclude": True})
-    receipt_frontier: AssignedSourceCursor | None
+    wire_frontier: AssignedSourceCursor | None
     before: TranscriptCursor | None
     after: TranscriptCursor | None
     through: TranscriptCursor | None
@@ -209,11 +240,8 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     @property
     def page_bound(self) -> TranscriptCursor:
         """The original witnessed byte/receipt bound owns page preparation."""
-        return self.through or TranscriptCursor(
-            self.session_file,
-            self.records_cut.offset,
-            self.receipt_frontier,
-        )
+        return self.through or TranscriptCursor.at(
+            self.session_file, self.records_cut.offset, self.wire_frontier)
 
     def contains_records_cut(self, other: TranscriptReadIdentity) -> bool:
         """Whether ``other`` still contains the thread records this read captured."""
@@ -282,8 +310,6 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
 
     @classmethod
     def resolve_source(cls, owner, name, source_file, historical_source):
-        from .wire_log import WireLog
-
         source = HistorySource.require(owner.bus.history.sources(), historical_source)
         thread = source.provenance.require(name)
         session_file = thread.session_file or ""
@@ -323,13 +349,8 @@ class TranscriptRead:
     @classmethod
     @contextmanager
     def publication_source(cls, root):
-        from .coordination_database import CoordinationStore
-        from .coordinated_runtime_schema import assert_native_runtime_schema
-        from .coordination_response import _assert_response_schema
-        from .recovery_projection import _preflight
-
         database = root / "coordination.sqlite3"
-        failure = _preflight(database)
+        failure = CoordinationStore.observation_failure(database)
         if failure == "missing":
             yield None
             return
@@ -449,8 +470,6 @@ class Transcripts:
         bus receipts contribute to the same projection. Registry-owned thread
         metadata also carries inherited fork text and source selection.
         """
-        from .presentation import MessageNotification
-
         if not 1 <= source_limit <= MessageNotification.window_limit:
             raise ValueError("Transcript source capture requires a bounded window")
         if not 0 <= sent_source_limit <= MessageNotification.window_limit:
@@ -485,7 +504,7 @@ class Transcripts:
         self,
         page: PageSource,
         name: str,
-        receipt_frontier: AssignedSourceCursor | None,
+        wire_frontier: AssignedSourceCursor | None,
         *,
         before: TranscriptCursor | None,
         after: TranscriptCursor | None,
@@ -506,7 +525,7 @@ class Transcripts:
             FileRevision.capture(root / "coordination.sqlite3-wal"),
             page.projection.reply_revision(records),
             FileRevision.capture(root / self.bus.reads.path.name),
-            receipt_frontier,
+            wire_frontier,
             before,
             after,
             through,
@@ -522,30 +541,12 @@ class Transcripts:
             raise ValueError(f"@{name} reads a native session; a CLI cannot publish its transcript")
         return page.records
 
-    def thread_draft(self, name: str) -> ExternalDraftRow | None:
-        """The canonical source's current output, separate from paged history."""
-        with self._page_source(name, None, None).records.reading() as records:
-            return records.current_draft()
-
     def _page_source(self, name, through, historical_source):
         member = (LiveTranscriptReadIdentity if historical_source is None
                   else RecordedTranscriptReadIdentity)
         return member.resolve_source(
             self, name, through.session_file if through is not None else None, historical_source,
         )
-
-    def thread_transcript(
-        self, name: str, *, max_messages: int = 20, max_bytes: int = 64 * 1024
-    ) -> Sequence[TranscriptEvent]:
-        """The same canonical source supplies bounded preview and paged history."""
-        if max_messages <= 0 or max_bytes <= 0:
-            return ()
-        page = self.thread_transcript_page(name, max_messages=max_messages, max_bytes=max_bytes)
-        return (
-            (NoticeTranscript("Earlier transcript content was omitted from this bounded view."),)
-            if page.has_older
-            else ()
-        ) + page.events
 
     def _thread_transcript_source(
         self, name: str, source_file: str | None = None, *, registry
@@ -619,16 +620,11 @@ class Transcripts:
     ) -> tuple[TranscriptPage, ExternalDraftRow | None]:
         """Read page and draft while their record owner retains one source lifecycle."""
         self.page_reads += 1
-        from .transcript_receipts import (
-            EarlierTranscript,
-            LaterTranscript,
-        )
-
         thread, session_file = page.thread, page.session_file
         cursor = before or after
         if cursor and (cursor.session_file != session_file or cursor.offset < 0):
             raise TranscriptChanged()
-        receipts = page.projection
+        source = page.projection
         with page.records.reading() as reader:
             size = reader.cut().offset
             if cursor and cursor.offset > size:
@@ -639,15 +635,15 @@ class Transcripts:
                 size = through.offset
                 if cursor and cursor.offset > size:
                     raise ValueError("Cursor is outside the transcript window.")
-            frontier = through or TranscriptCursor(session_file, size, receipts.frontier)
-            receipts.require_cursor(frontier)
+            frontier = through or TranscriptCursor.at(session_file, size, source.frontier)
+            source.require_cursor(frontier)
             if frontier.wire_seq < 0 or (cursor is not None and not frontier.contains(cursor)):
                 raise ValueError("Cursor is outside the combined transcript source")
             traversal = LaterTranscript() if after is not None else EarlierTranscript()
             initial = cursor or frontier
-            with reader.projection(receipts, page.routes) as project:
+            with reader.projection(source, page.routes) as project:
                 consumed, records = traversal.read_records(
-                    reader, project, receipts, initial, frontier,
+                    reader, project, source, initial, frontier,
                     max_messages=max_messages, max_bytes=max_bytes,
                 )
             draft = reader.current_draft()
@@ -665,13 +661,11 @@ class Transcripts:
         )
 
     def transcript_checkpoint(self, name: str) -> TranscriptCursor:
-        from .transcript_receipts import AssignedTranscriptSource
-
         registry = self.registry.snapshot()
         thread = registry.require(name)
         session_file = thread.session_file or ""
         path = Path(session_file)
-        return TranscriptCursor(
+        return TranscriptCursor.at(
             session_file,
             path.stat().st_size if session_file and path.is_file() else 0,
             AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier,

@@ -13,7 +13,8 @@ from uuid import uuid4
 import aiohttp
 from pydantic import JsonValue
 from agent_comms.messages import Message
-from .shared import TranscriptBridge, Options, Outcome, DeliveredOutcome, SendResult, TranscriptUpdate, shared_parser, parse_options, run_bridge
+from agent_comms.cli_protocol import Outcome, DeliveredOutcome
+from .shared import TranscriptBridge, Options, SendResult, TranscriptUpdate, shared_parser, parse_options, run_bridge
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcFailure, RpcNotification, RpcSuccess, TextInput,

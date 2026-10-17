@@ -72,7 +72,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
         assert coverage.covered_seq == 0
         assert coverage.injected_source_seqs == ()
         assert coverage.blocked_seq == fresh.seq  # Selection is not native proof.
-        assert reopened.bus.log.full_history() == [old, fresh]
+        assert list(reopened.bus.full_history_page().messages) == [old, fresh]
 
 
 def test_persisted_marker_cannot_omit_admission_authority(tmp_path):
@@ -94,7 +94,7 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     attached = reader.bus.history.attach(source.root)
     snapshot = Comms(attached.root)
     before = snapshot.bus.log.path.read_bytes()
-    assert [message.message_id for message in snapshot.bus.log.full_history()] == [sent]
+    assert [message.message_id for message in list(snapshot.bus.full_history_page().messages)] == [sent]
     with pytest.raises(RelationViolationError, match="read-only"):
         snapshot.messaging.send("alice", "bob", "must never append")
     assert snapshot.bus.log.path.read_bytes() == before

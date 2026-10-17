@@ -24,6 +24,12 @@ from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
 
 
+async def wait_for(predicate):
+    async with asyncio.timeout(30):
+        while not predicate():
+            await asyncio.sleep(0.01)
+
+
 class NativeBackendFixture:
     def __init__(self, root, project, session, provider, config):
         self.root, self.project, self.session, self.provider = root, project, session, provider
@@ -109,10 +115,11 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             async with InitialInput.reserve(
                 agent.inputs, session_id, agent.sessions.require(session_id),
                 text=text, prompt=text, echo=True, images=(), controller=None,
-            ) as (item, _owner, _row, custody):
-                resources.push_async_callback(Coordination.run_worker, custody.pop_all().close)
-            # Native acquisition begins after original wire custody ends, while
-            # the transferred reservation rollback still belongs to this turn.
+            ) as reservation:
+                item = reservation.item
+                resources.push_async_callback(reservation.release().aclose)
+            # Native acquisition begins after the wire reservation ends; its
+            # rollback actions remain with this turn until acquisition finishes.
             turn = OwnedTurn(
                 agent.turns, session_id, agent.sessions.require(session_id), text,
                 original_keys=(item.key,), initial_display_text=text,

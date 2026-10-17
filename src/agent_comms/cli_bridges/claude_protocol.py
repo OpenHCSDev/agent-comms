@@ -40,8 +40,9 @@ from .shared import (
 
 
 class ClaudeMonitorFrame(IncomingFrame):
-    """Claude Monitor caps each encoded stdout event at 500 UTF-16 units."""
+    """Claude Monitor caps lines at 500 and joined batches at 3000 UTF-16 units."""
     EVENT_CHARS = 500
+    BATCH_CHARS = 3000
     HEADER = 'Comms in'
     JSON_TEXT = TypeAdapter(str)
 
@@ -330,9 +331,9 @@ class TaskEnvelope(WireModel, ABC):
     def from_text(cls, text: str) -> TaskEnvelope:
         if not text.startswith('<task-notification>'):
             return ForeignTaskNotification(text=text)
-        closing = '</task-notification>'
         # Claude Code appends sibling blocks (system-reminder) after the envelope in the same record.
-        root = ElementTree.fromstring(text[:text.index(closing) + len(closing)])  # Malformed envelope fails at ingress.
+        envelope, closing, _ = text.partition('</task-notification>')
+        root = ElementTree.fromstring(envelope + closing)  # Malformed envelope fails at ingress.
         event = root.find('event')
         if event is None:
             return ForeignTaskNotification(text=text)

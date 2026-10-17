@@ -3,23 +3,115 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from math import isfinite
-from pathlib import Path
-import logging
-from typing import Literal
+from typing import Literal, Self
 from abc import abstractmethod
 
 from .declared_family import DeclaredFamily
-from .coordination_errors import PublicationUncertain
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
 from .goal_states import ActiveGoal, GoalState
-from .goal_progress import GoalProgress, TextGoalProgress
-from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from .message_reference import MessageReference
+from .recorded_time import EventTime, UnrecordedEventTime
 
-_LOG = logging.getLogger(__name__)
+
+@dataclass(frozen=True)
+class Delivery(DeclaredFamily):
+    evidence: str
+
+    @property
+    def summary(self) -> str:
+        return self.evidence
+
+    def require_completion(self) -> None:
+        raise ValueError("Completion requires works_in_app evidence and a commit SHA.")
+
+    @property
+    def reported_sha(self) -> str:
+        raise ValueError("Completion requires works_in_app with a commit SHA.")
+
+
+class Unfinished(Delivery):
+    pass
+
+
+@dataclass(frozen=True)
+class WorksInApp(Delivery):
+    sha: str
+
+    def require_completion(self) -> None:
+        pass
+
+    @property
+    def reported_sha(self) -> str:
+        return self.sha
+
+
+@dataclass(frozen=True)
+class GoalReport:
+    stupid: str
+    deleted: str
+    delivery: Delivery
+    next: str
+
+    def __post_init__(self):
+        if not all(value.strip() for value in (
+                self.stupid, self.deleted, self.delivery.evidence, self.next)):
+            raise ValueError("Delivery and report text must be nonempty.")
+
+    def __str__(self) -> str:
+        return (f"Stupid: {self.stupid}\nDeleted: {self.deleted}\n"
+                f"Delivery: {self.delivery.summary}\nNext: {self.next}")
+
+
+class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
+    @classmethod
+    def capture(cls, value: GoalProgress | GoalReport | str) -> GoalProgress:
+        return value if isinstance(value, cls) else cls.from_wire(FieldCodec.encode(value))
+
+    def require_report(self) -> GoalReport:
+        raise ValueError("A commanded goal requires stupid, deleted, delivery and next.")
+
+    def noted(self, note: str) -> Self:
+        return self  # Runtime notes must not replace the last structured report.
+
+    def failed(self, diagnostic: str) -> GoalProgress:
+        return self.noted(diagnostic)
+
+    @property
+    def block_reason(self) -> str:
+        return str(self)
+
+    def __bool__(self) -> bool:
+        return bool(str(self))
+
+
+@dataclass(frozen=True)
+class TextGoalProgress(GoalProgress, JsonShapeMember):
+    value: str = ""
+
+    def __str__(self) -> str:
+        return self.value
+
+    def noted(self, note: str) -> TextGoalProgress:
+        return type(self)(f"{self.value}\n\n{note}" if self.value else note)
+
+    def failed(self, diagnostic: str) -> TextGoalProgress:
+        return type(self)(diagnostic)
+
+
+@dataclass(frozen=True)
+class ReportedGoalProgress(GoalProgress, JsonShapeMember):
+    value: GoalReport
+
+    def require_report(self) -> GoalReport:
+        return self.value
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+    @property
+    def block_reason(self) -> str:
+        return self.value.next
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,8 +129,7 @@ class GoalRef:
     def current(self, snapshot) -> Goal | None:
         if not self.owner.current(snapshot):
             return None
-        goal = snapshot.require(self.owner.name).goal
-        return goal if goal is not None and goal.id == self.goal_id else None
+        return snapshot.require(self.owner.name).goal_for(self.goal_id)
 
     def require_current(self, registry) -> Goal:
         goal = self.current(registry.snapshot())
@@ -151,68 +242,20 @@ class ResolvedMentionBinding(GoalMentionBinding):
         ), ()
 
 
-class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
-    @abstractmethod
-    def require_report(self, progress) -> None: ...
-
-    @abstractmethod
-    def require_completion(self, progress, *, root: Path, goal: GoalRef) -> EventTime: ...
-
-    @abstractmethod
-    def require_current_order(self, root: Path, goal: GoalRef) -> None: ...
-
-    def require_order_source(self, problem_id: str) -> None:
-        raise ValueError("This goal is not a problem-bound order.")
-
-    @abstractmethod
-    def complete_problem(self, goals, reference: GoalRef) -> None: ...
-
-    @abstractmethod
-    def require_self_direction(self) -> None: ...
-
-    @abstractmethod
-    def require_commander(self, actor: ThreadIncarnation, snapshot) -> None: ...
-
-    @abstractmethod
-    def revised(self, author: ThreadIncarnation, registry, now: float): ...
-
-    @abstractmethod
-    def release(self, goals, reference: GoalRef) -> None: ...
-
-    @abstractmethod
-    def has_report(self, recorded: EventTime) -> bool: ...
-
-    @property
-    @abstractmethod
-    def revision_count(self) -> int: ...
-
-    @abstractmethod
-    def notification_targets(
-        self, registry, root: Path, *, new_order: bool
-    ) -> tuple[ThreadIncarnation, ...]: ...
-
-    @property
-    @abstractmethod
-    def issued_times(self) -> tuple[float, ...]: ...
-
-    @property
-    @abstractmethod
-    def instruction(self) -> str: ...
-
-
 @dataclass(frozen=True)
-class SelfDirectedGoalAuthor(GoalAuthor):
+class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
+    """Ordinary goals share behavior here; orders override their differences."""
     def require_report(self, progress) -> None:
         pass
 
-    def require_completion(self, progress, *, root, goal):
+    def require_completion(self, progress, *, goals, goal):
         return UnrecordedEventTime()
 
-    def require_current_order(self, root, goal):
+    def require_current_order(self, goals, goal):
         pass
 
-    def complete_problem(self, goals, reference):
-        pass
+    def require_order_source(self, problem_id: str) -> None:
+        raise ValueError("This goal is not a problem-bound order.")
 
     def require_self_direction(self):
         pass
@@ -220,29 +263,23 @@ class SelfDirectedGoalAuthor(GoalAuthor):
     def require_commander(self, actor, snapshot):
         raise ValueError("This existing goal was not issued by a commander.")
 
-    def revised(self, author, registry, now):
-        self.require_commander(author, registry)
-
     def release(self, goals, reference):
-        pass  # A self-directed goal is no commander's order to take away.
+        pass
 
-    def has_report(self, recorded):
-        return recorded.since(0)
+    def require_target(self, goals, target, goal_id):
+        if target.goal is not None and not target.goal.state.terminal:
+            target.goal.author.require_self_direction()
 
-    @property
-    def revision_count(self):
-        return 0
-
-    def notification_targets(self, registry, root, *, new_order):
-        return ()
-
-    @property
-    def issued_times(self):
+    def notification_targets(self, goals, *, new_order):
         return ()
 
     @property
     def instruction(self):
         return ""
+
+
+class UncommandedGoalAuthor(GoalAuthor):
+    """The ordinary author's wire case; all behavior belongs to GoalAuthor."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -321,75 +358,6 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
     revision: GoalRevision
 
 
-class GoalDeadline(DeclaredFamily):
-    @abstractmethod
-    def overdue(self, now: float, delivery: EventTime) -> bool: ...
-
-    @abstractmethod
-    def late(self, delivery: EventTime) -> bool: ...
-
-
-@dataclass(frozen=True)
-class NoDeadline(GoalDeadline):
-    def overdue(self, now: float, delivery: EventTime) -> bool:
-        return False
-
-    def late(self, delivery: EventTime) -> bool:
-        return False
-
-
-@dataclass(frozen=True)
-class Deadline(GoalDeadline):
-    at: float
-
-    def __post_init__(self) -> None:
-        if not isfinite(self.at) or self.at <= 0:
-            raise ValueError("A goal deadline requires a positive finite Unix timestamp.")
-
-    def overdue(self, now: float, delivery: EventTime) -> bool:
-        return now > self.at and not delivery.timestamps
-
-    def late(self, delivery: EventTime) -> bool:
-        return any(timestamp > self.at for timestamp in delivery.timestamps)
-
-
-class GoalNotice(DeclaredFamily, affix="GoalNotice"):
-    @classmethod
-    def publish(cls, bus, message, target: ThreadIncarnation) -> GoalNotice:
-        try:
-            # Core publication must not implicitly answer the unit's input.
-            published = bus.publisher.publish_ordinary(message)
-            return SentGoalNotice(published.reference)
-        except PublicationUncertain as error:
-            # Only the publisher's explicit uncertainty becomes this result;
-            # programming errors and invalid requests must remain visible.
-            _LOG.exception("Order saved; notification unconfirmed; no automatic resend")
-            return UnconfirmedGoalNotice(target, f"{type(error).__name__}: {error}")
-
-    @property
-    @abstractmethod
-    def summary(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class SentGoalNotice(GoalNotice):
-    message: MessageReference
-
-    @property
-    def summary(self):
-        return "Commander notified"
-
-
-@dataclass(frozen=True)
-class UnconfirmedGoalNotice(GoalNotice):
-    target: ThreadIncarnation
-    reason: str
-
-    @property
-    def summary(self):
-        return f"Commander notice unconfirmed: {self.reason}; no automatic resend"
-
-
 @dataclass(frozen=True)
 class Goal:
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
@@ -401,30 +369,12 @@ class Goal:
     reported_turn: str | None = None
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
-    deadline: GoalDeadline = field(
-        default_factory=NoDeadline, metadata={"wire_omit_default": True}
-    )
-    report_time: EventTime = field(
-        default_factory=UnrecordedEventTime, metadata={"wire_omit_default": True}
-    )
-    work_time: EventTime = field(
+    deadline: EventTime = field(
         default_factory=UnrecordedEventTime, metadata={"wire_omit_default": True}
     )
     delivery_time: EventTime = field(
         default_factory=UnrecordedEventTime, metadata={"wire_omit_default": True}
     )
-    notices: tuple[GoalNotice, ...] = field(default=(), metadata={"wire_omit_default": True})
-
-    def with_text(self, text, owner, registry, *, author: GoalAuthor):
-        from .goal_mentions import bind_goal_mentions
-
-        text = text.strip()
-        if not text:
-            raise ValueError("A goal requires text.")
-        revision = self.revision + 1
-        return replace(self, text=text, revision=revision, mention_source=bind_goal_mentions(
-            text, self.id, revision, owner, registry, author=author,
-        ))
 
     @property
     def author(self) -> GoalAuthor:
@@ -433,11 +383,11 @@ class Goal:
         return self.mention_source.author
 
     def notification_targets(
-        self, registry, root: Path, *, previous: Goal | None
+        self, goals, *, previous: Goal | None
     ) -> tuple[ThreadIncarnation, ...]:
         source = self.mention_source
         return () if source is None else source.author.notification_targets(
-            registry, root, new_order=not self.same_order_as(previous))
+            goals, new_order=not self.same_order_as(previous))
 
     def same_order_as(self, other: Goal | None) -> bool:
         return other is not None and self.id == other.id
@@ -465,6 +415,7 @@ class Goal:
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
         GoalRevision(self.id, self.revision)
+        self.require_deadline(self.deadline)
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
 
@@ -472,9 +423,15 @@ class Goal:
     def checkpoint(self) -> GoalRevision:
         return GoalRevision(self.id, self.revision)
 
+    @staticmethod
+    def require_deadline(deadline: EventTime):
+        if any(at <= 0 for at in deadline.timestamps):
+            raise ValueError("A goal deadline requires a positive Unix timestamp.")
+
     @property
     def late(self) -> bool:
-        return self.deadline.late(self.delivery_time)
+        return any(delivered > deadline for delivered in self.delivery_time.timestamps
+                   for deadline in self.deadline.timestamps)
 
     @property
     def delivery_complete(self) -> bool:

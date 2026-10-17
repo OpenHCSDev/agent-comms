@@ -46,7 +46,7 @@ from .native_tool_call import (
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
 from .pi_rpc import unique_fields
-from .private_path import PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole
+from .private_path import PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole, fsync_directory
 from .selected_actions import SelectedAction
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
@@ -196,14 +196,6 @@ def selected_extension(package: Path) -> Path:
     return source
 
 
-def _sync_dir(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
 def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
     """Persist one consumed slot BEFORE a bus append; even failed fsync is UNKNOWN.
 
@@ -226,7 +218,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
         info = ledger.lstat()
         if PrivateDirectoryRole.violation(info) is not None:
             raise SelectedToolDenied("Selected tool ledger is not private")
-        _sync_dir(directory)
+        fsync_directory(directory)
         fd = os.open(ledger / input_id, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     except FileExistsError as error:
         raise SelectedToolDenied(
@@ -239,7 +231,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
             stream.write((call_id + "\n").encode("ascii"))
             stream.flush()
             os.fsync(stream.fileno())
-        _sync_dir(ledger)
+        fsync_directory(ledger)
     except OSError as error:
         # Do NOT remove the visible slot; a failed fsync or a crash may have
         # committed it. No automatic re-append, retry, or write follows.
@@ -255,7 +247,7 @@ def record_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
             output.write((call_id + "\n").encode("ascii"))
             output.flush()
             os.fsync(output.fileno())
-        _sync_dir(result.parent)
+        fsync_directory(result.parent)
     except OSError as error:
         raise SelectedToolDenied("Selected tool terminal receipt UNKNOWN; no retry") from error
 

@@ -212,7 +212,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 ]
                 assert [event.text for event in incoming] == [origin.body for origin in messages]
             if case in {"deliver", "rename", "batch_rename"}:
-                assert comms.views.channel_history("#team")[-1].body == "RECEIVED"
+                assert list(comms.views.channel_history_page("#team").messages)[-1].body == "RECEIVED"
             if not success:
                 updates = []
 
@@ -220,7 +220,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     async def session_update(self, **kwargs):
                         updates.append(kwargs["update"].model_dump(by_alias=True))
 
-                await agent.inputs.replay_unknown_inputs("worker", Client())
+                await agent.inputs.emit_input_delivery_changed("worker", client=Client())
                 assert any(
                     row["_meta"]["agentComms"]["inputDisposition"]["sequence"] == message.seq
                     for row in updates

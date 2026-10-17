@@ -35,7 +35,7 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
     comms.views.mark_channel_view_read("#any", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#docs"] == 0
-    with patch.object(comms.bus.log, '_iter_log_unlocked', side_effect=AssertionError("idle rescan")):
+    with patch.object(comms.bus.log, 'verified_snapshot', side_effect=AssertionError("idle rescan")):
         comms.views.viewer_snapshot(str(tmp_path))
 
 
@@ -118,5 +118,5 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
         assert child.returncode == 9
         reopened = wire(root)
         reopened.channels.set_channel_any_mode("#team", True)
-        assert [message.seq for message in reopened.views.full_history()] == [1, 2]
+        assert [message.seq for message in list(reopened.views.full_history_page().messages)] == [1, 2]
         assert reopened.views.viewer_snapshot(str(root)).channel_unread["#team"] == 2

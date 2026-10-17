@@ -35,6 +35,7 @@ from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
 from test_backend_native_lifecycle import native_backend
+from native_backend_fixture import wait_for
 
 
 class Updates:
@@ -44,12 +45,6 @@ class Updates:
     async def session_update(self, *, session_id, update):
         self.rows.append(update if isinstance(update, dict) else
                          update.model_dump(by_alias=True, exclude_none=True))
-
-
-async def wait_for(predicate):
-    async with asyncio.timeout(30):
-        while not predicate():
-            await asyncio.sleep(0.01)
 
 
 async def test_native_preflight_failure_is_visible_and_cannot_mark_started(native_backend, monkeypatch):
@@ -355,11 +350,11 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             ))
             await wait_for(lambda: session in owner.inputs._idle_private_revisions)
             key = message.seq, message.message_id
-            pending, = comms.views.message_notifications([message])[key]
+            pending, = comms.views.message_notifications_for_references((message.reference,))[key]
             assert pending.state == "Sent" and not pending.busy
             open_release.set()
             await asyncio.wait_for(started.wait(), 30)
-            in_flight, = comms.views.message_notifications([message])[key]
+            in_flight, = comms.views.message_notifications_for_references((message.reference,))[key]
             assert in_flight.state == "Sent"
             assert in_flight.read_at_ms is None
             started_release.set()
@@ -378,7 +373,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 initial.seq, message.seq,
             ]
             assert type(assignments[-1].lifecycle) is DeliveredAssignment
-            read, = comms.views.message_notifications([message])[key]
+            read, = comms.views.message_notifications_for_references((message.reference,))[key]
             assert read.state.startswith("Read ") and not read.busy
             assert read.read_at_ms == assignments[-1].updated_at_ms
             assert native.provider.posts == 2
@@ -594,7 +589,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             # Nothing is left to start another turn for, and the sender got one answer.
             await wait_for(lambda: session not in owner.inputs.wake_tasks)
             assert native.provider.posts == 2
-            assert len([m for m in comms.views.full_history() if m.sender == session]) == 1
+            assert len([m for m in list(comms.views.full_history_page().messages) if m.sender == session]) == 1
         finally:
             held.set()
 

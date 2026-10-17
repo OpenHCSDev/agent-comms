@@ -142,6 +142,7 @@ class Thread(ThreadProvenance):
         if generated:
             object.__setattr__(self, "created_at", float(self.created_at))
         super(Thread, self).__post_init__()
+        self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None:
             if self.active_turn.owner_pid != self.pid:
@@ -224,9 +225,12 @@ class Thread(ThreadProvenance):
         if type(value) is not cls:
             raise ValueError("live owner requires an exact thread declaration")
 
+    def same_local_process(self, process: ProcessIdentity) -> bool:
+        return self.role.executable and self.process_identity == process
+
     def require_local_process(self, process: ProcessIdentity) -> None:
         self.role.require_executable()
-        if self.process_identity != process:
+        if not self.same_local_process(process):
             raise RelationViolationError("live owner is not the current process incarnation")
 
     def require_process(self) -> ProcessIdentity:

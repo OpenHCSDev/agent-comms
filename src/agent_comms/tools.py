@@ -25,9 +25,10 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_states import ActiveGoal
-from .goals import Deadline, GoalDeadline, NoDeadline
-from .todos import AcceptanceCheck, Assignment, TodoStore, TodoWhere
-from .goal_progress import GoalProgress
+from .goals import GoalProgress
+from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .todos import AcceptanceCheck, AssignedTodoAssignment, SourceTodoWhere
+from .message_reference import MessageReference
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -129,7 +130,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](NativeRequestTools, NativeExe
         return result
 
     @classmethod
-    def invoke(cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller = NoThreadCaller()) -> JsonObject:
+    def invoke(cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller) -> JsonObject:
         if cls.family_discriminator in arguments:
             raise ValueError("Unknown tool argument: tool")
         try:
@@ -463,7 +464,7 @@ class CommsSetGoalTool(ThreadToolRequest):
         "start, set, or pursue a goal autonomously."
     )
     text: str = tool_field("Persistent objective to pursue")
-    deadline: GoalDeadline = tool_field("Goal deadline", default_factory=NoDeadline)
+    deadline: EventTime = tool_field("Goal deadline", default_factory=UnrecordedEventTime)
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
         goal = comms.goals.update_goal(
@@ -604,12 +605,12 @@ class CommsTodoCreateTool(ThreadToolRequest):
     id: str = tool_field("Unique problem ID")
     repo: str = tool_field("Repository owner/name")
     text: str = tool_field("Problem and requested repair")
-    where: TodoWhere = tool_field("Declared existing source path/line or original message reference")
+    where: SourceTodoWhere | MessageReference = tool_field("Existing source path/line or original message reference")
     acceptance: AcceptanceCheck = tool_field(
         "Checkout repo, command, expected_count; command must exit zero and print one integer")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        todo = TodoStore(comms.root).create(self.id, self.repo, self.text,
+        todo = comms.todos.create(self.id, self.repo, self.text,
             creator=comms.registry.require(caller.name), where=self.where,
             acceptance=self.acceptance, bus=comms.bus)
         return {"todo": FieldCodec.encode(todo)}
@@ -626,9 +627,9 @@ class CommsTodoAssignTool(ThreadToolRequest):
     deadline: float = tool_field("Unix deadline timestamp")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        todo = TodoStore(comms.root).assign(self.id, expected_revision=self.expected_revision,
+        todo = comms.todos.assign(self.id, expected_revision=self.expected_revision,
             owner=comms.registry.require(self.owner), parent=comms.registry.require(caller.name),
-            generation=self.generation, deadline=Deadline(self.deadline), goals=comms.goals)
+            generation=self.generation, deadline=RecordedEventTime(self.deadline), goals=comms.goals)
         return todo.order_result(comms.goals)
 
 
@@ -638,16 +639,16 @@ class CommsTodoTransferTool(ThreadToolRequest):
     description = "Transfer an exact assignment, end its old order and notify its prior owner."
     id: str = tool_field("Problem ID")
     expected_revision: int = tool_field("Exact current Todo revision")
-    previous: Assignment = tool_field("Exact previous assignment from Todo listing")
+    previous: AssignedTodoAssignment = tool_field("Exact previous assignment from Todo listing")
     owner: str = tool_field("New assignee thread")
     generation: str = tool_field("Unique new assignment/Goal ID")
     deadline: float = tool_field("Unix deadline timestamp")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        todo = TodoStore(comms.root).transfer(self.id, expected_revision=self.expected_revision,
+        todo = comms.todos.transfer(self.id, expected_revision=self.expected_revision,
             previous=self.previous, owner=comms.registry.require(self.owner),
             parent=comms.registry.require(caller.name), generation=self.generation,
-            deadline=Deadline(self.deadline), goals=comms.goals)
+            deadline=RecordedEventTime(self.deadline), goals=comms.goals)
         return todo.order_result(comms.goals)
 
 
@@ -660,7 +661,7 @@ class CommsTodoCompleteTool(ThreadToolRequest):
     progress: GoalProgress = tool_field("Structured progress; works_in_app requires evidence and sha")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        todo = TodoStore(comms.root).complete(self.id, expected_revision=self.expected_revision,
+        todo = comms.todos.complete(self.id, expected_revision=self.expected_revision,
             actor=comms.registry.require(caller.name), progress=self.progress, goals=comms.goals,
             actor_kind=ModelInvocable)
         return todo.order_result(comms.goals)
@@ -673,18 +674,16 @@ class CommsTodosTool(ToolRequest):
     repo: str | None = tool_field("Repository owner/name; omit for all", default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        return {"todos": FieldCodec.encode(TodoStore(comms.root).list(self.repo))}
+        return {"todos": FieldCodec.encode(comms.todos.list(self.repo))}
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsFleetTool(ToolRequest):
     label = "Fleet"
-    description = "Running threads, goals, deadlines and latest original tool/message activity, newest first."
+    description = "Canonical problems, exact current orders and observed activity."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import FleetCliCommand
-
-        return FleetCliCommand().apply(comms)
+        return {"problems": FieldCodec.encode(comms.todos.fleet(comms.registry, comms.agents))}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1080,7 +1079,6 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
     tags: str | None = tool_field(
         "Comma-separated tags; omitted inherits parent tags", default=None
     )
-    prompt: str | None = tool_field("Initial prompt override", default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import ForkCliCommand
@@ -1089,8 +1087,7 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
         return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
                               project=parent.worktree, model=parent.model,
                               thinking_level=parent.thinking_level,
-                              tags=_tag_set(self.tags) if self.tags is not None else None,
-                              prompt=self.prompt).apply(comms)
+                              tags=_tag_set(self.tags) if self.tags is not None else None).apply(comms)
 
 
 class OwnerLifecycleControl:
@@ -1216,7 +1213,7 @@ def context_tool_catalog(context: str) -> list[JsonObject]:
     return [tool.schema() for tool in tools]
 
 
-def invoke_tool(comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller = NoThreadCaller()) -> JsonObject:
+def invoke_tool(comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller) -> JsonObject:
     return ToolRequest.decode(name).invoke(comms, arguments, caller=caller)
 
 
@@ -1225,7 +1222,7 @@ def invoke_context_tool(
     name: str,
     *,
     subject: str,
-    actor: str | None = None,
+    actor: str | None,
     arguments: Mapping[str, object] | None = None,
 ) -> JsonObject:
     tool = ToolRequest.decode(name)

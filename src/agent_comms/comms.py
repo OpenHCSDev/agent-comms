@@ -9,6 +9,7 @@ from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
+from .goal_management import Goals
 from .history_views import HistoryViews
 from .message_bus import MessageBus
 from .messaging import Messaging
@@ -17,6 +18,7 @@ from .registration import Registration
 from .relationships import ThreadRelationships
 from .thread_management import ThreadManagement
 from .thread_configuration import ThreadConfiguration
+from .todos import TodoStore
 from .transcripts import Transcripts
 
 
@@ -36,10 +38,11 @@ class Comms:
             private_claim_writes=private_claim_writes,
         )
         self.messaging = Messaging(self.root, self.registry, self.bus)
-        self.agents = AgentActivity(self.root, self.registry, self.bus)
+        self.agents = AgentActivity(self.root, self.registry)
         self.ledger = CollaborationLedger(self.root / CollaborationLedger.filename, self.registry)
         self.owners = OwnerLifecycle(self.root, self.registry, self.bus)
-        self.goals = self.agents.goals
+        self.todos = TodoStore(self.root)
+        self.goals = Goals(self.root, self.registry, self.bus, self.agents, self.todos)
         self.transcripts = Transcripts(self.root, self.registry, self.bus, self.messaging)
         self.threads = ThreadManagement(
             self.root, self.registry, self.bus,

@@ -113,5 +113,5 @@ class GoalUnavailable(GoalDisplay):
         return True
 
     def heading(self, execution: GoalExecution | None) -> str:
-        detail = "last confirmed snapshot" if self.last_confirmed else "reconnecting to owner"
-        return f"Goal state unavailable · {detail}"
+        # A failed read says nothing about why; the session's own state explains it.
+        return "Goal state unavailable · last confirmed snapshot" if self.last_confirmed else "Goal state unavailable"

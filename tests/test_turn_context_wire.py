@@ -218,7 +218,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
             assert selected_rows[0].segments == ordinary_rows[0].segments == observed.segments
             assert ordinary_rows[0].turn == RecordedContextTurn(TurnId(lease.turn_id), lease.identity)
             assert comms.bus.log.latest_sequence() == original_message.seq
-            assert comms.bus.log.full_history() == [original_message]
+            assert list(comms.bus.full_history_page().messages) == [original_message]
             from subprocess import run
             command = [str(Path(sys.executable).with_name('agent-comms')), '--root', str(comms.root),
                        'context', 'Alice', '--turn', str(lease.identity.generation)]
@@ -255,20 +255,20 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert comms.bus.log.path.read_bytes().startswith(raw)
     assert b'PRIVATE INPUT' not in comms.bus.log.path.read_bytes()[len(raw):]
     assert comms.bus.log.latest_sequence()==first.seq
-    assert comms.bus.log.total_messages()==1
+    assert len(list(comms.bus.full_history_page().messages))==1
     assert _page(comms,lookup)[0].offset>prior[0].offset
     assert _page(comms,lookup)[1:]==prior[1:]
     assert comms.bus.channel_activity()==activity
     assert comms.bus.pending_counts_all(['Alice','Bob'])==pending
     assert comms.bus.awareness_segments(comms.registry.require('Alice'), ())==awareness
-    assert comms.bus.log.full_history()==[first]
+    assert list(comms.bus.full_history_page().messages)==[first]
     with comms.bus.log.full_history_snapshot() as (_, messages):
         assert list(messages)==[first]
     second=comms.messaging.send_initial_cohort('sender','#team','@Alice next original message')
     assert second.seq==first.seq+1
     comms.bus.log.record_context(manifest(comms.registry.require('Alice'),2))
     reopened=Comms(comms.root)
-    assert reopened.bus.log.full_history()==[first,second]
+    assert list(reopened.bus.full_history_page().messages)==[first,second]
     assert len(_page(reopened,lookup)[1])==2
     monkeypatch.setattr(type(reopened.relationships), "RECENT_MESSAGES", 2)
     recent, limited = reopened.relationships._recent_messages()
@@ -366,7 +366,7 @@ def test_context_pointer_family_rebuilds_and_decodes_only_selected_originals(tmp
     assert Comms(comms.root).bus.log.context_manifests('Alice', comms.registry) == expected
     assert comms.bus.log.path.read_bytes().startswith(original)
     assert comms.bus.log.latest_sequence() == 12
-    assert len(comms.bus.log.full_history()) == 12
+    assert len(list(comms.bus.full_history_page().messages)) == 12
 
     # Changing a sealed pointer file cannot authorize a rebuilt or empty view.
     index = comms.root / 'private_bus_checkpoint.sqlite3'

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from acp import RequestError
 
-from agent_comms import cohort_foreground, native_pi
+from agent_comms import native_pi
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import ACPFailure, NativeMessageFailureSource, RequestFailure
 from agent_comms.field_codec import FieldCodec
@@ -53,10 +53,9 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
                  "--no-extensions", "--no-skills", "--no-context-files"]
     agent = canonical_agent(wired, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
-    route = PrivateNkLaunch(Path(agent._comms.root), agent._configured_root_id(), package, None)
+    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(cohort_foreground, "_preflight",
-                        lambda root, root_id, pkg, enabled: native_pi._trusted_package(pkg))
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
     updates = []
     attempted = []
 

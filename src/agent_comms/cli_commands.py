@@ -8,16 +8,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import asyncio
 import os
 import re
 import shlex
 import time
 import types
 from collections.abc import AsyncIterator, Callable
+from contextlib import aclosing
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Literal, Self, TextIO, Type, TYPE_CHECKING, get_args, get_origin, get_type_hints
 
 from .activity import ActivityState
 from .channels import Channel
@@ -26,12 +28,14 @@ from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
-from .field_codec import FieldCodec, JsonShapeFamily
-from .goals import Deadline, GoalDeadline, NoDeadline
-from .goal_actions import OwnerInvocable
-from .goal_progress import GoalProgress
-from .todos import AcceptanceCheck, Assignment, TodoStore, TodoWhere
+from .cli_protocol import ArrivedMessage
+from .field_codec import FieldCodec
+from .tools import ToolRequest
 from .comms import Comms
+from .config_options import (
+    CatalogConfigOption, CatalogSelection, ConfigOptions,
+    ModelConfigOption, ThinkingLevelConfigOption,
+)
 from .declared_family import DeclaredFamily
 from .read_basis import WatchAcknowledgment, OnReadWatchAcknowledgment
 from .exporting import (
@@ -45,11 +49,12 @@ from .exporting import (
     SelectableWireExportFormat,
 )
 from .importing import ImportFormat, ImportLimits
+from .historical_views import HistoryCursor
+from .launch_runtime import RestartEnvironment
 from .turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
-from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .change_report import ChangeReport
@@ -58,6 +63,9 @@ from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
 from .owner_lifecycle import OwnerStartResult
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
+
+if TYPE_CHECKING:
+    from acp.schema import SessionConfigSelectOption
 
 
 def _duration_seconds(value: str) -> float:
@@ -71,7 +79,7 @@ def _duration_seconds(value: str) -> float:
 
 
 def _json_object(value: str) -> dict[str, Any]:
-    result = json.loads(value)
+    result = json.loads(value) if isinstance(value, str) else value
     if not isinstance(result, dict):
         raise ValueError("invoke --arguments must be a JSON object")
     return result
@@ -114,6 +122,7 @@ def option(
     multiline: bool = False,
     target_bound: bool = False,
     editor_format: Callable[[Any], str] | None = None,
+    catalog: type[CatalogConfigOption] | None = None,
     **parser_options: Any,
 ) -> Any:
     """One field owns both its CLI projection and JSON boundary conversion."""
@@ -130,6 +139,8 @@ def option(
     }
     if wire_name is not None:
         metadata["wire_name"] = wire_name
+    if catalog is not None:
+        metadata[CatalogConfigOption] = catalog
     return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
@@ -160,43 +171,50 @@ class TargetField:
             return formatter(self.value)
         if self.value is None:
             return ''
-        if isinstance(self.value, DeclaredFamily) and self.choices:
+        if isinstance(self.value, DeclaredFamily):
             return FieldCodec.encode(type(self.value))
         encoded = FieldCodec.encode(self.value)
         return encoded if isinstance(encoded, str) else json.dumps(encoded)
 
     @property
-    def choices(self) -> tuple[tuple[str, str], ...]:
-        schema = FieldCodec.value_schema(self.annotation)
-        if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
-            variants = schema.get('oneOf', ())
-            tag = self.annotation.family_discriminator
-            if variants and all(set(variant.get('properties', ())) == {tag}
-                                for variant in variants):
-                return tuple((member.declared_name, FieldCodec.encode(member))
-                             for member in self.annotation.members_with(self.annotation))
-        return tuple((str(value), str(value)) for value in schema.get('enum', ()))
+    def catalog(self) -> type[CatalogConfigOption] | None:
+        return self.declaration.metadata.get(CatalogConfigOption)
 
-    @staticmethod
-    def family_argument(annotation, value):
-        """Shell/editor syntax only; FieldCodec still owns the record decode."""
-        if isinstance(value, DeclaredFamily):
-            return FieldCodec.encode(value)
-        if not isinstance(value, str):
-            return value
-        if value.lstrip().startswith('{'):
-            return json.loads(value)
-        if issubclass(annotation, JsonShapeFamily):
-            return value
-        return {annotation.family_discriminator: value}
+    @property
+    def choices(self) -> tuple[tuple[str, str], ...] | None:
+        if self.catalog is not None:
+            return ()
+        if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
+            return tuple((member.declared_name, FieldCodec.encode(member))
+                         for member in self.annotation.members_with(self.annotation))
+        values = FieldCodec.value_schema(self.annotation).get('enum')
+        return None if values is None else tuple((str(value), str(value)) for value in values)
+
+    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> TargetField:
+        if (member := self.catalog) is None:
+            return self
+        options = await catalogs.catalog_for(member).choices(selection)
+        return CatalogTargetField(self.declaration, self.annotation, self.value, tuple(options))
 
     @property
     def required(self) -> bool:
         return self.declaration.default is MISSING and self.declaration.default_factory is MISSING
 
     def json_schema(self) -> dict[str, object]:
-        return {**FieldCodec.value_schema(self.annotation), 'multiline': self.multiline,
+        schema = (FieldCodec.value_schema(self.annotation) if self.catalog is None
+                  else {'type': 'string', 'configuration': FieldCodec.encode(self.catalog)})
+        return {**schema, 'multiline': self.multiline,
                 'description': self.description, 'editor_default': self.editor_default}
+
+
+@dataclass(frozen=True)
+class CatalogTargetField(TargetField):
+    """A form projects the choices supplied by its declared configuration owner."""
+    options: tuple[SessionConfigSelectOption, ...]
+
+    @property
+    def choices(self) -> tuple[tuple[str, str], ...]:
+        return tuple((choice.name, choice.value) for choice in self.options)
 
 
 @dataclass(frozen=True)
@@ -213,6 +231,9 @@ class TargetAction:
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
         return self.bound[0].editable_fields
+
+    async def prepare_fields(self) -> tuple[TargetField, ...]:
+        return await self.bound[0].prepare_fields()
 
     @property
     def label(self) -> str:
@@ -381,12 +402,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     @classmethod
     def member_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
         """Use original roster membership and each command's thread eligibility."""
-        from .presentation import ThreadView
         if snapshot is None:
             snapshot = comms.registry.snapshot()
-        return tuple(bound for thread in snapshot.threads.values()
-                     if channel.matches(thread.tags) and ThreadView.visible(
-                         thread, snapshot, show_stopped=True, show_archived=False)
+        return tuple(bound for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
+                     if channel.matches(thread.tags)
                      for bound in cls.thread_bindings(
                          comms, thread, snapshot.status(thread.name), channel.name))
 
@@ -448,6 +467,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return tuple(TargetField(item, hints[item.name], getattr(self, item.name))
                      for item in fields(self) if not item.metadata['target_bound'])
 
+    async def prepare_fields(self) -> tuple[TargetField, ...]:
+        catalogs = ConfigOptions.configured()
+        return tuple([await item.prepare(catalogs, self) for item in self.editable_fields])
+
     def describe(self, comms: Comms, target: CommandTarget | str, project: str) -> TargetAction:
         target = CommandTarget.named(target)
         bound = self.for_editor(comms, target.name, project)
@@ -488,7 +511,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif normalize is not None:
                 result[key] = normalize(text)
             elif isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-                result[key] = TargetField.family_argument(annotation, text)
+                result[key] = {annotation.family_discriminator: text}
             elif FieldCodec.value_schema(annotation).get('type') == 'string' or str in get_args(annotation):
                 result[key] = text
             else:
@@ -575,7 +598,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
     @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
+    def add_parser(cls, subparsers: Any) -> argparse.ArgumentParser:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls)
@@ -599,9 +622,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif isinstance(scalar, type) and issubclass(scalar, Enum):
                 options["choices"] = [kind.value for kind in scalar]
             elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
-                choices = TargetField(declared, scalar, None).choices
-                if choices:
-                    options.setdefault("choices", tuple(value for _, value in choices))
+                options.setdefault("choices", scalar.names())
             elif (
                 get_origin(scalar) is type and get_args(scalar)
                 and issubclass(get_args(scalar)[0], DeclaredFamily)
@@ -618,7 +639,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             else:
                 options["required"] = True
             if isinstance(options.get("default"), DeclaredFamily):
-                options["default"] = FieldCodec.encode(options["default"])
+                options["default"] = options["default"].declared_name
             elif (
                 isinstance(options.get("default"), type)
                 and issubclass(options["default"], DeclaredFamily)
@@ -629,6 +650,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             else:
                 options.pop("required", None)
             owner.add_argument(*metadata["flags"], **options)
+        return parser
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
@@ -644,7 +666,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif isinstance(hints[declared.name], type) and issubclass(
                 hints[declared.name], DeclaredFamily
             ):
-                value = TargetField.family_argument(hints[declared.name], value)
+                value = {hints[declared.name].family_discriminator: value}
             payload[key] = value
         return member.from_payload(payload)
 
@@ -699,13 +721,34 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
         return receipt.to_wire()
 
 
+class ToolArgument(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        namespace.arguments = {**namespace.arguments, self.dest: values}
+
+
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
+
+    @classmethod
+    def add_parser(cls, subparsers):
+        parser = super().add_parser(subparsers)
+        tools = parser.add_subparsers(dest="tool")
+        for declaration in ToolRequest.members_with(ToolRequest):
+            tool = tools.add_parser(declaration.declared_name, help=declaration.description)
+            tool.set_defaults(arguments={})
+            tool.add_argument("--caller", dest="caller", default=argparse.SUPPRESS)
+            schema = declaration.schema()["parameters"]
+            for name, value in schema["properties"].items():
+                converter = {"string": str, "integer": int, "number": float}.get(
+                    value.get("type"), json.loads)
+                tool.add_argument("--" + name.replace("_", "-"), dest=name,
+                    action=ToolArgument, type=converter, required=name in schema["required"],
+                    choices=value.get("enum"), help=value.get("description"))
     caller: str | None = option(
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )
-    tool: str = option("--tool")
+    tool: str = option("--tool", default="")
     arguments: dict[str, Any] = option(
         "--arguments",
         help="Tool arguments as a JSON object",
@@ -768,10 +811,6 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
     service_tier: ServiceTier | None = option("--service-tier", default=None)
 
     def apply(self, ctx: Comms) -> Any:
-        import asyncio
-
-        from .config_options import ConfigOptions
-        from .launch_runtime import RestartEnvironment
         from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
 
@@ -785,12 +824,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             thinking_level=level,
             service_tier=self.service_tier,
         )
-        catalogs = ConfigOptions(
-            NativeArguments.configured_binary(),
-            NativeArguments.configured(),
-            RestartEnvironment.inherit(os.environ),
-        )
-        asyncio.run(catalogs.validate(candidate))
+        asyncio.run(ConfigOptions.configured().validate(candidate))
         updated = ctx.threads.set_thread_configuration(
             thread,
             model=candidate.model,
@@ -953,15 +987,11 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
         return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
-        import asyncio
-        from contextlib import aclosing
-
+        emit = self.acknowledgment.line_output(output)
         async def stream() -> None:
             async with aclosing(self.apply(ctx)) as messages:
                 async for message in messages:
-                    json.dump(message.to_wire(), output, separators=(",", ":"))
-                    output.write("\n")
-                    output.flush()
+                    emit(ArrivedMessage(message=message).model_dump_json())
 
         asyncio.run(stream())
         return 0
@@ -1016,39 +1046,29 @@ class StatusCliCommand(CliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class HistoryCliCommand(CliCommand):
-    help = "Full history of a DM, channel, or everything"
+    help = "Newest-first bounded history of a DM, channel, or everything"
     with_thread: str | None = option("--with", help="DM with this thread", default=None)
     channel: str | None = option("--channel", help="Channel (#all, #tag)", default=None)
-    everything: bool = option("--everything", help="Every message on the wire", default=False)
-    me: str | None = option("--as", help="Your thread (for --with)", default=None)
+    everything: bool = option("--everything", help="Every message scope (the default)", default=False)
+    me: str | None = option("--as", help="DM participant (default: calling thread)", default=None)
+    limit: int = option("--limit", help="Maximum messages in this page", default=20)
+    before: int | HistoryCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
     def apply(self, ctx: Comms) -> Any:
-        selected = sum(bool(x) for x in (self.with_thread, self.channel, self.everything))
-        if selected != 1:
-            raise ValueError("history takes exactly one of --with, --channel, --everything")
+        if sum(bool(x) for x in (self.with_thread, self.channel, self.everything)) > 1:
+            raise ValueError("history takes at most one of --with, --channel, --everything")
+        paging = {"before": self.before, "limit": self.limit}
         if self.with_thread:
-            if not self.me:
-                raise ValueError("history --with requires --as (your thread)")
-            return {
-                "dm": [
-                    {**m.to_wire(), **m.display_metadata}
-                    for m in ctx.views.dm_history(self.me, self.with_thread)
-                ]
-            }
+            page = ctx.views.dm_history_page(self.me or RestartEnvironment.calling_thread(), self.with_thread, **paging)
         elif self.channel:
-            return {
-                "channel": self.channel,
-                "messages": [
-                    {**m.to_wire(), **m.display_metadata}
-                    for m in ctx.views.channel_history(self.channel)
-                ],
-            }
+            page = ctx.views.channel_history_page(self.channel, **paging)
         else:
-            return {
-                "everything": [
-                    {**m.to_wire(), **m.display_metadata} for m in ctx.views.full_history()
-                ]
-            }
+            page = ctx.views.full_history_page(**paging)
+        return {
+            "messages": [{**m.to_wire(), **m.display_metadata} for m in reversed(page.messages)],
+            "before": page.oldest_cursor,
+            "has_older": page.has_older,
+        }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1117,92 +1137,6 @@ class ChannelsCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> Any:
         return {"channels": list(ctx.channels.channels())}
-
-
-@dataclass(frozen=True, kw_only=True)
-class TodoCreateCliCommand(CliCommand, declared_name="todo-create"):
-    help = "Create a durable problem with its original source and acceptance check"
-    id: str = option("--id")
-    repo: str = option("--repo", help="Repository owner/name")
-    text: str = option("--text")
-    creator: str = option("--from")
-    where: TodoWhere = option("--where", help="Declared source/message JSON record")
-    acceptance: AcceptanceCheck = option("--acceptance", normalize=json.loads,
-        help="JSON: repo checkout, command, expected_count; command must print one integer")
-
-    def apply(self, ctx: Comms) -> object:
-        todo = TodoStore(ctx.root).create(self.id, self.repo, self.text,
-            creator=ctx.registry.require(self.creator), where=self.where,
-            acceptance=self.acceptance, bus=ctx.bus)
-        return {"todo": FieldCodec.encode(todo)}
-
-
-@dataclass(frozen=True, kw_only=True)
-class TodoAssignCliCommand(CliCommand, declared_name="todo-assign"):
-    help = "Assign one problem and create its checked commanded Goal"
-    id: str = option("--id")
-    expected_revision: int = option("--expected-revision")
-    owner: str = option("--owner")
-    parent: str = option("--from")
-    generation: str = option("--generation", help="Unique ID naming this assignment and its Goal")
-    deadline: float = option("--deadline", help="Unix timestamp")
-
-    def apply(self, ctx: Comms) -> object:
-        todo = TodoStore(ctx.root).assign(self.id, expected_revision=self.expected_revision,
-            owner=ctx.registry.require(self.owner), parent=ctx.registry.require(self.parent),
-            generation=self.generation, deadline=Deadline(self.deadline), goals=ctx.goals)
-        return todo.order_result(ctx.goals)
-
-
-@dataclass(frozen=True, kw_only=True)
-class TodoTransferCliCommand(CliCommand, declared_name="todo-transfer"):
-    help = "Transfer one exact assignment, end its old order and notify the prior owner"
-    id: str = option("--id")
-    expected_revision: int = option("--expected-revision")
-    previous: Assignment = option("--previous", normalize=json.loads)
-    owner: str = option("--owner")
-    parent: str = option("--from")
-    generation: str = option("--generation")
-    deadline: float = option("--deadline", help="Unix timestamp")
-
-    def apply(self, ctx: Comms) -> object:
-        todo = TodoStore(ctx.root).transfer(self.id, expected_revision=self.expected_revision,
-            previous=self.previous, owner=ctx.registry.require(self.owner),
-            parent=ctx.registry.require(self.parent), generation=self.generation,
-            deadline=Deadline(self.deadline), goals=ctx.goals)
-        return todo.order_result(ctx.goals)
-
-
-@dataclass(frozen=True, kw_only=True)
-class TodoCompleteCliCommand(CliCommand, declared_name="todo-complete"):
-    help = "Complete only after the declared acceptance check passes for the reported SHA"
-    id: str = option("--id")
-    expected_revision: int = option("--expected-revision")
-    actor: str = option("--from", help="Current assignee")
-    progress: GoalProgress = option("--progress", help="Structured report JSON including delivery SHA")
-
-    def apply(self, ctx: Comms) -> object:
-        todo = TodoStore(ctx.root).complete(self.id, expected_revision=self.expected_revision,
-            actor=ctx.registry.require(self.actor), progress=self.progress, goals=ctx.goals,
-            actor_kind=OwnerInvocable)
-        return todo.order_result(ctx.goals)
-
-
-@dataclass(frozen=True, kw_only=True)
-class TodosCliCommand(CliCommand, declared_name="todos"):
-    help = "List the canonical durable problems and assignments"
-    repo: str | None = option("--repo", default=None)
-
-    def apply(self, ctx: Comms) -> object:
-        return {"todos": FieldCodec.encode(TodoStore(ctx.root).list(self.repo))}
-
-
-@dataclass(frozen=True, kw_only=True)
-class FleetCliCommand(CliCommand):
-    help = "Running threads, original goals and latest activity, newest first"
-
-    def apply(self, ctx: Comms) -> Any:
-        return {"threads": FieldCodec.encode(ctx.views.fleet())}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1478,12 +1412,12 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     tags: frozenset[str] | None = option(
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
-    prompt: str | None = option("--prompt", default=None, multiline=True)
-    pi_bin: str = option("--pi-bin", default=NativeArguments.default_binary)
     project: str = option("--project", parser_default_factory=os.getcwd)
-    model: str = option("--model", parser_default=NativeThreadDefaults.model)
+    model: str = option("--model", parser_default=NativeThreadDefaults.model,
+                        catalog=ModelConfigOption)
     thinking_level: type[ThinkingLevel] = option(
-        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level)
+        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level,
+        catalog=ThinkingLevelConfigOption)
 
     @classmethod
     def project_bindings(cls, comms, project):
@@ -1498,7 +1432,8 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
         spec = self.spec_type(**{item.name: getattr(self, item.name)
                                  for item in fields(self.spec_type)})
-        child = ctx.threads.create(spec, pi_bin=self.pi_bin)
+        asyncio.run(ConfigOptions.configured().validate(self))
+        child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.pid)
 
 
@@ -1584,7 +1519,6 @@ class ContextCliCommand(CliCommand):
                 raise ValueError("No preceding recorded turn exists for comparison")
             return {"manifests": tuple(reversed(selected)),
                     "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
-        import asyncio
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path

@@ -180,7 +180,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     assert caught.value.context.session_file == Path(seed.session_file)
     assert all(not child.alive() for child in journey.children)
     assert journey.comms.registry.require("beta").active_turn is None
-    notice = journey.comms.views.full_history()[-1]
+    notice = list(journey.comms.views.full_history_page().messages)[-1]
     assert notice.notice and "No automatic retry" in notice.body
     delivery = journey.comms.bus.log.read_delivery_cohort(journey.root_id, notice.seq)
     assert all(decision.wake_mode == PassiveWake() for decision in delivery.decisions)
@@ -210,7 +210,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     assert result.input_id != caught.value.context.input_id
     assert all(row in journey.records() for row in before)
     assert not journey.replies
-    assert any(m.body == "NEW_INPUT_COMPLETED" for m in journey.comms.views.full_history())
+    assert any(m.body == "NEW_INPUT_COMPLETED" for m in list(journey.comms.views.full_history_page().messages))
     print(
         "SAVED_NATIVE_TERMINAL",
         "direct",
@@ -262,49 +262,3 @@ async def test_actual_saved_eof_preserves_unknown_and_never_replays(journey):
         if not running.done():
             running.cancel()
         await asyncio.gather(running, return_exceptions=True)
-
-
-@pytest.mark.parametrize("direct", [False])
-async def test_actual_fresh_enrollment_retains_coverage_across_triage(journey):
-    (journey.root / "runtime").mkdir(mode=0o700, exist_ok=True)
-    journey.text('{"decision":"FULL"}')
-    journey.text("FRESH_TRIAGE_FULL_COMPLETED")
-    result = await SelectedExecution(
-        root=journey.root,
-        wire_root_id=journey.root_id,
-        owner_name="beta",
-        native_package=journey.package,
-        fresh_private_enrollment=True,
-    ).run()
-    assert result.disposition is CompletedAssignment
-    assert result.fresh_session is not None
-    rows = journey.records()
-    assert {row.stage for row in rows} == {"triage", "full"}
-    assert len(rows) == 2 and len(journey.received) == 2
-    assert {Path(row.session_file) for row in rows} == {result.fresh_session.path}
-    assert Path(journey.comms.registry.require("beta").session_file) == result.fresh_session.path
-    assert all(not child.alive() for child in journey.children)
-    assert journey.comms.registry.require("beta").active_turn is None
-    print(
-        "FRESH_NATIVE: enrollment retained through triage and full, original input completed once"
-    )
-
-
-@pytest.mark.parametrize("direct", [False])
-async def test_actual_selected_first_start_preserves_unreviewed_cli_refusal(journey):
-    with pytest.raises(NativePiUnavailable, match="first-source CLI builtins are unreviewed"):
-        await SelectedExecution(
-            root=journey.root,
-            wire_root_id=journey.root_id,
-            owner_name="beta",
-            native_package=journey.package,
-            fresh_private_enrollment=True,
-            selected_thinking_level="low",
-        ).run()
-    assert not journey.received
-    assert journey.comms.registry.require("beta").active_turn is None
-    before = journey.records()
-    assert len(before) == 1
-    assert await journey.execution().run() is None
-    assert journey.records() == before and not journey.received
-    print("FIRST_START_REFUSAL: no provider call, lease released, reserved input never replayed")

@@ -1,9 +1,6 @@
 """Stored lifecycle names, graph/data ownership, and current codec paths."""
 
-import json
-from agent_comms.attempt_states import SucceededAttempt
 from dataclasses import fields, replace
-from pathlib import Path
 
 import pytest
 
@@ -17,12 +14,9 @@ from agent_comms.execution_states import (
     ActiveExecution,
     ExecutionState,
     PendingExecution,
-    QueuedExecution,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
-from agent_comms.recovery_gateway_client import _valid_projection
-from agent_comms.recovery_projection import AvailableRecoveryProjection, ProjectedExecution
 from agent_comms.wake_policy import FullWake
 
 
@@ -66,17 +60,6 @@ def test_record_replacement_uses_only_nominal_state():
     assert replace(active, revision=3).lifecycle == active.lifecycle
 
 
-def test_gateway_uses_declared_fields_and_rejects_missing_tags_and_bool_numbers():
-    value = FieldCodec.encode(AvailableRecoveryProjection("owner", 0, None, None, None))
-    assert _valid_projection(value, "owner")
-    for key in ("schema", "availability", "current"):
-        bad = dict(value)
-        del bad[key]
-        assert not _valid_projection(bad, "owner")
-    assert not _valid_projection(dict(value, sampledAtMs=True), "owner")
-    assert not _valid_projection(dict(value, owner="other"), "owner")
-
-
 def test_response_extension_decodes_transitions_and_projects_without_catalog_edits():
     class ReviewedResponse(ResponseState):
         @classmethod
@@ -86,26 +69,12 @@ def test_response_extension_decodes_transitions_and_projects_without_catalog_edi
     try:
         state = FieldCodec.decode(ResponseState, {"kind": "reviewed"})
         assert state.may_become(SilentResponse())
-        tag = ResponseState.decode("reviewed")
-        assert tag is ReviewedResponse
-        projection = ProjectedExecution(
-            PendingExecution,
-            ExecutionOrigin.WIRE,
-            False,
-            None,
-            False,
-            (tag,),
-        )
-        assert _valid_projection(
-            FieldCodec.encode(AvailableRecoveryProjection("owner", 0, projection, None, None)),
-            "owner",
-        )
+        assert ResponseState.decode("reviewed") is ReviewedResponse
     finally:
         ResponseState.__registry__.pop("reviewed")
 
 
-@pytest.mark.asyncio
-async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_schema(tmp_path):
+def test_execution_extension_is_stored_and_transitioned(tmp_path):
     from agent_comms.coordinator import Coordination
     from agent_comms.execution_states import UnstartedExecution
 
@@ -130,17 +99,6 @@ async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_
                 "ion=2 WHERE execution_id='e'"
             )
             assert isinstance(store.snapshots.get("e").execution.lifecycle, PendingExecution)
-            projection = ProjectedExecution(
-                type(record.lifecycle), record.origin, False, None, False, ()
-            )
-            result = await _through_socket(
-                AvailableRecoveryProjection("owner", 1, projection, None, None)
-            )
-            assert result["current"]["status"] == "paused"
-            assert _valid_projection(
-                FieldCodec.encode(AvailableRecoveryProjection("owner", 1, projection, None, None)),
-                "owner",
-            )
     finally:
         ExecutionState.__registry__.pop("paused")
 
@@ -248,33 +206,7 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path, mo
         assert store.snapshots.get("e").execution.lifecycle.completed
 
 
-async def _through_socket(projection):
-    import asyncio
-    import tempfile
-
-    from agent_comms.recovery_gateway_client import read_gateway_projection
-
-    with tempfile.TemporaryDirectory(prefix="s3-wire-", dir="/var/tmp") as directory:
-        root = Path(directory)
-        folder = root / ".recovery-viewer"
-        folder.mkdir(mode=0o700)
-        path = folder / "gateway.sock"
-
-        async def reply(reader, writer):
-            await reader.read()
-            writer.write((json.dumps(FieldCodec.encode(projection)) + "\n").encode())
-            await writer.drain()
-            writer.close()
-            await writer.wait_closed()
-
-        server = await asyncio.start_unix_server(reply, path=path)
-        path.chmod(0o600)
-        async with server:
-            return await read_gateway_projection(path, "owner")
-
-
-@pytest.mark.asyncio
-async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
+def test_new_response_state_roundtrips_real_store(tmp_path):
     from agent_comms.coordinator import Coordination
 
     class ReviewedResponse(ResponseState):
@@ -308,22 +240,6 @@ async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
             obligation = store.snapshots.get("e").obligation
             assert isinstance(obligation.lifecycle, ReviewedResponse)
             assert FieldCodec.decode(type(obligation), FieldCodec.encode(obligation)) == obligation
-            projection = AvailableRecoveryProjection(
-                "owner",
-                0,
-                ProjectedExecution(
-                    QueuedExecution,
-                    ExecutionOrigin.WIRE,
-                    False,
-                    None,
-                    False,
-                    obligation.lifecycle.publication(),
-                ),
-                None,
-                None,
-            )
-            result = await _through_socket(projection)
-            assert result["current"]["publication"] == "reviewed"
             store.session._connection.execute(
                 "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
                 "RE execution_id='e'"

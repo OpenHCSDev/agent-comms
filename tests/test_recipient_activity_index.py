@@ -153,13 +153,7 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
         ) == ()
     with pytest.raises(ValueError, match="positive recorded birth"):
         replace(source.threads["second"], created_at=0.0)
-    from agent_comms.thread_identity import UnrecordedThreadProvenance
-
-    original = recorded.threads["second"]
-    zero = UnrecordedThreadProvenance(
-        name=original.name, tags=original.tags, worktree=original.worktree,
-        created_at=0.0, session_file=original.session_file, title=original.title,
-    )
+    zero = replace(recorded.threads["second"], created_at=0.0)
     unrecorded = replace(recorded, threads={**recorded.threads, "second": zero})
     assert isinstance(unrecorded.threads["second"].incarnation, UnrecordedThreadIncarnation)
     assert not hasattr(unrecorded.threads["second"].incarnation, "lookup")

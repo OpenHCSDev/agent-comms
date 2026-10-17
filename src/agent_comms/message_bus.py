@@ -12,13 +12,17 @@ from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
-from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest, UnreadBeforeRequest
+from .message_page import (
+    ConversationMessagePageRequest, MessagePage, MessagePageRequest,
+    UnreadBeforeRequest,
+)
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
     ChannelDisplayScope,
     DMDisplayScope,
     ListedDeliveries,
+    DisplayBasis,
     MessageDisplayScope,
     WatchAcknowledgment,
 )
@@ -169,7 +173,7 @@ class MessageBus:
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
         with self.snapshot() as (basis, source):
-            counts = self.pending_counts_for_snapshot(source, basis, [name])[name]
+            counts = self._pending_projection(source, basis, [name])[name]
             if target is None or BuiltinChannel.aggregate_target(target):
                 return sum(counts.values())
             if is_channel_target(target):
@@ -181,7 +185,7 @@ class MessageBus:
 
     def pending_counts(self, name: str) -> Mapping[str, int]:
         with self.snapshot() as (basis, source):
-            return self.pending_counts_for_snapshot(source, basis, [name])[name]
+            return self._pending_projection(source, basis, [name])[name]
 
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
         if not names:
@@ -189,10 +193,10 @@ class MessageBus:
         with self.snapshot() as (basis, source):
             return {
                 name: sum(counts.values())
-                for name, counts in self.pending_counts_for_snapshot(source, basis, names).items()
+                for name, counts in self._pending_projection(source, basis, names).items()
             }
 
-    def pending_counts_for_snapshot(
+    def _pending_projection(
         self, source: OpenedWireSnapshot, basis: DisplaySelection, names: Sequence[str],
     ) -> Mapping[str, Mapping[str, int]]:
         """Bulk delivery counts from one original source, namespace and ledger."""
@@ -220,20 +224,31 @@ class MessageBus:
         ) as index:
             return index.unseen_counts({actor: selection.seen})[actor]
 
+    def delivered(
+        self, name: str, references: Sequence[MessageReference]
+    ) -> DisplayBasis:
+        """The named messages this reader received and has not yet read.
+
+        The canonical sparse public-message reader supplies only named rows,
+        including control messages without a wake cohort. No unread listing is
+        materialized. The caller marks the returned basis read.
+        """
+        snapshot = self._registry.snapshot()
+        delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
+        seen = self.reads.seen_sequences(delivery.actor, snapshot)
+        messages = self.log.messages_for_references(references)
+        return self.reads.capture(
+            name, tuple(message for message in messages if delivery.includes(message) and message.seq not in seen),
+            snapshot, self.log.path,
+        )
+
     def mark_delivered(
         self, name: str, references: Sequence[MessageReference]
     ) -> int:
         """Mark only the named unread messages delivered and return their count."""
-        requested = frozenset(references)
-        snapshot = self._registry.snapshot()
-        messages = tuple(
-            message
-            for message in self.inbox(name, snapshot=snapshot)
-            if message.reference in requested
-        )
-        basis = self.reads.capture(name, messages, snapshot, self.log.path)
+        basis = self.delivered(name, references)
         self.reads.mark_displayed(basis.viewer, basis)
-        return len(messages)
+        return basis.message_count
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
         """Advance a thread's global inbox cursor without loading messages."""
@@ -246,21 +261,6 @@ class MessageBus:
         displayed = self.reads.capture(canonical, messages, snapshot, self.log.path)
         self.reads.mark_displayed(canonical, displayed)
         return
-
-    def dm_history(self, a: str, b: str) -> Sequence[Message]:
-        """Full conversation between two threads, either possibly deleted, in seq order."""
-        snapshot = self._registry.snapshot()
-        scope = DMDisplayScope.capture(
-            snapshot.participant(a).name, snapshot.participant(b).name, snapshot
-        )
-        return [message for message in self.log.full_history() if scope.includes(message)]
-
-    def channel_history(self, target: str) -> Sequence[Message]:
-        """Full target-owned channel history, independent of delivery membership."""
-        if not is_channel_target(target):
-            raise ValueError(f"{target!r} is not a channel target.")
-        scope = ChannelDisplayScope(target, self._channels.read().history_targets(target))
-        return [message for message in self.log.full_history() if scope.includes(message)]
 
     def awareness_segments(
         self, owner: Thread, relations: Sequence[PeerRelation], *, blocking: bool = False
@@ -374,14 +374,6 @@ class MessageBus:
         return ConversationMessagePageRequest.capture(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         ).read(self.log)
-
-    def latest_sent_messages(self, threads: Sequence[Thread]):
-        if not threads:
-            return {}
-        lookups = tuple(thread.incarnation.stable_thread_lookup() for thread in threads)
-        with self.log.certified_read() as certified:
-            originals = certified.latest_sender_sources(lookups)
-        return {original.audience.sender_lookup: original.message for original in originals}
 
     def conversation_older_unread(
         self, scope: DMDisplayScope, *, before: int, seen: frozenset[int]

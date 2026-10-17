@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import replace
-from contextlib import contextmanager, ExitStack
+from dataclasses import dataclass, replace
 import time
+from contextlib import contextmanager, ExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -25,109 +25,86 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
 from .goal_presentation import GoalExecution, GoalWaitTarget
-from .goals import Goal, GoalNotice
+from .goals import Goal
 from .activity import ObservedActivity
-from .fleet import UnitObservation
 from .messages import Message, AlertKind
-from .recorded_time import RecordedEventTime
 from .message_bus import MessageBus
 from .store_files import _store_lock
 from .threads import Thread
+from .todos import TodoStore
 from .turn_lease import FinishedTurnFence
 
 _LOG = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class UnitProgress:
+    summary: str
+    notifies_commander: bool = False
+
+    @classmethod
+    def of(cls, goal: Goal | None, activity: ObservedActivity | None) -> UnitProgress:
+        if goal is not None:
+            if goal.delivery_complete:
+                return cls("Works in app", notifies_commander=True)
+            if not goal.state.terminal and goal.deadline.elapsed(time.time(), 0):
+                return cls("Deadline passed without accepted delivery", notifies_commander=True)
+        if activity is not None and activity.state.busy:
+            return cls("Working")
+        if goal is not None and not goal.state.terminal:
+            return cls("Idle with an open goal", notifies_commander=True)
+        return cls("No open goal")
+
+
 class Goals:
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus, agents):
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus, agents, todos: TodoStore):
         self.root = root
         self.registry = registry
         self.bus = bus
         self.agents = agents
+        self.todos = todos
         self._wire_lock_path = root / "wire"
         self.waits = GoalWaits(root / GoalWaits.filename)
         self.goal_store: GoalAttemptStore | None = None
 
     @contextmanager
-    def writing(self, *, shared=False):
+    def writing(self):
         # Publication runs after physical custody ends, also on exceptional exits.
         with ExitStack() as completed:
-            with _store_lock(self._wire_lock_path, shared=shared):
+            with _store_lock(self._wire_lock_path):
                 yield completed
-
-    def _observation(self, snapshot, thread, event, at):
-        owner = snapshot.owner_identity(thread.name)
-        return UnitObservation(thread, self.agents._observed(thread, owner, event),
-                               thread.execution.latest_tool(self.root, thread), at)
-
-    def _previous_at(self, goal, event):
-        return max((event.timestamp, *goal.work_time.timestamps,
-                    *goal.report_time.timestamps, *goal.author.issued_times))
 
     def write_goal(self, thread, goal, completed):
         """The work-goal writer; callers hold writing() custody."""
-        if goal is not None:
-            goal = replace(goal, work_time=RecordedEventTime(time.time()))
         snapshot = self.registry.snapshot()
-        event = self.agents.activity.current(thread.name, active=True)
+        previous = thread.goal
         self.registry.register(replace(thread, goal=goal), self.registry.status(thread.name))
-        if goal is not None and goal.notification_targets(snapshot, self.root, previous=thread.goal):
-            before = self._observation(snapshot, thread, event,
-                                       self._previous_at(thread.goal, event)
-                                       if thread.goal is not None else event.timestamp)
-            after = self._observation(snapshot, replace(thread, goal=goal), event,
-                                      max(goal.work_time.timestamps))
-            completed.callback(self._notify_transition, before, after)
+        if goal is not None and goal.notification_targets(self, previous=previous):
+            activity = self.agents.activity_of(thread.name, snapshot=snapshot)
+            completed.callback(self._notify_transition, thread.incarnation.require_recorded(),
+                               previous, goal, activity)
         return goal
 
-    def activity_written(self, snapshot, change):
-        if change is None:
+    def _notify_transition(self, original, previous, goal, activity):
+        progress = UnitProgress.of(goal, activity)
+        same_order = goal.same_order_as(previous)
+        if same_order and (not progress.notifies_commander
+                           or UnitProgress.of(previous, activity) == progress):
             return
-        before_event, after_event = change
-        thread = snapshot.threads[after_event.thread]
-        goal = thread.goal
-        if goal is None or not goal.notification_targets(snapshot, self.root, previous=goal):
-            return
-
-        # The original event owns the previous phase. Projecting it through
-        # the just-finished native lease would rewrite busy history as idle.
-        before = UnitObservation(
-            thread, ObservedActivity.acquire(before_event, snapshot.owner_identity(thread.name)),
-            thread.execution.latest_tool(self.root, thread), self._previous_at(goal, before_event),
-        )
-        after = self._observation(snapshot, thread, after_event, after_event.timestamp)
-        self._notify_transition(before, after)
-
-    def _notify_transition(self, before, after):
-        progress = after.progress
-        goal = after.thread.require_goal()
-        same_order = goal.same_order_as(before.thread.goal)
-        if same_order and (not progress.notifies_commander or before.progress == progress):
-            return
-        original = after.thread.incarnation
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             if not original.current(snapshot):
                 return
             unit = snapshot.require(original.name)
-            results = []
             summary = progress.summary if same_order else "Order assigned"
-            for target in goal.notification_targets(snapshot, self.root, previous=before.thread.goal):
+            for target in goal.notification_targets(self, previous=previous):
                 message = Message(
                     sender=unit.name, target=target.name, type=AlertKind,
-                    timestamp=after.observed_at,
                     body=f"{unit.name}: {summary}. Goal {goal.id}: {goal.text}",
                 )
-                results.append(GoalNotice.publish(self.bus, message, target))
-            current = self.registry.require(unit.name)
-            current_goal = current.goal
-            if goal.same_order_as(current_goal):
-                # Keep every recipient's result, including UNKNOWN; the last
-                # successful send must not erase an earlier uncertain send.
-                # Communication results do not reset the work clock.
-                self.registry.register(replace(current, goal=replace(
-                    current_goal, notices=tuple(results), revision=current_goal.revision + 1,
-                )), self.registry.status(current.name))
+                # The publisher owns send results, including uncertainty. Do
+                # not mirror those results in Goal or automatically resend.
+                self.bus.publisher.publish_ordinary(message)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
@@ -160,10 +137,9 @@ class Goals:
         from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path, shared=True):
-            self.registry.require(name)
             rows = (
                 InputDispositions(self.root)
-                .unresolved(aliases := self.registry.aliases_for(name))
+                .unresolved(aliases := self.registry.entry(name).entry.names)
                 .unknown(aliases)
             )
             return [row.public() for row in rows]
@@ -179,8 +155,7 @@ class Goals:
         from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path, shared=True):
-            self.registry.require(name)
-            aliases = self.registry.aliases_for(name)
+            aliases = self.registry.entry(name).entry.names
             return (
                 InputDispositions(self.root)
                 .unresolved(aliases)
@@ -196,8 +171,7 @@ class Goals:
         from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path):
-            self.registry.require(name)
-            aliases = self.registry.aliases_for(name)
+            aliases = self.registry.entry(name).entry.names
             return InputDispositions(self.root).dismiss_historical(
                 aliases, awaiting_keys=awaiting_keys
             )
@@ -221,11 +195,11 @@ class Goals:
         targets = tuple(
             dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
         )
-        owners = self.registry.aliases_for(thread.name)
+        snapshot = self.registry.snapshot()
+        owners = snapshot.names_for(thread.name)
         dispositions = InputDispositions(self.root)
         unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
         eligible = set()
-        snapshot = self.registry.snapshot()
         from .input_attempt import ReservedInput
 
         lookup = thread.incarnation.lookup

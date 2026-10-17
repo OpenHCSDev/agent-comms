@@ -33,7 +33,6 @@ from .peer_relevance import (
 )
 from .wire_record import WireRecord
 from .messages import Message
-from .presentation import ThreadView, WireRevision
 from .private_path import FileRevision
 from .registry_document import RegistrySnapshot
 from .routing import DeliveryScope
@@ -45,6 +44,7 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .message_bus import MessageBus
+    from .presentation import ThreadView, WireRevision
     from .registration import Registration
 
 
@@ -848,18 +848,29 @@ class ThreadRelationships:
                 return self._recent, self._limited
             with self.bus.log._opened_wire_snapshot(need_sequence=False) as source:
                 revision = source.revision
-                data, start = source.tail_bytes(self.RECENT_BYTES)
+                previous = self._recent_revision
+                extended = False
+                if previous is not None and revision is not None:
+                    extended = (previous.holds_cut(revision, previous.size)
+                                and revision.size > previous.size)
+                if extended:
+                    start = max(previous.size, source.boundary - self.RECENT_BYTES)
+                    source.stream.seek(start)
+                    data = source.stream.read(source.boundary - start)
+                    contiguous = start == previous.size
+                else:
+                    data, start = source.tail_bytes(self.RECENT_BYTES)
+                    contiguous = False
             lines = data.splitlines(keepends=True)
-            if start and lines:
-                lines.pop(0)  # The first record may be partial.
-            complete = [line for line in lines if line.endswith(b"\n")]
-            messages = tuple(
+            if start and not contiguous and lines:
+                lines.pop(0)  # A bounded cut may begin in a partial record.
+            messages = (self._recent if contiguous else ()) + tuple(
                 message
-                for line in complete
-                if line.strip()
+                for line in lines
+                if line.endswith(b"\n") and line.strip()
                 for message in WireRecord.public_from_wire(json.loads(line)).messages()
             )
-            limited = bool(start) or len(messages) > self.RECENT_MESSAGES
+            limited = (self._limited if contiguous else bool(start)) or len(messages) > self.RECENT_MESSAGES
             messages = messages[-self.RECENT_MESSAGES :]
             self._recent_revision = revision
             self._recent, self._limited = messages, limited

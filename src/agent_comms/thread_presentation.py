@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
+
+from .errors import RelationViolationError
 
 from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
+    from .message_reference import MessageReference
     from .presentation import MessageNotification
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
 
@@ -18,25 +21,18 @@ if TYPE_CHECKING:
 class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus"):
     """Display activity and warnings, not registry presence or turn authority."""
 
-    @property
-    def busy(self) -> bool:
-        return bool(self.working_members(self))
-
-    def working_members[T](self, member: T) -> tuple[T, ...]:
-        """Select a participant only while this status carries work."""
-        return ()
+    working: ClassVar[bool] = False
 
     def when_idle(self, ordinary: ThreadPresentation,
                   present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
         """Compose idle-only explanations without replacing genuine work."""
-        return present(ordinary)
+        return ordinary if self.working else present(ordinary)
 
     def activity_presentation(self, title: str, activity: str, detail: str) -> ThreadPresentation:
         return ThreadPresentation(title, "✓", "Ready", status=self)
 
     def require_activity_detail(self, detail: str) -> None:
-        if detail:
-            from .errors import RelationViolationError
+        if detail and not self.working:
             raise RelationViolationError("Idle activity cannot carry a detail.")
 
     def with_attention(self) -> ThreadPresentationStatus:
@@ -46,24 +42,18 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
         return IdleThreadPresentationStatus()
 
     def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        """Work and warnings keep their own explanation while the CLI is alive."""
-        return ordinary
+        """A live CLI inbox shows its bridge state; the CLI's activity reports are not work here."""
+        return replace(ordinary, marker="@", summary="CLI inbox · connected", status=self.without_work())
 
 
 @dataclass(frozen=True, slots=True)
 class IdleThreadPresentationStatus(ThreadPresentationStatus):
-    def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        return replace(ordinary, marker="@", summary="CLI participant")
+    pass
 
 
 @dataclass(frozen=True, slots=True)
 class WorkingThreadPresentationStatus(ThreadPresentationStatus):
-    def working_members[T](self, member: T) -> tuple[T, ...]:
-        return (member,)
-
-    def when_idle(self, ordinary: ThreadPresentation,
-                  present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
-        return ordinary
+    working: ClassVar[bool] = True
 
     def activity_presentation(self, title: str, activity: str, detail: str) -> ThreadPresentation:
         summary = activity.title()
@@ -71,16 +61,14 @@ class WorkingThreadPresentationStatus(ThreadPresentationStatus):
             summary += f" · {detail}"
         return ThreadPresentation(title, "⌛", summary, status=self)
 
-    def require_activity_detail(self, detail: str) -> None:
-        pass
-
 
 @dataclass(frozen=True, slots=True)
 class AttentionThreadPresentationStatus(ThreadPresentationStatus):
     activity: ThreadPresentationStatus
 
-    def working_members[T](self, member: T) -> tuple[T, ...]:
-        return self.activity.working_members(member)
+    @property
+    def working(self) -> bool:
+        return self.activity.working
 
     def when_idle(self, ordinary: ThreadPresentation,
                   present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
@@ -93,6 +81,10 @@ class AttentionThreadPresentationStatus(ThreadPresentationStatus):
     def without_work(self) -> ThreadPresentationStatus:
         return replace(self, activity=self.activity.without_work())
 
+    def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        """A warning keeps its own explanation; the CLI's activity reports are still not work."""
+        return replace(ordinary, status=self.without_work())
+
 
 @dataclass(frozen=True, slots=True)
 class StatusPending(ThreadPresentationStatus):
@@ -100,6 +92,29 @@ class StatusPending(ThreadPresentationStatus):
 
     def presentation(self, title: str) -> ThreadPresentation:
         return ThreadPresentation(title, "…", "Waiting for agent status", status=self)
+
+
+@dataclass(frozen=True, slots=True)
+class SessionDisconnected(ThreadPresentationStatus):
+    """A viewer's session to the thread failed; the owner process may still be live.
+
+    Every place a viewer shows the thread (its row, tab, status line and
+    input notice) shows this one state while that session stays failed.
+    """
+
+    reason: str
+
+    @property
+    def notice(self) -> str:
+        return f"Thread disconnected: {self.reason}"
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        return ThreadPresentation(title, "✗", self.notice, status=self)
+
+    def over(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        """The ordinary presentation, with its notifications, showing the disconnection."""
+        shown = self.presentation(ordinary.title)
+        return replace(ordinary, marker=shown.marker, summary=shown.summary, status=self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +187,14 @@ class ThreadPresentation:
     sent_notifications: tuple[MessageNotification, ...] = ()
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
     read_identity: TranscriptReadIdentity | None = None
+    incoming_references: tuple[MessageReference, ...] = ()
+    sent_references: tuple[MessageReference, ...] = ()
+
+    def same_status(self, other: ThreadPresentation | None) -> bool:
+        """Status changes do not require reacquiring an unchanged source window."""
+        return other is not None and (self.title, self.marker, self.summary, self.status, self.binding) == (
+            other.title, other.marker, other.summary, other.status, other.binding,
+        )
 
     def same_observation(self, other: ThreadPresentation | None) -> bool:
         """Equal view and turn evidence, not merely equal global store revisions.
@@ -206,8 +229,12 @@ class ThreadPresentation:
                   for notification in projected[source.message.seq, source.message.message_id])
             for selected in (window.sources, window.sent_sources)
         )
-        return replace(self, notifications=incoming, sent_notifications=sent,
-                       read_identity=window.read.identity)
+        return replace(
+            self, notifications=incoming, sent_notifications=sent,
+            read_identity=window.read.identity,
+            incoming_references=tuple(source.message.reference for source in window.sources),
+            sent_references=tuple(source.message.reference for source in window.sent_sources),
+        )
 
     @property
     def label(self) -> str:

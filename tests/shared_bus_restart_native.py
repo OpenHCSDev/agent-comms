@@ -179,7 +179,7 @@ async def configured_pure_channel(arguments):
 
     def read_original_bus():
         started = time.perf_counter()
-        history = service.bus.log.full_history()
+        history = list(service.bus.full_history_page().messages)
         service.bus.channel_activity()
         service.bus.last_sent_timestamps()
         service.bus.pending_counts_all(names)
@@ -271,7 +271,7 @@ async def configured_pure_channel(arguments):
                             rows = PublicationReceipts.select(db, where='execution_id=?',
                                 parameters=(claim.lifecycle.execution_id,))
                             assert len(rows) == 1 and rows[0].exact_target == '#openhcs'
-                            reply = service.bus.log.message_by_id(rows[0].message_id)
+                            reply, = service.bus.log.messages_for_references((rows[0].reference,))
                             assert reply.sender == claim.recipient and '12' in reply.body
                             receipts.extend(rows)
                             history = read_historical_native_inputs(store,wire_root_id=root_id,
@@ -429,7 +429,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                 assert len(full) == 1 and full[0].reference.recorded
                 assert len(receipts) == 1 and receipts[0].exact_target == '#openhcs'
-                reply = service.bus.log.message_by_id(receipts[0].message_id)
+                reply, = service.bus.log.messages_for_references((receipts[0].reference,))
                 assert reply.sender == name and '12' in reply.body
                 break
             await asyncio.sleep(.1)
@@ -530,7 +530,7 @@ async def configured_mixed_routes(arguments):
                         first_execution = execution_ids.pop()
                         receipts = PublicationReceipts.select(db,where='execution_id=?',parameters=(first_execution,))
                         assert {row.exact_target for row in receipts} == {'#team','human'}
-                        replies = [service.bus.log.message_by_id(row.message_id) for row in receipts]
+                        replies = service.bus.log.messages_for_references(tuple(row.reference for row in receipts))
                         channel = next(row for row in replies if row.target == '#team')
                         direct = next(row for row in replies if row.target == 'human')
                         assert '17' in channel.body and '12' in channel.body
@@ -540,7 +540,7 @@ async def configured_mixed_routes(arguments):
                         late_receipts = PublicationReceipts.select(db,where='execution_id=?',
                             parameters=(late_assignment.lifecycle.execution_id,))
                         assert len(late_receipts) == 1 and late_receipts[0].exact_target == 'human'
-                        assert '23' in service.bus.log.message_by_id(late_receipts[0].message_id).body
+                        assert '23' in service.bus.log.messages_for_references((late_receipts[0].reference,))[0].body
                         lookup = RecordedThreadIncarnation("fixture", service.registry.require(name).created_at).lookup
                         for original in (*originals,late):
                             history = read_historical_native_inputs(store,wire_root_id=root_id,
@@ -1082,12 +1082,12 @@ async def run(arguments):
                 cancelled_assignment = WakeAssignment.one(db,assignment_id=retained.assignment_id)
                 assert retained == cancelled_input
                 assert cancelled_assignment.lifecycle.declared_name=='deferred'
-            replies = service.bus.channel_history('#team')
+            replies = list(service.bus.channel_history_page('#team').messages)
             assert any(reply.sender==names[0] and reply.body=='Unique controlled native reply.'
                        for reply in replies)
             assert provider.posts == 2
         elif arguments.wave_size > 1:
-            replies = [message for message in service.bus.channel_history('#team')
+            replies = [message for message in list(service.bus.channel_history_page('#team').messages)
                        if message.sender == names[0]]
             assert len(replies) == 2
             assert replies[0].body == 'Combined wave answer: ' + '; '.join(
