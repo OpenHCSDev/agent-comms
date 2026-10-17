@@ -10,7 +10,6 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
@@ -146,10 +145,6 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def require_available(self) -> None:
         pass
 
-    def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
-        """An ordinary preparation has no earlier request failure to display."""
-        return activity
-
 
 @dataclass(frozen=True)
 class ReadyDrainReadiness(DrainReadiness):
@@ -170,33 +165,12 @@ class DiagnosticDrainReadiness(DrainReadiness):
         return self.diagnostic
 
     def presentation(self, ordinary):
-        return replace(ordinary, marker="!", summary=self.diagnostic.summary,
-                       status=ordinary.status.with_attention())
+        return replace(ordinary, marker="!",
+                       status=ordinary.status.with_attention(self.diagnostic.summary))
 
 
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
     """Retain the failed request warning; new messages keep ordinary availability."""
-
-    def presentation(self, ordinary):
-        return ordinary.status.when_idle(ordinary, super().presentation)
-
-    def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
-        return replace(activity, readiness=FailedPreparingDrainReadiness(self.diagnostic))
-
-
-@dataclass(frozen=True)
-class FailedPreparingDrainReadiness(NativeInputDrainReadiness):
-    """A retained native failure while the next turn has not reached its request."""
-
-    def presentation(self, ordinary):
-        when = datetime.fromtimestamp(self.diagnostic.recorded_at).astimezone().strftime("%H:%M")
-        return replace(
-            ordinary,
-            marker="!",
-            summary=f"Failed {when}",
-            status=ordinary.status.with_attention(),
-        )
-
 
 class UnavailableDrainReadiness(DiagnosticDrainReadiness):
     def require_available(self):
