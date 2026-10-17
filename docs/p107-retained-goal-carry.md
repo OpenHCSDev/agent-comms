@@ -149,6 +149,32 @@ Do not use the normal publication enqueue loop, repeat carry, replay operation6
 or reconstruct its expired in-memory restart handoff. No pointer/start operation
 was performed by this implementation owner.
 
+Codex's fresh416 target-only publication succeeded, then his pre-start check
+incorrectly truth-tested InputDocument rather than its rows. Actual unresolved
+rows were0. Claude separately authorized one start-only step: worker3710799 /
+170479330, owner13815/admission16260, target T061350. All37 registry Goals still
+exactly equal the converted candidate; retained settings match; release/history
+bytes equal their candidates; all five other original hashes remain unchanged,
+even after the actual saved-fork UI load. The current registry guard validates
+its current digest; it is not an immutable pre-start file.
+
+The first verification frontend failed because plain st reset HOME, selecting
+the unconverted public default. The corrected launcher supplies HOME after
+`st -e`, not only in its parent environment/ACP child. Actual private history
+and editor Ready then appeared; no new input, carry or original tool replay.
+Raw first crash is retained in `gr107/stopped-proof-1/ui-after-stopped/`; accepted
+private screenshot is `ui-after-stopped-home/ready.png`. Proofs:
+`.artifacts/p107-after-start-preservation.json` and
+`.artifacts/p107-after-ui-preservation.json`. Background indexing completion and
+new Goal execution were not claimed.
+
+This clears private data/start/readiness, not public installation. The draft
+still conflicts with current main's deferred P107/commander code. The old C8
+private pair predates newer P130/P108 work and must not replace the public
+installation. Integrate the restoration with current main and build a fresh
+paired target before reviewing a fresh public stopped carry. Its actual store
+counts must be derived anew, never assumed to be the private1045.
+
 Do not repeat a failed attempt. Inspect its original receipt, preimages, process
 and current pointer before disposition. Any changed/uncertain result stays
 stopped for review, never implicit rollback or replay. After success compare the
