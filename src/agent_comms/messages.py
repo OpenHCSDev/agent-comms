@@ -63,7 +63,7 @@ class MessageKind(DeclaredFamily, affix="Kind"):
 
 
 class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
-    """A claim-owner state transition, not conversation content."""
+    """A claim-owner record, not a delivery to a reader."""
 
     conversation_message = False
 
@@ -189,7 +189,7 @@ class Message:
 
     def notification_references(self) -> tuple[MessageReference, ...]:
         """Only an admitted delivery has recipient-handling outcomes to project."""
-        return () if self.notice else (self.reference,)
+        return (self.reference,) if self.type.conversation_message and not self.notice else ()
 
     def require_decision(self) -> Decision:
         return self.task.require_decision()
@@ -253,7 +253,7 @@ class Message:
             raise ValueError("Mention ranges must identify text in the message body.")
         if not is_channel_target(self.target):
             # DM: a thread name; sending to yourself is not a conversation.
-            if self.sender == self.target:
+            if self.sender == self.target and self.type.conversation_message:
                 raise RelationViolationError(f"Thread {self.sender!r} cannot message itself.")
             allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
             if not set(self.target) <= allowed:
@@ -333,14 +333,13 @@ class Message:
     @property
     def response_policy(self) -> ResponsePolicy:
         """Typed response semantics without changing the stored target."""
-        if self.notice or self.membership is not None:
-            return InformationalPolicy.instance()
-        if not (is_channel_target(self.target) or BuiltinChannel.lookup(self.target) is not None):
-            return DirectPolicy.instance()
-        if self.mentions:
-            return MentionedOnlyPolicy.instance()
-        if not self.sender_role.executable:
-            return CollectivePolicy.instance()
+        if self.type.conversation_message and not self.notice and self.membership is None:
+            if not (is_channel_target(self.target) or BuiltinChannel.lookup(self.target) is not None):
+                return DirectPolicy.instance()
+            if self.mentions:
+                return MentionedOnlyPolicy.instance()
+            if not self.sender_role.executable:
+                return CollectivePolicy.instance()
         return InformationalPolicy.instance()
 
     def response_eligibility(

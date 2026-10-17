@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 class RouteTable:
     """Disposable tables owned and reset together by the route projection."""
 
-    schema: ClassVar[int] = 4
+    schema: ClassVar[int] = 5
 
 
 @dataclass(frozen=True, kw_only=True)

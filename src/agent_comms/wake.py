@@ -103,7 +103,8 @@ def _validated_context(
     if candidate.wire_envelope_digest != frozen_audience.wire_envelope_digest:
         raise ValueError("message does not match the frozen audience envelope.")
     channel = is_channel_target(message.target)
-    if not channel and not (message.notice and not frozen_audience.recipients):
+    if (message.type.conversation_message and not channel
+            and not (message.notice and not frozen_audience.recipients)):
         if len(frozen_audience.recipients) != 1:
             raise ValueError("a direct message must have exactly one frozen eligible recipient.")
         if frozen_audience.recipients[0].canonical_thread != message.target:
@@ -125,23 +126,25 @@ def _member_decision(
     channel: bool,
     effective_mentions: frozenset[str],
 ) -> WakeDecision | NoWakeDecision:
-    if not channel:
-        audience = MessageAudience.DIRECT
-    elif effective_mentions:
-        audience = MessageAudience.MENTIONED
-    else:
-        audience = MessageAudience.COLLECTIVE
-    if message.notice or message.membership is not None or control.passive:
-        mode = PassiveWake()
-    elif not channel:
-        mode = FullWake()
-    elif effective_mentions:
-        if recipient.canonical_thread not in effective_mentions:
-            return NoWakeDecision(recipient.recipient_lookup)
-        mode = FullWake()
-    else:
-        mode = BoundedTriageWake()
-    return WakeDecision(recipient.recipient_lookup, audience, mode)
+    if message.type.conversation_message:
+        if not channel:
+            audience = MessageAudience.DIRECT
+        elif effective_mentions:
+            audience = MessageAudience.MENTIONED
+        else:
+            audience = MessageAudience.COLLECTIVE
+        if message.notice or message.membership is not None or control.passive:
+            mode = PassiveWake()
+        elif not channel:
+            mode = FullWake()
+        elif effective_mentions:
+            if recipient.canonical_thread not in effective_mentions:
+                return NoWakeDecision(recipient.recipient_lookup)
+            mode = FullWake()
+        else:
+            mode = BoundedTriageWake()
+        return WakeDecision(recipient.recipient_lookup, audience, mode)
+    return NoWakeDecision(recipient.recipient_lookup)
 
 
 def resolve_wake(

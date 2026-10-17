@@ -177,9 +177,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
         assert comms.bus.conversation_page(dm_scope).messages == ()
         raw_channel = comms.views.channel_history_page("#team").messages
-        assert [message.body for message in raw_channel] == [
-            "@Alice investigate", "Released files after a failed turn: module.py",
-        ]
+        assert [message.body for message in raw_channel] == ["@Alice investigate"]
         channel = comms.views.channel_display_page("#team").messages
         assert [message.body for message in channel] == ["@Alice investigate"]
         assert all(message.notification_references() for message in channel)
@@ -247,8 +245,8 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
                 (m.sender, m.target, m.body) for m in list(comms.views.full_history_page().messages)
             ] == [
                 ("sender", session, "Change the value"),
-                (session, "sender", "Resource claim admitted"),
+                (session, session, "Claimed"),
                 (session, "sender", "Changed it."),
-                (session, "sender", "Released files after a completed turn: module.py"),
+                (session, session, "Released files after a completed turn: module.py"),
             ]
             assert dict(comms.bus.log.claim_projection()) == {}
