@@ -8,6 +8,7 @@ from collections.abc import Callable, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .pi_events import PiEvent
 
@@ -18,6 +19,9 @@ from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
 from .session_revision import SessionRevision
+
+if TYPE_CHECKING:
+    from .turn_context import Provenance
 
 
 @dataclass
@@ -131,6 +135,13 @@ class PiSessionChild(PiChild):
     key: tuple[NativePiRpcLaunch, tuple[int, int]]
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
+    coordination_revision: tuple[Provenance, ...] = ()
+
+    def remember_coordination(self, provenance: tuple[Provenance, ...]) -> None:
+        self.coordination_revision = provenance
+
+    def forget_context(self) -> None:
+        self.coordination_revision = ()
 
     @classmethod
     async def start(cls, key, attestation):
@@ -159,6 +170,9 @@ class NativeChildState(ABC):
 
     def reuse(self, key) -> PiSessionChild | None:
         return None
+
+    async def context_for_input(self, thread, context):
+        return context
 
     def idle(self) -> RetainedNative:
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
@@ -256,6 +270,7 @@ class RetainedNative(ChildNative):
                 current.revision = SessionRevision.observe(
                     current.identity.session_file
                 ).require_available()
+                current.child.forget_context()
             return data
 
     def reuse(self, key):
@@ -278,4 +293,11 @@ class RetainedNative(ChildNative):
 
     def _shutdown_successor(self) -> NativeChildState:
         return EmptyNative()
+
+    async def context_for_input(self, thread, context):
+        if thread.project_resume_due or self.child.key[0].cwd != Path(thread.worktree):
+            self.child.forget_context()
+        if not self.current or self.identity.session_file != thread.runtime.read_key:
+            return context
+        return context.after_received(self.child.coordination_revision)
 
