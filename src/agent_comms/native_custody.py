@@ -52,18 +52,11 @@ class PiSessionChild:
             return cls(
                 proc,
                 PiRpcChannel(proc.stdout),
-                asyncio.create_task(cls.stderr_tail(proc.stderr)),
+                asyncio.create_task(proc.stderr_tail()),
                 key,
                 attestation,
                 resources=resources.pop_all(),
             )
-
-    @staticmethod
-    async def stderr_tail(stream: asyncio.StreamReader) -> str:
-        tail = b""
-        while chunk := await stream.read(4096):
-            tail = (tail + chunk)[-16000:]
-        return tail.decode(errors="replace").strip()
 
     @property
     def retired(self) -> bool:
