@@ -153,7 +153,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.InputRefused)
     async def input_refused(self, event: events.InputRefused) -> None:
-        await self.inputs.input_refused(self.session_id, event.id)
+        await event.apply_to(self.inputs, self.session_id)
 
     @handles(events.ProviderUsage)
     async def provider_usage(self, event: events.ProviderUsage) -> None:

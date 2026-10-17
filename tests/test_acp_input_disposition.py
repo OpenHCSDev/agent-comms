@@ -35,6 +35,7 @@ from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
 from test_backend_native_lifecycle import native_backend
+from native_backend_fixture import wait_for
 
 
 class Updates:
@@ -44,12 +45,6 @@ class Updates:
     async def session_update(self, *, session_id, update):
         self.rows.append(update if isinstance(update, dict) else
                          update.model_dump(by_alias=True, exclude_none=True))
-
-
-async def wait_for(predicate):
-    async with asyncio.timeout(30):
-        while not predicate():
-            await asyncio.sleep(0.01)
 
 
 async def test_native_preflight_failure_is_visible_and_cannot_mark_started(native_backend, monkeypatch):

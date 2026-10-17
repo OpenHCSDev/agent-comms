@@ -147,7 +147,7 @@ class SelectedWakeCheck(SessionScheduleCheck):
     async def run(self) -> None:
         inputs, session_id = self.inputs, self.session_id
         effects = inputs.effects
-        root_id = effects._configured_root_id()
+        root_id = effects.configured_root_id
         async with drain_failures(
             inputs.comms, self.thread, self.owner,
             partial(inputs.retry_observer, session_id),
