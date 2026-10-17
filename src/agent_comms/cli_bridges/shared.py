@@ -435,8 +435,7 @@ class ReceivingMonitor(MonitorEvidence):
         with bridge.db:
             part.insert_if_absent(bridge.db)
         await bridge.part_observed(delivery.id, notification.number)
-        numbers = ObservedPart.column_values(bridge.db, 'number', where='id=?', parameters=(delivery.id,))
-        if len(numbers) != self.total:
+        if ObservedPart.count(bridge.db, id=delivery.id) != self.total:
             return
         parts = ObservedPart.select(bridge.db, id=delivery.id, order_by=('number',))
         message = delivery.message
@@ -627,9 +626,8 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         await self.prepare_delivery()
         pending = tuple(outcome.declared_name for outcome in Outcome.members_with(UnconfirmedOutcome))
         placeholders = ','.join('?' for _ in pending)
-        count, newest, _ = self.db.execute(
-            f'SELECT COUNT(*), id, MAX(rowid) FROM "{DeliveryRow.declared_name}" WHERE outcome IN ({placeholders})', pending).fetchone()
-        print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed deliveries retained without replay: {count}; newest: {newest}', file=sys.stderr, flush=True)
+        count = DeliveryRow.count(self.db, where=f'outcome IN ({placeholders})', parameters=pending)
+        print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed deliveries retained without replay: {count}', file=sys.stderr, flush=True)
         while True:
             with (self.options.state / 'watch.stderr.log').open('a') as errors:
                 child = await AttachedChild.start((
