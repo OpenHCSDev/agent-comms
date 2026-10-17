@@ -150,8 +150,8 @@ class Goals:
             thread.incarnation.require_recorded(), targets
         )
         sequences = tuple({
-            row.sequence for row in unknown.values()
-            if row.sequence is not None and row.sequence <= after_seq
+            sequence for row in unknown.values()
+            for sequence in row.bus_sequences_through(after_seq)
         })
         earlier = self.bus.log.conversation_sources(
             lookup, f"w.seq IN ({','.join('?' for _ in sequences)})", sequences,
