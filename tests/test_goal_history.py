@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.goals import TextGoalProgress
 import json
 from dataclasses import replace
 
@@ -42,7 +41,7 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     comms = _wire(tmp_path)
     first = comms.goals.update_goal("worker", SetGoalAction(text="Ask @reviewer about the release"))
     paused = comms.goals.update_goal(
-        "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=first.id), progress=TextGoalProgress("Waiting"))
+        "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=first.id), progress="Waiting")
     )
     # ACP and other callers also write the declaration directly.
     thread = comms.registry.require("worker")

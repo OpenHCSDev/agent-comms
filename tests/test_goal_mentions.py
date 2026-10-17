@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.goals import TextGoalProgress
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -189,7 +188,7 @@ def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path)
     assert len(rows) == 1 and rows[0].sources == ("explicit", "goal_mention")
     assert manual is not None and manual.note in rows[0].detail
     progress = comms.goals.update_goal(
-        "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress=TextGoalProgress("Progress"))
+        "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="Progress")
     )
     assert progress is not None and progress.revision > goal.revision
     assert _rows(comms, "owner")[0][0].goal_contacts[0].text_revision == 1

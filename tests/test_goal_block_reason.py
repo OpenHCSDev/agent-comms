@@ -1,6 +1,5 @@
 """Blocking is explicit and inspectable; old rows are not assigned invented reasons."""
 
-from agent_comms.goals import TextGoalProgress
 import os
 from dataclasses import replace
 
@@ -37,7 +36,7 @@ def _owner(tmp_path):
 def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, monkeypatch):
     comms, original = _owner(tmp_path)
     progressed = comms.goals.update_goal(
-        "worker", ActiveGoalAction(progress=TextGoalProgress("Verified 2 of 3 items"))
+        "worker", ActiveGoalAction(progress="Verified 2 of 3 items")
     )
     assert progressed is not None
     before_history = comms.goals.goal_history("worker", goal_id=original.id)
@@ -49,8 +48,8 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
 
     for kwargs in (
         {},
-        {"progress": TextGoalProgress(" \n ")},
-        {"block_reason": "  ", "progress": TextGoalProgress("old progress must not become a reason")},
+        {"progress": " \n "},
+        {"block_reason": "  ", "progress": "old progress must not become a reason"},
         {"block_reason": "x" * 1025},
     ):
         with pytest.raises(ValueError, match="reason"):
@@ -97,7 +96,7 @@ def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monk
 
 def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
     comms, started = _owner(tmp_path)
-    progressed = comms.goals.update_goal("worker", ActiveGoalAction(progress=TextGoalProgress("Verified step")))
+    progressed = comms.goals.update_goal("worker", ActiveGoalAction(progress="Verified step"))
     assert progressed is not None
     blocked = comms.goals.block_goal_after_failed_turn(
         "worker",
@@ -106,13 +105,13 @@ def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
         diagnostic="Attempt outcome uncertain; inspect before Retry.",
     )
     assert blocked is not None
-    assert str(blocked.progress) == "Verified step\n\nAttempt outcome uncertain; inspect before Retry."
+    assert blocked.progress == "Verified step\n\nAttempt outcome uncertain; inspect before Retry."
     assert blocked.state.reason == "Attempt outcome uncertain; inspect before Retry."
     assert wire(tmp_path).goals.goal_execution("worker").block_reason == blocked.state.reason
 
     comms2, started2 = _owner(tmp_path / "another")
     completed = comms2.goals.update_goal(
-        "worker", CompletedGoalAction(progress=TextGoalProgress("Reported completion"))
+        "worker", CompletedGoalAction(progress="Reported completion")
     )
     assert completed is not None
     revoked = comms2.goals.block_unverified_goal_completion(
@@ -130,7 +129,7 @@ def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_
     comms, goal = _owner(tmp_path)
     thread = comms.registry.require("worker")
     recorded = Goal(
-        goal.text, goal.id, state=UnrecordedBlockGoal(), progress=TextGoalProgress("Unrelated old progress")
+        goal.text, goal.id, state=UnrecordedBlockGoal(), progress="Unrelated old progress"
     )
     comms.registry.register(replace(thread, goal=recorded), comms.registry.status("worker"))
     observed = wire(tmp_path).goals.goal_execution("worker")
@@ -150,7 +149,7 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
         )
     )
     progressed = comms.goals.update_goal(
-        "worker", PausedGoalAction(progress=TextGoalProgress("Half verified by the owner"))
+        "worker", PausedGoalAction(progress="Half verified by the owner")
     )
     assert progressed is not None
     store = comms.goals.open_goal_store()
@@ -172,7 +171,7 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
     reloaded = wire(tmp_path).registry.require("worker").goal
     assert reloaded is not None and reloaded.state.declared_name == "blocked"
     # Prior progress is retained; the refusal is stored separately as the reason.
-    assert str(reloaded.progress) == "Half verified by the owner"
+    assert reloaded.progress == "Half verified by the owner"
     assert reloaded.state.reason == refusal
     execution = comms.goals.goal_execution("worker")
     assert execution is not None and execution.block_reason == refusal

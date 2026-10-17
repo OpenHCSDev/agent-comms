@@ -119,8 +119,6 @@ class JsonShapeFamily(WireValue):
         for member in cls.members_with(JsonShapeMember):
             annotation = cls._value_annotation(member)
             shape = get_origin(annotation) or annotation
-            if is_dataclass(shape):
-                shape = dict
             if shape in (tuple, frozenset):
                 shape = list
             if shape not in (dict, list, str, int, float, bool, type(None)):
@@ -137,13 +135,6 @@ class JsonShapeFamily(WireValue):
 
     def to_wire(self):
         return self.value
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return {"oneOf": [
-            FieldCodec.value_schema(cls._value_annotation(member))
-            for member in cls.members_with(JsonShapeMember)
-        ]}
 
 
 class TextRepresentation(FieldRepresentation):

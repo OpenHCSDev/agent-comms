@@ -1,6 +1,5 @@
 """Actual saved SDK/OwnedTurn settlement, with only localhost HTTP controlled."""
 
-from agent_comms.goals import TextGoalProgress
 import asyncio
 import os
 
@@ -38,7 +37,7 @@ async def test_native_settlement_selects_only_original_goal(native_backend, repl
                     SetGoalAction(text="Independent replacement") if replace_goal
                     else ActiveGoalAction(
                         expect=GoalPrecondition(goal_id=original.id),
-                        progress=TextGoalProgress("Later progress on the original goal"),
+                        progress="Later progress on the original goal",
                     ),
                 )))
                 return True

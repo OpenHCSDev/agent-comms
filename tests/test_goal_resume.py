@@ -1,6 +1,5 @@
 """Same-ID, explicitly requested goal resume through the public tool boundary."""
 
-from agent_comms.goals import TextGoalProgress
 import os
 
 import pytest
@@ -39,7 +38,7 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
     comms.goals.update_goal(
         "owner",
-        PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("previous")),
+        PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="previous"),
     )
 
     result = invoke_tool(
@@ -78,7 +77,7 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
             {"goal_id": goal["id"], "status": "active", "progress": "another step"},
         )
     assert first["goal"]["progress"] == "one step"
-    assert str(comms.registry.require("owner").goal.progress) == "one step"
+    assert comms.registry.require("owner").goal.progress == "one step"
 
 
 def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkeypatch, tmp_path):
@@ -122,7 +121,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
             "comms_goal",
             {"goal_id": after_clear["id"], "status": "active", "progress": "third"},
         )
-    assert str(comms.registry.require("owner").goal.progress) == ""
+    assert comms.registry.require("owner").goal.progress == ""
 
 
 def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
@@ -142,7 +141,7 @@ def test_model_tool_cannot_resume_blocked_uncertain_goal(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
     blocked = comms.goals.update_goal(
         "owner",
-        BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("uncertain")),
+        BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="uncertain"),
     )
     with pytest.raises(ValueError, match="cannot be resumed"):
         invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "retry"})
@@ -210,7 +209,7 @@ def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, termi
 def test_resume_does_not_claim_success_after_concurrent_goal_change(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
     comms.goals.update_goal(
-        "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("before"))
+        "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="before")
     )
     real_update = comms.goals.update_goal
 
@@ -218,7 +217,7 @@ def test_resume_does_not_claim_success_after_concurrent_goal_change(comms, monke
         real_update(
             name,
             PausedGoalAction(
-                expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("newer progress")
+                expect=GoalPrecondition(goal_id=started["id"]), progress="newer progress"
             ),
         )
         return real_update(name, action, **kwargs)
@@ -231,14 +230,14 @@ def test_resume_does_not_claim_success_after_concurrent_goal_change(comms, monke
             {"goal_id": started["id"], "progress": "stale progress"},
         )
     goal = comms.registry.require("owner").goal
-    assert goal.state.declared_name == "paused" and str(goal.progress) == "newer progress"
+    assert goal.state.declared_name == "paused" and goal.progress == "newer progress"
 
 
 @pytest.mark.parametrize("race_kind", ["replacement", "same_id_activation"])
 def test_resume_losing_cas_never_reports_another_activations_success(comms, monkeypatch, race_kind):
     started = _goal(comms, monkeypatch)
     comms.goals.update_goal(
-        "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("before"))
+        "owner", PausedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="before")
     )
     real_update = comms.goals.update_goal
     requested_progress = "continue"
@@ -250,14 +249,14 @@ def test_resume_losing_cas_never_reports_another_activations_success(comms, monk
             real_update(
                 name,
                 ActiveGoalAction(
-                    expect=GoalPrecondition(goal_id=replacement.id), progress=TextGoalProgress(requested_progress)
+                    expect=GoalPrecondition(goal_id=replacement.id), progress=requested_progress
                 ),
             )
         else:
             real_update(
                 name,
                 ActiveGoalAction(
-                    expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress(requested_progress)
+                    expect=GoalPrecondition(goal_id=started["id"]), progress=requested_progress
                 ),
             )
         return real_update(name, action, **kwargs)
@@ -270,7 +269,7 @@ def test_resume_losing_cas_never_reports_another_activations_success(comms, monk
             {"goal_id": started["id"], "progress": requested_progress},
         )
     current = comms.registry.require("owner").goal
-    assert current.state.declared_name == "active" and str(current.progress) == requested_progress
+    assert current.state.declared_name == "active" and current.progress == requested_progress
     if race_kind == "replacement":
         assert current.id != started["id"]
     else:
@@ -281,7 +280,7 @@ def test_resume_losing_cas_never_reports_another_activations_success(comms, monk
 def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch, prior):
     started = _goal(comms, monkeypatch)
     comms.goals.update_goal(
-        "owner", prior(expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("unchanged"))
+        "owner", prior(expect=GoalPrecondition(goal_id=started["id"]), progress="unchanged")
     )
     saved = comms.registry.require("owner").goal
     assert saved is not None
@@ -295,11 +294,11 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
         other.goals.update_goal(
             name,
             (BlockedGoalAction if prior is BlockedGoalAction else ActiveGoalAction)(
-                expect=GoalPrecondition(goal_id=saved.id), progress=TextGoalProgress("newer report")
+                expect=GoalPrecondition(goal_id=saved.id), progress="newer report"
             ),
         )
         other.goals.update_goal(
-            name, prior(expect=GoalPrecondition(goal_id=saved.id), progress=TextGoalProgress("unchanged"))
+            name, prior(expect=GoalPrecondition(goal_id=saved.id), progress="unchanged")
         )
         now = Comms(comms.root).registry.require(name).goal
         assert now is not None
@@ -327,14 +326,14 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
                     expect=GoalPrecondition(
                         expected_goal=saved, goal_id=saved.id
                     ),
-                    progress=TextGoalProgress("stale second resume"),
+                    progress="stale second resume",
                 ),
             )
     final = Comms(comms.root).registry.require("owner").goal
     assert (
         final is not None
         and final.state.declared_name == prior.declared_name
-        and str(final.progress) == "unchanged"
+        and final.progress == "unchanged"
     )
     assert final.revision == saved.revision + 2
 
@@ -344,11 +343,11 @@ def test_same_value_goal_transition_bumps_durable_revision(comms, monkeypatch):
     original = comms.registry.require("owner").goal
     assert original is not None and started["revision"] == original.revision
     first = comms.goals.update_goal(
-        "owner", BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("same"))
+        "owner", BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="same")
     )
     assert first is not None
     second = Comms(comms.root).goals.update_goal(
-        "owner", BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("same"))
+        "owner", BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="same")
     )
     assert second is not None and second.revision == first.revision + 1
     assert Comms(comms.root).registry.require("owner").goal == second
@@ -361,7 +360,7 @@ def test_automatic_failure_block_advances_goal_revision(comms, monkeypatch):
     newer = Comms(comms.root).goals.update_goal(
         "owner",
         ActiveGoalAction(
-            expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("verified newer step")
+            expect=GoalPrecondition(goal_id=started["id"]), progress="verified newer step"
         ),
     )
     assert newer is not None
@@ -373,7 +372,7 @@ def test_automatic_failure_block_advances_goal_revision(comms, monkeypatch):
     )
     assert blocked is not None and blocked.state.declared_name == "blocked"
     assert blocked.revision == newer.revision + 1
-    assert str(blocked.progress).startswith("verified newer step\n\n")
+    assert blocked.progress.startswith("verified newer step\n\n")
     assert Comms(comms.root).registry.require("owner").goal == blocked
 
 
@@ -382,7 +381,7 @@ def test_automatic_failure_block_preserves_existing_goal_progress(comms, monkeyp
     goal = comms.goals.update_goal(
         "owner",
         ActiveGoalAction(
-            expect=GoalPrecondition(goal_id=started["id"]), progress=TextGoalProgress("Verified first step")
+            expect=GoalPrecondition(goal_id=started["id"]), progress="Verified first step"
         ),
     )
     assert goal is not None
@@ -396,7 +395,7 @@ def test_automatic_failure_block_preserves_existing_goal_progress(comms, monkeyp
 
     assert blocked is not None
     assert blocked.state.declared_name == "blocked"
-    assert str(blocked.progress) == "Verified first step\n\nBackend outcome uncertain."
+    assert blocked.progress == "Verified first step\n\nBackend outcome uncertain."
 
 
 def test_exhausted_goal_revision_refuses_transition_without_write(comms):
@@ -412,6 +411,6 @@ def test_exhausted_goal_revision_refuses_transition_without_write(comms):
     with pytest.raises(ValueError, match="revision"):
         comms.goals.update_goal(
             "owner",
-            BlockedGoalAction(expect=GoalPrecondition(goal_id="goal-id"), progress=TextGoalProgress("do not write")),
+            BlockedGoalAction(expect=GoalPrecondition(goal_id="goal-id"), progress="do not write"),
         )
     assert (comms.root / "registry.json").read_bytes() == before
