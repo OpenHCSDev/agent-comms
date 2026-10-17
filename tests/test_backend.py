@@ -662,7 +662,7 @@ for line in sys.stdin:
         ]
         events = await _rpc_events(tmp_path, records)
         used = [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)]
-        assert used == [None, 150, stats if type(stats) is int and stats > 0 else 150]
+        assert used == [150, stats if type(stats) is int and stats > 0 else 150]
         assert isinstance(events[-1], ae.Done) and events[-1].ok is True
 
     async def test_positive_final_usage_survives_empty_stats_and_final_stop_gate(self, tmp_path):
