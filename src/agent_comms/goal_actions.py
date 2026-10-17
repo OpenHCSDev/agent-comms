@@ -401,7 +401,7 @@ class OrderGoalAction(GoalAction, RuntimeInvocable):
     goal_id: str
     expected_revision: int
     deadline: EventTime
-    commander: str = ""
+    commander: str
 
     def change(self, ctx):
         ctx.thread.require_order_slot(self.goal_id, self.problem)
