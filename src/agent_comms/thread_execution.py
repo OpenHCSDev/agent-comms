@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from abc import ABC, abstractmethod
+import os
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
@@ -82,6 +83,8 @@ class NativeThreadExecution(ThreadExecution):
 
     @classmethod
     def restart_candidates(cls, thread: Thread, status):
+        if thread.pid == os.getpid():
+            return ()
         return (thread,) if thread.role.executable and status.active and thread.process_alive else ()
 
     @classmethod
