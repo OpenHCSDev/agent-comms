@@ -1,85 +1,78 @@
-# P118: opt-in Pi Durable (unfinished draft checkpoint)
+# P118: durable runtime location integration (draft)
 
-## Checked checkpoint
+Integration owner: core-native-runtime. Base main `05b0162bc`; frozen
+`work/core-pi-durable` (`b1fa2b97f`, #1127) was merged normally, without editing
+that branch. PiNativeBackend remains the new-thread default.
 
-- Base: `b5000b3b0`; implementation owner: core-pi-durable.
-- Exact npm dependencies: pi-durable, pi-ai and chord **1.3.0**. The packaged
-  `src/agent_comms/package-lock.json` retains registry URLs and SHA-512 integrity.
-  Install with `npm ci --ignore-scripts --omit=dev` in that package directory.
-  Codex owns installation; no installed package or user session was modified.
-- `pi_durable_host.mjs` is the sole pi-durable importer. The actual Node/SQLite
-  host answered open, inspect, resume, context_usage, entries and close.
-  Empty context was 0 tokens, no model window; history was empty.
-- Core source imports and seals both backends; the default remains
-  `PiNativeBackend`. The durable event converter family has 22 declarations.
-- Node syntax and Python compilation pass. These are not worker/UI acceptance.
+## Owners
 
-## 1.3.0 API gaps: neither closed
+- DurableDatabase is a member of P117's existing RuntimeLocation family. Its
+  path remains the persisted session_file; no second location envelope exists.
+- AgentBackend's subclass declaration binds location_type._backend once.
+  RuntimeLocation.backend reads that declaration; UnstartedRuntime returns its
+  existing owner. TurnRunner selects through Thread.runtime.backend.
+- DurableDatabase supplies saved history, read keys, selected-source identity
+  and storage files. Native Pi attestation and unsupported durable forking fail
+  explicitly, rather than interpreting SQLite as a native journal.
+- DurableDatabaseFiles reuses NativeSessionFiles' process-reference checks and
+  deletion lifecycle, overriding the actual SQLite/lock members. Schema-report
+  consumes each file owner's schema_paths instead of assuming native proofs.
+- DurableHost owns the Node protocol and child. A paused history host reads the
+  existing root without taking the worker's exclusive lock, resuming work,
+  loading provider credentials, or creating a missing database. SDK 1.3.0 only
+  offers a read/write storage opener: history still runs its idempotent schema
+  initialization. This is not a read-only SQLite capability claim.
+- DurableHistoryPage decodes original host pages once through FieldCodec.
+  Its opaque SDK cursor is JSON, not a string. The SDK continuation is page.next;
+  the frozen host incorrectly read page.cursor and stopped after one page.
+- TranscriptSource owns saved-record projection and input-bounded turn reading.
+  NativeRecord and durable input records own their boundaries; TurnDigest owns
+  event assembly. The replaced native turn loop and external projection copy
+  were deleted. External SQLite readers retain their efficient turn query.
 
-1. **Design section 2, gap 3:** `dist/harness/compaction.d.ts:53` still declares
-   `estimateContext`, but `dist/index.d.ts` and the package exports map do not
-   export it. Host alone imports the pinned internal implementation by file URL.
-   Core does not estimate tokens. This remains an upstream API risk, not a fix.
-2. **Design section 2, gap 4:** `Conversation` in `dist/harness/types.d.ts:588`
-   still provides submit/abort/compact, not place-queued-now. No `Interrupts`
-   capability is claimed, and no abort-and-replay workaround is implemented.
-3. The complete 1.3.0 changelog was read: its additions concern SQLite prefixes;
-   fixes concern compaction baseline ordering and base64 memory, not these gaps.
+## Verification
 
-## Owners and consumers
+Real Node/SQLite host, no provider requests and no comms tool inputs:
 
-Before editing, read AgentBackend/RuntimeLocation and all capability signatures,
-PiNativeBackend child lifecycle and conversions, TurnDelivery's construction in
-OwnedTurn.stream, OwnedSend admission, SendOutcome, TurnRunner.backend_for and
-idle inspection, plus pinned durable Harness/Conversation/events/storage types.
-The existing backend family remains the selection owner; no parallel registry
-or new default is introduced. RuntimeLocation's envelope migration belongs to
-P117/core-runtime-location; DurableDatabase consumes its agreed contract.
+- Durable/location checks: four pass, including persisted/unstarted round trips,
+  worker selection, missing history, source identity and file members.
+- Existing durable event checks: two pass.
+- Expanded existing backend, external transcript, schema and native transcript
+  batch: 39 pass, two fail. Both failures reproduce on unmodified main:
+  malformed_unknown_and_partial_entries_keep_byte_boundaries and
+  native_ancestry_is_acquired_before_coordinator_read. They are not green.
+- The real SDK writes 260 fresh entries; history traverses all pages in both
+  directions while a writer host holds the database, and reads the newest turn.
+  Original interrupted-work inspection stays unchanged.
+- Required backend equality-dispatch grep: zero.
+- Unchanged full debt ratchet: exit 1. Python source grows by 513 lines; retained
+  frozen-backend protocol code also contributes FamilyFlattened +1,
+  StringDispatch +1, StringDispatchArms +3 and StringSubscript +32. No newly
+  introduced banned vocabulary. No checker scope/budget/threshold changes.
+- NRA Python census: before 1,011 parsed modules plus the unresolved merge
+  conflict in agent_backend.py; after 1,013 modules, zero parse omissions.
+  Includes Core src/tests and Toad src consumers. Dynamic resolution stays open;
+  JS and pinned SDK declarations were read semantically, not Python-AST parsed.
 
-Reused the refactor-audit overlay over Core production before edits (no parser
-errors). Reused NRA's Python parser for the source census, serially, enumerating
-relevant declarations, writes, checks, imports, inheritance and calls. Evidence:
-`.scratch/p118/{owner-before.json,source-census.txt,source-census.err}` in the owned
-checkout. `owner-before.json` is the overlay's text output, not JSON. Dynamic
-registry resolution was inspected semantically. JS API/host were read and syntax
-checked, not AST-scanned; no JS structural census coverage is claimed.
+Evidence in the owned checkout: `.artifacts/p118/`, including source census,
+full check output, main failure reproduction and ratchet JSON. Tests use existing
+installed Python dependencies and borrow the frozen checkout's npm dependencies;
+node_modules is absent from the final Git tree and PR diff. One earlier published
+checkpoint accidentally included its symlink; the following commit removed it.
 
-## Still unfinished; do not treat this as usable
+## Not delivered by this checkpoint
 
-- Backend consumes P117's new runtime envelope, not the old abstract `.of()`;
-  it needs that branch integrated before locations can be instantiated.
-- Worker turns intentionally raise before submission: initial Core InputId and
-  generic send-disposition integration are not connected. The recovery methods
-  still need P117's typed recovery capability/records.
-- Event converters are only partially implemented. The open DurableTurn now owns
-  the stream and its bounded event inbox; DurableHost routes every decoded event
-  directly to that turn and raises when none is open. Host watch/unwatch controls
-  attach the snapshot first and drain the stream before releasing ownership.
-  Input disposition, tool completion and terminal response conversion still need
-  the unfinished submission/admission integration.
-- Startup recovery commands record ABANDON before abort marking and prohibit
-  resume while any unfinished item lacks a decision. Their crash/reopen behavior
-  has not yet been exercised. Never replay UNKNOWN original inputs.
-- No real provider request was made. No saved-thread copy, installed Toad worker
-  reply, screenshot or cold/warm measurement exists. Codex has not built this.
+Provider submission remains deliberately disabled until initial Core InputId and
+send-disposition integration is connected. Event conversion is incomplete; the
+current saved-history projection retains the frozen host's text projection,
+not full structured tool/thinking history. Durable forks and native-selected
+execution are not claimed. Recovery crash/reopen acceptance is unfinished.
 
-## Review correction: no dropped events
+No original saved session or UNKNOWN input was replayed. No default runtime,
+installation, Toad source or provider configuration changed. The configured
+provider saved-copy/worker/UI journey is a separate assignment.
 
-The original checkpoint's nullable host queue silently dropped every event. That
-was wrong. The replacement moves the inbox to DurableTurn, binds its receiver
-before watch attachment, and restores a failing receiver only after the watch's
-stop receipt. The protocol reader never waits on a full event queue, which would
-also block abort replies; overflow fails instead of dropping events.
-
-Two focused checks use the real Node host, watchEvents and SQLite, without a
-provider call: snapshot and agent changes reach successive open turns; an actual
-snapshot emitted without an open turn fails the reader and later requests.
-The same turn's converter stream yields Chunk, Thinking, ToolStart and Error from
-controlled event records. This is source/transport coverage, not a real provider
-or installed Toad acceptance claim. The initial installed Python lacked pytest;
-the existing Core development interpreter ran the checks instead.
-
-The immediate next change is the coherent P117 integration and Core admission
-owner migration, followed by complete event conversion, crash checks and the
-configured-provider saved-copy journey. A direct host reply cannot substitute
-for that worker/UI acceptance.
+Pinned dependencies remain pi-durable, pi-ai and chord 1.3.0. Install with
+`npm ci --ignore-scripts --omit=dev` in src/agent_comms. The host retains the
+frozen internal estimateContext import because 1.3.0 does not publicly export
+it; place-queued-now also remains unavailable. Neither upstream gap is closed.
