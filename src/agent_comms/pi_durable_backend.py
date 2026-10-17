@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import json
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -95,6 +96,39 @@ class CompactionStartDurableEvent(DurableEvent): pass
 class CompactionEndDurableEvent(DurableEvent): pass
 
 
+def _event_without_turn(event):
+    raise RuntimeError(f'Durable event {event.wire_kind()!r} arrived with no open turn')
+
+
+class DurableTurn:
+    """The open turn owns every committed event until its watch is drained."""
+    def __init__(self, host):
+        self.host = host
+        self.events = asyncio.Queue(maxsize=100)
+
+    def receive(self, event):
+        # Never block the protocol reader behind a slow ACP consumer: abort and
+        # other replies use that same pipe. Overflow is a failure, not lost paint.
+        self.events.put_nowait(event)
+
+    async def next_event(self):
+        waiting = asyncio.create_task(self.events.get())
+        try:
+            ready, _ = await asyncio.wait((waiting, self.host.reader), return_when=asyncio.FIRST_COMPLETED)
+            if self.host.reader in ready:
+                self.host.reader.result()
+            return waiting.result()
+        finally:
+            waiting.cancel()
+            await asyncio.gather(waiting, return_exceptions=True)
+
+    async def converted(self):
+        while True:
+            event = await self.next_event()
+            for converted in event.convert():
+                yield converted
+
+
 class DurableHost:
     """Own the child, its JSONL reader and its exclusive database lock together."""
     def __init__(self):
@@ -103,7 +137,7 @@ class DurableHost:
         self.reader = None
         self.stderr = None
         self.pending = {}
-        self.events = None
+        self.deliver_event = _event_without_turn
         self.sequence = 0
 
     async def open(self, location, thread):
@@ -139,8 +173,7 @@ class DurableHost:
                 if 'event' in message:
                     payload = message['event']
                     event = DurableEvent.decode(payload['type'])(payload)
-                    if self.events is not None:
-                        await self.events.put(event)
+                    self.deliver_event(event)
                 else:
                     future = self.pending.pop(message['id'])
                     if not future.done():
@@ -156,7 +189,26 @@ class DurableHost:
             self.pending.clear()
             raise
 
+    @asynccontextmanager
+    async def open_turn(self):
+        if self.deliver_event is not _event_without_turn:
+            raise RuntimeError('A durable turn is already open')
+        turn = DurableTurn(self)
+        self.deliver_event = turn.receive
+        try:
+            await self.request('watch')
+            yield turn
+        finally:
+            try:
+                # The stop receipt follows every event of this watch on stdout.
+                # Keep its turn attached until the reader has passed that receipt.
+                await self.request('unwatch')
+            finally:
+                self.deliver_event = _event_without_turn
+
     async def request(self, command, **payload):
+        if self.reader.done():
+            self.reader.result()
         self.sequence += 1
         identity = self.sequence
         future = asyncio.get_running_loop().create_future()
@@ -220,8 +272,16 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, ReadsHist
         await self.host.request('resume')
 
     async def run_turn(self, thread, content, delivery):
+        async with self.lock:
+            await self.open(thread)
+            async with self.host.open_turn() as turn:
+                await self.submit_turn(content, delivery)
+                async for event in turn.converted():
+                    yield event
+
+    async def submit_turn(self, content, delivery):
+        # Admission must be connected before any provider submission is enabled.
         raise RuntimeError('Durable worker admission is unfinished: initial Core InputId and send-disposition integration required')
-        yield  # AsyncIterator contract; no input is submitted by this checkpoint.
 
     async def abort(self, owner):
         # Closing never resumes interrupted work or replays an uncertain input.

@@ -42,9 +42,24 @@ const handlers = {
       onReport: error => process.stderr.write(`${error.stack ?? error}\n`),
     }, context);
     root = await harness.root(context, { agent: { cwd: request.cwd, ...(request.agent ?? {}) } });
+    const initial = await watchEvents(harness, root.id, context);
+    await initial.stop();
+    return { snapshot: initial.snapshot, interrupted: workItems(await harness.inspect(context)) };
+  },
+  async watch() {
+    requireOpen();
+    if (stream) throw new Error('A durable turn watch is already open');
     stream = await watchEvents(harness, root.id, context);
+    emit({ event: stream.snapshot });
     stream.start(async events => { for (const event of events) emit({ event }); });
-    return { snapshot: stream.snapshot, interrupted: workItems(await harness.inspect(context)) };
+    return null;
+  },
+  async unwatch() {
+    requireOpen();
+    if (!stream) throw new Error('No durable turn watch is open');
+    await stream.stop();
+    stream = undefined;
+    return null;
   },
   async inspect() { requireOpen(); return workItems(await harness.inspect(context)); },
   async settle(request) {

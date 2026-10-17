@@ -51,14 +51,33 @@ checked, not AST-scanned; no JS structural census coverage is claimed.
 - Worker turns intentionally raise before submission: initial Core InputId and
   generic send-disposition integration are not connected. The recovery methods
   still need P117's typed recovery capability/records.
-- Event converters are only partially implemented. Idle frames are decoded and
-  discarded; active-turn events are not yet wired to Core. Input disposition,
-  tool completion and terminal response conversion need delivery integration.
+- Event converters are only partially implemented. The open DurableTurn now owns
+  the stream and its bounded event inbox; DurableHost routes every decoded event
+  directly to that turn and raises when none is open. Host watch/unwatch controls
+  attach the snapshot first and drain the stream before releasing ownership.
+  Input disposition, tool completion and terminal response conversion still need
+  the unfinished submission/admission integration.
 - Startup recovery commands record ABANDON before abort marking and prohibit
   resume while any unfinished item lacks a decision. Their crash/reopen behavior
   has not yet been exercised. Never replay UNKNOWN original inputs.
 - No real provider request was made. No saved-thread copy, installed Toad worker
   reply, screenshot or cold/warm measurement exists. Codex has not built this.
+
+## Review correction: no dropped events
+
+The original checkpoint's nullable host queue silently dropped every event. That
+was wrong. The replacement moves the inbox to DurableTurn, binds its receiver
+before watch attachment, and restores a failing receiver only after the watch's
+stop receipt. The protocol reader never waits on a full event queue, which would
+also block abort replies; overflow fails instead of dropping events.
+
+Two focused checks use the real Node host, watchEvents and SQLite, without a
+provider call: snapshot and agent changes reach successive open turns; an actual
+snapshot emitted without an open turn fails the reader and later requests.
+The same turn's converter stream yields Chunk, Thinking, ToolStart and Error from
+controlled event records. This is source/transport coverage, not a real provider
+or installed Toad acceptance claim. The initial installed Python lacked pytest;
+the existing Core development interpreter ran the checks instead.
 
 The immediate next change is the coherent P117 integration and Core admission
 owner migration, followed by complete event conversion, crash checks and the
