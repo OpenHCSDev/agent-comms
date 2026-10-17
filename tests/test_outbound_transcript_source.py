@@ -266,8 +266,7 @@ def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa
     assert not before.current()
     assert before.content_current()
     assert before.read() == page
-    assert before.identity.content_identity == after.identity.content_identity
-    assert hash(before.identity.content_identity) == hash(after.identity.content_identity)
+    assert before.identity.same_content(after.identity)
     comms.messaging.send_message("sender", "beta", "Related original")
     assert not before.content_current()
 
