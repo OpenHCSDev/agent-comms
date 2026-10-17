@@ -99,10 +99,10 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     replacement = register(comms, "owner")
     assert owner.created_at != replacement.created_at
     with comms.bus.log.certified_read() as source:
-        assert not replace(wait, owner_created_at=replacement.created_at).matches(
+        assert not replace(wait, owner=replacement.incarnation.require_recorded()).matches(
             source.delivery(reply.seq), replacement.incarnation.require_recorded()
         )
-    assert not replace(wait, owner_created_at=replacement.created_at).has_reply(
+    assert not replace(wait, owner=replacement.incarnation.require_recorded()).has_reply(
         comms.bus.log, replacement.incarnation.require_recorded()
     )
 
@@ -136,7 +136,7 @@ async def test_native(retained_native_acp_owner):
     )
     wait = comms.goals.goal_wait(sid)
     parked_goal = comms.registry.require(sid).goal
-    assert wait is not None and wait.owner_created_at == owner.created_at
+    assert wait is not None and wait.owner == owner.incarnation.require_recorded()
 
     gate = asyncio.Event()
     native.provider.response_gate = gate

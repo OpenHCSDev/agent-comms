@@ -134,7 +134,7 @@ def test_idle_target_refusal_is_side_effect_free(tmp_path):
     assert isinstance(comms.goals.goal_wait("owner"), NoGoalWait)
 
 
-def test_optional_reply_read_failure_after_terminal_commit_never_releases_or_fails(
+def test_reply_read_failure_after_terminal_commit_raises_without_releasing(
     tmp_path, monkeypatch
 ):
     comms, goal = _waiting(tmp_path)
@@ -146,7 +146,8 @@ def test_optional_reply_read_failure_after_terminal_commit_never_releases_or_fai
         raise OSError("injected optional direct-reply read failure")
 
     monkeypatch.setattr(RecordedGoalWait, "has_reply", unavailable)
-    assert comms.goals.release_waits_after_terminal_turn(fence) == ()
+    with pytest.raises(OSError, match="injected optional direct-reply read failure"):
+        comms.goals.release_waits_after_terminal_turn(fence)
     assert comms.registry.require("child").active_turn is None
     assert comms.registry.require("owner").goal.state.active
     assert comms.registry.require("owner").goal.id == goal.id
@@ -435,7 +436,7 @@ def test_unbound_wait_is_rejected_without_replacing_current_wait(tmp_path):
     assert GoalWaits(comms.root / "goal_waits.json").path.read_bytes() == before
 
 
-async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
+async def test_acp_reply_read_failure_after_settled_reaches_terminal_caller(
     retained_native_acp_owner, monkeypatch
 ):
     native, comms, agent, child = retained_native_acp_owner
@@ -467,7 +468,8 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
     monkeypatch.setattr(agent, "_emit_event", capture_emit)
     monkeypatch.setattr(RecordedGoalWait, "has_reply", unavailable)
     async with asyncio.timeout(20):
-        await agent.turns.run_agent_turn(child, child, "Finish work")
+        with pytest.raises(OSError, match="injected optional direct-reply read failure"):
+            await agent.turns.run_agent_turn(child, child, "Finish work")
     assert terminal == ["settled"]
     assert comms.registry.require("owner").goal.state.active
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)

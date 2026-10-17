@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import replace
 from functools import cached_property
@@ -219,7 +218,7 @@ class Goals:
             wait = rows.get(goal.id)
             if (
                 wait is None
-                or not wait.current_for(goal, owner.created_at)
+                or not wait.current_for(goal, owner.incarnation.require_recorded())
             ):
                 return ()
             closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot, self.agents)
@@ -271,36 +270,29 @@ class Goals:
                 return ()
             waits = self.waits.read()
             released: list[str] = []
-            for owner in snapshot.threads.values():
-                goal = owner.active_goal
-                if goal is None:
+            for goal_id, wait in waits.items():
+                if not any(
+                    target.incarnation.resolved(snapshot) == source.incarnation
+                    and (generation := wait.target_turn_generations[index]) is not None
+                    and 0 < generation <= fence.identity.generation
+                    for index, target in enumerate(wait.targets)
+                ):
                     continue
-                wait = waits.get(goal.id)
+                owner = snapshot.threads.get(snapshot.canonical_name(wait.owner.name))
+                if owner is None:
+                    continue
+                goal = owner.active_goal
                 if (
-                    wait is None
-                    or not wait.current_for(goal, owner.created_at)
-                    or not any(
-                        target.incarnation.resolved(snapshot)
-                        == fence.identity.incarnation.resolved(snapshot)
-                        and (generation := wait.target_turn_generations[index]) is not None
-                        and 0 < generation <= fence.identity.generation
-                        for index, target in enumerate(wait.targets)
-                    )
+                    goal is None
+                    or goal.id != goal_id
+                    or not wait.current_for(goal, owner.incarnation.require_recorded())
                     or any(
                         self.agents.is_working(target.incarnation, snapshot)
                         for target in wait.targets
                     )
                 ):
                     continue
-                try:
-                    reply = wait.has_reply(self.bus.log, owner.incarnation.require_recorded())
-                except (OSError, ValueError, sqlite3.DatabaseError):
-                    # The terminal turn has already committed. An unavailable
-                    # optional reply read cannot prove silence or release this
-                    # owner; do not turn the completed ACP turn into a failure.
-                    # Registry/goal writes below remain outside this guard.
-                    continue
-                if reply:
+                if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
                     continue
                 diagnostic = (
                     f"Declared dependency @{canonical} finished without a qualifying direct "
@@ -368,7 +360,7 @@ class Goals:
             if goal is None:
                 return False
             wait = self.waits.for_goal(goal, self.waits.read())
-            if not wait.owner_matches(current.created_at):
+            if not wait.owner_matches(current.incarnation.require_recorded()):
                 return False
             with self.bus.log.certified_read() as source:
                 original = source.delivery(reference.seq)

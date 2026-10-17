@@ -134,7 +134,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
         revision=0,
         after_seq=0,
         targets=(GoalWaitTarget(peer.incarnation.require_recorded()),),
-        owner_created_at=comms.registry.require("owner").created_at,
+        owner=comms.registry.require("owner").incarnation.require_recorded(),
         target_turn_generations=(None,),
         report_turn_id=None,
         report_turn_generation=None,
