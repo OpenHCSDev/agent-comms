@@ -509,7 +509,7 @@ class HistoryViews:
     def poll(self, name: str | None = None) -> Mapping:
         """One-shot status snapshot: self state plus inbox."""
         if name is None:
-            me = current_thread(self.registry.storage_rule)
+            me = current_thread(self.registry)
             name = me.name
         self.registry.require(name)
         return {

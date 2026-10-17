@@ -5,7 +5,6 @@ journey. The isolated root is retained on failure, including uncertain inputs.
 """
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import argparse
 import asyncio
@@ -124,8 +123,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(root, root_id, package)
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)
-    comms.registry.declare(Thread.create("error-native", frozenset(), str(project), session_file=str(fresh.path),
-                                  model="error-local/error-fixture", thinking_level="off", storage_rule=StorageRule()))
+    comms.registry.declare(comms.registry.new_thread('error-native', frozenset(), str(project), session_file=str(fresh.path), model='error-local/error-fixture', thinking_level='off'))
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(("PI_", "AGENT_COMMS_")) and key != "PYTHONPATH"}
     environment.update(

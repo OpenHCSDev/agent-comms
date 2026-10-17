@@ -1,5 +1,4 @@
 """Dependency replies retain original certified identities across registry changes."""
-from agent_comms.storage_rules import StorageRule
 
 import os
 from agent_comms.tool_caller import NoThreadCaller
@@ -23,7 +22,7 @@ from agent_comms.pi_payloads import PublishedMessageToolDetails
 
 def register(comms, name):
     comms.registry.declare(
-        Thread.create(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()), storage_rule=StorageRule())
+        comms.registry.new_thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     return comms.registry.require(name)
 

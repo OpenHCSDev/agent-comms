@@ -1,5 +1,4 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
-from agent_comms.storage_rules import StorageRule
 import subprocess
 
 import pytest
@@ -25,7 +24,7 @@ from agent_comms.todos import (AwaitingFirstCall, CleanHunt, CommitDelivery, Fir
 def commander(tmp_path):
     comms = Comms(tmp_path / 'wire')
     for created, name in enumerate(('lead', 'worker'), 1):
-        comms.registry.declare(Thread.create(name, frozenset(), str(tmp_path), created_at=float(created), storage_rule=StorageRule()))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=float(created)))
     comms.goals.update_goal('worker', SetGoalAction(text='Original commander brief', goal_id='ongoing'))
     return comms, ThreadCaller('lead')
 

@@ -134,10 +134,10 @@ class OwnedTurn:
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
         )
         self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)
-        self.lease_custody = AsyncExitStack()
-        resources.push_async_callback(self.lease_custody.aclose)
+        self.lease_cleanup = AsyncExitStack()
+        resources.push_async_callback(self.lease_cleanup.aclose)
         self.registry_owner = self.runner.acquire_turn(
-            self.lease_custody, self.session_id, self.thread_name,
+            self.lease_cleanup, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
         active_goal = self.thread.active_goal
@@ -154,9 +154,9 @@ class OwnedTurn:
             permits.callback(
                 self.goal_permit.retire_unverified, self.runner.comms.goals.open_goal_store()
             )
-        self.input_custody = AsyncExitStack()
-        resources.push_async_callback(self.input_custody.aclose)
-        self.input_custody.push_async_callback(Coordination.run_worker, self.settle_unbound)
+        self.input_cleanup = AsyncExitStack()
+        resources.push_async_callback(self.input_cleanup.aclose)
+        self.input_cleanup.push_async_callback(Coordination.run_worker, self.settle_unbound)
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
             with _store_lock(self.runner.comms._wire_lock_path):
@@ -286,7 +286,7 @@ class OwnedTurn:
         if self.controller is UNBOUND_CONTROLLER:
             self.controller = None  # Autonomous/channel/goal turns have no controller.
         self.runner.inputs.original_sources[self.session_id] = self.original
-        self.input_custody.pop_all()
+        self.input_cleanup.pop_all()
         origin_claims = ExitStack()
         permits.callback(origin_claims.close)
         self.progress = TurnProgress(
@@ -375,12 +375,12 @@ class OwnedTurn:
         async for event in self.backend.run_turn(self.thread, content, delivery):
             await self.progress.consume(event)
 
-    async def acquire(self, resources: AsyncExitStack, permit_custody: AsyncExitStack) -> bool:
+    async def acquire(self, resources: AsyncExitStack, permit_cleanup: AsyncExitStack) -> bool:
         """Join source acquisition before exposing this turn's loop capabilities."""
         self.owner_task = asyncio.current_task()
         assert self.owner_task is not None
         permits = ExitStack()
-        permit_custody.push_async_callback(Coordination.run_worker, permits.close)
+        permit_cleanup.push_async_callback(Coordination.run_worker, permits.close)
         if not await Coordination.run_worker(self.authorize):
             return False
         self.runner.sessions.bindings[self.session_id] = self.thread_name
@@ -389,14 +389,14 @@ class OwnedTurn:
         self.open_stream(resources, permits)
         # Early failures close claims before inbox/lease retirement. Once all
         # stream capabilities exist, goal settlement belongs above those resources.
-        resources.push_async_callback(permit_custody.pop_all().aclose)
+        resources.push_async_callback(permit_cleanup.pop_all().aclose)
         resources.push_async_callback(self.backend.abort, self.owner_task)
         return True
 
     async def run(self) -> None:
         async with AsyncExitStack() as resources:
-            async with AsyncExitStack() as permit_custody:
-                if not await self.acquire(resources, permit_custody):
+            async with AsyncExitStack() as permit_cleanup:
+                if not await self.acquire(resources, permit_cleanup):
                     return
                 await self.run_native()
 

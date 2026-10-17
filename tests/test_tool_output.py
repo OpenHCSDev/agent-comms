@@ -1,5 +1,4 @@
 """Oversized inbox output remains inspectable without acknowledging unseen messages."""
-from agent_comms.storage_rules import StorageRule
 
 import hashlib
 import json
@@ -47,7 +46,7 @@ def seed_unknown(comms, count, text):
 @pytest.fixture
 def inbox_comms(comms):
     for name in ("a", "b"):
-        comms.registry.declare(Thread.create(name=name, tags=frozenset(), worktree="/wt", storage_rule=StorageRule()))
+        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree='/wt'))
     return comms
 
 

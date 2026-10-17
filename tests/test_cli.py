@@ -1,4 +1,3 @@
-from agent_comms.storage_rules import StorageRule
 import json
 import os
 import subprocess
@@ -277,7 +276,7 @@ class TestSelectedTargetActions:
 
         comms = wire(root)
         for name, tags in (("alpha", {"team"}), ("beta", {"other"})):
-            comms.registry.declare(Thread.create(name, frozenset(tags), str(root), storage_rule=StorageRule()), StoppedThreadStatus())
+            comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(root)), StoppedThreadStatus())
         return comms
 
     def test_catalog_absent_view_actor_has_no_backend_actions(self, tmp_path):
@@ -291,7 +290,7 @@ class TestSelectedTargetActions:
         assert CliCommand.target_catalog(comms, 'missing', project=str(tmp_path)) == ()
         with pytest.raises(UnregisteredThreadError):
             TargetEdit(ArchiveCliCommand, 'project', {}).apply(comms)
-        comms.registry.declare(Thread.create('project', frozenset(), str(tmp_path), storage_rule=StorageRule()), StoppedThreadStatus())
+        comms.registry.declare(comms.registry.new_thread('project', frozenset(), str(tmp_path)), StoppedThreadStatus())
         actions = CliCommand.target_catalog(comms, 'project', project=str(tmp_path))
         assert any(action.declaration is ArchiveCliCommand for action in actions)
 
@@ -416,7 +415,7 @@ class TestSelectedTargetActions:
         from agent_comms.threads import Thread
 
         comms = self.declared(tmp_path)
-        comms.registry.declare(Thread.create("active", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()),
+        comms.registry.declare(comms.registry.new_thread('active', frozenset({'team'}), str(tmp_path)),
                                RunningThreadStatus())
         code, result = cli(tmp_path, "target-action", "--targets", "alpha", "active", "#team",
                            "--operation", "archive", "--confirmed")
@@ -469,11 +468,10 @@ class TestSelectedTargetActions:
         from agent_comms.threads import Thread
 
         comms = self.declared(tmp_path)
-        comms.registry.declare(Thread.create("external", frozenset({"team"}), str(tmp_path),
-                                     execution=ExternalThreadExecution, storage_rule=StorageRule()), StoppedThreadStatus())
-        comms.registry.declare(Thread.create("archived", frozenset({"team"}), str(tmp_path), storage_rule=StorageRule()),
+        comms.registry.declare(comms.registry.new_thread('external', frozenset({'team'}), str(tmp_path), execution=ExternalThreadExecution), StoppedThreadStatus())
+        comms.registry.declare(comms.registry.new_thread('archived', frozenset({'team'}), str(tmp_path)),
                                ArchivedThreadStatus())
-        comms.registry.declare(Thread.create("human", frozenset({"team"}), str(tmp_path), role=ThreadRole.USER, storage_rule=StorageRule()),
+        comms.registry.declare(comms.registry.new_thread('human', frozenset({'team'}), str(tmp_path), role=ThreadRole.USER),
                                StoppedThreadStatus())
         commands = StartCliCommand.bindings(comms, "#team")
         assert tuple(command.name for command in commands) == ("alpha",)
@@ -543,8 +541,7 @@ class TestSelectedTargetActions:
         source.write_text(json.dumps({'type': 'message', 'message': {
             'role': 'assistant', 'content': [{'type': 'text', 'text': 'Saved reply'}],
         }}) + '\n')
-        comms.registry.declare(Thread.create('alpha', frozenset({'team'}), str(tmp_path),
-                                     session_file=str(source), storage_rule=StorageRule()))
+        comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), session_file=str(source)))
         comms.channels.update_tags('beta', add=frozenset({'team'}))
         viewer = comms.messaging.user_identity(str(tmp_path)).name
         comms.messaging.send('alpha', 'beta', 'Executor message')

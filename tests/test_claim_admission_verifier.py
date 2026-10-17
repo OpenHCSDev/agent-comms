@@ -1,7 +1,6 @@
 """Sealed N/K claim_scope checks against real private bus, registry, and SQLite stores."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import os
 import sys
@@ -55,13 +54,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         comms = Comms(root)
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.registry.declare(
-                Thread.create(
-                    name,
-                    frozenset({"team"}),
-                    str(worktree),
-                    process_identity=ProcessIdentity.capture(os.getpid()),
-                    created_at=created,
-                storage_rule=StorageRule())
+                comms.registry.new_thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created)
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
         message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")

@@ -1,5 +1,4 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
-from agent_comms.storage_rules import StorageRule
 import argparse
 import asyncio
 from importlib.resources import files
@@ -45,7 +44,7 @@ async def main():
     for name in (owner, 'stopped', 'archived'):
         source = root / (name + '.jsonl')
         source.touch()
-        comms.registry.declare(Thread.create(name, frozenset({'team'}), str(root), session_file=str(source), storage_rule=StorageRule()))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), session_file=str(source)))
     comms.owners.stop('stopped')
     comms.owners.stop('archived')
     comms.threads.archive('archived')

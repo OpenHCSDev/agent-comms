@@ -1,5 +1,4 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
-from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -23,7 +22,7 @@ from delivery_owner_fixture import canonical_agent
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
-async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_backend, monkeypatch):
+async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, monkeypatch):
     """Actual SDK fork/two fresh children; lend artifact, never input readiness."""
     import hashlib
     import os
@@ -36,7 +35,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.coordination_errors import IdentityConflict
     from agent_comms.coordinator import Coordination
-    from agent_comms.native_custody import PiSessionChild
+    from agent_comms.native_child import PiSessionChild
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_entries import NativeEntry
     from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -147,7 +146,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
         await asyncio.gather(observing, return_exceptions=True)
 
     assert hashlib.sha256(source.read_bytes()).hexdigest() == before
-    print("actual_selected_launch_custody", json.dumps({
+    print("actual_selected_launch_child", json.dumps({
         "preclaim_and_first_verifications": 1, "borrowed_verifications": 0,
         "independent_verifications": 1, "auth_changed": True,
         "children_retired": [child.proc.retired for child in children],
@@ -241,16 +240,14 @@ async def test_actual_catalog_auth_refresh_preserves_selection_and_reaps_childre
     print(f"actual_catalog_children_reaped={len(children)} provider_calls={native.provider.posts}")
 
 
-async def test_actual_catalog_larger_than_stream_buffer(catalog_owner, native_backend):
+async def test_actual_catalog_larger_than_stream_buffer(catalog_owner, native_backend, *, thread_registration):
     owner, children = catalog_owner
     path = native_backend.config / "models.json"
     document = json.loads(path.read_text())
     models = document["providers"]["response-local"]["models"]
     models.extend({"id": f"large-{i}-" + "x" * 2048, "name": str(i)} for i in range(70))
     path.write_text(json.dumps(document))
-    thread = Thread.create(
-        "catalog", frozenset(), str(native_backend.project), model="response-local/fixture"
-    , storage_rule=StorageRule())
+    thread = thread_registration.new_thread('catalog', frozenset(), str(native_backend.project), model='response-local/fixture')
     result = await owner.sessions.config.catalog_for(ModelConfigOption).choices(thread)
     assert len([model for model in result if model.value.startswith("response-local/")]) == 71
     assert sum(len(model.value) for model in result) > 2 * 65536
@@ -258,7 +255,7 @@ async def test_actual_catalog_larger_than_stream_buffer(catalog_owner, native_ba
     print(f"actual_catalog_identifier_bytes={sum(len(model.value) for model in result)}")
 
 
-async def test_actual_catalog_cancellation_reaps_child(catalog_owner, native_backend, monkeypatch):
+async def test_actual_catalog_cancellation_reaps_child(catalog_owner, native_backend, monkeypatch, *, thread_registration):
     owner, children = catalog_owner
     reading = asyncio.Event()
     receive = PiRpcChannel.receive
@@ -269,7 +266,7 @@ async def test_actual_catalog_cancellation_reaps_child(catalog_owner, native_bac
         return await receive(channel, **options)
 
     monkeypatch.setattr(PiRpcChannel, "receive", pause_read)
-    thread = Thread.create("catalog", frozenset(), str(native_backend.project), storage_rule=StorageRule())
+    thread = thread_registration.new_thread('catalog', frozenset(), str(native_backend.project))
     task = asyncio.create_task(owner.sessions.config.catalog_for(ModelConfigOption).choices(thread))
     try:
         await asyncio.wait_for(reading.wait(), 10)

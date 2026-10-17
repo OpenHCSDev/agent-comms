@@ -149,6 +149,10 @@ class Registration:
             history.commit(intent)
         return change
 
+    def new_thread(self, name, tags, worktree, *args, kind: type[Thread] = Thread, **values) -> Thread:
+        return kind(name, tags, worktree, *args,
+                      storage_roots=self.storage_rule.initial_roots(name, worktree), **values)
+
     def decide_storage(self, name, effects):
         current = self.require(name)
         roots = current.storage_roots

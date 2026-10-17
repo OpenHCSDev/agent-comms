@@ -1,5 +1,4 @@
 """Owner reads bound the dispatched reply, not local connection preparation."""
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -36,10 +35,7 @@ class Writer:
 
 def owner_read(tmp_path):
     comms = Comms(tmp_path)
-    thread = Thread.create(
-        "worker", frozenset(), str(tmp_path),
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    storage_rule=StorageRule())
+    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
     return comms, GoalRead(str(tmp_path), thread.incarnation)
 

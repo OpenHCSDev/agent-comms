@@ -54,7 +54,8 @@ class ThreadStatusModel:
         """Decode the observation's nullable presentation once, for local and foreign views."""
         if presentation is None:
             return cls.retired(name)
-        lines = [presentation.summary, *presentation.status.details]
+        lines = [presentation.summary, *(detail for detail in presentation.status.details
+                                         if detail != presentation.summary)]
         excerpts = []
         for acknowledgement in presentation.notifications:
             message = acknowledgement.message
@@ -86,7 +87,7 @@ class ThreadStatusModel:
     @classmethod
     def unreadable(cls, name: str, error: UnreadableHistory) -> ThreadStatusModel:
         return cls.known(name, ThreadPresentation(
-            name, "!", str(error), status=IdleThreadPresentationStatus().with_attention()))
+            name, "!", str(error), status=IdleThreadPresentationStatus().with_attention(str(error))))
 
 
 class OpenThreadStatus:

@@ -1,4 +1,3 @@
-from agent_comms.storage_rules import StorageRule
 import pytest
 from acp.schema import SessionConfigSelectOption
 
@@ -24,9 +23,7 @@ async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
     assert method.args == ["--login"]
 
 
-async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_model(
-    tmp_path, monkeypatch
-):
+async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_model(tmp_path, monkeypatch, *, thread_registration):
     async def discover(self, thread):
         return []
 
@@ -35,7 +32,7 @@ async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_m
         "pi", NativeArguments.parse(()),
         RestartEnvironment(native_config=tmp_path, agent_directory=tmp_path),
     )
-    thread = Thread.create(name="setup", tags=frozenset(), worktree=str(tmp_path), storage_rule=StorageRule())
+    thread = thread_registration.new_thread(name='setup', tags=frozenset(), worktree=str(tmp_path))
     advertised = await option.describe(thread)
     assert advertised.current_value == ""
     assert [choice.value for choice in advertised.options] == [""]

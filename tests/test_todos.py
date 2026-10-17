@@ -1,7 +1,7 @@
 """Todo creation and assignment retain exact owners, revisions and goal references."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
+from agent_comms.registration import Registration
 
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Manager
@@ -21,7 +21,8 @@ from agent_comms.todos import (
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
-    return Thread.create(name, frozenset(), str(root), created_at=created, storage_rule=StorageRule())
+    thread_registration = Registration(Path(root) / "registry.json")
+    return thread_registration.new_thread(name, frozenset(), str(root), created_at=created)
 
 
 def order(root: Path):

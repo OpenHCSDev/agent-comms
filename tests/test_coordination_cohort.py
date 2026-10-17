@@ -1,7 +1,6 @@
 """Original committed raw row → complete atomic N/K acceptance, no live wake."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import hashlib
 import json
@@ -66,7 +65,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     lookups: dict[str, str] = {}
     for name, (created_at, tags) in people.items():
         comms.registry.register(
-            Thread.create(name=name, worktree=str(root), created_at=created_at, tags=frozenset(tags), storage_rule=StorageRule())
+            comms.registry.new_thread(name=name, worktree=str(root), created_at=created_at, tags=frozenset(tags))
         )
         lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
     coordinator = Coordination(str(root / "coordinator.sqlite"), clock_ms=lambda: 4723)
@@ -332,13 +331,7 @@ def test_all_channel_excludes_sender_and_nonexecutors_and_control_is_not_forgeab
 ) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
     comms.registry.register(
-        Thread.create(
-            name="human",
-            tags=frozenset(),
-            worktree=str(tmp_path),
-            role=ThreadRole.USER,
-            created_at=17005.0,
-        storage_rule=StorageRule())
+        comms.registry.new_thread(name='human', tags=frozenset(), worktree=str(tmp_path), role=ThreadRole.USER, created_at=17005.0)
     )
     with pytest.raises(RelationViolationError, match="initial issuer"):
         comms.bus.publisher.publish_initial_cohort(
@@ -414,8 +407,8 @@ def test_existing_bus_cannot_acquire_private_marker(tmp_path: Path) -> None:
     root = tmp_path / "legacy"
     root.mkdir(mode=0o700)
     default = Comms(root)
-    default.registry.register(Thread.create(name="sender", tags=frozenset(), worktree=str(root), storage_rule=StorageRule()))
-    default.registry.register(Thread.create(name="Alice", tags=frozenset(), worktree=str(root), storage_rule=StorageRule()))
+    default.registry.register(default.registry.new_thread(name='sender', tags=frozenset(), worktree=str(root)))
+    default.registry.register(default.registry.new_thread(name='Alice', tags=frozenset(), worktree=str(root)))
     default.messaging.send_message("sender", "Alice", "ordinary")
     gated = Comms(root)
     before = (root / "bus.jsonl").read_bytes()
@@ -451,12 +444,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     # acquire another participant's claim identity or appear in an audience.
     with pytest.raises(RelationViolationError, match="creation identities collide"):
         comms.registry.register(
-            Thread.create(
-                name="duplicate",
-                tags=frozenset({"other"}),
-                worktree=str(tmp_path),
-                created_at=17002.0,
-            storage_rule=StorageRule())
+            comms.registry.new_thread(name='duplicate', tags=frozenset({'other'}), worktree=str(tmp_path), created_at=17002.0)
         )
     assert comms.bus.log.latest_sequence() == 0
 

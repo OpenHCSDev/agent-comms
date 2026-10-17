@@ -18,7 +18,7 @@ async def test_stop_failure_accounts_for_native_resources_and_retains_uncertaint
     tmp_path, monkeypatch, stage, fault
 ):
     from native_backend_fixture import native_backend_fixture
-    from agent_comms.native_custody import RetiringNative
+    from agent_comms.native_child import RetiringNative
 
     failure = fault("lost process cleanup acknowledgement")
     with pytest.raises(ChildRetirementFailed) as fixture_failure:
@@ -62,7 +62,7 @@ async def test_stop_failure_accounts_for_native_resources_and_retains_uncertaint
 
 async def test_resource_release_failure_retains_exact_native_child(tmp_path):
     from native_backend_fixture import native_backend_fixture
-    from agent_comms.native_custody import RetiringNative
+    from agent_comms.native_child import RetiringNative
 
     failure = RuntimeError("native resource release failed")
     with pytest.raises(RuntimeError) as fixture_failure:
@@ -93,7 +93,7 @@ async def test_resource_release_failure_retains_exact_native_child(tmp_path):
 async def test_all_native_shutdown_consumers_share_one_complete_job(
     native_backend, monkeypatch, borrowed
 ):
-    from agent_comms.native_custody import BorrowedNative, EmptyNative
+    from agent_comms.native_child import BorrowedNative, EmptyNative
 
     owner = native_backend
     assert (await owner.run("Before shared shutdown"))[-1].ok
@@ -199,7 +199,7 @@ async def test_cancelled_retirement_joins_exact_child_before_new_borrow(
     native_backend, monkeypatch
 ):
     import asyncio
-    from agent_comms.native_custody import PiSessionChild, RetiringNative
+    from agent_comms.native_child import PiSessionChild, RetiringNative
 
     owner = native_backend
     assert (await owner.run("Before cancelled retirement"))[-1].ok
@@ -251,7 +251,7 @@ async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
     tmp_path, failure, already_done, gateway
 ):
     from native_backend_fixture import native_backend_fixture
-    from agent_comms.native_custody import RetiringNative
+    from agent_comms.native_child import RetiringNative
 
     original_error = failure("owned shutdown failed")
     with pytest.raises(failure) as fixture_failure:

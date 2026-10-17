@@ -1,5 +1,4 @@
 """Append-aware activity snapshots preserve the existing JSONL recovery contract."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 import threading
@@ -129,7 +128,7 @@ def test_blank_lines_and_valid_tail_completion_keep_exact_cursor(tmp_path):
     assert set(reader.all_current()) == {"a", "b", "c"}
 
 
-def test_replacement_truncation_rename_delete_and_missing_file_reset_index(tmp_path):
+def test_replacement_truncation_rename_delete_and_missing_file_reset_index(tmp_path, *, thread_registration):
     path = tmp_path / "activity.jsonl"
     reader, writer = ActivityLog(path), ActivityLog(path)
     writer.emit(Activity("a", ActivityState.THINKING, "old"))
@@ -137,7 +136,7 @@ def test_replacement_truncation_rename_delete_and_missing_file_reset_index(tmp_p
     assert set(reader.all_current()) == {"a", "b"}
     writer.rename_thread("a", "renamed")
     assert set(reader.all_current()) == {"renamed", "b"}
-    writer.remove_threads((Thread.create("b", frozenset(), str(tmp_path), storage_rule=StorageRule()),))
+    writer.remove_threads((thread_registration.new_thread('b', frozenset(), str(tmp_path)),))
     assert set(reader.all_current()) == {"renamed"}
     path.write_text(encoded("c") + "\n")
     assert set(reader.all_current()) == {"c"}

@@ -1,5 +1,4 @@
 """Fresh production bootstrap wakes a real native owner before and after restart."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -104,13 +103,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "recipient"):
         comms.registry.declare(
-            Thread.create(
-                name,
-                frozenset(),
-                str(tmp_path),
-                model="selected-offline/fixture",
-                thinking_level="off",
-            storage_rule=StorageRule())
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), model='selected-offline/fixture', thinking_level='off')
         )
     # Ordinary publication must reach the same bootstrap as explicit protocol install.
     first = comms.messaging.send_message("sender", "recipient", "BOOTSTRAP_FIRST")

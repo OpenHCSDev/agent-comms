@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent, AgentInfo
     from .comms import Comms
     from .native_arguments import NativeArguments
-    from .native_custody import NativeChildState, PiSessionChild
+    from .native_child import NativeChildState, PiSessionChild
     from .native_session_reopen import NativeSessionIdentity
     from .pi_payloads import StateData
     from .threads import Thread
@@ -111,7 +111,7 @@ class PersistentPiSession:
     """Serialize borrowing and retirement of one native session's actual child."""
 
     def __init__(self) -> None:
-        from .native_custody import EmptyNative
+        from .native_child import EmptyNative
 
         self.lock = asyncio.Lock()
         self.child_state: NativeChildState = EmptyNative()
@@ -121,7 +121,7 @@ class PersistentPiSession:
         return self.child_state.available
 
     async def open(self, launch, *, reuse, startup, watchdog) -> PiSessionChild:
-        from .native_custody import BorrowedNative, EmptyNative, PiSessionChild
+        from .native_child import BorrowedNative, EmptyNative, PiSessionChild
 
         key = (launch, launch.configuration.auth_revision())
         child = self.child_state.reuse(key) if reuse else None
@@ -144,7 +144,7 @@ class PersistentPiSession:
             return await self.child_state.context_for_input(thread, context)
 
     def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
-        from .native_custody import RetainedNative
+        from .native_child import RetainedNative
         from .session_revision import SessionRevision, SessionRevisionUnavailable
 
         if not child.proc.alive():

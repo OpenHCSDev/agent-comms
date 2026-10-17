@@ -1,7 +1,6 @@
 """One-pass thread-list pending projection: no false zero or read acknowledgment."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -28,7 +27,7 @@ def _listed(wired, *, active_only: bool = False) -> dict[str, int]:
 
 
 def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
-    wired.registry.declare(Thread.create(name="third", tags=frozenset({"base"}), worktree="/tmp/third", storage_rule=StorageRule()))
+    wired.registry.declare(wired.registry.new_thread(name='third', tags=frozenset({'base'}), worktree='/tmp/third'))
     wired.messaging.send("PR111", "fixer", "direct")
     wired.messaging.send("fixer", "PR111", "reverse direct")
     wired.messaging.send("PR111", "#all", "global")
@@ -84,7 +83,7 @@ def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatc
 def test_thread_listing_validates_registry_per_snapshot_not_per_row(wired, monkeypatch):
     wired.messaging.initialize_private_initial_protocol()
     for index in range(30):
-        wired.registry.declare(Thread.create(f"peer-{index}", frozenset(), f"/peer-{index}", storage_rule=StorageRule()))
+        wired.registry.declare(wired.registry.new_thread(f'peer-{index}', frozenset(), f'/peer-{index}'))
     checks = 0
     store_type = type(wired.registry.store)
     verify = store_type.private_guard_unlocked
@@ -320,7 +319,7 @@ def test_route_projection_refuses_atomic_bus_replacement(wired):
 
 
 def test_route_projection_refuses_rewrite_before_append(wired):
-    wired.registry.declare(Thread.create(name="third", tags=frozenset(), worktree="/tmp/third", storage_rule=StorageRule()))
+    wired.registry.declare(wired.registry.new_thread(name='third', tags=frozenset(), worktree='/tmp/third'))
     wired.messaging.send("PR111", "fixer", "first")
     assert _listed(wired)["fixer"] == 1
     bus_path = wired.bus.log.path
@@ -334,7 +333,7 @@ def test_route_projection_refuses_rewrite_before_append(wired):
 
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
-    wired.registry.declare(Thread.create(name="broadcast", tags=frozenset(), worktree="/tmp/broadcast", storage_rule=StorageRule()))
+    wired.registry.declare(wired.registry.new_thread(name='broadcast', tags=frozenset(), worktree='/tmp/broadcast'))
     wired.messaging.send("PR111", "broadcast", "direct message to the named thread")
     wired.messaging.send("fixer", "broadcast", "second sender")
     wired.messaging.send("PR111", "fixer", "old direct")

@@ -35,7 +35,7 @@ def test_every_spawn_has_its_own_process_group() -> None:
     assert "bind_and_resume" in ast.unparse(declarations["WindowsLaunch"])
 
 
-def test_process_custody_has_no_bare_pid_or_optional_parent_api() -> None:
+def test_process_cleanup_has_no_bare_pid_or_optional_parent_api() -> None:
     import inspect
     from typing import get_type_hints
 

@@ -1,5 +1,4 @@
 """Owner background controller isolation and cancellation before native dispatch."""
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import os
@@ -17,12 +16,7 @@ from stored_inputs import stored_inputs
 async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private(tmp_path):
     comms = Comms(tmp_path)
     comms.registry.declare(
-        Thread.create(
-            "owner",
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_rule=StorageRule())
+        comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     agent = CommsAgent(comms, auto_wake=True, runtime_enabled=True)
     agent.sessions.bindings["owner"] = "owner"

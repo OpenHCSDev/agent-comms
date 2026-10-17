@@ -1,5 +1,4 @@
 """Original acquired SDK context reader through the installed owner RPC."""
-from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import argparse
@@ -55,9 +54,7 @@ async def read_original_context(
     # This fixture owns the root; the existing owner launch and RPC reader remain real.
     try:
         await owner._runtime.start()
-        thread = Thread.create("context-source", frozenset(), str(fixture.project),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            session_file=str(fixture.session), model="response-local/fixture", storage_rule=StorageRule())
+        thread = owner._comms.registry.new_thread('context-source', frozenset(), str(fixture.project), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(fixture.session), model='response-local/fixture')
         owner._comms.registry.declare(thread)
         from agent_comms.coordinator import Coordination
 
