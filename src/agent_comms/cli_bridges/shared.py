@@ -662,6 +662,8 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, current.cancel)
         try:
             await self.options.operation.run(self)
+        except* BlockingIOError:
+            raise
         except* (OSError, ValueError, CoordinationError) as group:
             failure = 'Comms bridge stopped:\n' + ''.join(
                 traceback.TracebackException.from_exception(
@@ -836,7 +838,7 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
         with Binding.open(options.state) as db, asyncio.Runner() as runner:
             bridge = bridge_type(options, Binding.bind(db, options.binding), db)
             runner.run(bridge.run())
-    except asyncio.CancelledError:
+    except* asyncio.CancelledError:
         pass
-    except BlockingIOError:
+    except* BlockingIOError:
         sys.exit('Another watcher owns this conversation')
