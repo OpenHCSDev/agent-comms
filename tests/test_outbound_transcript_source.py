@@ -123,7 +123,7 @@ def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp
     projected = tuple(NotificationAssignment.for_deliveries((initial,), records))
     assert projected[0][0] is initial
     assert any(outcome is records[0] for outcome in projected[0][1])
-    with pytest.raises(ValueError, match="multiple handling receipts"):
+    with pytest.raises(ValueError, match="multiple handling rows"):
         tuple(NotificationAssignment.for_deliveries((initial,), (*records, records[0])))
     # Duplicate evidences outside the acquired deliveries do not change their result.
     assert tuple(NotificationAssignment.for_deliveries((), (*records, records[0]))) == ()
@@ -133,7 +133,7 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
     from dataclasses import replace
     from agent_comms.field_codec import FieldCodec
     from agent_comms.routing import MessageRoute, TurnRouting
-    from agent_comms.transcript_receipts import AssignedTranscriptSource
+    from agent_comms.transcript_sources import AssignedTranscriptSource
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     reply = comms.messaging.send_message("beta", "sender", "First original reply")

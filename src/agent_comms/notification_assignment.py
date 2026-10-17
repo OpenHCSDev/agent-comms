@@ -239,7 +239,7 @@ class NotificationAssignment(NotificationSource):
             for recipient, decision in zip(original.audience.recipients, original.decisions, strict=True):
                 matching = by_recipient.get((reference, recipient.recipient_lookup), ())
                 if len(matching) > 1:
-                    raise ValueError("Original notification recipient has multiple handling receipts")
+                    raise ValueError("Original notification recipient has multiple handling rows")
                 sources.append(matching[0] if matching else UnrecordedNotificationSource(recipient, decision))
             yield original, tuple(sources)
 

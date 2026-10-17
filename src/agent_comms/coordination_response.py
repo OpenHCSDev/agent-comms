@@ -410,7 +410,7 @@ def _require_cohort_assignments(
         wire_root_id, tuple(assignment.wire_seq for assignment in snapshot.assignments))}
     for assignment in snapshot.assignments:
         initial = originals.get(assignment.wire_seq)
-        receipts = SelectedResponseRoute.read(
+        routes_read = SelectedResponseRoute.read(
             db.execute(
                 "SELECT r.message_id,r.exact_target,r.envelope_digest,r.audience_digest,"
                 "r.decisions_digest,r.resolver_version,r.policy_version,m.recipient_lookup,"
@@ -423,7 +423,7 @@ def _require_cohort_assignments(
                 (assignment.assignment_id, wire_root_id),
             )
         )
-        if initial is None or len(receipts) != 1:
+        if initial is None or len(routes_read) != 1:
             raise IdentityConflict("response claim lacks original bus/cohort authority")
         selected = {
             recipient.recipient_lookup
@@ -434,7 +434,7 @@ def _require_cohort_assignments(
         }
         if initial.wire_root_id != wire_root_id or assignment.source != initial.message.reference:
             raise IdentityConflict("response claim conflicts with original bus source")
-        receipts[0].require_source(initial, assignment)
+        routes_read[0].require_source(initial, assignment)
         if assignment.recipient_lookup not in selected:
             raise IdentityConflict("response recipient was not selected by the original source")
         engagement = (

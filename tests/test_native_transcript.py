@@ -160,7 +160,7 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     from agent_comms.coordination_response import install_private_response_schema
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
     from agent_comms.coordinator import Coordination
-    from agent_comms.transcript_receipts import AssignedTranscriptSource
+    from agent_comms.transcript_sources import AssignedTranscriptSource
 
     root = tmp_path / "wire"
     comms = wire(root)

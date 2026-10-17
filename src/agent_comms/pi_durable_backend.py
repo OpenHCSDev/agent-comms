@@ -22,7 +22,7 @@ from .pi_commands import Compact, GetAvailableModels, GetSessionStats, GetState,
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevel
-from .transcript_receipts import TranscriptSource
+from .transcript_sources import TranscriptSource
 from .unstarted_runtime import UnstartedRuntime
 
 

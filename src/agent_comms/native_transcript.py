@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 from .declared_family import DeclaredFamily
 from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
 from .private_path import FileRevision
-from .transcript_receipts import TranscriptSource
+from .transcript_sources import TranscriptSource
 
 
 def _reverse_records(
@@ -184,11 +184,11 @@ class NativeTranscript(TranscriptSource):
         return NativeRuntimeInput.publication_revision(root, self, recipient.lookup)
 
     @contextmanager
-    def projection(self, receipts, routes):
+    def projection(self, sources, routes):
         """Project records through their native input and the session's routes."""
         with routes.for_session(str(self.path)) as session_routes:
             def project(records, *, max_records, max_bytes):
-                return receipts.native_records(
+                return sources.native_records(
                     self.fragments(records, max_records=max_records, max_bytes=max_bytes),
                     routes=session_routes, reader=self)
 

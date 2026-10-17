@@ -155,7 +155,7 @@ class TranscriptTraversal(ABC):
             {event.tool_call_id for event in batch if isinstance(event, closing)},
         )
 
-    def read_records(self, reader, project, receipts, initial, frontier,
+    def read_records(self, reader, project, sources, initial, frontier,
                      *, max_messages, max_bytes):
         """Consume each original source coordinate only when its record is read."""
         consumed, records, used = initial, [], 0
@@ -169,7 +169,7 @@ class TranscriptTraversal(ABC):
         try:
             record, events = next(projected, (None, ()))
             source_rows = iter(
-                receipts.page_rows(
+                sources.page_rows(
                     self, consumed.wire.sequence, frontier, limit=max_messages + 1
                 )
             )
@@ -187,7 +187,7 @@ class TranscriptTraversal(ABC):
                     message is None
                     or self.chooses_native(native_time, message.message.timestamp)
                 )
-                batch = events if choose_native else receipts.events(message)
+                batch = events if choose_native else sources.events(message)
                 cost = record.size if choose_native else sum(event.text_size for event in batch)
                 if records and (len(records) >= max_messages or used + cost > max_bytes):
                     if not open_rounds or round_grace >= self.round_grace_limit:
