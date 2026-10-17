@@ -321,6 +321,16 @@ class Thread(ThreadProvenance):
         goal = self.goal
         return goal if goal is not None and goal.id == goal_id else None
 
+    def require_goal_replacement(self, goals) -> None:
+        if self.goal is not None:
+            self.goal.require_replacement(goals, self.incarnation)
+
+    def require_order_slot(self, goal_id: str, problem: str) -> None:
+        if self.goal is not None and (self.goal.id, self.goal.problem) != (goal_id, problem):
+            if self.goal.id == goal_id:
+                raise ValueError("Goal ID belongs to another problem.")
+            self.goal.state.require_order_slot()
+
     def require_goal(self, goal_id: str | None = None) -> Goal:
         if goal_id is None:
             if self.goal is None:

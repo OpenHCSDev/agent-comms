@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
@@ -25,6 +25,7 @@ from .goal_states import (
 from .goal_waits import GoalWaits, RecordedGoalWait
 from .goals import Goal
 from .threads import Thread
+from .recorded_time import EventTime
 
 if TYPE_CHECKING:
     from .goal_presentation import GoalSnapshot
@@ -134,6 +135,8 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         ):
             raise ValueError("This goal was already reported in this turn.")
         goal = self.change(ctx)
+        if goal == ctx.thread.goal:
+            return goal
         self.before_publish(goal, ctx)
         ctx.goals.registry.register(
             replace(
@@ -162,6 +165,7 @@ class TransitionGoalAction(GoalAction):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = ctx.require_goal()
+        goal.require_order(ctx.goals, ctx.thread.incarnation)
         state = self.next_state(ctx)
         goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
         self.before_transition(ctx)
@@ -367,6 +371,7 @@ class ReplacementGoalAction(GoalAction):
 @dataclass(frozen=True, kw_only=True)
 class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
     text: str
+    goal_id: str = field(default_factory=lambda: uuid4().hex)
 
     @classmethod
     async def submit_control(cls, observe, invoke, text: str = "") -> dict:
@@ -376,7 +381,10 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
 
     def change(self, ctx: GoalActionContext) -> Goal:
-        goal = Goal(text=self.text.strip(), id=uuid4().hex, revision=1)
+        if ctx.thread.goal_for(self.goal_id) is not None:
+            return ctx.require_goal()
+        ctx.thread.require_goal_replacement(ctx.goals)
+        goal = Goal(text=self.text.strip(), id=self.goal_id, revision=1)
         goal = replace(
             goal,
             mention_source=bind_goal_mentions(
@@ -388,10 +396,27 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
 
 @dataclass(frozen=True, kw_only=True)
+class OrderGoalAction(GoalAction, RuntimeInvocable):
+    problem: str
+    goal_id: str
+    expected_revision: int
+    deadline: EventTime
+    commander: str
+
+    def change(self, ctx):
+        ctx.thread.require_order_slot(self.goal_id, self.problem)
+        todo = ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
+            owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
+            generation=self.goal_id, deadline=self.deadline)
+        return replace(SetGoalAction(text=todo.text, goal_id=self.goal_id).change(ctx), problem=todo.id)
+
+
+@dataclass(frozen=True, kw_only=True)
 class ClearGoalAction(
     ReplacementGoalAction, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
 ):
     def change(self, ctx: GoalActionContext) -> None:
+        ctx.thread.require_goal_replacement(ctx.goals)
         return None
 
 
@@ -402,6 +427,7 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = ctx.require_goal()
+        ctx.thread.require_goal_replacement(ctx.goals)
         text = self.text.strip()
         if not text:
             raise ValueError("A goal requires text.")

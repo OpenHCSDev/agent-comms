@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from abc import abstractmethod
 
@@ -20,7 +20,8 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, TypedRow, TypedTable, sql_literal
+from .typed_table import Column, TypedRow, TypedTable
+from .recorded_time import EventTime, UnrecordedEventTime
 
 
 class TodoError(ValueError):
@@ -104,24 +105,11 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
     @classmethod
     def release(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
-        return replace(
-            current,
-            assignment=None,
-            revision=current.revision + 1,
-            last_transition=type(command),
-            last_previous=command.previous,
-        )
+        return command.remember(replace(current, assignment=None, revision=current.revision + 1))
 
     @classmethod
     def released(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
-        current.require_result(
-            replace(
-                current,
-                assignment=None,
-                last_transition=type(command),
-                last_previous=command.previous,
-            )
-        )
+        current.require_result(command.remember(replace(current, assignment=None)))
         return current
 
     @classmethod
@@ -141,30 +129,16 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 class OpenTodoState(TodoState):
     @classmethod
     def assign(cls, current, proposed):
-        current.require_assignment(None)
-        return replace(current, assignment=proposed, revision=current.revision + 1)
+        return current.assigned(proposed)
 
     @classmethod
     def transfer(cls, current, command):
         current.require_assignment(command.previous)
-        return replace(
-            current,
-            assignment=command.proposed,
-            revision=current.revision + 1,
-            last_transition=type(command),
-            last_previous=command.previous,
-        )
+        return command.remember(current.assigned(command.proposed))
 
     @classmethod
     def transferred(cls, current, command):
-        current.require_result(
-            replace(
-                current,
-                assignment=command.proposed,
-                last_transition=type(command),
-                last_previous=command.previous,
-            )
-        )
+        current.require_result(command.remember(replace(current, assignment=command.proposed)))
         return current
 
 
@@ -195,7 +169,7 @@ class DoneTodoState(TodoState):
 
 
 @dataclass(frozen=True)
-class TodoOperation(Command):
+class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     expected_revision: int
 
     def __post_init__(self) -> None:
@@ -209,18 +183,24 @@ class TodoOperation(Command):
 @dataclass(frozen=True)
 class AssignTodo(TodoOperation):
     proposed: Assignment
+    deadline: EventTime = field(default_factory=UnrecordedEventTime)
 
     def apply(self, current):
         if current.assignment == self.proposed:
+            current.require_result(replace(current, deadline=self.deadline))
             return current  # The original assignment generation is already reserved.
         current.require_revision(self.expected_revision)
-        return current.state.assign(current, self.proposed)
+        current.require_commander(self.proposed.parent_identity)
+        return replace(current.state.assign(current, self.proposed), deadline=self.deadline)
 
 
-class AssignmentChange(TodoOperation, DeclaredFamily, affix="TodoChange"):
+class AssignmentChange(TodoOperation):
     """The durable row retains the operation kind and exact previous assignment."""
 
     previous: Assignment
+
+    def remember(self, current):
+        return replace(current, last_transition=type(self), last_previous=self.previous)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -229,7 +209,7 @@ class AssignmentChange(TodoOperation, DeclaredFamily, affix="TodoChange"):
 
 
 @dataclass(frozen=True)
-class TransferTodoChange(AssignmentChange):
+class TransferTodoChange(AssignmentChange, declared_name="transfer"):
     previous: Assignment
     proposed: Assignment
 
@@ -242,7 +222,7 @@ class TransferTodoChange(AssignmentChange):
 
 
 @dataclass(frozen=True)
-class ReleaseTodoChange(AssignmentChange):
+class ReleaseTodoChange(AssignmentChange, declared_name="release"):
     previous: Assignment
 
     def apply(self, current):
@@ -251,6 +231,20 @@ class ReleaseTodoChange(AssignmentChange):
         current.require_revision(self.expected_revision)
         current.require_assignment(self.previous)
         return current.state.release(current, self)
+
+
+@dataclass(frozen=True)
+class StrikeTodo(TodoOperation):
+    actor: ThreadIncarnation
+    previous: Assignment
+    reason: str
+
+    def apply(self, current):
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        current.require_assignment(self.previous)
+        _text(self.reason, "Strike reason", 2000)
+        return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -271,43 +265,22 @@ class Todo(TypedTable):
     text: str
     creator: str
     creator_created: float
-    state: type[TodoState] = field(
-        metadata={
-            "sql": Column(
-                check=(
-                    '"state" IN ('
-                    + ", ".join(
-                        sql_literal(member)
-                        for member in TodoState.members_with(TodoState)
-                    )
-                    + ")"
-                )
-            )
-        }
-    )
+    state: type[TodoState]
     revision: int = field(metadata={"sql": Column(check="revision>0")})
     goal: GoalRef | None
     assignment: Assignment | None
-    last_transition: type[AssignmentChange] | None = field(
-        default=None,
-        metadata={
-            "sql": Column(
-                check=(
-                    '"last_transition" IN ('
-                    + ", ".join(
-                        sql_literal(member)
-                        for member in AssignmentChange.members_with(AssignmentChange)
-                    )
-                    + ")"
-                )
-            )
-        },
-    )
+    last_transition: type[AssignmentChange] | None = None
     last_previous: Assignment | None = None
+    deadline: EventTime = field(default_factory=UnrecordedEventTime)
+    strikes: tuple[StrikeTodo, ...] = ()
 
     @property
     def creator_identity(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.creator, self.creator_created)
+
+    @property
+    def strike_count(self) -> int:
+        return sum(strike.previous == self.assignment for strike in self.strikes)
 
     def require_result(self, result: Todo) -> None:
         if self != result:
@@ -325,6 +298,19 @@ class Todo(TypedTable):
         if self.assignment is None or not self.assignment.owned_by(actor, generation):
             raise TodoConflict(self)
 
+    def assigned(self, proposed: Assignment) -> Todo:
+        if self.assignment is not None:
+            self.assignment.require_successor(proposed, self)
+        return replace(self, assignment=proposed, revision=self.revision + 1)
+
+    def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
+        if self.assignment is not None and self.assignment.owned_by(owner, goal_id):
+            raise TodoConflict(self)
+
+    def require_commander(self, actor: ThreadIncarnation) -> None:
+        if self.creator_identity != actor:
+            raise TodoConflict(self)
+
     def require_actor(self, actor: ThreadIncarnation, generation: str | None) -> None:
         if self.creator_identity != actor:
             self.require_assignee(actor, generation)
@@ -332,12 +318,13 @@ class Todo(TypedTable):
     def require_same_creation(self, proposed: Todo) -> None:
         self.require_result(
             replace(
-                proposed,
-                state=self.state,
-                revision=self.revision,
-                assignment=self.assignment,
-                last_transition=self.last_transition,
-                last_previous=self.last_previous,
+                self,
+                id=proposed.id,
+                repo=proposed.repo,
+                text=proposed.text,
+                creator=proposed.creator,
+                creator_created=proposed.creator_created,
+                goal=proposed.goal,
             )
         )
 
@@ -410,23 +397,20 @@ class TodoStore:
 
     def _connect(self) -> sqlite3.Connection:
         db = CoordinationStore.writer(self.path, isolation_level=None)
-        db.execute("PRAGMA busy_timeout=5000")
         db.execute("PRAGMA synchronous=FULL")
         return db
 
     @contextmanager
     def _write(self) -> Iterator[sqlite3.Connection]:
-        db = self._connect()
-        try:
-            db.execute("BEGIN IMMEDIATE")
-            yield db
-            db.execute("COMMIT")
-        except BaseException:
-            if db.in_transaction:
-                db.execute("ROLLBACK")
-            raise
-        finally:
-            db.close()
+        with closing(self._connect()) as db:
+            try:
+                db.execute("BEGIN IMMEDIATE")
+                yield db
+                db.execute("COMMIT")
+            except BaseException:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+                raise
 
     @staticmethod
     def _current(db: sqlite3.Connection, todo_id: str) -> Todo:
@@ -478,27 +462,18 @@ class TodoStore:
             assignment=None,
         )
         with self._write() as db:
-            current = Todo.one(db, id=todo_id)
-            if current is not None:
-                current.require_same_creation(proposed)
-                return current
-            proposed.insert(db)
-            return self._current(db, todo_id)
+            proposed.insert_if_absent(db)
+            current = self._current(db, todo_id)
+            current.require_same_creation(proposed)
+            return current
 
-    def _apply(self, todo_id: str, command: TodoOperation) -> Todo:
+    def apply(self, todo_id: str, command: TodoOperation) -> Todo:
         with self._write() as db:
             current = self._current(db, todo_id)
             result = command.apply(current)
             if result == current:
                 return current
-            changes = {
-                item.name: getattr(result, item.name)
-                for item in fields(Todo)
-                if getattr(result, item.name) != getattr(current, item.name)
-            }
-            Todo.update(
-                db, where="id=? AND revision=?", parameters=(todo_id, current.revision), **changes
-            )
+            result.upsert(db)
             return self._current(db, todo_id)
 
     def assign(
@@ -509,6 +484,7 @@ class TodoStore:
         owner: Thread,
         parent: Thread,
         generation: str,
+        deadline: EventTime = UnrecordedEventTime(),
     ) -> Todo:
         identity, parent_identity = _thread(owner), _thread(parent)
         proposed = Assignment(
@@ -518,7 +494,7 @@ class TodoStore:
             parent_identity.created_at,
             generation,
         )
-        return self._apply(todo_id, AssignTodo(expected_revision, proposed))
+        return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline))
 
     def transfer(
         self,
@@ -539,10 +515,10 @@ class TodoStore:
             parent_identity.created_at,
             generation,
         )
-        return self._apply(todo_id, TransferTodoChange(expected_revision, previous, proposed))
+        return self.apply(todo_id, TransferTodoChange(expected_revision, previous, proposed))
 
     def release(self, todo_id: str, *, expected_revision: int, previous: Assignment) -> Todo:
-        return self._apply(todo_id, ReleaseTodoChange(expected_revision, previous))
+        return self.apply(todo_id, ReleaseTodoChange(expected_revision, previous))
 
     def set_state(
         self,
@@ -558,6 +534,6 @@ class TodoStore:
             state = FieldCodec.decode(type[TodoState], state)
         except ValueError as error:
             raise TodoError("Unknown todo state.") from error
-        return self._apply(
+        return self.apply(
             todo_id, ChangeTodoState(expected_revision, state, _participant(actor), generation)
         )
