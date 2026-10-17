@@ -209,7 +209,8 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime():
             "from agent_comms.threads import Thread\n"
             "Thread('a', frozenset(), '/tmp').backend\n"
             "assert 'agent_comms.backend' not in sys.modules\n"
-            "assert 'agent_comms.native_custody' not in sys.modules\n"
+            "assert 'agent_comms.tracked_turn' not in sys.modules\n"
+            "assert 'agent_comms.turn_watchdog' not in sys.modules\n"
         )],
         capture_output=True, text=True, timeout=60,
     )

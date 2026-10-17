@@ -8,9 +8,9 @@ from collections.abc import Callable, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
-from .pi_events import PiEvent, Response
+from .pi_events import PiEvent
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .native_attestation import NativeAttestation, PendingAttestation
@@ -29,9 +29,6 @@ class PiChild:
     reader: PiRpcChannel
     resources: ExitStack = field(default_factory=ExitStack, repr=False, kw_only=True)
     transport: AsyncExitStack = field(default_factory=AsyncExitStack, repr=False, kw_only=True)
-    strict: ClassVar[bool] = True
-    _events: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=100), init=False, repr=False)
-    _read_task: asyncio.Task | None = field(default=None, init=False, repr=False)
     forwarding_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
     _close_job: asyncio.Task[ChildOutcome | BaseException] | None = field(default=None, init=False, repr=False)
 
@@ -43,68 +40,14 @@ class PiChild:
         proc = await AttachedChild.start(argv, cwd=cwd, env=env, pass_fds=pass_fds)
         return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type), **state)
 
-    def unowned_event(self, event):
-        raise RuntimeError('Pi event arrived with no open turn')
-
-    async def response(self, event):
-        if self.reader.correlate(event) is None:
-            raise ValueError('Unsolicited Pi response')
-
-    async def _read(self):
-        while (event := await self.reader.receive(strict=self.strict)) is not None:
-            if isinstance(event, Response):
-                await self.response(event)
-            else:
-                await self.deliver_event(event)
-
-    async def deliver_event(self, event):
-        await self._events.put(event)
-
-    @asynccontextmanager
-    async def turn(self):
-        if self._read_task is not None:
-            raise RuntimeError('A Pi turn is already open')
-        self._events = asyncio.Queue(maxsize=100)
-        self._read_task = asyncio.create_task(self._read())
-        try:
-            yield self
-        finally:
-            await self.finish_input()
-
-    async def next_event(self):
-        reading = self._read_task
-        if reading is None:
-            raise RuntimeError('No Pi turn is open')
-        if not self._events.empty():
-            return self._events.get_nowait()
-        waiting = asyncio.create_task(self._events.get())
-        try:
-            await asyncio.wait((waiting, reading), return_when=asyncio.FIRST_COMPLETED)
-            return waiting.result() if waiting.done() else reading.result()
-        finally:
-            waiting.cancel()
-            await asyncio.gather(waiting, return_exceptions=True)
-
     async def request(self, command):
         if self.retired:
             raise RuntimeError('Pi child has retired')
         async with self.failures():
-            if self._read_task is None:
-                response = await command.exchange(self.reader, self.proc.stdin, strict=self.strict, on_event=self.unowned_event)
-            else:
-                async with command.pending_response(self.reader, self.proc.stdin) as future:
-                    await asyncio.wait((future, self._read_task), return_when=asyncio.FIRST_COMPLETED)
-                    response = future.result() if future.done() else self._read_task.result()
-                    if response is None:
-                        raise EOFError('Pi child ended before its response')
+            response = await self.reader.request(command, self.proc.stdin)
         if response.success is not True:
             raise RuntimeError(response.error)
         return response.data.require_payload()
-
-    async def converted(self):
-        while (event := await self.next_event()) is not None:
-            for update in event.convert():
-                yield update
 
     @property
     def retired(self) -> bool:
@@ -119,15 +62,11 @@ class PiChild:
 
     async def finish_input(self) -> None:
         """Retire this input's ingress without retiring a retained idle child."""
-        reading, self._read_task = self._read_task, None
-        if reading is not None:
-            reading.cancel()
-            await asyncio.gather(reading, return_exceptions=True)
+        await self.reader.finish_input()
         forwarding, self.forwarding_task = self.forwarding_task, None
         if forwarding is not None:
             forwarding.cancel()
             await asyncio.gather(forwarding, return_exceptions=True)
-        self.reader.pending.cancel_all()
 
     async def shutdown(self, *, graceful: bool = False) -> ChildOutcome:
         """Join the one gateway, ingress, process, pipe and resource retirement.
@@ -195,7 +134,6 @@ class PiSessionChild(PiChild):
     key: tuple[NativePiRpcLaunch, tuple[int, int]]
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
-    strict = False
 
     @classmethod
     async def start(cls, key, attestation):
@@ -207,13 +145,6 @@ class PiSessionChild(PiChild):
                 environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
             return await cls.start_command(launch.argv, cwd=str(launch.cwd), env=environment,
                 key=key, attestation=attestation, resources=resources.pop_all())
-
-    async def response(self, event):
-        self.reader.correlate(event)
-        await self.deliver_event(event)
-
-    def unowned_event(self, event):
-        pass
 
 
 class NativeCustody(ABC):
@@ -236,8 +167,9 @@ class NativeCustody(ABC):
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
     async def inspect(self, persistent, prepare, request):
-        """Inspect through this custody's legal acquisition/receiver capability."""
-        raise NativePiUnavailable("Native context requires an acquired native child")
+        """Prepare once, then inspect through the acquired idle capability."""
+        await prepare()
+        return await persistent.custody.idle().inspect_acquired(persistent, request)
 
     def retire(self, successor: NativeCustody | None = None) -> NativeCustody:
         return successor if successor is not None else self
@@ -251,13 +183,6 @@ class NativeCustody(ABC):
 
 class EmptyNative(NativeCustody):
     available = False
-
-    async def inspect(self, persistent, prepare, request):
-        # The runtime owner supplies its existing selected-session preparation:
-        # real saved launch/idle attestation/retention, never a priming prompt.
-        await prepare()
-        acquired = persistent.custody.idle()
-        return await acquired.inspect_acquired(persistent, request)
 
 
 @dataclass
@@ -288,6 +213,9 @@ class SuccessorNative(ChildNative):
 class RetiringNative(SuccessorNative):
     available = False
 
+    async def inspect(self, persistent, prepare, request):
+        raise NativePiUnavailable("Native context requires an acquired native child")
+
     def retire(self, successor=None):
         if successor is not None:
             self.successor = successor
@@ -304,7 +232,8 @@ class BorrowedNative(SuccessorNative):
     async def inspect(self, persistent, prepare, request):
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
-        return await self.child.request(request)
+        async with request.pending_response(self.child.reader, self.child.proc.stdin) as response:
+            return (await response).data.require_payload()
 
 @dataclass
 class RetainedNative(ChildNative):
@@ -320,13 +249,6 @@ class RetainedNative(ChildNative):
         if not self.current:
             return super().idle()
         return self
-
-    async def inspect(self, persistent, prepare, request):
-        # Reobserve this retained child through the same preparation/AgentInfo
-        # owner. An acquired child alone does not publish native usage.
-        await prepare()
-        acquired = persistent.custody.idle()
-        return await acquired.inspect_acquired(persistent, request)
 
     async def inspect_acquired(self, persistent, request):
         async with persistent.lock:

@@ -1,10 +1,10 @@
 """Cancellation-safe JSONL framing and shared object-field integrity."""
 import asyncio
-from typing import Any
+from pydantic import JsonValue
 
 
-def unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
+def unique_fields(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
+    result: dict[str, JsonValue] = {}
     for key, value in pairs:
         if key in result:
             raise ValueError("Duplicate JSON field")

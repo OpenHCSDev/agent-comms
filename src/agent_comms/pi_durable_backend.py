@@ -19,7 +19,7 @@ from .native_entries import StoredEntry
 from .native_session_files import NativeSessionFiles
 from .native_transcript import StoredRecord
 from .pi_commands import Compact, PiCommand
-from .pi_events import AutoRetryEnd, DurablePiEvent, MessageEnd, Response, RetryEnd, ToolExecutionEnd
+from .pi_events import AutoRetryEnd, DurablePiEvent, MessageEnd, RetryEnd
 from .pi_payloads import PiPayload, PiResponseData
 from .pi_rpc import PiRpcChannel
 from .selected_session import SelectedSession
@@ -200,12 +200,6 @@ class StoredMessageEnd(MessageEnd, DurablePiEvent):
     wire_kind = MessageEnd.wire_kind
 
 
-@dataclass(frozen=True, kw_only=True)
-class StoredToolExecutionEnd(ToolExecutionEnd, DurablePiEvent):
-    entry: StoredEntry | None = None
-    wire_kind = ToolExecutionEnd.wire_kind
-
-
 class Snapshot(DurablePiEvent):
     pass
 
@@ -333,7 +327,7 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
     async def run_turn(self, thread, content, delivery):
         async with self.lock:
             child = await self.open(thread)
-            async with child.turn() as turn:
+            async with child.reader.turn() as turn:
                 await child.request(Watch())
                 try:
                     await self.submit_turn(content, delivery)

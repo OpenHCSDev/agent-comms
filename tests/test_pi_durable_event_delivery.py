@@ -24,7 +24,7 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
     async def journey():
         host = await open_host(tmp_path)
         try:
-            async with host.turn() as turn:
+            async with host.reader.turn() as turn:
                 await host.request(Watch())
                 assert isinstance(await turn.next_event(), Snapshot)
                 await host.request(Configure(AgentSettings(instructions='turn-owned event')))
@@ -46,7 +46,7 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
                 finally:
                     await stream.aclose()
                 await host.request(Unwatch())
-            async with host.turn() as next_turn:
+            async with host.reader.turn() as next_turn:
                 await host.request(Watch())
                 assert isinstance(await next_turn.next_event(), Snapshot)
                 await host.request(Configure(AgentSettings(instructions='next turn')))

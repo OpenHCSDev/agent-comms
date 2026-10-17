@@ -45,6 +45,11 @@ class PiEvent(PiPayload, DeclaredFamily):
 
     wire_tag = "type"
     opaque = False
+
+    @staticmethod
+    def unowned_event(event):
+        """Idle native queries may interleave unsolicited Pi notifications."""
+
     @classmethod
     def known_kinds(cls):
         return (cls.wire_kind(),)
@@ -119,6 +124,10 @@ class NativePiEvent(PiEvent):
 
 class DurablePiEvent(PiEvent):
     declared_name = None
+
+    @staticmethod
+    def unowned_event(event):
+        raise RuntimeError('Pi event arrived with no open turn')
 
     @classmethod
     def wire_member(cls, wire):
@@ -792,7 +801,8 @@ class Response(NativePiEvent, DurablePiEvent):
         return super().normalize_field(target, key, value, record)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        async for event in self.command.on_response(self, session):
+        owner = session.native.reader.correlate(self) or self.command
+        async for event in owner.on_response(self, session):
             yield event
 
 
@@ -832,7 +842,7 @@ class SummarizationRetryScheduled(RetryAttemptEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolExecutionEnd(NativePiEvent):
+class ToolExecutionEnd(NativePiEvent, DurablePiEvent):
     accepts_prompt = True
 
     is_error: bool | None = field(default=None, metadata={"wire_name": "isError"})
