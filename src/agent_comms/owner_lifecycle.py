@@ -8,8 +8,9 @@ import shlex
 import shutil
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from uuid import uuid4
 
 from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity
 from .coordination_errors import PublicationActivationBlocked
@@ -33,6 +34,28 @@ from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
 
 _LOG = logging.getLogger(__name__)
+
+
+class LaunchInput:
+    text = ""
+
+    def apply_environment(self, environment: dict[str, str]) -> None:
+        pass
+
+    def record_first_input(self, record) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class TaskLaunchInput(LaunchInput):
+    text: str = field()
+    input_key: str = field(default_factory=lambda: f"acp:{uuid4().hex}", init=False)
+
+    def apply_environment(self, environment: dict[str, str]) -> None:
+        environment[RestartEnvironment.initial_input_key] = self.input_key
+
+    def record_first_input(self, record) -> None:
+        record(self.input_key, seq=None, text=self.text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -363,7 +386,7 @@ class OwnerLifecycle:
         agent_args: Sequence[str] | None = None,
         *,
         launch_runtime: LaunchRuntime,
-        startup_input_key: str | None = None,
+        initial_input: LaunchInput = LaunchInput(),
         environment: Mapping[str, str] | None = None,
     ) -> Thread:
         # Callers hold the wire lock; a phase change takes wire then registry.
@@ -375,7 +398,7 @@ class OwnerLifecycle:
             "PI_PROMPT",
             "PI_PARENT_ID",
             "PI_TASK",
-            "AGENT_COMMS_STARTUP_INPUT_KEY",
+            RestartEnvironment.initial_input_key,
             ROOT_ID_ENV,
             PACKAGE_ENV,
         ):
@@ -421,8 +444,7 @@ class OwnerLifecycle:
             env["PI_PARENT_ID"] = thread.parent
         if thread.task is not None:
             env["PI_TASK"] = thread.task
-        if startup_input_key is not None:
-            env["AGENT_COMMS_STARTUP_INPUT_KEY"] = startup_input_key
+        initial_input.apply_environment(env)
         if agent_args is not None:
             env[NativeArguments.arguments_key] = shlex.join(agent_args)
         owned: Thread | None = None
