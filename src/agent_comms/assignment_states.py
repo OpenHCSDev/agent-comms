@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import ClassVar, TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
@@ -528,20 +528,6 @@ class DeliveredAssignment(PreEngagementAssignment, AssignmentDecision, Assignmen
 
 
 class FailedAssignment(InterruptedAssignment):
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
-        notification = super().notification(
-            recipient, observation=observation, activity=activity
-        )
-        return replace(notification, state=FailedProgress(notification.state))
-
     def rejected_triage_history(self, execution, **source):
         """A proved rejected result is delivered source, never an IGNORE decision."""
         from .historical_native_inputs import FailedTriageHistoricalNativeInput
