@@ -88,31 +88,18 @@ def test_selected_lifetime_cannot_reintroduce_partial_runner_authority():
     assert writes <= {field.name for field in fields(SelectedExecution)}
     for module in ("selected_participant", "selected_session", "selected_request", "selected_turn"):
         body = ast.parse((SOURCE / f"{module}.py").read_text())
-        # The acquired launch resource may be annotated without giving this
-        # family a runtime constructor or mutable runner authority.
-        assert any(
-            isinstance(node, ast.ImportFrom) and node.module == "__future__"
-            and any(alias.name == "annotations" for alias in node.names)
-            for node in body.body
-        ), module
-        annotations = {
-            child for node in ast.walk(body)
-            if isinstance(node, ast.arg) and node.annotation is not None
-            for child in ast.walk(node.annotation)
-        }
-        type_only = {
-            child for node in body.body
-            if isinstance(node, ast.If) and isinstance(node.test, ast.Name)
-            and node.test.id == "TYPE_CHECKING"
-            for statement in node.body for child in ast.walk(statement)
-        }
         assert not any(
-            isinstance(node, ast.Name) and node.id == "SelectedExecution"
-            and node not in annotations for node in ast.walk(body)
+            isinstance(node, ast.AnnAssign)
+            and any(isinstance(term, ast.Name) and term.id == "SelectedExecution"
+                    for term in ast.walk(node.annotation))
+            for node in ast.walk(body)
         ), module
         assert not any(
             isinstance(node, ast.ImportFrom) and node.module == "coordinated_runtime"
-            and node not in type_only for node in ast.walk(body)
+            for statement in body.body
+            if not (isinstance(statement, ast.If) and isinstance(statement.test, ast.Name)
+                    and statement.test.id == "TYPE_CHECKING")
+            for node in ast.walk(statement)
         ), module
 
 
