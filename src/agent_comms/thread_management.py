@@ -10,7 +10,8 @@ import re
 import stat
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -35,7 +36,7 @@ from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .native_session_files import NativeSessionFiles
 from .launch_runtime import LaunchRuntime
-from .owner_lifecycle import OwnerLifecycle
+from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
@@ -68,27 +69,23 @@ class NewThreadSpec:
     project: str
     model: str
     thinking_level: type[ThinkingLevel]
-    task: str = ""
+    task: LaunchInput = field(default_factory=LaunchInput)
     tags: frozenset[str] | None = None
 
-    def __post_init__(self) -> None:
-        if not self.model:
-            raise ValueError("Choose a model for the new thread")
-        provider, separator, model = self.model.partition("/")
-        if not separator or not provider or not model:
-            raise ValueError("Choose a provider-qualified model for the new thread")
-        object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
+    @classmethod
+    def from_task(cls, *, task: str = "", **values) -> NewThreadSpec:
+        return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
+
+    def declaration(self, project: str) -> Thread:
+        return Thread(name=self.name, task=self.task.text, tags=self.tags or frozenset(),
+                      worktree=project, model=self.model, thinking_level=self.thinking_level)
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         from .fresh_private_session import create_fresh_private_session
 
         project = Path(self.project).expanduser().resolve(strict=True)
-        if not project.is_dir():
-            raise ValueError(f"Project path is not a directory: {project}")
-        thread = Thread(name=self.name, task=self.task, tags=self.tags or frozenset(),
-                        worktree=str(project), model=self.model,
-                        thinking_level=self.thinking_level)
+        thread = self.declaration(str(project))
         threads.registry.require_declaration_available(thread)
         fresh = create_fresh_private_session(threads.root / "sessions", worktree=project)
         with _store_lock(threads._wire_lock_path):
@@ -101,30 +98,14 @@ class ForkSpec(NewThreadSpec):
 
     parent: str
 
-    def child(self, parent: Thread, session_file: str) -> Thread:
-        """Derive the child declaration from the exact parent and fork result."""
-        return Thread(
-            name=self.name,
-            tags=parent.tags if self.tags is None else self.tags,
-            worktree=self.project,
-            parent=parent.name,
-            task=self.task,
-            session_file=session_file,
-            process_identity=None,
-            model=self.model,
-            thinking_level=self.thinking_level,
-        )
-
     def _parent(self, threads: ThreadManagement) -> Thread:
         parent = threads.registry.require(self.parent)
         parent.execution.require_native()
-        if threads.registry.name_reserved(self.name):
-            raise RelationViolationError(
-                f"Thread {self.name!r} already exists; reuse it instead of creating it again."
-            )
-        if not parent.session_file:
-            raise RelationViolationError(f"Parent thread {self.parent!r} has no session file to fork.")
         return parent
+
+    def child(self, parent: Thread, session_file: str) -> Thread:
+        return replace(self.declaration(self.project), parent=parent.name,
+                       tags=parent.tags if self.tags is None else self.tags, session_file=session_file)
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
@@ -634,21 +615,15 @@ class ThreadManagement:
         resolved_bin = NativeArguments.configured_binary()
         runtime = LaunchRuntime.current()
         with spec.prepared(self, resolved_bin, runtime) as child:
-            # A new incarnation's inbox already starts at its creation time
-            # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
             child = self.registry._declare_unlocked(child)
-
-            key = f"acp:{uuid4().hex}" if spec.task else None
             try:
                 owned = self.owners._launch_owner_unlocked(
-                    child, resolved_bin, startup_input_key=key, launch_runtime=runtime,
+                    child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
                 )
-                if key is not None:
-                    InputDispositions(self.root).record(
-                        key, seq=None, owner=owned.name, target=owned.name,
+                spec.task.record_first_input(
+                    partial(InputDispositions(self.root).record, owner=owned.name, target=owned.name,
                         admission=self.registry.snapshot().admission_generations[owned.name],
-                        text=spec.task,
-                    )
+                    ))
                 return owned
             except OSError:
                 self.registry.remove(spec.name)
