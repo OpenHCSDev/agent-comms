@@ -547,9 +547,6 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     def measured_tokens(self):
         return self.usage.positive_tokens if self.usage is not None else None
 
-    def require_failed_terminal(self):
-        raise ValueError("Native recovery requires an unambiguous failed terminal")
-
     async def apply_end(self, session):
         if False:
             yield
@@ -635,9 +632,6 @@ class AssistantMessage(PiMessage):
     @property
     def retry_progress(self):
         return self.stop_reason.permits_progress()
-
-    def require_failed_terminal(self):
-        self.stop_reason.require_failed_terminal()
 
     async def apply_end(self, session):
         from .agent_events import CommittedProgress

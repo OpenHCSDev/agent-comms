@@ -297,10 +297,10 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         return next(iter(rows), None)
 
     def corroborate(
-        self, session_file: Path, header: SessionEntry, tracked: dict[str, NativeEntry]
+        self, session_file: Path, header: SessionEntry, entry: NativeEntry
     ) -> NativeContextProof:
-        entry = tracked.get(self.input_id)
-        if self.session_id != header.id or entry is None or self.session_entry_id != entry.id:
+        if (self.session_id != header.id or self.input_id != entry.input_id
+                or self.session_entry_id != entry.id):
             raise NativePiUnavailable("Native Pi proof journal source lineage differs")
         return self.at(session_file)
 
@@ -332,18 +332,18 @@ class NativeContextProof(NativeContextRecord):
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         NativeInputIdText.decode(input_id)
         session_file = Path(session_file).absolute()
-        from .native_entries import NativeEntry, NativeInputEvidenceRead
+        from .native_entries import NativeInputEvidenceRead
 
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-            header, entries = evidence.observe()
-            tracked = NativeEntry.tracked_users(entries)
-            if input_id not in tracked:
+            header, _entries = evidence.observe()
+            user = evidence.tracked_user(input_id)
+            if user is None:
                 raise NativePiUnavailable("The specified input was never durably committed")
             with NativeContextJournal.open_evidence(session_file) as db:
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
                 if row is None:
                     raise NativePiUnavailable("The input has no assembled-context proof")
-                return row.corroborate(session_file, header, tracked)
+                return row.corroborate(session_file, header, user)
 
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
@@ -647,16 +647,6 @@ class NativePiRpcLaunch:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
         return cls._build(cli, tuple(arguments), worktree, env, session, package, configuration, runtime)
-
-
-def _read_private_file(path: Path):
-    """Yield strict private evidence rows, checking the same opened revision.
-
-    Historical bytes are not an admission quota. A bounded byte snapshot is
-    validated before decoding; callers must exhaust the resulting observation.
-    """
-    with PrivateEvidenceRead.open(path) as evidence:
-        yield from evidence.rows()
 
 
 class NativeEvidencePrefixChanged(NativePiUnavailable):
@@ -1057,14 +1047,12 @@ def read_tracked_input_digest(
     """
     NativeInputIdText.decode(input_id)
     session_file = Path(session_file).absolute()
-    from .native_entries import NativeEntry, NativeInputEvidenceRead
+    from .native_entries import NativeInputEvidenceRead
 
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-        _header, entries = evidence.observe()
-        users = NativeEntry.tracked_users(entries)
-        if input_id not in users:
-            return None
-        return users[input_id].message.input_digest
+        evidence.observe()
+        user = evidence.tracked_user(input_id)
+        return None if user is None else user.message.input_digest
 
 
 def _verify_context(

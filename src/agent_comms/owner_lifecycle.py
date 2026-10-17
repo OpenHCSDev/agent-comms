@@ -335,9 +335,9 @@ class OwnerLifecycle:
         # Stop is explicit abandonment of this exited local owner, not replay
         # permission. The existing recovery owner checks its exact release and
         # native-child absence before terminal settlement.
-        from .attempt_recovery import RecoveryMonitorCapability
+        from .attempt_recovery import AttemptRecovery
 
-        RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
+        AttemptRecovery.settle_stopped_owner(self.root, thread)
 
     def require_launch_authority(self) -> PrivateNkLaunch | None:
         """Check this lifecycle's launch authority without reserving a process.

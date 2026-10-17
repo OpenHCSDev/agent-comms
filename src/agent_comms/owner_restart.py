@@ -255,9 +255,9 @@ class FencedOwnerBatch:
                 # cannot keep running. Settle through the execution owner before
                 # a replacement can claim work; an unresolved publication blocks
                 # this cutover rather than granting replay or dropping the pointer.
-                from .attempt_recovery import RecoveryMonitorCapability
+                from .attempt_recovery import AttemptRecovery
 
-                RecoveryMonitorCapability.settle_stopped_owner(self.lifecycle.root, thread)
+                AttemptRecovery.settle_stopped_owner(self.lifecycle.root, thread)
             wire = self.custody.enter_context(self.lifecycle.restart_wire())
             snapshot = self.lifecycle.registry.snapshot()
             owners = progress.retired

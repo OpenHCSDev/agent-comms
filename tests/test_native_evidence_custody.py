@@ -59,7 +59,7 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
     ))
     with NativeEntry.open_input_evidence(session) as evidence:
         header, entries = evidence.observe()
-        assert header.id == "sid" and tuple(NativeEntry.tracked_users(entries)) == (INPUT_ID,)
+        assert header.id == "sid" and evidence.tracked_user(INPUT_ID) is not None
         if rewrite == "in_place":
             assert len(restored) == session.stat().st_size
             session.write_bytes(restored)
@@ -70,7 +70,7 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
             replacement.replace(session)
         header, entries = evidence.observe()
         assert header.id == "restored"
-        assert tuple(NativeEntry.tracked_users(entries)) == (restored_input,)
+        assert evidence.tracked_user(restored_input) is not None and evidence.tracked_user(INPUT_ID) is None
         assert evidence.source.size == len(restored)
 
 

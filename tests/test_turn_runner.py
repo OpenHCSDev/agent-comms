@@ -215,10 +215,10 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
     # The original tracked input, rather than the historical SDK content's
     # string/array shape, owns the exact current native message.
     (original,) = stored_inputs(owner.inputs.dispositions.root).rows.values()
-    _, entries = NativeEntry.read_evidence(native.session)
-    tracked = NativeEntry.tracked_users(entries)
-    assert tuple(tracked) == (original.native_id,)
-    assert tracked[original.native_id].message.text == original.sent_text
+    with NativeEntry.open_evidence(native.session) as evidence:
+        evidence.observe()
+        tracked = evidence.tracked_user(original.native_id)
+    assert tracked is not None and tracked.message.text == original.sent_text
     assert original.sent_text.endswith("Actual failed input")
     assert owner._comms.registry.require(session).active_turn is None
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.attempt_recovery import RecoveryMonitorCapability
+from agent_comms.attempt_recovery import VerifiedOwnerLoss
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.coordinator import Coordination
 
@@ -63,7 +63,7 @@ def test_no_mutation_aggregate_or_compatibility_dispatch():
 def test_owned_modules_and_methods_obey_s7_limits(tmp_path):
     with Coordination(tmp_path / "coordination.sqlite3") as coordination:
         owners = {type(value) for value in vars(coordination).values()}
-    owners.update((Coordination, AttemptStart, RecoveryMonitorCapability))
+    owners.update((Coordination, AttemptStart, VerifiedOwnerLoss))
     for path in {Path(inspect.getfile(owner)) for owner in owners}:
         source = path.read_text()
         assert len(source.splitlines()) <= 1000, path
