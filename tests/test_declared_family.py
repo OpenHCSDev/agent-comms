@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 import pytest
 from metaclass_registry import DuplicateRegistryKeyError
-
 from agent_comms.declared_family import DeclaredFamily
 
 

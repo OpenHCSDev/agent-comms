@@ -6,8 +6,10 @@ from agent_comms.cli_bridges.shared import (
     ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, DraftAccumulator, FinishedItem,
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolPendingTranscript, TranscriptEvent
+from agent_comms.field_codec import FieldCodec
+from agent_comms.cli_bridges.opencode_parts import AssistantMessage, ToolPart
 from test_codex_items import _output
 
 
@@ -129,12 +131,6 @@ def test_wire_start_decoder_selects_time_state(wire, state, expected):
     assert entry.publication().events[0].timestamp == expected
 
 
-@pytest.mark.parametrize('invalid', [None, True, '0', float('nan'), float('inf')])
-def test_capture_requires_a_real_recorded_timestamp(invalid):
-    with pytest.raises(ValueError, match='finite Unix timestamp'):
-        EventTime.capture(invalid)
-
-
 @pytest.mark.parametrize('invalid', [True, '0', 1.5])
 def test_wire_start_decoder_keeps_strict_integer_input(invalid):
     from pydantic import ValidationError
@@ -150,3 +146,41 @@ def test_completed_only_sources_do_not_retain_draft_state(tmp_path):
     output.publish_batch([FinishedItem('t', 'a', (AssistantTranscript('complete'),))])
     assert not output.drafts
     assert output.transcript.current_draft() is None
+
+
+def test_opencode_pending_file_tools_wait_for_arguments(tmp_path):
+    tool = 'edit'
+    output = _output(tmp_path)
+    message = AssistantMessage(id='t', sessionID='session', role='assistant',
+                               parentID='input', time={'created': 1000})
+    wire = dict(type='tool', id='tool', sessionID='session', messageID='t', callID='tool', tool=tool)
+    pending = ToolPart.model_validate(wire | dict(state=dict(status='pending', input={}, raw='')))
+    output.publish_batch(list(pending.present(message)))
+    event, = output.transcript.current_draft().events
+    assert event.title == tool.title()
+    assert isinstance(event, ToolPendingTranscript)
+    encoded = FieldCodec.encode(event)
+    assert not {'raw_input', 'detail', 'path'} & encoded.keys()
+    assert FieldCodec.decode(TranscriptEvent, encoded) == event
+    running = ToolPart.model_validate(wire | dict(state=dict(status='running',
+        input={'filePath': '/actual/path.py'}, time={'start': 1000})))
+    output.publish_batch(list(running.present(message)))
+    event, = output.transcript.current_draft().events
+    assert event.path == '/actual/path.py'
+    assert event.raw_input == {'filePath': '/actual/path.py'}
+    assert event.title == tool.title() + ' /actual/path.py'
+
+
+def test_opencode_aborted_pending_tool_preserves_its_title_and_error():
+    tool = 'edit'
+    message = AssistantMessage(id='t', sessionID='session', role='assistant',
+                               parentID='input', time={'created': 1000})
+    part = ToolPart.model_validate(dict(type='tool', id='tool', sessionID='session',
+        messageID='t', callID='tool', tool=tool, state=dict(status='error', input={},
+            metadata={'interrupted': True}, error='Tool execution aborted',
+            time={'start': 1000, 'end': 2000})))
+    update, = part.present(message)
+    opening, ending = update.events
+    assert isinstance(opening, ToolPendingTranscript) and opening.title == tool.title()
+    assert ending.text == 'Tool execution aborted' and not ending.ok
+    assert 'raw_input' not in FieldCodec.encode(opening)

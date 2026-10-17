@@ -18,7 +18,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar
 
-from pydantic import JsonValue, TypeAdapter, Field, model_validator
+from pydantic import TypeAdapter, Field, model_validator
 from metaclass_registry import RegistryConfig
 
 from agent_comms.activity import ActivityState
@@ -38,33 +38,14 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.thread_identity import ThreadRole
-from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms import tool_declaration
 from agent_comms.tool_results import ToolDiff
-from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent
+from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolPendingTranscript, ToolStartTranscript, TranscriptEvent
 from agent_comms.typed_table import Column, TypedTable
 
 
 class SendResult(WireModel):
     id: str
-
-@dataclass(frozen=True)
-class ToolCall:
-    """A CLI invocation uses the same preview and history as a native tool."""
-    id: str
-    name: str
-    arguments: JsonValue
-    detail: str = ""
-
-    @property
-    def title(self) -> str:
-        return ToolDeclaration.caption(self.name, self.detail)
-
-    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
-        return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=self.arguments, detail=self.detail),
-                ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
-                                  text=text, ok=ok, diff=diff))
-
 
 @dataclass(frozen=True)
 class Binding(TypedTable):
@@ -73,7 +54,7 @@ class Binding(TypedTable):
     thread: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class DraftAccumulator:
     """One subscription's item prefix; the shared output owns its lifetime."""
 
@@ -114,8 +95,55 @@ class NoPrefixDraft(DraftAccumulator):
 NO_PREFIX = NoPrefixDraft()
 
 
-@dataclass
-class TextDraft(DraftAccumulator):
+class SnapshotDraft(DraftAccumulator, ABC):
+    """A complete pending view, shared by textual and tool items."""
+
+    @property
+    @abstractmethod
+    def events(self) -> tuple[TranscriptEvent, ...]: ...
+
+    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+        return (DraftItem(turn_id, item_id, self),)
+
+
+class ToolCallDraft(SnapshotDraft, ABC):
+    """Tool snapshots close the same way, whether input arrived or not."""
+
+    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
+        return (*self.events, ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
+                                               text=text, ok=ok, diff=diff))
+
+
+@dataclass(frozen=True)
+class PendingToolCall(ToolCallDraft):
+    """A named tool whose arguments have not arrived, not an empty invocation."""
+    id: str
+    name: str
+
+    @property
+    def title(self) -> str:
+        return tool_declaration.ToolDeclaration.for_name(self.name).label
+
+    @property
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return (self.started_at.stamp(ToolPendingTranscript(
+            tool_call_id=self.id, tool_name=self.name)),)
+
+
+@dataclass(frozen=True)
+class ToolCall(ToolCallDraft, tool_declaration.ToolCallMetadata):
+    id: str
+    name: str
+    arguments: tool_declaration.ToolArguments
+
+    @property
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return (self.started_at.stamp(ToolStartTranscript(
+            tool_call_id=self.id, tool_name=self.name,
+            raw_input=self.arguments.raw_input)),)
+
+@dataclass(frozen=True)
+class TextDraft(SnapshotDraft):
     event_type: type[TextTranscript]
     sections: dict[int, list[str]]
     separator: ClassVar[str] = ''
@@ -132,9 +160,6 @@ class TextDraft(DraftAccumulator):
         text = self.separator.join(text for index in sorted(self.sections)
                                    if (text := ''.join(self.sections[index])))
         return (self.started_at.stamp(self.event_type(text)),) if text else ()
-
-    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
-        return (DraftItem(turn_id, item_id, self),)
 
 
 class ParagraphDraft(TextDraft):
@@ -280,7 +305,7 @@ class DraftItem(TranscriptUpdate):
     """A pending view; build its text only if this preview survives coalescing."""
     turn_id: str
     item_id: str
-    accumulator: TextDraft
+    accumulator: SnapshotDraft
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:
@@ -818,14 +843,6 @@ class MonitorPart(MonitorFrame):
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
         await bridge.journal.monitor_attempt(self).confirm(bridge, self, record)
-
-
-class ForeignMonitorFrame(MonitorFrame):
-    wire_tag = 'foreign'
-    text: str
-
-    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
-        """Another monitor's output is not comms delivery evidence."""
 
 
 MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())

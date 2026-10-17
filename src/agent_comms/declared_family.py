@@ -12,7 +12,6 @@ from metaclass_registry import (  # type: ignore[import-untyped]
     RegistryConfig,
 )
 
-
 class _FamilyMeta(AutoRegisterMeta, ABCMeta):
     def __new__(
         mcs,
@@ -100,14 +99,16 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         super().__init_subclass__()
 
     @classmethod
+    def member_named(cls, name: str) -> type[Self] | None:
+        member = cls.__registry__.get(name)
+        return cast(type[Self], member) if member is not None and issubclass(member, cls) else None
+
+    @classmethod
     def decode(cls, name: str) -> type[Self]:
-        try:
-            member = cls.__registry__[name]
-        except (KeyError, TypeError):
-            raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
-        if not issubclass(member, cls):
-            raise ValueError(f"{name!r} is not a member of {cls.__name__}")
-        return cast(type[Self], member)
+        member = cls.member_named(name)
+        if member is None:
+            raise ValueError(f"Unknown {cls.__name__} name: {name!r}")
+        return member
 
     @classmethod
     def names(cls) -> tuple[str, ...]:

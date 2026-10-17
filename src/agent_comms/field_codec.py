@@ -180,14 +180,15 @@ class TimestampText(TextRepresentation):
 class Projected(property):
     """A computed field declared by its owner for a named read-only view."""
 
-    def __init__(self, getter, *, view: str, name: str | None = None):
+    def __init__(self, getter, *, view: str, persist: bool, name: str | None = None):
         super().__init__(getter)
         self.view = view
         self.wire_name = name or getter.__name__
+        self.persist = persist
 
 
-def projected(*, view: str, name: str | None = None):
-    return lambda getter: Projected(getter, view=view, name=name)
+def projected(*, view: str, name: str | None = None, persist: bool = True):
+    return lambda getter: Projected(getter, view=view, name=name, persist=persist)
 
 
 class FieldCodec(Sealed):
@@ -321,6 +322,7 @@ class FieldCodec(Sealed):
             result.update(
                 (member.wire_name, cls.encode(getattr(value, name)))
                 for name, member in cls._projections(type(value), "wire").items()
+                if member.persist
             )
             return result
         if isinstance(value, type) and issubclass(value, DeclaredFamily):

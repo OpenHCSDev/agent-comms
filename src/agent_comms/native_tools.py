@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
+from operator import attrgetter
 from pathlib import Path
-from typing import ClassVar
+from typing import Annotated, ClassVar, get_args, get_origin, get_type_hints
 
-from .tool_declaration import ToolDeclaration
+from pydantic import ConfigDict, TypeAdapter
+
+from .tool_declaration import Caption, DecodedArguments, PathTool, ToolDeclaration
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 from .native_tool_call import SelectedToolDenied
@@ -28,7 +31,6 @@ class NativeExecutableTool(ToolDeclaration):
 
     @classmethod
     def from_call(cls, name: str, arguments: dict[str, object], *, call_id: str):
-        cls._member_declarations()
         FieldCodec.encode(arguments)
         return cls.decode(name).create_call(call_id, arguments)
 
@@ -48,7 +50,46 @@ class NativeRequestTools:
 
 
 class ArgumentTool(ToolDeclaration):
-    """One declared execution record supplies validation and native serialization."""
+    """The tool declares which input field supplies its caption."""
+    declared_name = None
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        hints = get_type_hints(cls, include_extras=True)
+        for owner in cls.__mro__:
+            marked = [(name, hints[name]) for name in owner.__dict__.get('__annotations__', {})
+                      if get_origin(hints[name]) is Annotated
+                      and any(isinstance(item, Caption) for item in get_args(hints[name])[1:])]
+            if marked:
+                (name, hint), = marked
+                read = attrgetter(name)
+                validate = TypeAdapter(hint, config=ConfigDict(strict=True)).validate_python
+                def caption(value):
+                    if name not in value.model_fields_set and name not in type(value).model_fields:
+                        raise ValueError(f'Tool input has no declared caption argument: {name}')
+                    return validate(read(value))
+                cls.caption_reader = staticmethod(caption)
+                return
+
+    @classmethod
+    def recorded_arguments(cls, schema, raw):
+        arguments = DecodedArguments(raw, schema.model_validate(raw))
+        cls.caption_subject(arguments)
+        return arguments
+
+    @classmethod
+    def caption_subject(cls, arguments: DecodedArguments) -> str | None:
+        return cls.caption_reader(arguments.input)
+
+    @classmethod
+    def file_location(cls, arguments: DecodedArguments) -> str | None:
+        return arguments.input.path
+
+
+@dataclass(frozen=True, kw_only=True)
+class CodingTool(ArgumentTool, NativeExecutableTool):
+    """Typed Pi fields own mutation paths; the existing SDK executes the tools."""
+
+    claim: FileClaimPath | None = field(init=False, compare=False)
 
     @classmethod
     def parse_arguments(cls, arguments: dict[str, object]):
@@ -61,31 +102,9 @@ class ArgumentTool(ToolDeclaration):
 
     @property
     def arguments(self) -> dict[str, object]:
-        # The native argument object has no family envelope. Its contents come
-        # entirely from the record codec, never a retained raw dictionary.
         encoded = FieldCodec.encode(self)
         del encoded[self.family_discriminator]
         return encoded
-
-    @property
-    @abstractmethod
-    def detail(self) -> str: ...
-
-
-@dataclass(frozen=True, kw_only=True)
-class PathTool:
-    path: str
-
-    @property
-    def detail(self) -> str:
-        return self.path
-
-
-@dataclass(frozen=True, kw_only=True)
-class CodingTool(ArgumentTool, NativeExecutableTool):
-    """Typed Pi fields own mutation paths; the existing SDK executes the tools."""
-
-    claim: FileClaimPath | None = field(init=False, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "claim", self._parse_resource())
@@ -119,12 +138,8 @@ class ReadTool(PathTool, CodingTool):
 class BashTool(CodingTool):
     acp_kind = "execute"
     label = "Run"
-    command: str
+    command: Annotated[str, Caption()]
     timeout: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
-
-    @property
-    def detail(self) -> str:
-        return self.command
 
     def _parse_resource(self) -> None:
         return None
@@ -165,11 +180,49 @@ class WriteTool(PathTool, CodingTool):
         return WritableFileClaim(Path(self.path))
 
 
-class GrepTool(ToolDeclaration):
+class GrepTool(ArgumentTool):
     acp_kind = "search"
     label = "Search"
+    pattern: Annotated[str, Caption()]
 
 
-class GlobTool(ToolDeclaration):
-    acp_kind = "search"
+class GlobTool(GrepTool):
     label = "Find"
+
+
+class WebFetchTool(ArgumentTool, declared_name='webfetch'):
+    acp_kind = "fetch"
+    label = "Fetch"
+    url: Annotated[str, Caption()]
+
+
+class WebSearchTool(GrepTool, declared_name='websearch'):
+    query: Annotated[str, Caption()]
+
+
+class ToolSearchTool(WebSearchTool, declared_name='toolsearch'):
+    label = "Search tools"
+
+
+class AgentTool(ArgumentTool):
+    label = "Agent"
+    description: Annotated[str, Caption()]
+
+
+class TaskTool(AgentTool):
+    label = "Task"
+
+
+class MonitorTool(ArgumentTool):
+    label = "Monitor"
+    description: Annotated[str | None, Caption()]
+
+
+class NotebookEditTool(PathTool, ArgumentTool, declared_name='notebookedit'):
+    label = "Edit"
+    acp_kind = "edit"
+
+
+class SkillTool(ArgumentTool):
+    label = "Skill"
+    skill: Annotated[str, Caption()]

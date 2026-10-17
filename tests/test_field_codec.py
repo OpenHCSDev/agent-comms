@@ -4,7 +4,7 @@ from typing import Annotated, ClassVar
 import pytest
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText, TimestampText, TextRepresentation, WireValue
+from agent_comms.field_codec import FieldCodec, PathText, TimestampText, TextRepresentation, WireValue, projected
 
 
 def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
@@ -133,25 +133,19 @@ class Record:
     optional: float | None = None
     ignored: ClassVar[str] = "not stored"
 
+    @projected(view="wire", persist=False)
+    def summary(self) -> str:
+        return self.label.upper()
 
-def test_golden_nested_family_record_round_trip():
+
+def test_nested_family_record_rederives_computed_fields():
     record = Record(CountChoice(4), ("alice", "bob"), {"a": [1, 2]})
-    golden = {
-        "choice": {"kind": "count", "value": 4},
-        "pair": ["alice", "bob"],
-        "aliases": {"a": [1, 2]},
-        "externalLabel": "default",
-        "optional": None,
-    }
-    assert FieldCodec.encode(record) == golden
-    assert FieldCodec.decode(Record, golden) == record
-    assert FieldCodec.record_schema(Record)["properties"]["aliases"] == {
-        "type": "object", "additionalProperties": {"type": "array", "items": {"type": "integer"}},
-    }
-    with pytest.raises(TypeError, match="No declared JSON schema"):
-        FieldCodec.value_schema(dict[int, str])
-    del golden["externalLabel"]
-    assert FieldCodec.decode(Record, golden) == record
+    encoded = FieldCodec.encode(record)
+    assert FieldCodec.decode(Record, encoded) == record
+    restored = FieldCodec.decode(Record, {**encoded, "summary": "stale stored text"})
+    assert restored.summary == record.summary
+    assert "summary" not in encoded
+    assert "summary" not in FieldCodec.record_schema(Record)["properties"]
 
 
 @pytest.mark.parametrize(

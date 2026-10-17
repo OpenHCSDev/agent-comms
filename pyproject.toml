@@ -27,7 +27,7 @@ keywords = ["agents", "coordination", "message-bus", "acp", "multi-agent"]
 
 dependencies = [
     "aiohttp>=3.14",
-    "metaclass-registry>=0.4.0",
+    "metaclass-registry>=0.4.1",
     "pydantic>=2.13",
 ]
 

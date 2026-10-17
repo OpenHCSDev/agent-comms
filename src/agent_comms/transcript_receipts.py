@@ -96,14 +96,10 @@ class TranscriptTraversal(ABC):
         A saved tool round is its call record together with its result record;
         a page window never stops between them.
         """
-        from .transcript_events import ToolEndTranscript, ToolStartTranscript
-
-        opening = ToolEndTranscript if self.descending_rounds else ToolStartTranscript
-        closing = ToolStartTranscript if self.descending_rounds else ToolEndTranscript
-        return (
-            {event.tool_call_id for event in batch if isinstance(event, opening)},
-            {event.tool_call_id for event in batch if isinstance(event, closing)},
-        )
+        opened, closed = set(), set()
+        for event in batch:
+            event.collect_round_edges(opened, closed)
+        return (opened, closed) if self.ascending else (closed, opened)
 
     def read_records(self, reader, project, receipts, initial, frontier,
                      *, max_messages, max_bytes):
@@ -164,8 +160,6 @@ class TranscriptTraversal(ABC):
             native.close()
 
     ascending = False
-    # Reading newest-first meets a round's result before its call.
-    descending_rounds = True
     round_grace_limit = 16
 
 
@@ -194,7 +188,6 @@ class EarlierTranscript(TranscriptTraversal):
 
 class LaterTranscript(TranscriptTraversal):
     ascending = True
-    descending_rounds = False
 
     def native(self, reader, cursor, through):
         return reader.forward(cursor.offset, through.offset)

@@ -19,7 +19,8 @@ from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
 from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
-from .transcript_events import SentTranscript
+from .transcript_events import SentTranscript, ToolStartTranscript
+from .tool_declaration import ToolDeclaration, ToolInput
 
 
 def wire_field(name: str, default=None):
@@ -314,11 +315,9 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
         return (self,)
 
     def assistant_transcript(self):
-        from .transcript_events import ToolStartTranscript
-
-        return [
-            ToolStartTranscript(tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments)
-        ]
+        arguments = ToolDeclaration.for_name(self.name).recorded_arguments(ToolInput, self.arguments)
+        return [ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
+                                    raw_input=arguments.raw_input)]
 
     id: str
     name: str
@@ -744,7 +743,6 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 
     def transcript_events(self, context):
-        from .tool_declaration import ToolDeclaration
         from .transcript_events import ToolEndTranscript
 
         if not self.parts:

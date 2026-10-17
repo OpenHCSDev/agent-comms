@@ -20,6 +20,7 @@ from pydantic import (
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
+from agent_comms.tool_declaration import ToolDeclaration, ToolInput
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
@@ -342,20 +343,19 @@ class ToolItem(Item, ABC):
     @abstractmethod
     def succeeded(self) -> bool: ...
 
-    @property
-    def tool_detail(self) -> str:
-        return ""
+    def call(self, started_at: EventTime = UnrecordedEventTime()) -> ToolCall:
+        arguments = ToolDeclaration.for_name(self.tool_name).recorded_arguments(ToolInput, self.arguments)
+        return ToolCall(started_at, self.id, self.tool_name, arguments)
 
-    @property
-    def call(self) -> ToolCall:
-        return ToolCall(self.id, self.tool_name, self.arguments, self.tool_detail)
+    def accumulator(self, started_at: EventTime) -> ToolCall:
+        return self.call(started_at)
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return self.call.finished(self.output, self.succeeded)
+        return self.call().finished(self.output, self.succeeded)
 
     @property
     def activity_detail(self) -> str:
-        return self.call.title
+        return self.call().title
 
 
 class CommandItem(ToolItem):
@@ -372,10 +372,6 @@ class CommandItem(ToolItem):
     @property
     def arguments(self) -> JsonValue:
         return {'command': self.command}
-
-    @property
-    def tool_detail(self) -> str:
-        return self.command
 
     @property
     def output(self) -> str:
@@ -664,7 +660,8 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return ToolCall(call_id, 'edit', {'file_path': self.path}, self.path).finished(
+        arguments = ToolDeclaration.for_name('edit').recorded_arguments(ToolInput, {'path': self.path})
+        return ToolCall(UnrecordedEventTime(), call_id, 'edit', arguments).finished(
             '', ok, diff=self.kind.patch(self.path, self.diff))
 
 

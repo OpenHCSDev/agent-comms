@@ -7,12 +7,11 @@ import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import (
-    CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
-    ForeignAttachment,
+    CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame, MetadataRecord, TaskEnvelope,
 )
 from agent_comms.cli_bridges.shared import (
     Binding, DeliveryJournal, DeliveryRow, MonitorAttemptRow, MonitorPartRow, MonitorPart,
-    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, NO_MONITOR_ATTEMPT, Watch,
+    Options, ObservedMonitor, MismatchedMonitor, NO_MONITOR_ATTEMPT, Watch,
 )
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
@@ -23,7 +22,7 @@ def notification(line, record_id='notification-record'):
     return CLAUDE_RECORD.validate_python(dict(
         type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
         sessionId='session', promptId='prompt', origin=dict(kind='task-notification'),
-        message=dict(content='<task-notification><event>'+escape(line)+
+        message=dict(content='<task-notification><summary>Monitor output</summary><event>'+escape(line)+
                      '</event></task-notification>')))
 
 
@@ -32,7 +31,7 @@ def attachment_notification(line, record_id='notification-record'):
         type='attachment', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
         attachment=dict(type='queued_command', commandMode='task-notification',
             origin=dict(kind='task-notification', producer='session-task'),
-            prompt='<task-notification><event>'+escape(line)+'</event></task-notification>')))
+            prompt='<task-notification><summary>Monitor output</summary><event>'+escape(line)+'</event></task-notification>')))
 
 
 @pytest.mark.asyncio
@@ -92,26 +91,26 @@ def test_frame_cap_and_exact_reconstruction(body, sender):
     assert [part.number for part in decoded]==list(range(1,len(decoded)+1))
 
 
-def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails():
-    record=CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
-        sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
-        message=dict(content='Another task producer')))
-    assert isinstance(record.message.content[0].text,ForeignTaskNotification)
-    assert record.updates(ClaudeSession())==()
+def test_task_notifications_paint_declared_content_and_reject_malformed_xml():
+    record = notification('ordinary monitor output')
+    rendered, = record.updates(ClaudeSession())
+    assert rendered.events[0].text == 'Monitor output\nordinary monitor output'
+    for text in ('<summary>Shell finished</summary>',
+                 '<summary>Agent completed</summary><status>completed</status><result>Analysis</result>'):
+        envelope = TaskEnvelope.from_text('<task-notification>' + text + '</task-notification>')
+        notice, = envelope.updates(record)
+        assert notice.events[0].text == envelope.summary
     from xml.etree.ElementTree import ParseError
     with pytest.raises(ParseError):
-        CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
-            sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
-            message=dict(content='<task-notification>')))
-    assert isinstance(ClaudeMonitorFrame.decode_line('ordinary unrelated monitor event'),ForeignMonitorFrame)
-    assert isinstance(ClaudeMonitorFrame.decode_line('"Comms in · old format...(truncated)'),ForeignMonitorFrame)
+        TaskEnvelope.from_text('<task-notification>')
+    assert ClaudeMonitorFrame.decode_line('ordinary unrelated monitor event') is None
 
 
 def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
     record=CLAUDE_RECORD.validate_python(dict(type='attachment', uuid='foreign-record',
         timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='queued_command',
         origin=dict(kind='peer'), prompt='Not a Monitor notification')))
-    assert isinstance(record.attachment, ForeignAttachment)
+    assert isinstance(record, MetadataRecord) and record.type == 'attachment'
     assert record.updates(ClaudeSession())==()
     queued=CLAUDE_RECORD.validate_python(dict(type='queue-operation', operation='enqueue',
         sessionId='session', content='<task-notification><event>not yet received</event></task-notification>'))

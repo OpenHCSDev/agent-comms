@@ -44,14 +44,19 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
         return self.wire_tag
 
     @classmethod
+    def wire_tags(cls) -> tuple[str, ...]:
+        return (cls.wire_tag,)
+
+    @classmethod
     def declared_union(cls) -> object:
         def tag(value: object) -> str:
             if isinstance(value, cls):
-                return value.wire_tag
+                return value.type
             return cls.header.model_validate(value).type
         by_tag: dict[str, list[builtins.type[TaggedWire]]] = {}
         for member in cls.__registry_config__.registry_dict.values():
-            by_tag.setdefault(member.wire_tag, []).append(member)
+            for wire_tag in member.wire_tags():
+                by_tag.setdefault(wire_tag, []).append(member)
         variants = []
         for wire_tag, members in by_tag.items():
             hierarchy = TopologicalSorter({

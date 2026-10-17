@@ -8,9 +8,9 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import quote
 
-from . import tool_declaration
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .tool_declaration import RecordedToolInput, ToolArguments, ToolCallMetadata, ToolDeclaration
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
@@ -42,6 +42,9 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
 
     def with_native_input(self, native_id: str | None) -> TranscriptEvent:
         return self
+
+    def collect_round_edges(self, opened: set[str], closed: set[str]) -> None:
+        """Non-tool events do not open or close a tool round."""
 
     @property
     @abstractmethod
@@ -194,25 +197,42 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
 
     @property
     def title(self) -> str:
-        return tool_declaration.ToolDeclaration.caption(self.tool_name)
+        return ToolDeclaration.for_name(self.tool_name).label
 
     @property
     def kind(self) -> str:
-        return tool_declaration.ToolDeclaration.for_name(self.tool_name).acp_kind
+        return ToolDeclaration.for_name(self.tool_name).acp_kind
+
+
+class ToolOpeningTranscript(ToolTranscript):
+    declared_name = None
+
+    def collect_round_edges(self, opened: set[str], closed: set[str]) -> None:
+        opened.add(self.tool_call_id)
+
+
+class ToolPendingTranscript(ToolOpeningTranscript):
+    """A named tool waiting for arguments; no invocation data exists yet."""
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolStartTranscript(ToolTranscript):
+class ToolStartTranscript(ToolCallMetadata, ToolOpeningTranscript):
     raw_input: Any = None
-    detail: str = field(default="", metadata={"wire_omit_default": True})
 
     @property
-    def title(self) -> str:
-        return tool_declaration.ToolDeclaration.caption(self.tool_name, self.detail)
+    def name(self) -> str:
+        return self.tool_name
+
+    @property
+    def arguments(self) -> ToolArguments:
+        return ToolDeclaration.for_name(self.tool_name).recorded_arguments(RecordedToolInput, self.raw_input)
 
 
 @dataclass(frozen=True, kw_only=True)
 class ToolEndTranscript(ToolTranscript):
+    def collect_round_edges(self, opened: set[str], closed: set[str]) -> None:
+        closed.add(self.tool_call_id)
+
     @staticmethod
     def parts_for(text, diff=None, sent_message=None):
         """The result owner selects its contents once, before transport or paint."""

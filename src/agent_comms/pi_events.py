@@ -13,6 +13,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
+from .tool_declaration import ToolDeclaration, ToolInput
 from .turn_phase import ModelWaitPhase
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
@@ -795,8 +796,6 @@ class ToolExecutionEnd(PiEvent):
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .tool_declaration import ToolDeclaration
-
         name = self.tool_name or "tool"
         is_ok = self.is_error is not True
         tool_id = self.tool_call_id or name
@@ -822,13 +821,12 @@ class ToolExecutionStart(PiEvent):
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .tool_declaration import ToolDeclaration
-
         name = self.tool_name or "tool"
         tool_id = self.tool_call_id or name
         session.watchdog.prompt_accepted = True
         session.active_tools.add(tool_id)
-        yield ToolDeclaration.start(tool_id, name, self.args or {})
+        arguments = ToolDeclaration.for_name(name).recorded_arguments(ToolInput, self.args or {})
+        yield events.ToolStart(tool_id, name, arguments)
 
     @property
     def retry_progress(self) -> bool:

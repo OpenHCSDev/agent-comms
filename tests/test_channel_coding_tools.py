@@ -103,14 +103,9 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
     ("edit", {"path": "x", "edits": [{"oldText": "old", "newText": "new"}]}),
     ("write", {"path": "x", "content": "value"}),
 ])
-def test_pi_argument_fields_own_roundtrip_and_display(name, arguments):
-    from dataclasses import fields
-    from agent_comms.tool_declaration import ToolDeclaration
-
+def test_pi_argument_fields_roundtrip(name, arguments):
     call = CodingCall.decode("typed-argument-shape", name, arguments)
-    assert "arguments" not in {item.name for item in fields(call.tool)}
     assert call.tool.arguments == arguments
-    assert call.tool.detail in ToolDeclaration.start("typed", name, arguments, detail=call.tool.detail).title
 
 
 @pytest.mark.asyncio

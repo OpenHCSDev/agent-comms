@@ -15,6 +15,7 @@ from acp.schema import (
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
+    ToolCallLocation,
     UsageUpdate,
 )
 
@@ -73,10 +74,10 @@ class AcpEventConsumer(MroDispatch):
             tool_call_id=event.id,
             title=event.title or event.name or "tool",
             kind=cast(Any, event.kind),
+            locations=[ToolCallLocation(path=path) for path in event.locations],
             status="in_progress",
         )
-        if event.args is not None:
-            start_update.raw_input = event.args
+        start_update.raw_input = event.arguments.raw_input
         await client.session_update(
             session_id=session_id,
             update=start_update,

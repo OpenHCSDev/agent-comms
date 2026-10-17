@@ -21,6 +21,7 @@ from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .tool_results import ToolDiff
+from .tool_declaration import ToolArguments, ToolCallMetadata
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
@@ -133,10 +134,8 @@ class ToolEvent(AgentEvent):
 
 
 @dataclass(frozen=True)
-class ToolStart(ToolEvent):
-    title: str = ""
-    args: dict[str, Any] | None = None
-    kind: str = "other"
+class ToolStart(ToolCallMetadata, ToolEvent):
+    arguments: ToolArguments
 
 
 @dataclass(frozen=True)

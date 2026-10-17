@@ -6,19 +6,21 @@ from abc import ABC, abstractmethod
 from typing import ClassVar, Literal
 
 from metaclass_registry import RegistryConfig
-from pydantic import ConfigDict, Field, JsonValue
+from pydantic import Field, JsonValue
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
-from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TextTranscript, TranscriptEvent
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.tool_declaration import OpenCodeToolInput, ToolDeclaration
+from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TextTranscript
 
 from .shared import (
-    ActiveItem,
     CompletedItem,
     StartedItem,
     TextDraft,
+    PendingToolCall,
     ToolCall,
+    ToolCallDraft,
     TranscriptUpdate,
 )
 
@@ -122,41 +124,43 @@ class ReasoningPart(TextualPart):
     detail = ''
 
 
-class ToolArguments(WireModel):
-    """Retain arbitrary tool inputs, declaring OpenCode's native path spelling."""
-    model_config = ConfigDict(strict=True, extra='allow')
-    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
-    filePath: str | None = None
-
-
 class StatusHeader(WireHeader):
     type: str = Field(alias='status')
 
 
 class ToolState(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+        registry_dict={}, key_attribute='__name__', skip_if_no_key=True)
     header = StatusHeader
-    input: ToolArguments
     finished: ClassVar[bool] = False
 
     @abstractmethod
-    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
+    def present(self, part: ToolPart) -> tuple[TranscriptUpdate, ...]: ...
+
+
+class InvokedTool(WireModel):
+    """Arguments have arrived; running and ended states share their decoding."""
+    input: dict[str, JsonValue]
 
     def call(self, part: ToolPart) -> ToolCall:
-        return ToolCall(part.callID, part.tool,
-                        self.input.model_dump(exclude_unset=True), self.input.filePath or '')
+        arguments = ToolDeclaration.for_name(part.tool).recorded_arguments(OpenCodeToolInput, self.input)
+        return ToolCall(UnrecordedEventTime(), part.callID, part.tool, arguments)
 
 
 class PendingTool(ToolState):
     wire_tag = 'pending'
 
-    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
-        return (ActiveItem(message.id, part.id, ActivityState.WORKING, self.call(part).title),)
+    def present(self, part: ToolPart) -> tuple[TranscriptUpdate, ...]:
+        call = PendingToolCall(UnrecordedEventTime(), part.callID, part.tool)
+        return (StartedItem(part.messageID, part.id, ActivityState.WORKING, call.title, call),)
 
 
-class RunningTool(PendingTool):
+class RunningTool(InvokedTool, ToolState):
     wire_tag = 'running'
+
+    def present(self, part: ToolPart) -> tuple[TranscriptUpdate, ...]:
+        call = self.call(part)
+        return (StartedItem(part.messageID, part.id, ActivityState.WORKING, call.title, call),)
 
 
 class EndedTool(ToolState, ABC):
@@ -164,17 +168,20 @@ class EndedTool(ToolState, ABC):
     ok: ClassVar[bool]
     finished = True
 
+    @abstractmethod
+    def call(self, part: ToolPart) -> ToolCallDraft: ...
+
     @property
     @abstractmethod
     def result(self) -> str: ...
 
-    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
+    def present(self, part: ToolPart) -> tuple[TranscriptUpdate, ...]:
         event_time = RecordedEventTime(self.time.start / 1000)
         events = tuple(event_time.stamp(event) for event in self.call(part).finished(self.result, self.ok))
-        return (CompletedItem(message.id, part.id, events),)
+        return (CompletedItem(part.messageID, part.id, events),)
 
 
-class CompletedTool(EndedTool):
+class CompletedTool(InvokedTool, EndedTool):
     wire_tag = 'completed'
     output: str
     ok = True
@@ -184,7 +191,7 @@ class CompletedTool(EndedTool):
         return self.output
 
 
-class FailedTool(EndedTool):
+class FailedTool(EndedTool, ABC):
     wire_tag = 'error'
     error: str
     ok = False
@@ -192,6 +199,24 @@ class FailedTool(EndedTool):
     @property
     def result(self) -> str:
         return self.error
+
+
+class InvokedFailedTool(InvokedTool, FailedTool):
+    pass
+
+
+class InterruptedToolMetadata(WireModel):
+    interrupted: Literal[True]
+
+
+class AbortedPendingTool(FailedTool):
+    """Native abort before arguments: preserve its exact error and marker."""
+    input: dict[str, JsonValue] = Field(max_length=0)
+    metadata: InterruptedToolMetadata
+    error: Literal['Tool execution aborted']
+
+    def call(self, part: ToolPart) -> PendingToolCall:
+        return PendingToolCall(UnrecordedEventTime(), part.callID, part.tool)
 
 
 class ToolPart(Part):
@@ -204,7 +229,7 @@ class ToolPart(Part):
         return self.state.finished
 
     def present(self, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
-        return self.state.present(self, message)
+        return self.state.present(self)
 
 
 class StructuralPart(Part, ABC):
