@@ -24,16 +24,22 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, TextRepresentation
 from .lifecycle import LifecycleState
+from .send_outcome import GrantedSend, HeldSend
 from .store_files import _async_store_lock, _atomic_write_text, _store_lock, store_lock_path
 
 
-class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
+class MaintenancePhase(HeldSend, DeclaredFamily, LifecycleState, affix="Phase"):
     turn_pending = True
+
+    @classmethod
+    @contextmanager
+    def send(cls, delegate, *args):
+        yield cls()
 
     @classmethod
     def require_open(cls) -> None:
         if cls.turn_pending:
-            raise RelationViolationError("Maintenance new turns held")
+            raise RelationViolationError("Maintenance ingress requires READY")
 
 
 class DrainingPhase(MaintenancePhase):
@@ -56,8 +62,17 @@ class InstallingPhase(MaintenancePhase):
         return (ReadyPhase,)
 
 
-class ReadyPhase(MaintenancePhase):
+class ReadyPhase(GrantedSend, MaintenancePhase):
     turn_pending = False
+
+    @classmethod
+    @contextmanager
+    def send(cls, delegate, *args):
+        if delegate is None:
+            yield cls()
+        else:
+            with delegate(*args) as outcome:
+                yield outcome
 
     @classmethod
     def successors(cls):
@@ -296,6 +311,12 @@ class MaintenanceBarrier:
             yield self.assert_open_unlocked()
 
     @asynccontextmanager
+    async def send(self, delegate, *args):
+        async with self.admit_ingress_async() as status:
+            with status.phase.send(delegate, *args) as outcome:
+                yield outcome
+
+    @asynccontextmanager
     async def admit_ingress_async(self):
         """Acquire the same ingress gate without blocking a native event loop.
 
@@ -303,4 +324,4 @@ class MaintenanceBarrier:
         pipe drain or a native response.
         """
         async with _async_store_lock(self.wire_path, shared=True):
-            yield self.assert_open_unlocked()
+            yield self.current_unlocked()

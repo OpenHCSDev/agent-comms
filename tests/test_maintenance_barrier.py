@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.backend import _maintenance_send_boundary
+from agent_comms.send_outcome import HeldSend
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
@@ -335,9 +335,8 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
     proc.join(10)
     assert proc.exitcode == 0
     assert q.get(timeout=2)[0] == "denied"
-    with pytest.raises(RelationViolationError, match="Maintenance"):
-        async with _maintenance_send_boundary(root, None, None, "native", "original"):
-            pytest.fail("Native stdin would be written")
+    async with MaintenanceBarrier(root / "registry.json").send(None, None, "native", "original") as outcome:
+        assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
     assert comms.registry.require("owner").active_turn is None
 
@@ -461,7 +460,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
     entered = asyncio.Event()
 
     async def native_write():
-        async with _maintenance_send_boundary(root, None, None, "native", "original") as allowed:
+        async with MaintenanceBarrier(root / "registry.json").send(None, None, "native", "original") as allowed:
             assert allowed
             entered.set()
 
@@ -492,7 +491,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     changed = threading.Event()
 
     async def fake_send() -> None:
-        async with _maintenance_send_boundary(root, None, None, "id", "text") as allowed:
+        async with MaintenanceBarrier(root / "registry.json").send(None, None, "id", "text") as allowed:
             assert allowed
             entered.set()
             assert release.wait(5)

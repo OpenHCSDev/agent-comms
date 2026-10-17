@@ -22,7 +22,7 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
-from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInboxItem
+from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
 from .drain_failures import drain_failures
@@ -720,6 +720,10 @@ class InputDrain(InputObservation):
     async def drain_owned_inbox(self, session_id: str) -> int:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
+        inbox = self.backend_inboxes.get(session_id)
+        if inbox is not None:
+            async with self.comms.owners.maintenance.admit_ingress_async() as status:
+                inbox.maintenance_changed(status)
         private_root = self.effects.configured_root_id
         pushed = await self._drain_private_if_changed(session_id, private_root)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
@@ -773,7 +777,7 @@ class InputDrain(InputObservation):
         self, session_id: str, owner: Thread,
     ) -> asyncio.Queue[TurnInboxItem]:
         """Open the live turn inbox and capture its configured settings."""
-        inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
+        inbox = self.backend_inboxes.setdefault(session_id, TurnInbox())
         self.sessions.config.turn_started(session_id, owner)
         return inbox
 

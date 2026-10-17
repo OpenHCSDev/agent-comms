@@ -21,6 +21,7 @@ from .ordinary_admission_rules import (
 )
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
+from .send_outcome import SendOutcome, GrantedSend, RefusedSend, AuthorityChangedSend
 from .input_attempt import InputAlreadyCleared
 from .thread_identity import TurnId
 from .turn_input_source import (
@@ -110,17 +111,17 @@ class OwnedSendAdmission:
         if not source.bypasses_goal_permit and self.goal_permit is not None:
             OrdinaryGoalGrantCheck(permit=self.goal_permit, store=self.goal_store).require_valid()
 
-    def _refusal(self, rule: ReservationRule, defer: bool) -> bool | None:
+    def _refusal(self, rule: ReservationRule, defer: bool) -> SendOutcome:
         _LOG.info(
             "Ordinary input %s: %s",
             "deferred" if defer else "refused",
             ReservationViolationError(rule),
         )
-        return None if defer else False
+        return RefusedSend() if defer else AuthorityChangedSend()
 
     def _prepare(
         self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
-    ) -> bool | None:
+    ) -> SendOutcome:
         # Backend ingress already owns shared custody through this check and write.
         snapshot = self.comms.registry.snapshot()
         canonical = snapshot.canonical_name(self.thread.name)
@@ -157,16 +158,16 @@ class OwnedSendAdmission:
                 tuple(origin.reference for origin in source.origins), None
             ) if source.origins else None,
         )
-        return True
+        return GrantedSend()
 
     @contextmanager
     def __call__(
         self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
-    ) -> Iterator[bool | None]:
+    ) -> Iterator[SendOutcome]:
         try:
             decision = self._prepare(public_id, native_id, sent_text, already_bound=already_bound)
         except InputAlreadyCleared:
-            decision = None
+            decision = RefusedSend()
         yield decision
 
     def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:

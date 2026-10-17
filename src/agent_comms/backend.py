@@ -20,7 +20,7 @@ import json
 import secrets
 import unicodedata
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
-from contextlib import AbstractContextManager, AsyncExitStack, aclosing, asynccontextmanager, contextmanager, nullcontext
+from contextlib import AsyncExitStack, aclosing, contextmanager
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -39,6 +39,7 @@ from .extension_ui import ExtensionUiSession
 from .image_inputs import ImageInput
 from .turn_context import InputContributionCoordinates
 from .maintenance_barrier import MaintenanceBarrier
+from .send_outcome import SendBoundary
 from .native_attestation import AttestationError
 from .native_custody import PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
@@ -47,7 +48,7 @@ from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import SelectedToolDenied
 from .turn_admission import UnwrittenPrompt
-from .turn_inputs import InputForwarding
+from .turn_inputs import InitialPrompt, InputForwarding
 from .turn_output import TurnOutput
 from .turn_phase import ShutdownPhase, TurnPhase
 from .turn_stats import StatsRequest
@@ -88,24 +89,6 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
         TurnSession.active.pop(task, None)
 
 
-@asynccontextmanager
-async def _maintenance_send_boundary(
-    root: Path,
-    delegate: Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None,
-    public_id: str | None,
-    native_id: str,
-    text: str,
-) -> AsyncIterator[bool | None]:
-    """Acquire shared ingress without blocking the loop needed to release it.
-
-    The original delegate checks and stdin.write consume this same custody
-    synchronously. Release it before pipe drain, native ACK or any other await.
-    """
-    async with MaintenanceBarrier(root / "registry.json").admit_ingress_async():
-        with delegate(public_id, native_id, text) if delegate else nullcontext(True) as allowed:
-            yield allowed
-
-
 async def stream_agent_events(
     agent_bin: str,
     agent_args: Sequence[str],
@@ -119,12 +102,8 @@ async def stream_agent_events(
     model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
     require_input_id: bool = True,
-    send_boundary: (
-        Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
-    ) = None,
-    interrupt_boundary: (
-        Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
-    ) = None,
+    send_boundary: SendBoundary | None = None,
+    interrupt_boundary: SendBoundary | None = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
     *,
     persistent_session: PersistentPiSession,
@@ -207,12 +186,8 @@ class TurnSession:
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
         rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
         require_input_id: bool = True,
-        send_boundary: (
-            Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
-        ) = None,
-        interrupt_boundary: (
-            Callable[[str | None, str, str], AbstractContextManager[bool | None]] | None
-        ) = None,
+        send_boundary: SendBoundary | None = None,
+        interrupt_boundary: SendBoundary | None = None,
         native_start: Callable[[str | None, str, str], bool] | None = None,
         persistent_session: PersistentPiSession | None = None,
         native_session: PersistentPiSession | None = None,
@@ -555,28 +530,29 @@ class TurnSession:
         self.prompt_state = self.prompt_state.dispatch()
         self.watchdog.await_input()
 
+    def write_original_prompt(self):
+        self.grant_prompt()
+        self.native.proc.stdin.write(self.prompt_payload)
+
     async def input_ready(self) -> None:
         assert self.native.proc.stdin is not None
         try:
-            self.boundary_context = _maintenance_send_boundary(
-                self.startup.root,
+            self.boundary_context = MaintenanceBarrier(self.startup.root / "registry.json").send(
                 self.send_boundary,
                 None,
                 self.original_input_id,
                 self.task,
             )
-            async with self.boundary_context as self.authorized:
-                if self.authorized:
-                    self.grant_prompt()
-                    self.native.proc.stdin.write(self.prompt_payload)
-            if not self.authorized:
+            async with self.boundary_context as outcome:
+                outcome.dispatch(self.inputs, self, InitialPrompt(), self.write_original_prompt)
+            self.ensure_input_forwarding()
+            if not await outcome.complete(self) or self.finished:
                 self.output.record_failure(
                     failures.InputMissing("Input authority changed before Pi prompt send.")
                 )
                 await self.native.shutdown()
                 self.finished = True
                 return
-            await self.native.proc.stdin.drain()
         except (BrokenPipeError, ConnectionResetError):
             self.output.record_failure(
                 failures.InputIdUnavailable(
