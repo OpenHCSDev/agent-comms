@@ -9,7 +9,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import Annotated, ClassVar, TYPE_CHECKING
 
 from .field_codec import FieldCodec, PathText
 from .native_tool_call import SelectedToolDenied
@@ -99,17 +99,47 @@ class StorageRule:
                 'No clones, virtualenv creation, uv sync or .artifacts writes.')
 
 
-class StorageEffect:
-    def check(self, rule, roots):
-        return roots
+class ShellProgram:
+    names: ClassVar[frozenset[str]] = frozenset()
+    programs: ClassVar[dict[str, type[ShellProgram]]] = {}
+    versioned = False
 
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        for name in cls.__dict__.get('names', ()):
+            ShellProgram.programs[name] = cls
+
+    @classmethod
+    def named(cls, name):
+        stem = re.sub(r'\d+(?:\.\d+)*$', '', name)
+        kind = cls.programs.get(name if name in cls.programs else stem)
+        return kind if kind and (kind.versioned or name in kind.names) else cls
+
+    @staticmethod
+    def matches(args, prefixes):
+        return any(tuple(args[:len(prefix)]) == prefix for prefix in prefixes)
+
+    @classmethod
+    def effects(cls, args, cwd):
+        return ()
+
+
+class StorageEffect:
     def removed_checkouts(self):
         return ()
 
 
 @dataclass(frozen=True)
-class WriteStorageEffect(StorageEffect):
+class WriteStorageEffect(StorageEffect, ShellProgram):
+    names = frozenset({'mkdir', 'touch', 'tee'})
+    targets = slice(None)
+    minimum = 1
     path: Path
+
+    @classmethod
+    def effects(cls, args, cwd):
+        paths = [arg for arg in args if not arg.startswith('-')]
+        return tuple(cls(physical_path(p, cwd)) for p in paths[cls.targets]) if len(paths) >= cls.minimum else ()
 
     def check(self, rule, roots):
         rule.require_path(roots, self.path)
@@ -117,23 +147,60 @@ class WriteStorageEffect(StorageEffect):
 
 
 @dataclass(frozen=True)
-class ForbiddenStorageEffect(StorageEffect):
+class ForbiddenStorageEffect(StorageEffect, ShellProgram):
+    names = frozenset({'virtualenv'})
+    forbidden = ((),)
     reason: str
+
+    @classmethod
+    def effects(cls, args, cwd):
+        if cls.matches(args, cls.forbidden):
+            return (ForbiddenStorageEffect('virtualenv creation and uv sync are forbidden; use the shared environment'),)
+        return super().effects(args, cwd)
 
     def check(self, rule, roots):
         rule.deny(self.reason)
 
 
 @dataclass(frozen=True)
-class AllocateStorageEffect(StorageEffect):
+class AllocateStorageEffect(StorageEffect, ShellProgram):
+    names = frozenset({'ffmpeg', 'recordmydesktop', 'build_runtime.py'})
+    prefixes = ((),)
+
+    @classmethod
+    def effects(cls, args, cwd):
+        return (AllocateStorageEffect(),) if cls.matches(args, cls.prefixes) else ()
+
     def check(self, rule, roots):
         rule.require_allocation(roots)
         return roots
 
 
 @dataclass(frozen=True)
-class CheckoutStorageEffect(AllocateStorageEffect):
+class GitProgram(AllocateStorageEffect):
+    names = frozenset({'git'})
     path: Path
+
+    @classmethod
+    def effects(cls, args, cwd):
+        while args and args[0] in ('-C', '-c', '--git-dir', '--work-tree'):
+            if len(args) < 2:
+                raise SelectedToolDenied('StorageRule: incomplete git option')
+            if args[0] == '-C':
+                cwd = physical_path(args[1], cwd)
+            args = args[2:]
+        if args[:1] == ['clone']:
+            return (ForbiddenStorageEffect('git clone is forbidden; use an existing repository'),)
+        if args[:2] == ['worktree', 'add']:
+            args = args[2:]
+            while args and args[0].startswith('-'):
+                args = args[2:] if args[0] in ('-b', '-B', '--reason') else args[1:]
+            if not args:
+                raise SelectedToolDenied('StorageRule: worktree destination is missing')
+            return (cls(physical_path(args[0], cwd)),)
+        if args[:2] == ['worktree', 'remove']:
+            return tuple(RemoveCheckoutStorageEffect(physical_path(p, cwd)) for p in args[2:] if not p.startswith('-'))[:1]
+        return ()
 
     def check(self, rule, roots):
         rule.require_path(roots, self.path)
@@ -217,64 +284,54 @@ def shell_commands(command):
         yield words
 
 
-def shell_storage_effects(command, cwd):
-    """Decode known shell storage operations once at the native tool boundary.
+class PythonProgram(ForbiddenStorageEffect, AllocateStorageEffect):
+    names = frozenset({'python'})
+    versioned = True
+    forbidden = (('-m', 'venv'),)
+    prefixes = (('-m', 'pip', 'install'), ('build_runtime.py',))
 
-    This checks declared shell storage operations, not arbitrary interpreter code.
-    Unknown programs retain the existing resource-claim contract.
-    """
+    @classmethod
+    def effects(cls, args, cwd):
+        args = [Path(args[0]).name, *args[1:]] if args and not args[0].startswith('-') else args
+        return super().effects(args, cwd)
+
+
+class UvProgram(ForbiddenStorageEffect, AllocateStorageEffect):
+    names = frozenset({'uv'})
+    forbidden = (('venv',), ('sync',))
+    prefixes = (('pip', 'install'),)
+
+
+class PackageProgram(AllocateStorageEffect):
+    names = frozenset({'pip', 'pip3', 'npm', 'pnpm', 'yarn'})
+    prefixes = (('install',), ('ci',), ('add',))
+
+
+class ProfileProgram(AllocateStorageEffect):
+    names = frozenset({'py-spy'})
+    prefixes = (('record',),)
+
+
+class CopyProgram(WriteStorageEffect):
+    names = frozenset({'cp', 'mv', 'rsync', 'install', 'ln'})
+    targets = slice(-1, None)
+    minimum = 2
+
+
+def shell_storage_effects(command, cwd):
+    """Decode known shell operations, not arbitrary interpreter programs."""
     effects = []
     for words in shell_commands(command):
         while words and '=' in words[0]:
             words.pop(0)
         if not words:
             continue
-        program = Path(words[0]).name
-        args = words[1:]
+        program, args = Path(words[0]).name, words[1:]
         if program == 'cd' and args:
             cwd = physical_path(args[0], cwd)
             continue
         for index, word in enumerate(args[:-1]):
             if word in ('>', '>>'):
                 effects.append(WriteStorageEffect(physical_path(args[index + 1], cwd)))
-        if program == 'git':
-            git_cwd = cwd
-            while args and args[0] in ('-C', '-c', '--git-dir', '--work-tree'):
-                if len(args) < 2:
-                    raise SelectedToolDenied('StorageRule: incomplete git option')
-                if args[0] == '-C':
-                    git_cwd = physical_path(args[1], git_cwd)
-                args = args[2:]
-            if args[:1] == ['clone']:
-                effects.append(ForbiddenStorageEffect('git clone is forbidden; use an existing repository'))
-            elif args[:2] == ['worktree', 'add']:
-                tail = args[2:]
-                while tail and tail[0].startswith('-'):
-                    tail = tail[2:] if tail[0] in ('-b', '-B', '--reason') else tail[1:]
-                if not tail:
-                    raise SelectedToolDenied('StorageRule: worktree destination is missing')
-                effects.append(CheckoutStorageEffect(physical_path(tail[0], git_cwd)))
-            elif args[:2] == ['worktree', 'remove']:
-                paths = [p for p in args[2:] if not p.startswith('-')]
-                if paths:
-                    effects.append(RemoveCheckoutStorageEffect(physical_path(paths[0], git_cwd)))
-        python = re.fullmatch(r'python(?:\d+(?:\.\d+)*)?', program)
-        if (program == 'uv' and args[:1] in (['venv'], ['sync'])) or program == 'virtualenv' or (python and args[:2] == ['-m', 'venv']):
-            effects.append(ForbiddenStorageEffect('virtualenv creation and uv sync are forbidden; use the shared environment'))
-        allocator = (program in ('ffmpeg', 'recordmydesktop') or
-            program == 'py-spy' and args[:1] == ['record'] or
-            program in ('pip', 'pip3', 'npm', 'pnpm', 'yarn') and args[:1] in (['install'], ['ci'], ['add']) or
-            program == 'uv' and args[:2] == ['pip', 'install'] or
-            python and args[:3] == ['-m', 'pip', 'install'] or
-            program == 'build_runtime.py' or python and args and Path(args[0]).name == 'build_runtime.py')
-        if allocator:
-            effects.append(AllocateStorageEffect())
-        targets = []
-        positional = [arg for arg in args if not arg.startswith('-')]
-        if program in ('mkdir', 'touch', 'tee'):
-            targets = positional
-        elif program in ('cp', 'mv', 'rsync', 'install', 'ln') and len(positional) >= 2:
-            targets = positional[-1:]
-        for target in targets:
-            effects.append(WriteStorageEffect(physical_path(target, cwd)))
+        effects.extend(ShellProgram.named(program).effects(args, cwd))
     return tuple(effects)
