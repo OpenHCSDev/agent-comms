@@ -11,7 +11,7 @@ from agent_comms import agent_events as ae
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
     TranscriptSnapshotUpdate,
-    TurnSettledUpdate,
+    TurnChangedUpdate,
     decode_updates,
 )
 from agent_comms.agent_backend import CompactionOutcome, PlacedCompaction
@@ -161,7 +161,9 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
         assert result["stopReason"] == "end_turn"
         await until(
             lambda: any(
-                any(isinstance(f, TurnSettledUpdate) for f in decode_updates(u.get("_meta")))
+                any(isinstance(f, TurnChangedUpdate)
+                    and f.state.active is None and f.state.finished_turn_id is not None
+                    for f in decode_updates(u.get("_meta")))
                 for u in updates
             )
         )
