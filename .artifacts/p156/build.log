@@ -1,0 +1,14 @@
+Building wheel...
+Successfully built /var/tmp/agent-scratch-p156/wheel/agent_comms-0.1.0-py3-none-any.whl
+Using CPython 3.14.2 interpreter at: /home/ts/.local/share/agent-comms/current/bin/python
+Creating virtual environment at: /var/tmp/agent-scratch-p156/runtime
+Activate with: source /var/tmp/agent-scratch-p156/runtime/bin/activate
+Using Python 3.14.2 environment at: /var/tmp/agent-scratch-p156/runtime
+Resolved 2 packages in 10ms
+Prepared 1 package in 62ms
+warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+         If the cache and target directories are on different filesystems, hardlinking may not be supported.
+         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+Installed 2 packages in 412ms
+ + agent-comms==0.1.0 (from file:///var/tmp/agent-scratch-p156/wheel/agent_comms-0.1.0-py3-none-any.whl)
+ + batrachian-toad==0.6.20 (from file:///home/ts/.cache/agent-scratch/core-p150-open-tab/p154-wheel/batrachian_toad-0.6.20-py3-none-any.whl)

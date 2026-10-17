@@ -1,0 +1,40 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/private_registry_guard.py", line 144, in _open
+    fd = os.open(self.path, flags | os.O_NOFOLLOW)
+FileNotFoundError: [Errno 2] No such file or directory: '/var/tmp/agent-scratch-p156/.registry-owner-guard'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/core-read-locks-2/.artifacts/p156/benchmark.py", line 9, in <module>
+    c=Comms(s,private_initial_writes=False,private_claim_writes=False)
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/comms.py", line 32, in __init__
+    self.registry = Registration(self.root / "registry.json")
+                    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/registration.py", line 37, in __init__
+    self.store.read()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/locked_store.py", line 163, in read
+    with self.reading() as value:
+         ~~~~~~~~~~~~^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/locked_store.py", line 160, in reading
+    yield self._read_unlocked()
+          ~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/registry_store.py", line 97, in _read_unlocked
+    self.private_guard_unlocked()  # before even a cache hit
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/registry_store.py", line 194, in private_guard_unlocked
+    guard = self._check_guard_unlocked(marker_path, guard_path)
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/registry_store.py", line 214, in _check_guard_unlocked
+    guard.verify()
+    ~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/private_registry_guard.py", line 199, in verify
+    fd = self._open(writable=False)
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/private_registry_guard.py", line 146, in _open
+    _reject(f"file is missing or redirected: {error.__class__.__name__}")
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/private_registry_guard.py", line 41, in _reject
+    raise RelationViolationError(f"Private registry guard {detail}")
+agent_comms.errors.RelationViolationError: Private registry guard file is missing or redirected: FileNotFoundError

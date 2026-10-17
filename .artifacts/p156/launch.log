@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/core-read-locks-2/.artifacts/p156/launch.py", line 8, in <module>
+    (r/'bin/pi-comms-native').symlink_to(base/'bin/pi-comms-native')
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py", line 1213, in symlink_to
+    os.symlink(target, self, target_is_directory)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileExistsError: [Errno 17] File exists: '/home/ts/.local/share/agent-comms/runtimes/toad-74d18ddfb-core-ab3848214-native-70f0512abbcfa4e0-20261017T103214Z/bin/pi-comms-native' -> '/var/tmp/agent-scratch-p156/runtime/bin/pi-comms-native'

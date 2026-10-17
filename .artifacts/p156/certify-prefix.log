@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/core-read-locks-2/.artifacts/p156/certify-prefix.py", line 8, in <module>
+    with _store_lock_file(p).open('a+b') as lock:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_GeneratorContextManager' object has no attribute 'open'

@@ -1,0 +1,36 @@
+{"bytes": 2147438993, "public_rows": 5029, "last_seq": 5029, "index_seconds": 61.734584079822525, "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/bus.jsonl", "root": "/var/tmp/agent-scratch-p156"}
+Traceback (most recent call last):
+  File "/home/ts/wt/core-read-locks-2/.artifacts/p156/prepare-prefix.py", line 42, in <module>
+    with WireLog(p).locked():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/store_files.py", line 234, in _store_lock
+    lock = acquire(shared)
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/store_files.py", line 230, in acquire
+    return resources.enter_context(_held_store_source(
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+        store_path, lock_file, platform, max_bus_bytes, shared=shared))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 530, in enter_context
+    result = _enter(cm)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/store_files.py", line 204, in _held_store_source
+    with WireLog(store_path).verify_before_read_unlocked(shared=shared) as source:
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/wire_log.py", line 775, in verify_before_read_unlocked
+    with opened_private_checkpoint_unlocked(self, private_marker, shared=shared) as source:
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/private_bus_checkpoint.py", line 1410, in opened_private_checkpoint_unlocked
+    db = resources.enter_context(closing(marker.access.open_checkpoint(path, shared=shared)))
+                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/wire_metadata.py", line 59, in open_checkpoint
+    return _connect(path, readonly=shared)
+  File "/home/ts/wt/core-read-locks-2/src/agent_comms/private_bus_checkpoint.py", line 1127, in _connect
+    raise RelationViolationError("Private bus checkpoint is missing or redirected.")
+agent_comms.errors.RelationViolationError: Private bus checkpoint is missing or redirected.
