@@ -185,14 +185,14 @@ class ProgressWatchdog:
         self.retry_recovery_pending = False
         self.retry_recovery_reason = "provider_auto_retry_progress"
 
-    def launching(self, clock: Callable[[], float], source_path: str | None) -> None:
+    def launching(self, clock: Callable[[], float], session_file: str | None) -> None:
         self.clock = clock
         self.launch_started_at = clock()
         self.session_bytes: int | None = None
-        if source_path:
+        if session_file:
             # A new session has no file yet; any other stat failure is real.
             with suppress(FileNotFoundError):
-                self.session_bytes = Path(source_path).stat().st_size
+                self.session_bytes = Path(session_file).stat().st_size
 
     def spawned(self, reused: bool) -> None:
         self.spawn_ms = 0 if reused else round((self.clock() - self.launch_started_at) * 1000)

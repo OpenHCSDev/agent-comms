@@ -972,7 +972,7 @@ class NativeSessionSnapshot(PiPayload):
     """External snapshots may report only part of a saved session's identity."""
 
     session_id: str | None = wire_field("sessionId")
-    source_path: str | None = wire_field("sessionFile")
+    session_file: str | None = wire_field("sessionFile")
 
     def _known_identity(self) -> dict[str, str]:
         return {
@@ -1023,7 +1023,7 @@ class StateData(NativeSessionSnapshot, PiResponseData):
             model=self.model.display_name,
             thinking_level=ThinkingLevel.optional_name(self.thinking_level),
             session_name=self.session_name,
-            source_path=str(session.active_source_path) if session.active_source_path is not None else None,
+            session_file=session.active_session_file,
             context_used=session.usage.used,
             context_size=session.usage.size,
         )

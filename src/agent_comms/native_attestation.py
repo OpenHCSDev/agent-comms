@@ -118,7 +118,7 @@ class KnownSessionAttestation(NativeAttestation):
 
     @property
     def diagnostic_evidence(self):
-        return {"session_id": self.identity.session_id, "session_file": self.identity.source_path}
+        return {"session_id": self.identity.session_id, "session_file": self.identity.session_file}
 
     def require_identity(self) -> NativeSessionIdentity:
         return self.identity
@@ -132,7 +132,7 @@ class KnownSessionAttestation(NativeAttestation):
             observed is not None and observed != expected
             for expected, observed in (
                 (self.identity.session_id, data.session_id),
-                (self.identity.source_path, data.source_path),
+                (self.identity.session_file, data.session_file),
             )
         )
 
@@ -144,7 +144,7 @@ class ObservedAttestation(NativeAttestation):
 
     @property
     def diagnostic_evidence(self):
-        return {"session_id": self.state.session_id, "session_file": self.state.source_path}
+        return {"session_id": self.state.session_id, "session_file": self.state.session_file}
 
     @property
     def identity(self):

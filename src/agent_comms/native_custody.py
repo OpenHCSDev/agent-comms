@@ -160,9 +160,9 @@ class NativeCustody(ABC):
 
     retained = False
 
-    def managed_launch(self, command, arguments, *, worktree, environment, source_path):
+    def managed_launch(self, command, arguments, *, worktree, environment, session_file):
         return NativePiRpcLaunch.managed(command, arguments, worktree=worktree,
-            environment=environment, source_path=source_path)
+            environment=environment, session_file=session_file)
 
     def reuse(self, key) -> PiSessionChild | None:
         return None
@@ -252,7 +252,7 @@ class RetainedNative(ChildNative):
 
     @property
     def current(self) -> bool:
-        return self.child.proc.alive() and self.revision.current(self.identity.source_path)
+        return self.child.proc.alive() and self.revision.current(self.identity.session_file)
 
     def idle(self):
         if not self.current:
@@ -279,7 +279,7 @@ class RetainedNative(ChildNative):
                 from .session_revision import SessionRevision
 
                 current.revision = SessionRevision.observe(
-                    current.identity.source_path
+                    current.identity.session_file
                 ).require_available()
             return response.data.require_payload()
 
@@ -289,17 +289,17 @@ class RetainedNative(ChildNative):
             return self.child
         return None
 
-    def managed_launch(self, command, arguments, *, worktree, environment, source_path):
+    def managed_launch(self, command, arguments, *, worktree, environment, session_file):
         if self.current:
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
-                worktree=worktree, environment=environment, source_path=source_path)
+                worktree=worktree, environment=environment, session_file=session_file)
             if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
                 original, authentication
             ):
                 return original
         return super().managed_launch(command, arguments, worktree=worktree,
-            environment=environment, source_path=source_path)
+            environment=environment, session_file=session_file)
 
     def _shutdown_successor(self) -> NativeCustody:
         return EmptyNative()

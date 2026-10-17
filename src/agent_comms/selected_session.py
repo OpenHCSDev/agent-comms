@@ -57,7 +57,7 @@ class SelectedSession:
 
     def attest(self, identity: NativeSessionIdentity) -> Path:
         # Only an unselected new session uses the originally allocated directory.
-        return _session_location(self.directory, identity.source_path)
+        return _session_location(self.directory, identity.session_file)
 
     def verify_start(self, actual: NativeSessionIdentity) -> Path:
         return self.attest(actual)

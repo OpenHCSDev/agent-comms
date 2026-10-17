@@ -95,22 +95,22 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
         return None
 
     @classmethod
-    def read_evidence(cls, source_path):
+    def read_evidence(cls, session_file):
         """Decode once behind the existing strict private-file trust boundary."""
-        with cls.open_evidence(source_path) as evidence:
+        with cls.open_evidence(session_file) as evidence:
             return evidence.observe()
 
     @classmethod
     @contextmanager
-    def open_evidence(cls, source_path):
+    def open_evidence(cls, session_file):
         """Acquire a source reader, never input acceptance or replay authority."""
-        with NativeEvidenceRead.open(source_path) as evidence:
+        with NativeEvidenceRead.open(session_file) as evidence:
             yield evidence
 
     @classmethod
     @contextmanager
-    def open_input_evidence(cls, source_path):
-        with NativeInputEvidenceRead.open(source_path) as evidence:
+    def open_input_evidence(cls, session_file):
+        with NativeInputEvidenceRead.open(session_file) as evidence:
             yield evidence
 
     @staticmethod
@@ -206,20 +206,20 @@ class NativeEvidenceRead:
         self.source = source
         self.entries: tuple[NativeEntry, ...] = ()
 
-    def require_path(self, source_path):
+    def require_path(self, session_file):
         from .native_pi import NativePiUnavailable
 
-        if self.source.path != source_path:
+        if self.source.path != session_file:
             raise NativePiUnavailable("Native evidence reader belongs to another source")
 
     @classmethod
     @contextmanager
-    def open(cls, source_path):
+    def open(cls, session_file):
         """One original descriptor and byte-verification lifetime for every read."""
         from .native_pi import PrivateEvidenceRead, _private_session_dir
 
-        _private_session_dir(source_path.parent)
-        with PrivateEvidenceRead.open(source_path) as source:
+        _private_session_dir(session_file.parent)
+        with PrivateEvidenceRead.open(session_file) as source:
             evidence = cls(source)
             try:
                 yield evidence
@@ -228,20 +228,20 @@ class NativeEvidenceRead:
 
     @classmethod
     @contextmanager
-    def borrow(cls, source_path: Path, reader: NativeEvidenceRead | None = None):
+    def borrow(cls, session_file: Path, reader: NativeEvidenceRead | None = None):
         """Own acquisition and refusal cleanup, without borrowing proof authority.
 
         A supplied reader stays acquired by its original scope after success.
         Failed corroboration or cancellation retires its bytes and descriptor;
         a consumer cannot continue using an observation after that refusal.
         """
-        source_path = Path(source_path).absolute()
+        session_file = Path(session_file).absolute()
         if reader is None:
-            with cls.open(source_path) as acquired:
+            with cls.open(session_file) as acquired:
                 yield acquired
         else:
             try:
-                reader.require_path(source_path)
+                reader.require_path(session_file)
                 yield reader
             except BaseException:
                 reader.close()

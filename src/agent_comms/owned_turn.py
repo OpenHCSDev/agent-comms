@@ -13,7 +13,7 @@ from uuid import uuid4
 from acp import RequestError
 
 from . import agent_events as events
-from .agent_backend import InputContent, InputId, TurnDelivery
+from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .goal_attempts import LaunchPermit
 from .messages import Message
@@ -66,11 +66,11 @@ class OwnedTurn:
     def reply_targets(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys(origin.exact_reply_target for origin in self.origins))
 
-    async def attach_native_session(self, source_path):
+    async def attach_native_session(self, session_file):
         """Publish through the owner returned by this original begin operation."""
         self.registry_owner = await Coordination.run_worker(partial(
             self.runner.comms.registry.attach_native_session,
-            self.registry_owner, str(source_path),
+            self.registry_owner, str(session_file),
         ))
 
     def __init__(
@@ -368,7 +368,6 @@ class OwnedTurn:
             original=replace(self.original, prompt=rendered.text),
         )
         delivery = TurnDelivery(
-            input_id=InputId.for_sources(self.original.keys),
             worktree=self.worktree,
             environment=self.env_extra,
             inbox=self.backend_inbox,

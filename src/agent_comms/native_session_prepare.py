@@ -41,7 +41,7 @@ class PreparedSession(UnwrittenPrompt):
             or state.pending_message_count != 0
         ):
             raise NativePiUnavailable("Native preparation did not attest the idle saved session")
-        session.active_source_path = identity.source_path
+        session.active_session_file = identity.session_file
         await session.stats.request(session)
         return True
 
@@ -70,17 +70,17 @@ class NativeSessionPreparation(backend.TurnSession):
         *,
         worktree: str,
         environment: dict[str, str],
-        source_path: str,
+        session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         async with persistent.lock:
             return await cls.open_acquired(persistent, agent_bin, agent_args,
-                worktree=worktree, environment=environment, source_path=source_path, observe=observe)
+                worktree=worktree, environment=environment, session_file=session_file, observe=observe)
 
     @classmethod
     async def open_acquired(
         cls, persistent: PersistentPiSession, agent_bin: str, agent_args: Sequence[str], *,
-        worktree: str, environment: dict[str, str], source_path: str,
+        worktree: str, environment: dict[str, str], session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         """Borrow existing child custody through launch, observation and retention."""
@@ -88,10 +88,10 @@ class NativeSessionPreparation(backend.TurnSession):
         launch = await Coordination.run_worker(partial(
             persistent.custody.managed_launch,
             agent_bin, tuple(agent_args), worktree=Path(worktree),
-            environment=environment, source_path=source_path,
+            environment=environment, session_file=session_file,
         ))
         preparation = cls(launch, "", persistent_session=persistent)
-        async with session_writer_fence(launch.session.path):
+        async with session_writer_fence(launch.session.session_file):
             try:
                 async with aclosing(preparation.run()) as stream:
                     async for event in stream:

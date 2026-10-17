@@ -511,14 +511,14 @@ class RegistryDocument(RegistryPresence):
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         return self._turn_effects(lease, lambda state: state.native_phase_effects(phase))
 
-    def prepare_native_source(self, original: RegistryOwner, source_path: str) -> NativeSourcePublication:
+    def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:
         """Publish only the source fact of an already admitted original owner."""
         current = original.require_source_snapshot(self.snapshot())
-        return self._native_source_publication(current, source_path)
+        return self._native_source_publication(current, session_file)
 
-    def _native_source_publication(self, current: Thread, source_path: str) -> NativeSourcePublication:
+    def _native_source_publication(self, current: Thread, session_file: str) -> NativeSourcePublication:
         return NativeSourcePublication(
-            thread=replace(current, runtime=current.backend.location_type(source_path)),
+            thread=replace(current, runtime=current.backend.location_type(session_file)),
             status=self.statuses[current.name],
             previous=current, previous_status=self.statuses[current.name],
         )

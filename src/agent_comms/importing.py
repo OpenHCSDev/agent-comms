@@ -135,9 +135,9 @@ class ImportedSessionMetadata:
         current = registry.require(owner.name)
         if current.incarnation != owner.incarnation:
             raise ValueError("Imported context thread incarnation changed")
-        if current.runtime != owner.runtime:
+        if current.session_file != owner.session_file:
             raise ValueError("Imported context selected session changed")
-        return current.runtime.imported_sources()
+        return current.imported_sources()
 
     @classmethod
     def public_source_text(cls, registry, owner, source, comms):
@@ -564,7 +564,7 @@ class CodexImporter(ImportAdapter, format=ImportFormat.CODEX):
 @dataclass(frozen=True, slots=True)
 class ImportReceipt:
     thread: str
-    source_path: str = field(metadata={"wire_name": "session_file"})
+    session_file: str
     source_format: ImportFormat
     source_id: str
     imported_messages: int

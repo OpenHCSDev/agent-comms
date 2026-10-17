@@ -69,7 +69,7 @@ class Registration:
                         replace(entry.thread, process_identity=None), NoBridgeThreadStatus(),
                         new_owner=False))
 
-    def attach_native_session(self, original: RegistryOwner, source_path: str) -> RegistryOwner:
+    def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
         """Publish an observed native source under its original executable lease.
 
         Registry admission checks own the determining facts. A changing progress
@@ -77,7 +77,7 @@ class Registration:
         Native session identity and context proof remain with their producers.
         """
         with _store_lock(self.store.path.parent / "wire", shared=True), self.store.editing() as edit:
-            change = edit.document.prepare_native_source(original, source_path)
+            change = edit.document.prepare_native_source(original, session_file)
             self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
             # observed source must not rewrite this admitted turn's settings.

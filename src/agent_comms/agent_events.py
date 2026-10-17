@@ -276,7 +276,7 @@ class NativeMetadataObservation(RuntimeInfoObservation):
 
     model: str | None = None
     session_name: str | None = None
-    source_path: str | None = field(default=None, metadata={"wire_name": "session_file"})
+    session_file: str | None = None
     thinking_level: str | None = None
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:

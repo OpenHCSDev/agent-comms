@@ -137,7 +137,7 @@ class RegistrySessionRule(ReservationRule):
     explanation = "The captured owner's native session changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
-        return check.actual.source_path != check.expected.source_path
+        return check.actual.session_file != check.expected.session_file
 
 
 class RegistryTurnRule(ReservationRule):

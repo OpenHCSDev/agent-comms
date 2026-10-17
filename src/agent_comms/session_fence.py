@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from .native_storage import NativeSessionFiles
+from .native_session_files import NativeSessionFiles
 
 
 def _try_lock(fd: int) -> None:
@@ -49,12 +49,12 @@ def _open_lock(path: Path) -> int:
 
 
 @asynccontextmanager
-async def session_writer_fence(source_path: str | None) -> AsyncIterator[None]:
+async def session_writer_fence(session_file: str | None) -> AsyncIterator[None]:
     """Hold the per-session writer resource through one executor operation."""
-    if source_path is None:
+    if session_file is None:
         yield
         return
-    path = NativeSessionFiles.of(source_path).writer_lock
+    path = NativeSessionFiles.of(session_file).writer_lock
     fd = _open_lock(path)
     locked = False
     try:

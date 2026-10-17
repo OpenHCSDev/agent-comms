@@ -224,7 +224,7 @@ class GetState(SessionSnapshot, NativeQuery):
             session.native.attestation = session.native.attestation.observe(state)
             session.model_name = state.model.display_name
             session.session_name = state.session_name
-            session.active_source_path = state.source_path or session.active_source_path
+            session.active_session_file = state.session_file or session.active_session_file
             session.usage.size = state.model.context_window
             yield state.agent_info(session)
 

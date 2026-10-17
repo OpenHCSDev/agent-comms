@@ -45,9 +45,9 @@ class WireFrontier(DeclaredFamily, affix="WireFrontier"):
 
     sequence: ClassVar[int] = 0
 
-    def cursor(self, source_path, offset):
+    def cursor(self, session_file, offset):
         from .transcripts import NativeTranscriptCursor
-        return NativeTranscriptCursor(source_path, offset)
+        return NativeTranscriptCursor(session_file, offset)
 
     def at(self, sequence):
         if sequence:
@@ -79,9 +79,9 @@ class NoWireFrontier(WireFrontier):
 class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
     sequence: int = field()
 
-    def cursor(self, source_path, offset):
+    def cursor(self, session_file, offset):
         from .transcripts import WireTranscriptCursor
-        return WireTranscriptCursor(source_path, offset, self)
+        return WireTranscriptCursor(session_file, offset, self)
 
     def within(self, parent):
         return parent.contains(self)

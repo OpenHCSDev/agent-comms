@@ -83,7 +83,7 @@ class NativeContextData(PiResponseData):
     def for_turn(self, owner, turn):
         return TurnContext(owner.incarnation, turn, self.segments)
 
-    def require_source_path(self, source_path):
-        if self.identity.source_path != source_path:
+    def require_session_file(self, session_file):
+        if self.identity.session_file != session_file:
             raise ValueError("Context inspection belongs to a different selected native session")
         return self

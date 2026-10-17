@@ -471,7 +471,7 @@ class CertifiedSourceRead:
                 for reference in batch
                 for value in (
                     reference.identity.session_id,
-                    reference.identity.source_path,
+                    reference.identity.session_file,
                     reference.entry_id,
                 )
             )
@@ -729,7 +729,7 @@ class ContextEntrySources(WireSourcePointer[ContextEntryManifest], CheckpointTab
         reference = entry.reference
         return cls(
             reference.identity.session_id,
-            reference.identity.source_path,
+            reference.identity.session_file,
             reference.entry_id,
             offset=offset,
             length=length,

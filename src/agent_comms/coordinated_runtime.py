@@ -44,7 +44,7 @@ class SelectedExecution:
     native_package: Path
     opt_in: bool = True
     after_seq: int = 0
-    source_path: Path | None = None
+    session_file: Path | None = None
     selected_existing_file_write: SelectedAction | None = None
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
@@ -75,13 +75,13 @@ class SelectedExecution:
             raise IdentityConflict("Selected launch precedes its execution package acquisition")
         return self._tracked_factory(**options)
 
-    def retained_source(self, source_path: Path):
+    def retained_source(self, session_file: Path):
         """The owner's idle child on this saved source with this package, if still current."""
         try:
             retained = self.pi_session.custody.idle()
         except NativePiUnavailable:
             return None
-        if retained.identity.source_path != str(source_path) or retained.child.key[0].package != self.native_package:
+        if retained.identity.session_file != str(session_file) or retained.child.key[0].package != self.native_package:
             return None
         return retained
 
@@ -148,7 +148,7 @@ class SelectedExecution:
                         return None
                     session = await SelectedSession.prepare(
                         participant,
-                        self.source_path,
+                        self.session_file,
                         self,
                     )
                     try:

@@ -1181,16 +1181,16 @@ class HeartbeatCliCommand(CliCommand):
 class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
     help = "Attach a live Pi session to a registered thread"
     name: str = option("--name")
-    source_path: str = option("--session-file", wire_name="session_file")
+    session_file: str = option("--session-file")
     pid: int | None = option("--pid", default=None)
 
     def apply(self, ctx: Comms) -> Any:
         attached = ctx.threads.attach_session(
-            ctx.registry.require(self.name), self.source_path, pid=self.pid
+            ctx.registry.require(self.name), self.session_file, pid=self.pid
         )
         return {
             "attached": attached.name,
-            "runtime": FieldCodec.encode(attached.runtime),
+            "session_file": attached.session_file,
             "pid": attached.pid,
         }
 
@@ -1407,9 +1407,9 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         return (result.created,)
 
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
-        spec = self.spec_type(**{item.name: getattr(self, item.name)
-                                 for item in fields(self.spec_type)})
         asyncio.run(ConfigOptions.configured().validate(self))
+        spec = self.spec_type.from_task(**{item.name: getattr(self, item.name)
+                                           for item in fields(self.spec_type)})
         child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.pid)
 
@@ -1512,8 +1512,8 @@ class ContextCliCommand(CliCommand):
                     raise ValueError("Core context belongs to another owner incarnation")
                 try:
                     payload = await connection.request("context")
-                    native = FieldCodec.decode(NativeContextData, payload).require_source_path(
-                        owner.runtime.path)
+                    native = FieldCodec.decode(NativeContextData, payload).require_session_file(
+                        owner.require_saved_session())
                 except (OSError, ValueError, RuntimeError, RequestError) as error:
                     return context, None, str(error)
                 return context, native, None
