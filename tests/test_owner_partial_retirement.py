@@ -100,7 +100,7 @@ class CapturedFailure(PreserveOwnerRuntime):
 
 
 @pytest.mark.parametrize('mode', ['second_guard', 'post_stop_witness', 'final_witness'])
-def test_partial_retirement_transfers_original_custody_and_refuses_launch(mode, monkeypatch, tmp_path):
+def test_partial_retirement_transfers_original_input_and_refuses_launch(mode, monkeypatch, tmp_path):
     lifecycle = AuthoredRetirement(tmp_path, mode, monkeypatch)
     batch = lifecycle.batch()
     operation = CapturedFailure()

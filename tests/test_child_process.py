@@ -443,7 +443,7 @@ async def test_discard_stderr_drains_past_transport_capacity_to_real_eof():
 
 
 @pytest.mark.asyncio
-async def test_parent_custody_reaps_but_observation_cannot_claim_exit_code():
+async def test_parent_process_reaps_but_observation_cannot_claim_exit_code():
     from agent_comms.child_process import DetachedExitOutcome
 
     child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(.1); exit(7)"))
@@ -457,7 +457,7 @@ async def test_parent_custody_reaps_but_observation_cannot_claim_exit_code():
         child.close()
 
 
-def test_parent_pipe_custody_closes_after_real_exception():
+def test_parent_pipe_cleanup_closes_after_real_exception():
     with (
         pytest.raises(ValueError, match="caller failed"),
         Platform.current().launch(

@@ -304,7 +304,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def complete(self) -> NativeTurnResult:
         async with AsyncExitStack() as ownership:
-            retirement = self.startup.measurements.operation("native_custody_retirement")
+            retirement = self.startup.measurements.operation("native_child_retirement")
             # Exit this observation after every original resource callback.
             ownership.push(retirement)
             try:
