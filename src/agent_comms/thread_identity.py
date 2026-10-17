@@ -236,7 +236,7 @@ class ThreadProvenance:
         if not self.worktree:
             raise ValueError("Thread worktree cannot be empty.")
         for tag in self.tags:
-            Tag(tag)
+            Tag.validate(tag)
 
     @staticmethod
     def capture(thread: ThreadProvenance) -> ThreadProvenance:
@@ -375,6 +375,11 @@ class ThreadRole(StrEnum):
     @property
     def executable(self) -> bool:
         return self is self.AGENT
+
+    def initial_delivery(self, message, target):
+        if not self.executable:
+            return replace(message, notice=True), []
+        return message, [target]
 
     def require_executable(self) -> None:
         if not self.executable:

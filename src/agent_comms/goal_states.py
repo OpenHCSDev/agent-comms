@@ -221,6 +221,9 @@ class BlockedState(GoalState, FromOpenGoal):
     def successors(cls) -> tuple[type[GoalState], ...]:
         return (BlockedGoal,)
 
+    def activity_refusal(self) -> str:
+        return self.transition_refusal()
+
     def transition_refusal(self) -> str:
         return "Blocked goal requires an explicit retry through its owner."
 

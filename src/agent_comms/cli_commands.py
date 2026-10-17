@@ -447,25 +447,18 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         available_targets = tuple(item for item in selected if item.available(snapshot))
         catalog = (comms.channels.catalog.read()
                    if channel or any(item.needs_catalog for item in selected) else None)
-        grouped: dict[type[CliCommand], list[CliCommand]] = {}
+        grouped: dict[type[CliCommand], dict[CliCommand, None]] = {}
         for member in cls.members_with(cls):
             if len(selected) > 1 and not member.multiple_targets:
                 continue
             for name in available_targets:
                 for context in name.contexts(member, channel):
-                    try:
-                        available = member.bindings(
-                            comms, name, context, snapshot=snapshot, catalog=catalog)
-                    except ValueError:
-                        if len(selected) == 1:
-                            raise
-                        continue
-                    for command in available:
+                    available = member.bindings(
+                        comms, name, context, snapshot=snapshot, catalog=catalog)
+                    if available:
                         declaration = member.catalog_declaration() if len(selected) > 1 else member
-                        commands = grouped.setdefault(declaration, [])
-                        bound = command.for_editor(comms, name.name, project)
-                        if bound not in commands:
-                            commands.append(bound)
+                        grouped.setdefault(declaration, {}).update(dict.fromkeys(
+                            command.for_editor(comms, name.name, project) for command in available))
         names = tuple(name for item in selected for name in item.names)
         return tuple(TargetAction(tuple(commands), names) for commands in grouped.values())
 

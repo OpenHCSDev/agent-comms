@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 
 from ..private_bus_checkpoint import DeliverySources
-from ..turn_context import InstructionFile, InstructionSegment, WireProvenance
+from ..turn_context import InstructionSegment, WireProvenance
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -15,11 +15,8 @@ class AwarenessSegment(InstructionSegment):
 
     @classmethod
     def capture(cls, path, root_id, sources):
-        instruction = InstructionFile.read("awareness.md")
-        return cls(
-            provenance=(instruction.source, *(WireProvenance(row.reference) for row in sources)),
-            instruction=instruction, bus=str(path), root_id=root_id, sources=sources,
-        )
+        return super().capture(tuple(WireProvenance(row.reference) for row in sources),
+                               bus=str(path), root_id=root_id, sources=sources)
 
     def values(self):
         return {"pointers": json.dumps({
@@ -32,9 +29,8 @@ class AwarenessSegment(InstructionSegment):
 @dataclass(frozen=True, kw_only=True)
 class UnavailableAwarenessSegment(InstructionSegment):
     @classmethod
-    def capture(cls):
-        instruction = InstructionFile.read("awareness-unavailable.md")
-        return cls(provenance=(instruction.source,), instruction=instruction)
+    def instruction_name(cls):
+        return "awareness-unavailable.md"
 
     def values(self):
         return {}

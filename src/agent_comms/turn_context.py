@@ -8,7 +8,7 @@ import re
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -242,6 +242,11 @@ class SegmentManifest:
         if len(self.sha256) != 64 or not set(self.sha256) <= set("0123456789abcdef"):
             raise ValueError("Context segment requires its measured byte digest")
 
+    def remember_received(self, child) -> None:
+        self.kind.remember_received(child, self.provenance)
+        for contributor in self.contributors:
+            contributor.remember_received(child)
+
     def source_membership(self):
         yield from self.provenance
         for span in self.source_spans:
@@ -412,6 +417,13 @@ class ContextSegment(
 
     def public_description(self) -> str:
         return self.public_title()
+
+    def needed_after(self, received: tuple[Provenance, ...]) -> bool:
+        return True
+
+    @classmethod
+    def remember_received(cls, child, provenance):
+        pass
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()
@@ -761,6 +773,15 @@ class ToolCatalogSegment(MeasuredNativeSegment):
 class InstructionSegment(ContextSegment):
     instruction: InstructionFile
 
+    @classmethod
+    def instruction_name(cls):
+        return cls.declared_name.replace("_", "-") + ".md"
+
+    @classmethod
+    def capture(cls, provenance=(), **values):
+        instruction = InstructionFile.read(cls.instruction_name())
+        return cls(provenance=(*provenance, instruction.source), instruction=instruction, **values)
+
     @abstractmethod
     def values(self) -> dict[str, object]: ...
 
@@ -777,12 +798,9 @@ class InstructionSegment(ContextSegment):
 class TypedUserInputSegment(InstructionSegment, UserInputSegment):
     """Text the user typed into this thread's own view, labelled as such for the model."""
 
-    LABEL: ClassVar[str]
-
     @classmethod
     def capture(cls, content: str) -> Self:
-        instruction = InstructionFile.read(cls.LABEL)
-        return cls(provenance=(instruction.source,), instruction=instruction, content=content)
+        return super().capture(content=content)
 
     def values(self) -> dict[str, object]:
         return {"content": self.content}
@@ -791,13 +809,11 @@ class TypedUserInputSegment(InstructionSegment, UserInputSegment):
 class UserRequestSegment(TypedUserInputSegment):
     """The message that starts a turn."""
 
-    LABEL = "user-request.md"
 
 
 class UserFollowupSegment(TypedUserInputSegment):
     """A message typed while a turn is running."""
 
-    LABEL = "user-followup.md"
 
 
 @dataclass(frozen=True)
@@ -828,6 +844,13 @@ class PeerState:
 
 @dataclass(frozen=True, kw_only=True)
 class CoordinationSegment(InstructionSegment):
+    def needed_after(self, received: tuple[Provenance, ...]) -> bool:
+        return not all(source in received for source in self.provenance)
+
+    @classmethod
+    def remember_received(cls, child, provenance):
+        child.remember_coordination(provenance)
+
     response_instruction: InstructionFile
     owner: ThreadIncarnation
     parent: str | None
@@ -840,16 +863,13 @@ class CoordinationSegment(InstructionSegment):
     ) -> CoordinationSegment:
         from .wake_policy import WakePolicy
 
-        instruction = InstructionFile.read("coordination.md")
         response_instruction = WakePolicy.relevance_instruction()
         viewed = {view.thread.incarnation: view for view in views}
         peers = tuple(PeerState.from_view(viewed[r.peer], r)
                       for r in relations if r.peer in viewed and r.relevance.grants(AlwaysListed))
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
-        return cls(
-            provenance=(OwnerProvenance(owner.incarnation, revision), instruction.source,
-                        response_instruction.source),
-            instruction=instruction,
+        return super().capture(
+            (OwnerProvenance(owner.incarnation, revision), response_instruction.source),
             response_instruction=response_instruction,
             owner=owner.incarnation,
             parent=owner.parent,
@@ -872,12 +892,7 @@ class GoalSegment(InstructionSegment):
 
     @classmethod
     def capture(cls, owner: Thread, goal: Goal) -> GoalSegment:
-        instruction = InstructionFile.read("goal.md")
-        return cls(
-            provenance=(OwnerProvenance(owner.incarnation, str(goal.revision)), instruction.source),
-            instruction=instruction,
-            goal=goal,
-        )
+        return super().capture((OwnerProvenance(owner.incarnation, str(goal.revision)),), goal=goal)
 
     def values(self) -> dict[str, object]:
         return dict(goal_id=self.goal.id, goal_text=self.goal.instructions, progress=self.goal.progress)
@@ -1128,6 +1143,10 @@ class TurnContext:
 
     def append(self, segment: ContextSegment) -> TurnContext:
         return replace(self, segments=(*self.segments, segment))
+
+    def after_received(self, received: tuple[Provenance, ...]) -> TurnContext:
+        return replace(self, segments=tuple(segment for segment in self.segments
+                                           if segment.needed_after(received)))
 
     def render(self, *, images=()) -> RenderedInput:
         return self.render_segments(self.segments, images=images)

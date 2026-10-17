@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .channel_targets import is_channel_target
+from .channel_targets import CommandTarget
 from .errors import RelationViolationError
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .input_attempt import (
@@ -114,7 +114,7 @@ class InputDocument:
             for row in sorted(self.rows.values(), key=lambda item: item.order)
             if (reference := row.delivered_in(lease, source.marker.root_id, snapshot)) is not None
         )
-        route = target if is_channel_target(target) else snapshot.canonical_name(target)
+        route = CommandTarget.named(target).canonical_name(snapshot.canonical_name)
         return tuple(
             original.message.reference
             for original in source.references(delivered)

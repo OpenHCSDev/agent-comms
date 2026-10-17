@@ -17,7 +17,7 @@ from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_route_counts import OpenedRouteCounts
 from .bus_display_index import BusDisplayIndex, DisplayMetricScope
-from .channel_targets import is_channel_target
+from .channel_targets import CommandTarget
 from .channels import Channel
 from .display_order import ChannelSort, NameChannelSort
 from .goal_presentation import GoalExecution
@@ -241,17 +241,13 @@ class MessageNotification:
         cls, source, snapshot, reads, document, *, owner_lookup
     ) -> MessageNotification | None:
         """Project a human DM read even though humans have no wake assignment."""
-        from .channel_targets import is_channel_target
-
         message = source.message
         if (
             source.audience.recipients
-            or is_channel_target(message.target)
             or (owner_lookup is not None and source.audience.sender_lookup != owner_lookup)
         ):
             return None
-        name = snapshot.canonical_name(message.target)
-        target = snapshot.threads.get(name)
+        target = CommandTarget.named(message.target).direct_peer(snapshot)
         if target is None or not reads.human(target.role):
             return None
         recipient = FrozenRecipient(target.incarnation.lookup, target.name)
@@ -433,15 +429,14 @@ class BusPresentation:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Local display projection; underlying channel history remains target-owned."""
-        if not is_channel_target(target):
-            raise ValueError(f"{target!r} is not a channel target.")
+        target = CommandTarget.named(target).require_channel()
         with ExitStack() as resources:
             with _store_lock(self._wire_lock_path, shared=True):
                 source = resources.enter_context(self.bus.log._opened_wire_snapshot())
                 with DisplaySelection.reading(
                     self.registry, self.catalog, self.bus.reads, viewer
                 ) as basis:
-                    scope = basis.scope(target)
+                    scope = basis.scope(target.name)
             # Identity capture does not grant custody over page preparation. Both
             # DM and channel pages borrow the same original reader and source cut.
             page = ConversationMessagePageRequest.capture(
@@ -784,11 +779,9 @@ class WireRevision:
                     raise StaleRevision("Wire source changed before route attribution")
                 with OpenedRouteCounts(comms.bus.log.path, source, snapshot, {}) as routes:
                     actors = routes.participants_between(earlier.through_seq, self.through_seq)
-            channels = tuple(comms.channels.catalog.read().resolve(name)
-                             for name in actors if is_channel_target(name))
-            changed.update(snapshot.canonical_name(name) for name in actors if not is_channel_target(name))
-            changed.update(name for name in names if (thread := snapshot.threads.get(name)) is not None
-                           and any(channel.matches(thread.tags) for channel in channels))
+            catalog = comms.channels.catalog.read()
+            for actor in actors:
+                changed.update(CommandTarget.named(actor).changed_threads(names, snapshot, catalog))
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
         if (self.activity, self.goal_waits, self.expiry_period) != (
             earlier.activity, earlier.goal_waits, earlier.expiry_period

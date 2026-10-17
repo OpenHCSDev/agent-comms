@@ -51,7 +51,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
@@ -72,7 +72,7 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
 from agent_comms.turn_failure import ProviderRetryExhausted
-from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
+from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience, PassiveWake, WakePolicy
 
 
 @pytest.fixture

@@ -8,7 +8,7 @@ from typing import Type
 
 from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from agent_comms.comms import wire
-from agent_comms.coordination_tables.assignments import MessageAudience
+from agent_comms.wake_policy import MessageAudience
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import AckKind, HandoffKind, InfoKind, MembershipChange, Message, MessageKind
 from agent_comms.obligation_states import SilentResponse

@@ -21,7 +21,7 @@ from .bus_publication import (
     HumanOrigin,
     initial_sideband,
 )
-from .channel_targets import BuiltinChannel, is_channel_target
+from .channel_targets import CommandTarget, NamedTarget
 from .envelope_claim_transitions import (
     ClaimRelease,
     ClaimTransition,
@@ -74,36 +74,15 @@ class Publisher:
     def _validate_publish_request(
         self, message: Message, *, registry_snapshot: RegistrySnapshot | None = None,
         catalog: CatalogDocument | None = None,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, NamedTarget]:
         """Resolve the public route from the acquired declarations when supplied."""
 
-        def canonical(name: str) -> str:
-            if registry_snapshot is None:
-                return self._registry.canonical_name(name)
-            return registry_snapshot.canonical_name(name)
-
-        def exists(name: str) -> bool:
-            if registry_snapshot is None:
-                return name in self._registry
-            return canonical(name) in registry_snapshot.threads
-
-        if not exists(message.sender):
+        snapshot = self._registry.snapshot() if registry_snapshot is None else registry_snapshot
+        sender = snapshot.canonical_name(message.sender)
+        if sender not in snapshot.threads:
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
-        if BuiltinChannel.aggregate_target(message.target) or (
-            is_channel_target(message.target)
-            and (catalog if catalog is not None else self._channels.read()).is_view_target(
-                message.target)
-        ):
-            raise RelationViolationError(
-                f"View {message.target!r} is a projection, not a routable target."
-            )
-        if not is_channel_target(message.target) and not exists(message.target):
-            raise UnregisteredThreadError(f"Target {message.target!r} is not a registered thread.")
-        sender = canonical(message.sender)
-        target = message.target
-        if (message.type.conversation_message
-                and not is_channel_target(target) and canonical(target) == sender):
-            raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
+        target = CommandTarget.named(message.target)
+        target.require_publication(message, snapshot, lambda: self._channels.read() if catalog is None else catalog)
         return sender, target
 
     def _prepare_message_unlocked(
@@ -111,7 +90,7 @@ class Publisher:
         message: Message,
         *,
         sender: str,
-        target: str,
+        target: NamedTarget,
         sequence: int,
         snapshot: RegistrySnapshot | None = None,
         original_source: CertifiedSourceRead | None = None,
@@ -135,7 +114,7 @@ class Publisher:
         return replace(
             message,
             sender=sender,
-            target=target,
+            target=target.name,
             seq=sequence,
             sender_role=snapshot.threads[sender].role,
             mentions=ThreadMention.find(message.body, resolve_mention),
@@ -368,29 +347,7 @@ class Publisher:
                 _human_origin.require_registered(snapshot)
                 if message.sender != _human_origin.sender:
                     raise RelationViolationError("Local USER origin differs from registered identity.")
-            if not is_channel_target(target):
-                # Bind the alias in this guarded publication snapshot. The
-                # envelope and frozen audience carry its canonical incarnation.
-                target = snapshot.canonical_name(target)
-                recipient = snapshot.threads.get(target)
-                if recipient is None or not snapshot.statuses[target].visible:
-                    raise RelationViolationError("Initial direct target must be visible.")
-                if target == sender:
-                    raise RelationViolationError("A thread cannot message itself.")
-                names = [target] if recipient.role.executable else []
-                if not recipient.role.executable:
-                    # A human DM is displayed, never admitted as agent work.
-                    message = replace(message, notice=True)
-            else:
-                channel = catalog.resolve(target)
-                names = [
-                    name
-                    for name, thread in snapshot.threads.items()
-                    if name != sender
-                    and thread.role.executable
-                    and snapshot.statuses[name].visible
-                    and channel.matches(thread.tags)
-                ]
+            target, message, names = target.initial_delivery(sender, message, snapshot, catalog)
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
@@ -501,7 +458,7 @@ class Publisher:
             executable = registry_snapshot.threads[sender].role.executable
         if not executable:
             raise RelationViolationError("Keyed response sender must be executable.")
-        if intent.publication_key != canonical_publication_key(intent.execution_id, target):
+        if intent.publication_key != canonical_publication_key(intent.execution_id, target.name):
             raise RelationViolationError("Response publication key does not match its route.")
         last_sequence = max(metadata.last_seq, previous_sequence)
         if last_sequence >= MAX_WIRE_SEQ:
