@@ -425,8 +425,8 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
         lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     notification = MessageNotification(
-        initial.audience.recipients[0], "Read", "",
-        message=initial.message, changed=True, progress=HumanReadProgress(),
+        initial.audience.recipients[0], HumanReadProgress(),
+        message=initial.message, changed=True,
     )
     sent_outcome = notification.sent_outcome()
     assert sent_outcome is not None
@@ -1051,7 +1051,7 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
         (_initial.message.seq, _initial.message.message_id)
     ]
     failure = next(item for item in notifications if item.recipient == "alpha")
-    assert failure.state == "Failed" and not failure.busy
+    assert failure.label == "Failed" and not failure.state.working
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(

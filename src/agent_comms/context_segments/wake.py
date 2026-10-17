@@ -110,8 +110,8 @@ class SelectedWakeSegment(InstructionSegment):
                 "source_seq": message.seq,
                 "target": message.target,
                 "recipient": outcome.recipient,
-                "state": outcome.state,
-                "detail": outcome.detail,
+                "state": outcome.label,
+                "detail": outcome.state.detail,
                 "answer": (
                     FieldCodec.encode(reference) if reference is not None else None
                 ),

@@ -64,34 +64,15 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class SentMessageOutcome:
-    """A changed authored message outcome admitted once for prompt context."""
-
-    message: Message
-    recipient_identity: FrozenRecipient
-    state: str
-    detail: str
-    answer: MessageReference | None = None
-
-    @property
-    def recipient(self) -> str:
-        return self.recipient_identity.canonical_thread
-
-
-@dataclass(frozen=True, slots=True)
 class MessageNotification:
     """Read-only display of one recipient's durable assignment decision."""
 
     window_limit: ClassVar[int] = 120
     recipient_identity: FrozenRecipient
-    state: str
-    detail: str
-    priority: int = 3
-    busy: bool = False
+    state: DeliveryProgress
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
     answer: MessageReference | None = None
-    progress: DeliveryProgress = field(kw_only=True)
     answered_at_ms: int | None = None
     changed: bool = False
 
@@ -99,20 +80,19 @@ class MessageNotification:
     def recipient(self) -> str:
         return self.recipient_identity.canonical_thread
 
+    @property
+    def label(self) -> str:
+        return self.state.notification_label(self)
+
     def sent_outcome(self) -> SentMessageOutcome | None:
         if not self.changed or self.message is None:
             return None
-        return SentMessageOutcome(
-            self.message,
-            self.recipient_identity,
-            self.state,
-            self.detail,
-            self.answer,
-        )
+        return SentMessageOutcome(self.recipient_identity, self.state, message=self.message,
+                                  answer=self.answer, answered_at_ms=self.answered_at_ms)
 
     @classmethod
     def ordered(cls, notifications: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
-        return tuple(sorted(notifications, key=lambda item: (item.priority, item.recipient.casefold())))
+        return tuple(sorted(notifications, key=lambda item: (item.state.priority, item.recipient.casefold())))
 
     @classmethod
     def summary(cls, notifications: Iterable[MessageNotification]) -> str:
@@ -120,10 +100,10 @@ class MessageNotification:
         ordered = cls.ordered(notifications)
         if not ordered:
             return "No recorded notification result"
-        delivered = sum(notification.progress.delivered for notification in ordered)
-        read = sum(notification.progress.read for notification in ordered)
+        delivered = sum(notification.state.delivered for notification in ordered)
+        read = sum(notification.state.read for notification in ordered)
         total = len(ordered)
-        return (f"{ordered[0].state} · Delivered {delivered}/{total}"
+        return (f"{ordered[0].label} · Delivered {delivered}/{total}"
                 f" · {ReadDelivery.label} {read}/{total}")
 
     @staticmethod
@@ -282,11 +262,8 @@ class MessageNotification:
             return None
         return cls(
             recipient,
-            HumanReadProgress.label,
-            "",
-            priority=2,
+            HumanReadProgress(),
             displayed_to=displayed_to,
-            progress=HumanReadProgress(),
             changed=True,
         )
 
@@ -322,6 +299,12 @@ class MessageNotification:
             for source in sources
             for notification in projected[source.message.seq, source.message.message_id]
         )
+
+
+@dataclass(frozen=True, slots=True)
+class SentMessageOutcome(MessageNotification):
+    """The same typed outcome, with its original message required for context."""
+    message: Message = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)

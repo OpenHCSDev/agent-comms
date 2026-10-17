@@ -16,7 +16,7 @@ from .coordination_tables.publications import PublicationReceipts
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
-from .notification_progress import AssignmentProgress, QueuedProgress, SentProgress, ShownToModelProgress
+from .notification_progress import AnsweredProgress, AssignmentProgress, QueuedProgress, SentProgress, ShownToModelProgress
 from .typed_table import BooleanStorage, SQLiteUserVersion, TypedRow, sql_literal
 
 if TYPE_CHECKING:
@@ -94,10 +94,8 @@ class UnansweredResponse(AssignmentResponse):
     def delivered_notification(self, notification, delivered_at_ms):
         return replace(
             notification,
-            state=notification.timed_state(ShownToModelProgress.label, delivered_at_ms),
-            detail="",
-            busy=False,
-            progress=ShownToModelProgress(delivered_at_ms),
+            state=ShownToModelProgress(delivered_at_ms),
+
         )
 
 
@@ -114,11 +112,9 @@ class AnsweredResponse(AssignmentResponse):
     def delivered_notification(self, notification, delivered_at_ms):
         return replace(
             notification,
-            state=notification.timed_state(AssignmentProgress.answered_label, self.received_at_ms),
-            detail="",
-            busy=False,
+            state=AnsweredProgress(ShownToModelProgress(delivered_at_ms)),
+
             answer=self.reference,
-            progress=ShownToModelProgress(delivered_at_ms),
             answered_at_ms=self.received_at_ms,
         )
 
@@ -126,12 +122,8 @@ class AnsweredResponse(AssignmentResponse):
 @dataclass(frozen=True)
 class AssignmentActivity:
     triage_inflight: bool
-    context_progress: AssignmentProgress
+    progress: AssignmentProgress
     response: AssignmentResponse
-
-    @property
-    def progress(self) -> AssignmentProgress:
-        return self.context_progress
 
     def pending_notification(self, notification, queued_at_ms):
         return self.progress.selected_notification(notification, busy=False)
