@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from abc import abstractmethod
 from collections.abc import Sequence
@@ -184,20 +183,13 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 
     @projected(view="content", name="bus")
     def content_bus(self):
-        # The certified frozen membership frontier owns relevant appends.
-        # Keep inode custody: replacing the source is never an unrelated append.
+        # Appends beyond this page's assigned messages do not change its content.
+        # Replacing the bus file does.
         return self.bus_revision.identity if self.bus_revision is not None else None
 
     @property
-    def content_identity(self) -> bytes:
-        """Hashable source-owned inputs for existing preparation resources."""
-        return json.dumps(
-            FieldCodec.project(self, "content"), sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
-
-    @property
     def page_bound(self) -> TranscriptCursor:
-        """The original witnessed byte/receipt bound owns page preparation."""
+        """The last native byte and assigned message included in this page."""
         return self.through or self.wire_frontier.cursor(self.session_file, self.records_cut.offset)
 
     def contains_records_cut(self, other: TranscriptReadIdentity) -> bool:
@@ -205,14 +197,15 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         return self.records_cut.holds(other.records_cut, self.page_bound.offset)
 
     def same_content(self, other: TranscriptReadIdentity) -> bool:
-        """Fence the captured cut and its original publication proof.
+        """Compare the captured records and values that affect this page.
 
-        Reader acknowledgements and thread activity do not change page content.
-        The scoped published relation remains fenced: an obligation can commit
-        just after its wire append and replace the native final reply projection.
-        Native growth after the captured byte bound belongs to a later update.
+        Reading messages or updating activity does not change the content.
+        A committed reply can replace its provisional native output.
+        Records appended beyond this page belong to a later update.
         """
-        return self.contains_records_cut(other) and self.content_identity == other.content_identity
+        return self.contains_records_cut(other) and (
+            FieldCodec.project(self, "content") == FieldCodec.project(other, "content")
+        )
 
     def same_snapshot(self, other: TranscriptReadIdentity) -> bool:
         """Finished history and its source projection agree, including the latest record."""
