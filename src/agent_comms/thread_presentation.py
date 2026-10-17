@@ -74,7 +74,7 @@ class AttentionThreadPresentationStatus(ThreadPresentationStatus):
         return replace(projected, status=projected.status.with_attention())
 
     def with_attention(self, *details: str) -> ThreadPresentationStatus:
-        return replace(self, details=tuple(dict.fromkeys((*self.details, *details)))) if details else self
+        return replace(self, details=(*self.details, *details)) if details else self
 
     def without_work(self) -> ThreadPresentationStatus:
         return replace(self, activity=self.activity.without_work())

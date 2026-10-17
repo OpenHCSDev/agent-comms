@@ -14,6 +14,7 @@ from .native_input_owner import RegistryOwner
 from .notification_progress import AcknowledgedProgress
 
 if TYPE_CHECKING:
+    from .agent_backend import AgentBackend
     from .agent_events import RuntimeInfoObservation
     from .registration import Registration
     from .registry_document import RegistrySnapshot
@@ -230,7 +231,7 @@ class AgentActivity:
 
             return self.activity.update(participant.name, recover)
 
-    def recover_completed_turn(self, lease: TurnLeaseFence, backend) -> bool:
+    def recover_completed_turn(self, lease: TurnLeaseFence, backend: type[AgentBackend]) -> bool:
         """A successful later backend turn disproves only an older drain failure."""
         snapshot = self.registry.snapshot()
         thread = snapshot.threads[lease.identity.incarnation.name]
