@@ -1,5 +1,6 @@
 """How much one thread matters to another, and what its peers see of that."""
 
+from agent_comms.goals import TextGoalProgress
 import json
 
 import pytest
@@ -139,7 +140,7 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
     (change,) = segment.changes
     assert (change.peer, change.goal, change.state) == ("partner", goal.checkpoint, ActiveGoal)
     comms.goals.update_goal(
-        "partner", CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="Done.")
+        "partner", CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress=TextGoalProgress("Done."))
     )
     (settled,) = _partner_activity(comms, "owner")[0].changes
     assert (settled.state, settled.progress) == (CompletedGoal, "Done.")
