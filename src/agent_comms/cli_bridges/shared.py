@@ -627,10 +627,9 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         await self.prepare_delivery()
         pending = tuple(outcome.declared_name for outcome in Outcome.members_with(UnconfirmedOutcome))
         placeholders = ','.join('?' for _ in pending)
-        rows = DeliveryRow.column_values(self.db, 'id', where=f'outcome IN ({placeholders})', parameters=pending)
-        if rows:
-            print(f'Unconfirmed messages retained without replay: {rows}', file=sys.stderr, flush=True)
-        print(f'Watching {self.binding.bus} → {self.binding.thread}', file=sys.stderr, flush=True)
+        count, newest, _ = self.db.execute(
+            f'SELECT COUNT(*), id, MAX(rowid) FROM "{DeliveryRow.declared_name}" WHERE outcome IN ({placeholders})', pending).fetchone()
+        print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed deliveries retained without replay: {count}; newest: {newest}', file=sys.stderr, flush=True)
         while True:
             with (self.options.state / 'watch.stderr.log').open('a') as errors:
                 child = await AttachedChild.start((
