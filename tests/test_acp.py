@@ -24,6 +24,7 @@ from acp.schema import ConfigOptionUpdate, SessionInfoUpdate
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.schedule_rules import WakeScheduleCheck
+from agent_comms.send_outcome import GrantedSend
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import (
     ClearQueueRequest,
@@ -68,7 +69,7 @@ def fake_input_started(args, kwargs):
     text = args[2]
     native_id = uuid4().hex
     with kwargs["send_boundary"](None, native_id, text) as admitted:
-        assert admitted is True
+        assert isinstance(admitted, GrantedSend)
     assert kwargs["native_start"](None, native_id, text)
     return ae.InputStarted(id=None)
 
