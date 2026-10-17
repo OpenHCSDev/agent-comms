@@ -215,7 +215,7 @@ class ClaudeToolArguments(WireModel):
     claude_names: ClassVar[tuple[str, ...]] = ()
     declaration: ClassVar[type[ToolDeclaration]]
     types: ClassVar[dict[str, type[ClaudeToolArguments]]] = {}
-    detail: str
+    model_config = {'extra': 'allow'}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -228,12 +228,12 @@ class ClaudeToolArguments(WireModel):
 
 class ClaudeCommandArguments(ClaudeToolArguments):
     claude_names, declaration = ('Bash',), BashTool
-    detail: str = Field(alias='command')
+    command: str
 
 
 class ClaudePatternArguments(ClaudeToolArguments):
     claude_names, declaration = ('Grep',), GrepTool
-    detail: str = Field(alias='pattern')
+    pattern: str
 
 
 class ClaudeGlobArguments(ClaudePatternArguments):
@@ -242,7 +242,7 @@ class ClaudeGlobArguments(ClaudePatternArguments):
 
 class ClaudePathArguments(ClaudeToolArguments):
     claude_names, declaration = ('Read',), ReadTool
-    detail: str = Field(alias='file_path')
+    path: str = Field(alias='file_path')
 
 
 class ClaudeReplacement(WireModel):
@@ -261,7 +261,7 @@ class ClaudeEditArguments(ClaudePathArguments):
 
     def diff(self) -> ToolDiff:
         return ToolDiff(''.join(patch.text for edit in self.edits
-            if (patch := ToolDiff.from_versions(self.detail, edit.old_string, edit.new_string)) is not None))
+            if (patch := ToolDiff.from_versions(self.path, edit.old_string, edit.new_string)) is not None))
 
 
 class ClaudeWriteArguments(ClaudePathArguments):
@@ -269,8 +269,8 @@ class ClaudeWriteArguments(ClaudePathArguments):
     content: str
 
     def diff(self) -> ToolDiff | None:
-        return ToolDiff.from_versions(self.detail, '', self.content,
-                                     before_path=self.detail + ' (previous content not supplied)')
+        return ToolDiff.from_versions(self.path, '', self.content,
+                                     before_path=self.path + ' (previous content not supplied)')
 
 
 class ToolUse(AssistantBlock):
@@ -285,7 +285,7 @@ class ToolUse(AssistantBlock):
             call = ToolCall(self.id, self.name, self.input)
         else:
             arguments = arguments_type.model_validate(self.input)
-            call = ToolCall(self.id, FieldCodec.encode(arguments.declaration), self.input, arguments.detail, arguments.diff())
+            call = ToolCall(self.id, FieldCodec.encode(arguments.declaration), arguments.model_dump(), arguments.diff())
         session.started(call)
         return (ActiveItem(session.turn, self.id, ActivityState.WORKING, call.title),)
 

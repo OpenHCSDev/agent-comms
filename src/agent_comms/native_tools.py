@@ -67,18 +67,11 @@ class ArgumentTool(ToolDeclaration):
         del encoded[self.family_discriminator]
         return encoded
 
-    @property
-    @abstractmethod
-    def detail(self) -> str: ...
-
 
 @dataclass(frozen=True, kw_only=True)
 class PathTool:
+    preview_field: ClassVar[str] = 'path'
     path: str
-
-    @property
-    def detail(self) -> str:
-        return self.path
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -122,9 +115,7 @@ class BashTool(CodingTool):
     command: str
     timeout: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
 
-    @property
-    def detail(self) -> str:
-        return self.command
+    preview_field = 'command'
 
     def _parse_resource(self) -> None:
         return None
@@ -168,8 +159,10 @@ class WriteTool(PathTool, CodingTool):
 class GrepTool(ToolDeclaration):
     acp_kind = "search"
     label = "Search"
+    preview_field = 'pattern'
 
 
 class GlobTool(ToolDeclaration):
     acp_kind = "search"
     label = "Find"
+    preview_field = 'pattern'

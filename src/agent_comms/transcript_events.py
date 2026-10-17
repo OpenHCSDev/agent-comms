@@ -204,11 +204,10 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
     raw_input: Any = None
-    detail: str = field(default="", metadata={"wire_omit_default": True})
 
     @property
     def title(self) -> str:
-        return tool_declaration.ToolDeclaration.caption(self.tool_name, self.detail)
+        return tool_declaration.ToolDeclaration.caption(self.tool_name, self.raw_input)
 
 
 @dataclass(frozen=True, kw_only=True)

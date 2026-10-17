@@ -828,7 +828,7 @@ class ToolExecutionStart(PiEvent):
         tool_id = self.tool_call_id or name
         session.watchdog.prompt_accepted = True
         session.active_tools.add(tool_id)
-        yield ToolDeclaration.start(tool_id, name, self.args or {})
+        yield ToolDeclaration.start(tool_id, name, self.args)
 
     @property
     def retry_progress(self) -> bool:
