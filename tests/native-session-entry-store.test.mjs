@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { after, test } from 'node:test';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DiskEntryStore, MemoryEntryStore } from '../stack/native-session-entry-store.mjs';
 
-const scratch = resolve(process.env.TMPDIR ?? '.artifacts');
-mkdirSync(scratch, {recursive:true});
+const scratch = mkdtempSync(join(tmpdir(), 'native-session-entry-store-'));
+after(() => rmSync(scratch, {recursive:true, force:true}));
 const header = {type:'session', version:3, id:'test-session', cwd:scratch};
 const entry = (id,parentId,content='text') => ({type:'message',id,parentId,message:{role:'user',content}});
 function fixture(rows) {
