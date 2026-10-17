@@ -236,8 +236,7 @@ class MessageBus:
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
         seen = self.reads.seen_sequences(delivery.actor, snapshot)
-        with self.log._opened_wire_snapshot(need_sequence=False) as opened:
-            messages = opened.messages_for_references(references)
+        messages = self.log.messages_for_references(references)
         return self.reads.capture(
             name, tuple(message for message in messages if delivery.includes(message) and message.seq not in seen),
             snapshot, self.log.path,

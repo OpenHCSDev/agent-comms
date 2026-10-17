@@ -717,6 +717,10 @@ class WireLog:
         with self.full_history_snapshot() as (_, messages):
             return next((message for message in messages if message.message_id == message_id), None)
 
+    def messages_for_references(self, references):
+        with self._opened_wire_snapshot(need_sequence=False) as opened:
+            return opened.messages_for_references(references)
+
     def deliveries_for_references(self, references):
         """One canonical lock/certificate lifetime for a visible source window."""
         if not references:
