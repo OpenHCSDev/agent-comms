@@ -134,7 +134,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
     runtime = RestartEnvironment.inherit(environment)
     original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None, LaunchRuntime(Path("/target/bin/python")))
     encoded = FieldCodec.encode(original)
-    assert set(encoded["owners"][0]) == {"owner", "claim_scope", "launch"}
+    assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
     decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)
     assert decoded == original
     assert decoded.owners[0].require_current(snapshot) is thread
