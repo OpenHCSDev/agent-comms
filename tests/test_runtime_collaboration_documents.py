@@ -1,5 +1,4 @@
 """Saved documents, independent snapshots, and disposable activity projection."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 import time
@@ -72,7 +71,7 @@ def test_document_readers_share_lock_and_exclude_updates(tmp_path, store_type):
     assert store.read() == {}
 
 
-def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path):
+def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path, *, thread_registration):
     store = RuntimeInfoStore(tmp_path / RuntimeInfoStore.filename)
     saved = {
         "old": {
@@ -92,7 +91,7 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path):
     reopened = RuntimeInfoStore(store.path).read()
     assert FieldCodec.encode(reopened["new"]) == {**saved["old"], "thread": "new"}
     before = store.path.stat()
-    store.remove_threads((Thread("absent", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('absent', str(tmp_path))),))
+    store.remove_threads((thread_registration.new_thread('absent', frozenset(), str(tmp_path)),))
     assert store.path.stat() == before
 
 
@@ -110,7 +109,7 @@ def test_runtime_observation_requires_original_finite_date(tmp_path, timestamp):
     assert store.path.read_bytes() == original
 
 
-def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path):
+def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path, *, thread_registration):
     store = SharedLedger(tmp_path / SharedLedger.filename)
     saved = {
         "nested": {"old": ["old", None, True, 9, {"free": "old is prose"}]},
@@ -123,7 +122,7 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path):
     SharedLedger(store.path).merge({"other": [1, 2]}, "other")
     assert store.rename_thread("old", "new") == 2
     assert store.read()["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
-    store.remove_threads((Thread("new", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('new', str(tmp_path))),))
+    store.remove_threads((thread_registration.new_thread('new', frozenset(), str(tmp_path)),))
     assert store.read() == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
 
 

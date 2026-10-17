@@ -1,5 +1,4 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import os
@@ -161,7 +160,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         caller_project.mkdir()
         comms = Comms(base / "wire")
         root_id = comms.messaging.initialize_private_initial_protocol()
-        comms.registry.declare(Thread("headless", frozenset(), str(project), storage_roots=StorageRule().initial_roots('headless', str(project))))
+        comms.registry.declare(comms.registry.new_thread('headless', frozenset(), str(project)))
         env = dict(
             os.environ,
             AGENT_COMMS_ROOT=str(comms.root),

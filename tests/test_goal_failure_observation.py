@@ -1,5 +1,4 @@
 """Passive observations never reopen attempts, inputs, or owner execution."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 import multiprocessing
@@ -35,21 +34,12 @@ from agent_comms.turn_lease import TurnLeaseFence
 
 
 @pytest.fixture
-def bound(tmp_path):
+def bound(tmp_path, *, thread_registration):
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(root)
     goal = Goal("private goal prose", "goal", published_seq=0, revision=2)
-    owner = Thread(
-        "owner",
-        frozenset(),
-        "/private-worktree",
-        process_identity=ProcessIdentity.capture(os.getpid()),
-        created_at=10.0,
-        goal=goal,
-        turn_generation=7,
-        last_finished_turn_id="a" * 32,
-    storage_roots=StorageRule().initial_roots('owner', '/private-worktree'))
+    owner = thread_registration.new_thread('owner', frozenset(), '/private-worktree', process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0, goal=goal, turn_generation=7, last_finished_turn_id='a' * 32)
     store.create_goal(goal.id)
     permit = store.claim_launch(store.reserve(goal.id, 1))
     lease = TurnLeaseFence(TurnIdentity(owner.incarnation, 7), "a" * 32, 3)

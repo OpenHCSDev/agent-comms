@@ -7,7 +7,6 @@ No model/provider is started by this test.
 """
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import sys
 from pathlib import Path
@@ -40,12 +39,7 @@ def test_selected_wake_and_file_claims_have_no_common_claim_receipt() -> None:
         people = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
         for name, created_at in people.items():
             comms.registry.declare(
-                Thread(
-                    name,
-                    frozenset({"team"}),
-                    str(worktree),
-                    created_at=created_at,
-                storage_roots=StorageRule().initial_roots(name, str(worktree)))
+                comms.registry.new_thread(name, frozenset({'team'}), str(worktree), created_at=created_at)
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
         # BOTH barriers must be installed while the private bus is empty.

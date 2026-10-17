@@ -1,7 +1,6 @@
 """Actual fsynced bus + SQLite response boundaries, default OFF outside opted-in roots."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import os
 import selectors
@@ -75,12 +74,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     comms = Comms(tmp_path / "wire", private_initial_writes=True)
     for name in ("sender", "owner"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset({"team"}),
-                worktree=str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset({'team'}), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     target = "owner" if direct else "#team"

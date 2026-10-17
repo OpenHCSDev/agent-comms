@@ -1,5 +1,4 @@
 """Real native Pi goal tool, localhost provider, and dependency-triggered owner turn."""
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -193,12 +192,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             project.mkdir()
             await agent.new_session(str(project))
             comms.registry.declare(
-                Thread(
-                    "child",
-                    frozenset(),
-                    str(project),
-                    process_identity=ProcessIdentity.capture(os.getpid()),
-                storage_roots=StorageRule().initial_roots('child', str(project)))
+                comms.registry.new_thread('child', frozenset(), str(project), process_identity=ProcessIdentity.capture(os.getpid()))
             )
             comms.agents.begin_turn("child", "child-report-in-flight")
             goal = comms.goals.update_goal(

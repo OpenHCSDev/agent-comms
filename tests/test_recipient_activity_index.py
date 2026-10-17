@@ -1,5 +1,4 @@
 """Registry snapshots own recipient lookup; activity reads own their requested set."""
-from agent_comms.storage_rules import StorageRule
 
 import hashlib
 from dataclasses import replace
@@ -33,7 +32,7 @@ from goal_owner_fixture import canonical_goal_wire
 def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
     comms = canonical_goal_wire(tmp_path / "bus")
     for index in range(12):
-        comms.registry.declare(Thread(f"peer-{index}", frozenset(), str(tmp_path), created_at=1_700_000_000.0 + index, storage_roots=StorageRule().initial_roots(f'peer-{index}', str(tmp_path))))
+        comms.registry.declare(comms.registry.new_thread(f'peer-{index}', frozenset(), str(tmp_path), created_at=1700000000.0 + index))
     sent = comms.messaging.send_user_message("peer-7", "original recipient", worktree=str(tmp_path))
     with comms.bus.log.certified_read() as source:
         original = source.delivery(sent.seq)
@@ -75,8 +74,8 @@ def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
     assert all(not item.displayed_to for item in window[(sent.seq, sent.message_id)])
 
 
-def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path):
-    thread = Thread("worker", frozenset(), str(tmp_path), created_at=1_700_000_000.0, storage_roots=StorageRule().initial_roots('worker', str(tmp_path)))
+def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path, *, thread_registration):
+    thread = thread_registration.new_thread('worker', frozenset(), str(tmp_path), created_at=1700000000.0)
     incarnation = thread.incarnation
     assert thread.incarnation is incarnation
     original_sha = hashlib.sha256
@@ -129,7 +128,7 @@ def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path):
 def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_owner(tmp_path):
     comms = Comms(tmp_path / "bus")
     for name, birth in (("old", 1700.0), ("second", 1701.0)):
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), created_at=birth, storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=birth))
     source = comms.registry.snapshot()
     with pytest.raises(RelationViolationError, match="creation identities collide"):
         replace(source, threads={

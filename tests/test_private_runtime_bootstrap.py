@@ -1,5 +1,4 @@
 """Explicit installation may fill absent schemas, never repair an existing drift."""
-from agent_comms.storage_rules import StorageRule
 
 import sqlite3
 
@@ -15,7 +14,7 @@ from agent_comms.threads import Thread
 def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tmp_path):
     comms = Comms(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('owner', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
     database = comms.root / "coordination.sqlite3"
     with sqlite3.connect(database) as db:

@@ -1,5 +1,4 @@
 """Canonical original-bus batch capture and one-use native reservation."""
-from agent_comms.storage_rules import StorageRule
 from binding_reads import binding_rows
 
 import asyncio
@@ -33,11 +32,7 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     for name in ("sender", "receiver"):
-        comms.registry.declare(Thread(
-            name, frozenset({"team"}), str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            model="openai-codex/gpt-6-sol",
-        storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='openai-codex/gpt-6-sol'))
     root_id = comms.messaging.initialize_private_initial_protocol()
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("receiver").created_at).lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -143,11 +138,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     for name in ("sender", "receiver"):
-        comms.registry.declare(Thread(
-            name, frozenset({"team"}), str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            model="openai-codex/gpt-6-sol",
-        storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='openai-codex/gpt-6-sol'))
     root_id = comms.messaging.initialize_private_initial_protocol()
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("receiver").created_at).lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -187,11 +178,7 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     for name in ("sender", "receiver"):
-        comms.registry.declare(Thread(
-            name, frozenset({"team"}), str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            model="openai-codex/gpt-6-sol",
-        storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='openai-codex/gpt-6-sol'))
     root_id = comms.messaging.initialize_private_initial_protocol()
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("receiver").created_at).lookup
     session = NativeSessionIdentity("native-session", str(tmp_path / "session.jsonl"))

@@ -1,7 +1,6 @@
 """Real isolated owners: birth-bound launch, retirement and refusal to interrupt."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -32,7 +31,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
     package = pinned_native_package()
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
-    declared = Thread("worker", frozenset(), str(tmp_path), task="retained task", storage_roots=StorageRule().initial_roots('worker', str(tmp_path)))
+    declared = comms.registry.new_thread('worker', frozenset(), str(tmp_path), task='retained task')
     comms.registry.declare(declared)
     first = comms.owners.start(
         "worker", agent_bin="pi", agent_args=[]
@@ -102,12 +101,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
     try:
         comms = Comms(tmp_path)
         comms.registry.declare(
-            Thread(
-                "stale",
-                frozenset(),
-                str(tmp_path),
-                process_identity=replace(child.identity, start_time=child.identity.start_time + 1),
-            storage_roots=StorageRule().initial_roots('stale', str(tmp_path)))
+            comms.registry.new_thread('stale', frozenset(), str(tmp_path), process_identity=replace(child.identity, start_time=child.identity.start_time + 1))
         )
         with pytest.raises(RelationViolationError, match="another live owner"):
             comms.owners.restart_owners(["stale"])
@@ -128,13 +122,7 @@ def test_restart_preflights_all_owners_before_signalling(tmp_path: Path) -> None
         comms = Comms(tmp_path)
         for index, child in enumerate(children):
             comms.registry.declare(
-                Thread(
-                    f"worker-{index}",
-                    frozenset(),
-                    str(tmp_path),
-                    process_identity=child.identity,
-                    active_turn=ActiveTurn("busy", child.pid) if index else None,
-                storage_roots=StorageRule().initial_roots(f'worker-{index}', str(tmp_path)))
+                comms.registry.new_thread(f'worker-{index}', frozenset(), str(tmp_path), process_identity=child.identity, active_turn=ActiveTurn('busy', child.pid) if index else None)
             )
         with pytest.raises(RelationViolationError, match="idle before restart"):
             comms.owners.restart_owners(["worker-0", "worker-1"])
@@ -152,14 +140,8 @@ def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> Non
     child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     try:
         comms = Comms(tmp_path)
-        owner = Thread("owner", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('owner', str(tmp_path)))
-        peer = Thread(
-            "peer",
-            frozenset(),
-            str(tmp_path),
-            process_identity=child.identity,
-            active_turn=ActiveTurn("work", child.pid),
-        storage_roots=StorageRule().initial_roots('peer', str(tmp_path)))
+        owner = comms.registry.new_thread('owner', frozenset(), str(tmp_path))
+        peer = comms.registry.new_thread('peer', frozenset(), str(tmp_path), process_identity=child.identity, active_turn=ActiveTurn('work', child.pid))
         comms.registry.declare(owner)
         comms.registry.declare(peer)
         targets = (GoalWaitTarget(peer.incarnation.require_recorded()),)
@@ -181,7 +163,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", "invalid")
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", "/missing/native")
     comms = Comms(tmp_path)
-    comms.registry.declare(Thread("failed-start", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('failed-start', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('failed-start', frozenset(), str(tmp_path)))
     result = comms.owners.start("failed-start")
     owner = comms.registry.require("failed-start")
     deadline = time.monotonic() + 5
@@ -225,7 +207,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             client = CommsAgent(comms, agent_bin=str(package / 'dist' / 'cli.js'), auto_wake=False)
             lifetime.push_async_callback(client.shutdown)
             catalog = client.sessions.config.catalog_for(ThinkingLevelConfigOption)
-            return await catalog.choices(Thread('catalog', frozenset(), str(tmp_path), model=model, storage_roots=StorageRule().initial_roots('catalog', str(tmp_path))))
+            return await catalog.choices(comms.registry.new_thread('catalog', frozenset(), str(tmp_path), model=model))
 
     declared_options = asyncio.run(thinking_options())
     thinking = declared_options[0].value
@@ -286,11 +268,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     try:
         for name, arguments, credential in settings:
             goal = Goal("Protected failed original", name + "-goal", published_seq=0, state=BlockedGoal("No replay"))
-            comms.registry.declare(Thread(
-                name, frozenset({name}), str(tmp_path),
-                model=model, thinking_level=thinking,
-                goal=goal, task="retained task " + name,
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
+            comms.registry.declare(comms.registry.new_thread(name, frozenset({name}), str(tmp_path), model=model, thinking_level=thinking, goal=goal, task='retained task ' + name))
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
                 patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))

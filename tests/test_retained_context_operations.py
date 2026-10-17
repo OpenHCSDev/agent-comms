@@ -1,5 +1,4 @@
 """One original human-source workflow through the public CLI and file effects."""
-from agent_comms.storage_rules import StorageRule
 
 from contextlib import ExitStack
 
@@ -23,8 +22,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     saved = tmp_path / "original.jsonl"
     saved_source(saved)
     goal = Goal("Original task goal, not an exported human constraint", "original-goal", published_seq=0, revision=7)
-    owner = comms.registry.declare(Thread("reader", frozenset(), str(tmp_path),
-                                        session_file=str(saved), goal=goal, storage_roots=StorageRule().initial_roots('reader', str(tmp_path))))
+    owner = comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), session_file=str(saved), goal=goal))
     wording = "Original human constraint λ; preserve UNKNOWN and its source."
     original = comms.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
@@ -49,8 +47,8 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
 
 def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     comms.messaging.initialize_private_initial_protocol()
-    owner = comms.registry.declare(Thread("recipient", frozenset(), str(comms.root), storage_roots=StorageRule().initial_roots('recipient', str(comms.root))))
-    other = comms.registry.declare(Thread("unaddressed", frozenset(), str(comms.root), storage_roots=StorageRule().initial_roots('unaddressed', str(comms.root))))
+    owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(comms.root)))
+    other = comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), str(comms.root)))
     wording = "Never replay UNKNOWN.\nPreserve exact λ /source/owned bytes."
     original = comms.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
     original_prefix = (comms.root / "bus.jsonl").read_bytes()
@@ -143,7 +141,7 @@ def original_input_consumer_journey(tmp_path, command):
             claim_scope=origin.claim_scope.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()
-    other = comms.registry.declare(Thread("unaddressed", frozenset(), origin.project, storage_roots=StorageRule().initial_roots('unaddressed', origin.project)))
+    other = comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), origin.project))
 
     def invoke(*args):
         result = command(comms.root, args)

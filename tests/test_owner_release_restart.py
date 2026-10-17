@@ -1,5 +1,4 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
-from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import os
@@ -207,7 +206,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     from agent_comms.threads import Thread
 
     comms = Comms(tmp_path / "wire")
-    declared = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    declared = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
     generation = comms.registry.snapshot().claimed_generations[declared.name]
     comms.owners.stop(declared.name)
     snapshot = comms.registry.snapshot()
@@ -215,7 +214,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     assert snapshot.threads[declared.name].process_identity is None
     assert comms.owners.releases.read()[declared.name].current(snapshot, declared, generation)
 
-    waiting = comms.registry.declare(Thread("waiting", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('waiting', str(tmp_path))))
+    waiting = comms.registry.declare(comms.registry.new_thread('waiting', frozenset(), str(tmp_path)))
     before = comms.registry.snapshot().claimed_generations[waiting.name]
     comms.registry.register(
         replace(waiting, process_identity=ProcessIdentity.capture(os.getpid())),
@@ -328,8 +327,7 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
 
     comms = Comms(tmp_path, private_initial_writes=True)
     comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path),
-                                  process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     assert comms.registry.status("worker").running
     agent = CommsAgent(comms, runtime_enabled=True)

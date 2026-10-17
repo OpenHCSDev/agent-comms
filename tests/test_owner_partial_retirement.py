@@ -4,7 +4,6 @@ The controlled stop member supplies process exit; actual registry/selection
 validation and FencedOwnerBatch failure/resource dispatch remain production.
 This is not an OFD, process retirement or installed central-batch qualification.
 """
-from agent_comms.storage_rules import StorageRule
 
 from contextlib import contextmanager
 import pytest
@@ -26,10 +25,9 @@ class AuthoredRetirement(OwnerLifecycle):
         comms = Comms(root)
         super().__init__(comms.root, comms.registry, comms.bus)
         self.mode = mode
-        self.originals = tuple(Thread(
+        self.originals = tuple(self.registry.new_thread(
             name, frozenset(), '/authored', created_at=float(index + 1),
-            process_identity=ProcessIdentity(2147483647 - index, 1),
-        storage_roots=StorageRule().initial_roots(name, '/authored')) for index, name in enumerate(('first', 'second')))
+            process_identity=ProcessIdentity(2147483647 - index, 1)) for index, name in enumerate(('first', 'second')))
         for thread in self.originals:
             self.registry.register(thread, StoppedThreadStatus())
         self.alive = {t.require_process(): True for t in self.originals}

@@ -2,7 +2,6 @@
 
 No root, writer, child, native package or process launch is acquired here.
 """
-from agent_comms.storage_rules import StorageRule
 
 from dataclasses import replace
 import os
@@ -86,10 +85,10 @@ def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, ex
     assert applied['AUTHORED_CREDENTIAL'] == 'kept'
 
 
-def stopped():
+def stopped(registry):
     # A declared absent synthetic process, never a borrowed original identity.
-    thread = Thread("authored", frozenset(), "/authored",
-                    process_identity=ProcessIdentity(2147483647, 1), created_at=1.0, storage_roots=StorageRule().initial_roots('authored', '/authored'))
+    thread = registry.new_thread("authored", frozenset(), "/authored",
+                    process_identity=ProcessIdentity(2147483647, 1), created_at=1.0)
     snapshot = RegistrySnapshot(
         threads={thread.name: thread}, statuses={thread.name: StoppedThreadStatus()},
         last_seen={thread.name: 1.0}, aliases={},
@@ -99,8 +98,8 @@ def stopped():
     return thread, snapshot
 
 
-def test_retired_witness_cannot_borrow_live_or_replaced_claim():
-    thread, snapshot = stopped()
+def test_retired_witness_cannot_borrow_live_or_replaced_claim(*, thread_registration):
+    thread, snapshot = stopped(registry=thread_registration)
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
@@ -121,8 +120,8 @@ def test_retired_witness_cannot_borrow_live_or_replaced_claim():
             owner.require_current(substituted)
 
 
-def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
-    thread, snapshot = stopped()
+def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*, thread_registration):
+    thread, snapshot = stopped(registry=thread_registration)
     environment = {
         "AGENT_COMMS_THREAD": thread.name, "AGENT_COMMS_AGENT_BIN": "/authored/pi",
         "AGENT_COMMS_AGENT_ARGS": "--no-tools 'authored value'",
@@ -147,19 +146,19 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
         replace(owner, launch=unrelated).require_current(snapshot)
 
 
-def test_retirement_capture_refuses_changed_original_incarnation():
-    thread, snapshot = stopped()
+def test_retirement_capture_refuses_changed_original_incarnation(*, thread_registration):
+    thread, snapshot = stopped(registry=thread_registration)
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     with pytest.raises(RelationViolationError):
         RetiredOwnerLaunch.capture_retired(snapshot, replace(thread, created_at=2.0), launch)
 
 
-def test_handoff_restore_requires_each_authentic_interpreter_before_read_or_launch():
+def test_handoff_restore_requires_each_authentic_interpreter_before_read_or_launch(*, thread_registration):
     from pathlib import Path
     from types import SimpleNamespace
 
-    thread, snapshot = stopped()
+    thread, snapshot = stopped(registry=thread_registration)
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/other-python",
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)

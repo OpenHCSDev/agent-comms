@@ -2,7 +2,6 @@
 publication protocol."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 from agent_comms.tool_caller import NoThreadCaller
 
 import json
@@ -24,12 +23,7 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     message = comms.messaging.send_message("sender", "beta", "ordinary send")
     metadata = comms.bus.log.read_metadata_unlocked(required=True)
@@ -50,12 +44,7 @@ def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     stored = Message(
         sender="sender", target="beta", body="preserved history", type=InfoKind, seq=1
@@ -74,12 +63,7 @@ def test_explicitly_disabled_private_writer_refuses(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     before = comms.bus.log.path.read_bytes()

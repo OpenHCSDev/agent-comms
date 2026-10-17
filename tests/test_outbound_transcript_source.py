@@ -1,5 +1,4 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
-from agent_comms.storage_rules import StorageRule
 
 from agent_comms import invoke_tool
 from agent_comms.tool_caller import NoThreadCaller
@@ -317,7 +316,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity
     comms.registry.unregister("renamed")
     comms.registry.remove("renamed")
-    comms.registry.declare(Thread("renamed", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('renamed', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('renamed', frozenset(), str(tmp_path)))
     with pytest.raises(StaleRevision, match="original thread"):
         comms.transcripts.bind_page_read("renamed", identity)
 

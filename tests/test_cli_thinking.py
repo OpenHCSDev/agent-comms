@@ -1,5 +1,4 @@
 """Stopped-thread configuration uses the session's model-specific catalog."""
-from agent_comms.storage_rules import StorageRule
 
 import pytest
 
@@ -20,10 +19,7 @@ def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, m
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/reasoning,fixture/plain")
     else:
         monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
-    comms.registry.declare(Thread(
-        name="worker", tags=frozenset(), worktree=str(tmp_path),
-        model="fixture/reasoning", thinking_level="high",
-    storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/reasoning', thinking_level='high'))
     comms.registry.unregister("worker")
     original = comms.registry.require("worker")
     queried = []
@@ -51,10 +47,7 @@ def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, m
 
 def test_configure_refuses_model_outside_catalog_without_writing(comms, tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/reasoning")
-    comms.registry.declare(Thread(
-        name="worker", tags=frozenset(), worktree=str(tmp_path),
-        model="fixture/reasoning", thinking_level="high",
-    storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/reasoning', thinking_level='high'))
     comms.registry.unregister("worker")
     original = comms.registry.require("worker")
 
@@ -65,7 +58,7 @@ def test_configure_refuses_model_outside_catalog_without_writing(comms, tmp_path
 
 def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
-    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path), model="fixture/reasoning", storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/reasoning'))
     comms.registry.unregister("worker")
 
     async def discover_models(self, binary, arguments):
@@ -101,7 +94,7 @@ def test_native_arguments_configured_has_one_default(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("overridden", [False, True])
-async def test_session_description_and_change_share_refusal(tmp_path, monkeypatch, overridden):
+async def test_session_description_and_change_share_refusal(tmp_path, monkeypatch, overridden, *, thread_registration):
     import os
     from agent_comms.native_pi import NativePiUnavailable
     from acp import RequestError
@@ -110,7 +103,7 @@ async def test_session_description_and_change_share_refusal(tmp_path, monkeypatc
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/plain")
     else:
         monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
-    thread = Thread(name="worker", tags=frozenset(), worktree=str(tmp_path), model="fixture/plain", thinking_level="high", storage_roots=StorageRule().initial_roots('worker', str(tmp_path)))
+    thread = thread_registration.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/plain', thinking_level='high')
     option = ThinkingLevelConfigOption("unused", NativeArguments.parse([]), RestartEnvironment.inherit(os.environ))
 
     async def discover(self, binary, arguments):

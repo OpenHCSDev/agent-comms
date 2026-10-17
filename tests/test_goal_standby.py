@@ -1,5 +1,4 @@
 """Declared goal dependencies control scheduling without changing legacy registry rows."""
-from agent_comms.storage_rules import StorageRule
 
 import os
 from contextlib import nullcontext
@@ -68,7 +67,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
 
 def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_path):
     comms = canonical_goal_wire(tmp_path)
-    comms.registry.declare(Thread("parent", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('parent', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('parent', frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Goal with @mention"))
     with pytest.raises(ValueError, match="wait_for"):
         comms.goals.update_goal(
@@ -83,12 +82,7 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
@@ -116,12 +110,7 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob", "carol"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
@@ -144,12 +133,7 @@ def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob", "carol"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     for name in ("alice", "bob"):
         comms.agents.begin_turn(name, f"{name}-turn")
@@ -175,21 +159,11 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-turn")
     comms.registry.declare(
-        Thread(
-            "carol",
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_roots=StorageRule().initial_roots('carol', str(tmp_path)))
+        comms.registry.new_thread('carol', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.agents.begin_turn("carol", "carol-turn")
     carol_thread = comms.registry.require("carol")
@@ -221,12 +195,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
@@ -274,12 +243,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-first")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
@@ -319,12 +283,7 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset(),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
@@ -368,7 +327,7 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
 def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, acknowledged):
     comms = canonical_goal_wire(tmp_path)
     for name in ("parent", "child"):
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
     message = comms.messaging.send_message("child", "parent", "Finished immediately")
     if acknowledged:

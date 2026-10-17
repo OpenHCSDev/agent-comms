@@ -1,5 +1,4 @@
 """Standby liveness preserves goal authority and never replays an input."""
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import os
@@ -71,9 +70,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
 
 def _thread(comms, name, worktree):
     comms.registry.declare(
-        Thread(
-            name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
-        , storage_roots=StorageRule().initial_roots(name, str(worktree)))
+        comms.registry.new_thread(name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()))
     )
 
 

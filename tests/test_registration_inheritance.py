@@ -5,17 +5,16 @@ from dataclasses import dataclass, field, replace
 from agent_comms.comms import wire
 from agent_comms.registration_inheritance import RegistrationInheritance
 from agent_comms.threads import Thread
-from agent_comms.storage_rules import StorageRule
 
 
-def test_unchanged_registration_retains_generated_creation_marker():
-    incoming = Thread("fresh", frozenset(), "/wt", storage_roots=StorageRule().initial_roots('fresh', '/wt'))
+def test_unchanged_registration_retains_generated_creation_marker(*, thread_registration):
+    incoming = thread_registration.new_thread('fresh', frozenset(), '/wt')
     assert incoming._generated_created_at
     assert incoming.for_registration("fresh", None) is incoming
     assert incoming._generated_created_at
 
 
-def test_declared_new_inheritance_case_needs_no_registration_consumer_edit():
+def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(thread_registration):
     class InheritUnsetCount(RegistrationInheritance):
         @staticmethod
         def inherits(incoming: object) -> bool:
@@ -25,7 +24,9 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit():
     class CountedThread(Thread):
         count: int = field(default=-1, metadata={"registration_inheritance": InheritUnsetCount})
 
-    previous = CountedThread("owner", frozenset(), "/wt", created_at=42.0, count=9, storage_roots=StorageRule().initial_roots('owner', '/wt'))
+    from agent_comms.field_codec import FieldCodec
+    declared = thread_registration.new_thread('owner', frozenset(), '/wt', created_at=42.0)
+    previous = FieldCodec.decode(CountedThread, {**FieldCodec.encode(declared), 'count': 9})
     omitted = replace(previous, count=-1)
     assert omitted.for_registration("owner", previous) == previous
     explicit = replace(previous, count=0)
@@ -34,19 +35,19 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit():
 
 def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(tmp_path):
     comms = wire(tmp_path)
-    initial = Thread(
+    initial = comms.registry.new_thread(
         "owner",
         frozenset({"team"}),
-        str(tmp_path),
+        '/old',
         session_file=str(tmp_path / "session.jsonl"),
         model="provider/model",
         thinking_level="high",
-        storage_roots=StorageRule().initial_roots('owner', '/old').adding(tmp_path),
         auto_title_pending=True,
         title="retained",
     )
+    initial = replace(initial, worktree=str(tmp_path), storage_roots=initial.storage_roots.adding(tmp_path))
     comms.registry.declare(initial)
-    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('owner', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     restored = comms.registry.require("owner")
     assert restored == initial
     assert restored.incarnation == initial.incarnation
@@ -63,7 +64,7 @@ def test_generated_clock_collision_is_still_allocated_by_locked_registry(tmp_pat
     monkeypatch.setattr("agent_comms.threads.time.time", lambda: 42.0)
     comms = wire(tmp_path)
     for name in ("first", "second"):
-        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     first, second = comms.registry.require("first"), comms.registry.require("second")
     assert first.created_at == 42.0
     assert second.created_at > first.created_at
@@ -72,9 +73,9 @@ def test_generated_clock_collision_is_still_allocated_by_locked_registry(tmp_pat
 
 def test_operational_alias_redeclaration_returns_preserved_current_owner(tmp_path):
     comms = wire(tmp_path)
-    first = comms.registry.declare(Thread("before", frozenset({"team"}), str(tmp_path), storage_roots=StorageRule().initial_roots('before', str(tmp_path))))
+    first = comms.registry.declare(comms.registry.new_thread('before', frozenset({'team'}), str(tmp_path)))
     comms.registry.rename("before", "after")
-    returned = comms.registry.declare(Thread("before", frozenset(), str(tmp_path), title="new", storage_roots=StorageRule().initial_roots('before', str(tmp_path))))
+    returned = comms.registry.declare(comms.registry.new_thread('before', frozenset(), str(tmp_path), title='new'))
     assert returned == comms.registry.require("after")
     assert returned.incarnation.created_at == first.created_at
     assert returned.name == "after" and returned.tags == first.tags
@@ -105,8 +106,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / 'wire')
-    comms.registry.declare(Thread('owner', frozenset(), str(old),
-        process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('owner', str(old))))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(old), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', 'original-turn')
     try:
         comms.threads.set_project('owner', str(new))
@@ -139,8 +139,7 @@ def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
     from agent_comms.coordination_errors import StaleFence
 
     comms = wire(tmp_path)
-    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path / 'old'),
-        process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('owner', str(tmp_path / 'old'))))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path / 'old'), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', 'original-turn')
     current = comms.registry.require('owner')
     comms.registry.register(replace(current, worktree=str(tmp_path / 'other')))

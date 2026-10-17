@@ -1,5 +1,4 @@
 """Actual persisted claim boundaries distinguish declaration from claim_scope drift."""
-from agent_comms.storage_rules import StorageRule
 
 import os
 from dataclasses import replace
@@ -16,10 +15,7 @@ from agent_comms.threads import Thread
 
 def registered(root):
     comms = wire(root)
-    comms.registry.register(Thread(
-        'owner', frozenset({'team'}), str(root),
-        process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g', published_seq=0),
-    storage_roots=StorageRule().initial_roots('owner', str(root))))
+    comms.registry.register(comms.registry.new_thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g', published_seq=0)))
     return comms.registry
 
 

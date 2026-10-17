@@ -1,7 +1,6 @@
 """Bounded, provider-free current-owner cursor pagination; no native ACK inference."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import os
 import tempfile
@@ -46,12 +45,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
     ).run()
     assert first is not None and first.cursor_status == "proven"
     for number in range(recipients - 1):
-        member = Thread(
-            f"member{number:03}",
-            frozenset({"team"}),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_roots=StorageRule().initial_roots(f'member{number:03}', str(tmp_path)))
+        member = comms.registry.new_thread(f'member{number:03}', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         comms.registry.declare(member)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             store.participants.register(
@@ -107,12 +101,7 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     comms.registry.declare(
-        Thread(
-            "other",
-            frozenset({"team"}),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_roots=StorageRule().initial_roots('other', str(tmp_path)))
+        comms.registry.new_thread('other', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     other = comms.registry.require("other")
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -147,12 +136,7 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     comms.registry.declare(
-        Thread(
-            "other",
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_roots=StorageRule().initial_roots('other', str(tmp_path)))
+        comms.registry.new_thread('other', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     for number in range(101):
         comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")

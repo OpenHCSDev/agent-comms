@@ -1,5 +1,4 @@
 """Actual native Pi evidences for queued and steered channel requests."""
-from agent_comms.storage_rules import StorageRule
 
 from agent_comms.queued_input import InitialInput
 import asyncio
@@ -116,7 +115,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
         try:
             await agent.new_session(str(project))
             comms.channels.update_tags("worker", add=frozenset({"team"}))
-            comms.registry.declare(Thread("peer", frozenset({"team"}), str(project), storage_roots=StorageRule().initial_roots('peer', str(project))))
+            comms.registry.declare(comms.registry.new_thread('peer', frozenset({'team'}), str(project)))
             turn = asyncio.create_task(InitialInput.run(agent.inputs, "worker", "worker", "Warmup"))
             assert await asyncio.to_thread(started.wait, 15)
             if case != "steer":

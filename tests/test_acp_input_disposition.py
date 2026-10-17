@@ -1,5 +1,4 @@
 """Saved SDK owner input ownership over actual native pipes and the owner socket."""
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -243,10 +242,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
 
         def prepare():
             comms.registry.register(
-                Thread(
-                    name="sender", tags=frozenset(), worktree=str(native.project),
-                    created_at=61001.0,
-                storage_roots=StorageRule().initial_roots('sender', str(native.project)))
+                comms.registry.new_thread(name='sender', tags=frozenset(), worktree=str(native.project), created_at=61001.0)
             )
             with Coordination(str(native.root / "coordination.sqlite3")) as store:
                 install_private_cohort_schema(store)
@@ -342,10 +338,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
 
         def prepare():
             comms.registry.register(
-                Thread(
-                    name="sender", tags=frozenset(), worktree=str(native.project),
-                    created_at=61002.0,
-                storage_roots=StorageRule().initial_roots('sender', str(native.project)))
+                comms.registry.new_thread(name='sender', tags=frozenset(), worktree=str(native.project), created_at=61002.0)
             )
             with Coordination(str(native.root / "coordination.sqlite3")) as store:
                 install_private_cohort_schema(store)
@@ -428,10 +421,7 @@ async def test_waiting_messages_follow_the_original_on_the_changed_model(
 
         def prepare():
             comms.registry.register(
-                Thread(
-                    name="sender", tags=frozenset(), worktree=str(native.project),
-                    created_at=61001.0,
-                storage_roots=StorageRule().initial_roots('sender', str(native.project)))
+                comms.registry.new_thread(name='sender', tags=frozenset(), worktree=str(native.project), created_at=61001.0)
             )
             with Coordination(str(native.root / "coordination.sqlite3")) as store:
                 install_private_cohort_schema(store)

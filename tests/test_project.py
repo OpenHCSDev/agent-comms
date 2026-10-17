@@ -1,5 +1,4 @@
 """Project changes preserve thread/session identity and synchronize executing owners."""
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -30,15 +29,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     new.mkdir()
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
-        Thread(
-            name="worker",
-            tags=frozenset({"test"}),
-            worktree=str(old),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            session_file=str(old / "session.jsonl"),
-            model="test/model",
-            created_at=123,
-        storage_roots=StorageRule().initial_roots('worker', str(old)))
+        comms.registry.new_thread(name='worker', tags=frozenset({'test'}), worktree=str(old), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(old / 'session.jsonl'), model='test/model', created_at=123)
     )
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep this objective"))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")

@@ -1,5 +1,4 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
-from agent_comms.storage_rules import StorageRule
 import asyncio
 import hashlib
 import json
@@ -79,9 +78,7 @@ async def run(stage, package):
         environment.pop(key, None)
     os.environ.clear()
     os.environ.update(environment)
-    child = Thread('reply505', source.tags, source.worktree, parent=source.name,
-        task=source.task, session_file=fork.session_file, model=source.model,
-        thinking_level=source.thinking_level, execution=source.execution, storage_roots=StorageRule().initial_roots('reply505', source.worktree))
+    child = service.registry.new_thread('reply505', source.tags, source.worktree, parent=source.name, task=source.task, session_file=fork.session_file, model=source.model, thinking_level=source.thinking_level, execution=source.execution)
     service.registry.declare(child)
     assert 'openhcs' in child.tags
     packets = []

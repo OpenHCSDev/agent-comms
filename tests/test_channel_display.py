@@ -1,5 +1,4 @@
 """The opt-in channel activity feed is a local display, never wire authority."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 from contextlib import contextmanager
@@ -25,7 +24,7 @@ def populated(tmp_path):
         ("bob", {"ui"}),
         ("outsider", set()),
     ):
-        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path)))
     return comms
 
 

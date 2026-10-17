@@ -1,7 +1,6 @@
 """The AgentBackend family: registry, declaration checks, lookup and Pi conversions."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -55,8 +54,8 @@ def test_pi_native_serves_threads_with_every_thread_capability():
 @pytest.mark.parametrize("location", [
     PiSessionFile("/home/ts/wt/test/session.jsonl"), UnstartedRuntime(PiNativeBackend),
 ])
-def test_runtime_location_round_trip_uses_declared_backend(location):
-    thread = Thread("location", frozenset(), "/home/ts/wt/test", session_file=location.read_key, storage_roots=StorageRule().initial_roots('location', '/home/ts/wt/test'))
+def test_runtime_location_round_trip_uses_declared_backend(location, *, thread_registration):
+    thread = thread_registration.new_thread('location', frozenset(), '/home/ts/wt/test', session_file=location.read_key)
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
     assert restored.runtime == location
     assert restored.runtime is restored.runtime
@@ -187,8 +186,8 @@ def test_pi_event_family_matches_pi_0_85_1_when_imported_fresh():
 # -- thread declaration -------------------------------------------------------
 
 
-def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration():
-    thread = Thread("owner", frozenset(), "/tmp/owner", storage_roots=StorageRule().initial_roots('owner', '/tmp/owner'))
+def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration(*, thread_registration):
+    thread = thread_registration.new_thread('owner', frozenset(), '/tmp/owner')
     assert thread.backend is PiNativeBackend
     encoded = FieldCodec.encode(thread)
     assert "backend" not in encoded
@@ -201,19 +200,19 @@ def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration():
     assert thread.for_registration("owner", thread).backend is PiNativeBackend
 
 
-def test_cli_registry_reads_do_not_load_the_pi_runtime():
+def test_cli_registry_reads_do_not_load_the_pi_runtime(tmp_path):
     import subprocess
 
     result = subprocess.run(
         [sys.executable, "-c", (
             "import sys, agent_comms.cli\n"
-            "from agent_comms.threads import Thread\n"
-            "from agent_comms.storage_rules import StorageRule\n"
-            "Thread('a', frozenset(), '/tmp', storage_roots=StorageRule().initial_roots('a', '/tmp')).backend\n"
+            "from pathlib import Path\n"
+            "from agent_comms.registration import Registration\n"
+            "Registration(Path(sys.argv[1])/'registry.json').new_thread('a', frozenset(), '/tmp').backend\n"
             "assert 'agent_comms.backend' not in sys.modules\n"
             "assert 'agent_comms.tracked_turn' not in sys.modules\n"
             "assert 'agent_comms.turn_watchdog' not in sys.modules\n"
-        )],
+        ), str(tmp_path)],
         capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stderr
@@ -240,7 +239,7 @@ def test_runner_obtains_one_backend_per_session_from_the_thread_declaration(comm
     from agent_comms.turn_runner import TurnRunner
 
     runner = _Runner(comms)
-    thread = Thread("owner", frozenset(), "/tmp/owner", model="p/m", storage_roots=StorageRule().initial_roots('owner', '/tmp/owner'))
+    thread = comms.registry.new_thread('owner', frozenset(), '/tmp/owner', model='p/m')
     backend = TurnRunner.backend_for(runner, "session", thread)
     assert type(backend) is PiNativeBackend
     assert TurnRunner.backend_for(runner, "session", thread) is backend
@@ -351,10 +350,7 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         "type": "session", "version": 3, "id": "same", "timestamp": "2026-10-10T10:00:00.000Z",
         "cwd": str(project),
     }) + "\n")
-    thread = comms.registry.declare(Thread(
-        "owner", frozenset(), str(project), session_file=str(session), model="p/m",
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    storage_roots=StorageRule().initial_roots('owner', str(project))))
+    thread = comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(project), session_file=str(session), model='p/m', process_identity=ProcessIdentity.capture(os.getpid())))
     published = []
 
     async def observe(observed, state, info):

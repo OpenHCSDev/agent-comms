@@ -1,5 +1,4 @@
 """Typed durable JSONL ingress and real-host replies, without provider work."""
-from agent_comms.storage_rules import StorageRule
 import asyncio
 import json
 
@@ -82,12 +81,12 @@ def test_result_kind_is_bound_to_its_pending_command():
     asyncio.run(journey())
 
 
-def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path):
+def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thread_registration):
     async def journey():
         backend = PiDurableBackend()
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
-        thread = Thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
-                        session_file=location.path, storage_roots=StorageRule().initial_roots('records', str(tmp_path)))
+        thread = thread_registration.new_thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
+                        session_file=location.path)
         try:
             outcome = await backend.compact(thread, 'retain the empty plan')
             assert isinstance(outcome, FailedCompaction)

@@ -1,5 +1,4 @@
 """Headless failures retain inspectable structural evidence before their channel notice."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 import os
@@ -60,12 +59,7 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path))).session_id
     comms.registry.declare(
-        Thread(
-            name="sender",
-            tags=frozenset(),
-            worktree=str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_roots=StorageRule().initial_roots('sender', str(tmp_path)))
+        comms.registry.new_thread(name='sender', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     incoming = comms.messaging.send_message("sender", "#comms", "Private input")
     original_send = comms.messaging.send

@@ -3,7 +3,6 @@
 No provider input, retry or live bus write. The fixture is a canonical saved
 manifest whose declaration name is intentionally unavailable in this reader.
 """
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -46,7 +45,7 @@ from test_turn_context_wire import manifest
 
 
 def saved_row(comms):
-    owner = Thread("saved", frozenset(), str(comms.root.parent), created_at=17003.0, storage_roots=StorageRule().initial_roots('saved', str(comms.root.parent)))
+    owner = comms.registry.new_thread('saved', frozenset(), str(comms.root.parent), created_at=17003.0)
     comms.registry.declare(owner)
     comms.messaging.initialize_private_initial_protocol()
     comms.bus.log.path.touch(mode=0o600)

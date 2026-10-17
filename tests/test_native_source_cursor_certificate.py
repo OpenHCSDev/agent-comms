@@ -1,7 +1,6 @@
 """Certified source pages still require sealed and native owner-epoch proof."""
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import os
 import sqlite3
@@ -42,23 +41,12 @@ def _fresh(tmp_path: Path, count: int = 2):
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.registry.declare(
-        Thread(
-            "sender",
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_roots=StorageRule().initial_roots('sender', str(tmp_path)))
+        comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     for n in range(count):
         name = "alpha" if n == 0 else f"other{n:03}"
         comms.registry.declare(
-            Thread(
-                name,
-                frozenset({"team"}),
-                str(tmp_path),
-                process_identity=ProcessIdentity.capture(os.getpid()),
-                model="fake/fake",
-            storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='fake/fake')
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(root / "coordination.sqlite3")) as store:

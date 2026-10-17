@@ -1,5 +1,4 @@
 """Canonical page identity covers byte and annotation/source changes."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 import sqlite3
@@ -22,7 +21,7 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, jo
             "role": "user", "inputId": native_id, "content": "private wrapper",
         },
     }) + "\n")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(path)))
     comms.transcripts.routes.record_input_display("b" * 32, None)
     with closing(sqlite3.connect(comms.transcripts.routes.database_path)) as connection:
         assert connection.execute("PRAGMA journal_mode=" + journal_mode).fetchone()[0] == journal_mode.lower()
@@ -43,8 +42,8 @@ def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(
     parent.write_text(json.dumps({"type": "message", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "parent answer"}],
     }}) + "\n")
-    comms.registry.declare(Thread("parent", frozenset(), str(tmp_path), session_file=str(parent), storage_roots=StorageRule().initial_roots('parent', str(tmp_path))))
-    comms.registry.declare(Thread("child", frozenset(), str(tmp_path), parent="parent", task="continue", storage_roots=StorageRule().initial_roots('child', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=str(parent)))
+    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent', task='continue'))
     captured = comms.transcripts.capture_page_read("child")
     assert any(event.text == "parent answer" for event in captured.read().events)
     with parent.open("a") as output:
@@ -78,7 +77,7 @@ def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
     replacement = original.replace("first answer", "other answer")
     assert len(replacement) == len(original)
     path.write_text(original)
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(path)))
     captured = comms.transcripts.capture_page_read("worker")
 
     path.write_text(replacement)
@@ -94,7 +93,7 @@ def test_native_growth_during_page_preparation_keeps_the_captured_cut(tmp_path, 
     path.write_text(json.dumps({"type": "message", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "captured answer"}],
     }}) + "\n")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(path)))
     captured = comms.transcripts.capture_page_read("worker")
     prepare = comms.transcripts._thread_transcript_page
 
@@ -124,7 +123,7 @@ def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
     path.write_text(json.dumps({"type": "message", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "Original retained answer"}],
     }}) + "\n")
-    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(path)))
     captured = comms.transcripts.capture_page_read("worker")
     original = captured.read()
     comms.registry.heartbeat("worker")

@@ -1,5 +1,4 @@
 """Actual fork worker held before its socket, with the pinned native model on loopback."""
-from agent_comms.storage_rules import StorageRule
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -48,14 +47,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         root_id = comms.bus.log.read_metadata_unlocked().root_id
     comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
     comms.registry.declare(
-        Thread(
-            "parent",
-            frozenset(),
-            str(fixture.project),
-            session_file=str(fixture.session),
-            model="response-local/fixture",
-            thinking_level="off",
-        storage_roots=StorageRule().initial_roots('parent', str(fixture.project)))
+        comms.registry.new_thread('parent', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')
     )
     launched = []
     launch = ParentedProcess.launch

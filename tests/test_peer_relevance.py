@@ -1,5 +1,4 @@
 """How much one thread matters to another, and what its peers see of that."""
-from agent_comms.storage_rules import StorageRule
 
 import json
 
@@ -28,7 +27,7 @@ def _wire(tmp_path, *threads):
     comms = Comms(tmp_path / "wire")
     for created, (name, tags) in enumerate(threads, start=1):
         comms.registry.declare(
-            Thread(name, frozenset(tags), str(tmp_path), created_at=20000.0 + created, storage_roots=StorageRule().initial_roots(name, str(tmp_path)))
+            comms.registry.new_thread(name, frozenset(tags), str(tmp_path), created_at=20000.0 + created)
         )
     return comms
 
@@ -77,7 +76,7 @@ def test_a_thread_reusing_a_deleted_name_inherits_no_relevance(tmp_path):
     comms.relationships.edit("owner", RelationshipEdit.decode("add"), "partner", "Old work")
     comms.owners.stop("partner")
     comms.registry.remove("partner")
-    comms.registry.declare(Thread("partner", frozenset(), str(tmp_path), created_at=30000.0, storage_roots=StorageRule().initial_roots('partner', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('partner', frozenset(), str(tmp_path), created_at=30000.0))
     assert comms.relationships.relevance("owner", "partner") is StrangerRelevance
 
 
@@ -214,15 +213,14 @@ def test_recent_direct_work_stays_addressable_without_bare_peer_inventory(tmp_pa
     comms.owners.stop("Bob")
     assert [r.peer.name for r in comms.relationships.context_relations("Alice")] == ["Bob"]
     comms.registry.remove("Bob")
-    comms.registry.declare(Thread("Bob", frozenset(), str(tmp_path),
-                                  created_at=original.timestamp + 1, storage_roots=StorageRule().initial_roots('Bob', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('Bob', frozenset(), str(tmp_path), created_at=original.timestamp + 1))
     assert _peers(comms, "Alice") == ()
     assert comms.relationships.context_relations("Alice") == ()
 
 
 def test_parent_binding_remains_without_bare_parent_inventory(tmp_path):
     comms = _wire(tmp_path, ("parent", ()), ("unrelated", ()))
-    comms.registry.declare(Thread("child", frozenset(), str(tmp_path), parent="parent", storage_roots=StorageRule().initial_roots('child', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent='parent'))
     context = TurnContext.for_inspection(comms, comms.registry.require("child"))
     segment = next(s for s in context.segments if isinstance(s, CoordinationSegment))
     assert (segment.parent, segment.peers) == ("parent", ())

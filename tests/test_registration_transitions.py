@@ -1,5 +1,4 @@
 """Transition-family consequences on the actual canonical registry and locks."""
-from agent_comms.storage_rules import StorageRule
 
 import os
 from dataclasses import replace
@@ -17,8 +16,7 @@ from agent_comms.turn_lease import ActiveTurn
 @pytest.mark.parametrize('transition', ['metadata', 'session', 'restart', 'stop', 'new-turn'])
 def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, transition):
     registry = Registration(tmp_path / 'registry.json')
-    thread = Thread('owner', frozenset({'team'}), str(tmp_path),
-                    process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('owner', str(tmp_path)))
+    thread = registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', 'turn')
     before = registry.snapshot()
@@ -51,8 +49,7 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
 
 def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
     registry = Registration(tmp_path / 'registry.json')
-    thread = Thread('owner', frozenset(), str(tmp_path),
-                    process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots('owner', str(tmp_path)))
+    thread = registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', 'same-id')
     registry.rename('owner', 'renamed')
@@ -65,7 +62,7 @@ def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
 
 def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
     registry = Registration(tmp_path / 'registry.json')
-    registry.register(Thread('owner', frozenset(), str(tmp_path), storage_roots=StorageRule().initial_roots('owner', str(tmp_path))))
+    registry.register(registry.new_thread('owner', frozenset(), str(tmp_path)))
     original = registry.snapshot()
     expected = original.threads['owner']
     claim_scope = original.claimed_generations['owner']
@@ -84,7 +81,7 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
 def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
     registry = Registration(tmp_path / "registry.json")
     for name in ("first", "second"):
-        registry.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), storage_roots=StorageRule().initial_roots(name, str(tmp_path))))
+        registry.register(registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     before = registry.snapshot()
     selected = tuple((before.threads[name], before.claimed_generations[name]) for name in ("first", "second"))
     registry.register(replace(before.threads["second"], active_turn=ActiveTurn("busy", os.getpid())))

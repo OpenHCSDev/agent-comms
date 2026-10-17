@@ -1,5 +1,4 @@
 """Blocking is explicit and inspectable; old rows are not assigned invented reasons."""
-from agent_comms.storage_rules import StorageRule
 
 import os
 from dataclasses import replace
@@ -28,7 +27,7 @@ from agent_comms.tool_caller import ThreadCaller
 
 def _owner(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path), storage_roots=StorageRule().initial_roots('worker', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish selected work"))
     assert goal is not None
     return comms, goal

@@ -1,5 +1,4 @@
 """Original authored ingress and neutral historical evidence share one input store."""
-from agent_comms.storage_rules import StorageRule
 
 from contextlib import ExitStack
 
@@ -240,7 +239,7 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     repeated = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
     assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (repeated,)
     before = (comms.root / 'bus.jsonl').read_bytes()
-    comms.registry.declare(Thread('unaddressed', frozenset(), origin.project, storage_roots=StorageRule().initial_roots('unaddressed', origin.project)))
+    comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), origin.project))
     with pytest.raises(RelationViolationError, match='did not receive'):
         comms.messaging.pin_input_constraint('unaddressed', subject, worktree=origin.project)
     with pytest.raises(RelationViolationError, match='provenance'):

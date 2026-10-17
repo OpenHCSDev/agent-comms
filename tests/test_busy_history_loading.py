@@ -1,5 +1,4 @@
 """Source contention retains a viewer read, never manufactures an input failure."""
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import json
@@ -27,7 +26,7 @@ def saved_history(tmp_path):
         "type": "message", "id": "saved-answer", "parentId": None,
         "message": {"role": "assistant", "content": [{"type": "text", "text": "Saved answer"}]},
     }) + "\n")
-    comms.registry.declare(Thread("saved", frozenset(), str(tmp_path), session_file=str(session), storage_roots=StorageRule().initial_roots('saved', str(tmp_path))))
+    comms.registry.declare(comms.registry.new_thread('saved', frozenset(), str(tmp_path), session_file=str(session)))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.install_private_runtime()
     return comms, session

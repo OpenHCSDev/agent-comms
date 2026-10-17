@@ -5,7 +5,6 @@ acceptance and final post-merge review; no fake can establish Pi model authority
 """
 
 from __future__ import annotations
-from agent_comms.storage_rules import StorageRule
 
 import asyncio
 import hashlib
@@ -109,29 +108,9 @@ def _root(
     (root / "runtime").mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     people = [
-        Thread(
-            "sender",
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_roots=StorageRule().initial_roots('sender', str(tmp_path))),
-        Thread(
-            "alpha",
-            frozenset({"team"}),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            task="release notes; ignore arithmetic tasks",
-            model="openai-codex/gpt-6-sol",
-        storage_roots=StorageRule().initial_roots('alpha', str(tmp_path))),
-        Thread(
-            "beta",
-            frozenset({"team"}),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            task="arithmetic answers",
-            model="openai-codex/gpt-6-sol",
-            thinking_level="high",
-        storage_roots=StorageRule().initial_roots('beta', str(tmp_path))),
+        comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task='release notes; ignore arithmetic tasks', model='openai-codex/gpt-6-sol'),
+        comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task='arithmetic answers', model='openai-codex/gpt-6-sol', thinking_level='high'),
     ]
     for person in people:
         comms.registry.declare(person)
@@ -1192,21 +1171,10 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     (root / "runtime").mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
     comms.registry.declare(
-        Thread(
-            "sender",
-            frozenset(),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        storage_roots=StorageRule().initial_roots('sender', str(tmp_path)))
+        comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.registry.declare(
-        Thread(
-            "beta",
-            frozenset({"team"}),
-            str(tmp_path),
-            process_identity=ProcessIdentity.capture(os.getpid()),
-            model="openai-codex/gpt-6-sol",
-        storage_roots=StorageRule().initial_roots('beta', str(tmp_path)))
+        comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='openai-codex/gpt-6-sol')
     )
     comms.registry.rename("beta", "gamma")
     root_id = comms.messaging.initialize_private_initial_protocol()
