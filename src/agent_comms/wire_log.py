@@ -406,10 +406,6 @@ class WireLog:
             with self.certified_read() as source:
                 _, captured, more = source.addressed_page(self, request, prefix=witness)
 
-    def full_history(self) -> list[Message]:
-        with self.verified_snapshot() as records:
-            return [message for record in records for message in record.messages()]
-
     def record_context(self, manifest) -> None:
         """Append the context records chosen by the certified entry owner."""
         with self.locked() as lock:
