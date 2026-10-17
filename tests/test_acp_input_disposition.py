@@ -88,7 +88,15 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
     saved = native.session.read_bytes()
     native.provider.response_gate = asyncio.Event()
     acknowledgements = []
+    prompts = {}
     decode = PiRpcChannel.decode_record
+    encode = PiRpcChannel.command_bytes
+
+    def observed_command(command):
+        frame = encode(command)
+        if isinstance(command, commands.Prompt):
+            prompts[command.input_id] = command
+        return frame
 
     def observed_response(raw, **options):
         event = decode(raw, **options)
@@ -97,6 +105,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
         return event
 
     monkeypatch.setattr(PiRpcChannel, "decode_record", staticmethod(observed_response))
+    monkeypatch.setattr(PiRpcChannel, "command_bytes", staticmethod(observed_command))
     async with native.open_owner(runtime_enabled=True) as (owner, session):
         turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
         attachment = canonical_agent(owner._comms, auto_wake=False)
@@ -144,7 +153,12 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             assert final[key].unresolved is (not second_start)
             assert final[key].has_started is second_start
             assert len({row.native_id for row in final.values()}) == 2
-            assert sent_text(native, final[key]).endswith("followup")
+            sent = prompts[final[key].native_id]
+            assert sent.id == public_id
+            assert final[key].sent_digest.matches(sent.message)
+            assert sent.message.endswith("followup")
+            if second_start:
+                assert sent_text(native, final[key]) == sent.message
             assert len(native.saved_inputs()) == (3 if second_start else 2)
             overview = await proxy.request("input_dispositions", include_history=True)
             assert overview["inputs"] == []
