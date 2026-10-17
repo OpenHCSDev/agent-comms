@@ -29,7 +29,7 @@ The operator must stop the original producers/clients using the existing cutover
 
 ## Complete copied-store qualification
 
-Codex confirmed native-stall-0438 contains an extracted failing event, not a frozen DB. A read-only SQLite backup of the actual live external store was therefore taken into `/home/ts/.cache/agent-scratch/core-goal-retry-p130/original.sqlite3`; source connection changes:0. No live conversion or provider input occurred. Under the measured resource pressure this used bounded existing-dependency jobs, not another environment, agent fleet or broad suite; the two retained transcript copies need about850MiB on /home.
+Codex confirmed native-stall-0438 contains an extracted failing event, not a frozen DB. A read-only SQLite backup of the actual live external store was therefore taken into `/home/ts/.cache/agent-scratch/core-goal-retry-p130/original.sqlite3`; source connection changes:0. No live conversion or provider input occurred. Under the measured resource pressure this used bounded existing-dependency jobs, not another environment, agent fleet or broad suite; the canonical original/result pair needs about850MiB on /home. A superseded425MiB first result still awaits borrower clearance: the read-only /proc check found no visible borrower but could not inspect15 owned processes, so it was not removed. The15MiB disposition snapshot is retained for comparison. These paths are owned by core-goal-retry until Codex accepts this conversion.
 
 `.artifacts/p130-copy-proof.json` records the independently compared result:
 
