@@ -34,7 +34,7 @@ def test_owner_context_does_not_repeat_project_maintenance_rules(tmp_path: Path)
     comms, _ = _root(tmp_path)
     for name in ("Alice", "Bob", "outsider"):
         context = TurnContext.for_owner(
-            comms.registry.require(name), NextContextTurn(), "original task", (), ()
+            comms.registry.require(name), NextContextTurn(), "original task", (), (), comms.goals
         )
         kinds = tuple(type(segment) for segment in context.segments)
         assert kinds == (CoordinationSegment, UserInputSegment)

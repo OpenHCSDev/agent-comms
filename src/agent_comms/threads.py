@@ -280,12 +280,12 @@ class Thread(ThreadProvenance):
         return (GoalTaskScope(project=self.worktree, goal=goal.checkpoint)
                 if goal is not None else TurnTaskScope(project=self.worktree))
 
-    def context_goal_segments(self):
+    def context_goal_segments(self, goals):
         """Project this declaration's active goal without a second goal state."""
         from .turn_context import GoalSegment
 
         goal = self.active_goal
-        return (GoalSegment.capture(self, goal),) if goal is not None else ()
+        return (GoalSegment.capture(self, goal, goals),) if goal is not None else ()
 
     def wake_context(self) -> dict[str, object]:
         """This captured thread owns its selected-wake work and goal projection."""
