@@ -22,7 +22,7 @@ from agent_comms.acp_extension import (
 from agent_comms.comms import wire
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
-from agent_comms.input_disposition import InputDispositions
+from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
 from agent_comms.transcript_events import ContextTranscript
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
@@ -45,7 +45,7 @@ async def owner(tmp_path, monkeypatch):
     await agent.new_session(str(tmp_path / "project"))
     session = tmp_path / "session.jsonl"
     session.touch()
-    comms.threads.attach_session("project", str(session))
+    comms.threads.attach_session(comms.registry.require("project"), str(session))
     return agent, comms, session, updates
 
 
@@ -113,7 +113,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
 
     async def events(*args, **kwargs):
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
-            assert allowed is True
+            assert isinstance(allowed, GrantedSend)
         persist_user(session, "a" * 32, args[2])
         assert kwargs["native_start"](None, "a" * 32, args[2])
         yield ae.InputStarted(id=None)
@@ -125,13 +125,13 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         if not queued_before_activation:
             public_id, command = await queue_followup(agent, kwargs)
         observed.update(goal=goal, public_id=public_id)
-        with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
-            assert allowed is (not queued_before_activation)
+        with kwargs["send_boundary"](public_id, "b" * 32, command.content.text) as allowed:
+            assert isinstance(allowed, AuthorityChangedSend if queued_before_activation else GrantedSend)
         if queued_before_activation:
             yield ae.InputRefused(id=public_id)
         else:
-            persist_user(session, "b" * 32, command["message"])
-            assert kwargs["native_start"](public_id, "b" * 32, command["message"])
+            persist_user(session, "b" * 32, command.content.text)
+            assert kwargs["native_start"](public_id, "b" * 32, command.content.text)
             yield ae.InputStarted(id=public_id)
         yield ae.Chunk(text="Goal set and work completed this turn.")
         yield ae.StreamSettled()
@@ -178,7 +178,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         original = agent.inputs.original_sources["project"]
         assert original.notice_keys == ()  # Internal continuation is not a user echo.
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
-            assert allowed is True
+            assert isinstance(allowed, GrantedSend)
         persist_user(session, "a" * 32, args[2])
         assert kwargs["native_start"](None, "a" * 32, args[2])
         yield ae.InputStarted(id=None)
@@ -188,11 +188,11 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
             observed["replacement"] = comms.goals.update_goal(
                 "project", SetGoalAction(text="A different goal")
             )
-        with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
-            assert allowed is (change is None)
+        with kwargs["send_boundary"](public_id, "b" * 32, command.content.text) as allowed:
+            assert isinstance(allowed, GrantedSend if change is None else AuthorityChangedSend)
         if change is None:
-            persist_user(session, "b" * 32, command["message"])
-            assert kwargs["native_start"](public_id, "b" * 32, command["message"])
+            persist_user(session, "b" * 32, command.content.text)
+            assert kwargs["native_start"](public_id, "b" * 32, command.content.text)
             yield ae.InputStarted(id=public_id)
         else:
             yield ae.InputRefused(id=public_id)
