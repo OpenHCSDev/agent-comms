@@ -1310,7 +1310,7 @@ class RestartCliCommand(CliCommand):
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        return (cls(name=thread.name),) if thread.restart_candidates(status) and thread.active_turn is None else ()
+        return (cls(name=thread.name),) if thread.restart_candidates(status) and not thread.executing else ()
 
     def apply(self, ctx: Comms) -> Any:
         results = ctx.owners.restart_owners(
