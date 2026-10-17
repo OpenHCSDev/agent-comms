@@ -4,6 +4,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
+from difflib import unified_diff
 import json
 from typing import ClassVar, Literal
 from xml.etree import ElementTree
@@ -12,6 +13,9 @@ from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from agent_comms.activity import ActivityState
+from agent_comms.native_tools import BashTool, ReadTool, EditTool, WriteTool, GrepTool, GlobTool
+from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.tool_results import ToolDiff
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -207,14 +211,96 @@ class ThinkingBlock(RedactedThinking):
             record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp),)))
 
 
+class ClaudeToolArguments(WireModel, ABC):
+    @property
+    @abstractmethod
+    def detail(self) -> str: ...
+
+    def diff(self) -> ToolDiff | None:
+        return None
+
+
+class ClaudeCommandArguments(ClaudeToolArguments):
+    command: str
+
+    @property
+    def detail(self) -> str:
+        return self.command
+
+
+class ClaudePatternArguments(ClaudeToolArguments):
+    pattern: str
+
+    @property
+    def detail(self) -> str:
+        return self.pattern
+
+
+class ClaudePathArguments(ClaudeToolArguments):
+    file_path: str
+
+    @property
+    def detail(self) -> str:
+        return self.file_path
+
+    def patch(self, before: str, after: str, *, source: str | None = None) -> str:
+        # Claude supplies replacement fragments, not full-file line positions.
+        lines = tuple(unified_diff(before.splitlines(), after.splitlines(),
+                                   fromfile=source or self.file_path, tofile=self.file_path, lineterm=''))
+        return '\n'.join(lines) + ('\n' if lines else '')
+
+
+class ClaudeReplacement(WireModel):
+    old_string: str
+    new_string: str
+
+
+class ClaudeEditArguments(ClaudePathArguments, ClaudeReplacement):
+    def diff(self) -> ToolDiff:
+        return ToolDiff(self.patch(self.old_string, self.new_string))
+
+
+class ClaudeWriteArguments(ClaudePathArguments):
+    content: str
+    old_string: str | None = None
+
+    def diff(self) -> ToolDiff:
+        # A Write request does not normally report its previous file content.
+        # Label that missing side explicitly; never claim the file did not exist.
+        return ToolDiff(self.patch(self.old_string or '', self.content,
+            source=self.file_path if self.old_string is not None else self.file_path + ' (previous content not supplied)'))
+
+
+class ClaudeMultiEditArguments(ClaudePathArguments):
+    edits: list[ClaudeReplacement]
+
+    def diff(self) -> ToolDiff:
+        return ToolDiff(''.join(self.patch(edit.old_string, edit.new_string) for edit in self.edits))
+
+
 class ToolUse(AssistantBlock):
     wire_tag = 'tool_use'
     id: str
     name: str
     input: JsonValue
+    native_tools: ClassVar[dict[str, tuple[type[ToolDeclaration], type[ClaudeToolArguments]]]] = {
+        'Bash': (BashTool, ClaudeCommandArguments),
+        'Read': (ReadTool, ClaudePathArguments),
+        'Edit': (EditTool, ClaudeEditArguments),
+        'Write': (WriteTool, ClaudeWriteArguments),
+        'MultiEdit': (EditTool, ClaudeMultiEditArguments),
+        'Grep': (GrepTool, ClaudePatternArguments),
+        'Glob': (GlobTool, ClaudePatternArguments),
+    }
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        call = ToolCall(self.id, self.name, self.input)
+        mapped = self.native_tools.get(self.name)
+        if mapped is None:
+            call = ToolCall(self.id, self.name, self.input)
+        else:
+            declaration, arguments_type = mapped
+            arguments = arguments_type.model_validate(self.input)
+            call = ToolCall(self.id, declaration.declared_name, self.input, arguments.detail, arguments.diff())
         session.started(call)
         return (ActiveItem(session.turn, self.id, ActivityState.WORKING, call.title),)
 
