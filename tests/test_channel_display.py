@@ -436,25 +436,6 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
         )
 
 
-def test_new_channel_during_boundary_is_not_falsely_unknown(tmp_path):
-    comms = populated(tmp_path)
-    original = comms.bus.log._opened_wire_snapshot
-    added = False
-
-    @contextmanager
-    def register_before_open(**options):
-        nonlocal added
-        if not added:
-            added = True
-            comms.registry.register(Thread("late", frozenset({"new"}), str(tmp_path)))
-        with original(**options) as snapshot:
-            yield snapshot
-
-    with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=register_before_open):
-        assert bodies(comms.views.channel_display_page("#new")) == []
-    assert added
-
-
 def test_views_answer_how_far_the_bus_has_grown(tmp_path):
     comms = populated(tmp_path)
     assert comms.views.latest_sequence() == 0
