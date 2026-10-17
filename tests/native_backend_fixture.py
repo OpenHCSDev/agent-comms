@@ -79,7 +79,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         session_id = await self.attach_saved_owner(agent, project=project, session=session)
         original = await Coordination.run_worker(partial(agent._comms.registry.require, session_id))
         await agent.turns.backend_for(session_id, original).prepare(original)
-        child = agent.turns.persistent_backends[session_id].custody.child.proc
+        child = agent.turns.persistent_backends[session_id].child_state.child.proc
         self.children.append(child)
         return session_id
 
@@ -131,7 +131,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
 
     async def force_reopen(self):
         """Retire this fixture's actual attested child; the next turn opens the saved session."""
-        self.persistent.custody.child.attestation.require_identity()
+        self.persistent.child_state.child.attestation.require_identity()
         await self.persistent.close_idle()
 
     def started(self, public_id, native_id, text):
@@ -139,8 +139,8 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         child = backend.TurnSession.active[asyncio.current_task()].native.proc
         # Custody is already with the saved-session owner at native input start;
         # there is no later copy from transient TurnSession process fields.
-        assert self.persistent.custody.child.proc is child
-        assert self.persistent.custody.child.reader is not None
+        assert self.persistent.child_state.child.proc is child
+        assert self.persistent.child_state.child.reader is not None
         if child not in self.children:
             self.children.append(child)
         return True

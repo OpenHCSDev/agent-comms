@@ -8,7 +8,8 @@ from collections.abc import Callable, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+from .pi_events import PiEvent
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .native_attestation import NativeAttestation, PendingAttestation
@@ -16,20 +17,15 @@ from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
-
-if TYPE_CHECKING:
-    from .session_revision import SessionRevision
+from .session_revision import SessionRevision
 
 
 @dataclass
-class PiSessionChild:
+class PiChild:
     proc: AttachedChild
     reader: PiRpcChannel
-    key: tuple[NativePiRpcLaunch, tuple[int, int]]
-    attestation: NativeAttestation
-    sensitive_diagnostics: bool = False
-    resources: ExitStack = field(default_factory=ExitStack, repr=False)
-    transport: AsyncExitStack = field(default_factory=AsyncExitStack, repr=False)
+    resources: ExitStack = field(default_factory=ExitStack, repr=False, kw_only=True)
+    transport: AsyncExitStack = field(default_factory=AsyncExitStack, repr=False, kw_only=True)
     forwarding_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
     _close_job: asyncio.Task[ChildOutcome | BaseException] | None = field(default=None, init=False, repr=False)
 
@@ -37,24 +33,18 @@ class PiSessionChild:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
 
     @classmethod
-    async def start(cls, key, attestation):
-        launch, _ = key
-        with ExitStack() as resources:
-            environment = dict(launch.env)
-            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
-                address = resources.enter_context(PrivateSocketRole.address(
-                    Path(environment["AGENT_COMMS_PROJECT_SOCKET"])
-                ))
-                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
-            proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=environment)
-            assert proc.stdout is not None
-            return cls(
-                proc,
-                PiRpcChannel(proc.stdout),
-                key,
-                attestation,
-                resources=resources.pop_all(),
-            )
+    async def start_command(cls, argv, *, cwd, env=None, pass_fds=(), event_type=PiEvent, **state):
+        proc = await AttachedChild.start(argv, cwd=cwd, env=env, pass_fds=pass_fds)
+        return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type), **state)
+
+    async def request(self, command):
+        if self.retired:
+            raise RuntimeError('Pi child has retired')
+        async with self.failures():
+            response = await self.reader.request(command, self.proc.stdin)
+        if response.success is not True:
+            raise RuntimeError(response.error)
+        return response.data.require_payload()
 
     @property
     def retired(self) -> bool:
@@ -69,16 +59,16 @@ class PiSessionChild:
 
     async def finish_input(self) -> None:
         """Retire this input's ingress without retiring a retained idle child."""
+        await self.reader.finish_input()
         forwarding, self.forwarding_task = self.forwarding_task, None
         if forwarding is not None:
             forwarding.cancel()
             await asyncio.gather(forwarding, return_exceptions=True)
-        self.reader.pending.cancel_all()
 
     async def shutdown(self, *, graceful: bool = False) -> ChildOutcome:
         """Join the one gateway, ingress, process, pipe and resource retirement.
 
-        A settled non-retained protocol gets its existing bounded EOF grace;
+        A settled child gets its existing bounded EOF grace;
         refusals and interruptions terminate immediately. The first request
         owns that choice and every caller joins the same complete operation.
         """
@@ -136,7 +126,25 @@ class PiSessionChild:
             raise
 
 
-class NativeCustody(ABC):
+@dataclass
+class PiSessionChild(PiChild):
+    key: tuple[NativePiRpcLaunch, tuple[int, int]]
+    attestation: NativeAttestation
+    sensitive_diagnostics: bool = False
+
+    @classmethod
+    async def start(cls, key, attestation):
+        launch, _ = key
+        with ExitStack() as resources:
+            environment = dict(launch.env)
+            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
+                address = resources.enter_context(PrivateSocketRole.address(Path(environment["AGENT_COMMS_PROJECT_SOCKET"])))
+                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
+            return await cls.start_command(launch.argv, cwd=str(launch.cwd), env=environment,
+                key=key, attestation=attestation, resources=resources.pop_all())
+
+
+class NativeChildState(ABC):
     """State owns the legal child capabilities, including its retirement successor."""
 
     @property
@@ -156,37 +164,31 @@ class NativeCustody(ABC):
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
     async def inspect(self, persistent, prepare, request):
-        """Inspect through this custody's legal acquisition/receiver capability."""
-        raise NativePiUnavailable("Native context requires an acquired native child")
+        """Prepare once, then inspect through the acquired idle capability."""
+        await prepare()
+        return await persistent.child_state.idle().inspect_acquired(persistent, request)
 
-    def retire(self, successor: NativeCustody | None = None) -> NativeCustody:
+    def retire(self, successor: NativeChildState | None = None) -> NativeChildState:
         return successor if successor is not None else self
 
     @property
-    def settled(self) -> NativeCustody:
+    def settled(self) -> NativeChildState:
         return self
 
     async def closed(self) -> None:
         """Complete this custody's retirement, if any."""
 
-class EmptyNative(NativeCustody):
+class EmptyNative(NativeChildState):
     available = False
-
-    async def inspect(self, persistent, prepare, request):
-        # The runtime owner supplies its existing selected-session preparation:
-        # real saved launch/idle attestation/retention, never a priming prompt.
-        await prepare()
-        acquired = persistent.custody.idle()
-        return await acquired.inspect_acquired(persistent, request)
 
 
 @dataclass
-class ChildNative(NativeCustody):
+class ChildNative(NativeChildState):
     child: PiSessionChild
     available = True
 
     @abstractmethod
-    def _shutdown_successor(self) -> NativeCustody: ...
+    def _shutdown_successor(self) -> NativeChildState: ...
 
     def retire(self, successor=None):
         following = self._shutdown_successor() if successor is None else successor
@@ -198,9 +200,9 @@ class ChildNative(NativeCustody):
 
 @dataclass
 class SuccessorNative(ChildNative):
-    successor: NativeCustody
+    successor: NativeChildState
 
-    def _shutdown_successor(self) -> NativeCustody:
+    def _shutdown_successor(self) -> NativeChildState:
         return self.successor
 
 
@@ -208,13 +210,16 @@ class SuccessorNative(ChildNative):
 class RetiringNative(SuccessorNative):
     available = False
 
+    async def inspect(self, persistent, prepare, request):
+        raise NativePiUnavailable("Native context requires an acquired native child")
+
     def retire(self, successor=None):
         if successor is not None:
             self.successor = successor
         return self
 
     @property
-    def settled(self) -> NativeCustody:
+    def settled(self) -> NativeChildState:
         return self.successor if self.child.retired else self
 
 
@@ -224,9 +229,7 @@ class BorrowedNative(SuccessorNative):
     async def inspect(self, persistent, prepare, request):
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
-        async with request.pending_response(
-            self.child.reader,self.child.proc.stdin
-        ) as response:
+        async with request.pending_response(self.child.reader, self.child.proc.stdin) as response:
             return (await response).data.require_payload()
 
 @dataclass
@@ -244,29 +247,16 @@ class RetainedNative(ChildNative):
             return super().idle()
         return self
 
-    async def inspect(self, persistent, prepare, request):
-        # Reobserve this retained child through the same preparation/AgentInfo
-        # owner. An acquired child alone does not publish native usage.
-        await prepare()
-        acquired = persistent.custody.idle()
-        return await acquired.inspect_acquired(persistent, request)
-
     async def inspect_acquired(self, persistent, request):
         async with persistent.lock:
-            current = persistent.custody.idle()
-            response = await request.exchange(
-                current.child.reader,current.child.proc.stdin
-            )
-            if response.success is not True:
-                raise ValueError(f"Native request did not succeed: {response.error}")
+            current = persistent.child_state.idle()
+            data = await current.child.request(request)
             if request.writes_session:
                 # This child wrote the file itself; its loaded context is the new revision.
-                from .session_revision import SessionRevision
-
                 current.revision = SessionRevision.observe(
                     current.identity.session_file
                 ).require_available()
-            return response.data.require_payload()
+            return data
 
     def reuse(self, key):
         if self.child.key == key and self.current:
@@ -286,6 +276,6 @@ class RetainedNative(ChildNative):
         return super().managed_launch(command, arguments, worktree=worktree,
             environment=environment, session_file=session_file)
 
-    def _shutdown_successor(self) -> NativeCustody:
+    def _shutdown_successor(self) -> NativeChildState:
         return EmptyNative()
 

@@ -122,7 +122,7 @@ async def stream_agent_events(
         async with persistent_session.lock:
             try:
                 launch = await Coordination.run_worker(partial(
-                    persistent_session.custody.managed_launch,
+                    persistent_session.child_state.managed_launch,
                     agent_bin,
                     tuple(agent_args),
                     worktree=Path(cwd),
@@ -466,7 +466,7 @@ class TurnSession:
                     async for event in self.finish_result():
                         yield event
             finally:
-                if not self.native_session.custody.retained:
+                if not self.native_session.child_state.retained:
                     await self.native_session.close()
 
     async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
@@ -582,7 +582,7 @@ class TurnSession:
         ):
             self.native.sensitive_diagnostics = self.output.sensitive
             self.native_session.retain(self.native, identity)
-        if not self.native_session.custody.retained:
+        if not self.native_session.child_state.retained:
             outcome = await self.native.shutdown(graceful=True)
             if isinstance(outcome, TimedOutOutcome):
                 self.output.record_failure(failures.BackendDidNotExit("agent backend did not exit"))

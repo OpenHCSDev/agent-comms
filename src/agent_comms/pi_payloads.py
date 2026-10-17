@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
 from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
+from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
@@ -779,8 +780,11 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
         except ValueError:
             return UnknownDelta
 
-    @abstractmethod
-    def emit(self, session): ...
+    def events(self):
+        return ()
+
+    def emit(self, session):
+        return self.events()
 
 
 @dataclass(frozen=True)
@@ -792,11 +796,12 @@ class TextDelta(PiDelta, declared_name="text_delta"):
     def progress(self):
         return bool(self.delta)
 
+    def events(self):
+        return (events.Chunk(text=self.delta),)
+
     def emit(self, session):
         session.output.append(self.delta)
-        from .agent_events import Chunk
-
-        return (Chunk(text=self.delta),)
+        return self.events()
 
 
 @dataclass(frozen=True)
@@ -807,12 +812,8 @@ class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
     def progress(self):
         return bool(self.delta)
 
-    def emit(self, session):
-        if not self.delta:
-            return ()
-        from .agent_events import Thinking
-
-        return (Thinking(text=self.delta),)
+    def events(self):
+        return (events.Thinking(text=self.delta),) if self.delta else ()
 
 
 class ToolDelta:
@@ -1326,7 +1327,7 @@ class McpLiveReceipt:
         attestation or permission, even when the current input identity matches.
         """
         import json
-        from .pi_rpc import unique_fields
+        from .jsonl_stream import unique_fields
 
         if text is None or len(text) > 8192:
             return None

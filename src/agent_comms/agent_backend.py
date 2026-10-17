@@ -44,6 +44,11 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     """Runtime behavior derived once by the owning thread record."""
 
     path: str
+    _backend: ClassVar[type[AgentBackend]]
+
+    @property
+    def backend(self):
+        return self._backend
 
     def require_forkable(self):
         pass
@@ -70,8 +75,8 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def external_records(self, root, incarnation):
         raise ValueError("A native session cannot publish an external transcript")
 
-    @abstractmethod
-    def select_session(self, directory, execution): ...
+    def select_session(self, directory, execution):
+        raise BackendDeclarationError('Runtime cannot select native sessions')
 
     @abstractmethod
     def history_source(self, root, incarnation): ...
@@ -80,8 +85,8 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
         return ()
 
     @property
-    @abstractmethod
-    def read_key(self) -> str: ...
+    def read_key(self) -> str:
+        return self.path
 
     @abstractmethod
     def storage_files(self): ...
@@ -400,6 +405,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
                 "in a module imported by agent_backend before it seals."
             )
         super().__init_subclass__(**options)
+        cls.location_type._backend = cls
 
     @classmethod
     @abstractmethod
@@ -423,6 +429,9 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         AgentBackend.__registry__ = MappingProxyType(dict(AgentBackend.__registry__))  # type: ignore[assignment]
         AgentBackend._sealed = True
 
+    def run_turn(self, thread: Thread, content: InputContent, delivery: TurnDelivery):
+        raise BackendDeclarationError(f"{type(self).__name__} does not run turns")
+
     @classmethod
     def require_event_family(cls, family: type[DeclaredFamily]) -> None:
         """Fail unless ``family`` converts exactly the event kinds this backend's runtime emits."""
@@ -432,7 +441,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
 
 def _event_family_problems(backend: type, family: type[DeclaredFamily]) -> list[str]:
-    declared = {member.wire_kind() for member in family.members_with(family) if not member.unknown_kind}
+    declared = {kind for member in family.members_with(family) for kind in member.known_kinds()}
     expected = backend.event_kinds
     problems = []
     if missing := sorted(expected - declared):

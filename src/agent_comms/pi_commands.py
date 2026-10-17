@@ -36,7 +36,6 @@ from .pi_payloads import (
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import Response
-    from .pi_rpc import PiRpcChannel
 
 
 class SessionSnapshot:
@@ -81,6 +80,19 @@ class PiCommand(DeclaredFamily):
         finally:
             channel.pending.discard(type(command), command.id)
             future.cancel()
+
+    async def exchange(self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None):
+        from .pi_events import Response
+        async with self.pending_response(channel, writer) as future:
+            while not future.done():
+                event = await channel.receive(strict=strict, max_bytes=max_bytes)
+                if event is None:
+                    raise EOFError('Pi RPC ended before the requested response')
+                if isinstance(event, Response):
+                    channel.correlate(event)
+                else:
+                    on_event(event)
+            return future.result()
 
     def to_rpc(self) -> dict[str, Any]:
         data = FieldCodec.encode(self)
@@ -195,20 +207,6 @@ class NativeQuery(PiCommand):
     @property
     @abstractmethod
     def response_payload(self) -> type[PiResponseData]: ...
-
-    async def exchange(
-        self, channel: PiRpcChannel, writer: asyncio.StreamWriter, *,
-        strict: bool = False, max_bytes: int | None = None,
-    ) -> Response:
-        from .pi_events import Response
-        async with self.pending_response(channel,writer) as future:
-            while not future.done():
-                event = await channel.receive(strict=strict, max_bytes=max_bytes)
-                if event is None:
-                    raise EOFError("Pi RPC ended before the requested response")
-                if isinstance(event,Response):
-                    channel.correlate(event)
-            return future.result()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -363,6 +361,13 @@ class SettingCommand(CatalogQuery):
 
 @dataclass(frozen=True, kw_only=True)
 class SetModel(SettingCommand):
+    @classmethod
+    def from_name(cls, model: str | None):
+        if model is None:
+            return cls()
+        provider, model_id = model.split('/', 1)
+        return cls(provider=provider, model_id=model_id)
+
     result_type = events.ModelChanged
     error_message = "Model change failed"
     provider: str | None = field(default=None, metadata={"wire_omit_default": True})

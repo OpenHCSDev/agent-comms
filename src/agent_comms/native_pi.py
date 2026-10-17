@@ -26,7 +26,7 @@ from .native_session_files import NativeSessionFiles
 from .native_package import OWNER_INSTRUCTIONS
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .field_codec import FieldCodec
-from .pi_rpc import unique_fields
+from .jsonl_stream import unique_fields
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable

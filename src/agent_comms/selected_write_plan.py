@@ -33,7 +33,7 @@ from .threads import Thread
 from .field_codec import FieldCodec
 from .declared_family import DeclaredFamily
 from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
-from .pi_rpc import unique_fields
+from .jsonl_stream import unique_fields
 from .message_reference import MessageReference
 from .thread_identity import AdmissionIdentity, RecordedThreadIncarnation
 

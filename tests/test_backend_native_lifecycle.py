@@ -42,7 +42,7 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert [row[2] for row in owner.starts] == ["first", "queued followup"]
     assert [row[0] for row in owner.starts] == [None, "queued"]
     assert len([event for event in first if isinstance(event, events.StreamSettled)]) == 1
-    retained = owner.persistent.custody.child.proc
+    retained = owner.persistent.child_state.child.proc
     assert retained is not None and retained.alive()
 
     await owner.force_reopen()
@@ -50,17 +50,17 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     owner.provider.text = "Reopened retained context."
     reopened = await owner.run("after validated reopen")
     assert reopened[-1].ok and reopened[-1].text == owner.provider.text, reopened[-1]
-    assert owner.persistent.custody.child.proc is not retained
-    assert owner.persistent.custody.child.proc.alive()
-    assert owner.persistent.custody.idle().current
-    reopened_child = owner.persistent.custody.child.proc
+    assert owner.persistent.child_state.child.proc is not retained
+    assert owner.persistent.child_state.child.proc.alive()
+    assert owner.persistent.child_state.idle().current
+    reopened_child = owner.persistent.child_state.child.proc
     # The deliberately oversized output tests framing and exceeds Core's
     # immutable retained-context limit. Pi compacts it before settling; the
     # history and split-turn prefix each require a summary provider request.
     owner.provider.text = "L" * (2 * 1024 * 1024 + 257)
     second = await owner.run("large response")
     assert second[-1].ok and second[-1].text == owner.provider.text, second[-1]
-    assert owner.persistent.custody.child.proc is reopened_child
+    assert owner.persistent.child_state.child.proc is reopened_child
     assert len(owner.saved_inputs()) == 4
     print(f"ordinary_native_response_bytes={len(second[-1].text.encode())}")
 
@@ -195,8 +195,8 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
         stop.cancel()
         assert not stop.done()
         assert backend.TurnSession.active[turn] is session
-        assert isinstance(owner.persistent.custody, RetiringNative)
-        assert not owner.persistent.custody.child._close_job.done()
+        assert isinstance(owner.persistent.child_state, RetiringNative)
+        assert not owner.persistent.child_state.child._close_job.done()
         release.set()
         with pytest.raises(asyncio.CancelledError):
             await stop
@@ -244,7 +244,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
             native_owner = agent.turns.persistent_backends[session]
             forwarding = next(turn.inputs for turn in backend.TurnSession.active.values()
                               if turn.native_session is native_owner)
-            selected_child = native_owner.custody.child.proc
+            selected_child = native_owner.child_state.child.proc
             if selected_child not in native.children:
                 native.children.append(selected_child)
             response = await agent.prompt(

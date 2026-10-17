@@ -98,7 +98,7 @@ class TurnOutput:
     def done(self, session: TurnSession, stderr: str) -> Iterator[events.AgentEvent]:
         # Read admission and custody from their actual owners; output never grants either.
         transport_ok = not self.failure_text and (
-            session.native_session.custody.retained or session.native.proc.returncode == 0
+            session.native_session.child_state.retained or session.native.proc.returncode == 0
         )
         self.settle(session, transport_ok)
         success = transport_ok and self.clean and session.inputs.settled

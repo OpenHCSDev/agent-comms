@@ -14,6 +14,10 @@ class UnstartedRuntime(RuntimeLocation):
     owner: type[AgentBackend]
 
     @property
+    def backend(self):
+        return self.owner
+
+    @property
     def path(self) -> str:
         raise ValueError("Canonical saved session required")
 

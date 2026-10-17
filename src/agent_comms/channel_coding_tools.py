@@ -170,7 +170,7 @@ class CodingToolSocket(OwnerToolSocket[CodingCall]):
     def decode_request(self, raw: bytes) -> CodingCall:
         if not raw.endswith(b"\n") or len(raw) > self.max_request:
             raise SelectedToolDenied("Coding request incomplete or oversized")
-        from .pi_rpc import unique_fields
+        from .jsonl_stream import unique_fields
 
         value = json.loads(raw, object_pairs_hook=unique_fields)
         if (

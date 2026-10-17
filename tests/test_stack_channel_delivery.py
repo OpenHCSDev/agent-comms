@@ -121,7 +121,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             if case != "steer":
                 release.set()
                 await asyncio.wait_for(turn, 20)
-                warmup_proc = agent.turns.persistent_backends["worker"].custody.idle().child.proc
+                warmup_proc = agent.turns.persistent_backends["worker"].child_state.idle().child.proc
                 message = comms.messaging.send_user_message(
                     "#team", "@worker QUEUED_CHANNEL_REQUEST", worktree=str(project)
                 )
@@ -166,7 +166,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             if case == "deliver":
                 assert warmup_proc is not None and warmup_proc.returncode is None
                 assert (
-                    agent.turns.persistent_backends["worker"].custody.idle().child.proc
+                    agent.turns.persistent_backends["worker"].child_state.idle().child.proc
                     is warmup_proc
                 )
             assert stored_inputs(agent.inputs.dispositions.root).rows[key].declared_name == (

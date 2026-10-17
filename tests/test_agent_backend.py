@@ -18,6 +18,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
+from agent_comms.pi_durable_backend import PiDurableBackend, DurableDatabase
 from agent_comms.threads import Thread
 from agent_comms.unstarted_runtime import UnstartedRuntime
 
@@ -26,12 +27,11 @@ from agent_comms.unstarted_runtime import UnstartedRuntime
 
 
 def test_registry_holds_the_pi_native_backend_and_is_frozen():
-    assert ab.AgentBackend.names() == ("pi_native",)
+    assert ab.AgentBackend.names() == ("pi_native", "pi_durable")
     assert ab.AgentBackend.decode("pi_native") is PiNativeBackend
     assert ab.AgentBackend.for_new_threads() is PiNativeBackend
     assert isinstance(ab.AgentBackend.__registry__, MappingProxyType)
-    with pytest.raises(ValueError, match="Unknown AgentBackend name: 'pi_durable'"):
-        ab.AgentBackend.decode("pi_durable")
+    assert ab.AgentBackend.decode("pi_durable") is PiDurableBackend
 
 
 def test_a_backend_declared_after_sealing_fails_loud():
@@ -40,7 +40,7 @@ def test_a_backend_declared_after_sealing_fails_loud():
         class LateBackend(ab.AgentBackend):  # noqa: F841
             pass
 
-    assert ab.AgentBackend.names() == ("pi_native",)
+    assert ab.AgentBackend.names() == ("pi_native", "pi_durable")
 
 
 def test_pi_native_serves_threads_with_every_thread_capability():
@@ -129,11 +129,13 @@ def test_validation_requires_a_location_and_event_kinds():
 
 
 class _ProbeEvent(DeclaredFamily):
-    unknown_kind = False
-
     @classmethod
     def wire_kind(cls):
         return cls.declared_name
+
+    @classmethod
+    def known_kinds(cls):
+        return (cls.wire_kind(),)
 
 
 class AlphaProbe(_ProbeEvent):
@@ -145,7 +147,9 @@ class BetaProbe(_ProbeEvent):
 
 
 class FallbackProbe(_ProbeEvent):
-    unknown_kind = True
+    @classmethod
+    def known_kinds(cls):
+        return ()
 
 
 def test_converter_family_must_cover_exactly_the_runtime_event_kinds():
@@ -170,7 +174,7 @@ def test_pi_event_family_matches_pi_0_85_1_when_imported_fresh():
         [sys.executable, "-c", (
             "from agent_comms import pi_events as p\n"
             "from agent_comms.pi_native_backend import PiNativeBackend as B\n"
-            "kinds = {m.wire_kind() for m in p.PiEvent.members_with(p.PiEvent) if not m.unknown_kind}\n"
+            "kinds = {k for m in p.NativePiEvent.members_with(p.NativePiEvent) for k in m.known_kinds()}\n"
             "assert kinds == B.event_kinds, kinds ^ B.event_kinds\n"
         )],
         capture_output=True, text=True, timeout=60,
@@ -205,7 +209,8 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime():
             "from agent_comms.threads import Thread\n"
             "Thread('a', frozenset(), '/tmp').backend\n"
             "assert 'agent_comms.backend' not in sys.modules\n"
-            "assert 'agent_comms.native_custody' not in sys.modules\n"
+            "assert 'agent_comms.tracked_turn' not in sys.modules\n"
+            "assert 'agent_comms.turn_watchdog' not in sys.modules\n"
         )],
         capture_output=True, text=True, timeout=60,
     )
@@ -376,7 +381,7 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         assert "".join(event.text for event in events if isinstance(event, ae.Chunk)) == "pong"
         assert isinstance(events[-1], ae.Done) and events[-1].ok and events[-1].text == "pong"
         assert starts == ["ping"]
-        assert backend.custody.retained
+        assert backend.child_state.retained
 
         usage = await backend.context_usage(thread)
         assert usage == ab.ContextUsage(tokens=321, window=1000)

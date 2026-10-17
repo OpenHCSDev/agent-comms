@@ -222,7 +222,7 @@ def test_turn_runner_and_duplicate_pi_decoders_are_retired():
         for method in ast.walk(tree):
             if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 for node in ast.walk(method):
-                    if isinstance(node, ast.Call) and ast.unparse(node.func) == "PiEvent.from_wire":
+                    if isinstance(node, ast.Call) and ast.unparse(node.func) == "event_type.from_wire":
                         decoders.append((name, method.name))
     assert decoders == [("pi_rpc.py", "decode_record")]
 
