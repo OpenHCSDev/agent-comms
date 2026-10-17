@@ -705,7 +705,20 @@ class WireLog:
             return next((message for message in messages if message.message_id == message_id), None)
 
     def messages_for_references(self, references):
-        return tuple(source.message for source in self.deliveries_for_references(references))
+        """Resolve exact public identities, including rows without a wake cohort."""
+        if not references:
+            return ()
+        with self._opened_wire_snapshot(need_sequence=False) as opened:
+            messages = {
+                message.reference: message
+                for message, _ in opened.public_records_for(
+                    frozenset(reference.seq for reference in references),
+                    before_offset=opened.complete_boundary,
+                )
+            }
+        if any(reference not in messages for reference in references):
+            raise RelationViolationError("Notification reference is not its original source")
+        return tuple(messages[reference] for reference in references)
 
     def deliveries_for_references(self, references):
         """One canonical lock/certificate lifetime for a visible source window."""
