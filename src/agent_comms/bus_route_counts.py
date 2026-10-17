@@ -240,7 +240,15 @@ class RouteUnread(TypedRow):
     actor: str
     target: str
     sender: str
-    count: int
+    since: float
+    full: RouteTimeNode
+    prefix: RouteTimeNode | None
+    painted: int
+
+    def count(self, connection: sqlite3.Connection) -> int:
+        return (self.full.count_since(connection, self.since)
+                - (self.prefix.count_since(connection, self.since) if self.prefix is not None else 0)
+                - self.painted)
 
 
 @dataclass(frozen=True)
@@ -425,10 +433,10 @@ class BusRouteCounts:
                             else RouteIndexBehind(current_through, size))
                 if rebuild:
                     for owner in TypedTable.members_with(RouteTable):
-                        connection.execute(f'DELETE FROM "{owner.declared_name}"')
+                        owner.delete(connection)
                 for row in rows:
                     RouteEntryRow.record(connection, row)
-                connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
+                RouteSourceRow.delete(connection)
                 RouteSourceRow(1, checkpoint, tail_digest).insert(connection)
                 connection.commit()
         except BlockingIOError:
@@ -526,7 +534,7 @@ class OpenedRouteCounts(BusRouteCounts):
                 counts[actor][conversation] = counts[actor].get(conversation, 0) + count
 
         for row in self._read_counts(seen):
-            add(row.actor, row.sender, row.target, row.count)
+            add(row.actor, row.sender, row.target, row.count(self.connection))
         for item in self._appended:
             message = item.message
             for actor in self._recipients(message.target):
@@ -593,8 +601,7 @@ class OpenedRouteCounts(BusRouteCounts):
         }
 
     def _read_counts(self, seen: Mapping[str, ReadCursor]) -> list[RouteUnread]:
-        node_field, = RouteTimeRow._fields_named(("node",))
-        rows = self.connection.execute(
+        return RouteUnread.read(self.connection.execute(
             f'''WITH {self._requests}, actors AS MATERIALIZED (
                 SELECT key AS actor, json_extract(value,'$.high_water') AS high_water,
                     json_extract(value,'$.exceptions') AS exceptions FROM json_each(:seen)
@@ -606,8 +613,8 @@ class OpenedRouteCounts(BusRouteCounts):
                     AND request.target=row.target AND request.sender=row.sender
                     AND request.sender_lookup=row.sender_lookup AND row.timestamp>=request.since
                 WHERE row.seq<=:through GROUP BY request.actor,request.root
-            ) SELECT request.actor,request.target,request.sender,request.since,full.node,
-                prefix.node,coalesce(painted.count,0)
+            ) SELECT request.actor,request.target,request.sender,request.since,full.node AS full,
+                prefix.node AS prefix,coalesce(painted.count,0) AS painted
             FROM requests AS request JOIN actors AS owner ON owner.actor=request.actor
             JOIN "{RouteTimeRow.declared_name}" AS full ON full.id=request.root
             LEFT JOIN "{RouteTimeRow.declared_name}" AS prefix ON prefix.id=(
@@ -616,12 +623,7 @@ class OpenedRouteCounts(BusRouteCounts):
                     AND seq<=min(owner.high_water,:through) ORDER BY seq DESC LIMIT 1)
             LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
             self._request_bindings(self.deliveries) | {
-                "seen": json.dumps({actor: FieldCodec.encode(cursor) for actor,cursor in seen.items()})})
-        return [RouteUnread(actor,target,sender,
-                node_field.decode(full).count_since(self.connection,since)
-                - (node_field.decode(prefix).count_since(self.connection,since) if prefix is not None else 0)
-                - painted)
-                for actor,target,sender,since,full,prefix,painted in rows]
+                "seen": json.dumps({actor: FieldCodec.encode(cursor) for actor,cursor in seen.items()})}))
 
     def _read_deliveries(self, actor: str, seen: ReadCursor, after: int) -> list[UnseenDelivery]:
         return UnseenDelivery.read(self.connection.execute(
