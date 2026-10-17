@@ -6,6 +6,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import replace
 from functools import cached_property
+from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +29,8 @@ from .goals import Goal
 from .message_bus import MessageBus
 from .store_files import _store_lock
 from .threads import Thread
+from .input_attempt import ReservedInput
+from .input_disposition import InputDispositions
 from .turn_lease import FinishedTurnFence
 from .todos import TodoStore
 
@@ -84,8 +87,6 @@ class Goals:
 
     def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
-        from .input_disposition import InputDispositions
-
         with _store_lock(self._wire_lock_path, shared=True):
             rows = (
                 InputDispositions(self.root)
@@ -102,8 +103,6 @@ class Goals:
         awaiting_keys: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         """Project durable notices using current owner queue facts when available."""
-        from .input_disposition import InputDispositions
-
         with _store_lock(self._wire_lock_path, shared=True):
             aliases = self.registry.entry(name).entry.names
             return (
@@ -118,8 +117,6 @@ class Goals:
         self, name: str, *, awaiting_keys: frozenset[str] | None = None
     ) -> dict[str, Any]:
         """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
-        from .input_disposition import InputDispositions
-
         with _store_lock(self._wire_lock_path):
             aliases = self.registry.entry(name).entry.names
             return InputDispositions(self.root).dismiss_historical(
@@ -134,8 +131,6 @@ class Goals:
     def _goal_input_review(
         self, thread: Thread, goal_id: str, wait_for: Sequence[str]
     ) -> GoalInputReview:
-        from .input_disposition import InputDispositions
-
         thread.require_active_goal(goal_id)
         if not wait_for:
             raise ValueError("Standby requires explicit wait_for thread names.")
@@ -150,14 +145,25 @@ class Goals:
         dispositions = InputDispositions(self.root)
         unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
         eligible = set()
-        from .input_attempt import ReservedInput
-
         lookup = thread.incarnation.lookup
-        # Original certification supplies both sides of the reply. Display ACKs
-        # and today's sender aliases cannot admit a different incarnation.
+        after_seq = self.goal_wait(thread.name).review_after_seq(
+            thread.incarnation.require_recorded(), targets
+        )
+        sequences = tuple({
+            row.sequence for row in unknown.values()
+            if row.sequence is not None and row.sequence <= after_seq
+        })
+        earlier = self.bus.log.conversation_sources(
+            lookup, f"w.seq IN ({','.join('?' for _ in sequences)})", sequences,
+            limit=len(sequences), ascending=True,
+        ) if sequences else ()
+        # Keep older UNKNOWNs, but discover unreserved replies only after this
+        # dependency scope's recorded wait. Certification owns both identities.
         replies = {
             InputDispositions.bus_key(original.message, thread): original.message
-            for original in self.bus.log.addressed_sources(lookup)
+            for original in chain(
+                earlier, self.bus.log.addressed_sources(lookup, after_seq=after_seq)
+            )
             if original.direct_for(lookup) and any(target.sent(original) for target in targets)
         }
         document = dispositions.read(tuple(replies))
