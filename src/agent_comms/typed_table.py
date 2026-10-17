@@ -588,7 +588,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     def _condition(
         cls, where: str, parameters: tuple, key: dict[str, object]
     ) -> tuple[str, tuple]:
-        """Compile declared key values once for reads and keyed removals."""
+        """Compile predicate field names and declared key values once."""
         selected = cls._fields_named(tuple(key))
         if selected:
             where = "(" + where + ") AND " + " AND ".join(
@@ -601,11 +601,11 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         cls, db: sqlite3.Connection, where: str, parameters: tuple,
         order_by: tuple[str, ...], descending: bool, key: dict[str, object]
     ) -> sqlite3.Cursor:
-        where, parameters = cls._condition(where, parameters, key)
+        condition, parameters = cls._condition(where, parameters, key)
         direction = " DESC" if descending else ""
         return db.execute(
             f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
-            f"WHERE {where}"
+            f"WHERE {condition}"
             + (" ORDER BY " + ", ".join(cls._column_list((name,)) + direction for name in order_by)
                if order_by else ""),
             parameters,
@@ -654,14 +654,14 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = ()) -> bool:
         return SqlValue.for_annotation(bool).read(db.execute(
-            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {where})",
+            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {cls._sql(where)})",
             parameters))[0]
 
     @classmethod
     def count(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> int:
-        where, parameters = cls._condition(where, parameters, key)
+        condition, parameters = cls._condition(where, parameters, key)
         return SqlValue.for_annotation(int).read(db.execute(
-            f"SELECT COUNT(*) FROM {_identifier(cls.declared_name)} WHERE {where}", parameters))[0]
+            f"SELECT COUNT(*) FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters))[0]
 
     @classmethod
     def _writable_fields(cls, columns: tuple[str, ...] | None = None) -> tuple[_Field, ...]:
@@ -690,8 +690,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         cls, db: sqlite3.Connection, *, where: str = "1",
         parameters: tuple = (), **key: object,
     ) -> sqlite3.Cursor:
-        where, parameters = cls._condition(where, parameters, key)
-        return db.execute(f"DELETE FROM {_identifier(cls.declared_name)} WHERE {where}", parameters)
+        condition, parameters = cls._condition(where, parameters, key)
+        return db.execute(f"DELETE FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters)
 
     def _insertion(self) -> tuple[str, tuple]:
         writable = self._writable_fields()
@@ -710,7 +710,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         statement, values = self._insertion()
         keys = tuple(item.name for item in self._fields() if item.column.primary_key)
         updates = tuple(
-            item.name
+            item.wire_name
             for item in self._writable_fields()
             if not item.column.primary_key
         )
@@ -738,7 +738,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return db.execute(
             f"UPDATE {_identifier(cls.declared_name)} SET "
             + ", ".join(f"{_identifier(item.wire_name)}=?" for item in selected)
-            + f" WHERE {where}",
+            + f" WHERE {cls._sql(where)}",
             tuple(item.encode(changes[item.name]) for item in selected) + parameters,
         )
 
