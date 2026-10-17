@@ -284,10 +284,8 @@ class TranscriptSource:
                 return ()
             with closing(reader.reverse(cut.offset)) as records:
                 for record in records:
-                    if record.entry is None:
-                        continue
                     pending.append(record)
-                    if record.entry.input_boundary:
+                    if record.project(lambda original: original.entry.input_boundary):
                         turns.append(TurnDigest(record.entry.require_entry_id(), tuple(
                             event for original in reversed(pending) for event in original.events)))
                         pending.clear()

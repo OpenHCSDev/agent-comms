@@ -1,0 +1,899 @@
+diff --git a/src/agent_comms/native_custody.py b/src/agent_comms/native_custody.py
+index 4ef5f580a..086d45ac4 100644
+--- a/src/agent_comms/native_custody.py
++++ b/src/agent_comms/native_custody.py
+@@ -69,12 +69,7 @@ class PiChild:
+             await asyncio.gather(forwarding, return_exceptions=True)
+ 
+     async def shutdown(self, *, graceful: bool = False) -> ChildOutcome:
+-        """Join the one gateway, ingress, process, pipe and resource retirement.
+-
+-        A settled non-retained protocol gets its existing bounded EOF grace;
+-        refusals and interruptions terminate immediately. The first request
+-        owns that choice and every caller joins the same complete operation.
+-        """
++        """Join complete retirement; the first caller chooses bounded graceful EOF."""
+         if self._close_job is None:
+             self._close_job = asyncio.create_task(self._shutdown(graceful=graceful))
+         job = self._close_job
+diff --git a/src/agent_comms/native_entries.py b/src/agent_comms/native_entries.py
+index 509161962..f046bfe91 100644
+--- a/src/agent_comms/native_entries.py
++++ b/src/agent_comms/native_entries.py
+@@ -34,7 +34,7 @@ class NativeEntryCoordinates(PiPayload):
+     def original_id(self):
+         if not self.id:
+             raise ValueError("Native publication requires an original entry ID")
+-        return self.id
++        return str(self.id)
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+@@ -44,16 +44,20 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
+     timestamp: str | None = None
+     is_message: ClassVar[bool] = False
+     assistant_message: ClassVar[bool] = False
+-    input_boundary: ClassVar[bool] = False
++    messages: ClassVar[tuple[PiMessage, ...]] = ()
+     final_reply: ClassVar[bool] = False
+ 
++    @property
++    def input_boundary(self):
++        return any(message.user for message in self.messages)
++
+     def imported_sources(self):
+         return ()
+ 
+     @classmethod
+     def wire_member(cls, value):
+         try:
+-            member = cls.decode(value.get("type"))
++            member = cls if cls.wire_tag is None else cls.decode(value.get(cls.wire_tag))
+         except ValueError:
+             return UnknownEntry
+         return member.wire_variant(value)
+@@ -179,7 +183,7 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
+         return [replace(event, timestamp=timestamp) for event in self._events(context)]
+ 
+     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+-        return []
++        return [event for message in self.messages for event in message.transcript_events(context)]
+ 
+     @property
+     def unread_reply(self) -> bool:
+@@ -410,8 +414,8 @@ class MessageEntry(NativeEntry):
+     is_message = True
+ 
+     @property
+-    def input_boundary(self):
+-        return self.message.user
++    def messages(self):
++        return (self.message,)
+ 
+     @property
+     def final_reply(self):
+@@ -447,9 +451,6 @@ class MessageEntry(NativeEntry):
+             raise ValueError("Native recovery requires an unambiguous failed terminal")
+         self.message.require_failed_terminal()
+ 
+-    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+-        return self.message.transcript_events(context)
+-
+     @property
+     def unread_reply(self) -> bool:
+         return self.message.unread_reply
+@@ -469,23 +470,9 @@ class CompactionEntry(NativeEntry):
+ @dataclass(frozen=True, kw_only=True)
+ class StoredEntry(NativeEntry):
+     """A committed Pi Durable entry owns zero or more ordinary Pi messages."""
++    wire_tag = None
+     id: int = field()
+-    model: tuple[PiMessage, ...] = ()
+-
+-    @classmethod
+-    def wire_member(cls, value):
+-        return cls
+-
+-    @property
+-    def original_id(self):
+-        return str(self.id)
+-
+-    @property
+-    def input_boundary(self):
+-        return any(message.user for message in self.model)
+-
+-    def _events(self, context):
+-        return [event for message in self.model for event in message.transcript_events(context)]
++    messages: tuple[PiMessage, ...] = field(default=(), metadata={'wire_name': 'model'})
+ 
+ 
+ class CustomEntry(NativeEntry):
+diff --git a/src/agent_comms/native_session_files.py b/src/agent_comms/native_session_files.py
+index b224fc279..059e60534 100644
+--- a/src/agent_comms/native_session_files.py
++++ b/src/agent_comms/native_session_files.py
+@@ -28,10 +28,6 @@ class NativeSessionFiles:
+     def input_proof(self) -> Path:
+         return Path(f"{self.session}.input-proof")
+ 
+-    @property
+-    def schema_paths(self) -> tuple[Path, ...]:
+-        return (self.input_proof,)
+-
+     @property
+     def writer_lock(self) -> Path:
+         return self.session.with_name(f".{self.session.name}.agent-comms-writer.lock")
+diff --git a/src/agent_comms/native_transcript.py b/src/agent_comms/native_transcript.py
+index 366c98dcb..7ff0ee7de 100644
+--- a/src/agent_comms/native_transcript.py
++++ b/src/agent_comms/native_transcript.py
+@@ -5,7 +5,7 @@ from __future__ import annotations
+ from collections import defaultdict
+ from abc import abstractmethod
+ from collections.abc import Generator
+-from contextlib import contextmanager
++from contextlib import closing, contextmanager
+ from dataclasses import dataclass
+ from pathlib import Path
+ from typing import TYPE_CHECKING
+@@ -14,6 +14,7 @@ if TYPE_CHECKING:
+     from .thread_identity import RecordedThreadIncarnation
+ 
+ from .declared_family import DeclaredFamily
++from .coordination_errors import StaleRevision
+ from .native_entries import NativeEntry, SessionEntry, TranscriptProjection
+ from .transcript_events import TurnDigest
+ from .private_path import FileRevision
+@@ -105,16 +106,6 @@ class NativeRecord:
+         entry = NativeEntry.read(raw) if complete else None
+         return cls(start, end, entry, complete)
+ 
+-    def completed_turn(self, records):
+-        entry = self.entry
+-        if entry is not None and entry.input_boundary:
+-            return (TurnDigest.from_records(entry.require_entry_id(), records),)
+-        return ()
+-
+-    @property
+-    def turn_events(self):
+-        return self.project(lambda original: original.entry.events(TranscriptProjection()))
+-
+     def project(self, projection):
+         """A decoded record owns whether it can produce presentation events."""
+         return projection(self) if self.entry is not None else ()
+@@ -143,7 +134,7 @@ class NativeRecord:
+ class StoredRecord(NativeRecord):
+     @property
+     def events(self):
+-        return self.turn_events
++        return self.project(lambda original: original.entry.events(TranscriptProjection()))
+ 
+     @property
+     def size(self):
+@@ -320,6 +311,29 @@ class NativeTranscript(TranscriptSource):
+             return record, user
+         raise RelationViolationError("Native turn has no final reply after its checkpoint")
+ 
++    def turns(self, last: int):
++        """Read input-bounded turns under one original record-source cut."""
++        turns, pending = [], []
++        with self.reading() as reader:
++            cut = reader.cut()
++            if cut.offset == 0:
++                return ()
++            with closing(reader.reverse(cut.offset)) as records:
++                for record in records:
++                    if record.entry is None:
++                        continue
++                    pending.append(record)
++                    if record.entry.input_boundary:
++                        turns.append(TurnDigest(record.entry.require_entry_id(), tuple(
++                            event for original in reversed(pending)
++                            for event in original.project(lambda source: source.entry.events(TranscriptProjection())))))
++                        pending.clear()
++                        if len(turns) >= last:
++                            break
++            if not cut.holds(reader.cut(), cut.offset):
++                raise StaleRevision('Turn source changed during its read')
++        return tuple(turns)
++
+     def tail(self, *, max_bytes: int | None = None):
+         end = self.path.stat().st_size
+         floor = max(0, end - max_bytes) if max_bytes is not None else 0
+diff --git a/src/agent_comms/pi_durable_backend.py b/src/agent_comms/pi_durable_backend.py
+index 847445cc1..1f119870a 100644
+--- a/src/agent_comms/pi_durable_backend.py
++++ b/src/agent_comms/pi_durable_backend.py
+@@ -17,11 +17,11 @@ from .native_custody import PiChild
+ from .external_transcript import ExternalCut
+ from .native_entries import StoredEntry
+ from .native_session_files import NativeSessionFiles
+-from .native_transcript import StoredRecord
+-from .pi_commands import Compact, PiCommand
+-from .pi_events import AutoRetryEnd, DurablePiEvent, MessageEnd, RetryEnd
+-from .pi_payloads import PiPayload, PiResponseData
+-from .pi_rpc import PiRpcChannel
++from .native_transcript import NativeTranscript, StoredRecord
++from .pi_commands import Compact, GetAvailableModels, GetSessionStats, GetState, PiCommand, SetModel, SetThinkingLevel
++from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
++from .pi_payloads import PiResponseData
++from .pi_vocabulary import ThinkingLevel
+ from .selected_session import SelectedSession
+ from .transcript_receipts import TranscriptSource
+ from .unstarted_runtime import UnstartedRuntime
+@@ -49,7 +49,7 @@ class DurableDatabase(RuntimeLocation):
+         return self.path
+ 
+     def storage_files(self):
+-        return (DurableDatabaseFiles(Path(self.path)),)
++        return (NativeSessionFiles(Path(self.path), schema_suffix='', lock_name='{name}.lock'),)
+ 
+ 
+ @dataclass(frozen=True)
+@@ -68,23 +68,6 @@ class DurableSelectedSession(SelectedSession):
+         raise ValueError('A durable database cannot attest a native Pi session')
+ 
+ 
+-class DurableDatabaseFiles(NativeSessionFiles):
+-    @property
+-    def members(self):
+-        return (self.session, *(Path(str(self.session) + suffix) for suffix in ('-wal', '-shm', '-journal', '.lock')))
+-
+-    @property
+-    def schema_paths(self):
+-        return (self.session,)
+-
+-
+-@dataclass(frozen=True)
+-class DurableEntryQuery:
+-    min_entry_id: int | None = field(default=None, metadata={'wire_name': 'minEntryId', 'wire_omit_default': True})
+-    max_entry_id: int | None = field(default=None, metadata={'wire_name': 'maxEntryId', 'wire_omit_default': True})
+-    order: str = 'descending'
+-
+-
+ @dataclass(frozen=True)
+ class HistoryData(PiResponseData):
+     items: tuple[StoredEntry, ...]
+@@ -97,7 +80,10 @@ def _history_request(source, command):
+ 
+ 
+ @dataclass(frozen=True)
+-class DurableTranscript(TranscriptSource):
++class DurableTranscript(NativeTranscript):
++    # SDK records use native turn projection, never native-file publication proof.
++    projection = TranscriptSource.projection
++    publication_revision = TranscriptSource.publication_revision
+     location: DurableDatabase
+     execute: Callable = field(default=_history_request, repr=False, compare=False)
+ 
+@@ -115,18 +101,15 @@ class DurableTranscript(TranscriptSource):
+             finally:
+                 loop.run(child.shutdown())
+ 
+-    def page(self, *, limit=128, cursor=None, query=DurableEntryQuery()):
+-        return self.execute(self, Entries(limit, cursor, query))
+-
+     def cut(self):
+-        return ExternalCut(max((entry.id for entry in self.page(limit=1).items), default=0))
++        return ExternalCut(max((entry.id for entry in self.execute(self, Entries(1)).items), default=0))
+ 
+     def records(self, minimum, maximum, order):
+         if maximum < minimum:
+             return
+         cursor = None
+         while True:
+-            page = self.page(cursor=cursor, query=DurableEntryQuery(minimum, maximum, order))
++            page = self.execute(self, Entries(128, cursor, minimum, maximum, order))
+             for entry in page.items:
+                 yield StoredRecord(entry.id - 1, entry.id, entry, True)
+             cursor = page.cursor
+@@ -140,49 +123,9 @@ class DurableTranscript(TranscriptSource):
+         return self.records(1, before, 'descending')
+ 
+ 
+-@dataclass(frozen=True)
+-class ModelRef(PiPayload):
+-    provider: str
+-    model_id: str = field(metadata={'wire_name': 'modelId'})
+-
+-
+-@dataclass(frozen=True)
+-class AgentSettings(PiPayload):
+-    model: ModelRef | None = field(default=None, metadata={'wire_omit_default': True})
+-    thinking_level: str | None = field(default=None, metadata={'wire_name': 'thinkingLevel', 'wire_omit_default': True})
+-    instructions: str | None = field(default=None, metadata={'wire_omit_default': True})
+-
+-    @classmethod
+-    def selected(cls, model, thinking):
+-        return cls(ModelRef(*model.split('/', 1)) if model else None, thinking)
+-
+-
+-@dataclass(frozen=True)
+-class ConfigurationData(PiResponseData):
+-    models: tuple[str, ...]
+-    model: ModelRef | None = None
+-    thinking: str | None = None
+-
+-    def selected(self):
+-        if self.model is None:
+-            raise ValueError('Durable session has no configured model')
+-        return f'{self.model.provider}/{self.model.model_id}', self.thinking
+-
+-
+-@dataclass(frozen=True)
+-class InterruptedWork:
+-    id: str
+-    kind: str
+-
+-
+ @dataclass(frozen=True)
+ class RecoveryData(PiResponseData):
+-    work: tuple[InterruptedWork, ...]
+-
+-
+-@dataclass(frozen=True)
+-class ContextUsageData(ContextUsage, PiResponseData):
+-    pass
++    work: tuple[str, ...]
+ 
+ 
+ @dataclass(frozen=True)
+@@ -194,21 +137,6 @@ class DurableRetryEnd(RetryEnd, DurablePiEvent):
+     wire_kind = AutoRetryEnd.wire_kind
+ 
+ 
+-@dataclass(frozen=True, kw_only=True)
+-class StoredMessageEnd(MessageEnd, DurablePiEvent):
+-    entry: StoredEntry
+-    wire_kind = MessageEnd.wire_kind
+-
+-
+-class Snapshot(DurablePiEvent):
+-    pass
+-
+-
+-@dataclass(frozen=True)
+-class AgentChanged(DurablePiEvent):
+-    agent: AgentSettings
+-
+-
+ @dataclass(frozen=True)
+ class TaskFailed(DurablePiEvent):
+     task_id: int = field(metadata={'wire_name': 'taskId'})
+@@ -218,14 +146,6 @@ class TaskFailed(DurablePiEvent):
+         return (Error(self.message),)
+ 
+ 
+-class RunStart(DurablePiEvent): pass
+-class RunEnd(DurablePiEvent): pass
+-class InboxUpdate(DurablePiEvent): pass
+-class Submission(DurablePiEvent): pass
+-class DeferredPoll(DurablePiEvent): pass
+-class UsageChanged(DurablePiEvent): pass
+-
+-
+ class HostQuery(PiCommand):
+     declared_name = None
+     strict_response = True
+@@ -235,7 +155,8 @@ class HostQuery(PiCommand):
+ class Open(HostQuery):
+     path: str
+     cwd: str
+-    agent: AgentSettings
++    model: str | None
++    thinking_level: str | None = field(metadata={'wire_name': 'thinkingLevel'})
+     auth_path: str = field(metadata={'wire_name': 'authPath'})
+     response_payload = RecoveryData
+ 
+@@ -264,20 +185,12 @@ class Settle(HostQuery):
+ class Entries(HostQuery):
+     limit: int
+     cursor: dict[str, JsonValue] | None = None
+-    query: DurableEntryQuery = DurableEntryQuery()
++    min_entry_id: int | None = field(default=None, metadata={'wire_name': 'minEntryId', 'wire_omit_default': True})
++    max_entry_id: int | None = field(default=None, metadata={'wire_name': 'maxEntryId', 'wire_omit_default': True})
++    order: str = 'descending'
+     response_payload = HistoryData
+ 
+ 
+-@dataclass(frozen=True)
+-class Configure(HostQuery):
+-    agent: AgentSettings | None = field(default=None, metadata={'wire_omit_default': True})
+-    response_payload = ConfigurationData
+-
+-
+-class ContextUsageQuery(HostQuery):
+-    response_payload = ContextUsageData
+-
+-
+ class CompactDurable(Compact):
+     strict_response = True
+     response_payload = OutcomeData
+@@ -309,7 +222,7 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
+                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                 self.child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+                     cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
+-            await self.child.request(Open(str(path), thread.worktree, AgentSettings.selected(thread.model, thread.thinking_level), str(Path.home() / '.pi/agent/auth.json')))
++            await self.child.request(Open(str(path), thread.worktree, thread.model, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
+         return self.child
+ 
+     async def interrupted(self, thread):
+@@ -325,18 +238,8 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
+         await child.request(Resume())
+ 
+     async def run_turn(self, thread, content, delivery):
+-        async with self.lock:
+-            child = await self.open(thread)
+-            async with child.reader.turn() as turn:
+-                await child.request(Watch())
+-                try:
+-                    await self.submit_turn(content, delivery)
+-                    async for event in turn.converted():
+-                        yield event
+-                finally:
+-                    await child.request(Unwatch())
+-
+-    async def submit_turn(self, content, delivery):
++        if False:
++            yield
+         raise RuntimeError('Durable worker integration is unfinished: Core InputId and send-disposition integration required')
+ 
+     async def abort(self, owner):
+@@ -351,7 +254,10 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
+ 
+     async def context_usage(self, thread):
+         child = await self.open(thread)
+-        return await child.request(ContextUsageQuery())
++        usage = (await child.request(GetSessionStats())).context_usage
++        if usage is None:
++            raise ValueError('Durable session has no context observation')
++        return ContextUsage(usage.tokens, usage.context_window)
+ 
+     async def compact(self, thread, instructions):
+         child = await self.open(thread)
+@@ -359,8 +265,16 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
+ 
+     async def models(self, thread):
+         child = await self.open(thread)
+-        return (await child.request(Configure())).models
++        return tuple(model.display_name for model in (await child.request(GetAvailableModels())).models)
+ 
+     async def configure(self, thread, model, thinking):
+         child = await self.open(thread)
+-        return (await child.request(Configure(AgentSettings.selected(model, thinking)))).selected()
++        if model is not None:
++            provider, model_id = model.split('/', 1)
++            await child.request(SetModel(provider=provider, model_id=model_id))
++        if thinking is not None:
++            await child.request(SetThinkingLevel(level=thinking))
++        state = await child.request(GetState())
++        if state.model.display_name is None:
++            raise ValueError('Durable session has no configured model')
++        return state.model.display_name, ThinkingLevel.optional_name(state.thinking_level)
+diff --git a/src/agent_comms/pi_durable_host.mjs b/src/agent_comms/pi_durable_host.mjs
+index f5dedcc65..f0c11b6d9 100644
+--- a/src/agent_comms/pi_durable_host.mjs
++++ b/src/agent_comms/pi_durable_host.mjs
+@@ -15,13 +15,18 @@ const { estimateContext } = await import(new URL('./harness/compaction.js', impo
+ const Recovery = defineDoc({ kind: 'core.recovery', version: 1, scope: 'session', initial: () => ({ decisions: {} }) });
+ let harness, root, stream, models;
+ let resumed = false;
+-const emit = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
++const emit = (value) => {
++  const { changes, ...update } = value;
++  const frames = value.type === 'message_update'
++    ? changes.map(assistantMessageEvent => ({ ...update, assistantMessageEvent })) : [value];
++  for (const frame of frames) process.stdout.write(`${JSON.stringify(frame)}\n`);
++};
+ const ack = Object.freeze({});
+ const requireOpen = () => { if (!harness) throw new Error('Host is not open'); };
+ const requireResumed = () => { requireOpen(); if (!resumed) throw new Error('Interrupted work must be explicitly abandoned before resume'); };
+ const workItems = (inspection) => [
+-  ...inspection.tasks.map(({ record }) => ({ id: `task:${record.id}`, kind: record.kind })),
+-  ...inspection.submissions.map(record => ({ id: `submission:${record.id}`, kind: 'submission' })),
++  ...inspection.tasks.map(({ record }) => `task:${record.id}`),
++  ...inspection.submissions.map(record => `submission:${record.id}`),
+ ];
+ const text = (entry) => (entry.model ?? []).flatMap(message => typeof message.content === 'string'
+   ? [message.content] : (message.content ?? []).filter(block => block.type === 'text').map(block => block.text)).join('\n');
+@@ -42,7 +47,14 @@ const handlers = {
+       models, registry, env: ({ cwd }) => new NodeExecutionEnv({ cwd: cwd ?? request.cwd }),
+       onReport: error => process.stderr.write(`${error.stack ?? error}\n`),
+     }, context);
+-    root = await harness.root(context, { agent: { cwd: request.cwd, ...(request.agent ?? {}) } });
++    const agent = { cwd: request.cwd };
++    if (request.model) {
++      const separator = request.model.indexOf('/');
++      if (separator < 1 || separator === request.model.length - 1) throw new Error('Expected provider/model');
++      agent.model = { provider: request.model.slice(0, separator), modelId: request.model.slice(separator + 1) };
++    }
++    if (request.thinkingLevel) agent.thinkingLevel = request.thinkingLevel;
++    root = await harness.root(context, { agent });
+     return { work: workItems(await harness.inspect(context)) };
+   },
+   async open_history(request) {
+@@ -77,10 +89,10 @@ const handlers = {
+     requireOpen();
+     if (resumed) throw new Error('Recovery is only available before resume');
+     if (request.disposition !== 'ABANDON') throw new Error('Only explicit ABANDON is supported');
+-    const work = workItems(await harness.inspect(context)).find(item => item.id === request.work);
++    const work = workItems(await harness.inspect(context)).find(item => item === request.work);
+     if (!work) throw new Error('Interrupted work does not exist');
+-    await harness.commit(async tx => { (await tx.doc(Recovery)).decisions[work.id] = 'ABANDON'; }, context);
+-    const [kind, id] = work.id.split(':');
++    await harness.commit(async tx => { (await tx.doc(Recovery)).decisions[work] = 'ABANDON'; }, context);
++    const [kind, id] = work.split(':');
+     if (kind === 'task') await harness.abortTask(Number(id), context);
+     else await harness.abortSubmission(Number(id), context);
+     return ack;
+@@ -90,7 +102,7 @@ const handlers = {
+     if (resumed) return ack;
+     const inspection = await harness.inspect(context);
+     const decisions = (await harness.snapshot(Recovery, context))?.decisions ?? {};
+-    if (workItems(inspection).some(work => decisions[work.id] !== 'ABANDON')) throw new Error('Interrupted work has no recorded disposition');
++    if (workItems(inspection).some(work => decisions[work] !== 'ABANDON')) throw new Error('Interrupted work has no recorded disposition');
+     if (inspection.tasks.some(({ record }) => !record.abortRequested)) throw new Error('Interrupted task was not abort-marked');
+     harness.resume();
+     resumed = true;
+@@ -105,20 +117,31 @@ const handlers = {
+   async abort() { requireResumed(); await root.abort(context); return ack; },
+   async entries(request) {
+     requireOpen();
+-    const page = await root.entries(request.query ?? {}, request.limit, request.cursor ?? undefined, context);
++    const { minEntryId, maxEntryId, order } = request;
++    const page = await root.entries({ minEntryId, maxEntryId, order }, request.limit, request.cursor ?? undefined, context);
+     return { items: page.items, cursor: page.next ?? null };
+   },
+-  async context_usage_query() {
++  async get_session_stats() {
+     requireOpen();
+     const agent = await root.agent(context);
+     const model = agent.model && models.getModel(agent.model.provider, agent.model.modelId);
+-    return { tokens: estimateContext(await root.context(context), []), window: model?.contextWindow ?? null };
++    return { contextUsage: { tokens: estimateContext(await root.context(context), []), contextWindow: model?.contextWindow ?? null } };
+   },
+-  async configure(request) {
++  async get_state() {
+     requireOpen();
+-    if (request.agent) await root.configure(request.agent, context);
+     const agent = await root.agent(context);
+-    return { model: agent.model, thinking: agent.thinkingLevel, models: (await models.getAvailable()).map(model => `${model.provider}/${model.id}`) };
++    return { model: agent.model ? models.getModel(agent.model.provider, agent.model.modelId) : null, thinkingLevel: agent.thinkingLevel };
++  },
++  async get_available_models() { requireOpen(); return { models: await models.getAvailable() }; },
++  async set_model(request) {
++    requireOpen();
++    await root.configure({ model: { provider: request.provider, modelId: request.modelId } }, context);
++    return ack;
++  },
++  async set_thinking_level(request) {
++    requireOpen();
++    await root.configure({ thinkingLevel: request.level }, context);
++    return ack;
+   },
+   async compact_durable(request) {
+     requireResumed();
+diff --git a/src/agent_comms/pi_events.py b/src/agent_comms/pi_events.py
+index 5fe4a21f8..b0d56115f 100644
+--- a/src/agent_comms/pi_events.py
++++ b/src/agent_comms/pi_events.py
+@@ -37,11 +37,7 @@ if TYPE_CHECKING:
+ 
+ @dataclass(frozen=True)
+ class PiEvent(PiPayload, DeclaredFamily):
+-    """One record Pi writes to RPC stdout; each member converts one Pi event kind.
+-
+-    ``PiNativeBackend.event_kinds`` lists what Pi 0.85.1 emits; the family is
+-    checked against it when this module finishes importing.
+-    """
++    """One declaration-owned record received by the Pi RPC channel."""
+ 
+     wire_tag = "type"
+     opaque = False
+@@ -123,7 +119,11 @@ class NativePiEvent(PiEvent):
+ 
+ 
+ class DurablePiEvent(PiEvent):
+-    declared_name = None
++    ignored_kinds = ('run_start', 'run_end', 'inbox_update', 'submission', 'deferred_poll', 'usage_changed', 'snapshot', 'agent_changed')
++
++    @classmethod
++    def known_kinds(cls):
++        return cls.ignored_kinds if cls is DurablePiEvent else super().known_kinds()
+ 
+     @staticmethod
+     def unowned_event(event):
+@@ -132,7 +132,7 @@ class DurablePiEvent(PiEvent):
+     @classmethod
+     def wire_member(cls, wire):
+         members = tuple(member for member in cls.members_with(cls)
+-                        if member.wire_kind() == wire.get("type"))
++                        if wire.get("type") in member.known_kinds())
+         if len(members) > 1:
+             raise ValueError("Ambiguous durable event declaration")
+         return members[0] if members else UnknownPiEvent
+@@ -661,7 +661,7 @@ class InputCommitted(NativePiEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class MessageEnd(NativePiEvent):
++class MessageEnd(NativePiEvent, DurablePiEvent):
+     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
+ 
+     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+@@ -698,7 +698,7 @@ class MessageStart(NativePiEvent, DurablePiEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class MessageUpdate(NativePiEvent):
++class MessageUpdate(NativePiEvent, DurablePiEvent):
+     assistant_message_event: PiDelta | None = field(
+         default=None, metadata={"wire_name": "assistantMessageEvent"}
+     )
+@@ -715,16 +715,12 @@ class MessageUpdate(NativePiEvent):
+                 session.usage.provisional = True
+                 yield session.context_info()
+ 
+-        for delta in self.deltas:
+-            for event in delta.emit(session):
++        if self.assistant_message_event is not None:
++            for event in self.assistant_message_event.emit(session):
+                 yield event
+ 
+-    @property
+-    def deltas(self):
+-        return (self.assistant_message_event,) if self.assistant_message_event is not None else ()
+-
+     def convert(self):
+-        return tuple(event for delta in self.deltas for event in delta.events())
++        return self.assistant_message_event.events() if self.assistant_message_event is not None else ()
+ 
+     accepts_prompt = True
+ 
+@@ -741,17 +737,6 @@ class MessageUpdate(NativePiEvent):
+         return phase.response_output() if delta is not None and delta.response_progress else phase
+ 
+ 
+-@dataclass(frozen=True, kw_only=True)
+-class BatchMessageUpdate(MessageUpdate, DurablePiEvent):
+-    """Pi Durable batches the same Pi deltas in one committed update."""
+-    changes: tuple[PiDelta, ...]
+-    wire_kind = MessageUpdate.wire_kind
+-
+-    @property
+-    def deltas(self):
+-        return self.changes
+-
+-
+ @dataclass(frozen=True, kw_only=True)
+ class Response(NativePiEvent, DurablePiEvent):
+     command: type[PiCommand] = UnknownCommand
+@@ -801,7 +786,9 @@ class Response(NativePiEvent, DurablePiEvent):
+         return super().normalize_field(target, key, value, record)
+ 
+     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+-        owner = session.native.reader.correlate(self) or self.command
++        owner = session.native.reader.correlate(self)
++        if owner is None:
++            raise ValueError('Unsolicited Pi response')
+         async for event in owner.on_response(self, session):
+             yield event
+ 
+diff --git a/src/agent_comms/pi_rpc.py b/src/agent_comms/pi_rpc.py
+index e96652809..8eaa10d88 100644
+--- a/src/agent_comms/pi_rpc.py
++++ b/src/agent_comms/pi_rpc.py
+@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
+ 
+ import asyncio
+ import json
+-from typing import TYPE_CHECKING, Any
++from typing import TYPE_CHECKING
+ from uuid import uuid4
+ 
+ from .pending_requests import PendingRequests
+@@ -15,16 +15,10 @@ from .sealed import Sealed
+ 
+ if TYPE_CHECKING:
+     from .pi_commands import PiCommand
+-    from .pi_events import PiEvent, Response
+ 
+ 
+ class PiRpcChannel(JsonlStreamReader, Sealed):
+-    """Read whole JSONL records regardless of asyncio's transport buffer limit.
+-
+-    Pi's end-of-turn events may contain many messages in one record. Retain
+-    consumed fragments across cancellation when the finish signal wins the
+-    read race, so the next read can finish the same record without losing bytes.
+-    """
++    """Correlate Pi commands and stream decoded records over shared JSONL framing."""
+ 
+     OBSERVATION_MAX_BYTES = 16 * 1024
+ 
+diff --git a/src/agent_comms/transcript_events.py b/src/agent_comms/transcript_events.py
+index 8e0f51aec..18daa687f 100644
+--- a/src/agent_comms/transcript_events.py
++++ b/src/agent_comms/transcript_events.py
+@@ -237,10 +237,5 @@ class ToolEndTranscript(ToolTranscript):
+ class TurnDigest:
+     """One turn's events in their recorded order, read from the unit's own records."""
+ 
+-    @classmethod
+-    def from_records(cls, turn_id, records):
+-        return cls(turn_id, tuple(event for record in reversed(records)
+-                                 for event in record.turn_events))
+-
+     turn_id: str
+     events: tuple[TranscriptEvent, ...]
+diff --git a/src/agent_comms/transcript_receipts.py b/src/agent_comms/transcript_receipts.py
+index 7454754c8..b5ed73733 100644
+--- a/src/agent_comms/transcript_receipts.py
++++ b/src/agent_comms/transcript_receipts.py
+@@ -8,7 +8,7 @@ from __future__ import annotations
+ 
+ from abc import ABC, abstractmethod
+ from collections.abc import Iterator
+-from contextlib import closing, contextmanager
++from contextlib import contextmanager
+ from dataclasses import dataclass, field, replace
+ from functools import partial
+ from pathlib import Path
+@@ -18,7 +18,6 @@ if TYPE_CHECKING:
+     from .transcript_events import TranscriptEvent
+ 
+ from .bus_publication import CommittedDelivery
+-from .coordination_errors import StaleRevision
+ from .declared_family import DeclaredFamily
+ from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+ from .routing import MessageRoute, TurnRouting
+@@ -275,25 +274,6 @@ class TranscriptSource:
+     source adds the separately acquired wire/publication capability below.
+     """
+ 
+-    def turns(self, last):
+-        turns, pending = [], []
+-        with self.reading() as reader:
+-            cut = reader.cut()
+-            if cut.offset == 0:
+-                return ()
+-            with closing(reader.reverse(cut.offset)) as records:
+-                for record in records:
+-                    pending.append(record)
+-                    completed = record.completed_turn(pending)
+-                    if completed:
+-                        turns.extend(completed)
+-                        pending.clear()
+-                        if len(turns) >= last:
+-                            break
+-            if not cut.holds(reader.cut(), cut.offset):
+-                raise StaleRevision('Turn source changed during its read')
+-        return tuple(turns)
+-
+     def current_draft(self):
+         """Saved records have no draft unless their reader supplies one."""
+         return None
+diff --git a/tests/test_durable_host_records.py b/tests/test_durable_host_records.py
+index 630e76752..9d304a1d9 100644
+--- a/tests/test_durable_host_records.py
++++ b/tests/test_durable_host_records.py
+@@ -4,13 +4,15 @@ import json
+ 
+ import pytest
+ 
+-from agent_comms.agent_backend import FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction
++from agent_comms.agent_backend import ContextUsage, FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction
+ from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
+ from agent_comms.pi_durable_backend import (
+-    CompactDurable, ContextUsageData, ContextUsageQuery, DurableDatabase,
++    CompactDurable, DurableDatabase,
+     DurablePiEvent, Inspect, PiDurableBackend, Settle,
+ )
+ from agent_comms.pi_rpc import PiRpcChannel
++from agent_comms.pi_commands import GetSessionStats
++from agent_comms.pi_payloads import PiContextUsage
+ from agent_comms.pi_events import PiEvent, UnknownPiEvent
+ from agent_comms.threads import Thread
+ 
+@@ -34,10 +36,10 @@ def test_compaction_reply_decodes_directly_to_existing_outcome(result, expected)
+ 
+ 
+ @pytest.mark.parametrize('event,expected', [
+-    ({'type': 'message_update', 'usage': {}, 'changes': [
+-        {'type': 'text_delta', 'contentIndex': 0, 'delta': 'visible'},
+-        {'type': 'thinking_delta', 'contentIndex': 1, 'delta': 'reasoning'},
+-    ]}, (Chunk('visible'), Thinking('reasoning'))),
++    ({'type': 'message_update', 'usage': {}, 'assistantMessageEvent':
++        {'type': 'text_delta', 'contentIndex': 0, 'delta': 'visible'}}, (Chunk('visible'),)),
++    ({'type': 'message_update', 'usage': {}, 'assistantMessageEvent':
++        {'type': 'thinking_delta', 'contentIndex': 1, 'delta': 'reasoning'}}, (Thinking('reasoning'),)),
+     ({'type': 'tool_execution_start', 'toolCallId': 'call', 'toolName': 'read',
+       'args': {'path': 'source.py'}},
+      (ToolStart(id='call', name='read', title='Read source.py', kind='read', args={'path': 'source.py'}),)),
+@@ -51,14 +53,12 @@ def test_event_fields_and_changes_are_decoded_at_frame_ingress(event, expected):
+ 
+ def test_missing_delta_and_unknown_result_fields_fail_at_ingress():
+     with pytest.raises((TypeError, ValueError), match='delta'):
+-        decode({'type': 'message_update', 'usage': {}, 'changes': [
+-            {'type': 'text_delta', 'contentIndex': 0},
+-        ]})
++        decode({'type': 'message_update', 'usage': {}, 'assistantMessageEvent':
++            {'type': 'text_delta', 'contentIndex': 0}})
+     with pytest.raises(ValueError, match='Unknown fields'):
+         decode({'type': 'response', 'command': 'compact_durable', 'success': True,
+                 'id': '1', 'data': {'outcome': {'kind': 'stale', 'message': 'extra'}}})
+-    with pytest.raises((TypeError, ValueError), match='changes'):
+-        decode({'type': 'message_update', 'usage': {}})
++    assert decode({'type': 'message_update', 'usage': {}}).convert() == ()
+     with pytest.raises((TypeError, ValueError), match='success'):
+         PiEvent.from_wire({'type': 'auto_retry_end', 'attempt': 1})
+     assert not isinstance(decode({'type': 'auto_retry_end', 'attempt': 1}), UnknownPiEvent)
+@@ -88,12 +88,12 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path):
+         thread = Thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
+                         session_file=location.path)
+         try:
+-            assert await backend.context_usage(thread) == ContextUsageData(0, None)
++            assert await backend.context_usage(thread) == ContextUsage(0, None)
+             assert await backend.interrupted(thread) == ()
+             with pytest.raises(RuntimeError, match='Interrupted work does not exist'):
+                 await backend.child.request(Settle('task:missing', 'ABANDON'))
+             assert (await backend.child.request(Inspect())).work == ()
+-            assert await backend.child.request(ContextUsageQuery()) == ContextUsageData(0, None)
++            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(0, None)
+             assert backend.child.proc.alive()
+         finally:
+             await backend.close_idle()
+diff --git a/tests/test_pi_durable_event_delivery.py b/tests/test_pi_durable_event_delivery.py
+index e57084389..7ff9380c0 100644
+--- a/tests/test_pi_durable_event_delivery.py
++++ b/tests/test_pi_durable_event_delivery.py
+@@ -6,10 +6,12 @@ import pytest
+ 
+ from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
+ from agent_comms.pi_payloads import PiUsage, TextDelta, ThinkingDelta
+-from agent_comms.pi_events import BatchMessageUpdate, ToolExecutionStart
++from agent_comms.pi_events import MessageUpdate, DurablePiEvent, ToolExecutionStart
++from agent_comms.pi_commands import GetState, SetThinkingLevel
++from agent_comms.pi_vocabulary import ThinkingLevel
+ from agent_comms.pi_durable_backend import (
+-    AgentChanged, DurableDatabase, PiDurableBackend, Snapshot, TaskFailed,
+-    Configure, AgentSettings, Inspect, Watch, Unwatch,
++    DurableDatabase, PiDurableBackend, TaskFailed,
++    Inspect, Watch, Unwatch,
+ )
+ 
+ 
+@@ -26,13 +28,14 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
+         try:
+             async with host.reader.turn() as turn:
+                 await host.request(Watch())
+-                assert isinstance(await turn.next_event(), Snapshot)
+-                await host.request(Configure(AgentSettings(instructions='turn-owned event')))
++                assert type(await turn.next_event()) is DurablePiEvent
++                await host.request(SetThinkingLevel(level='low'))
+                 changed = await asyncio.wait_for(turn.next_event(), 5)
+-                assert isinstance(changed, AgentChanged)
+-                assert changed.agent.instructions == 'turn-owned event'
++                assert type(changed) is DurablePiEvent
++                assert ThinkingLevel.optional_name((await host.request(GetState())).thinking_level) == 'low'
+                 for event in (
+-                    BatchMessageUpdate(usage=PiUsage(), changes=(TextDelta('visible'), ThinkingDelta('reasoning'))),
++                    MessageUpdate(usage=PiUsage(), assistant_message_event=TextDelta('visible')),
++                    MessageUpdate(usage=PiUsage(), assistant_message_event=ThinkingDelta('reasoning')),
+                     ToolExecutionStart(tool_call_id='call', tool_name='read', args={}),
+                     TaskFailed(task_id=1, message='visible failure'),
+                 ):
+@@ -48,10 +51,11 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
+                 await host.request(Unwatch())
+             async with host.reader.turn() as next_turn:
+                 await host.request(Watch())
+-                assert isinstance(await next_turn.next_event(), Snapshot)
+-                await host.request(Configure(AgentSettings(instructions='next turn')))
++                assert type(await next_turn.next_event()) is DurablePiEvent
++                await host.request(SetThinkingLevel(level='off'))
+                 changed = await asyncio.wait_for(next_turn.next_event(), 5)
+-                assert changed.agent.instructions == 'next turn'
++                assert type(changed) is DurablePiEvent
++                assert ThinkingLevel.optional_name((await host.request(GetState())).thinking_level) == 'off'
+                 await host.request(Unwatch())
+         finally:
+             await host.shutdown()

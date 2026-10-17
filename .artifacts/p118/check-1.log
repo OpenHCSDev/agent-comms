@@ -1,0 +1,68 @@
+........................................................................ [ 96%]
+F..                                                                      [100%]
+=================================== FAILURES ===================================
+_______ test_pi_rpc_stream_converts_to_agent_events_through_the_backend ________
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/p118-toad-theme-20261017-owner-1/test_pi_rpc_stream_converts_to0')
+comms = <agent_comms.comms.Comms object at 0x7fb397b45bd0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb3976f8210>
+
+    @pytest.mark.usefixtures("native_rpc_fixture")
+    @pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
+    async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_path, comms, monkeypatch):
+        from agent_comms.native_session_reopen import NativeSessionIdentity
+    
+        # The stub is not a verified Pi package; its saved header is the session's identity.
+        from agent_comms.native_pi import NativePiRpcLaunch
+    
+        # The stub is not a verified Pi package: its saved header is the session's
+        # identity, and its acquired launch is the one a retained child is reused under.
+        monkeypatch.setattr(NativeSessionIdentity, "locate", staticmethod(
+            lambda package, path: NativeSessionIdentity("same", path)
+        ))
+        monkeypatch.setattr(NativePiRpcLaunch, "retained_managed", lambda self, *args, **options: self)
+        session = tmp_path / "session.jsonl"
+        project = tmp_path / "project"
+        project.mkdir()
+        session.write_text(json.dumps({
+            "type": "session", "version": 3, "id": "same", "timestamp": "2026-10-10T10:00:00.000Z",
+            "cwd": str(project),
+        }) + "\n")
+        thread = comms.registry.declare(Thread(
+            "owner", frozenset(), str(project), session_file=str(session), model="p/m",
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ))
+        published = []
+    
+        async def observe(observed, state, info):
+            published.append((observed.name, info.context_used, info.context_size))
+    
+        backend = PiNativeBackend(str(_pi_stub(tmp_path, session)), NativeArguments.parse([]), comms, observe)
+        starts = []
+        finish = asyncio.Event()
+        delivery = ab.TurnDelivery(
+            worktree=str(project), environment={}, inbox=ab.TurnInbox(), finish_event=finish,
+            send_boundary=None, interrupt_boundary=None,
+            input_started=lambda public_id, native_id, text: starts.append(text) or True,
+            request_progress=lambda progress, process: None,
+            ui_request=None,
+        )
+        events = []
+        try:
+            async with asyncio.timeout(10):
+                async for event in backend.run_turn(thread, ab.InputContent(text="ping"), delivery):
+                    events.append(event)
+                    if isinstance(event, ae.StreamSettled):
+                        finish.set()
+            kinds = [type(event) for event in events]
+            assert len(events) > 1, events
+>           assert ae.Chunk in kinds and ae.ProviderUsage in kinds and ae.StreamSettled in kinds
+E           AssertionError: assert (<class 'agent_comms.agent_events.Chunk'> in [<class 'agent_comms.agent_events.AgentInfo'>, <class 'agent_comms.agent_events.NativePhaseChanged'>, <class 'agent_co..._events.Chunk'>, <class 'agent_comms.agent_events.ProviderUsage'>, <class 'agent_comms.agent_events.ContextInfo'>, ...] and <class 'agent_comms.agent_events.ProviderUsage'> in [<class 'agent_comms.agent_events.AgentInfo'>, <class 'agent_comms.agent_events.NativePhaseChanged'>, <class 'agent_co..._events.Chunk'>, <class 'agent_comms.agent_events.ProviderUsage'>, <class 'agent_comms.agent_events.ContextInfo'>, ...] and <class 'agent_comms.agent_events.StreamSettled'> in [<class 'agent_comms.agent_events.AgentInfo'>, <class 'agent_comms.agent_events.NativePhaseChanged'>, <class 'agent_co..._events.Chunk'>, <class 'agent_comms.agent_events.ProviderUsage'>, <class 'agent_comms.agent_events.ContextInfo'>, ...])
+E            +  where <class 'agent_comms.agent_events.Chunk'> = ae.Chunk
+E            +  and   <class 'agent_comms.agent_events.ProviderUsage'> = ae.ProviderUsage
+E            +  and   <class 'agent_comms.agent_events.StreamSettled'> = ae.StreamSettled
+
+tests/test_agent_backend.py:380: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_agent_backend.py::test_pi_rpc_stream_converts_to_agent_events_through_the_backend
+1 failed, 74 passed in 28.31s

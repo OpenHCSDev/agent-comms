@@ -1,0 +1,684 @@
+diff --git a/src/agent_comms/native_entries.py b/src/agent_comms/native_entries.py
+index 53963aae7..509161962 100644
+--- a/src/agent_comms/native_entries.py
++++ b/src/agent_comms/native_entries.py
+@@ -466,6 +466,28 @@ class CompactionEntry(NativeEntry):
+         return [NoticeTranscript(f"## Context compacted\n\n{text}")] if text else []
+ 
+ 
++@dataclass(frozen=True, kw_only=True)
++class StoredEntry(NativeEntry):
++    """A committed Pi Durable entry owns zero or more ordinary Pi messages."""
++    id: int = field()
++    model: tuple[PiMessage, ...] = ()
++
++    @classmethod
++    def wire_member(cls, value):
++        return cls
++
++    @property
++    def original_id(self):
++        return str(self.id)
++
++    @property
++    def input_boundary(self):
++        return any(message.user for message in self.model)
++
++    def _events(self, context):
++        return [event for message in self.model for event in message.transcript_events(context)]
++
++
+ class CustomEntry(NativeEntry):
+     """External custom records select their declared payload once at ingress."""
+ 
+diff --git a/src/agent_comms/native_transcript.py b/src/agent_comms/native_transcript.py
+index bb1c49e94..366c98dcb 100644
+--- a/src/agent_comms/native_transcript.py
++++ b/src/agent_comms/native_transcript.py
+@@ -5,7 +5,7 @@ from __future__ import annotations
+ from collections import defaultdict
+ from abc import abstractmethod
+ from collections.abc import Generator
+-from contextlib import closing, contextmanager
++from contextlib import contextmanager
+ from dataclasses import dataclass
+ from pathlib import Path
+ from typing import TYPE_CHECKING
+@@ -14,7 +14,6 @@ if TYPE_CHECKING:
+     from .thread_identity import RecordedThreadIncarnation
+ 
+ from .declared_family import DeclaredFamily
+-from .coordination_errors import StaleRevision
+ from .native_entries import NativeEntry, SessionEntry, TranscriptProjection
+ from .transcript_events import TurnDigest
+ from .private_path import FileRevision
+@@ -106,6 +105,16 @@ class NativeRecord:
+         entry = NativeEntry.read(raw) if complete else None
+         return cls(start, end, entry, complete)
+ 
++    def completed_turn(self, records):
++        entry = self.entry
++        if entry is not None and entry.input_boundary:
++            return (TurnDigest.from_records(entry.require_entry_id(), records),)
++        return ()
++
++    @property
++    def turn_events(self):
++        return self.project(lambda original: original.entry.events(TranscriptProjection()))
++
+     def project(self, projection):
+         """A decoded record owns whether it can produce presentation events."""
+         return projection(self) if self.entry is not None else ()
+@@ -131,6 +140,16 @@ class NativeRecord:
+         return None
+ 
+ 
++class StoredRecord(NativeRecord):
++    @property
++    def events(self):
++        return self.turn_events
++
++    @property
++    def size(self):
++        return sum(event.text_size for event in self.events)
++
++
+ class NativeTranscript(TranscriptSource):
+     def __init__(self, path: Path):
+         self.path = path
+@@ -140,10 +159,6 @@ class NativeTranscript(TranscriptSource):
+         """Keep the native record owner bound across one page projection."""
+         yield self
+ 
+-    def current_draft(self) -> None:
+-        """Native in-progress output belongs to the ACP stream."""
+-        return None
+-
+     def imported_sources(self):
+         """Read original metadata before conversation, including native configuration.
+ 
+@@ -305,31 +320,6 @@ class NativeTranscript(TranscriptSource):
+             return record, user
+         raise RelationViolationError("Native turn has no final reply after its checkpoint")
+ 
+-    def turns(self, last: int):
+-        """Read newest input-bounded turns through the existing record decoder."""
+-        cut = self.cut()
+-        if cut.offset == 0:
+-            return ()
+-        turns, pending = [], []
+-        with closing(self.reverse(cut.offset)) as records:
+-            for record in records:
+-                entry = record.entry
+-                if entry is None:
+-                    continue
+-                pending.append(record)
+-                if entry.input_boundary:
+-                    turns.append(TurnDigest(entry.require_entry_id(), tuple(
+-                        event
+-                        for original in reversed(pending)
+-                        for event in original.project(
+-                            lambda source: source.entry.events(TranscriptProjection())))))
+-                    pending.clear()
+-                    if len(turns) >= last:
+-                        break
+-        if not cut.holds(self.cut(), cut.offset):
+-            raise StaleRevision("Native turn source changed during its read")
+-        return tuple(turns)
+-
+     def tail(self, *, max_bytes: int | None = None):
+         end = self.path.stat().st_size
+         floor = max(0, end - max_bytes) if max_bytes is not None else 0
+diff --git a/src/agent_comms/pi_commands.py b/src/agent_comms/pi_commands.py
+index 43e568e9b..5866a5229 100644
+--- a/src/agent_comms/pi_commands.py
++++ b/src/agent_comms/pi_commands.py
+@@ -82,6 +82,19 @@ class PiCommand(DeclaredFamily):
+             channel.pending.discard(type(command), command.id)
+             future.cancel()
+ 
++    async def exchange(self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None):
++        from .pi_events import Response
++        async with self.pending_response(channel, writer) as future:
++            while not future.done():
++                event = await channel.receive(strict=strict, max_bytes=max_bytes)
++                if event is None:
++                    raise EOFError('Pi RPC ended before the requested response')
++                if isinstance(event, Response):
++                    channel.correlate(event)
++                else:
++                    on_event(event)
++            return future.result()
++
+     def to_rpc(self) -> dict[str, Any]:
+         data = FieldCodec.encode(self)
+         data["type"] = data.pop("kind")
+@@ -196,20 +209,6 @@ class NativeQuery(PiCommand):
+     @abstractmethod
+     def response_payload(self) -> type[PiResponseData]: ...
+ 
+-    async def exchange(
+-        self, channel: PiRpcChannel, writer: asyncio.StreamWriter, *,
+-        strict: bool = False, max_bytes: int | None = None,
+-    ) -> Response:
+-        from .pi_events import Response
+-        async with self.pending_response(channel,writer) as future:
+-            while not future.done():
+-                event = await channel.receive(strict=strict, max_bytes=max_bytes)
+-                if event is None:
+-                    raise EOFError("Pi RPC ended before the requested response")
+-                if isinstance(event,Response):
+-                    channel.correlate(event)
+-            return future.result()
+-
+ 
+ @dataclass(frozen=True, kw_only=True)
+ class GetState(SessionSnapshot, NativeQuery):
+diff --git a/src/agent_comms/pi_events.py b/src/agent_comms/pi_events.py
+index 705ad16c2..be2dafccc 100644
+--- a/src/agent_comms/pi_events.py
++++ b/src/agent_comms/pi_events.py
+@@ -45,7 +45,9 @@ class PiEvent(PiPayload, DeclaredFamily):
+ 
+     wire_tag = "type"
+     opaque = False
+-    unknown_kind: ClassVar[bool] = False
++    @classmethod
++    def known_kinds(cls):
++        return (cls.wire_kind(),)
+ 
+     @classmethod
+     def wire_kind(cls) -> str:
+@@ -75,6 +77,9 @@ class PiEvent(PiPayload, DeclaredFamily):
+     def wire_case(cls, wire):
+         return cls
+ 
++    def convert(self):
++        return ()
++
+     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+         """Apply shared progress and phase behavior around this event's meaning."""
+         async for event in session.consume_native_event(self):
+@@ -108,6 +113,22 @@ class PiEvent(PiPayload, DeclaredFamily):
+         return False
+ 
+ 
++class NativePiEvent(PiEvent):
++    declared_name = None
++
++
++class DurablePiEvent(PiEvent):
++    declared_name = None
++
++    @classmethod
++    def wire_member(cls, wire):
++        members = tuple(member for member in cls.members_with(cls)
++                        if member.wire_kind() == wire.get("type"))
++        if len(members) > 1:
++            raise ValueError("Ambiguous durable event declaration")
++        return members[0] if members else UnknownPiEvent
++
++
+ @dataclass(frozen=True)
+ class UnreadPayload:
+     """A Pi event whose fields Core does not read; the record is kept as received."""
+@@ -117,54 +138,56 @@ class UnreadPayload:
+ 
+ 
+ @dataclass(frozen=True)
+-class UnknownPiEvent(UnreadPayload, PiEvent):
++class UnknownPiEvent(UnreadPayload, NativePiEvent, DurablePiEvent):
+     """Unrecognized events remain ignorable, never admission evidence."""
+ 
+-    unknown_kind: ClassVar[bool] = True
++    @classmethod
++    def known_kinds(cls):
++        return ()
+ 
+ 
+ @dataclass(frozen=True)
+-class TurnStart(UnreadPayload, PiEvent):
++class TurnStart(UnreadPayload, NativePiEvent, DurablePiEvent):
+     """Pi starts one model round. Core follows the run, not its rounds."""
+ 
+ 
+ @dataclass(frozen=True)
+-class TurnEnd(UnreadPayload, PiEvent):
++class TurnEnd(UnreadPayload, NativePiEvent, DurablePiEvent):
+     """Pi ends one model round. Settlement comes from agent_end / agent_settled."""
+ 
+ 
+ @dataclass(frozen=True)
+-class QueueUpdate(UnreadPayload, PiEvent):
++class QueueUpdate(UnreadPayload, NativePiEvent):
+     """Pi's own steering queue changed. Core keeps the queue the user sees."""
+ 
+ 
+ @dataclass(frozen=True)
+-class EntryAppended(UnreadPayload, PiEvent):
++class EntryAppended(UnreadPayload, NativePiEvent, DurablePiEvent):
+     """Pi wrote a session entry. History is read from the session file."""
+ 
+ 
+ @dataclass(frozen=True)
+-class SessionInfoChanged(UnreadPayload, PiEvent):
++class SessionInfoChanged(UnreadPayload, NativePiEvent):
+     """The session name changed. Core reads it from get_state."""
+ 
+ 
+ @dataclass(frozen=True)
+-class ThinkingLevelChanged(UnreadPayload, PiEvent):
++class ThinkingLevelChanged(UnreadPayload, NativePiEvent):
+     """The thinking level changed. Core reads it from get_state."""
+ 
+ 
+ @dataclass(frozen=True)
+-class BashExecutionUpdate(UnreadPayload, PiEvent):
++class BashExecutionUpdate(UnreadPayload, NativePiEvent):
+     """Output of a user ``!`` bash command; Core never sends one."""
+ 
+ 
+ @dataclass(frozen=True)
+-class ExtensionError(UnreadPayload, PiEvent):
++class ExtensionError(UnreadPayload, NativePiEvent):
+     """An extension hook failed inside Pi; the failure stays in Pi's own handling."""
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class AgentEnd(PiEvent):
++class AgentEnd(NativePiEvent):
+     will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
+     accepts_prompt = True
+ 
+@@ -173,7 +196,7 @@ class AgentEnd(PiEvent):
+         return self.will_retry is True
+ 
+ 
+-class AgentSettled(PiEvent):
++class AgentSettled(NativePiEvent):
+     def settles(self, session: TurnSession) -> bool:
+         # A prior retained turn may finish while the new state query is
+         # pending. It cannot settle a turn whose admission is not attested.
+@@ -206,7 +229,7 @@ class AgentSettled(PiEvent):
+         return True
+ 
+ 
+-class AgentStart(PiEvent):
++class AgentStart(NativePiEvent):
+     accepts_prompt = True
+ 
+     @property
+@@ -215,7 +238,7 @@ class AgentStart(PiEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class ModelRequestProgress(PiEvent):
++class ModelRequestProgress(NativePiEvent):
+     progress: "RequestProgress"
+ 
+     def observe_request(self, observer: Callable[[RequestProgress], None] | None) -> bool:
+@@ -225,13 +248,18 @@ class ModelRequestProgress(PiEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class AutoRetryEnd(PiEvent):
+-    outcome: ProviderRetryOutcome = field(metadata={"wire_name": "success"})
++class RetryEnd(PiEvent):
++    declared_name = None
+     attempt: int
+ 
+     def __post_init__(self) -> None:
+         if self.attempt < 0:
+-            raise ValueError("Native retry count must be nonnegative")
++            raise ValueError("Retry count must be nonnegative")
++
++
++@dataclass(frozen=True, kw_only=True)
++class AutoRetryEnd(RetryEnd, NativePiEvent):
++    outcome: ProviderRetryOutcome = field(metadata={"wire_name": "success"})
+ 
+     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+         session.watchdog.progress()
+@@ -267,7 +295,7 @@ class NativeRetryEnd(AutoRetryEnd):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class RetryAttemptEvent(PiEvent):
++class RetryAttemptEvent(NativePiEvent):
+     """Original Pi retry data and shared observation behavior.
+ 
+     This intermediate declaration factors the same fields and algorithm from
+@@ -297,7 +325,7 @@ class RetryAttemptEvent(PiEvent):
+         )
+ 
+ 
+-class AutoRetryStart(RetryAttemptEvent):
++class AutoRetryStart(RetryAttemptEvent, DurablePiEvent):
+     retry_reason_code = "provider_auto_retry"
+     recovery_on_progress = True
+ 
+@@ -320,7 +348,7 @@ class NativeRetryStart(AutoRetryStart):
+     recovery_on_progress = False
+ 
+ 
+-class ReasonedCompaction(PiEvent):
++class ReasonedCompaction(NativePiEvent, DurablePiEvent):
+     """A compaction record owns decoding its external reason."""
+ 
+     def __post_init__(self):
+@@ -385,7 +413,7 @@ class CompactionStart(ReasonedCompaction):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class ContextCommitted(PiEvent):
++class ContextCommitted(NativePiEvent):
+     input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
+     session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
+     session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
+@@ -397,7 +425,7 @@ class ContextCommitted(PiEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class TurnContextObserved(PiEvent):
++class TurnContextObserved(NativePiEvent):
+     context: NativeContextManifestData
+ 
+     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+@@ -434,7 +462,7 @@ class ValueUiChoice(ExtensionUiChoice):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class ExtensionUiRequest(PiEvent):
++class ExtensionUiRequest(NativePiEvent):
+     """Pi owns the outer type; concrete declarations own its method vocabulary."""
+ 
+     method: str | None = None
+@@ -617,14 +645,14 @@ class EditorUiRequest(DialogUiRequest):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class InputCommitted(PiEvent):
++class InputCommitted(NativePiEvent):
+     input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
+     session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
+     session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class MessageEnd(PiEvent):
++class MessageEnd(NativePiEvent):
+     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
+ 
+     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+@@ -639,7 +667,7 @@ class MessageEnd(PiEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class MessageStart(PiEvent):
++class MessageStart(NativePiEvent, DurablePiEvent):
+     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
+ 
+     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+@@ -661,7 +689,7 @@ class MessageStart(PiEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class MessageUpdate(PiEvent):
++class MessageUpdate(NativePiEvent):
+     assistant_message_event: PiDelta | None = field(
+         default=None, metadata={"wire_name": "assistantMessageEvent"}
+     )
+@@ -678,10 +706,17 @@ class MessageUpdate(PiEvent):
+                 session.usage.provisional = True
+                 yield session.context_info()
+ 
+-        if self.assistant_message_event is not None:
+-            for event in self.assistant_message_event.emit(session):
++        for delta in self.deltas:
++            for event in delta.emit(session):
+                 yield event
+ 
++    @property
++    def deltas(self):
++        return (self.assistant_message_event,) if self.assistant_message_event is not None else ()
++
++    def convert(self):
++        return tuple(event for delta in self.deltas for event in delta.events())
++
+     accepts_prompt = True
+ 
+     @property
+@@ -698,7 +733,18 @@ class MessageUpdate(PiEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class Response(PiEvent):
++class BatchMessageUpdate(MessageUpdate, DurablePiEvent):
++    """Pi Durable batches the same Pi deltas in one committed update."""
++    changes: tuple[PiDelta, ...]
++    wire_kind = MessageUpdate.wire_kind
++
++    @property
++    def deltas(self):
++        return self.changes
++
++
++@dataclass(frozen=True, kw_only=True)
++class Response(NativePiEvent, DurablePiEvent):
+     command: type[PiCommand] = UnknownCommand
+     data: PiResponseData = field(default_factory=MissingData)
+     error: str | None = field(default=None, metadata={"wire_name": "error"})
+@@ -746,19 +792,18 @@ class Response(PiEvent):
+         return super().normalize_field(target, key, value, record)
+ 
+     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+-        owner = session.native.reader.correlate(self) or self.command
+-        async for event in owner.on_response(self, session):
++        async for event in self.command.on_response(self, session):
+             yield event
+ 
+ 
+-class SteeringInterruptCompleted(PiEvent):
++class SteeringInterruptCompleted(NativePiEvent):
+     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+         session.explicit_interrupt = False
+         session.output.interrupted()
+         yield events.SteeringInterrupted()
+ 
+ 
+-class SteeringInterruptStarted(PiEvent):
++class SteeringInterruptStarted(NativePiEvent):
+     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+         session.explicit_interrupt = True
+         if False:
+@@ -770,7 +815,7 @@ class SummarizationRetryAttemptStart(RetryAttemptEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class SummarizationRetryFinished(PiEvent):
++class SummarizationRetryFinished(NativePiEvent):
+     result: CompactionData | None = field(default=None, metadata={"wire_name": "result"})
+     success: bool | None = field(default=None, metadata={"wire_name": "success"})
+ 
+@@ -787,7 +832,7 @@ class SummarizationRetryScheduled(RetryAttemptEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class ToolExecutionEnd(PiEvent):
++class ToolExecutionEnd(NativePiEvent):
+     accepts_prompt = True
+ 
+     is_error: bool | None = field(default=None, metadata={"wire_name": "isError"})
+@@ -815,21 +860,26 @@ class ToolExecutionEnd(PiEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class ToolExecutionStart(PiEvent):
++class ToolExecutionStart(NativePiEvent, DurablePiEvent):
+     accepts_prompt = True
+ 
+     args: dict[str, JsonValue] = field(default_factory=dict, metadata={"wire_name": "args", "wire_nonnull": True})
+     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
+     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
+ 
+-    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
++    @property
++    def tool_id(self):
++        return self.tool_call_id or self.tool_name or "tool"
++
++    def convert(self):
+         from .tool_declaration import ToolDeclaration
++        return (ToolDeclaration.start(self.tool_id, self.tool_name or "tool", self.args),)
+ 
+-        name = self.tool_name or "tool"
+-        tool_id = self.tool_call_id or name
++    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+         session.watchdog.prompt_accepted = True
+-        session.active_tools.add(tool_id)
+-        yield ToolDeclaration.start(tool_id, name, self.args)
++        session.active_tools.add(self.tool_id)
++        for event in self.convert():
++            yield event
+ 
+     @property
+     def retry_progress(self) -> bool:
+@@ -837,7 +887,7 @@ class ToolExecutionStart(PiEvent):
+ 
+ 
+ @dataclass(frozen=True, kw_only=True)
+-class ToolExecutionUpdate(PiEvent):
++class ToolExecutionUpdate(NativePiEvent, DurablePiEvent):
+     accepts_prompt = True
+ 
+     partial_result: PiToolResult = field(
+@@ -857,4 +907,4 @@ class ToolExecutionUpdate(PiEvent):
+ 
+ from .pi_native_backend import PiNativeBackend  # noqa: E402
+ 
+-PiNativeBackend.require_event_family(PiEvent)
++PiNativeBackend.require_event_family(NativePiEvent)
+diff --git a/src/agent_comms/pi_payloads.py b/src/agent_comms/pi_payloads.py
+index fb9353313..e5c3a6338 100644
+--- a/src/agent_comms/pi_payloads.py
++++ b/src/agent_comms/pi_payloads.py
+@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, fields, is_dataclass, replace
+ from functools import singledispatch
+ from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
+ 
++from . import agent_events as events
+ from .declared_family import DeclaredFamily
+ from .field_codec import FieldCodec, TextRepresentation
+ from .native_session_reopen import NativeSessionIdentity
+@@ -779,8 +780,11 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
+         except ValueError:
+             return UnknownDelta
+ 
+-    @abstractmethod
+-    def emit(self, session): ...
++    def events(self):
++        return ()
++
++    def emit(self, session):
++        return self.events()
+ 
+ 
+ @dataclass(frozen=True)
+@@ -792,11 +796,12 @@ class TextDelta(PiDelta, declared_name="text_delta"):
+     def progress(self):
+         return bool(self.delta)
+ 
++    def events(self):
++        return (events.Chunk(text=self.delta),)
++
+     def emit(self, session):
+         session.output.append(self.delta)
+-        from .agent_events import Chunk
+-
+-        return (Chunk(text=self.delta),)
++        return self.events()
+ 
+ 
+ @dataclass(frozen=True)
+@@ -807,12 +812,8 @@ class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
+     def progress(self):
+         return bool(self.delta)
+ 
+-    def emit(self, session):
+-        if not self.delta:
+-            return ()
+-        from .agent_events import Thinking
+-
+-        return (Thinking(text=self.delta),)
++    def events(self):
++        return (events.Thinking(text=self.delta),) if self.delta else ()
+ 
+ 
+ class ToolDelta:
+@@ -1326,7 +1327,7 @@ class McpLiveReceipt:
+         attestation or permission, even when the current input identity matches.
+         """
+         import json
+-        from .pi_rpc import unique_fields
++        from .jsonl_stream import unique_fields
+ 
+         if text is None or len(text) > 8192:
+             return None
+diff --git a/src/agent_comms/transcript_receipts.py b/src/agent_comms/transcript_receipts.py
+index a0a52bdd1..7454754c8 100644
+--- a/src/agent_comms/transcript_receipts.py
++++ b/src/agent_comms/transcript_receipts.py
+@@ -8,6 +8,7 @@ from __future__ import annotations
+ 
+ from abc import ABC, abstractmethod
+ from collections.abc import Iterator
++from contextlib import closing, contextmanager
+ from dataclasses import dataclass, field, replace
+ from functools import partial
+ from pathlib import Path
+@@ -17,6 +18,7 @@ if TYPE_CHECKING:
+     from .transcript_events import TranscriptEvent
+ 
+ from .bus_publication import CommittedDelivery
++from .coordination_errors import StaleRevision
+ from .declared_family import DeclaredFamily
+ from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+ from .routing import MessageRoute, TurnRouting
+@@ -273,6 +275,38 @@ class TranscriptSource:
+     source adds the separately acquired wire/publication capability below.
+     """
+ 
++    def turns(self, last):
++        turns, pending = [], []
++        with self.reading() as reader:
++            cut = reader.cut()
++            if cut.offset == 0:
++                return ()
++            with closing(reader.reverse(cut.offset)) as records:
++                for record in records:
++                    pending.append(record)
++                    completed = record.completed_turn(pending)
++                    if completed:
++                        turns.extend(completed)
++                        pending.clear()
++                        if len(turns) >= last:
++                            break
++            if not cut.holds(reader.cut(), cut.offset):
++                raise StaleRevision('Turn source changed during its read')
++        return tuple(turns)
++
++    def current_draft(self):
++        """Saved records have no draft unless their reader supplies one."""
++        return None
++
++    def publication_revision(self, root, recipient):
++        return PublishedReplyRevision(0, 0)
++
++    @contextmanager
++    def projection(self, source, routes):
++        def project(records, *, max_records, max_bytes):
++            return ((record, record.events) for record in records)
++        yield project
++
+     def resolve_sent(self, messages):
+         """Records without a sender assignment cannot qualify Send reports."""
+         return self.frontier.resolve_sent(messages)
