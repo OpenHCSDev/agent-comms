@@ -54,6 +54,27 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     )
 
 
+@pytest.mark.parametrize("name,label", [("grep", "Search"), ("glob", "Find")])
+async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, label):
+    from agent_comms.transcript_events import ToolStartTranscript
+
+    arguments = {"pattern": "shared preview"}
+    event = ToolDeclaration.start("pattern-case", name, arguments)
+    recorded = ToolStartTranscript(tool_call_id="pattern-case", tool_name=name, raw_input=arguments)
+    assert (event.title, event.kind) == (f"{label} shared preview", "search")
+    assert (recorded.title, recorded.kind) == (event.title, event.kind)
+    owner, received = acp_tools
+    await owner._emit_event("pattern-tool", event, owner.sessions.client)
+    async with asyncio.timeout(3):
+        update = await received.get()
+    assert isinstance(update, ToolCallStart)
+    assert (update.kind, update.title, update.raw_input) == (
+        "search", f"{label} shared preview", arguments,
+    )
+    with pytest.raises(ValueError):
+        CodingTool.from_call(name, arguments, call_id="pattern-case")
+
+
 @pytest.mark.parametrize("name,label,kind", [
     ("read", "Read", "read"), ("bash", "Run", "execute"),
     ("edit", "Edit", "edit"), ("write", "Write", "edit"),

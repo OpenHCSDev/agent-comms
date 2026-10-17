@@ -97,20 +97,20 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
         CodingCall.decode("bad-argument-shape", name, arguments)
 
 
-@pytest.mark.parametrize("name,arguments", [
-    ("read", {"path": "x", "offset": 2, "limit": 3}),
-    ("bash", {"command": "pwd", "timeout": 2}),
-    ("edit", {"path": "x", "edits": [{"oldText": "old", "newText": "new"}]}),
-    ("write", {"path": "x", "content": "value"}),
+@pytest.mark.parametrize("name,arguments,title", [
+    ("read", {"path": "x", "offset": 2, "limit": 3}, "Read x"),
+    ("bash", {"command": "pwd", "timeout": 2}, "Run pwd"),
+    ("edit", {"path": "x", "edits": [{"oldText": "old", "newText": "new"}]}, "Edit x"),
+    ("write", {"path": "x", "content": "value"}, "Write x"),
 ])
-def test_pi_argument_fields_own_roundtrip_and_display(name, arguments):
+def test_pi_argument_fields_own_roundtrip_and_display(name, arguments, title):
     from dataclasses import fields
     from agent_comms.tool_declaration import ToolDeclaration
 
     call = CodingCall.decode("typed-argument-shape", name, arguments)
     assert "arguments" not in {item.name for item in fields(call.tool)}
     assert call.tool.arguments == arguments
-    assert call.tool.detail in ToolDeclaration.start("typed", name, arguments, detail=call.tool.detail).title
+    assert ToolDeclaration.start("typed", name, arguments).title == title
 
 
 @pytest.mark.asyncio
