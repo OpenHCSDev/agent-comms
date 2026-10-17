@@ -1,6 +1,5 @@
 """Persistent goal ownership, continuation, and stale-worker protection."""
 
-from agent_comms.goals import TextGoalProgress
 import pytest
 
 from agent_comms.comms import wire
@@ -62,7 +61,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish the release"))
-    comms.goals.update_goal("worker", PausedGoalAction(progress=TextGoalProgress("Paused after an uncertain turn")))
+    comms.goals.update_goal("worker", PausedGoalAction(progress="Paused after an uncertain turn"))
     resume = next(
         tool
         for tool in ToolRequest.members_with(ToolRequest)
@@ -74,7 +73,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     )
     assert result["goal"]["id"] == goal.id
     assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
-    assert FieldCodec.encode(comms.registry.require("worker").goal.progress) == "Explicitly resumed by the user"
+    assert comms.registry.require("worker").goal.progress == "Explicitly resumed by the user"
 
     with pytest.raises(ValueError, match="cannot be resumed"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale duplicate"}, caller=ThreadCaller("worker"))

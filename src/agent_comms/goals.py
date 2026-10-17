@@ -3,148 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Literal, Self
+from typing import Literal
 from abc import abstractmethod
 
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
+from .field_codec import FieldCodec
 from .goal_states import ActiveGoal, GoalState
-from .recorded_time import EventTime, UnrecordedEventTime
-
-
-@dataclass(frozen=True)
-class Delivery(DeclaredFamily):
-    evidence: str
-
-    @property
-    def reported_sha(self) -> str:
-        raise ValueError("Completion requires works_in_app with a commit SHA.")
-
-
-class Unfinished(Delivery):
-    pass
-
-
-@dataclass(frozen=True)
-class WorksInApp(Delivery):
-    sha: str
-
-    @property
-    def reported_sha(self) -> str:
-        return self.sha
-
-
-@dataclass(frozen=True)
-class GoalReport:
-    stupid: str
-    deleted: str
-    delivery: Delivery
-    next: str
-
-    def __post_init__(self):
-        if not all(value.strip() for value in (
-                self.stupid, self.deleted, self.delivery.evidence, self.next)):
-            raise ValueError("Delivery and report text must be nonempty.")
-
-    def __str__(self) -> str:
-        return (f"Stupid: {self.stupid}\nDeleted: {self.deleted}\n"
-                f"Delivery: {self.delivery.evidence}\nNext: {self.next}")
-
-
-class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
-    def require_report(self) -> GoalReport:
-        raise ValueError("A commanded goal requires stupid, deleted, delivery and next.")
-
-    def noted(self, note: str) -> Self:
-        return self  # Runtime notes must not replace the last structured report.
-
-    def failed(self, diagnostic: str) -> GoalProgress:
-        return self.noted(diagnostic)
-
-    @property
-    def block_reason(self) -> str:
-        return str(self)
-
-    def present(self, view) -> None:
-        view.show_progress(str(self))
-
-
-@dataclass(frozen=True)
-class NoGoalProgress(GoalProgress):
-    def __str__(self) -> str:
-        return ""
-
-    def to_wire(self):
-        return ""
-
-    def present(self, view) -> None:
-        view.hide_progress()
-
-    def noted(self, note: str) -> GoalProgress:
-        return TextGoalProgress.from_json_value(note)
-
-
-@dataclass(frozen=True)
-class TextGoalProgress(GoalProgress, JsonShapeMember):
-    value: str
-
-    def __post_init__(self):
-        if self.value == "":
-            raise ValueError("Empty progress is NoGoalProgress, not a text note")
-
-    @classmethod
-    def from_json_value(cls, value):
-        return NoGoalProgress() if value == "" else cls(value)
-
-    def __str__(self) -> str:
-        return self.value
-
-    def noted(self, note: str) -> TextGoalProgress:
-        return type(self)(f"{self.value}\n\n{note}")
-
-    def failed(self, diagnostic: str) -> TextGoalProgress:
-        return type(self)(diagnostic)
-
-
-@dataclass(frozen=True)
-class ReportedGoalProgress(GoalProgress, JsonShapeMember):
-    value: GoalReport
-
-    def require_report(self) -> GoalReport:
-        return self.value
-
-    def __str__(self) -> str:
-        return str(self.value)
-
-    @property
-    def block_reason(self) -> str:
-        return self.value.next
-
-
-@dataclass(frozen=True, slots=True)
-class GoalRef:
-    owner: RecordedThreadIncarnation
-    goal_id: str
-
-    def __post_init__(self):
-        self.owner.require_recorded()
-        GoalRevision(self.goal_id, 0)
-
-    def same_order(self, other: GoalRef) -> bool:
-        return self.goal_id == other.goal_id and self.owner.same_publication_birth(other.owner)
-
-    def current(self, snapshot) -> Goal | None:
-        if not self.owner.current(snapshot):
-            return None
-        return snapshot.require(self.owner.name).goal_for(self.goal_id)
-
-    def require_current(self, registry) -> Goal:
-        goal = self.current(registry.snapshot())
-        if goal is None:
-            raise ValueError("Goal reference is no longer current.")
-        return goal
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -251,42 +117,6 @@ class ResolvedMentionBinding(GoalMentionBinding):
         ), ()
 
 
-@dataclass(frozen=True)
-class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
-    """Ordinary goals share behavior here; orders override their differences."""
-    def require_report(self, progress) -> None:
-        pass
-
-    def require_completion(self, progress, *, goals, goal):
-        return UnrecordedEventTime()
-
-    def require_current_order(self, goals, goal):
-        pass
-
-    def require_order_source(self, problem_id: str) -> None:
-        raise ValueError("This goal is not a problem-bound order.")
-
-    def require_self_direction(self):
-        pass
-
-    def require_target(self, goals, target, goal_id):
-        target.require_goal_replacement(self, goal_id)
-
-    def require_open_target(self, current, goal_id):
-        current.author.require_self_direction()
-
-    def notification_targets(self, goals, *, new_order):
-        return ()
-
-    @property
-    def instruction(self):
-        return ""
-
-
-class UncommandedGoalAuthor(GoalAuthor):
-    """The ordinary author's wire case; all behavior belongs to GoalAuthor."""
-
-
 @dataclass(frozen=True, slots=True)
 class GoalMentionSource:
     """Text-revision and owner-incarnation proof saved with its registry Goal."""
@@ -297,7 +127,6 @@ class GoalMentionSource:
     owner_name: str
     owner_created_at: float
     bindings: tuple[GoalMentionBinding, ...]
-    author: GoalAuthor = field(kw_only=True)
 
     def __post_init__(self) -> None:
         from .text_digest import TextDigest
@@ -369,50 +198,22 @@ class Goal:
 
     text: str
     id: str
-    progress: GoalProgress = field(default_factory=NoGoalProgress)
+    progress: str = ""
     revision: int = 0
     reported_turn: str | None = None
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
-    deadline: EventTime = field(
-        default_factory=UnrecordedEventTime, metadata={"wire_omit_default": True}
-    )
-    delivery_time: EventTime = field(
-        default_factory=UnrecordedEventTime, metadata={"wire_omit_default": True}
-    )
-
-    @property
-    def author(self) -> GoalAuthor:
-        if self.mention_source is None:
-            raise ValueError("This goal has no recorded author; it cannot be treated as self-directed.")
-        return self.mention_source.author
-
-    def notification_targets(
-        self, goals, *, previous: Goal | None
-    ) -> tuple[ThreadIncarnation, ...]:
-        source = self.mention_source
-        return () if source is None else source.author.notification_targets(
-            goals, new_order=not self.same_order_as(previous))
-
-    def same_order_as(self, other: Goal | None) -> bool:
-        return other is not None and self.id == other.id
-
-    def commander_updates(self, activity) -> tuple[str, ...]:
-        if self.delivery_complete:
-            return ("Works in app",)
-        return self.state.commander_updates(self.deadline, activity)
 
     def after_failed_turn(self, diagnostic: str) -> Goal:
-        return self._failure_projection(
-            self.state.after_failed_turn(diagnostic), self.progress.noted(diagnostic)
-        )
+        progress = f"{self.progress}\n\n{diagnostic}" if self.progress else diagnostic
+        return self._failure_projection(self.state.after_failed_turn(diagnostic), progress)
 
     def after_unverified_completion(self, diagnostic: str) -> Goal:
         return self._failure_projection(
-            self.state.after_unverified_completion(diagnostic), self.progress.failed(diagnostic)
+            self.state.after_unverified_completion(diagnostic), diagnostic
         )
 
-    def _failure_projection(self, state: GoalState, progress: GoalProgress) -> Goal:
+    def _failure_projection(self, state: GoalState, progress: str) -> Goal:
         if state is self.state:
             return self
         return replace(self, state=state, progress=progress, revision=self.revision + 1)
@@ -424,21 +225,12 @@ class Goal:
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
         GoalRevision(self.id, self.revision)
-        self.deadline.require_deadline()
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
 
     @property
     def checkpoint(self) -> GoalRevision:
         return GoalRevision(self.id, self.revision)
-
-    @property
-    def late(self) -> bool:
-        return self.delivery_time.after(self.deadline)
-
-    @property
-    def delivery_complete(self) -> bool:
-        return self.state.delivery_complete(self.delivery_time)
 
     def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
         """Later revisions may describe the same failed goal, never a replacement."""

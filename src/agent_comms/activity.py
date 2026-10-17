@@ -371,7 +371,9 @@ class ActivityLog(ThreadOwnedState):
         the log unchanged; an append cannot overtake its own comparison.
         """
         with self._writing() as snapshot:
-            event = transition(self._observed(thread, snapshot.latest, active=True, now=time.time()))
+            event = transition(self._observed(
+                thread, snapshot.latest, active=True, now=time.time()
+            ))
             if event is None:
                 return False
             _append_jsonl(self._path, FieldCodec.encode(event))

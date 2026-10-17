@@ -1,6 +1,5 @@
 """Current goal consumers over the original certified private-bus producer."""
 
-from agent_comms.goals import TextGoalProgress
 import os
 
 import pytest
@@ -59,7 +58,7 @@ def test_review_and_command_refuse_replaced_or_cleared_goal(selected_goal, repla
 def test_failed_turn_retains_later_progress_of_same_goal(selected_goal):
     comms, original = selected_goal
     later = comms.goals.update_goal("worker", ActiveGoalAction(
-        expect=GoalPrecondition(goal_id=original.id), progress=TextGoalProgress("Newer verified work"),
+        expect=GoalPrecondition(goal_id=original.id), progress="Newer verified work",
     ))
     assert later.revision > original.revision
     assert comms.registry.require("worker").goal_for(original.id) == later
@@ -82,7 +81,7 @@ def test_failed_turn_retains_later_progress_of_same_goal(selected_goal):
 
 def test_exact_cas_and_owner_pause_remain_strict(selected_goal):
     comms, original = selected_goal
-    later = comms.goals.update_goal("worker", ActiveGoalAction(progress=TextGoalProgress("Later revision")))
+    later = comms.goals.update_goal("worker", ActiveGoalAction(progress="Later revision"))
     with pytest.raises(ValueError, match="changed during resume"):
         comms.goals.update_goal("worker", CompletedGoalAction(
             expect=GoalPrecondition(expected_goal=original, goal_id=original.id),
@@ -113,14 +112,14 @@ def test_model_edit_and_resume_use_current_goal_selection(selected_goal, monkeyp
     current = FieldCodec.decode(Goal, edited["goal"])
     assert current.id == original.id and current.revision > original.revision
     comms.goals.update_goal("worker", PausedGoalAction())
-    resumed = CommsResumeGoalTool(goal_id=original.id, progress=TextGoalProgress("Explicit model resume")).apply(comms, caller)
+    resumed = CommsResumeGoalTool(goal_id=original.id, progress="Explicit model resume").apply(comms, caller)
     assert FieldCodec.decode(Goal, resumed["goal"]).id == original.id
     assert comms.registry.require("worker").goal.state.active
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="Replacement"))
     with pytest.raises(ValueError, match="replaced or cleared"):
         CommsEditGoalTool(goal_id=original.id, text="Stale edit").apply(comms, caller)
     with pytest.raises(ValueError, match="cannot be resumed"):
-        CommsResumeGoalTool(goal_id=original.id, progress=TextGoalProgress("Stale resume")).apply(comms, caller)
+        CommsResumeGoalTool(goal_id=original.id, progress="Stale resume").apply(comms, caller)
     assert comms.registry.require("worker").goal == replacement
 
 
