@@ -277,7 +277,7 @@ class ToolUse(AssistantBlock):
     wire_tag = 'tool_use'
     id: str
     name: str
-    input: JsonValue
+    input: dict[str, JsonValue]
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         arguments_type = ClaudeToolArguments.types.get(self.name)

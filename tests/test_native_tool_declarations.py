@@ -21,7 +21,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     class InspectFixtureTool(ToolDeclaration):
         acp_kind = "search"
         label = "Inspect"
-        preview_field = 'query'
+        preview_fields = ('query',)
 
     event = ToolDeclaration.start("case", "inspect_fixture", {"query": "new declaration"})
     assert (event.title, event.kind) == ("Inspect new declaration", "search")
@@ -45,7 +45,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
         event = ToolDeclaration.start("case", tool.declared_name, call.tool.arguments)
         assert event.kind == tool.acp_kind and event.args == tool.arguments
-        assert call.tool == tool and tool.arguments[tool.preview_field] in event.title
+        assert call.tool == tool and tool.arguments[tool.preview_fields[0]] in event.title
     unknown = ToolDeclaration.start("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
         "external_extension",
@@ -69,7 +69,10 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
     assert (start.title, start.kind, start.raw_input) == (label, kind, foreign)
     assert (end.title, end.kind) == (label, kind)
     assert ToolDeclaration.start("saved", name, foreign).title == label
-    assert ToolStartTranscript(tool_call_id="scalar", tool_name=name, raw_input=17).title == label
+    from agent_comms.field_codec import FieldCodec
+    for invalid in (17, None, [["path", "external.txt"]]):
+        with pytest.raises((TypeError, ValueError)):
+            FieldCodec.decode(ToolStartTranscript, {**FieldCodec.encode(start), "raw_input": invalid})
     with pytest.raises(SelectedToolDenied):
         CodingCall.decode("execution", name, foreign)
 
@@ -93,8 +96,9 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     assert call.title == "Read open-code.txt"
     recorded, _ = call.finished("saved", True)
     assert recorded.title == call.title and recorded.raw_input == {"path": "open-code.txt"}
-    scalar, _ = ToolCall("opaque", "external_custom", ["not", "Pi"]).finished("saved", True)
-    assert scalar.title == "external_custom" and scalar.raw_input == ["not", "Pi"]
+    opaque = {"external": ["not", "Pi"]}
+    scalar, _ = ToolCall("opaque", "external_custom", opaque).finished("saved", True)
+    assert scalar.title == "external_custom" and scalar.raw_input == opaque
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():

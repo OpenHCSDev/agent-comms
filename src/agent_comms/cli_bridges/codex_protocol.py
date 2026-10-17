@@ -331,7 +331,7 @@ class ToolItem(Item, ABC):
 
     @property
     @abstractmethod
-    def arguments(self) -> JsonValue: ...
+    def arguments(self) -> dict[str, JsonValue]: ...
 
     @property
     @abstractmethod
@@ -365,7 +365,7 @@ class CommandItem(ToolItem):
         return 'bash'  # Core's declared shell tool, which presents its command
 
     @property
-    def arguments(self) -> JsonValue:
+    def arguments(self) -> dict[str, JsonValue]:
         return {'command': self.command}
 
     @property
@@ -420,7 +420,7 @@ ToolContent = ToolContentPart.declared_union()
 class DynamicToolItem(ToolItem):
     wire_tag = 'dynamicToolCall'
     tool: str
-    input_value: JsonValue = Field(alias='arguments')
+    input_value: dict[str, JsonValue] = Field(alias='arguments')
     contentItems: list[ToolContent] | None = None
     success: bool | None = None
 
@@ -429,7 +429,7 @@ class DynamicToolItem(ToolItem):
         return self.tool
 
     @property
-    def arguments(self) -> JsonValue:
+    def arguments(self) -> dict[str, JsonValue]:
         return self.input_value
 
     @property
@@ -463,7 +463,7 @@ class McpToolItem(ToolItem):
     wire_tag = 'mcpToolCall'
     server: str
     tool: str
-    input_value: JsonValue = Field(alias='arguments')
+    input_value: dict[str, JsonValue] = Field(alias='arguments')
     status: str
     result: McpResult | None = None
     error: McpError | None = None
@@ -473,7 +473,7 @@ class McpToolItem(ToolItem):
         return f'{self.server}/{self.tool}'
 
     @property
-    def arguments(self) -> JsonValue:
+    def arguments(self) -> dict[str, JsonValue]:
         return self.input_value
 
     @property

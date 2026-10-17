@@ -49,7 +49,7 @@ class ToolCall:
     """A CLI invocation uses the same preview and history as a native tool."""
     id: str
     name: str
-    arguments: JsonValue
+    arguments: dict[str, JsonValue]
     diff: ToolDiff | None = None
 
     @property

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, Mapping
 
 from .agent_events import ToolStart
 from .declared_family import DeclaredFamily
@@ -12,7 +12,7 @@ from .declared_family import DeclaredFamily
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
     acp_kind: ClassVar[str] = "other"
     label: ClassVar[str]
-    preview_field: ClassVar[str | None] = None
+    preview_fields: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     def _member_declarations(cls):
@@ -30,16 +30,15 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def caption(cls, name: str, arguments: object = None) -> str:
+    def caption(cls, name: str, arguments: Mapping[str, object]) -> str:
         declaration = cls.for_name(name)
-        value = arguments.get(declaration.preview_field) if isinstance(arguments, dict) else None
-        preview = ' '.join(str(value or '').split())
+        preview = ' '.join(word for key in declaration.preview_fields for word in str(arguments.get(key, '')).split())
         return declaration.label + (' ' + preview if preview else '')
 
     @classmethod
-    def start(cls, call_id: str, name: str, arguments: dict[str, object] | None) -> ToolStart:
+    def start(cls, call_id: str, name: str, arguments: Mapping[str, object]) -> ToolStart:
         declaration = cls.for_name(name)
-        return ToolStart(call_id, name, cls.caption(name, arguments), arguments or {}, declaration.acp_kind)
+        return ToolStart(call_id, name, cls.caption(name, arguments), arguments, declaration.acp_kind)
 
     @classmethod
     def result_diff(cls, result, ok):

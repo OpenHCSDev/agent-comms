@@ -70,7 +70,7 @@ class ArgumentTool:
 
 @dataclass(frozen=True, kw_only=True)
 class PathTool:
-    preview_field: ClassVar[str] = 'path'
+    preview_fields: ClassVar[tuple[str, ...]] = ('path',)
     path: str
 
 
@@ -115,7 +115,7 @@ class BashTool(CodingTool):
     command: str
     timeout: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
 
-    preview_field = 'command'
+    preview_fields = ('command',)
 
     def _parse_resource(self) -> None:
         return None
@@ -159,10 +159,8 @@ class WriteTool(PathTool, CodingTool):
 class GrepTool(ToolDeclaration):
     acp_kind = "search"
     label = "Search"
-    preview_field = 'pattern'
+    preview_fields = ('pattern',)
 
 
-class GlobTool(ToolDeclaration):
-    acp_kind = "search"
+class GlobTool(GrepTool):
     label = "Find"
-    preview_field = 'pattern'

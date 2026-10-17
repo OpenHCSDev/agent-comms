@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import types
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -685,11 +686,10 @@ class _FixedTupleDecoder(ValueDecoder):
 class _DictDecoder(ValueDecoder):
     key: ValueDecoder
     value: ValueDecoder
+    entries: Callable[[object], Iterable[tuple[object, object]]]
 
     def decode(self, data):
-        if isinstance(data, dict):
-            return {self.key.decode(key): self.value.decode(value) for key, value in data.items()}
-        return dict(_ListDecoder(_FixedTupleDecoder((self.key, self.value))).decode(data))
+        return {self.key.decode(key): self.value.decode(value) for key, value in self.entries(data)}
 
 @dataclass(frozen=True, slots=True)
 class _FamilyRecordDecoder(ValueDecoder):
@@ -793,7 +793,8 @@ def _structural_decoder(target: object) -> ValueDecoder:
             return _VariadicTupleDecoder(compile_decoder(args[0]))
         return _FixedTupleDecoder(tuple(compile_decoder(item) for item in args))
     if origin is dict:
-        return _DictDecoder(compile_decoder(args[0]), compile_decoder(args[1]))
+        entries = dict.items if args[0] is str else lambda data: data.items() if isinstance(data, dict) else data
+        return _DictDecoder(compile_decoder(args[0]), compile_decoder(args[1]), entries)
     if isinstance(target, type) and issubclass(target, DeclaredFamily):
         return _FamilyRecordDecoder(target)
     return _member_decoder(target)
