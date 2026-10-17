@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import Any
+from urllib.parse import quote
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .tool_declaration import RecordedToolInput, ToolArguments, ToolCallMetadata, ToolDeclaration
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
-from .tool_results import ToolDiff, ToolText
+from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 
 
@@ -47,6 +50,22 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     @abstractmethod
     def routed(self) -> bool:
         return False
+
+
+@dataclass(frozen=True)
+class TranscriptCoverage:
+    """The incoming wire sequences and native inputs a run of events carries."""
+
+    events: tuple[TranscriptEvent, ...]
+
+    @property
+    def sequences(self) -> frozenset[int]:
+        return frozenset(source.seq for event in self.events
+                         for source in event.incoming_sources if source.seq > 0)
+
+    @property
+    def native_inputs(self) -> frozenset[str]:
+        return frozenset(native_id for event in self.events for native_id in event.native_inputs)
 
 
 @dataclass(frozen=True)
@@ -147,11 +166,6 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
 
     def tool_content(self, tool_call_id):
         """Encode the Send report only at its actual ACP output boundary."""
-        import json
-        from urllib.parse import quote
-        from .field_codec import FieldCodec
-        from .tool_results import SENT_MESSAGE_MIME
-
         return {"type": "content", "content": {
             "type": "resource", "resource": {
                 "uri": f"agent-comms:///messages/{self.source.seq}/{quote(self.source.message_id, safe='')}",
@@ -183,7 +197,7 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
 
     @property
     def title(self) -> str:
-        return ToolDeclaration.for_name(self.tool_name).label
+        return ToolDeclaration.caption(self.tool_name)
 
     @property
     def kind(self) -> str:

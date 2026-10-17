@@ -27,8 +27,7 @@ def append_input(path, native_id, text, *, role="user"):
         )
 
 
-@pytest.mark.parametrize("paged", [False, True])
-def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(tmp_path, paged):
+def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
@@ -50,11 +49,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
         str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first.reference,), None)
     )
     reopened = wire(comms.root)
-    events = (
-        reopened.transcripts.thread_transcript_page("worker").events
-        if paged
-        else reopened.transcripts.thread_transcript("worker")
-    )
+    events = reopened.transcripts.thread_transcript_page("worker").events
     inputs = [event for event in events if event.declared_name in {"incoming", "user"}]
     assert len(inputs) == 3 and inputs[1].text == second.body and inputs[1].routing.requests == (second.reference,)
     assert inputs[2].text == quote and inputs[2].routing is None

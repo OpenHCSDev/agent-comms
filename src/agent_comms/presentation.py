@@ -414,7 +414,7 @@ class DisplaySelection:
     @property
     def viewer_names(self) -> frozenset[str]:
         return (
-            DMDisplayScope.names_for(self.viewer, self.registry)
+            self.registry.names_for(self.viewer)
             if self.viewer is not None
             else frozenset()
         )

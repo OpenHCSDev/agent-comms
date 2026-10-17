@@ -287,6 +287,13 @@ class OwnerIdentity:
     incarnation: ThreadIncarnation
     generation: int
 
+    def owns(self, thread: Thread, generation: int, process: ProcessIdentity) -> bool:
+        return (
+            self.incarnation.renamed(thread.name) == thread.incarnation
+            and self.generation == generation
+            and thread.same_local_process(process)
+        )
+
     def require_current(self, thread: Thread, generation: int, process: ProcessIdentity) -> None:
         if self.incarnation.renamed(thread.name) != thread.incarnation:
             raise RelationViolationError("Thread incarnation changed during owner attachment")

@@ -190,21 +190,7 @@ SERVICE_TIER_ENVIRONMENT = "AGENT_COMMS_SERVICE_TIER"
 
 
 class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
-    selected_fresh = False
     ordinary_choice = True
-
-    @classmethod
-    def supports_selected(cls, value):
-        try:
-            return cls.decode(value).selected_fresh
-        except ValueError:
-            return False
-
-    @classmethod
-    def selected_names(cls):
-        return tuple(
-            member.declared_name for member in cls.members_with(cls) if member.selected_fresh
-        )
 
     @classmethod
     def optional_name(cls, level):
@@ -220,7 +206,7 @@ class MinimalThinkingLevel(ThinkingLevel):
 
 
 class LowThinkingLevel(ThinkingLevel):
-    selected_fresh = True
+    pass
 
 
 class MediumThinkingLevel(ThinkingLevel):
@@ -228,7 +214,7 @@ class MediumThinkingLevel(ThinkingLevel):
 
 
 class HighThinkingLevel(ThinkingLevel):
-    selected_fresh = True
+    pass
 
 
 class XhighThinkingLevel(ThinkingLevel):
