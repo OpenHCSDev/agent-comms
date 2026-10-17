@@ -304,10 +304,8 @@ class BusRouteCounts:
         WAL reset, recovery after the last connection closed); it waits them
         out through SQLite's busy handler instead of failing the read.
         """
-        try:
+        with CoordinationReadUnavailable.checking():
             return self._acquire()
-        except sqlite3.OperationalError as error:
-            CoordinationReadUnavailable.raise_from(error)
 
     def _acquire(self) -> BusRouteCounts:
         self.connection = self._open()
