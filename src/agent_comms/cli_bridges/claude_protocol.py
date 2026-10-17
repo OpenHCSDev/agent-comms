@@ -5,11 +5,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 import json
-from typing import ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 from xml.etree import ElementTree
 
 from metaclass_registry import RegistryConfig
-from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
+from pydantic import AliasChoices, AliasPath, BeforeValidator, Field, JsonValue, TypeAdapter, computed_field, field_validator, model_validator
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
@@ -103,12 +103,6 @@ class ClaudeMonitorFrame(IncomingFrame):
         return MonitorPart(id=message_id, sender=sender, number=int(number),
                            total=int(total), body=body)
 
-    @classmethod
-    def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:
-        return tuple(frame for line in event.splitlines()
-                     if (frame := cls.decode_line(line)) is not None)
-
-
 @dataclass
 class ClaudeSession:
     turn: str = ''
@@ -152,6 +146,8 @@ class TimedRecord(WireModel):
 
 
 class ClaudeHeader(WireHeader):
+    type: str = Field(validation_alias=AliasChoices('subtype', 'type'))
+
     @model_validator(mode='before')
     @classmethod
     def local_command(cls, value: dict) -> dict:
@@ -164,7 +160,8 @@ class ClaudeHeader(WireHeader):
                 return {'type': TaskUserRecord.wire_tag}
             if 'promptId' not in value:
                 return {'type': LocalCommandOutput.wire_tag}
-        return value
+        # A subtype discriminates only a system envelope, never an ordinary message.
+        return value if value.get('type') == 'system' else {'type': value.get('type')}
 
 
 class ClaudeRecord(TaggedWire, ABC):
@@ -234,16 +231,12 @@ class ToolUse(AssistantBlock):
         return (session.started(call),)
 
 
-class AssistantMessage(WireModel):
-    content: list[AssistantBlock.declared_union()]
-
-
 class AssistantRecord(ClaudeRecord, TimedRecord):
     wire_tag = 'assistant'
-    message: AssistantMessage
+    content: list[AssistantBlock.declared_union()] = Field(validation_alias=AliasPath('message', 'content'))
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return tuple(update for block in self.message.content for update in block.updates(self, session))
+        return tuple(update for block in self.content for update in block.updates(self, session))
 
 
 class ResultPart(TaggedWire, ABC):
@@ -296,7 +289,6 @@ class HumanPrompt(PromptOrigin):
 class TaskNotification(PromptOrigin):
     """Its specialized user record owns task-envelope decoding."""
     wire_tag = 'task-notification'
-    kind: Literal['task-notification']
 
 
 class PeerMessage(PromptOrigin):
@@ -307,11 +299,7 @@ class AutoContinuation(PromptOrigin):
     wire_tag = 'auto-continuation'
 
 
-class ToolSupplied(PromptOrigin):
-    """Records Claude writes without an origin: tool results and summaries."""
-
-
-class UserBlock(TaggedWire, ABC):
+class UserBlock(ResultPart, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
 
@@ -319,7 +307,7 @@ class UserBlock(TaggedWire, ABC):
         return (TurnStarted(),)
 
 
-class UserText(UserBlock, TextContent):
+class UserText(TextContent, UserBlock):
     wire_tag = 'text'
 
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
@@ -328,7 +316,7 @@ class UserText(UserBlock, TextContent):
         return super().updates(record, session) + record.origin.prompt(record, self.text, session)
 
 
-class UserImage(UserBlock, ImageContent):
+class UserImage(ImageContent, UserBlock):
     wire_tag = 'image'
 
 
@@ -362,33 +350,10 @@ class TaskEnvelope(WireModel):
     def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
         text = '\n\n'.join(value for value in self.model_dump().values() if value)
         observations = tuple(MonitorObservation(frame, ObservedMonitor(record.uuid, record.timestamp))
-                             for frame in ClaudeMonitorFrame.decode_event(self.event))
+                             for line in self.event.splitlines()
+                             if (frame := ClaudeMonitorFrame.decode_line(line)) is not None)
         return (*observations, FinishedItem(record.uuid, record.uuid,
                                             (NoticeTranscript(text, timestamp=record.timestamp),)))
-
-
-class TaskContent(WireModel):
-    """Both external task-record shapes share envelope decoding and observations."""
-    text: TaskEnvelope
-
-    @field_validator('text', mode='before')
-    @classmethod
-    def envelope(cls, value: str) -> TaskEnvelope:
-        return TaskEnvelope.from_text(value)
-
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
-        return self.text.updates(record)
-
-
-class TaskText(TaskContent):
-    type: Literal['text'] = 'text'
-
-
-class TaskMessage(ContentBlocks):
-    content: list[TaskText]
-
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
-        return tuple(update for block in self.content for update in block.updates(record))
 
 
 class ResultMessage(ContentBlocks):
@@ -398,7 +363,7 @@ class ResultMessage(ContentBlocks):
         return '\n'.join(part.result_text() for part in self.content)
 
 
-class ToolResult(UserBlock, ResultMessage):
+class ToolResult(ResultMessage, UserBlock):
     wire_tag = 'tool_result'
     tool_use_id: str
     is_error: bool = False
@@ -448,84 +413,46 @@ class CompactUserRecord(PromptRecord):
 class TaskUserRecord(ClaudeRecord, TimedRecord):
     wire_tag = 'task-user'
     origin: TaskNotification
-    message: TaskMessage
+    message: UserMessage
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return self.message.updates(self)
+        return tuple(update for block in self.message.content
+                     for update in TaskEnvelope.from_text(block.result_text()).updates(self))
 
 
-class SubtypeHeader(WireHeader):
-    type: str = Field(alias='subtype')
-
-
-class SystemEvent(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
-    header = SubtypeHeader
-
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return ()
-
-
-class TurnDuration(SystemEvent):
+class TurnDuration(ClaudeRecord):
     wire_tag = 'turn_duration'
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return (session.ended(),)
 
 
-class CompactBoundary(SystemEvent, TimedRecord):
+class CompactBoundary(ClaudeRecord, TimedRecord):
     wire_tag = 'compact_boundary'
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return session.finished(self.uuid, (NoticeTranscript('Context compacted', timestamp=self.timestamp),))
 
 
-class StopHookSummary(SystemEvent):
-    wire_tag = 'stop_hook_summary'
+class MetadataRecord(ClaudeRecord):
+    wire_kinds: ClassVar[tuple[str, ...]] = (
+        'stop_hook_summary', 'informational', 'scheduled_task_fire', 'local_command',
+        'away_summary', 'agents_killed', 'model_refusal_no_fallback', 'queue-operation',
+        'mode', 'permission-mode', 'atis-latch', 'last-prompt', 'ai-title', 'pr-link',
+        'file-history-snapshot', 'file-history-delta', 'cost-state',
+    )
+    wire_tag = wire_kinds[0]
+    kind: Literal[*wire_kinds] = Field(
+        validation_alias=ClaudeHeader.model_fields['type'].validation_alias, exclude=True)
 
-
-class Informational(SystemEvent):
-    wire_tag = 'informational'
-
-
-class ScheduledTaskFire(SystemEvent):
-    wire_tag = 'scheduled_task_fire'
-
-
-class LocalCommand(SystemEvent):
-    wire_tag = 'local_command'
-
-
-class AwaySummary(SystemEvent):
-    wire_tag = 'away_summary'
-
-
-class AgentsKilled(SystemEvent):
-    wire_tag = 'agents_killed'
-
-
-class ModelRefusalNoFallback(SystemEvent):
-    wire_tag = 'model_refusal_no_fallback'
-
-
-class SystemRecord(ClaudeRecord):
-    wire_tag = 'system'
-    subtype: SystemEvent.declared_union()
-
-    @model_validator(mode='before')
     @classmethod
-    def decode_subtype(cls, value: dict) -> dict:
-        # Claude places both discriminators on one envelope. Decode that shape
-        # once; its declared subtype owns the behavior and any retained fields.
-        return {'subtype': value}
+    def wire_tags(cls) -> tuple[str, ...]:
+        return cls.wire_kinds
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return self.subtype.updates(session)
-
-
-class MetadataRecord(ClaudeRecord, ABC):
-    pass
+    @computed_field
+    @property
+    def type(self) -> str:
+        return self.kind
 
 
 class AttachmentHeader(WireHeader):
@@ -547,10 +474,13 @@ class AttachmentPayload(TaggedWire, ABC):
     def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
 
 
-class QueuedTaskNotification(TaskContent, AttachmentPayload):
+class QueuedTaskNotification(AttachmentPayload):
     wire_tag = 'queued_command'
-    text: TaskEnvelope = Field(alias='prompt')
+    text: Annotated[TaskEnvelope, BeforeValidator(TaskEnvelope.from_text)] = Field(alias='prompt')
     origin: TaskNotification
+
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return self.text.updates(record)
 
 
 class ForeignAttachment(AttachmentPayload):
@@ -568,47 +498,7 @@ class Attachment(ClaudeRecord, TimedRecord):
         return self.attachment.updates(self)
 
 
-class QueueOperation(MetadataRecord):
-    wire_tag = 'queue-operation'
-
-
-class Mode(MetadataRecord):
-    wire_tag = 'mode'
-
-
-class PermissionMode(MetadataRecord):
-    wire_tag = 'permission-mode'
-
-
-class AtisLatch(MetadataRecord):
-    wire_tag = 'atis-latch'
-
-
-class LastPrompt(MetadataRecord):
-    wire_tag = 'last-prompt'
-
-
-class AiTitle(MetadataRecord):
-    wire_tag = 'ai-title'
-
-
-class PrLink(MetadataRecord):
-    wire_tag = 'pr-link'
-
-
-class FileHistorySnapshot(MetadataRecord):
-    wire_tag = 'file-history-snapshot'
-
-
-class FileHistoryDelta(MetadataRecord):
-    wire_tag = 'file-history-delta'
-
-
-class CostState(MetadataRecord):
-    wire_tag = 'cost-state'
-
-
-class LocalCommandOutput(MetadataRecord):
+class LocalCommandOutput(ClaudeRecord):
     """A terminal-only slash command and its output."""
     wire_tag = 'local-command'
 
