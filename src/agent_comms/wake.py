@@ -10,12 +10,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from agent_comms.coordination_tables.assignments import MessageAudience
 
 from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
-from .channel_targets import is_channel_target
+from .channel_targets import CommandTarget, NamedTarget
 from .messages import Message
-from .wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
+from .wake_policy import MessageAudience, PassiveWake, WakePolicy
 
 
 class ControlClassification(StrEnum):
@@ -79,7 +78,7 @@ def _require_stored(message: Message) -> None:
 
 def _validated_context(
     message: Message, frozen_audience: FrozenAudience, control: ControlClassification
-) -> tuple[bool, frozenset[str]]:
+) -> tuple[NamedTarget, frozenset[str]]:
     """Check the full envelope exactly once before interpreting recipient rows."""
     _require_stored(message)
     if type(control) is not ControlClassification:
@@ -102,46 +101,22 @@ def _validated_context(
     )
     if candidate.wire_envelope_digest != frozen_audience.wire_envelope_digest:
         raise ValueError("message does not match the frozen audience envelope.")
-    channel = is_channel_target(message.target)
-    if not channel and not (message.notice and not frozen_audience.recipients):
-        if len(frozen_audience.recipients) != 1:
-            raise ValueError("a direct message must have exactly one frozen eligible recipient.")
-        if frozen_audience.recipients[0].canonical_thread != message.target:
-            raise ValueError("direct frozen recipient must match the exact stored target.")
-    effective_mentions = (
-        frozenset(mention.thread for mention in message.mentions).intersection(
-            frozen_audience.canonical_members
-        )
-        if channel
-        else frozenset()
-    )
-    return channel, effective_mentions
+    target = CommandTarget.named(message.target)
+    target.require_frozen_recipients(message, frozen_audience)
+    return target, target.effective_mentions(message, frozen_audience)
 
 
 def _member_decision(
     message: Message,
     recipient: FrozenRecipient,
     control: ControlClassification,
-    channel: bool,
+    target: NamedTarget,
     effective_mentions: frozenset[str],
 ) -> WakeDecision | NoWakeDecision:
-    if not channel:
-        audience = MessageAudience.DIRECT
-    elif effective_mentions:
-        audience = MessageAudience.MENTIONED
-    else:
-        audience = MessageAudience.COLLECTIVE
-    if message.notice or message.membership is not None or control.passive:
-        mode = PassiveWake()
-    elif not channel:
-        mode = FullWake()
-    elif effective_mentions:
-        if recipient.canonical_thread not in effective_mentions:
-            return NoWakeDecision(recipient.recipient_lookup)
-        mode = FullWake()
-    else:
-        mode = BoundedTriageWake()
-    return WakeDecision(recipient.recipient_lookup, audience, mode)
+    mode = target.wake_policy(message, recipient, control, effective_mentions)
+    if mode is None:
+        return NoWakeDecision(recipient.recipient_lookup)
+    return WakeDecision(recipient.recipient_lookup, target.wake_audience(effective_mentions), mode)
 
 
 def resolve_wake(
@@ -158,10 +133,10 @@ def resolve_wake(
     """
     if type(recipient) is not FrozenRecipient:
         raise TypeError("wake requires a FrozenAudience and FrozenRecipient.")
-    channel, effective_mentions = _validated_context(message, frozen_audience, control)
+    target, effective_mentions = _validated_context(message, frozen_audience, control)
     if recipient not in frozen_audience.recipients:
         return None
-    return _member_decision(message, recipient, control, channel, effective_mentions)
+    return _member_decision(message, recipient, control, target, effective_mentions)
 
 
 def resolve_wake_cohort(
@@ -172,8 +147,8 @@ def resolve_wake_cohort(
     Stage3 must separately attest the committed row, recipient capture, and
     control/policy version at the original send boundary before persisting N.
     """
-    channel, effective_mentions = _validated_context(message, frozen_audience, control)
+    target, effective_mentions = _validated_context(message, frozen_audience, control)
     return tuple(
-        _member_decision(message, recipient, control, channel, effective_mentions)
+        _member_decision(message, recipient, control, target, effective_mentions)
         for recipient in frozen_audience.recipients
     )

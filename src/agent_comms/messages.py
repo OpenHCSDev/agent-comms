@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Type
 
-from .channel_targets import _TAG_CHARS, BuiltinChannel, is_channel_target
+from .channel_targets import CommandTarget
 from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
@@ -20,10 +20,6 @@ from .field_codec import FieldCodec, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .response_policy import (
-    CollectivePolicy,
-    DirectPolicy,
-    InformationalPolicy,
-    MentionedOnlyPolicy,
     ResponseEligibility,
     ResponsePolicy,
 )
@@ -251,22 +247,7 @@ class Message:
             for mention in self.mentions
         ):
             raise ValueError("Mention ranges must identify text in the message body.")
-        if not is_channel_target(self.target):
-            # DM: a thread name; sending to yourself is not a conversation.
-            if self.sender == self.target:
-                raise RelationViolationError(f"Thread {self.sender!r} cannot message itself.")
-            allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-            if not set(self.target) <= allowed:
-                raise ValueError(
-                    f"Message target {self.target!r} is not a thread name or #channel."
-                )
-        if self.target.startswith("#") and self.target != BuiltinChannel.ALL.value:
-            tag = self.target[1:]
-            if not tag or not set(tag) <= _TAG_CHARS:
-                raise ValueError(
-                    f"Channel {self.target!r} must be lowercase alphanumeric"
-                    " with hyphens/underscores."
-                )
+        CommandTarget.named(self.target).validate(self.sender)
 
     @property
     def view_cursor(self) -> int | HistoryCursor:
@@ -333,15 +314,7 @@ class Message:
     @property
     def response_policy(self) -> ResponsePolicy:
         """Typed response semantics without changing the stored target."""
-        if self.notice or self.membership is not None:
-            return InformationalPolicy.instance()
-        if not (is_channel_target(self.target) or BuiltinChannel.lookup(self.target) is not None):
-            return DirectPolicy.instance()
-        if self.mentions:
-            return MentionedOnlyPolicy.instance()
-        if not self.sender_role.executable:
-            return CollectivePolicy.instance()
-        return InformationalPolicy.instance()
+        return CommandTarget.named(self.target).response_policy(self)
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
@@ -362,15 +335,12 @@ class Message:
 
     def starts_turn_for(self, name: str, *, aliases: Mapping[str, str] | None = None) -> bool:
         """Whether this message enters one canonical recipient's model context."""
-        channel = is_channel_target(self.target) or BuiltinChannel.lookup(self.target) is not None
-        if not channel:
-            return self.starts_turn
-        return name in self.response_eligibility((name,), aliases=aliases).recipients
+        return CommandTarget.named(self.target).starts_turn_for(self, name, aliases)
 
     @property
     def exact_reply_target(self) -> str:
         """The exact response destination owned by this opening message."""
-        return self.target if is_channel_target(self.target) else self.sender
+        return CommandTarget.named(self.target).reply_target(self.sender)
 
     @property
     def reply_target(self) -> str | None:

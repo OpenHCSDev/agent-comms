@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
-from .channel_targets import BuiltinChannel, is_channel_target
+from .channel_targets import BuiltinChannel, CommandTarget
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision
 from .exporting import (
@@ -223,8 +223,8 @@ class HistoryViews:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Bounded channel history for any client adapter."""
-        targets = self.channels.catalog.read().history_targets(target)
-        return ChannelHistory(target, targets).page(
+        selected = CommandTarget.named(target).require_channel()
+        return ChannelHistory(selected.name, selected.history_targets(self.channels.catalog.read())).page(
             self.presentation,
             before=before,
             after=after,
@@ -369,12 +369,7 @@ class HistoryViews:
             self.bus.pending_counts(actor)
             if registry.canonical_name(actor) in registry.threads else {}
         )
-        channel_unread: dict[str, int] = {}
-        for name in declarations:
-            targets = catalog.history_targets(name)
-            channel_unread[name] = sum(
-                count for target, count in unread.items() if targets is None or target in targets
-            )
+        channel_unread = {name: channel.pending_count(unread) for name, channel in declarations.items()}
         return CoordinationSnapshot.capture(
             self.root, registry, catalog, self.agents, declarations, sent,
             ChannelActivity.for_views(declarations, self.bus.channel_activity()),
@@ -449,9 +444,9 @@ class HistoryViews:
         executor's delivery cursor. A deliberate mark-read can acknowledge the
         current saved tail without pretending the transcript was displayed.
         """
-        if is_channel_target(target):
-            self.mark_channel_view_read(target, worktree=worktree)
-            return
+        CommandTarget.named(target).mark_view_read(self, worktree)
+
+    def mark_thread_view_read(self, target: str, *, worktree: str) -> None:
         viewer = self.messaging.user_identity(worktree).name
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(target)

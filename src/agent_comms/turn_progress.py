@@ -17,7 +17,6 @@ from . import agent_events as events
 from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
 from .acp_failure import RequestFailure
 from .thread_identity import AdmissionIdentity
-from .channel_targets import is_channel_target
 from .comms import Comms
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress
@@ -318,7 +317,7 @@ class TurnProgress(events.AgentEventConsumer):
                 dict.fromkeys(
                     (*self.reply_targets,)
                     + tuple(
-                        origin.target if is_channel_target(origin.target) else origin.sender
+                        origin.exact_reply_target
                         for origin in self.origins
                         if origin.sender != self.thread_name
                     )

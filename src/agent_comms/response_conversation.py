@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from .audience_manifest import FrozenRecipient, freeze_audience
 from .bus_publication import CommittedDelivery
-from .channel_targets import is_channel_target
+from .channel_targets import CommandTarget
 from .coordination_errors import IdentityConflict
 from .messages import Message
 from .message_reference import MessageReference
@@ -76,9 +76,7 @@ class ResponseConversation:
                 if previous != member:
                     raise IdentityConflict("Conversation participant identity changed")
         members.pop(self.responder.recipient_lookup, None)
-        recipients = tuple(members.values())
-        if not is_channel_target(self.obligation.exact_target):
-            recipients = tuple(m for m in recipients if m.canonical_thread == self.obligation.exact_target)
+        recipients = CommandTarget.named(self.obligation.exact_target).response_recipients(tuple(members.values()))
         revision = hashlib.sha256(
             "\n".join(source.audience.digest for source in self.sources).encode()
         ).hexdigest()

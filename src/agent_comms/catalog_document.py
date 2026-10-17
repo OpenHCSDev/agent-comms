@@ -101,12 +101,6 @@ class CatalogDocument:
             f"#{tag}" for tag in tags
         )
 
-    def history_targets(self, target: str) -> frozenset[str] | None:
-        return self.resolve(target).history_targets
-
-    def is_view_target(self, target: str) -> bool:
-        return target.startswith("#") and target.removeprefix("#") in self.saved_views
-
     def pinned_threads(self, channel: str) -> frozenset[str]:
         return self.preferences.get(channel, ChannelPreferences()).pinned_threads
 

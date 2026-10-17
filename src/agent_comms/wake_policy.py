@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import ClassVar
 
 from .coordination_errors import IntegrityViolationError
@@ -15,6 +16,12 @@ from .source_proof_requirement import (
     TriageSourceProof,
 )
 from .typed_table import sql_literal
+
+
+class MessageAudience(StrEnum):
+    DIRECT = "direct"
+    MENTIONED = "mentioned"
+    COLLECTIVE = "collective"
 
 
 @dataclass(frozen=True)

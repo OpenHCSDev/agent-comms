@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from .bus_activity_index import BusActivityIndex, ChannelActivity
 from .bus_route_counts import OpenedRouteCounts
-from .channel_targets import BuiltinChannel, is_channel_target
+from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
 from .message_page import (
@@ -180,14 +180,8 @@ class MessageBus:
         """Count unread messages without retaining their bodies."""
         with self.snapshot() as (basis, source):
             counts = self._pending_projection(source, basis, [name])[name]
-            if target is None or BuiltinChannel.aggregate_target(target):
-                return sum(counts.values())
-            if is_channel_target(target):
-                targets = basis.catalog.history_targets(target)
-                return sum(
-                    count for scope, count in counts.items() if targets is None or scope in targets
-                )
-            return counts.get(basis.registry.require(target).name, 0)
+            selected = CommandTarget.named(BuiltinChannel.ANY.value if target is None else target)
+            return selected.pending_count(counts, basis.registry, basis.catalog)
 
     def pending_counts(self, name: str) -> Mapping[str, int]:
         with self.snapshot() as (basis, source):
@@ -333,7 +327,7 @@ class MessageBus:
 
     def channel_history_page(
         self,
-        target: str,
+        target: ChannelTarget,
         *,
         before: int | None = None,
         after: int | None = None,
@@ -341,11 +335,8 @@ class MessageBus:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Return one bounded page from a channel in ascending order."""
-        if not (is_channel_target(target)):
-            raise ValueError(f"{target!r} is not a channel target.")
-        targets = self._channels.read().history_targets(target)
         return self.display_page(
-            ChannelDisplayScope(target, targets),
+            ChannelDisplayScope(target.name, target.history_targets(self._channels.read())),
             before=before,
             after=after,
             limit=limit,

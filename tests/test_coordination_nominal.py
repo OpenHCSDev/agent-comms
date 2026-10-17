@@ -8,7 +8,7 @@ from agent_comms.assignment_states import AssignmentState, EngagedAssignment, Fu
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import SettlingAttempt, SucceededAttempt
 from agent_comms.coordination_errors import IntegrityViolationError
-from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
 from agent_comms.execution_states import (
     ActiveExecution,
@@ -17,7 +17,7 @@ from agent_comms.execution_states import (
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
-from agent_comms.wake_policy import FullWake
+from agent_comms.wake_policy import FullWake, MessageAudience
 
 
 def test_state_data_cannot_be_attached_to_wrong_variant():

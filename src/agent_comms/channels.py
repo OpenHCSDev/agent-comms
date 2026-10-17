@@ -7,7 +7,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from .channel_targets import _TAG_CHARS, BuiltinChannel, Tag
+from .channel_targets import BuiltinChannel, ChannelTarget, Tag
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
@@ -44,16 +44,9 @@ class Channel:
             raise ValueError("Channel presentation flags must be boolean.")
         if self.any_mode and not self.exact:
             raise ValueError("Only exact tag channels can include member activity.")
-        if not name[1:] or not set(name[1:]) <= _TAG_CHARS:
-            raise ValueError(
-                "Channel names must be lowercase alphanumeric with hyphens/underscores."
-            )
-        if self.parent is not None and (
-            not self.parent[1:] or not set(self.parent[1:]) <= _TAG_CHARS
-        ):
-            raise ValueError(
-                "Channel parents must be lowercase alphanumeric with hyphens/underscores."
-            )
+        ChannelTarget(name).validate()
+        if self.parent is not None:
+            ChannelTarget(self.parent).validate()
         if self.parent == name:
             raise RelationViolationError("A channel cannot be its own parent.")
         if self.builtin is not None:
@@ -66,8 +59,6 @@ class Channel:
                 raise ValueError("Saved projection must retain its declaration identity.")
         elif self.tags != frozenset({name.removeprefix("#")}):
             raise ValueError("A routable channel must be its exact tag.")
-        for tag in self.tags:
-            Tag(tag)
 
     def matches(self, tags: frozenset[str]) -> bool:
         if self.view is not None:
@@ -98,6 +89,10 @@ class Channel:
             return self.view.history_targets
         builtin = self.builtin
         return builtin.history_targets if builtin is not None else frozenset({self.name})
+
+    def pending_count(self, counts: dict[str, int]) -> int:
+        targets = self.history_targets
+        return sum(count for scope, count in counts.items() if targets is None or scope in targets)
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
@@ -163,13 +158,4 @@ class SavedView:
         return self.original_targets | frozenset(f"#{tag}" for tag in self.predicate.tags)
 
     def __post_init__(self) -> None:
-        if (
-            not self.name
-            or self.name.startswith("#")
-            or not set(self.name) <= _TAG_CHARS
-            or BuiltinChannel.lookup(f"#{self.name}")
-        ):
-            raise ValueError(
-                "View names must be lowercase alphanumeric with hyphens/underscores "
-                "and cannot be channel targets."
-            )
+        Tag(self.name)

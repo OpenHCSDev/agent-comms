@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .channel_targets import BuiltinChannel, is_channel_target
+from .channel_targets import BuiltinChannel, CommandTarget
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .messages import Message
@@ -31,7 +31,7 @@ class MessageRoute:
     def incoming_scope(self) -> str:
         return (
             ", ".join(
-                target if is_channel_target(target) else "direct message" for target in self.targets
+                CommandTarget.named(target).incoming_scope for target in self.targets
             )
             or "direct message"
         )
@@ -118,11 +118,7 @@ class ScheduledTurn:
         cls, message: Message, *, aliases: Mapping[str, str] | None = None
     ) -> ScheduledTurn:
         guidance = message.response_policy.guidance(message, aliases=aliases)
-        scope = (
-            f"; delivery and history remain {message.target}"
-            if is_channel_target(message.target)
-            else ""
-        )
+        scope = CommandTarget.named(message.target).guidance_scope
         return cls(
             f"[agent-comms from {message.sender} to {message.target}]\n"
             f"[Response policy: {guidance}{scope}]\n{message.body}",
@@ -188,16 +184,8 @@ class DeliveryScope(MessageDisplayScope):
         return self.delivers(message.sender, message.target)
 
     def selection(self, target, snapshot, catalog) -> MessageDisplayScope:
-        if target is None:
-            return ChannelDisplayScope(BuiltinChannel.ANY.value, None)
-        if is_channel_target(target):
-            return ChannelDisplayScope(target, catalog.history_targets(target))
-        peer = snapshot.canonical_name(target)
-        if peer not in snapshot.threads:
-            from .errors import UnregisteredThreadError
-
-            raise UnregisteredThreadError(f"Thread {target!r} is not registered.")
-        return DMDisplayScope.capture(self.actor, peer, snapshot)
+        selected = CommandTarget.named(BuiltinChannel.ANY.value if target is None else target)
+        return selected.display_scope(self.actor, snapshot, catalog, ChannelDisplayScope, DMDisplayScope)
 
     def canonical(self, name: str) -> str:
         return self.aliases.get(name, name)
@@ -250,7 +238,4 @@ class DeliveryScope(MessageDisplayScope):
         return since is not None and message.timestamp >= since
 
     def conversation(self, sender: str, target: str) -> str:
-        if is_channel_target(target):
-            return target
-        sender, target = self.canonical(sender), self.canonical(target)
-        return sender if target == self.actor else target
+        return CommandTarget.named(target).conversation(sender, self.actor, self.canonical)

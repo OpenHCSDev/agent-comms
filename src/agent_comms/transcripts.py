@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Callable, ClassVar
 
 from .agent_backend import RuntimeLocation
-from .channel_targets import is_channel_target
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .declared_family import DeclaredFamily

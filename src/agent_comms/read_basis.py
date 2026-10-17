@@ -16,7 +16,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
-from .channel_targets import is_channel_target
+from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .private_path import FileRevision
@@ -269,8 +269,7 @@ class DMDisplayBasis:
         Fetching is not paint proof. A UI may use the basis only after proving
         that the corresponding inbound tail was contiguous and visibly painted.
         """
-        if not isinstance(peer, str) or is_channel_target(peer):
-            raise ValueError("A DM page requires a registered peer.")
+        peer = CommandTarget.named(peer).require_dm_peer()
         with _store_lock(root / "wire", shared=True):
             snapshot = registry.snapshot()
             viewer_name = snapshot.canonical_name(viewer)
@@ -563,6 +562,6 @@ class ChannelDisplayScope(MessageDisplayScope):
             return False
         return (
             message.sender in self.participant_names
-            or (not is_channel_target(message.target) and message.target in self.participant_names)
+            or any(name in self.participant_names for name in CommandTarget.named(message.target).direct_names)
             or any(mention.thread in self.participant_names for mention in message.mentions)
         )

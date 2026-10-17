@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .audience_manifest import FrozenAudience
-from .coordination_tables.assignments import MessageAudience
+from .wake_policy import MessageAudience
 from .coordination_tables.publications import canonical_publication_key
 from .declared_family import DeclaredFamily
 from .wake import ControlClassification, WakeDecision, resolve_wake_cohort
