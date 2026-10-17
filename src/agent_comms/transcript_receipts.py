@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
 from .bus_publication import CommittedDelivery
+from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
@@ -272,6 +274,38 @@ class TranscriptSource:
     Native and external stores supply their original records. An assigned
     source adds the separately acquired wire/publication capability below.
     """
+
+    def turns(self, last):
+        turns, pending = [], []
+        with self.reading() as reader:
+            cut = reader.cut()
+            if cut.offset == 0:
+                return ()
+            with closing(reader.reverse(cut.offset)) as records:
+                for record in records:
+                    pending.append(record)
+                    completed = record.completed_turn(pending)
+                    if completed:
+                        turns.extend(completed)
+                        pending.clear()
+                        if len(turns) >= last:
+                            break
+            if not cut.holds(reader.cut(), cut.offset):
+                raise StaleRevision('Turn source changed during its read')
+        return tuple(turns)
+
+    def current_draft(self):
+        """Saved records have no draft unless their reader supplies one."""
+        return None
+
+    def publication_revision(self, root, recipient):
+        return PublishedReplyRevision(0, 0)
+
+    @contextmanager
+    def projection(self, source, routes):
+        def project(records, *, max_records, max_bytes):
+            return ((record, record.events) for record in records)
+        yield project
 
     def resolve_sent(self, messages):
         """Records without a sender assignment cannot qualify Send reports."""

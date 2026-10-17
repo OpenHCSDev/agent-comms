@@ -43,6 +43,12 @@ class BackendDeclarationError(TypeError):
 class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     """Runtime behavior derived once by the owning thread record."""
 
+    _backend: ClassVar[type[AgentBackend]]
+
+    @property
+    def backend(self):
+        return self._backend
+
     def require_forkable(self):
         pass
 
@@ -398,6 +404,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
                 "in a module imported by agent_backend before it seals."
             )
         super().__init_subclass__(**options)
+        cls.location_type._backend = cls
 
     @classmethod
     @abstractmethod

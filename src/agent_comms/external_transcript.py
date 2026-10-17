@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest
@@ -104,7 +103,7 @@ class ExternalCut(RecordsCut, TypedRow):
 
 
 @dataclass(frozen=True, slots=True)
-class ExternalTranscriptRead:
+class ExternalTranscriptRead(TranscriptSource):
     """One SQLite snapshot of a sessionless transcript's finished and draft rows."""
 
     transcript: ExternalTranscript
@@ -153,14 +152,6 @@ class ExternalTranscriptRead:
 
     def reverse(self, before: int) -> Iterator[ExternalRecord]:
         return self._records("seq <= ?", (before,), descending=True)
-
-    @contextmanager
-    def projection(self, receipts, routes):
-        def project(records, *, max_records, max_bytes):
-            return ((record, record.events) for record in records)
-
-        yield project
-
 
 @dataclass(frozen=True, slots=True)
 class ExternalTranscript(TranscriptSource, TypedStore):
@@ -229,6 +220,4 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         with self.reading() as records:
             return records.cut()
 
-    def publication_revision(self, root: Path, thread) -> PublishedReplyRevision:
-        return PublishedReplyRevision(0, 0)  # Core publishes no native replies here.
 

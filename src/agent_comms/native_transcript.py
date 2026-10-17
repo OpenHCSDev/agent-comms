@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from abc import abstractmethod
 from collections.abc import Generator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from .thread_identity import RecordedThreadIncarnation
 
 from .declared_family import DeclaredFamily
-from .coordination_errors import StaleRevision
 from .native_entries import NativeEntry, SessionEntry, TranscriptProjection
 from .transcript_events import TurnDigest
 from .private_path import FileRevision
@@ -106,6 +105,16 @@ class NativeRecord:
         entry = NativeEntry.read(raw) if complete else None
         return cls(start, end, entry, complete)
 
+    def completed_turn(self, records):
+        entry = self.entry
+        if entry is not None and entry.input_boundary:
+            return (TurnDigest.from_records(entry.require_entry_id(), records),)
+        return ()
+
+    @property
+    def turn_events(self):
+        return self.project(lambda original: original.entry.events(TranscriptProjection()))
+
     def project(self, projection):
         """A decoded record owns whether it can produce presentation events."""
         return projection(self) if self.entry is not None else ()
@@ -139,10 +148,6 @@ class NativeTranscript(TranscriptSource):
     def reading(self):
         """Keep the native record owner bound across one page projection."""
         yield self
-
-    def current_draft(self) -> None:
-        """Native in-progress output belongs to the ACP stream."""
-        return None
 
     def imported_sources(self):
         """Read original metadata before conversation, including native configuration.
@@ -304,31 +309,6 @@ class NativeTranscript(TranscriptSource):
             self.require_publication_context(user)
             return record, user
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
-
-    def turns(self, last: int):
-        """Read newest input-bounded turns through the existing record decoder."""
-        cut = self.cut()
-        if cut.offset == 0:
-            return ()
-        turns, pending = [], []
-        with closing(self.reverse(cut.offset)) as records:
-            for record in records:
-                entry = record.entry
-                if entry is None:
-                    continue
-                pending.append(record)
-                if entry.input_boundary:
-                    turns.append(TurnDigest(entry.require_entry_id(), tuple(
-                        event
-                        for original in reversed(pending)
-                        for event in original.project(
-                            lambda source: source.entry.events(TranscriptProjection())))))
-                    pending.clear()
-                    if len(turns) >= last:
-                        break
-        if not cut.holds(self.cut(), cut.offset):
-            raise StaleRevision("Native turn source changed during its read")
-        return tuple(turns)
 
     def tail(self, *, max_bytes: int | None = None):
         end = self.path.stat().st_size

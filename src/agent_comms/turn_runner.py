@@ -132,11 +132,12 @@ class TurnRunner:
 
     def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""
+        backend = thread.runtime.backend
         current = self.persistent_backends.get(session_id)
         if current is None:
-            current = thread.backend.for_worker(self, session_id)
+            current = backend.for_worker(self, session_id)
             self.persistent_backends[session_id] = current
-        elif type(current) is not thread.backend:
+        elif type(current) is not backend:
             raise RelationViolationError(
                 f"Session {session_id!r} holds a {type(current).__name__}, but "
                 f"thread {thread.name!r} declares {thread.backend.declared_name}"
