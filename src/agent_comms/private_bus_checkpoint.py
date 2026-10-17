@@ -35,7 +35,7 @@ from .coordination_tables.publications import PublicationIntents
 from .errors import HumanAdmissionBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
-from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedRow, TypedTable
+from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
 from .thread_identity import ThreadIncarnation
