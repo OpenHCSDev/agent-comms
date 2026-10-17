@@ -93,26 +93,40 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
     assert len(decoded) == 5 and forward.events == latest.events
 
 
-def test_malformed_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
+def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     path = tmp_path / "session.jsonl"
     extension = {"type": "plugin-note", "custom": {"future": True}}
     path.write_bytes(
         encoded(extension)
-        + encoded({"type": "message", "message": {"role": "assistant", "content": 42}})
-        + b'{"type":"message"\n'
         + encoded({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "valid"}]}})
         + b'{"type":"message","message":'
     )
     reader = NativeTranscript(path)
     forward = list(reader.forward(0, path.stat().st_size))
     reverse = list(reader.reverse(path.stat().st_size))
+    assert len(forward) == 3
     assert forward == list(reversed(reverse))
     assert isinstance(forward[0].entry, UnknownEntry) and forward[0].entry.payload == extension
     assert forward[0].entry.events(TranscriptProjection()) == []
-    assert forward[1].entry is None and forward[2].entry is None
-    assert forward[3].entry.events(TranscriptProjection()) == [AssistantTranscript("valid")]
+    assert forward[1].entry.events(TranscriptProjection()) == [AssistantTranscript("valid")]
     assert forward[-1].entry is None and not forward[-1].complete
     assert forward[0].start == 0 and forward[-1].end == path.stat().st_size
+
+
+@pytest.mark.parametrize("raw", [
+    encoded({"type": "message", "message": {"role": "assistant", "content": 42}}),
+    b'{"type":"message"\n',
+])
+@pytest.mark.parametrize("read", [
+    lambda reader, size: reader.forward(0, size),
+    lambda reader, size: reader.reverse(size),
+    lambda reader, size: reader.tail(),
+], ids=["forward", "reverse", "tail"])
+def test_corrupt_complete_entries_raise_in_every_read_direction(tmp_path, raw, read):
+    path = tmp_path / "corrupt.jsonl"
+    path.write_bytes(raw)
+    with pytest.raises(ValueError):
+        tuple(read(NativeTranscript(path), path.stat().st_size))
 
 
 @pytest.mark.parametrize(
@@ -160,7 +174,7 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     from agent_comms.coordination_response import install_private_response_schema
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
     from agent_comms.coordinator import Coordination
-    from agent_comms.transcript_sources import AssignedTranscriptSource
+    from agent_comms.transcript_sources import LiveAssignedTranscriptSource
 
     root = tmp_path / "wire"
     comms = wire(root)
@@ -212,7 +226,7 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     monkeypatch.setattr(CoordinationStore, "observing", traced_read)
     monkeypatch.setattr(NativeTranscript, "inputs_for", traced_ancestry)
     monkeypatch.setattr(NativeTranscript, "session_id", property(traced_header))
-    source = AssignedTranscriptSource.for_thread(root, thread, comms.bus.log)
+    source = LiveAssignedTranscriptSource.for_thread(root, thread, comms.bus.log)
     with comms.transcripts.routes.for_session(str(path)) as routes:
         projected = tuple(source.native_records((records,), routes, reader))
     # One parent walk serves the whole fragment.
