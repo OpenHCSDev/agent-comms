@@ -333,14 +333,13 @@ class Message:
     @property
     def response_policy(self) -> ResponsePolicy:
         """Typed response semantics without changing the stored target."""
-        if not self.type.conversation_message or self.notice or self.membership is not None:
-            return InformationalPolicy.instance()
-        if not (is_channel_target(self.target) or BuiltinChannel.lookup(self.target) is not None):
-            return DirectPolicy.instance()
-        if self.mentions:
-            return MentionedOnlyPolicy.instance()
-        if not self.sender_role.executable:
-            return CollectivePolicy.instance()
+        if self.type.conversation_message and not self.notice and self.membership is None:
+            if not (is_channel_target(self.target) or BuiltinChannel.lookup(self.target) is not None):
+                return DirectPolicy.instance()
+            if self.mentions:
+                return MentionedOnlyPolicy.instance()
+            if not self.sender_role.executable:
+                return CollectivePolicy.instance()
         return InformationalPolicy.instance()
 
     def response_eligibility(

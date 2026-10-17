@@ -126,25 +126,25 @@ def _member_decision(
     channel: bool,
     effective_mentions: frozenset[str],
 ) -> WakeDecision | NoWakeDecision:
-    if not message.type.conversation_message:
-        return NoWakeDecision(recipient.recipient_lookup)
-    if not channel:
-        audience = MessageAudience.DIRECT
-    elif effective_mentions:
-        audience = MessageAudience.MENTIONED
-    else:
-        audience = MessageAudience.COLLECTIVE
-    if message.notice or message.membership is not None or control.passive:
-        mode = PassiveWake()
-    elif not channel:
-        mode = FullWake()
-    elif effective_mentions:
-        if recipient.canonical_thread not in effective_mentions:
-            return NoWakeDecision(recipient.recipient_lookup)
-        mode = FullWake()
-    else:
-        mode = BoundedTriageWake()
-    return WakeDecision(recipient.recipient_lookup, audience, mode)
+    if message.type.conversation_message:
+        if not channel:
+            audience = MessageAudience.DIRECT
+        elif effective_mentions:
+            audience = MessageAudience.MENTIONED
+        else:
+            audience = MessageAudience.COLLECTIVE
+        if message.notice or message.membership is not None or control.passive:
+            mode = PassiveWake()
+        elif not channel:
+            mode = FullWake()
+        elif effective_mentions:
+            if recipient.canonical_thread not in effective_mentions:
+                return NoWakeDecision(recipient.recipient_lookup)
+            mode = FullWake()
+        else:
+            mode = BoundedTriageWake()
+        return WakeDecision(recipient.recipient_lookup, audience, mode)
+    return NoWakeDecision(recipient.recipient_lookup)
 
 
 def resolve_wake(
