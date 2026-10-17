@@ -257,7 +257,8 @@ class ClaudeEditArguments(ClaudePathArguments):
     @model_validator(mode='before')
     @classmethod
     def replacements(cls, value):
-        return value if 'edits' in value else {**value, 'edits': [value]}
+        return {key: item for key, item in value.items() if key not in ClaudeReplacement.model_fields} | {
+            'edits': value.get('edits', [value])}
 
     def diff(self) -> ToolDiff:
         return ToolDiff(''.join(patch.text for edit in self.edits
