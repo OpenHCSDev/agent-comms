@@ -224,8 +224,8 @@ class VerifiedOwnerLoss:
                     observed_at_ms=now,
                 ).insert(db)
                 return Applied(settled)
-        # Local exit commits; unresolved publication still requires its original receipt.
-        raise PublicationUncertain("frozen publication requires bus-keyed receipt")
+        # Local exit commits; unresolved publication still requires its original bus proof.
+        raise PublicationUncertain("frozen publication requires bus-keyed proof")
 
 
 class AttemptRecovery:
