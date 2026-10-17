@@ -38,18 +38,16 @@ from .typed_table import Column, TypedRow, TypedTable
 if TYPE_CHECKING:
     from .private_send_stage import NativeSendStage
 
-_BINDING_PATH = "native_prompt_bindings.sqlite3"
-
-
 def binding_store_path(store: Coordination) -> Path:
     """Sidecar store beside the private coordination database."""
     if type(store) is not Coordination:
         raise TypeError("prompt binding requires the actual coordinator store")
-    return (store.session.path.parent / _BINDING_PATH).absolute()
+    return (store.session.path.parent / PromptBinding.filename).absolute()
 
 
 @dataclass(frozen=True, slots=True)
 class PromptBinding(NativeInputRecord, TypedTable, PrivateRuntimeSchema):
+    filename = "native_prompt_bindings.sqlite3"
     @classmethod
     def install(cls, store) -> None:
         install_prompt_binding_schema(store)
@@ -209,27 +207,22 @@ def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> str:
     return rows[0].wire_root_id
 
 
-def read_expected_prompt_binding(
-    store: Coordination, input_id: str, *, blocking: bool = True
-) -> PromptBinding | None:
-    """Return the immutable binding, or None when none was durably written."""
-    with expected_prompt_binding(store, input_id, blocking=blocking) as binding:
-        return binding
-
-
 @contextmanager
-def expected_prompt_binding(
-    store: Coordination, input_id: str, *, blocking: bool = True
-) -> Iterator[PromptBinding | None]:
-    """Keep the original sidecar snapshot in custody through dependent admission."""
-    if type(store) is not Coordination or type(input_id) is not str:
-        raise ValueError("prompt binding lookup requires the coordinator store and input ID")
+def expected_prompt_bindings(
+    store: Coordination, input_ids, *, blocking: bool = True
+) -> Iterator[dict[str, PromptBinding]]:
+    """Keep one immutable bindings snapshot in custody through dependent admission."""
+    input_ids = tuple(input_ids)
+    if any(type(input_id) is not str for input_id in input_ids):
+        raise ValueError("prompt binding lookup requires string input IDs")
     path = binding_store_path(store)
-    if not path.exists() and not path.is_symlink():
-        yield None
+    if not input_ids or (not path.exists() and not path.is_symlink()):
+        yield {}
         return
-    with sidecar_connection(path, PromptBinding, blocking=blocking) as db:
-        yield PromptBinding.one(db, input_id=input_id)
+    with sidecar_connection(path, PromptBinding, blocking=blocking, read_only=True) as db:
+        yield {row.input_id: row for row in PromptBinding.select(
+            db, where=f"input_id IN ({','.join('?' for _ in input_ids)})", parameters=input_ids,
+        )}
 
 
 def expected_prompt_matches_journal(
