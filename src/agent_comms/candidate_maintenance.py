@@ -8,10 +8,13 @@ include observations as well as messages, without inventing message sequences.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import threading
+from contextlib import ExitStack
 from pathlib import Path
 
 from .bus_route_counts import BusRouteCounts
+from .coordination_errors import CoordinationError
 from .routing import DeliveryMessage
 from .wire_log import WireLog
 from .wake_candidate_index import WakeCandidateIndex
@@ -51,48 +54,50 @@ def schedule_candidate_catchup(log: WireLog, through_bytes: int) -> None:
                 name="agent-comms-candidate-maintenance",
                 daemon=True,
             ).start()
-        except RuntimeError:
+        except RuntimeError as error:
             _pending.pop(root, None)
-            _LOG.warning("Candidate notification omitted: maintenance worker unavailable")
+            raise CandidateMaintenanceFailed(root) from error
+
+
+def _retire_candidate(root: Path) -> None:
+    with _guard:
+        _pending.pop(root, None)
 
 
 def _drain_candidate(root: Path) -> None:
-    try:
-        with _guard:
-            log, _bytes = _pending[root]
-        # Source ownership is checked off the producer path. Maintenance cannot
-        # create the protocol marker or authorize delivery.
-        with log.certified_read() as source:
-            metadata = source.marker
-        root_id = metadata.root_id
-        index = WakeCandidateIndex(log)
-        routes = BusRouteCounts(log.path)
-        while True:
+    with ExitStack() as cleanup:
+        cleanup.callback(_retire_candidate, root)
+        try:
             with _guard:
-                target = _pending[root][1]
-            hint = index.notify_committed_append(root_id=root_id, through_bytes=target)
-            result = index.catch_up_committed_append(
-                hint, bootstrap_new=True
-            )
-            with log._opened_wire_snapshot(need_sequence=False) as source:
-                route_result = routes.sync(
-                    source.stream,
-                    source.revision,
-                    lambda record: DeliveryMessage.from_wire(record, root_id=source.metadata.root_id),
-                )
-            if result.caught_up and route_result.complete:
+                log, _bytes = _pending[root]
+            # Source ownership is checked off the producer path. Maintenance cannot
+            # create the protocol marker or authorize delivery.
+            with log.certified_read() as source:
+                metadata = source.marker
+            root_id = metadata.root_id
+            index = WakeCandidateIndex(log)
+            routes = BusRouteCounts(log.path)
+            while True:
                 with _guard:
-                    if _pending[root][1] <= result.checkpoint_bytes:
-                        # Retire this worker once, atomically with its final
-                        # target check. A later append can start a new worker;
-                        # this worker must not remove that successor's signal.
-                        _pending.pop(root)
-                        return
-    except Exception as error:
-        with _guard:
-            _pending.pop(root, None)
-        # The worker thread has no caller. Publish one named failure through the
-        # log and threading.excepthook after retiring this process-local drain.
-        failure = CandidateMaintenanceFailed(root)
-        _LOG.exception("%s", failure)
-        raise failure from error
+                    target = _pending[root][1]
+                hint = index.notify_committed_append(root_id=root_id, through_bytes=target)
+                result = index.catch_up_committed_append(
+                    hint, bootstrap_new=True
+                )
+                with log._opened_wire_snapshot(need_sequence=False) as source:
+                    route_result = routes.sync(
+                        source.stream,
+                        source.revision,
+                        lambda record: DeliveryMessage.from_wire(record, root_id=source.metadata.root_id),
+                    )
+                if result.caught_up and route_result.complete:
+                    with _guard:
+                        if _pending[root][1] <= result.checkpoint_bytes:
+                            # Disarm cleanup before a successor can own this root.
+                            cleanup.pop_all()
+                            _pending.pop(root)
+                            return
+        except (OSError, ValueError, sqlite3.Error, CoordinationError) as error:
+            failure = CandidateMaintenanceFailed(root)
+            _LOG.exception("%s", failure)
+            raise failure from error

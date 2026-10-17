@@ -11,11 +11,13 @@ from __future__ import annotations
 import asyncio
 import os
 import select
+import sqlite3
 import threading
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
 from .diagnostics import PublicationMeasurements
+from .coordination_errors import CoordinationError
 
 _MAX_SEND_SECONDS = 5.0
 
@@ -93,8 +95,8 @@ def _write_fenced(
                     raise PromptSendUnknown("Native prompt short write is UNKNOWN; no retry")
                 written += count
                 remaining = remaining[count:]
-    except Exception as error:
-        if written and not isinstance(error, PromptSendUnknown):
+    except (OSError, sqlite3.Error, CoordinationError) as error:
+        if written:
             raise PromptSendUnknown(
                 "Native prompt post-write outcome is UNKNOWN; no retry: "
                 f"{type(error).__name__}: {error}"
@@ -175,11 +177,9 @@ async def send_fenced_prompt(
         # the input locks while bytes remain scheduled for transmission.
         while not done.done():
             try:
-                await asyncio.shield(done)
+                await asyncio.wait((done,))
             except asyncio.CancelledError:
                 cancelled.set()
-            except Exception:
-                break
         # Cancellation still propagates, carrying the writer's own outcome
         # (for example an UNKNOWN partial write) instead of discarding it.
         if not done.cancelled() and (outcome := done.exception()) is not None:

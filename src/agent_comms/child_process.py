@@ -957,7 +957,7 @@ class ChildProcess(Sealed, ABC):
             except BaseException as error:
                 raise ChildRetirementCancelled("Child retirement was not attested") from error
             raise
-        except Exception as error:
+        except (OSError, RuntimeError) as error:
             raise ChildRetirementFailed("Child retirement was not attested") from error
 
 
