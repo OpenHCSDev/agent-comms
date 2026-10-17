@@ -1,4 +1,4 @@
-"""Named admission rules: one rule family selected by each check's type."""
+"""Named start rules: each check's type selects the rules to apply."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """One-use fenced raw prompt writes, independent of the owner's asyncio loop.
 
-The irreversible byte admission point is each successful os.write into the
-native pipe while the admission scope is held. No StreamWriter prompt buffer
+Each successful os.write into the native pipe sends bytes irreversibly
+while the input locks are held. No StreamWriter prompt buffer
 exists to flush after that scope. Partial/failed/timed-out/cancelled sends grant
 no acceptance and are never retried. The reserved input remains unreplayable.
 """
@@ -29,7 +29,7 @@ class PromptSendUnknown(PromptSendFailure):  # noqa: N818 - nominal UNKNOWN outc
 
 
 class PromptSendNotWritten(PromptSendFailure):  # noqa: N818 - original prebyte refusal
-    """The writer never acquired its original admission or wrote this payload."""
+    """The writer never obtained permission or wrote this payload."""
 
 
 def _enter_admission(
@@ -114,8 +114,8 @@ async def send_fenced_prompt(
 
     Cancellation is signalled to the independent writer and joined before this
     function exits. A dedicated thread avoids default-executor queue starvation.
-    Each admission probe is nonblocking and uses thread-local database connections.
-    Contention waits for original admission without retaining partial locks or
+    Each permission check is nonblocking and uses thread-local database connections.
+    Contention waits for permission without retaining partial locks or
     depending on owner-loop callbacks. The write budget begins only after grant.
     Cancellation or a closed original pipe before grant proves no bytes. No
     admitted send is retried.
@@ -136,7 +136,7 @@ async def send_fenced_prompt(
     write_timeout = min(timeout, _MAX_SEND_SECONDS)
 
     def finish(error: BaseException | None) -> None:
-        # Completion is posted only after admission and the raw fd are closed;
+        # Report completion only after releasing the input locks and closing the raw fd;
         # no owner-loop work is needed for this final thread exit.
         writer.join()
         if error is None:
@@ -172,7 +172,7 @@ async def send_fenced_prompt(
     except asyncio.CancelledError as cancellation:
         cancelled.set()
         # Repeated cancellation cannot abandon a still-writing fd or release
-        # admission while bytes remain scheduled for transmission.
+        # the input locks while bytes remain scheduled for transmission.
         while not done.done():
             try:
                 await asyncio.shield(done)

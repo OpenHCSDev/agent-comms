@@ -381,7 +381,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         snapshot = await Coordination.run_worker(self._comms.registry.snapshot)
         owner = snapshot.require(thread_name)
         if self.inputs.background_wakes_disabled or snapshot.status(thread_name).stopped:
-            # Admission changes still invalidate the client while this owner
+            # Input permission changes still invalidate the client while this owner
             # cannot run a wake. An eligible drain observes once after its
             # acceptance/selection, instead of verifying history before it too.
             await self.cursors.publish(session_id, thread_name)

@@ -1,4 +1,4 @@
-"""Original native request measurements; no admission, completion or retry authority."""
+"""Native request measurements do not permit input, confirm completion or allow retry."""
 from dataclasses import dataclass, field
 
 from .pi_payloads import PiModel, PiPayload

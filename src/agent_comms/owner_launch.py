@@ -17,7 +17,7 @@ from .threads import Thread
 
 @dataclass(frozen=True, slots=True)
 class RetainedOwnerLaunch:
-    """An immutable original process observation, not owner/admission authority."""
+    """An immutable process observation, not ownership or permission to start work."""
 
     process: ProcessIdentity
     interpreter: str

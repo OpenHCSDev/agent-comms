@@ -1,7 +1,7 @@
 """Declared native input and cursor rows, never reconstructed native proof.
 
 These original coordination.sqlite3 rows retain irreplaceable reservation,
-send-admission and live-context authority. Installation never resets them.
+permission to send and live-context ownership. Installation never resets them.
 """
 
 from __future__ import annotations

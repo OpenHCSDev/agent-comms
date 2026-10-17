@@ -405,7 +405,7 @@ class AvailableQueueProjection(QueueProjection):
     def validate_scope(self, scope: QueueScope | None) -> None:
         # Null is admitted by the external observation envelope for unavailable
         # queues. An available observation without its scope is malformed, not
-        # another waiting state or permission to infer a different admission.
+        # another waiting state or permission to infer a different input grant.
         if scope is None:
             raise ValueError('Available input queue has no original attachment scope.')
 

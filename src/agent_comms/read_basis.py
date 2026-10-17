@@ -279,8 +279,8 @@ class DMDisplayBasis:
             peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
             bus_identity = bus.reads.bus_identity(bus.log.path)
-        # Native admission uses this same wire lock. Scoped page/read queries
-        # use opened source boundaries outside admission.
+        # Native input writes use this same wire lock. Scoped page/read queries
+        # use opened source snapshots, not live input permission.
         page = bus.conversation_page(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         )

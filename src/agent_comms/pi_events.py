@@ -152,7 +152,7 @@ class IgnoredDurableEvent(UnreadPayload, DurablePiEvent):
 
 @dataclass(frozen=True)
 class UnknownPiEvent(UnreadPayload, NativePiEvent, DurablePiEvent):
-    """Unrecognized events remain ignorable, never admission evidence."""
+    """Ignore unrecognized events; they do not prove permission to start input."""
 
     @classmethod
     def known_kinds(cls):
@@ -212,7 +212,7 @@ class AgentEnd(NativePiEvent):
 class AgentSettled(NativePiEvent):
     def settles(self, session: TurnSession) -> bool:
         # A prior retained turn may finish while the new state query is
-        # pending. It cannot settle a turn whose admission is not attested.
+        # pending. It cannot settle a turn whose input start is unconfirmed.
         return not session.awaiting_native_attestation
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:

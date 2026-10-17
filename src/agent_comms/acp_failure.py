@@ -367,7 +367,7 @@ class ProviderConnectionFailure(ACPFailure):
 
 
 class ErrorValue(DeclaredFamily, JsonShapeFamily, affix="ErrorValue"):
-    """Provider JSON presentation, never input admission or retry authority."""
+    """Display provider JSON; it cannot permit input or retries."""
 
     @property
     @abstractmethod

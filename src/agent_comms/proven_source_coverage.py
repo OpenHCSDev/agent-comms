@@ -46,7 +46,7 @@ class ProvenSourceCoverage:
 
     This detached result lives only for the caller's read/publication operation.
     SQL identity, wire witness and live owner checks remain with the cursor;
-    these historical observations never grant admission or replay.
+    these historical observations never permit new input or replay.
     """
 
     wire_root_id: str
@@ -81,7 +81,7 @@ class ProvenSourceCoverage:
 class SourceCoverage:
     """Canonical source snapshot reader bound to one wire and stable recipient.
 
-    Owns bounded paging and historical corroboration, never native admission.
+    Owns bounded paging and historical checks, never permission to start native input.
     No claim, input or schema is created by this read path.
     """
 

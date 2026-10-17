@@ -123,7 +123,7 @@ def _resource(value: object) -> str:
 
 @dataclass(frozen=True, slots=True)
 class AssignmentBinding:
-    """Selected claim revision and source, shared by its admission and SQL row."""
+    """The selected claim's revision and source, used for permission checks and its SQL row."""
 
     assignment_id: str
     revision: int

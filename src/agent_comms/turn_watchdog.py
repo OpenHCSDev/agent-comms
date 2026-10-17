@@ -294,7 +294,7 @@ class ProgressWatchdog:
                 )
             if not done:
                 # Let an already-ready pipe continuation retire before expiry;
-                # this does not grant another provider wait or admission.
+                # this does not permit another provider wait or new input.
                 await asyncio.sleep(0)
                 done = {task for task in observed if task.done()}
             if not done:

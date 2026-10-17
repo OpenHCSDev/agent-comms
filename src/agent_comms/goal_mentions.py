@@ -1,4 +1,4 @@
-"""Registry-bound goal mentions are contact awareness, never work admission.
+"""Registry-bound goal mentions identify contacts; they never permit starting work.
 
 Only goal set/text-edit binds names. Reads do not resolve a fresh name to an
 old token: a deleted peer's replacement cannot inherit its predecessor's goal.

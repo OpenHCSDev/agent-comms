@@ -202,7 +202,7 @@ class DeliveryScope(MessageDisplayScope):
         """Share format discovery; each consumer owns its missing-birth action.
 
         The unstamped format matches before a birth is required. An index must
-        probe for an assigned stamp; admission must refuse that unproven stamp.
+        probe for an assigned stamp; starting input requires a verified stamp.
         """
         def missing() -> tuple[str, ...]:
             on_unrecorded()
