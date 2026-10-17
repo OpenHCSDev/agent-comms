@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
+from typing import ClassVar
 from pydantic import JsonValue
 from urllib.parse import quote
 
 from . import tool_declaration
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .messages import Message
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
@@ -19,26 +21,17 @@ from .transcript_merge import EventMerge, StreamingMerge
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
-    routing: TurnRouting | None = None
-    source: MessageReference | None = None
-    # Original journal event time in Unix seconds; None is unrecorded, never now.
-    timestamp: float | None = None
+    routing = None
+    source = None
+    timestamp = None
 
     def as_context(self) -> TranscriptEvent:
         """Non-text native evidence retains its own presentation declaration."""
         return self
 
-    @property
-    def text_size(self) -> int:
-        return 0
-
-    @property
-    def native_inputs(self) -> frozenset[str]:
-        return frozenset()
-
-    @property
-    def incoming_sources(self) -> tuple[MessageReference, ...]:
-        return ()
+    text_size: ClassVar[int] = 0
+    native_inputs: ClassVar[frozenset[str]] = frozenset()
+    incoming_sources: ClassVar[tuple[MessageReference, ...]] = ()
 
     def with_native_input(self, native_id: str | None) -> TranscriptEvent:
         return self
@@ -65,23 +58,31 @@ class TranscriptCoverage:
         return frozenset(native_id for event in self.events for native_id in event.native_inputs)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
+class RecordedTranscript(TranscriptEvent):
+    routing: TurnRouting | None = None
+    source: MessageReference | None = None
+    timestamp: float | None = None
+
+
 class TextTranscript(TranscriptEvent):
-    text: str = ""
 
     def as_context(self) -> ContextTranscript:
         return ContextTranscript(self.text, timestamp=self.timestamp)
 
-    @property
-    def starts_activity(self) -> bool:
-        return True
+    starts_activity = True
 
     @property
     def text_size(self) -> int:
         return len(self.text)
 
 
-class MarkdownTranscript(TextTranscript):
+@dataclass(frozen=True)
+class NativeTextTranscript(TextTranscript, RecordedTranscript):
+    text: str = ""
+
+
+class MarkdownTranscript(NativeTextTranscript):
     """Text whose body uses the shared Markdown preparation owner."""
 
 
@@ -90,9 +91,7 @@ class LiveTextTranscript(StreamingMerge, MarkdownTranscript):
 
 
 class SilentTranscript:
-    @property
-    def routed(self) -> bool:
-        return False
+    routed = False
 
 
 class OutgoingRoute:
@@ -117,15 +116,31 @@ class WireTextTranscript(MarkdownTranscript):
     """Immutable presentation of one original committed wire record."""
 
     source: MessageReference = field()
-
-    @property
-    def routed(self) -> bool:
-        return True
+    routed = True
 
 
 @dataclass(frozen=True, kw_only=True)
-class IncomingTranscript(WireTextTranscript):
-    route: MessageRoute
+class IncomingTranscript(TextTranscript):
+    message: Message
+    reader: str
+
+    @property
+    def text(self):
+        return self.message.body
+
+    @property
+    def timestamp(self):
+        return self.message.timestamp
+
+    @property
+    def source(self):
+        return self.message.reference
+
+    routed = True
+
+    @property
+    def routing(self):
+        return TurnRouting((self.source,))
 
     @property
     def incoming_sources(self) -> tuple[MessageReference, ...]:
@@ -133,7 +148,7 @@ class IncomingTranscript(WireTextTranscript):
 
 
 @dataclass(frozen=True)
-class UserTranscript(TextTranscript):
+class UserTranscript(NativeTextTranscript):
     native_id: str | None = field(default=None, kw_only=True)
 
     def with_native_input(self, native_id: str | None) -> UserTranscript:
@@ -176,6 +191,16 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
         return cls(message.body, timestamp=message.timestamp, source=message.reference,
                    routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))))
 
+    def matches(self, message: Message) -> bool:
+        return self == type(self).from_message(message)
+
+    def core_message(self, source) -> Message:
+        """Read the actual original; a stored report cannot invent its missing kind or role."""
+        original = source.sent_messages((self.source,)).get(self.source)
+        if original is not None and self.matches(original):
+            return original
+        raise ValueError("Sent report no longer matches its original assigned wire message")
+
 
 class ThinkingTranscript(SilentTranscript, LiveTextTranscript):
     @property
@@ -183,12 +208,12 @@ class ThinkingTranscript(SilentTranscript, LiveTextTranscript):
         return bool(self.text.strip())
 
 
-class ContextTranscript(SilentTranscript, TextTranscript):
+class ContextTranscript(SilentTranscript, NativeTextTranscript):
     pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolTranscript(SilentTranscript, TranscriptEvent):
+class ToolTranscript(SilentTranscript, RecordedTranscript):
     tool_call_id: str
     tool_name: str
 

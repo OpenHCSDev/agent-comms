@@ -79,41 +79,6 @@ class DisplayCheckpoint(AppendCheckpoint):
     def current_for(self, revision: FileRevision, semantics: DisplayMetricScope) -> bool:
         return (self.source, self.semantics) == (revision, semantics)
 
-    def rebase(self, opened: OpenedWireSnapshot,
-               semantics: DisplayMetricScope) -> DisplayMetrics:
-        """Reuse each answer only while its own inclusion history agrees."""
-        metrics = semantics.empty_metrics
-        clocks, counts = metrics
-        previous_scopes = {scope.channel: scope for scope in self.semantics.scopes}
-        rebuild, changed_reads = [], []
-        same_reads = semantics.seen == self.semantics.seen
-        for scope in semantics.scopes:
-            previous = previous_scopes.get(scope.channel)
-            if scope == previous:
-                clocks[scope.channel] = self.activity[scope.channel]
-                if semantics.viewer_names == self.semantics.viewer_names:
-                    counts[scope.channel] = self.counts[scope.channel]
-                    if not same_reads:
-                        changed_reads.append(scope)
-                    continue
-            rebuild.append(scope)
-        rebuilt = DisplayMetricScope(tuple(rebuild), semantics.viewer_names,
-                                     semantics.seen)
-        changed_sequences = (self.semantics.seen.changed(semantics.seen)
-                             if changed_reads else ())
-        records = (opened.public_records(before_offset=self.offset)
-                   if rebuild else
-                   opened.public_records_for(changed_sequences, before_offset=self.offset))
-        for message, _ in records:
-            rebuilt.observe(message, metrics)
-            delta = int(semantics.unread(message)) - int(self.semantics.unread(message))
-            if delta:
-                for scope in changed_reads:
-                    if scope.includes(message):
-                        counts[scope.channel] += delta
-        return metrics
-
-
 class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
     record_type = DisplayCheckpoint
 
@@ -131,11 +96,16 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
         checkpoint = opened.append_checkpoint(self)
         if checkpoint is not None and checkpoint.current_for(source, semantics):
             return checkpoint
-        if checkpoint is None:
-            metrics, offset = semantics.empty_metrics, 0
+        if checkpoint is None or checkpoint.semantics != semantics:
+            metrics = opened.query_page_index(
+                lambda index: index.display_metrics(semantics, boundary), empty=semantics.empty_metrics)
+            offset = boundary
         else:
-            metrics, offset = checkpoint.rebase(opened, semantics), checkpoint.offset
-        for message, _ in opened.public_records(offset, before_offset=boundary):
+            metrics, offset = (dict(checkpoint.activity), dict(checkpoint.counts)), checkpoint.offset
+        rows = opened.query_page_index(lambda index: tuple(index.offsets(
+            lower=None, upper=None, targets=None, after_offset=offset,
+            descending=False, before_offset=boundary)), empty=())
+        for message, _ in opened.indexed_records(rows, before_offset=boundary):
             semantics.observe(message, metrics)
         projected = DisplayCheckpoint(source, boundary,
                      AppendCheckpoint.fingerprint(stream, boundary),
