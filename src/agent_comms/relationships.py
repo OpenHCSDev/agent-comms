@@ -848,18 +848,30 @@ class ThreadRelationships:
                 return self._recent, self._limited
             with self.bus.log._opened_wire_snapshot(need_sequence=False) as source:
                 revision = source.revision
-                data, start = source.tail_bytes(self.RECENT_BYTES)
+                previous = self._recent_revision
+                extended = (
+                    previous is not None and revision is not None
+                    and revision.identity == previous.identity and revision.size > previous.size
+                )
+                limit = self.RECENT_BYTES
+                if extended:
+                    start = max(previous.size, source.boundary - limit)
+                    source.stream.seek(start)
+                    data = source.stream.read(source.boundary - start)
+                    contiguous = start == previous.size
+                else:
+                    data, start = source.tail_bytes(limit)
+                    contiguous = False
             lines = data.splitlines(keepends=True)
-            if start and lines:
-                lines.pop(0)  # The first record may be partial.
-            complete = [line for line in lines if line.endswith(b"\n")]
-            messages = tuple(
+            if start and not contiguous and lines:
+                lines.pop(0)  # A bounded cut may begin in a partial record.
+            messages = (self._recent if contiguous else ()) + tuple(
                 message
-                for line in complete
-                if line.strip()
+                for line in lines
+                if line.endswith(b"\n") and line.strip()
                 for message in WireRecord.public_from_wire(json.loads(line)).messages()
             )
-            limited = bool(start) or len(messages) > self.RECENT_MESSAGES
+            limited = (self._limited if contiguous else bool(start)) or len(messages) > self.RECENT_MESSAGES
             messages = messages[-self.RECENT_MESSAGES :]
             self._recent_revision = revision
             self._recent, self._limited = messages, limited
