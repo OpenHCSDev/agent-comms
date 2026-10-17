@@ -1,4 +1,4 @@
-"""Canonical wire-record admission and complete-scan sequence custody.
+"""Validate wire records and track sequence numbers through complete scans.
 
 The public message and committed delivery remain the data authorities. This
 family distinguishes retained/claim envelopes from attested delivery records;

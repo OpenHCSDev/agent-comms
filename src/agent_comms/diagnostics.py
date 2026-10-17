@@ -109,7 +109,7 @@ def record_request_progress(root, lease, progress, native_process, *, publicatio
 
 
 def record_acquisition_progress(root, lease, input_id, measurements):
-    """Publish the original parent acquisition spans after its custody closes.
+    """Report the parent's acquisition timings after its resources close.
 
     The same diagnostic stream retains native and parent clocks with distinct
     keys. There is no additional phase, readiness ledger or observation store.

@@ -190,7 +190,7 @@ class NativeChildState(ABC):
         return self
 
     async def closed(self) -> None:
-        """Complete this custody's retirement, if any."""
+        """Finish closing this child's resources, if needed."""
 
 class EmptyNative(NativeChildState):
     available = False

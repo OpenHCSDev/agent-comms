@@ -390,7 +390,7 @@ class TranscriptReadState(ThreadOwnedState):
             }
             yield database, indexes
         # Admit only after releasing the read snapshot. Spawn receives data and
-        # cancellation, never this connection, the observer pipe or owner custody.
+        # cancellation, never this connection, the observer pipe or the owner's locks.
         if needed and self._preparation is None and self._cleanup.alive:
             names = tuple(needed)
             start = names.index(self._next_source) + 1 if self._next_source in names else 0

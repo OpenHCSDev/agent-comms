@@ -161,7 +161,7 @@ class SelectedParticipant(MroDispatch):
             )
             yield selected
         finally:
-            # Joined entry can acquire custody without delivering its result.
+            # The blocking call may acquire the lease even if its result is not delivered.
             # The original generator owns retirement even in that case.
             await Coordination.run_worker(lease.close)
 
@@ -271,8 +271,8 @@ class SelectedParticipant(MroDispatch):
         read resources close before any native preparation or provider request.
         """
         def capture():
-            # The certificate lends original pointer/byte snapshots before SQL
-            # snapshot custody, so file decoding cannot retain a database reader.
+            # Capture source pointers and bytes before opening the SQL snapshot,
+            # so file decoding cannot keep a database reader open.
             with bus.log.certified_read() as source:
                 marker = source.marker
                 if marker.root_id != root_id:

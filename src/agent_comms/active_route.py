@@ -244,7 +244,7 @@ def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
     """Identify actual flock owners of this opened directory, not merely open FDs.
 
     An OFD lock with no reported PID, inaccessible /proc, or a concurrent exit
-    is unknown; absence from this snapshot never certifies exclusive custody.
+    is unknown; absence from this snapshot never proves sole ownership of the lock.
     """
     info = os.fstat(directory)
     identity = f"{os.major(info.st_dev):02x}:{os.minor(info.st_dev):02x}:{info.st_ino}"

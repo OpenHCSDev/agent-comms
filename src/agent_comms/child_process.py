@@ -187,7 +187,7 @@ class Platform(DeclaredFamily, affix="Platform"):
         StoreLockContention(math.inf if blocking else 0).acquire(descriptor, self, shared=shared)
 
     def release_store_lock(self, descriptor: int) -> None:
-        """POSIX custody ends at last close, including inherited descriptors."""
+        """POSIX locks end at last close, including inherited descriptors."""
 
     @abstractmethod
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch: ...
@@ -608,7 +608,7 @@ class ChildLaunch(ABC):
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     ) -> ParentedProcess:
-        """Capture parent custody while the platform exec gate is still closed."""
+        """Record the parent's process handle before the platform allows exec."""
         process = subprocess.Popen(
             self.argv,
             cwd=cwd,
@@ -862,7 +862,7 @@ async def join_retirement(task: asyncio.Future):
                 interrupted = error
         result = task.result()
     except BaseException as error:
-        # A failed joined operation still retires its custody. Its error must
+        # A failed joined operation has still finished. Its error must
         # not consume the caller's cancellation and restart an observer loop.
         if interrupted is not None:
             raise interrupted from error
@@ -922,7 +922,7 @@ class ChildProcess(Sealed, ABC):
         return stage
 
     def _retire_group(self, guard):
-        """Run the same guarded physical plan for synchronous and async custody."""
+        """Use the same guarded stop plan for synchronous and asynchronous cleanup."""
         plan = self._stop_plan(guard)
         while True:
             try:
@@ -1215,7 +1215,7 @@ class BoundedRun:
 
 
 class SynchronousProcess(ChildProcess):
-    """Identity-bound control with synchronous reaping supplied by custody."""
+    """Identity-checked process control; each subclass supplies synchronous reaping."""
 
     def require_stop_authority(self) -> None:
         """A retained parent handle already establishes stop/reap authority."""
