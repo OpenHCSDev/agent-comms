@@ -33,9 +33,8 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
 
 def pytest_configure(config):
     if "PI_COMPACTION_TEST_PACKAGE" not in os.environ:
-        os.environ["PI_COMPACTION_TEST_PACKAGE"] = str(
-            NativePiRpcLaunch.package_for_command("pi", LaunchRuntime.running())
-        )
+        package, _ = NativePiRpcLaunch._command_selection("pi", LaunchRuntime.running())
+        os.environ["PI_COMPACTION_TEST_PACKAGE"] = str(package)
 
 
 @pytest.fixture(autouse=True)
