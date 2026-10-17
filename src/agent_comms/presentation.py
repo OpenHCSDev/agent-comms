@@ -84,14 +84,10 @@ class MessageNotification:
 
     window_limit: ClassVar[int] = 120
     recipient_identity: FrozenRecipient
-    state: str
-    detail: str
-    priority: int = 3
-    busy: bool = False
+    state: DeliveryProgress
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
     answer: MessageReference | None = None
-    progress: DeliveryProgress = field(kw_only=True)
     answered_at_ms: int | None = None
     changed: bool = False
 
@@ -99,20 +95,24 @@ class MessageNotification:
     def recipient(self) -> str:
         return self.recipient_identity.canonical_thread
 
+    @property
+    def label(self) -> str:
+        return self.state.notification_label(self)
+
     def sent_outcome(self) -> SentMessageOutcome | None:
         if not self.changed or self.message is None:
             return None
         return SentMessageOutcome(
             self.message,
             self.recipient_identity,
-            self.state,
-            self.detail,
+            self.label,
+            self.state.detail,
             self.answer,
         )
 
     @classmethod
     def ordered(cls, notifications: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
-        return tuple(sorted(notifications, key=lambda item: (item.priority, item.recipient.casefold())))
+        return tuple(sorted(notifications, key=lambda item: (item.state.priority, item.recipient.casefold())))
 
     @classmethod
     def summary(cls, notifications: Iterable[MessageNotification]) -> str:
@@ -120,10 +120,10 @@ class MessageNotification:
         ordered = cls.ordered(notifications)
         if not ordered:
             return "No recorded notification result"
-        delivered = sum(notification.progress.delivered for notification in ordered)
-        read = sum(notification.progress.read for notification in ordered)
+        delivered = sum(notification.state.delivered for notification in ordered)
+        read = sum(notification.state.read for notification in ordered)
         total = len(ordered)
-        return (f"{ordered[0].state} · Delivered {delivered}/{total}"
+        return (f"{ordered[0].label} · Delivered {delivered}/{total}"
                 f" · {ReadDelivery.label} {read}/{total}")
 
     @staticmethod
@@ -282,11 +282,8 @@ class MessageNotification:
             return None
         return cls(
             recipient,
-            HumanReadProgress.label,
-            "",
-            priority=2,
+            HumanReadProgress(),
             displayed_to=displayed_to,
-            progress=HumanReadProgress(),
             changed=True,
         )
 
