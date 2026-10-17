@@ -31,14 +31,14 @@ from agent_comms.ui_model.unread import IndexingUnread
 def test_display_metrics_encode_one_viewer_read_set_for_all_channels(tmp_path):
     from agent_comms.bus_display_index import DisplayMetricScope
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.read_basis import ChannelDisplayScope
+    from agent_comms.read_basis import ChannelDisplayScope, ReadCursor
 
     scopes = tuple(ChannelDisplayScope(f"#{n}", frozenset({f"#{n}"})) for n in range(48))
-    seen = frozenset(range(10_000))
+    seen = ReadCursor(10_000)
     encoded = FieldCodec.encode(DisplayMetricScope(scopes, frozenset({"viewer"}), seen))
-    assert set(encoded) == {"scopes", "viewer_names", "seen_sequences"}
-    assert frozenset(encoded["seen_sequences"]) == seen
-    assert all("seen_sequences" not in scope for scope in encoded["scopes"])
+    assert set(encoded) == {"scopes", "viewer_names", "seen"}
+    assert encoded["seen"] == {"high_water": 10_000, "exceptions": []}
+    assert all("seen" not in scope for scope in encoded["scopes"])
     index = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer")
     assert index.path.name.startswith(f"bus_display_{index.record_type.schema}_")
 

@@ -252,7 +252,7 @@ class MessageNotification:
             return None
         name = snapshot.canonical_name(message.target)
         target = snapshot.threads.get(name)
-        if target is None or not reads.human(target.role):
+        if target is None or target.role.executable:
             return None
         recipient = FrozenRecipient(target.incarnation.lookup, target.name)
         displayed_to = reads.displayed_recipient(

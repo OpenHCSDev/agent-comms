@@ -10,7 +10,6 @@ from .bus_projection import AppendCheckpoint, BusAppendIndex
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, ReadCursor
-from .read_ledger import ReadLedger
 
 if TYPE_CHECKING:
     from .wire_log import OpenedWireSnapshot
@@ -41,7 +40,7 @@ class DisplayMetricScope:
                 clocks[scope.channel] = (
                     max(last_message, message.timestamp),
                     max(last_user, message.timestamp)
-                    if ReadLedger.human(message.sender_role) else last_user,
+                    if not message.sender_role.executable else last_user,
                 )
                 counts[scope.channel] += int(unread)
 

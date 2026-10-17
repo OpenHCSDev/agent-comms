@@ -572,7 +572,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         )
 
     def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
-        if not reads.human(thread.role):
+        if thread.role.executable:
             return ()
         return super().displayed_recipient_effect(reads, message, thread, document=document)
 

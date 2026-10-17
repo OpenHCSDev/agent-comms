@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
-    from .thread_identity import ThreadRole
     from .threads import Thread
 
 
@@ -60,10 +59,6 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
     def empty(self) -> ReadDocument:
         return ReadDocument()
-
-    @staticmethod
-    def human(role: ThreadRole) -> bool:
-        return not role.executable
 
     @staticmethod
     def bus_identity(path: Path) -> tuple[int, int] | None:
