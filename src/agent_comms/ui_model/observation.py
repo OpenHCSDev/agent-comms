@@ -32,7 +32,6 @@ from typing import TYPE_CHECKING, Generic, Self, TypeVar, final
 
 from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 from agent_comms.active_route import CommsRoute
-from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
@@ -391,8 +390,6 @@ class ObserveSidebar(InterestRequest):
             snapshot = read(
                 subject, show_stopped=self.show_stopped, show_archived=self.show_archived)
             return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
-        except RouteIndexRebuilding:
-            raise  # A bounded preparation unit finished; runnable work remains.
         except UnreadableHistory.DEFERRED_READS:
             return None  # No new snapshot; keep the original interest for the next observation.
         except StoredHistoryUnreadable as error:
@@ -467,13 +464,7 @@ class SidebarReading(Observation[ObserveSidebar]):
             if not changed and key == self.sent:
                 return
             stage = self.stage
-            try:
-                result = stage.read(self.request, comms, revision)
-            except RouteIndexRebuilding:
-                # Continue bounded preparation, letting the service accept and
-                # serve foreground requests between every bounded unit.
-                yield None
-                continue
+            result = stage.read(self.request, comms, revision)
             if result is None:
                 return
             self.sent = key

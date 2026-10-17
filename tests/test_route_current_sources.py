@@ -11,6 +11,7 @@ from agent_comms.comms import wire
 from agent_comms.routing import DeliveryScope
 from agent_comms.threads import Thread
 from agent_comms.wire_record import PublicWireRecord
+from test_bus_route_counts_locking import _sync
 
 
 @pytest.mark.parametrize('rebound', [False, True])
@@ -21,6 +22,7 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound):
     original = c.messaging.send_message('sender', viewer, 'current source')
 
     def measured():
+        _sync(c)
         with c.bus.snapshot(viewer=viewer) as (basis, source):
             scope = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
             with OpenedRouteCounts(
@@ -58,6 +60,7 @@ def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
     c.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
     viewer = c.messaging.user_identity(str(tmp_path)).name
     original = c.messaging.send_message('sender', viewer, 'assigned source')
+    _sync(c)
     with c.bus.snapshot(viewer=viewer) as (basis, source):
         from agent_comms.registry_provenance import RegistryProvenance
 

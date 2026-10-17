@@ -12,11 +12,14 @@ from agent_comms.bus_route_counts import (
 )
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
+from agent_comms.read_basis import ReadCursor
 from agent_comms.threads import Thread
 from agent_comms.routing import DeliveryScope
+from test_bus_route_counts_locking import _sync
 
 
 def consistent(comms, *names):
+    _sync(comms)
     bulk = comms.bus.pending_counts_all(names)
     for name in names:
         inbox = comms.bus.inbox(name)
@@ -81,7 +84,7 @@ def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
 def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path):
     """A reader whose opened cut is behind the recorded index never rebuilds.
 
-    While this reader holds its cut, another reader can index a later cut of
+    While this reader holds its cut, maintenance can index a later cut of
     the same file. Counts and unread listings stay inside the older cut,
     without decoding or regressing the recorded projection.
     """
@@ -95,7 +98,8 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
     reader = wire(tmp_path)
     with reader.bus.snapshot(viewer=viewer) as (basis, stale):
         comms.messaging.send_message("sender", viewer, "after the reader's cut")
-        # Another reader indexes a later cut while this cut is held.
+        # Independent maintenance indexes a later cut while this cut is held.
+        _sync(comms)
         assert wire(tmp_path).bus.pending_counts(viewer) == {"sender": 6}
         with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
             assert reader.bus.pending_counts_opened(stale, basis) == {"sender": 5}
@@ -110,13 +114,11 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
     assert recorded.revision.size > stale.revision.size
 
 
-def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
-    """A source truncated in place below the recorded offset cannot answer.
+def test_truncated_source_serves_original_tail_without_rebuilding(tmp_path):
+    """A mismatched index cannot authorize rows outside the retained original cut.
 
-    The append-only writer (wire_log._append_private_unlocked, os.O_APPEND)
-    never truncates, so a digest-verified recorded revision is safe to answer
-    from. A source that loses the bytes that digest covers fails it and
-    rebuilds, the same way a replaced source does.
+    The retained prefix still exists; the reader streams that original prefix
+    without using or rewriting the later, now-mismatched route projection.
     """
     comms = wire(tmp_path)
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
@@ -129,6 +131,7 @@ def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
     with reader.bus.snapshot(viewer=viewer) as (basis, stale):
         comms.messaging.send_message("sender", viewer, "after the reader's cut")
         comms.messaging.send_message("sender", viewer, "one more after it")
+        _sync(comms)
         assert wire(tmp_path).bus.pending_counts(viewer) == {"sender": 7}
         path = comms.bus.log.path
         with open(path, "rb") as scan:
@@ -143,7 +146,7 @@ def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
             assert decode.call_count > 0
     with BusRouteCounts(comms.bus.log.path) as index:
         recorded = RouteSourceRow.select(index.connection)[0]
-    assert recorded.revision.size == stale.revision.size
+    assert recorded.revision.size == recorded_offset
 
 
 def test_route_storage_and_decoder_have_one_declaration_owner():
@@ -203,10 +206,10 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_
             viewer, (later,), basis.registry, comms.bus.log.path,
         ))
         assert comms.bus.pending_counts(viewer) == {"sender": 1}
-        later_reads = comms.bus.reads.read().seen_sequences(
+        later_reads = comms.bus.reads.read().cursor(
             viewer, basis.registry, source.revision.identity
         )
-        assert later_reads == {later.seq}
+        assert later_reads == ReadCursor(exceptions=(later.seq,))
         delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
         with OpenedRouteCounts(
             comms.bus.log.path, source, basis.registry, {viewer: delivery}
