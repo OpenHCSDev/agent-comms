@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
+from agent_comms.pi_payloads import PiUsage
 from agent_comms.pi_durable_backend import (
     AgentChangedDurableEvent, DurableHost, MessageUpdateDurableEvent,
     SnapshotDurableEvent, TaskFailedDurableEvent, ToolExecutionStartDurableEvent,
@@ -32,7 +33,7 @@ def test_real_host_events_belong_to_open_turn(tmp_path):
                 assert changed.agent.instructions == 'turn-owned event'
                 # Same turn delivers Core-visible records, not a host-side sink.
                 for event in (
-                    MessageUpdateDurableEvent(usage=None, changes=(
+                    MessageUpdateDurableEvent(usage=PiUsage(), changes=(
                         TextDeltaDurableChange(0, 'visible'),
                         ThinkingDeltaDurableChange(1, 'reasoning'),
                     )),

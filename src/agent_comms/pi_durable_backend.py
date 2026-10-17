@@ -31,6 +31,7 @@ from .transcript_receipts import TranscriptSource
 from .transcript_events import UserTranscript, AssistantTranscript, NoticeTranscript, TurnDigest
 from .unstarted_runtime import UnstartedRuntime
 from .native_session_files import NativeSessionFiles
+from .pi_payloads import PiUsage
 from .selected_session import SelectedSession
 
 
@@ -216,13 +217,24 @@ class DurableSelectionEdits:
 
 
 @dataclass(frozen=True)
+class DurableToolFilter:
+    remove: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DurableUsageState:
+    models: dict[str, PiUsage]
+    tools: dict[str, PiUsage]
+
+
+@dataclass(frozen=True)
 class DurableAgent:
     model: DurableModel | None = field(default=None, metadata={'wire_omit_default': True})
     thinking_level: str | None = field(default=None, metadata={'wire_name': 'thinkingLevel', 'wire_omit_default': True})
     instructions: str | None = field(default=None, metadata={'wire_omit_default': True})
     cwd: str | None = field(default=None, metadata={'wire_omit_default': True})
     extensions: tuple[str, ...] | DurableSelectionEdits | None = field(default=None, metadata={'wire_omit_default': True})
-    tools: tuple[str, ...] | DurableSelectionEdits | None = field(default=None, metadata={'wire_omit_default': True})
+    tools: tuple[str, ...] | DurableToolFilter | None = field(default=None, metadata={'wire_omit_default': True})
     model_tools: tuple[str, ...] | DurableSelectionEdits | None = field(default=None, metadata={'wire_name': 'modelTools', 'wire_omit_default': True})
 
 
@@ -318,10 +330,6 @@ class DurableEvent(DeclaredFamily, affix='DurableEvent'):
     family_discriminator = 'type'
     unknown_kind = False
 
-    @classmethod
-    def wire_kind(cls):
-        return cls.declared_name
-
     def convert(self):
         return ()
 
@@ -334,7 +342,7 @@ class SnapshotDurableEvent(DurableEvent):
     compactions: tuple[JsonValue, ...]
     inbox: tuple[JsonValue, ...]
     agent: DurableAgent
-    usage: JsonValue
+    usage: DurableUsageState
     run: JsonValue = None
     generation: JsonValue = None
     compaction_failure: JsonValue = field(default=None, metadata={'wire_name': 'compactionFailure'})
@@ -359,7 +367,7 @@ class MessageStartDurableEvent(DurableEvent):
 
 @dataclass(frozen=True)
 class MessageUpdateDurableEvent(DurableEvent):
-    usage: JsonValue
+    usage: PiUsage
     changes: tuple[DurableChange, ...]
 
     def convert(self):
@@ -441,7 +449,7 @@ class AgentChangedDurableEvent(DurableEvent):
 
 @dataclass(frozen=True)
 class UsageChangedDurableEvent(DurableEvent):
-    usage: JsonValue
+    usage: DurableUsageState
 
 
 @dataclass(frozen=True)
@@ -634,7 +642,7 @@ class CompactHostCommand(HostCommand):
 class SubmitHostCommand(HostCommand):
     content: JsonValue
     request_id: str = field(metadata={'wire_name': 'requestId'})
-    when_busy: str = field(metadata={'wire_name': 'whenBusy'})
+    when_busy: Literal['steer', 'followUp', 'reject'] = field(metadata={'wire_name': 'whenBusy'})
     reply_type = SubmissionHostMessage
 
 
@@ -659,7 +667,7 @@ class PendingHostRequest:
 
 
 def _event_without_turn(event):
-    raise RuntimeError(f'Durable event {event.wire_kind()!r} arrived with no open turn')
+    raise RuntimeError(f'Durable event {event.declared_name!r} arrived with no open turn')
 
 
 class DurableTurn:
@@ -807,7 +815,7 @@ class PiDurableBackend(AgentBackend, Steers, Compacts, ReportsContext, Configure
     """
     location_type = DurableDatabase
     unstarted_type = UnstartedRuntime
-    event_kinds = frozenset(member.wire_kind() for member in DurableEvent.members_with(DurableEvent))
+    event_kinds = frozenset(DurableEvent.names())
 
     def __init__(self):
         self.host = DurableHost()
