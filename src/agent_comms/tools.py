@@ -710,9 +710,10 @@ class CommsSendTool(ToolRequest):
             self.sender, self.target, self.body, self.type, report=self.report
         )
         from .pi_payloads import PublishedMessageToolDetails
+        from .transcript_events import SentTranscript
 
         return PublishedMessageToolDetails(
-            id=message.message_id, message=message).to_wire()
+            id=message.message_id, message=SentTranscript.from_message(message)).to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)

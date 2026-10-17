@@ -123,10 +123,20 @@ class AgentTextTranscript(OutgoingRoute, LiveTextTranscript):
 
 
 @dataclass(frozen=True, kw_only=True)
-class WireTextTranscript(TextTranscript):
-    """The original committed message owns every projected wire fact."""
+class WireTextTranscript(MarkdownTranscript):
+    """Immutable presentation of one original committed wire record."""
 
+    source: MessageReference = field()
+
+    @property
+    def routed(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True, kw_only=True)
+class IncomingTranscript(TextTranscript):
     message: Message
+    reader: str
 
     @property
     def text(self):
@@ -147,11 +157,6 @@ class WireTextTranscript(TextTranscript):
     @property
     def routed(self) -> bool:
         return True
-
-
-@dataclass(frozen=True, kw_only=True)
-class IncomingTranscript(WireTextTranscript):
-    reader: str
 
     @property
     def routing(self):
@@ -201,13 +206,20 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
             },
         }}
 
-    @property
-    def routing(self):
-        return TurnRouting(reply=self.route)
-
     @classmethod
     def from_message(cls, message):
-        return cls(message=message)
+        return cls(message.body, timestamp=message.timestamp, source=message.reference,
+                   routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))))
+
+    def matches(self, message: Message) -> bool:
+        return self == type(self).from_message(message)
+
+    def core_message(self, source) -> Message:
+        """Read the actual original; a stored report cannot invent its missing kind or role."""
+        for original in source.rows("w.seq=?", (self.source.seq,), limit=1):
+            if self.matches(original.message):
+                return original.message
+        raise ValueError("Sent report no longer matches its original assigned wire message")
 
 
 class ThinkingTranscript(SilentTranscript, LiveTextTranscript):

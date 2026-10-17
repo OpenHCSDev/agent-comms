@@ -352,9 +352,9 @@ class AssignedTranscriptSource(TranscriptSource):
         }
         scope = AssignedSourceIdentity(str(self.root), self.recipient)
         return tuple(
-            PublishedSentMessage(original, scope)
+            PublishedSentMessage(message, scope)
             if (original := originals.get(message.source)) is not None
-            and SentTranscript.from_message(original) == message else message
+            and message.matches(original) else message
             for message in messages
         )
 
