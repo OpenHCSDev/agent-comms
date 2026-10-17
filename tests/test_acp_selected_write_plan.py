@@ -241,8 +241,9 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         assert await agent._drain_private_nk("beta", root_id) == 1
         await reply_turn_finished(agent, "beta")
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
-        claim = Comms(root).bus.log.claim_projection()[str(resource)]
-        assert claim.admission is not None and claim.admission.operation_id == receipt.operation_id
+        with Comms(root).bus.log.certified_read() as source:
+            assert source.claim_operation_used(receipt.operation_id)
+            assert source.claim(str(resource)) is None
         rows = list((root / "selected-write-plans").glob("*.json"))
         assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
         assert await agent._drain_private_nk("beta", root_id) == 0
