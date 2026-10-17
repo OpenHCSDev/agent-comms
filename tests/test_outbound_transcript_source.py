@@ -11,6 +11,7 @@ from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
+from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.wire_log import WireLog
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor, TranscriptRead
@@ -160,16 +161,12 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
 def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     before = comms.transcripts.capture_page_read("beta")
-    receipt = invoke_tool(
-        comms,
-        "comms_send",
-        {
-            "from": "beta",
-            "to": "sender",
-            "body": "Original outgoing ownership reply",
-        }, caller=NoThreadCaller(),
-    )
-    message = comms.bus.log.message_by_id(receipt["id"])
+    receipt = PublishedMessageToolDetails.from_wire(invoke_tool(
+        comms, "comms_send",
+        {"from": "beta", "to": "sender", "body": "Original outgoing ownership reply"},
+        caller=NoThreadCaller(),
+    ))
+    message, = comms.bus.log.messages_for_references((receipt.message.source,))
     after = comms.transcripts.capture_page_read("beta")
     assert after.identity.wire_frontier.sequence == message.seq
     assert not before.current()
