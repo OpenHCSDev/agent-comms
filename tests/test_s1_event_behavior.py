@@ -249,7 +249,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     if not value.successful:
         with pytest.raises(RequestError, match="Internal error"):
             await progress.publish_result()
-        messages = comms.bus.log.full_history()
+        messages = list(comms.bus.full_history_page().messages)
         assert not any(row.body == "provisional" for row in messages)
         assert any(row.notice and "[Open diagnostic]" in row.body for row in messages)
         assert progress.result is not None and progress.result.diagnostic == diagnostic
@@ -386,7 +386,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             assert native.provider.posts == (2 if committed_progress else 1)
         inputs = stored_inputs(comms.root).rows
         assert len(inputs) == 1 and all(row.has_started for row in inputs.values())
-        rows = comms.bus.log.full_history()
+        rows = list(comms.bus.full_history_page().messages)
         replies = [row for row in rows if row.sender == name]
         if provider_status == 200:
             assert [(row.body, row.notice) for row in replies] == (
@@ -556,6 +556,6 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
         assert comms.registry.require("waiting").goal.state.active
         assert sum(isinstance(event, TurnTranscriptUpdate) and not event.state.busy
             for event in events) == 1
-        assert any(row.body == "relay body" for row in comms.bus.log.full_history())
+        assert any(row.body == "relay body" for row in list(comms.bus.full_history_page().messages))
     finally:
         await owner.shutdown()

@@ -48,11 +48,12 @@ from .exporting import (
     SelectableWireExportFormat,
 )
 from .importing import ImportFormat, ImportLimits
+from .historical_views import HistoryCursor
+from .launch_runtime import RestartEnvironment
 from .turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
-from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .change_report import ChangeReport
@@ -400,12 +401,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     @classmethod
     def member_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
         """Use original roster membership and each command's thread eligibility."""
-        from .presentation import ThreadView
         if snapshot is None:
             snapshot = comms.registry.snapshot()
-        return tuple(bound for thread in snapshot.threads.values()
-                     if channel.matches(thread.tags) and ThreadView.visible(
-                         thread, snapshot, show_stopped=True, show_archived=False)
+        return tuple(bound for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
+                     if channel.matches(thread.tags)
                      for bound in cls.thread_bindings(
                          comms, thread, snapshot.status(thread.name), channel.name))
 
@@ -1024,39 +1023,29 @@ class StatusCliCommand(CliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class HistoryCliCommand(CliCommand):
-    help = "Full history of a DM, channel, or everything"
+    help = "Newest-first bounded history of a DM, channel, or everything"
     with_thread: str | None = option("--with", help="DM with this thread", default=None)
     channel: str | None = option("--channel", help="Channel (#all, #tag)", default=None)
-    everything: bool = option("--everything", help="Every message on the wire", default=False)
-    me: str | None = option("--as", help="Your thread (for --with)", default=None)
+    everything: bool = option("--everything", help="Every message scope (the default)", default=False)
+    me: str | None = option("--as", help="DM participant (default: calling thread)", default=None)
+    limit: int = option("--limit", help="Maximum messages in this page", default=20)
+    before: int | HistoryCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
     def apply(self, ctx: Comms) -> Any:
-        selected = sum(bool(x) for x in (self.with_thread, self.channel, self.everything))
-        if selected != 1:
-            raise ValueError("history takes exactly one of --with, --channel, --everything")
+        if sum(bool(x) for x in (self.with_thread, self.channel, self.everything)) > 1:
+            raise ValueError("history takes at most one of --with, --channel, --everything")
+        paging = {"before": self.before, "limit": self.limit}
         if self.with_thread:
-            if not self.me:
-                raise ValueError("history --with requires --as (your thread)")
-            return {
-                "dm": [
-                    {**m.to_wire(), **m.display_metadata}
-                    for m in ctx.views.dm_history(self.me, self.with_thread)
-                ]
-            }
+            page = ctx.views.dm_history_page(self.me or RestartEnvironment.calling_thread(), self.with_thread, **paging)
         elif self.channel:
-            return {
-                "channel": self.channel,
-                "messages": [
-                    {**m.to_wire(), **m.display_metadata}
-                    for m in ctx.views.channel_history(self.channel)
-                ],
-            }
+            page = ctx.views.channel_history_page(self.channel, **paging)
         else:
-            return {
-                "everything": [
-                    {**m.to_wire(), **m.display_metadata} for m in ctx.views.full_history()
-                ]
-            }
+            page = ctx.views.full_history_page(**paging)
+        return {
+            "messages": [{**m.to_wire(), **m.display_metadata} for m in reversed(page.messages)],
+            "before": page.oldest_cursor,
+            "has_older": page.has_older,
+        }
 
 
 @dataclass(frozen=True, kw_only=True)

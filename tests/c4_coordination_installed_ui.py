@@ -55,7 +55,7 @@ async def main():
     assert set(actor.threads) == {owner, 'stopped'}
     assert actor.channel_unread['#team'] == human.channel_unread['#team'] == 1
     assert comms.views.coordination_snapshot('stopped') == actor
-    original = comms.views.message_notifications((message,))
+    original = comms.views.message_notifications_for_references((message.reference,))
     assert original[message.seq, message.message_id]
     assert comms.views.message_notifications_for_references(
         (message.reference,) * (MessageNotification.window_limit + 1)) == original

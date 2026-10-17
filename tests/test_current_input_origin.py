@@ -65,7 +65,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     comms.agents.begin_turn("beta", "held-native", "Existing original")
     agent.inputs.backend_inboxes["beta"] = asyncio.Queue()
     origin = capture(comms)
-    before = comms.bus.log.full_history()
+    before = list(comms.bus.full_history_page().messages)
     command = QueuePromptRequest("Never replay UNKNOWN", origin=origin)
     assert decode_request(encode_request(command)) == command
     try:
@@ -75,7 +75,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         key = "acp:" + command.input_id
         row = stored_inputs(inputs.root).lookup(key)
         assert row.origin == origin and row.source_text == command.user_text
-        assert len(stored_inputs(inputs.root).rows) == 1 and comms.bus.log.full_history() == before
+        assert len(stored_inputs(inputs.root).rows) == 1 and list(comms.bus.full_history_page().messages) == before
         from agent_comms.pi_commands import Prompt
         queued = agent.inputs.backend_inboxes['beta'].get_nowait()
         queued.pop('_input_id')

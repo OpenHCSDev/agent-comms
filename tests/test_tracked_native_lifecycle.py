@@ -154,7 +154,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
             assert result.publications
             assert elapsed >= seconds
             assert provider.posts == 2
-            assert comms.views.full_history()[-1].body == provider.text
+            assert list(comms.views.full_history_page().messages)[-1].body == provider.text
         else:
             async with asyncio.timeout(20):
                 while not (tmp_path / "native-started").exists():

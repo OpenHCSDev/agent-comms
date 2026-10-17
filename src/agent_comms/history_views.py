@@ -47,7 +47,6 @@ from .presentation import (
     ThreadView,
     WireRevision,
 )
-from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayBasis
 from .store_files import _store_lock
 from .thread_presentation import ThreadPresentation
@@ -78,8 +77,11 @@ class ThreadPresentations:
     transcripts: Transcripts
     sent_source_limit: int
 
+    def view(self, name: str) -> ThreadView | None:
+        return self.views.get(self.snapshot.canonical_name(name))
+
     def read(self, name: str) -> ThreadPresentation | None:
-        view = self.views.get(self.snapshot.canonical_name(name))
+        view = self.view(name)
         if view is None:
             return None
         captured = self.transcripts.capture_page_window(
@@ -120,21 +122,8 @@ class HistoryViews:
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
         self.transcript_reads = transcript_read_state(bus.reads.path)
 
-    def message_notifications(self, messages: Sequence[Message]):
-        return MessageNotification.window(self.root, self.registry, self.bus.log, messages)
-
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.log, references)
-
-    def recent_notifications(self, name: str, *, limit: int = 5):
-        return MessageNotification.recent(self.root, self.registry, self.bus.log, name, limit=limit)
-
-    def dm_history(self, a: str, b: str) -> Sequence[Message]:
-        return DMHistory(a, b).full_history(self.presentation)
-
-    def channel_history(self, target: str) -> Sequence[Message]:
-        targets = self.channels.catalog.read().history_targets(target)
-        return ChannelHistory(target, targets).full_history(self.presentation)
 
     def dm_history_page(
         self,
@@ -255,11 +244,6 @@ class HistoryViews:
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
 
-    def full_history(self) -> Sequence[Message]:
-        return ChannelHistory(
-            BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets
-        ).full_history(self.presentation)
-
     def full_history_page(
         self,
         *,
@@ -314,8 +298,8 @@ class HistoryViews:
             catalog.pinned_members(),
             catalog.list_order,
             self.agents.all_activity(
-                ThreadView.visible_threads(
-                    snapshot, show_stopped=show_stopped, show_archived=show_archived
+                snapshot.visible_threads(
+                    show_stopped=show_stopped, show_archived=show_archived
                 ), snapshot=snapshot,
             ),
             self.last_sent_timestamps(),
@@ -329,12 +313,8 @@ class HistoryViews:
     ) -> tuple[ThreadView, ...]:
         snapshot = self.registry.snapshot()
         return ThreadView.roster(
-            snapshot,
-            self.agents,
-            None,
-            GoalWaits(self.root / GoalWaits.filename),
-            show_stopped=show_stopped,
-            show_archived=show_archived,
+            snapshot, self.agents, GoalWaits(self.root / GoalWaits.filename),
+            show_stopped=show_stopped, show_archived=show_archived,
         )
 
     def retired_views(self, threads: Iterable[ThreadIncarnation], channels: Iterable[str]) -> RetiredViews:
@@ -357,18 +337,13 @@ class HistoryViews:
         return self.thread_presentations((name,), sent_source_limit=sent_source_limit).read(name)
 
     def thread_presentations(
-        self, names: Iterable[str], *, sent_source_limit: int = 5
+        self, names: Iterable[str], *, sent_source_limit: int = 5,
     ) -> ThreadPresentations:
-        """Acquire status documents once, with no document lock held while building rows."""
+        """Read status once for only the requested rows, before their original sources."""
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
-            snapshot,
-            self.agents,
-            None,
-            GoalWaits(self.root / GoalWaits.filename),
-            names=names,
-            show_stopped=True,
-            show_archived=False,
+            snapshot, self.agents, GoalWaits(self.root / GoalWaits.filename),
+            names=names, show_stopped=True, show_archived=False,
         )
         return ThreadPresentations(
             snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
@@ -486,26 +461,9 @@ class HistoryViews:
             messages = self.bus.inbox(viewer, thread.name)
             self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 
-    def revision_paths(self) -> dict[str, Path | tuple[Path, ...]]:
-        """The stores a view derives from, by WireRevision part: what to stat and to watch."""
-        from .external_transcript import ExternalTranscript
-        from .notification_assignment import NotificationAssignment
-        from .relationships import RelationshipStore
-
-        return {
-            "registry": self.registry.store.path,
-            "catalog": self.channels.catalog.path,
-            "bus_log": self.bus.log.path,
-            "history": self.bus.history.path,
-            "activity": self.agents.activity._path,
-            "runtime_info": self.agents.runtime_info.path,
-            "reads": self.bus.reads.path,
-            "native_unread": self.transcript_reads.index_path,
-            "goal_waits": self.root / GoalWaits.filename,
-            "relationships": self.root / RelationshipStore.filename,
-            "notifications": tuple(NotificationAssignment.source_paths(self.root)),
-            "external_transcripts": ExternalTranscript.source_paths(self.root),
-        }
+    def revision_paths(self) -> dict[str, tuple[Path, ...]]:
+        """The revision owner's declarations supply both stat and watch paths."""
+        return WireRevision.source_paths(self)
 
     def latest_sequence(self) -> int:
         """The sequence number of the newest message on the bus, whoever it was sent to."""
@@ -513,12 +471,7 @@ class HistoryViews:
 
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
-        parts = {
-            name: (tuple(map(FileRevision.capture, path)) if isinstance(path, tuple)
-                   else FileRevision.capture(path))
-            for name, path in self.revision_paths().items()
-        }
-        return WireRevision(**parts, expiry_tick=int(time.time()))
+        return WireRevision.capture(self, expiry_tick=int(time.time()))
 
     def who(self) -> Sequence[Mapping]:
         """Presence: who is in the chat, with status and unread counts."""

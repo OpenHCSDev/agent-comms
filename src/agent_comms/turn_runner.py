@@ -276,7 +276,7 @@ class TurnRunner:
             await asyncio.sleep(REPLY_POLL)
             waited += REPLY_POLL
             quiet += REPLY_POLL
-            pushed = await self.inputs.drain_count(session_id)
+            pushed = await self.inputs.drain_inbox(session_id)
             if pushed:
                 got_reply = True
                 quiet = 0.0

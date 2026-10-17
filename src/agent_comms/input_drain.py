@@ -22,7 +22,7 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
-from .agent_backend import InputContent, InputId, SendNow, TurnInboxItem
+from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
 from .drain_failures import drain_failures
@@ -526,7 +526,7 @@ class InputObservation:
             if settled is None:
                 return False
             observed = await self._observe_coordination(
-                session_id, self.effects._configured_root_id(), settled.wire, entry,
+                session_id, self.effects.configured_root_id, settled.wire, entry,
             )
             return observed == settled
 
@@ -581,14 +581,22 @@ class InputDrain(InputObservation):
         reset. Callers may re-send the prompts they want to keep.
         """
         async with self.queue_lock:
+            retained = {}
+            cleared = []
+            for key, item in self.queued_inputs.get(session_id, {}).items():
+                remaining = item.after_clear()
+                if remaining is None:
+                    cleared.append(item)
+                else:
+                    retained[key] = remaining
+            if cleared:
+                await Coordination.run_worker(partial(
+                    self.dispositions.clear_unbound, tuple(item.key for item in cleared),
+                ))
+            self.queued_inputs[session_id] = retained
             inbox = self.backend_inboxes.get(session_id)
-            if inbox is not None:
-                inbox.put_nowait({"type": "clear_queue"})
-            self.queued_inputs[session_id] = {
-                key: retained
-                for key, item in self.queued_inputs.get(session_id, {}).items()
-                if (retained := item.after_clear()) is not None
-            }
+            if inbox is not None and cleared:
+                inbox.put_nowait(ClearQueue(tuple(InputId(item.input_id) for item in cleared)))
             self.restored_inputs.pop(session_id, None)
         await self.emit_queue_state(session_id)
 
@@ -712,7 +720,7 @@ class InputDrain(InputObservation):
     async def drain_owned_inbox(self, session_id: str) -> int:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
-        private_root = self.effects._configured_root_id()
+        private_root = self.effects.configured_root_id
         pushed = await self._drain_private_if_changed(session_id, private_root)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
         return pushed
@@ -720,9 +728,6 @@ class InputDrain(InputObservation):
     @property
     def background_wakes_disabled(self) -> bool:
         return not self.auto_wake or not self.sessions.runtime_enabled
-
-    async def drain_count(self, session_id: str) -> int:
-        return await self.drain_inbox(session_id)
 
     async def accept_followup(
         self,
@@ -743,15 +748,17 @@ class InputDrain(InputObservation):
             prompt=TurnContext.render_segments((followup,), images=images).text,
             echo=request.defer_display, images=images, controller=controller,
             input_id=request.input_id, origin=request.origin,
-        ) as (item, owner, source, custody):
-            item = request.accepted(item, source, owner)
-            followup = replace(followup, provenance=(*followup.provenance, source.context_provenance()))
+        ) as reservation:
+            item = reservation.item
+            followup = replace(followup, provenance=(
+                *followup.provenance, reservation.source.context_provenance(),
+            ))
             rendered = TurnContext.render_segments((followup,), images=images)
             item.place(self, session_id, inbox, InputContent(
                 text=item.prompt, images=tuple(images), contributions=rendered.contributions,
             ))
             request.enqueue_control(inbox, item.input_id)
-            custody.pop_all()
+            reservation.release()
         await request.publish_acceptance(self, session_id)
         return PromptResponse(
             stop_reason="end_turn",
@@ -763,15 +770,11 @@ class InputDrain(InputObservation):
             raise InputHandoffRefused("Running turn inbox retired before input placement")
 
     def bind_native_turn(
-        self, session_id: str, owner: Thread, admission: int, turn_id: str
+        self, session_id: str, owner: Thread,
     ) -> asyncio.Queue[TurnInboxItem]:
-        """Transfer existing live inputs to the new lease, never read them from disk."""
+        """Open the live turn inbox and capture its configured settings."""
         inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
         self.sessions.config.turn_started(session_id, owner)
-        for input_id, item in self.queued_inputs.get(session_id, {}).items():
-            self.queued_inputs[session_id][input_id] = item.bind_turn(
-                owner, admission, turn_id
-            )
         return inbox
 
     async def send_now(self, session_id: str) -> None:
@@ -779,8 +782,6 @@ class InputDrain(InputObservation):
             inbox = self.backend_inboxes.get(session_id)
             queued = self.queued_inputs.get(session_id, {})
             if inbox is not None and queued:
-                for key, item in tuple(queued.items()):
-                    queued[key] = item.immediate()
                 inbox.put_nowait(SendNow(tuple(InputId(input_id) for input_id in queued)))
 
     async def close(self) -> None:
@@ -842,6 +843,19 @@ class InputDrain(InputObservation):
         if item is not None:
             await item.not_started(self)
             await self.emit_queue_state(session_id)
+
+    async def input_cleared(
+        self, session_id: str, input_id: str, native_id: str, text: str,
+    ) -> None:
+        source = self.following_sources.get(session_id, {}).get(input_id)
+        if source is not None:
+            def record():
+                with _store_lock(self.comms._wire_lock_path):
+                    for key in source.keys:
+                        if not self.dispositions.clear_native(key, native_id, text):
+                            raise RelationViolationError("Native clear differs from its original input")
+            await Coordination.run_worker(record)
+        await self.input_refused(session_id, input_id)
 
     def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
         """The joined retirement owns the original input and its wire cut."""

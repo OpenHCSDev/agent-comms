@@ -81,11 +81,8 @@ class ExternalRecipientActivity(RecipientActivity):
         ):
             return replace(
                 notification,
-                state="Acknowledged",
-                detail="",
-                progress=AcknowledgedProgress(),
-                priority=2,
-                busy=False,
+                state=AcknowledgedProgress(),
+
                 changed=True,
             )
         return notification

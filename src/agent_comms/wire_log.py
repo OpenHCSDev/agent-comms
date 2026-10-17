@@ -103,11 +103,11 @@ class OpenedWireSnapshot:
             stream.seek(position)
 
     def query_page_index[T](
-        self, read: Callable[[BusPageIndex], T], *, empty: Callable[[], T]
+        self, read: Callable[[BusPageIndex], T], *, empty: T
     ) -> T:
         """Prepare/query this cut; source absence and index repair stay owned here."""
         if self.stream is None:
-            return empty()
+            return empty
         access = self.metadata.access
         with BusPageIndex(Path(self.stream.name)) as index:
             try:
@@ -209,6 +209,19 @@ class OpenedWireSnapshot:
         ):
             yield from self.public_page_records(record, raw_size, self.metadata)
 
+    def messages_for_references(self, references):
+        """Resolve exact public identities, including rows without a wake cohort."""
+        messages = {
+            message.reference: message
+            for message, _ in self.public_records_for(
+                frozenset(reference.seq for reference in references),
+                before_offset=self.complete_boundary,
+            )
+        }
+        if any(reference not in messages for reference in references):
+            raise RelationViolationError("Notification reference is not its original source")
+        return tuple(messages[reference] for reference in references)
+
     def public_records_for(self, sequences: frozenset[int], *, before_offset: int
                            ) -> Iterator[tuple[Message, int]]:
         """An uncertified cut must validate every original row, including silence."""
@@ -259,7 +272,7 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
             )
             return tuple(self.indexed_records(index, rows, before_offset=before_offset))
 
-        yield from self.query_page_index(read, empty=tuple)
+        yield from self.query_page_index(read, empty=())
 
 
 @dataclass(frozen=True, slots=True)
@@ -405,10 +418,6 @@ class WireLog:
             request = replace(request, after_seq=originals[-1].message.seq)
             with self.certified_read() as source:
                 _, captured, more = source.addressed_page(self, request, prefix=witness)
-
-    def full_history(self) -> list[Message]:
-        with self.verified_snapshot() as records:
-            return [message for record in records for message in record.messages()]
 
     def record_context(self, manifest) -> None:
         """Append the context records chosen by the certified entry owner."""
@@ -699,17 +708,9 @@ class WireLog:
         with self._record_snapshot() as (through, records):
             yield through, (message for message, _ in records)
 
-    def message_by_id(self, message_id: str) -> Message | None:
-        """Resolve an ID-only request through the canonical opened wire stream.
-
-        Display callers carry original seq/id references and use their bounded
-        certified window. There is no second receipt-offset index or cache.
-        """
-        with self.full_history_snapshot() as (_, messages):
-            return next((message for message in messages if message.message_id == message_id), None)
-
     def messages_for_references(self, references):
-        return tuple(source.message for source in self.deliveries_for_references(references))
+        with self._opened_wire_snapshot(need_sequence=False) as opened:
+            return opened.messages_for_references(references)
 
     def deliveries_for_references(self, references):
         """One canonical lock/certificate lifetime for a visible source window."""
@@ -734,9 +735,6 @@ class WireLog:
         if lock.source is not None:
             return lock.certified_read().committed_sequence()
         return self.read_metadata_unlocked().last_seq
-
-    def claim_gate_enabled(self) -> bool:
-        return self._claim_marker_unlocked() is not None
 
     def _claim_marker_unlocked(self) -> WireMetadata | None:
         # _store_lock is also used for registry, channels, and marker files.

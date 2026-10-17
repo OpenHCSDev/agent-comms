@@ -13,7 +13,7 @@ from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
 from .message_page import (
-    ConversationMessagePageRequest, MessagePage, MessagePageRequest, ReferencedMessagesRequest,
+    ConversationMessagePageRequest, MessagePage, MessagePageRequest,
     UnreadBeforeRequest,
 )
 from .message_reference import MessageReference
@@ -229,16 +229,16 @@ class MessageBus:
     ) -> DisplayBasis:
         """The named messages this reader received and has not yet read.
 
-        The page index finds each one by its sequence, so this costs the named
-        rows only: no route projection, unread listing or other body is read.
-        The caller marks the returned basis read.
+        The canonical sparse public-message reader supplies only named rows,
+        including control messages without a wake cohort. No unread listing is
+        materialized. The caller marks the returned basis read.
         """
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
         seen = self.reads.cursor(delivery.actor, snapshot)
-        messages = ReferencedMessagesRequest(delivery, frozenset(references)).read(self.log)
+        messages = self.log.messages_for_references(references)
         return self.reads.capture(
-            name, tuple(message for message in messages if message.seq not in seen),
+            name, tuple(message for message in messages if delivery.includes(message) and message.seq not in seen),
             snapshot, self.log.path,
         )
 
@@ -261,21 +261,6 @@ class MessageBus:
         displayed = self.reads.capture(canonical, messages, snapshot, self.log.path)
         self.reads.mark_displayed(canonical, displayed)
         return
-
-    def dm_history(self, a: str, b: str) -> Sequence[Message]:
-        """Full conversation between two threads, either possibly deleted, in seq order."""
-        snapshot = self._registry.snapshot()
-        scope = DMDisplayScope.capture(
-            snapshot.participant(a).name, snapshot.participant(b).name, snapshot
-        )
-        return [message for message in self.log.full_history() if scope.includes(message)]
-
-    def channel_history(self, target: str) -> Sequence[Message]:
-        """Full target-owned channel history, independent of delivery membership."""
-        if not is_channel_target(target):
-            raise ValueError(f"{target!r} is not a channel target.")
-        scope = ChannelDisplayScope(target, self._channels.read().history_targets(target))
-        return [message for message in self.log.full_history() if scope.includes(message)]
 
     def awareness_segments(
         self, owner: Thread, relations: Sequence[PeerRelation], *, blocking: bool = False
