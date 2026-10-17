@@ -15,11 +15,19 @@ import logging
 import os
 import secrets
 import socket
-from collections.abc import Coroutine
 from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from dataclasses import dataclass
+from types import CoroutineType
+from typing import ClassVar, TYPE_CHECKING
+from pydantic import BaseModel, JsonValue
+from acp.interfaces import Client
+
+from .field_codec import FieldCodec
+
+if TYPE_CHECKING:
+    from .acp import CommsAgent
 
 from acp.exceptions import RequestError
 from acp.schema import RequestPermissionResponse
@@ -39,7 +47,6 @@ def socket_path(root: Path, pid: int) -> Path:
 
 
 UNBOUND_CONTROLLER = object()
-_UNBOUND_PUBLICATION_CLIENT = object()
 ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
 _LOG = logging.getLogger(__name__)
 
@@ -55,9 +62,9 @@ class SocketClient:
         send_bytes = writer.get_extra_info("socket").getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
         transport.set_write_buffer_limits(high=max(high_water, send_bytes), low=low_water)
         self.token = secrets.token_hex(32)
-        self.pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self.pending: dict[str, asyncio.Future[dict[str, JsonValue]]] = {}
 
-    async def send(self, payload: dict[str, Any]) -> None:
+    async def send(self, payload: dict[str, JsonValue]) -> None:
         """Bound this subscriber's output without borrowing the owner turn."""
         if self.writer.is_closing():
             raise ConnectionError("Runtime subscriber is closed")
@@ -75,11 +82,11 @@ class SocketClient:
             self.disconnected()
             raise ConnectionError("Runtime subscriber stopped reading; attach to canonical history again")
 
-    async def permission(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+    async def permission(self, payload: dict[str, JsonValue]) -> dict[str, JsonValue] | None:
         if len(self.pending) >= 4:
             return None
         request_id = secrets.token_hex(16)
-        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        future: asyncio.Future[dict[str, JsonValue]] = asyncio.get_running_loop().create_future()
         self.pending[request_id] = future
         task = asyncio.current_task()
         try:
@@ -109,7 +116,7 @@ class SocketClient:
                 future.set_result({"outcome": "cancelled"})
         self.pending.clear()
 
-    async def session_update(self, *, session_id: str, update: Any) -> None:
+    async def session_update(self, *, session_id: str, update: BaseModel) -> None:
         await self.send({"update": update.model_dump(by_alias=True, exclude_none=True)})
 
 
@@ -117,7 +124,7 @@ class OwnerIdentityChangedError(RuntimeError):
     """A saved attachment must not follow a reused thread name."""
 
 
-def _owner_error(error: Exception) -> dict[str, Any]:
+def _owner_error(error: Exception) -> dict[str, JsonValue]:
     if isinstance(error, RequestError):
         data = error.data if isinstance(error.data, dict) else {}
         reason = data.get("details") or data.get("reason")
@@ -130,7 +137,7 @@ def _owner_error(error: Exception) -> dict[str, Any]:
     return {"error": str(error) or type(error).__name__}
 
 
-def _raise_owner_error(data: dict[str, Any]) -> None:
+def _raise_owner_error(data: dict[str, JsonValue]) -> None:
     if "error" not in data:
         return
     rpc = data.get("rpcError")
@@ -143,8 +150,20 @@ def _raise_owner_error(data: dict[str, Any]) -> None:
     raise RuntimeError(data["error"])
 
 
+@dataclass(frozen=True)
+class PublicationBinding:
+    client: Client | None
+    thread: str
+    sockets: frozenset[SocketClient]
+
+    def matches(self, runtime: RuntimeServer, session_id: str) -> bool:
+        return (runtime.agent.sessions.client is self.client
+                and runtime.agent.sessions.bindings.get(session_id) == self.thread
+                and runtime.clients.get(session_id, set()).issubset(self.sockets))
+
+
 class RuntimeServer:
-    def __init__(self, agent: Any):
+    def __init__(self, agent: CommsAgent):
         self.agent = agent
         self.server: asyncio.Server | None = None
         self.clients: dict[str, set[SocketClient]] = {}
@@ -156,7 +175,7 @@ class RuntimeServer:
         self.path = socket_path(agent._comms.root, os.getpid())
         self._resources = ExitStack()
 
-    def background(self, work: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
+    def background(self, work: CoroutineType) -> asyncio.Task[None]:
         """Launch owner work without inheriting an attached human controller."""
         token = self.controller.set(UNBOUND_CONTROLLER)
         try:
@@ -181,10 +200,8 @@ class RuntimeServer:
         self,
         *,
         session_id: str,
-        update: Any,
-        _expected_client: Any = _UNBOUND_PUBLICATION_CLIENT,
-        _expected_thread: str | None = None,
-        _expected_sockets: frozenset[SocketClient] | None = None,
+        update: BaseModel,
+        binding: PublicationBinding | None = None,
     ) -> bool:
         """Return whether any local transport accepted the update.
 
@@ -194,18 +211,7 @@ class RuntimeServer:
         change cannot undo delivery and is checked by the outbox observer.
         """
 
-        def bound() -> bool:
-            return _expected_client is _UNBOUND_PUBLICATION_CLIENT or (
-                self.agent.sessions.client is _expected_client
-                and self.agent.sessions.bindings.get(session_id) == _expected_thread
-            )
-
-        def sockets_bound() -> bool:
-            return _expected_sockets is None or self.clients.get(session_id, set()).issubset(
-                _expected_sockets
-            )
-
-        if not bound() or not sockets_bound():
+        if binding is not None and not binding.matches(self, session_id):
             return False
         delivered = False
         client = self.agent.sessions.client
@@ -216,11 +222,11 @@ class RuntimeServer:
         # socket reattach has a new identity even with the same session ID.
         sockets = (
             tuple(self.clients.get(session_id, ()))
-            if _expected_sockets is None
-            else tuple(_expected_sockets)
+            if binding is None
+            else tuple(binding.sockets)
         )
         for socket_client in sockets:
-            if not bound() or not sockets_bound():
+            if binding is not None and not binding.matches(self, session_id):
                 return delivered
             if socket_client not in self.clients.get(session_id, ()):
                 continue
@@ -235,8 +241,8 @@ class RuntimeServer:
         return controller in self.clients.get(session_id, ()) and not controller.writer.is_closing()
 
     async def request_permission(
-        self, session_id: str, controller: SocketClient, payload: dict[str, Any]
-    ) -> dict[str, Any] | None:
+        self, session_id: str, controller: SocketClient, payload: dict[str, JsonValue]
+    ) -> dict[str, JsonValue] | None:
         if not self.is_controller(session_id, controller):
             return None
         reply = await controller.permission(payload)
@@ -277,7 +283,7 @@ class RuntimeServer:
         self._resources.close()
 
 
-def present_session(metadata: dict[str, Any], session_id: str) -> dict[str, Any]:
+def present_session(metadata: dict[str, JsonValue], session_id: str) -> dict[str, JsonValue]:
     """Rebind presentation coordinates through their declared owners."""
     from .acp_extension import decode_updates, encode_updates
 
@@ -365,7 +371,7 @@ class RuntimeConnection:
     async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
         return await JsonlStreamReader(reader).readline()
 
-    async def request(self, action: str, **kwargs: Any) -> dict[str, Any]:
+    async def request(self, action: str, **kwargs: JsonValue) -> dict[str, JsonValue]:
         if self._closed:
             raise ConnectionError("Owner attachment was closed before request dispatch")
         task = asyncio.current_task()
@@ -392,7 +398,7 @@ class RuntimeConnection:
                 raise RuntimeError("Thread owner disconnected after request; outcome unknown.")
             data = json.loads(line)
             _raise_owner_error(data)
-            return cast(dict[str, Any], data["result"])
+            return FieldCodec.decode(dict[str, JsonValue], data["result"])
         finally:
             try:
                 if writer is not None:
@@ -421,7 +427,7 @@ class OwnerReplyConnection(RuntimeConnection):
 
 
 class RuntimeProxy(RuntimeConnection):
-    def __init__(self, agent: Any, session_id: str, path: Path):
+    def __init__(self, agent: CommsAgent, session_id: str, path: Path):
         super().__init__(agent._comms, session_id, path)
         self.agent = agent
         self.writer: asyncio.StreamWriter | None = None
@@ -433,12 +439,12 @@ class RuntimeProxy(RuntimeConnection):
     def controller_token(self):
         return self._controller_token
 
-    async def subscribe(self) -> dict[str, Any]:
+    async def subscribe(self) -> dict[str, JsonValue]:
         reader, metadata = await self._subscribe_once()
         self.task = asyncio.create_task(self.forward(reader))
         return metadata
 
-    async def _subscribe_once(self) -> tuple[asyncio.StreamReader, dict[str, Any]]:
+    async def _subscribe_once(self) -> tuple[asyncio.StreamReader, dict[str, JsonValue]]:
         reader, writer = await self._connect_current()
         self.writer = writer
         try:
@@ -468,7 +474,7 @@ class RuntimeProxy(RuntimeConnection):
                         raise ValueError(
                             "Owner subscription ready requires a valid controllerToken."
                         )
-                    metadata = cast(dict[str, Any], data["ready"])
+                    metadata = FieldCodec.decode(dict[str, JsonValue], data["ready"])
                     presented = await Coordination.run_worker(
                         partial(present_session, metadata, self.session_id)
                     )
@@ -482,7 +488,7 @@ class RuntimeProxy(RuntimeConnection):
             writer.close()
             raise
 
-    async def update(self, data: dict[str, Any]) -> None:
+    async def update(self, data: dict[str, JsonValue]) -> None:
         client = self.agent.sessions.client
         if "update" in data and client is not None:
             metadata = await Coordination.run_worker(partial(
@@ -511,7 +517,7 @@ class RuntimeProxy(RuntimeConnection):
             token = self._controller_token
 
             async def ask() -> None:
-                outcome: dict[str, Any] = {"outcome": "cancelled"}
+                outcome: dict[str, JsonValue] = {"outcome": "cancelled"}
                 try:
                     if self.agent.sessions.client is not None and token == self._controller_token:
                         reply = await asyncio.wait_for(
@@ -530,7 +536,7 @@ class RuntimeProxy(RuntimeConnection):
                 ):
                     # An unanswered, disconnected, refused or invalid client reply
                     # is a denial; the owner never receives client exception text.
-                    # Any other failure is a defect and propagates after the denial.
+                    # Other failures are defects and propagate after the denial.
                     pass
                 finally:
                     if (
