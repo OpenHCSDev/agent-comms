@@ -7,6 +7,7 @@ from collections.abc import Callable
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
+from pydantic import JsonValue
 
 from . import agent_events as events
 from .declared_family import DeclaredFamily
@@ -817,7 +818,7 @@ class ToolExecutionEnd(PiEvent):
 class ToolExecutionStart(PiEvent):
     accepts_prompt = True
 
-    args: dict[str, Any] | None = field(default=None, metadata={"wire_name": "args"})
+    args: dict[str, JsonValue] = field(default_factory=dict, metadata={"wire_name": "args", "wire_nonnull": True})
     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
@@ -828,7 +829,7 @@ class ToolExecutionStart(PiEvent):
         tool_id = self.tool_call_id or name
         session.watchdog.prompt_accepted = True
         session.active_tools.add(tool_id)
-        yield ToolDeclaration.start(tool_id, name, self.args or {})
+        yield ToolDeclaration.start(tool_id, name, self.args)
 
     @property
     def retry_progress(self) -> bool:
