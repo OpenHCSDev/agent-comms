@@ -81,7 +81,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     assert [m.seq for m in tail.messages] == [3, 4]
     older = comms.views.channel_display_page("#engineering", before=3, limit=2)
     assert [m.seq for m in older.messages] == [1, 2]
-    assert [m.target for m in comms.views.channel_history("#engineering")] == [
+    assert [m.target for m in list(comms.views.channel_history_page("#engineering").messages)] == [
         m.target for m in rows
     ]
     for send in (
@@ -120,7 +120,7 @@ def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_p
     assert comms.bus.log.latest_sequence() == before
     comms.messaging.send_user_message("#team", "exact", worktree=str(comms.root))
     comms.channels.update_tags("bob", remove=frozenset({"team"}))
-    rows = comms.views.channel_history("#team")
+    rows = list(comms.views.channel_history_page("#team").messages)
     assert [row.body for row in rows if row.membership is None] == ["exact"]
     assert any(row.membership is not None for row in rows)
     assert not any(row.target == "#team-view" for row in rows)

@@ -38,6 +38,18 @@ class ACPInputIdText(TextRepresentation):
             raise ValueError("ACP submission requires a canonical UUID hex identity")
         return value
 
+class InputAlreadyCleared(RelationViolationError):
+    """A positively cleared input cannot acquire another native write."""
+
+
+class ClearedInputState:
+    public_status = "cleared"
+    cancellation_feedback = "Input cleared before native start."
+
+    def require_not_cleared(self) -> None:
+        raise InputAlreadyCleared("Input was explicitly cleared")
+
+
 @dataclass(frozen=True, slots=True)
 class GoalInputDecision:
     goal_revision: int
@@ -50,7 +62,6 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     accepts_reservation: ClassVar[bool] = False
     has_started: ClassVar[bool] = False
     has_native_binding: ClassVar[bool] = False
-    proves_no_native_send: ClassVar[bool] = False
     unresolved: ClassVar[bool] = False
     cancellation_feedback: ClassVar[str] = (
         "Delivery unconfirmed. Inspect delivery before deciding whether to send a new message."
@@ -61,9 +72,6 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def public_status(self) -> str: ...
 
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
-        return False
-
-    def matches_original_provenance(self, source: InputProvenance) -> bool:
         return False
 
     def require_original_provenance(self, source: InputProvenance):
@@ -84,6 +92,7 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def bind(
         self, *, admission: int, turn_id: str, native_id: str, text: str
     ) -> InputAttempt | None:
+        self.require_not_cleared()
         return None
 
     def started(self, *, turn_id: str, native_id: str, text: str) -> InputAttempt | None:
@@ -91,6 +100,15 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
     def finish_unbound(self) -> InputAttempt | None:
         return None
+
+    def clear_unbound(self) -> InputAttempt | None:
+        return None
+
+    def clear_native(self, native_id: str, text: str) -> InputAttempt | None:
+        return None
+
+    def require_not_cleared(self) -> None:
+        """Non-cleared states retain their existing write checks."""
 
     def matches_native(self, *, turn_id: str, native_id: str, text: str) -> bool:
         return False
@@ -105,6 +123,10 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     ) -> StartedInput | None:
         return None
 
+
+    def unbound_delivery(self, root_id: str) -> MessageReference | None:
+        """Explicit withdrawal never grants an automatic delivery retry."""
+        return None
 
     def delivered_in(
         self, lease: TurnLeaseFence, root_id: str, snapshot: RegistrySnapshot
@@ -122,11 +144,8 @@ class StoredInput(InputAttempt):
     def context_provenance(self) -> InputProvenance:
         return InputProvenance(self.key, self.origin)
 
-    def matches_original_provenance(self, source: InputProvenance) -> bool:
-        return self.context_provenance() == source
-
     def require_original_provenance(self, source: InputProvenance):
-        if not self.matches_original_provenance(source):
+        if self.context_provenance() != source:
             raise RelationViolationError("Constraint lacks its original input provenance")
         self.origin.require_human()
         return self
@@ -212,9 +231,13 @@ class StoredInput(InputAttempt):
         }
 
 
-class ReservedInput(StoredInput):
+class RecoverableUnboundInput(StoredInput):
+    def unbound_delivery(self, root_id: str) -> MessageReference | None:
+        return self.origin.delivery_reference(root_id)
+
+
+class ReservedInput(RecoverableUnboundInput):
     unresolved = True
-    proves_no_native_send = True
     public_status = "unknown"
 
     accepts_reservation = True
@@ -237,6 +260,9 @@ class ReservedInput(StoredInput):
 
     def finish_unbound(self) -> NotSentInput:
         return self._transition(NotSentInput)
+
+    def clear_unbound(self) -> ClearedUnsentInput:
+        return self._transition(ClearedUnsentInput)
 
 
 @dataclass(frozen=True)
@@ -265,12 +291,27 @@ class BoundUnknownInput(SentInput):
     unresolved = True
     public_status = "unknown"
 
+    def clear_native(self, native_id: str, text: str) -> ClearedNativeInput | None:
+        return (
+            self._transition(ClearedNativeInput)
+            if self.native_id == native_id and self.sent_digest.matches(text)
+            else None
+        )
+
     def started(self, *, turn_id: str, native_id: str, text: str) -> StartedInput | None:
         return (
             self._transition(StartedInput)
             if self.matches_native(turn_id=turn_id, native_id=native_id, text=text)
             else None
         )
+
+
+class ClearedUnsentInput(ClearedInputState, StoredInput):
+    """Explicit withdrawal before any native binding; never a retry grant."""
+
+
+class ClearedNativeInput(ClearedInputState, SentInput):
+    """The native queue confirmed removal; original wire binding stays intact."""
 
 
 class StartedInput(SentInput):
@@ -283,12 +324,15 @@ class StartedInput(SentInput):
             raise RelationViolationError("Input start admission changed")
         return self
 
-    def delivered_in(self, lease, root_id, snapshot):
-        if (
+    def matches_lease(self, lease, snapshot) -> bool:
+        return (
             lease.identity.incarnation.matches_recorded_name(self.owner, snapshot)
             and self.matches_admission(lease.admission_generation)
             and self.turn_id == lease.turn_id
-        ):
+        )
+
+    def delivered_in(self, lease, root_id, snapshot):
+        if self.matches_lease(lease, snapshot):
             return self.origin.delivery_reference(root_id)
         return None
 
@@ -306,19 +350,12 @@ class StartedInput(SentInput):
         publication source independently validates the original complete lease
         and native ancestry; this receipt never invents their missing proof.
         """
-        if not lease.identity.incarnation.matches_recorded_name(self.owner, snapshot):
-            return None
-        if not self.matches_admission(lease.admission_generation):
-            return None
-        return (
-            self
-            if self.matches_native(turn_id=lease.turn_id, native_id=native_id, text=sent_text)
-            else None
-        )
+        return self if self.matches_lease(lease, snapshot) and self.matches_native(
+            turn_id=lease.turn_id, native_id=native_id, text=sent_text,
+        ) else None
 
-class NotSentInput(StoredInput):
+class NotSentInput(RecoverableUnboundInput):
     unresolved = True
-    proves_no_native_send = True
     public_status = "not_sent"
     cancellation_feedback = (
         "Not sent — cancellation completed before native delivery."

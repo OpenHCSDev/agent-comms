@@ -56,7 +56,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
         owner, 'NativePiUnavailable', 'Original outcome uncertain', recorded_at=1.0
     )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
-    notice = next(item for item in comms.views.recent_notifications('sender')
+    notice = next(item for item in comms.views.thread_presentation('sender').notifications
                   if item.recipient=='beta')
     assert notice.state=='Sent'
     assert notice.detail == ''
@@ -67,7 +67,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     foreign = replace(diagnostic,owner=replace(owner,generation=owner.generation+1))
     activity = comms.agents.activity_of('beta').source_event()
     comms.agents.activity.emit(replace(activity,diagnostic=foreign))
-    current = next(item for item in comms.views.recent_notifications('sender')
+    current = next(item for item in comms.views.thread_presentation('sender').notifications
                    if item.recipient=='beta')
     assert current.state=='Sent'
 
@@ -87,7 +87,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     with Coordination(str(root/'coordination.sqlite3')) as store:
         before = WakeAssignment.select(store.session._connection)
     wire_before = comms.bus.log.path.read_bytes()
-    notices = comms.views.message_notifications((message,))[message.seq,message.message_id]
+    notices = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
     assert beta.state=='Sent' and beta.detail == ''
     assert beta.recipient_identity.recipient_lookup==RecordedThreadIncarnation("fixture", comms.registry.require('beta').created_at).lookup
@@ -98,7 +98,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     # The immutable source's recipient survives rename; current readiness must
     # join its original birth rather than manufacture a new membership/claim.
     comms.registry.rename('beta','renamed')
-    renamed = comms.views.message_notifications((message,))[message.seq,message.message_id]
+    renamed = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
     assert {item.recipient_identity for item in renamed}=={item.recipient_identity for item in notices}
 
 
@@ -183,7 +183,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     comms.registry.rename("beta", "renamed")
     reopened = wire(comms.root).transcripts.capture_page_read("renamed").read()
     assert reopened.events == events
-    assert comms.bus.log.full_history()[-1] == message
+    assert list(comms.bus.full_history_page().messages)[-1] == message
 
 
 def test_original_target_handling_revokes_open_sender_read_without_new_message(
@@ -195,7 +195,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     sender_page = before.read()
     target = comms.registry.require("beta")
     lookup = RecordedThreadIncarnation("fixture", target.created_at).lookup
-    receipts = comms.views.recent_notifications("sender")
+    receipts = comms.views.thread_presentation("sender").notifications
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
     assert beta.message.reference == message.reference and beta.state == "Sent"
     original = next(
@@ -240,10 +240,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     assert sender.read_identity != open_sender.read_identity
     assert recipient.read_identity != open_recipient.read_identity
     assert sender.read_identity == after.identity
-    outcomes = comms.views.message_notifications((message,))[message.seq, message.message_id]
-    assert comms.views.message_notifications_for_references((message.reference,)) == {
-        (message.seq, message.message_id): outcomes,
-    }
+    outcomes = comms.views.message_notifications_for_references((message.reference,))[message.seq, message.message_id]
     with pytest.raises(RelationViolationError):
         comms.views.message_notifications_for_references(
             (MessageReference(message.seq + 1, message.message_id),)

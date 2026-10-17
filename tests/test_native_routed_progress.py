@@ -37,7 +37,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
                     if index == 2:
                         observed.extend(
                             (message.body, message.notice)
-                            for message in comms.views.channel_history("#team")
+                            for message in list(comms.views.channel_history_page("#team").messages)
                         )
                     assert index <= 2
                     if index == 1:
@@ -150,7 +150,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             assert len(requests) == 2
             assert observed == [("Working", True)]
             assert [
-                (message.body, message.notice) for message in comms.views.channel_history("#team")
+                (message.body, message.notice) for message in list(comms.views.channel_history_page("#team").messages)
             ] == [("Working", True), ("Done", False)]
         finally:
             await agent.shutdown()

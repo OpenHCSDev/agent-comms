@@ -163,7 +163,7 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
             root_id=root_id,
             recipient_lookup=RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
             after_seq=0,
-            required_through_seq=comms.bus.log.full_history()[-1].seq,
+            required_through_seq=list(comms.bus.full_history_page().messages)[-1].seq,
             limit=100,
         )
         assert len(page.entries) >= 1 and not page.has_more

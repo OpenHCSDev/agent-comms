@@ -20,7 +20,6 @@ from agent_comms.native_input_record import FullNativeExecution, TriageNativeExe
 from agent_comms.native_package import verify_native_package
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.presentation import MessageNotification
 from agent_comms.selected_triage import FullSelectedTriage
 from agent_comms.threads import Thread
 from shared_bus_restart_native import attach
@@ -146,8 +145,8 @@ async def run(stage, package):
                                 recipient_lookup=RecordedThreadIncarnation("fixture", service.registry.require(child.name).created_at).lookup,
                                 source_seq=original.seq)
                             assert len(history) == 2 and all(row.expected_prompt_equality_established for row in history)
-                            handling = MessageNotification.window(service.root, service.registry,
-                                service.bus.log, [original])[(original.seq, original.message_id)]
+                            handling = service.views.message_notifications_for_references(
+                                (original.reference,))[(original.seq, original.message_id)]
                             notification, = handling
                             assert notification.state == 'Responded'
                             receipt['proof'] = {'assignment': FieldCodec.encode(claims[0]),

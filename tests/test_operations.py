@@ -328,7 +328,7 @@ class TestThreadOps:
         assert wired.registry.status("fixer").declared_name == "archived"
         assert not any(row["name"] == "fixer" for row in wired.views.who())
         assert "fixer" not in wired.registry.active_threads()
-        assert [message.body for message in wired.views.dm_history("PR111", "fixer")] == [
+        assert [message.body for message in list(wired.views.dm_history_page("PR111", "fixer").messages)] == [
             "kept after archive"
         ]
 
@@ -359,7 +359,7 @@ class TestThreadOps:
         assert [message.body for message in wired.bus.inbox("planner", "fixer")] == [
             "old alias routes"
         ]
-        history = wired.views.dm_history("PR111", "fixer")
+        history = list(wired.views.dm_history_page("PR111", "fixer").messages)
         assert [message.body for message in history] == [
             "before rename",
             "old alias routes",

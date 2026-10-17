@@ -6,11 +6,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .errors import RelationViolationError
+
 from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
+    from .message_reference import MessageReference
     from .presentation import MessageNotification
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
 
@@ -23,14 +26,13 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
     def when_idle(self, ordinary: ThreadPresentation,
                   present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
         """Compose idle-only explanations without replacing genuine work."""
-        return present(ordinary)
+        return ordinary if self.working else present(ordinary)
 
     def activity_presentation(self, title: str, activity: str, detail: str) -> ThreadPresentation:
         return ThreadPresentation(title, "✓", "Ready", status=self)
 
     def require_activity_detail(self, detail: str) -> None:
-        if detail:
-            from .errors import RelationViolationError
+        if detail and not self.working:
             raise RelationViolationError("Idle activity cannot carry a detail.")
 
     def with_attention(self) -> ThreadPresentationStatus:
@@ -53,18 +55,11 @@ class IdleThreadPresentationStatus(ThreadPresentationStatus):
 class WorkingThreadPresentationStatus(ThreadPresentationStatus):
     working: ClassVar[bool] = True
 
-    def when_idle(self, ordinary: ThreadPresentation,
-                  present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
-        return ordinary
-
     def activity_presentation(self, title: str, activity: str, detail: str) -> ThreadPresentation:
         summary = activity.title()
         if detail := " ".join(detail.split()):
             summary += f" · {detail}"
         return ThreadPresentation(title, "⌛", summary, status=self)
-
-    def require_activity_detail(self, detail: str) -> None:
-        pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +187,14 @@ class ThreadPresentation:
     sent_notifications: tuple[MessageNotification, ...] = ()
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
     read_identity: TranscriptReadIdentity | None = None
+    incoming_references: tuple[MessageReference, ...] = ()
+    sent_references: tuple[MessageReference, ...] = ()
+
+    def same_status(self, other: ThreadPresentation | None) -> bool:
+        """Status changes do not require reacquiring an unchanged source window."""
+        return other is not None and (self.title, self.marker, self.summary, self.status, self.binding) == (
+            other.title, other.marker, other.summary, other.status, other.binding,
+        )
 
     def same_observation(self, other: ThreadPresentation | None) -> bool:
         """Equal view and turn evidence, not merely equal global store revisions.
@@ -226,8 +229,12 @@ class ThreadPresentation:
                   for notification in projected[source.message.seq, source.message.message_id])
             for selected in (window.sources, window.sent_sources)
         )
-        return replace(self, notifications=incoming, sent_notifications=sent,
-                       read_identity=window.read.identity)
+        return replace(
+            self, notifications=incoming, sent_notifications=sent,
+            read_identity=window.read.identity,
+            incoming_references=tuple(source.message.reference for source in window.sources),
+            sent_references=tuple(source.message.reference for source in window.sent_sources),
+        )
 
     @property
     def label(self) -> str:

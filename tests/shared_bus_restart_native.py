@@ -179,7 +179,7 @@ async def configured_pure_channel(arguments):
 
     def read_original_bus():
         started = time.perf_counter()
-        history = service.bus.log.full_history()
+        history = list(service.bus.full_history_page().messages)
         service.bus.channel_activity()
         service.bus.last_sent_timestamps()
         service.bus.pending_counts_all(names)
@@ -1082,12 +1082,12 @@ async def run(arguments):
                 cancelled_assignment = WakeAssignment.one(db,assignment_id=retained.assignment_id)
                 assert retained == cancelled_input
                 assert cancelled_assignment.lifecycle.declared_name=='deferred'
-            replies = service.bus.channel_history('#team')
+            replies = list(service.bus.channel_history_page('#team').messages)
             assert any(reply.sender==names[0] and reply.body=='Unique controlled native reply.'
                        for reply in replies)
             assert provider.posts == 2
         elif arguments.wave_size > 1:
-            replies = [message for message in service.bus.channel_history('#team')
+            replies = [message for message in list(service.bus.channel_history_page('#team').messages)
                        if message.sender == names[0]]
             assert len(replies) == 2
             assert replies[0].body == 'Combined wave answer: ' + '; '.join(

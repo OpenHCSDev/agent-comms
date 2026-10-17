@@ -97,7 +97,7 @@ def test_original_identity_and_no_delivery_authority(migrated):
     old, prior, live, source = migrated
     rows = collect(live, "channel_display_page", "#team", worktree=str(live.root))
     historical = [m for m in rows if isinstance(m, HistoricalMessage) and m.source == source]
-    original = old.views.channel_history("#team")
+    original = list(old.views.channel_history_page("#team").messages)
     assert [m.to_wire() for m in historical] == [m.to_wire() for m in original]
     assert all(m.sender_created_at == 10.0 for m in historical)
     assert len(live.bus.incoming_page("bob", after=0).messages) == 2
@@ -284,15 +284,15 @@ def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrat
 def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
     _, _, live, _ = migrated
     viewer = live.messaging.user_identity(str(live.root)).name
-    assert len(live.views.channel_history("#team")) == 9
-    assert len(live.views.dm_history("alice", viewer)) == 9
-    assert len(live.views.full_history()) == 18
-    for message in live.views.full_history():
+    assert len(collect(live, "channel_history_page", "#team")) == 9
+    assert len(collect(live, "dm_history_page", "alice", viewer)) == 9
+    assert len(collect(live, "full_history_page")) == 18
+    for message in collect(live, "full_history_page"):
         if isinstance(message, HistoricalMessage):
             assert not message.starts_turn
             assert not message.starts_turn_for("bob")
             assert message.display_metadata["history"]["source"] == message.source.original_root
-    assert len(live.bus.log.full_history()) == 4
+    assert len(list(live.bus.full_history_page().messages)) == 4
 
 
 def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path):
@@ -316,7 +316,7 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
 
 def test_older_than_registry_incarnation_stays_unattributed(migrated):
     _, _, live, source = migrated
-    original = live.bus.log.full_history()[0]
+    original = list(live.bus.full_history_page().messages)[0]
     projected = HistoricalMessage.project(
         replace(original, timestamp=1.0), source, 0, source.provenance
     )

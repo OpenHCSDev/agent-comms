@@ -58,7 +58,7 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     assert [message.target for message in page.messages] == ["#api", "bob", "carol", "bob"]
     assert len({message.seq for message in page.messages}) == len(page.messages)
     assert bodies(comms.views.channel_history_page("#api")) == ["exact target"]
-    assert [message.body for message in comms.views.channel_history("#api")] == ["exact target"]
+    assert [message.body for message in list(comms.views.channel_history_page("#api").messages)] == ["exact target"]
     assert bodies(comms.views.channel_display_page("#ui")) == ["unrelated channel"]
     assert tmp_path.joinpath("bus.jsonl").read_bytes() == before_wire
     assert comms.bus.pending_counts("alice") == before_delivery

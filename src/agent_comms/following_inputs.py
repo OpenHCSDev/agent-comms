@@ -17,6 +17,7 @@ from .turn_input_source import AcceptedFollowingInput, SelectedOriginalInput
 
 if TYPE_CHECKING:
     from .threads import Thread
+    from .agent_events import InputRefused
     from .turn_runner import TurnRunner
     from .input_drain import InputDrain
     from .tracked_turn import TrackedTurnSession
@@ -35,7 +36,7 @@ class FollowingInputs:
             ))
             await DeliveredInput.deliver_pending(
                 inputs, session_id, owner, inputs.comms.bus,
-                inputs.effects._configured_root_id(), after_seq=after_seq,
+                inputs.effects.configured_root_id, after_seq=after_seq,
             )
 
     async def open(self, session: TrackedTurnSession) -> None:
@@ -44,8 +45,8 @@ class FollowingInputs:
     async def started(self, input_id: str) -> AcceptedFollowingInput:
         raise AssertionError("A turn without an inbox cannot start a following input")
 
-    async def refused(self, input_id: str | None) -> None:
-        raise AssertionError("A turn without an inbox cannot refuse a following input")
+    async def retired(self, event: InputRefused) -> None:
+        raise AssertionError("A turn without an inbox cannot retire a following input")
 
 
 @dataclass
@@ -85,7 +86,7 @@ class OwnerFollowingInputs(FollowingInputs):
         inputs = self.inputs
         thread = await Coordination.run_worker(partial(inputs.comms.registry.require, self.owner.name))
         lease = thread.require_turn_lease()
-        inputs.bind_native_turn(self.session_id, thread, lease.admission_generation, lease.turn_id)
+        inputs.bind_native_turn(self.session_id, thread)
         original = SelectedOriginalInput.answering(session.command.message)
         admission = OwnedSendAdmission(
             comms=inputs.comms,
@@ -116,5 +117,5 @@ class OwnerFollowingInputs(FollowingInputs):
         await self.ready(self.inputs, self.session_id)
         return source
 
-    async def refused(self, input_id: str | None) -> None:
-        await self.inputs.input_refused(self.session_id, input_id)
+    async def retired(self, event: InputRefused) -> None:
+        await event.apply_to(self.inputs, self.session_id)

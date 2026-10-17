@@ -103,11 +103,11 @@ class OpenedWireSnapshot:
             stream.seek(position)
 
     def query_page_index[T](
-        self, read: Callable[[BusPageIndex], T], *, empty: Callable[[], T]
+        self, read: Callable[[BusPageIndex], T], *, empty: T
     ) -> T:
         """Prepare/query this cut; source absence and index repair stay owned here."""
         if self.stream is None:
-            return empty()
+            return empty
         access = self.metadata.access
         with BusPageIndex(Path(self.stream.name)) as index:
             try:
@@ -259,7 +259,7 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
             )
             return tuple(self.indexed_records(index, rows, before_offset=before_offset))
 
-        yield from self.query_page_index(read, empty=tuple)
+        yield from self.query_page_index(read, empty=())
 
 
 @dataclass(frozen=True, slots=True)
@@ -405,10 +405,6 @@ class WireLog:
             request = replace(request, after_seq=originals[-1].message.seq)
             with self.certified_read() as source:
                 _, captured, more = source.addressed_page(self, request, prefix=witness)
-
-    def full_history(self) -> list[Message]:
-        with self.verified_snapshot() as records:
-            return [message for record in records for message in record.messages()]
 
     def record_context(self, manifest) -> None:
         """Append the context records chosen by the certified entry owner."""

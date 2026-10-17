@@ -80,7 +80,7 @@ def main():
     assert retained.original_text_source(pin) == subject
     # Reopening both source and registry must derive the same original lineage.
     reopened = Comms(root)
-    assert reopened.bus.log.full_history()[-1] == pin
+    assert list(reopened.bus.full_history_page().messages)[-1] == pin
     before = (root / 'bus.jsonl').read_bytes()
     try:
         reopened.owners.restart_owners(cutover=operation)

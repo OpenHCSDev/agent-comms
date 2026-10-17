@@ -83,7 +83,7 @@ def test_validation_names_missing_roles_and_abstract_methods():
     with pytest.raises(ab.BackendDeclarationError) as error:
         ab.validate_backends([HalfBackend])
     message = str(error.value)
-    for role in ("ReportsContext", "ReadsHistory", "RecoversAfterCrash", "ConfiguresModel"):
+    for role in ("ReportsContext", "ReadsHistory", "ConfiguresModel"):
         assert role in message
     assert "leaves methods abstract" in message
     for method in ("compact", "run_turn", "abort", "close_idle"):
@@ -366,15 +366,6 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         assert published and published[0][0] == "owner"
     finally:
         await backend.close_idle()
-
-
-async def test_pi_native_has_no_resumable_work_after_a_crash(comms):
-    backend = PiNativeBackend("pi", NativeArguments.parse([]), comms, None)
-    thread = Thread("owner", frozenset(), "/tmp/owner")
-    assert await backend.interrupted(thread) == ()
-    await backend.resume(thread)
-    with pytest.raises(ValueError, match="no interrupted work"):
-        await backend.settle(thread, ab.InterruptedRequestWork(()), ab.Disposition.ABANDON)
 
 
 # -- inbox records --------------------------------------------------------------

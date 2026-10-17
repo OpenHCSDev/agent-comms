@@ -932,6 +932,18 @@ class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
         return cls if cls is not PiResponseData else cls.decode(value.get("kind"))
 
 
+@dataclass(frozen=True)
+class QueueClearedData(PiResponseData):
+    """Native IDs actually removed, never the texts of possible candidates."""
+
+    input_ids: tuple[str, ...] = field(metadata={"wire_name": "inputIds"})
+
+    def require_requested(self, requested: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(self.input_ids)) != len(self.input_ids) or not set(self.input_ids) <= set(requested):
+            raise ValueError("Native clear returned duplicate or unrequested input IDs")
+        return self.input_ids
+
+
 class EmptyData(PiResponseData):
     pass
 

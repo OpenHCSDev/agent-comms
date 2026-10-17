@@ -287,9 +287,7 @@ class OwnedTurn:
             reservation.pop_all()
 
     def open_stream(self, resources: AsyncExitStack, permits: ExitStack):
-        self.backend_inbox = self.runner.inputs.bind_native_turn(
-            self.session_id, self.thread, self.turn_lease.admission_generation, self.turn_id
-        )
+        self.backend_inbox = self.runner.inputs.bind_native_turn(self.session_id, self.thread)
         resources.push_async_callback(
             self.runner.inputs.finish_turn_inputs, self.session_id, self.backend_inbox
         )

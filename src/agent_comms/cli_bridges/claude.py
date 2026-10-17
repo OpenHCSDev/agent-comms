@@ -15,6 +15,7 @@ from .shared import (
 
 class ClaudeBridge(LineMonitorBridge):
     incoming_frame = ClaudeMonitorFrame
+    window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
 
     async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
         """Follow this Claude file without submitting an input.

@@ -27,7 +27,7 @@ class RegistryRevision:
     The raw rows let the next revision decode only the threads that changed.
     """
 
-    revision: FileRevision
+    revision: FileRevision | None
     document: RegistryDocument
     raw: dict
 
@@ -179,8 +179,6 @@ class RegistryStore(LockedStore[RegistryDocument]):
         without its committed guard (or a guard without a marker) is an
         uncertain migration, never an invitation to bootstrap old metadata.
         """
-        from .private_registry_guard import PrivateRegistryGuard
-
         marker_path = self.path.parent / "bus_meta.json"
         guard_path = self.guard_path
         key = (

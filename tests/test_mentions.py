@@ -24,7 +24,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert [message.body[item.start : item.end] for item in message.mentions] == ["@alpha", "@beta"]
     assert [item.message_id for item in comms.bus.inbox("alpha")] == [message.message_id]
     assert [item.message_id for item in comms.bus.inbox("beta")] == [message.message_id]
-    assert Comms(tmp_path).views.channel_history("#team")[0].mentions == message.mentions
+    assert list(Comms(tmp_path).views.channel_history_page("#team").messages)[0].mentions == message.mentions
     assert Message.from_wire(message.to_wire()) == message
     scheduled = ScheduledTurn.incoming(message)
     assert scheduled.origin.exact_reply_target == "#team"
@@ -163,7 +163,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
     comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, notice=True)
-    notice = comms.views.channel_history("#team")[-1]
+    notice = list(comms.views.channel_history_page("#team").messages)[-1]
     assert notice.notice is True and not notice.starts_turn
     assert "sender" not in comms.views.last_sent_timestamps()
     assert Message.from_wire(notice.to_wire()) == notice

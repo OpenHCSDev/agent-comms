@@ -39,7 +39,7 @@ class TestToolCatalog:
         assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"][0]["peer"] == "b"
         invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "b"}, caller=ThreadCaller("a"))
         assert comms.registry.snapshot() == before
-        assert not comms.views.full_history()
+        assert not list(comms.views.full_history_page().messages)
 
     def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms, monkeypatch):
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)

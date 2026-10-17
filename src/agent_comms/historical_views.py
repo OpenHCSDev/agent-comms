@@ -31,7 +31,7 @@ from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy, ResponsePolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
-from .thread_identity import ThreadIncarnation, ThreadProvenance, UnrecordedThreadIncarnation
+from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
@@ -71,14 +71,6 @@ class HistoryView(ABC):
             ),
         )
 
-    def full_history(self, presentation: BusPresentation) -> list[Message]:
-        page = self.page(presentation, limit=1000)
-        pages = [page.messages]
-        while page.has_older:
-            page = self.page(presentation, before=page.oldest_cursor, limit=1000)
-            pages.append(page.messages)
-        return [message for rows in reversed(pages) for message in rows]
-
     @abstractmethod
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
         """Retain the source's aliases/membership without borrowing live identity."""
@@ -96,7 +88,7 @@ class ConversationRevision:
 
     def display_changed_since(self, earlier: ConversationRevision) -> bool:
         return (self.selection != earlier.selection
-                or FileRevision.source_changed(earlier.stores.bus_log, self.stores.bus_log))
+                or self.stores.bus_source_changed_since(earlier.stores))
 
 
 class ConversationHistoryView:

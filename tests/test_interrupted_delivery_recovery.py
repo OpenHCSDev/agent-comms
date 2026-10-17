@@ -132,9 +132,7 @@ async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_
             async with SelectedParticipant.select(comms, store, root_id, "beta", 0) as selected:
                 assert selected is not None
                 leased = selected.owner.thread
-                inbox = agent.inputs.bind_native_turn(
-                    "beta", leased, leased.turn_lease.admission_generation, leased.active_turn.id,
-                )
+                inbox = agent.inputs.bind_native_turn("beta", leased)
                 agent.inputs.original_sources["beta"] = SelectedOriginalInput.answering("selected batch")
                 following = await Coordination.run_worker(partial(
                     comms.messaging.send_initial_cohort, "sender", "beta", "following message",
@@ -205,9 +203,7 @@ async def test_delivery_worker_retires_unplaced_inputs_after_cancellation_or_inb
 
     comms, agent, root_id = _session(tmp_path)
     leased = comms.agents.begin_turn("beta", "delivery-worker-turn")
-    inbox = agent.inputs.bind_native_turn(
-        "beta", leased.thread, leased.turn_lease.admission_generation, "delivery-worker-turn",
-    )
+    inbox = agent.inputs.bind_native_turn("beta", leased.thread)
     agent.inputs.original_sources["beta"] = SelectedOriginalInput.answering("live selected work")
     message = comms.messaging.send_initial_cohort("sender", "beta", "worker-held delivery")
     path = comms.root / "coordination.sqlite3"

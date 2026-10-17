@@ -33,6 +33,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
@@ -313,7 +314,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         assert ignored[0].execution == TriageNativeExecution()
         # Fake journal contract checks the join only, not native acceptance.
         assert ignored[0].expected_prompt_equality_established
-    assert len(comms.views.channel_history("#team")) == 1
+    assert len(list(comms.views.channel_history_page("#team").messages)) == 1
     second, beta_calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", second)
     beta = await SelectedExecution(
@@ -327,7 +328,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert "delivered automatically to #team" in beta_calls[1][1]
     assert f'"source_seq":{initial.message.seq}' in beta_calls[1][1]
     assert "This frame is a read-only projection, not file-write permission" in beta_calls[1][1]
-    response = comms.views.channel_history("#team")[-1]
+    response = list(comms.views.channel_history_page("#team").messages)[-1]
     assert response.body == "42" and response.sender == "beta"
     assert "_agent_comms_private_v1" not in response.to_wire()
     assert (
@@ -377,7 +378,7 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
         is None
     )
     assert not calls  # No-wake has no prompt frame or model invocation.
-    assert len(comms.views.channel_history("#team")) == 1
+    assert len(list(comms.views.channel_history_page("#team").messages)) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
@@ -400,7 +401,7 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
     forged = replace(selected, recipient="alpha", recipient_lookup=alpha_lookup)
     with pytest.raises(IdentityConflict, match="selected N/K"):
         TurnContext.render_segments((SelectedWakeSegment.capture(((initial, forged),), people[1]),)).text
-    assert len(comms.views.channel_history("#team")) == 1  # Framing never publishes a row.
+    assert len(list(comms.views.channel_history_page("#team").messages)) == 1  # Framing never publishes a row.
 
 
 def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: Path) -> None:
@@ -413,7 +414,7 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     assert '"wake_mode":"bounded_triage"' in frame
     assert f'"body":{json.dumps(initial.message.body)}' in frame
     assert "No response obligation exists until triage engages" in frame
-    assert len(comms.views.channel_history("#team")) == 1
+    assert len(list(comms.views.channel_history_page("#team").messages)) == 1
 
 
 def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> None:
@@ -425,7 +426,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
         assignment = sealed_cohort_assignments(store, lookup)[0]
     notification = MessageNotification(
         initial.audience.recipients[0], "Read", "",
-        message=initial.message, changed=True,
+        message=initial.message, changed=True, progress=HumanReadProgress(),
     )
     sent_outcome = notification.sent_outcome()
     assert sent_outcome is not None
@@ -488,7 +489,7 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
         assert len(one) == 1 and isinstance(one[0].execution, FullNativeExecution)
         assert isinstance(one[0], FullHistoricalNativeInput)
         assert one[0].input_id == outcome.input_id
-    assert comms.bus.dm_history("sender", "beta")[-1].target == "sender"
+    assert list(comms.bus.dm_history_page("sender", "beta").messages)[-1].target == "sender"
 
 
 
@@ -684,12 +685,12 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     ).run()
     assert outcome is not None and outcome.publications
     assert outcome.cursor_status == "proven"  # exact original only; not an unrelated ACK
-    assert len(calls) == 1 and comms.views.dm_history("sender", "beta")[-1].body
+    assert len(calls) == 1 and list(comms.views.dm_history_page("sender", "beta").messages)[-1].body
     with Coordination(str(root / "coordination.sqlite3")) as store:
         cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
         assert cursor is not None and cursor.input_id == outcome.input_id
         response = next(
-            message for message in comms.bus.log.full_history()
+            message for message in list(comms.bus.full_history_page().messages)
             if message.reference in tuple(receipt.reference for receipt in outcome.publications)
         )
         # The published own reply is nonbinding for beta, but belongs to the
@@ -886,7 +887,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(
         is None
     )
     assert len(calls) == 1
-    history = comms.views.channel_history("#team")
+    history = list(comms.views.channel_history_page("#team").messages)
     assert len(history) == 2 and history[-1].notice
     assert "input is uncertain" in history[-1].body
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -923,7 +924,7 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(
             native_package=tmp_path,
             opt_in=True,
         ).run()
-    rows = comms.views.channel_history("#team")
+    rows = list(comms.views.channel_history_page("#team").messages)
     assert len(rows) == 2 and rows[-1].notice
     assert "input is uncertain" in rows[-1].body
 
@@ -968,7 +969,7 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(calls) == 1
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 1
 
 
 async def test_project_change_during_native_full_turn_denies_response(
@@ -994,7 +995,7 @@ async def test_project_change_during_native_full_turn_denies_response(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(calls) == 1
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 1
 
 
 async def test_owner_generation_revoked_during_native_triage_fails_closed(
@@ -1020,7 +1021,7 @@ async def test_owner_generation_revoked_during_native_triage_fails_closed(
             native_package=tmp_path,
             opt_in=True,
         ).run()
-    assert len(comms.views.channel_history("#team")) == 1
+    assert len(list(comms.views.channel_history_page("#team").messages)) == 1
 
 
 @pytest.mark.parametrize(
@@ -1045,8 +1046,8 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
     ).run()
     assert failed.disposition is FailedAssignment
     assert len(calls) == 1
-    assert "invalid triage decision" in comms.views.channel_history("#team")[-1].body
-    notifications = comms.views.message_notifications((_initial.message,))[
+    assert "invalid triage decision" in list(comms.views.channel_history_page("#team").messages)[-1].body
+    notifications = comms.views.message_notifications_for_references((_initial.message.reference,))[
         (_initial.message.seq, _initial.message.message_id)
     ]
     failure = next(item for item in notifications if item.recipient == "alpha")
@@ -1092,7 +1093,7 @@ async def test_registered_owner_stopped_during_model_cannot_settle(
             native_package=tmp_path,
             opt_in=True,
         ).run()
-    assert len(comms.views.channel_history("#team")) == 1
+    assert len(list(comms.views.channel_history_page("#team").messages)) == 1
     assert not comms.registry.status("alpha").active
     assert comms.registry.require("alpha").active_turn is None
 
@@ -1118,7 +1119,7 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(
     assert not calls
     assert not comms.registry.status("beta").active
     assert comms.registry.require("beta").active_turn is None
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
@@ -1161,14 +1162,14 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
                 opt_in=True,
             ).run()
         assert not calls
-        assert len(comms.bus.dm_history("sender", "beta")) == 1
+        assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 1
     else:
         result = await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
         assert result is not None and result.disposition is CompletedAssignment
         assert len(calls) == 1
-        assert len(comms.bus.dm_history("sender", "beta")) == 2
+        assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 2
     assert comms.registry.require("beta").active_turn is None
     with Coordination(str(root / "coordination.sqlite3")) as store:
         inputs = store.session._connection.execute(
@@ -1240,14 +1241,14 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
                 opt_in=True,
             ).run()
         assert comms.registry.require("delta").active_turn is None
-        assert len(comms.bus.dm_history("sender", "gamma")) == 1
+        assert len(list(comms.bus.dm_history_page("sender", "gamma").messages)) == 1
     else:
         result = await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
         assert result is not None and result.disposition is CompletedAssignment
         assert comms.registry.require("gamma").active_turn is None
-        assert len(comms.bus.dm_history("sender", "gamma")) == 2
+        assert len(list(comms.bus.dm_history_page("sender", "gamma").messages)) == 2
     assert len(calls) == 1
 
 
@@ -1273,7 +1274,7 @@ async def test_owner_stop_before_response_boundary_never_appends(
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         receipts = store.session._connection.execute(
             "SELECT count(*) FROM publication_receipts"
@@ -1322,7 +1323,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
             worker.join(timeout=4)
     assert workers and all(not worker.is_alive() for worker in workers)
     assert stopped.is_set() and not comms.registry.status("beta").active
-    assert len(comms.bus.dm_history("sender", "beta")) == 2
+    assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 2
     with Coordination(str(root / "coordination.sqlite3")) as store:
         state = store.session._connection.execute("SELECT state FROM obligations").fetchone()
         assert state[0] == "published"
@@ -1365,7 +1366,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
     assert len(calls) == 1
     assert comms.registry.status("beta").active
     assert comms.registry.require("beta").active_turn is None
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert store.session._connection.execute("SELECT state FROM obligations").fetchone()[0] == (
             "pending" if boundary == "before_tx1" else "publishing"
@@ -1467,7 +1468,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
                 opt_in=True,
             ).run()
         assert len(calls) == 1
-    assert len(comms.bus.dm_history("sender", "beta")) == 1
+    assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
@@ -1541,7 +1542,7 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
         is None
     )
     assert len(calls) == 1
-    rows = comms.bus.dm_history("sender", "beta")
+    rows = list(comms.bus.dm_history_page("sender", "beta").messages)
     assert len(rows) == 2 and rows[-1].notice
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
@@ -1693,7 +1694,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
-    notice = comms.views.full_history()[-1]
+    notice = list(comms.views.full_history_page().messages)[-1]
     from agent_comms.messages import AlertKind
 
     assert notice.notice and notice.type is AlertKind
@@ -1901,7 +1902,7 @@ async def test_native_rpc_refusal_retains_private_details_without_replay(tmp_pat
             owner_name="beta",
             native_package=tmp_path,
         ).run()
-    notice = comms.views.full_history()[-1]
+    notice = list(comms.views.full_history_page().messages)[-1]
     assert notice.notice and "input is uncertain" in notice.body
     assert "No automatic retry" in notice.body
     assert response.error not in notice.body
