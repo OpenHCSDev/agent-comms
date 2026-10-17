@@ -151,10 +151,13 @@ async def test_native(retained_native_acp_owner):
         root_id = source.marker.root_id
     turn = asyncio.create_task(agent.inputs.drain_inbox(sid))
     try:
+        await turn
+        assert sid in agent.inputs.wake_tasks
+        wake = agent.inputs.wake_tasks[sid]
         async with asyncio.timeout(15):
             while native.provider.posts < 2:
-                if turn.done():
-                    await turn
+                if wake.done():
+                    await wake
                     raise AssertionError("Selected wake ended before its actual native request")
                 await asyncio.sleep(0.01)
         assert "Original dependency reply" in json.dumps(native.provider.requests[-1])
@@ -166,10 +169,11 @@ async def test_native(retained_native_acp_owner):
         )
         assert accepted.input_id in agent.inputs.queued_inputs[sid]
         queued = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
-        assert queued.unresolved and not queued.has_native_binding
+        assert queued.unresolved and queued.has_native_binding
         gate.set()
         native.provider.response_gate = None
         async with asyncio.timeout(30):
+            await wake
             assert await turn == 1
         assert isinstance(comms.goals.goal_wait(sid), NoGoalWait)
         assert comms.registry.require(sid).goal == parked_goal
