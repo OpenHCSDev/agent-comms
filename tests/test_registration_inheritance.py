@@ -24,9 +24,7 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(threa
     class CountedThread(Thread):
         count: int = field(default=-1, metadata={"registration_inheritance": InheritUnsetCount})
 
-    from agent_comms.field_codec import FieldCodec
-    declared = thread_registration.new_thread('owner', frozenset(), '/wt', created_at=42.0)
-    previous = FieldCodec.decode(CountedThread, {**FieldCodec.encode(declared), 'count': 9})
+    previous = thread_registration.new_thread('owner', frozenset(), '/wt', kind=CountedThread, created_at=42.0, count=9)
     omitted = replace(previous, count=-1)
     assert omitted.for_registration("owner", previous) == previous
     explicit = replace(previous, count=0)

@@ -119,9 +119,9 @@ def comms(root: Path) -> Comms:
 
 
 @pytest.fixture
-def thread_registration(tmp_path: Path):
+def thread_registration(tmp_path_factory):
     from agent_comms.registration import Registration
-    return Registration(tmp_path / 'registry.json')
+    return Registration(tmp_path_factory.mktemp('thread-registration') / 'registry.json')
 
 
 @pytest.fixture
