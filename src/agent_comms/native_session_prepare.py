@@ -29,6 +29,7 @@ class PreparedSession(UnwrittenPrompt):
 
 
     async def deliver_to(self, inputs, session):
+        session.native.forget_context()
         state = session.native.attestation.state
         assert state is not None
         identity = session.native.attestation.identity

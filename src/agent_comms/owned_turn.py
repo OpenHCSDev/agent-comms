@@ -201,7 +201,6 @@ class OwnedTurn:
             TurnContext,
             AutomaticTitleSegment,
             ReplyRouteSegment,
-            InstructionFile,
             OwnerProvenance,
             RecordedContextTurn,
         )
@@ -220,29 +219,12 @@ class OwnedTurn:
             for segment in self.thread.context_goal_segments():
                 self.context = self.context.prepend(segment)
         if self.thread.auto_title_pending:
-            instruction = InstructionFile.read("automatic-title.md")
-            self.context = self.context.prepend(
-                AutomaticTitleSegment(
-                    provenance=(
-                        instruction.source,
-                        OwnerProvenance(self.thread.incarnation, self.turn_id),
-                    ),
-                    instruction=instruction,
-                )
-            )
+            self.context = self.context.prepend(AutomaticTitleSegment.capture(
+                (OwnerProvenance(self.thread.incarnation, self.turn_id),)))
         response_targets = batch.native_reply_targets or self.reply_targets
         if response_targets:
-            instruction = InstructionFile.read("reply-route.md")
-            self.context = self.context.prepend(
-                ReplyRouteSegment(
-                    provenance=(
-                        instruction.source,
-                        OwnerProvenance(self.thread.incarnation, self.turn_id),
-                    ),
-                    instruction=instruction,
-                    targets=response_targets,
-                )
-            )
+            self.context = self.context.prepend(ReplyRouteSegment.capture(
+                (OwnerProvenance(self.thread.incarnation, self.turn_id),), targets=response_targets))
 
     def reserve_input(self, batch: InputBatch):
         """Acquire the original durable input before opening loop capabilities."""
@@ -355,7 +337,8 @@ class OwnedTurn:
 
     async def stream(self):
         await self.runner.transition_turn(self.session_id, self.turn_lease, PromptAcceptancePhase())
-        rendered = self.context.render(images=self.images)
+        context = await self.backend.context_for_input(self.thread, self.context)
+        rendered = context.render(images=self.images)
         sender = OwnedSend(
             comms=self.runner.comms,
             inputs=self.runner.inputs,
