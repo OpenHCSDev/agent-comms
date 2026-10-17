@@ -1,8 +1,8 @@
 """Actual fork worker held before its socket, with the pinned native model on loopback."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
-import os
 import shlex
 import signal
 import sys
@@ -26,7 +26,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     await fixture.persistent.close()
     fixture.provider.text = "Cold fork first reply received."
     comms = Comms(fixture.root)
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
     arguments = [
         "--provider",

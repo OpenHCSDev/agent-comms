@@ -1,8 +1,8 @@
 """Compiled native recovery owns closure; Core preserves the original failure."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -27,7 +27,7 @@ DIAGNOSTIC = {
 
 
 async def native_records():
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     program = f"""
 import assert from 'node:assert/strict';
 import {{ NativeTurnRun }} from {json.dumps((package / 'dist/core/turn-recovery.js').as_uri())};
@@ -157,7 +157,7 @@ console.log(JSON.stringify({{events,proof,noOutput}}));
 
 @pytest.mark.asyncio
 async def test_clean_stops_leave_answer_validation_to_tracked_terminal():
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     source = Path(__file__).parents[1] / "stack/native-turn-recovery.mjs"
     program = f"""
 import assert from 'node:assert/strict';
@@ -231,7 +231,7 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
             updates.append(update)
 
     agent.sessions.client = Client()
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
     monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))

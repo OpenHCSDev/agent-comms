@@ -1,9 +1,8 @@
 """Native refusal recovery: Core reports one outcome, never blocks on a retry."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
-import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -17,7 +16,7 @@ from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
 from test_acp import facts
-from test_backend import _NATIVE_PROMPT_START, _stub
+from test_backend import _NATIVE_PROMPT_START, _replay_stub
 
 OVERLOADED = "Our servers are currently overloaded. Please try again later."
 
@@ -26,13 +25,12 @@ pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 
 def _stub_with(tmp_path, records):
     lines = "\n".join(json.dumps(record) for record in records)
-    return _stub(
+    return _replay_stub(
         tmp_path,
-        "#!" + sys.executable + "\n"
-        + "import json, sys\n"
-        + "def emit(value):\n    print(json.dumps(value), flush=True)\n"
+        lines,
+        startup="def emit(value):\n    print(json.dumps(value), flush=True)\n"
         + _NATIVE_PROMPT_START
-        + f"for line in {lines!r}.splitlines():\n    emit(json.loads(line))\n",
+        + "prompt_request = prompt\n",
     )
 
 
@@ -98,7 +96,7 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     # The recorded-protocol launch validates this test's own pinned package;
     # the live runtime route must not leak into the turn.
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
     monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))

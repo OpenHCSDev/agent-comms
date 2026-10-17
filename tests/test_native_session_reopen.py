@@ -1,9 +1,9 @@
 """Saved identity selection and strict history loading have distinct owners."""
 
 from __future__ import annotations
+from agent_comms.native_package import pinned_native_package
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,9 +12,9 @@ import pytest
 
 from agent_comms.native_session_reopen import NativeReopenError, NativeSessionIdentity
 
-PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+PACKAGE = str(pinned_native_package())
 pytestmark = pytest.mark.skipif(
-    sys.platform != "linux" or not PACKAGE, reason="Disposable Linux canonical native fixture"
+    sys.platform != "linux", reason="Disposable Linux canonical native fixture"
 )
 
 
