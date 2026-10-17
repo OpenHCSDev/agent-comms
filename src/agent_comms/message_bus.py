@@ -171,10 +171,10 @@ class MessageBus:
         ) as changes:
             async for _ in changes:
                 snapshot = self._registry.snapshot()
-                if not reader.current(snapshot):
-                    raise UnregisteredThreadError("Watched thread was removed or replaced")
                 messages = await asyncio.to_thread(
                     self.inbox, name, snapshot=snapshot, after=after, projection=WaitingRouteCounts)
+                if not reader.current(self._registry.snapshot()):
+                    raise UnregisteredThreadError("Watched thread was removed or replaced")
                 for message in messages:
                     displayed = self.reads.capture(name, (message,), snapshot, self.log.path)
                     yield message

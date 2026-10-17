@@ -57,9 +57,11 @@ async def test_watch_exit_is_reported_once_with_exit_and_log_tail(tmp_path, monk
         assert f'exit {code}' in report
         assert 'tail-evidence' in report
         assert 'old-prefix' not in report
+        assert 'Watch stream closed' not in report
+        assert len(report) < 12000
         assert 'No message was retried.' in report
         assert isinstance(failure.value.exceptions[0], ChildProcessError)
-        assert (tmp_path / 'watch.stderr.log').read_bytes().endswith(b'tail-evidence\n')
+        assert not (tmp_path / 'watch.stderr.log').exists()
 
 
 @pytest.mark.asyncio
@@ -80,14 +82,18 @@ async def test_route_writer_delays_delivery_without_starting_a_second_child(tmp_
     # blocked state. The pipe is not part of the watch protocol.
     driver = '''
 import os, sys
-from agent_comms.bus_route_counts import BusRouteCounts, RouteIndexBlocked
+from agent_comms.bus_route_counts import BusRouteCounts, RouteTable
+from agent_comms.child_process import PosixPlatform
 from agent_comms.cli import main
 BusRouteCounts.rebuild_bytes = 1
-original = RouteIndexBlocked.defer_read
-def observe(self, through, size):
-    os.write(int(sys.argv[1]), b'B')
-    return original(self, through, size)
-RouteIndexBlocked.defer_read = observe
+original = PosixPlatform.acquire_store_lock
+def observe(self, descriptor, *, shared, blocking):
+    if blocking and os.readlink(f'/proc/self/fd/{descriptor}').endswith(
+        f'.bus_route_counts.v{RouteTable.schema}.sqlite3.lock'
+    ):
+        os.write(int(sys.argv[1]), b'B')
+    return original(self, descriptor, shared=shared, blocking=blocking)
+PosixPlatform.acquire_store_lock = observe
 raise SystemExit(main(sys.argv[2:]))
 '''
 
@@ -124,6 +130,8 @@ raise SystemExit(main(sys.argv[2:]))
             with _store_lock(BusRouteCounts(comms.bus.log.path).path):
                 task = asyncio.create_task(bridge.run())
                 await asyncio.wait_for(blocked.wait(), 10)
+                with pytest.raises(TimeoutError):
+                    await asyncio.wait_for(delivered.wait(), 0.1)
                 assert messages == [] and not task.done()
                 assert len(starts) == 1 and children[0].returncode is None
             await asyncio.wait_for(delivered.wait(), 10)

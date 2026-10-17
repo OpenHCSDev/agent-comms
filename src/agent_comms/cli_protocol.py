@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import builtins
-import os
 from abc import ABC, abstractmethod
 from graphlib import TopologicalSorter
-from typing import TYPE_CHECKING, Annotated, AsyncIterator, BinaryIO, ClassVar, Union
+from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
 from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field
@@ -18,6 +17,12 @@ from .messages import Message
 if TYPE_CHECKING:
     from .child_process import AttachedChild
     from .cli_bridges.shared import CliBridge
+
+
+async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
+    await child.wait()
+    tail = await child.stderr_tail(max_bytes=8192)
+    raise ChildProcessError(f'Core watch ended, exit {child.returncode}\n{reason}\n{tail}')
 
 
 class WireModel(BaseModel):
@@ -91,19 +96,18 @@ class EmittedOutcome(UnconfirmedOutcome):
 
 
 class WatchLine(TaggedWire):
-    """One declared Core watch line, including its continuation behavior."""
+    """One declared line from a Core watch child."""
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
     )
 
     @abstractmethod
-    async def handle(self, bridge: CliBridge, child: AttachedChild, errors: BinaryIO) -> None: ...
+    async def handle(self, bridge: CliBridge, child: AttachedChild) -> None: ...
 
     @staticmethod
     async def stream(child: AttachedChild) -> AsyncIterator[WatchLine]:
         async for line in child.stdout:
             yield WATCH_LINE.validate_json(line)
-        yield FailedCoreError(error='Watch stream closed without a declared handoff')
 
 
 class CoreError(WatchLine):
@@ -126,13 +130,8 @@ class CoreError(WatchLine):
                 return members[declaration](error=message)
         raise TypeError('No declared Core error handles this exception')
 
-    async def handle(self, bridge: CliBridge, child: AttachedChild, errors: BinaryIO) -> None:
-        """An unrecognized terminal state fails with the original process evidence."""
-        await child.wait()
-        errors.seek(0, os.SEEK_END)
-        errors.seek(max(0, errors.tell() - 8192))
-        tail = errors.read().decode('utf-8', errors='replace')
-        raise ChildProcessError(f'Core watch ended, exit {child.returncode}: {self.error}\n{tail}')
+    async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
+        await raise_child_exit(child, self.error)
 
 
 class UnavailableCoreError(CoreError):
@@ -150,7 +149,7 @@ class ArrivedMessage(WatchLine):
     wire_tag = 'message'
     message: InstanceOf[Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(Message.to_wire)]]
 
-    async def handle(self, bridge: CliBridge, child: AttachedChild, errors: BinaryIO) -> None:
+    async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
         await bridge.accept(self.message)
 
 

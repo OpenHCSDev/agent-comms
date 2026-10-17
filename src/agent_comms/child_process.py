@@ -25,7 +25,7 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
@@ -995,6 +995,8 @@ class TerminalChildStdio(ChildStdio):
 
 
 class AttachedChild(ChildProcess):
+    stderr_limit: ClassVar[int] = 16000
+
     def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity):
         super().__init__(identity)
         self.process = process
@@ -1063,11 +1065,11 @@ class AttachedChild(ChildProcess):
         tail = b""
         if self.stderr is not None:
             while chunk := await self.stderr.read(4096):
-                tail = (tail + chunk)[-16000:]
+                tail = (tail + chunk)[-self.stderr_limit:]
         return tail
 
-    async def stderr_tail(self) -> str:
-        return (await asyncio.shield(self._stderr_task)).decode(errors="replace").strip()
+    async def stderr_tail(self, max_bytes: int = stderr_limit) -> str:
+        return (await asyncio.shield(self._stderr_task))[-max_bytes:].decode(errors="replace").strip()
 
     async def _collect_stdout(self) -> bytes:
         output = bytearray()

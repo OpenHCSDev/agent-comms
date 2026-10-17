@@ -27,7 +27,7 @@ from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
     DeliveredOutcome, EmittedOutcome, FilteredOutcome, Outcome, TaggedWire,
-    UnconfirmedOutcome, WatchLine,
+    UnconfirmedOutcome, WatchLine, raise_child_exit,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_database import CoordinationStore
@@ -640,18 +640,18 @@ class CliBridge(ABC, Generic[BridgeOptions]):
     async def watch(self) -> None:
         await self.prepare_delivery()
         print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay', file=sys.stderr, flush=True)
-        with (self.options.state / 'watch.stderr.log').open('ab+') as errors:
-            child = await AttachedChild.start((
-                str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
-                '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-                '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
-                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
-                stdio=StreamingChildStdio(input_enabled=False, stderr=errors))
-            try:
-                async for item in WatchLine.stream(child):
-                    await item.handle(self, child, errors)
-            finally:
-                await child.stop()
+        child = await AttachedChild.start((
+            str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
+            '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
+            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
+            '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
+            stdio=StreamingChildStdio(input_enabled=False))
+        try:
+            async for item in WatchLine.stream(child):
+                await item.handle(self, child)
+            await raise_child_exit(child, '')
+        finally:
+            await child.stop()
 
     async def run(self) -> None:
         current = asyncio.current_task()
