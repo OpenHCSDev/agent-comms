@@ -310,7 +310,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 goal.revision,
                 ctx.goals.bus.log.latest_sequence(),
                 wait_targets,
-                owner_created_at=thread.created_at,
+                owner=thread.incarnation.require_recorded(),
                 report_turn_id=reporting_lease.turn_id if reporting_lease is not None else None,
                 report_turn_generation=(
                     reporting_lease.identity.generation if reporting_lease is not None else None

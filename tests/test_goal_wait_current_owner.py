@@ -23,7 +23,7 @@ def test_graph_uses_only_wait_for_original_owner_goal(tmp_path, change):
     goal = peer.active_goal
     wait = RecordedGoalWait(
         goal.id, "original-wait", goal.revision, 0,
-        (GoalWaitTarget(leaf.incarnation.require_recorded()),), peer.created_at,
+        (GoalWaitTarget(leaf.incarnation.require_recorded()),), peer.incarnation.require_recorded(),
         (None,), None, None,
     )
     if change == "later_goal":
@@ -31,7 +31,7 @@ def test_graph_uses_only_wait_for_original_owner_goal(tmp_path, change):
     elif change == "future_wait":
         wait = replace(wait, revision=goal.revision + 1)
     elif change == "replacement":
-        wait = replace(wait, owner_created_at=peer.created_at + 1)
+        wait = replace(wait, owner=replace(peer.incarnation.require_recorded(), created_at=peer.created_at + 1))
     elif change == "foreign_goal":
         wait = replace(wait, goal_id="different-goal")
     # The foreign-goal case models a mismatched persisted lookup key. Its row

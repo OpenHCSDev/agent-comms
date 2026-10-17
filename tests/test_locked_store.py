@@ -27,7 +27,7 @@ def wait(goal_id="goal"):
         2,
         7,
         (GoalWaitTarget(RecordedThreadIncarnation("worker", 123.0)),),
-        122.0,
+        RecordedThreadIncarnation("owner", 122.0),
         (3,),
         "turn",
         4,
@@ -185,8 +185,8 @@ def test_callback_and_encoding_fail_before_publication(tmp_path):
 
     with pytest.raises(RuntimeError, match="change failed"):
         store.update(fail)
-    with pytest.raises(ValueError, match="owner incarnation"):
-        store.record(replace(wait(), owner_created_at=float("nan")))
+    with pytest.raises(ValueError, match="Expected <class 'float'>, received float"):
+        store.record(replace(wait(), owner=RecordedThreadIncarnation("owner", float("nan"))))
     # The failed callback/encoder released the lock.
     store.record(replace(wait(), revision=3))
 
