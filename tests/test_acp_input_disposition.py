@@ -30,12 +30,12 @@ from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiUnavailable
-from agent_comms.notification_progress import SentProgress, ShownToModelProgress
+from agent_comms.notification_progress import AnsweredProgress, SentProgress, ShownToModelProgress
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
-from stored_inputs import stored_inputs
+from stored_inputs import sent_text, stored_inputs
 from test_backend_native_lifecycle import native_backend
 from native_backend_fixture import wait_for
 
@@ -353,7 +353,8 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             await wait_for(lambda: session in owner.inputs._idle_private_revisions)
             key = message.seq, message.message_id
             pending, = comms.views.message_notifications_for_references((message.reference,))[key]
-            assert isinstance(pending.state, SentProgress) and not pending.state.working
+            assert pending.label == "Sent" and not pending.state.working
+            assert not pending.state.read and not pending.state.delivered
             open_release.set()
             await asyncio.wait_for(started.wait(), 30)
             in_flight, = comms.views.message_notifications_for_references((message.reference,))[key]
@@ -376,8 +377,10 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             ]
             assert type(assignments[-1].lifecycle) is DeliveredAssignment
             read, = comms.views.message_notifications_for_references((message.reference,))[key]
-            assert isinstance(read.state, ShownToModelProgress) and not read.state.working
-            assert read.state.read_at_ms == assignments[-1].updated_at_ms
+            assert isinstance(read.state, AnsweredProgress) and not read.state.working
+            assert isinstance(read.state.proof, ShownToModelProgress)
+            assert read.state.proof.read_at_ms == assignments[-1].updated_at_ms
+            assert read.answer is not None
             assert native.provider.posts == 2
             rows = [json.loads(line) for line in native.session.read_text().splitlines()]
             tool_result = next(
