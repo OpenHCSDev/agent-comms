@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms import backend, cohort_foreground, native_pi, pi_events
+from agent_comms import backend, native_pi, pi_events
 from agent_comms.acp_extension import RequestFailedUpdate
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.tracked_turn import PendingTrackedTerminal, TrackedTurnSession
@@ -101,8 +101,7 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(cohort_foreground, "_preflight",
-        lambda root, root_id, pkg, enabled: native_pi._trusted_package(pkg))
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
     agent.sessions.client = FakeClient()
     await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
     try:

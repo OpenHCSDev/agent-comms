@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import acp, cohort_foreground, coordinated_runtime, native_pi
+from agent_comms import acp, cohort_foreground, coordinated_runtime, native_pi, private_nk_entrypoint
 from agent_comms import agent_events as events
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinator import Coordination
@@ -229,7 +229,7 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
 
     monkeypatch.setattr(acp, "_accept_visible_deliveries", accepted)
     monkeypatch.setattr(NativeSourceCursor, "advance", covered)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", no_package)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", no_package)
     monkeypatch.setattr(native_pi, "_trusted_package", no_package)
     assert await agent.inputs.drain_inbox("beta") == 0
     # Advancing the durable cursor changes the first before/after observation.

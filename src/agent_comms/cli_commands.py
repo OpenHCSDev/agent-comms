@@ -15,6 +15,7 @@ import shlex
 import time
 import types
 from collections.abc import AsyncIterator, Callable
+from contextlib import aclosing
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
@@ -27,6 +28,7 @@ from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
+from .cli_protocol import ArrivedMessage
 from .field_codec import FieldCodec
 from .comms import Comms
 from .config_options import (
@@ -963,13 +965,10 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
         return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
-        from contextlib import aclosing
-
         async def stream() -> None:
             async with aclosing(self.apply(ctx)) as messages:
                 async for message in messages:
-                    json.dump(message.to_wire(), output, separators=(",", ":"))
-                    output.write("\n")
+                    output.write(ArrivedMessage(message=message).model_dump_json() + '\n')
                     output.flush()
 
         asyncio.run(stream())

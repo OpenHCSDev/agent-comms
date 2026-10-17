@@ -7,7 +7,7 @@ import pytest
 from acp import RequestError
 
 from agent_comms import agent_events as events
-from agent_comms import cohort_foreground, coordinated_runtime
+from agent_comms import coordinated_runtime, private_nk_entrypoint
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
 from agent_comms.input_attempt import ClearedUnsentInput, NotSentInput, ReservedInput
 from agent_comms.native_arguments import NativeArguments
@@ -37,7 +37,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
 ):
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, _ = _fake_model()
     entered, release = asyncio.Event(), asyncio.Event()
@@ -129,7 +129,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
 async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatch, change, expected_state):
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, _ = _fake_model()
     entered, release = asyncio.Event(), asyncio.Event()
@@ -215,7 +215,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
 
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, _ = _fake_model()
     entered, release = asyncio.Event(), asyncio.Event()
@@ -466,7 +466,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
 
     monkeypatch.setattr(agent.turns, "extension_ui_permission", permission)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, _ = _fake_model()
     entered, release = asyncio.Event(), asyncio.Event()

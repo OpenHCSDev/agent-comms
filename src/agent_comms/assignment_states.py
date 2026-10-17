@@ -229,6 +229,26 @@ class PendingNotification:
         )
 
 
+class SelectedResponseNotification:
+    """An engaged or deferred decision shows its selected response's progress."""
+
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return observation.selected_response(
+            notification, updated_at_ms, activity.progress
+        )
+
+
 class TriagePendingAssignment(PendingNotification, AssignmentState):
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         if obligation is not None:
@@ -355,19 +375,6 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
     notification_changed = True
     decision: Engagement
 
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
-        return super().notification(
-            recipient, observation=observation, activity=activity
-        )
-
     @classmethod
     def binding_expression(cls) -> str:
         return "execution_id IS NOT NULL AND exact_target IS NOT NULL"
@@ -377,23 +384,7 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
         return cls(mode.engage(execution_id, target))
 
 
-class EngagedAssignment(BoundAssignment):
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
-        notification = super().notification(
-            recipient, observation=observation, activity=activity
-        )
-        return observation.selected_response(
-            notification, updated_at_ms, activity.progress
-        )
-
+class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         if obligation is None:
             raise IdentityConflict("full wake frame requires the current response obligation")
@@ -471,27 +462,11 @@ class InterruptedAssignment(AssignmentDecision, AssignmentState):
         )
 
 
-class DeferredAssignment(InterruptedAssignment):
+class DeferredAssignment(SelectedResponseNotification, InterruptedAssignment):
     def requires_selected_triage(self) -> bool:
         if self.execution_id is not None:
             return False
         return super().requires_selected_triage()
-
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
-        notification = super().notification(
-            recipient, observation=observation, activity=activity
-        )
-        return observation.selected_response(
-            notification, updated_at_ms, activity.progress
-        )
 
     notification_state = "Interrupted before read"
     notification_detail = ""

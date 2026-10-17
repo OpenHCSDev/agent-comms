@@ -29,12 +29,24 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.nk_foreground import reserve_foreground_owner
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
-from test_cohort_foreground import _configured_thread, _fake_package
 from test_coordinated_runtime import _fake_model
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private foreground N/K requires Linux /var/tmp and fork"
 )
+
+
+def _configured_thread(*args, **kwargs):
+    """Offline foreground owners still have an explicit saved selection."""
+    return Thread(*args, **kwargs, model="openai-codex/gpt-6-sol")
+
+
+def _fake_package(package):
+    """Supply the actual extension bytes; only the provider boundary is faked."""
+    dist = Path(package) / "dist"
+    dist.mkdir(parents=True, exist_ok=True)
+    extension = Path(__file__).parents[1] / "src/agent_comms/channel_coding_tools.mjs"
+    (dist / extension.name).write_bytes(extension.read_bytes())
 
 
 @pytest.fixture(autouse=True)
