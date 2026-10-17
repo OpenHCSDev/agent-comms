@@ -1,4 +1,5 @@
 """Native launcher identity, route and package authority remain independent."""
+from agent_comms.native_package import pinned_native_package
 
 import pytest
 
@@ -62,7 +63,7 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
     from agent_comms.pi_native_backend import PiNativeBackend
     from agent_comms.threads import Thread
 
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     selected = tmp_path / "selected-core"
     venv.EnvBuilder(with_pip=False, symlinks=True).create(selected)
     (selected / "bin/pi-comms-native").symlink_to(LaunchRuntime.running().native_entrypoint)

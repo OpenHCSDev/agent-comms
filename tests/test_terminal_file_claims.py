@@ -1,4 +1,5 @@
 """Exact terminal claim release on real private stores and worker processes."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -102,7 +103,6 @@ def test_terminal_release_spans_the_existing_envelope_bound():
         assert sum(m.body.count("file-") for m in notices) == 35
 
 
-@pytest.mark.skipif(not os.environ.get("PI_COMPACTION_TEST_PACKAGE"), reason="requires native bundle")
 @pytest.mark.asyncio
 async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_path):
     from agent_comms.comms import Comms
@@ -120,7 +120,7 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
         comms.owners.pin_private_nk_launch(
             native.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-            Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+            pinned_native_package(),
         )
         original_chunks = native.provider.response_chunks
         gate = asyncio.Event()

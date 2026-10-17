@@ -1,3 +1,4 @@
+from agent_comms.native_package import pinned_native_package
 import asyncio
 import sys
 import os
@@ -39,7 +40,7 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     comms = wire(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(
-        comms.root, root_id, Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        comms.root, root_id, pinned_native_package()
     )
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(source)))
     comms.registry.unregister("worker")

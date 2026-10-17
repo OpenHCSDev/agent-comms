@@ -1,4 +1,5 @@
 """Installed selected coding journey through real CLI/tools; localhost responses only."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -20,8 +21,7 @@ from native_proof_cases import read_proof_rows
 from delivery_owner_fixture import canonical_agent
 from test_coordinated_runtime import _root
 
-PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
-pytestmark = pytest.mark.skipif(not PACKAGE, reason="Reviewed prepared native package required")
+PACKAGE = str(pinned_native_package())
 
 
 class CodingProvider(LoopbackProvider):

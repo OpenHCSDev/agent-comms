@@ -1,4 +1,5 @@
 """Actual native owner survives client loss; a loopback provider gates completion."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -20,7 +21,7 @@ from compaction_loopback import LoopbackProvider
 async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
     tmp_path, monkeypatch
 ):
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     project = tmp_path / "project"
     project.mkdir()
     started, release, settled = asyncio.Event(), asyncio.Event(), asyncio.Event()

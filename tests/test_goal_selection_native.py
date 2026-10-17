@@ -11,8 +11,6 @@ from agent_comms.goal_generation import ReadyGeneration
 from test_backend_native_lifecycle import native_backend
 
 
-@pytest.mark.skipif(not os.environ.get("PI_COMPACTION_TEST_PACKAGE"),
-                    reason="Explicit immutable native execution grant required")
 @pytest.mark.parametrize("replace_goal", [False, True])
 async def test_native_settlement_selects_only_original_goal(native_backend, replace_goal):
     native = native_backend

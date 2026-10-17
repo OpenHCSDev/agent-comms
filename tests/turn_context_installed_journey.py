@@ -1,4 +1,5 @@
 """Run the existing continuous context case without source/conftest substitutes."""
+from agent_comms.native_package import pinned_native_package
 
 import argparse
 import asyncio
@@ -203,7 +204,7 @@ async def run_configured(options):
             source_file=str(original_file), source_bytes=original_file.stat().st_size,
             original_process=FieldCodec.encode(source.require_process()),
             original_sha256=original_digest)
-        package = Path(os.environ['PI_COMPACTION_TEST_PACKAGE'])
+        package = pinned_native_package()
         verify_native_package(package)
         project = root / 'project'
         project.mkdir(mode=0o700)
@@ -218,7 +219,6 @@ async def run_configured(options):
         environment.update(AGENT_COMMS_ROOT=str(service.root),
             AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
             AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
-            PI_COMPACTION_TEST_PACKAGE=str(package),
             AGENT_COMMS_AGENT_BIN=str(runtime / 'pi-comms-native'),
             PATH=str(runtime) + os.pathsep + environment.get('PATH', os.defpath),
             XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),

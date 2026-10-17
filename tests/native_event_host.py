@@ -1,4 +1,5 @@
 """Opt-in local SDK fixture using the same typed native launch boundary."""
+from agent_comms.native_package import pinned_native_package
 
 import json
 import os
@@ -24,7 +25,7 @@ def install_event_host(
     compaction_release=None,
     cancelled_session=None,
 ):
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     verify_native_package(package)
     host = Path(__file__).with_suffix(".mjs")
     resolve = NativePiRpcLaunch.package_for_command

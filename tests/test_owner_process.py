@@ -1,6 +1,7 @@
 """Real isolated owners: birth-bound launch, retirement and refusal to interrupt."""
 
 from __future__ import annotations
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import os
@@ -27,7 +28,7 @@ from agent_comms.turn_lease import ActiveTurn
 
 def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> None:
     comms = Comms(tmp_path)
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
     declared = Thread("worker", frozenset(), str(tmp_path), task="retained task")
@@ -213,7 +214,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     model = "openai-codex/gpt-6.1-sol"
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", model)
     comms = Comms(tmp_path)
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
 

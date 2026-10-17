@@ -1,4 +1,5 @@
 """Canonical ACP owners sharing the production bus, SQL stores and owner socket."""
+from agent_comms.native_package import pinned_native_package
 
 import os
 from contextlib import asynccontextmanager
@@ -45,7 +46,7 @@ def canonical_agent(comms, **options):
         metadata.root_id if metadata.private
         else comms.messaging.initialize_private_initial_protocol()
     )
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     return CommsAgent(
         comms, private_nk_native_package=package,
         private_nk_wire_root_id=root_id, **options,
