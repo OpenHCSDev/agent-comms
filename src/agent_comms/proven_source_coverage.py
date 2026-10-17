@@ -137,14 +137,14 @@ class SourceCoverage:
                 matches = [(recipient, lifecycle)
                            for recipient, _decision, lifecycle in initial.assignment_decisions()
                            if recipient.recipient_lookup == self.recipient_lookup]
-                receipt = self._receipt(initial)
-                if receipt is None:
+                accepted = self._accepted(initial)
+                if accepted is None:
                     blocked = seq
                     break
                 if not matches:
                     no_wake.append(seq)
                 for recipient, lifecycle in matches:
-                    evidence = self._selected_inputs(seq, recipient, lifecycle, receipt, source_reads)
+                    evidence = self._selected_inputs(seq, recipient, lifecycle, accepted, source_reads)
                     if not evidence:
                         blocked = seq
                         break
@@ -180,7 +180,7 @@ class SourceCoverage:
             request.require_exhausted(more)
         return witness, tuple(initials), more
 
-    def _receipt(self, initial: CommittedDelivery) -> AcceptedCohort | None:
+    def _accepted(self, initial: CommittedDelivery) -> AcceptedCohort | None:
         with self.store.session.read():
             db = self.store.session._connection
             assert_cohort_schema(db)
@@ -191,12 +191,12 @@ class SourceCoverage:
             return _receipt_matches(db, initial) if sealed and sealed.sealed else None
 
     def _selected_inputs(
-        self, seq: int, recipient: FrozenRecipient, lifecycle: AssignmentState, receipt: AcceptedCohort,
+        self, seq: int, recipient: FrozenRecipient, lifecycle: AssignmentState, accepted: AcceptedCohort,
         source_reads: NativeEvidenceScope,
     ) -> tuple[HistoricalNativeInput, ...]:
         assignments = [
             a
-            for a in receipt.assignments
+            for a in accepted.assignments
             if a.recipient_lookup == self.recipient_lookup
             and a.recipient == recipient.canonical_thread
         ]
