@@ -486,7 +486,7 @@ class DeliveryRow(TypedTable):
     def resume_after(cls, db: CoordinationStore) -> MessageReference | None:
         """The existing journal owns attempted progress, including uncertain emissions."""
         latest = cls.read(db.execute(
-            f'SELECT {cls._column_list(cls.columns())} FROM "{cls.declared_name}" '
+            f'SELECT {cls._column_list(tuple(cls.projection()))} FROM "{cls.declared_name}" '
             f'ORDER BY {cls.sequence_sql} DESC LIMIT 1'))
         return latest[0].message.reference if latest else None
 

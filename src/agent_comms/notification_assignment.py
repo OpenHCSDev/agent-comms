@@ -148,15 +148,15 @@ class AssignmentActivityEvidence(TypedRow):
     response: AssignmentResponse
 
     @classmethod
-    def columns(cls) -> tuple[str, ...]:
-        return (
-            "triage_inflight",
-            "current_execution_id",
-            "context_committed_at_ms",
-            "response_seq",
-            "response_message_id",
-            "response_received_at_ms",
-        )
+    def projection(cls) -> dict[str, str]:
+        return {
+            "triage_inflight": "triage_inflight",
+            "current_execution_id": "current_execution_id",
+            "context_committed_at_ms": "context_committed_at_ms",
+            "response_seq": "response_seq",
+            "response_message_id": "response_message_id",
+            "response_received_at_ms": "response_received_at_ms",
+        }
 
     @classmethod
     def _decode_row(cls, row, positions) -> AssignmentActivityEvidence:

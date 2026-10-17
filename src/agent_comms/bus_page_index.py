@@ -190,7 +190,7 @@ class BusPageIndex:
                 if actual:
                     saved = BusPageSource.one(self.connection, singleton=1)
                     last_rows = BusPageRow.read(self.connection.execute(
-                        f"SELECT {BusPageRow._column_list(BusPageRow.columns())} "
+                        f"SELECT {BusPageRow._column_list(tuple(BusPageRow.projection()))} "
                         f"FROM {BusPageRow.declared_name} ORDER BY seq DESC LIMIT 1"
                     ))
         stream, revision = opened.stream, opened.revision
@@ -305,7 +305,7 @@ class BusPageIndex:
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         direction = "DESC" if descending else "ASC"
         query = (
-            f"SELECT {BusPageRow._column_list(BusPageRow.columns())} "
+            f"SELECT {BusPageRow._column_list(tuple(BusPageRow.projection()))} "
             f"FROM {BusPageRow.declared_name}"
             + where
             + f" ORDER BY seq {direction}"
