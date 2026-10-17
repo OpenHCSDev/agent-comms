@@ -1133,6 +1133,15 @@ import json, sys
 
 def emit(value):
     print(json.dumps(value), flush=True)
+
+def next_prompt():
+    while True:
+        request = json.loads(sys.stdin.readline())
+        if request["type"] == "prompt":
+            return request
+        emit({"id": request["id"], "type": "response",
+              "command": request["type"], "success": True})
+
 initial = {"sessionId": "first", "sessionFile": "/tmp/first.jsonl",
            "sessionName": "A", "model": {"provider": "test", "id": "A", "contextWindow": 1000},
            "nativeInputProofCapability": "pi-native-input-v1-live-only"}
@@ -1142,8 +1151,7 @@ state = json.loads(sys.stdin.readline())
 assert state["type"] == "get_state"
 emit({"id": state["id"], "type": "response", "command": "get_state",
       "success": True, "data": initial})
-prompt = json.loads(sys.stdin.readline())
-assert prompt["type"] == "prompt"
+prompt = next_prompt()
 emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
 emit({"type": "message_start", "message": {"role": "user",
       "content": prompt["message"], "inputId": prompt["inputId"]}})
@@ -1151,12 +1159,7 @@ emit({"type": "message_update", "assistantMessageEvent":
       {"type": "text_delta", "delta": "A-before"}})
 emit({"type": "message_end", "message": {"role": "assistant", "content": [],
       "stopReason": "stop", "usage": {"totalTokens": 250}}})
-while True:
-    pending = json.loads(sys.stdin.readline())
-    if pending["type"] == "prompt":
-        break
-    emit({"id": pending["id"], "type": "response",
-          "command": pending["type"], "success": True})
+pending = next_prompt()
 assert pending["message"] == "[peer] pending"
 evidence = __EVIDENCE__
 if evidence in {"get_state", "get_session_stats"}:
@@ -1213,7 +1216,7 @@ for line in sys.stdin:
                 process = backend.TurnSession.active[owner].native.proc
                 queue.put_nowait(pending)
         assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before"]
-        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [None, 250, None]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [250, None]
         assert all(
             e.session_file != "/tmp/second.jsonl" for e in events if isinstance(e, ae.AgentInfo)
         )
