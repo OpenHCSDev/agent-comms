@@ -324,7 +324,8 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
     assert comms.registry.require("beta").name == "beta"
     release.set()
     assert await asyncio.wait_for(running, timeout=8) == 1
-    await reply_turn_finished(agent, "beta")
+    with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
+        await reply_turn_finished(agent, "beta")
     failure = drain_diagnostic(comms, "beta")
     assert isinstance(failure, UnavailableDrainDiagnostic)
     assert failure.error_type == "RelationViolationError"
@@ -800,6 +801,7 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
     finally:
         release.set()
         assert await asyncio.wait_for(running, timeout=5) == 1
+        await reply_turn_finished(first, "beta")
     assert await second.inputs.drain_inbox("beta") == 0
     assert len(calls) == 1
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
@@ -862,7 +864,8 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
     finally:
         release.set()
     assert await asyncio.wait_for(running, timeout=5) == 1
-    await reply_turn_finished(agent, "beta")
+    with pytest.raises(StaleFence, match="owner changed before native send"):
+        await reply_turn_finished(agent, "beta")
     failure = drain_diagnostic(comms, "beta")
     assert isinstance(failure, UnavailableDrainDiagnostic)
     assert failure.error_type == "StaleFence"

@@ -33,7 +33,6 @@ from .tracked_turn import TrackedTurnSession
 from .turn_context import RenderedInput
 
 if TYPE_CHECKING:
-    from .coordinated_runtime import SelectedExecution
     from .agent_events import AgentEvent
     from .native_attestation import ObservedAttestation
     from .pi_events import PiEvent
@@ -133,7 +132,7 @@ class PrivateSendAdmission:
 
     async def execute(
         self,
-        execution: SelectedExecution,
+        execution,
         *,
         provider: str,
         model: str,
