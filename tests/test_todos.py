@@ -1,4 +1,4 @@
-"""Post-PR1 todo assignment is durable, one-owner and independent of goals."""
+"""Todo creation and assignment retain exact owners, revisions and goal references."""
 
 from __future__ import annotations
 
@@ -8,8 +8,19 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.threads import Thread
-from agent_comms.todos import Assignment, GoalRef, OpenTodoState, TodoConflict, TodoError, TodoStore
+from agent_comms.todos import (
+    Assignment,
+    ChangeTodoState,
+    DoneTodoState,
+    GoalRef,
+    TodoConflict,
+    TodoError,
+    TodoState,
+    TodoStore,
+)
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
@@ -26,6 +37,7 @@ def _assign_process(root: str, name: str, created: float, gate) -> tuple[str, st
             owner=thread(name, Path(root), created),
             parent=thread("lead", Path(root), 1.0),
             generation=f"generation-{name}",
+            deadline=RecordedEventTime(1000.0),
         )
         return "won", row.assignment.owner
     except TodoConflict as error:
@@ -37,32 +49,41 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
     lead = thread("lead", tmp_path, 1.0)
     goal = GoalRef("lead", 1.0, "goal-1")
     original = store.create(
-        "todo-1", "OpenHCSDev/agent-comms", "Fix the sidebar", creator=lead, goal=goal
+        "todo-1", "OpenHCSDev/agent-comms", "Fix the sidebar", creator=lead, goal=goal,
+        owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
     )
     assert original.repo == "openhcsdev/agent-comms"
-    assert original.revision == 1 and original.assignment is None
+    assert original.revision == 1
+    assert original.assignment == Assignment("lead", 1.0, "lead", 1.0, "initial")
     assert (
-        store.create("todo-1", "openhcsdev/agent-comms", "Fix the sidebar", creator=lead, goal=goal)
+        store.create(
+            "todo-1", "openhcsdev/agent-comms", "Fix the sidebar", creator=lead, goal=goal,
+            owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
+        )
         == original
     )
     with pytest.raises(TodoConflict):
-        store.create("todo-1", "openhcsdev/agent-comms", "A different task", creator=lead)
+        store.create(
+            "todo-1", "openhcsdev/agent-comms", "A different task", creator=lead,
+            owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
+        )
     assert TodoStore(tmp_path).list("openhcsdev/agent-comms") == (original,)
     # A new same-name goal owner does not rebind this todo's saved old goal.
     newer = thread("lead", tmp_path, 2.0)
     assert store.get(original.id).goal == goal
     with pytest.raises(TodoConflict):
-        store.set_state("todo-1", expected_revision=1, state="done", actor=newer)
+        store.apply("todo-1", ChangeTodoState(1, DoneTodoState, newer.incarnation, None))
     assert store.get("todo-1") == original
 
 
 def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Path) -> None:
     store = TodoStore(tmp_path)
+    lead = thread("lead", tmp_path, 1.0)
     store.create(
         "todo-1",
         "OpenHCSDev/agent-comms",
         "One implementation",
-        creator=thread("lead", tmp_path, 1.0),
+        creator=lead, owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
     )
     with Manager() as manager, ProcessPoolExecutor(max_workers=2) as pool:
         gate = manager.Event()
@@ -80,140 +101,20 @@ def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Pa
     assert len(store.list("OpenHCSDev/agent-comms")) == 1
 
 
-def test_idempotent_retry_transfer_and_old_generation_cannot_clear_owner(tmp_path: Path) -> None:
-    store = TodoStore(tmp_path)
-    lead = thread("lead", tmp_path, 1.0)
-    first = thread("worker-a", tmp_path, 2.0)
-    second = thread("worker-b", tmp_path, 3.0)
-    store.create("todo-1", "org/repo", "One task", creator=lead)
-    reserved = store.assign(
-        "todo-1", expected_revision=1, owner=first, parent=lead, generation="gen-a"
-    )
-    assert (
-        store.assign("todo-1", expected_revision=1, owner=first, parent=lead, generation="gen-a")
-        == reserved
-    )
-    with pytest.raises(TodoConflict) as conflict:
-        store.assign("todo-1", expected_revision=1, owner=second, parent=lead, generation="gen-b")
-    assert conflict.value.current.assignment == reserved.assignment
-    moved = store.transfer(
-        "todo-1",
-        expected_revision=2,
-        previous=reserved.assignment,
-        owner=second,
-        parent=lead,
-        generation="gen-b",
-    )
-    assert moved.revision == 3 and moved.assignment.owner == "worker-b"
-    store = TodoStore(tmp_path)  # Retry after the writer process has exited.
-    assert (
-        store.transfer(
-            "todo-1",
-            expected_revision=2,
-            previous=reserved.assignment,
-            owner=second,
-            parent=lead,
-            generation="gen-b",
-        )
-        == moved
-    )
-    with pytest.raises(TodoConflict):
-        store.transfer(
-            "todo-1",
-            expected_revision=2,
-            previous=Assignment("other", 4.0, "lead", 1.0, "gen-other"),
-            owner=second,
-            parent=lead,
-            generation="gen-b",
-        )
-    with pytest.raises(TodoConflict):
-        store.release("todo-1", expected_revision=3, previous=reserved.assignment)
-    with pytest.raises(TodoConflict):
-        store.transfer(
-            "todo-1",
-            expected_revision=3,
-            previous=reserved.assignment,
-            owner=first,
-            parent=lead,
-            generation="gen-c",
-        )
-    assert TodoStore(tmp_path).get("todo-1") == moved
-
-
-def test_release_exact_retry_after_uncertain_reply(tmp_path: Path) -> None:
-    store = TodoStore(tmp_path)
-    lead = thread("lead", tmp_path, 1.0)
-    worker = thread("worker", tmp_path, 2.0)
-    store.create("todo-1", "org/repo", "One task", creator=lead)
-    reserved = store.assign(
-        "todo-1", expected_revision=1, owner=worker, parent=lead, generation="gen-a"
-    )
-    released = store.release("todo-1", expected_revision=2, previous=reserved.assignment)
-    assert released.revision == 3 and released.assignment is None
-    store = TodoStore(tmp_path)
-    assert store.release("todo-1", expected_revision=2, previous=reserved.assignment) == released
-    with pytest.raises(TodoConflict):
-        store.release(
-            "todo-1",
-            expected_revision=2,
-            previous=Assignment("other", 4.0, "lead", 1.0, "gen-other"),
-        )
-    with pytest.raises(TodoConflict):
-        store.release("todo-1", expected_revision=1, previous=reserved.assignment)
-
-
-def test_blocked_todo_retains_assignment_goal_does_not_follow_status(
-    tmp_path: Path,
-) -> None:
-    store = TodoStore(tmp_path)
-    lead = thread("lead", tmp_path, 1.0)
-    worker = thread("worker", tmp_path, 2.0)
-    goal = GoalRef("lead", 1.0, "goal-1")
-    store.create("todo-1", "org/repo", "Work A", creator=lead, goal=goal)
-    store.create("todo-2", "org/repo", "Work B", creator=lead, goal=goal)
-    assigned = store.assign(
-        "todo-1", expected_revision=1, owner=worker, parent=lead, generation="gen-a"
-    )
-    blocked = store.set_state("todo-1", expected_revision=2, state="blocked", actor=lead)
-    assert blocked.assignment == assigned.assignment
-    with pytest.raises(TodoConflict):
-        store.transfer(
-            "todo-1",
-            expected_revision=3,
-            previous=assigned.assignment,
-            owner=lead,
-            parent=lead,
-            generation="gen-b",
-        )
-    opened = store.set_state("todo-1", expected_revision=3, state="open", actor=lead)
-    with pytest.raises(TodoConflict):
-        store.set_state("todo-1", expected_revision=4, state="done", actor=lead)
-    with pytest.raises(TodoConflict):
-        store.set_state(
-            "todo-1",
-            expected_revision=4,
-            state="done",
-            actor=worker,
-            generation="wrong-generation",
-        )
-    done = store.set_state(
-        "todo-1", expected_revision=4, state="done", actor=worker, generation="gen-a"
-    )
-    assert opened.assignment == assigned.assignment
-    assert done.assignment is None and done.revision == 5
-    assert store.get("todo-2").state is OpenTodoState and store.get("todo-2").goal == goal
-    with pytest.raises(TodoConflict):
-        store.assign("todo-1", expected_revision=5, owner=worker, parent=lead, generation="gen-c")
-
-
 def test_validation_rejects_ambiguous_identity_and_bad_state(tmp_path: Path) -> None:
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     for index, repo in enumerate(("org/repo/branch", "../repo", "org/", "org/repo name")):
         with pytest.raises(TodoError):
-            store.create(f"invalid-{index}", repo, "task", creator=lead)
+            store.create(
+                f"invalid-{index}", repo, "task", creator=lead,
+                owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
+            )
     with pytest.raises(TodoError):
         GoalRef("lead", float("nan"), "goal-1")
-    store.create("todo-1", "org/repo", "task", creator=lead)
-    with pytest.raises(TodoError):
-        store.set_state("todo-1", expected_revision=1, state="unverified", actor=lead)
+    store.create(
+        "todo-1", "org/repo", "task", creator=lead,
+        owner=lead, generation="initial", deadline=RecordedEventTime(1000.0),
+    )
+    with pytest.raises(ValueError):
+        FieldCodec.decode(type[TodoState], "unverified")

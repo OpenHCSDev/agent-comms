@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
+from pathlib import Path
 from typing import Literal
+
+from .change_report import FileLine
 from abc import abstractmethod
 
 from .declared_family import DeclaredFamily
@@ -153,7 +156,7 @@ class GoalMentionSource:
         if self.goal_id != goal.id or self.text_revision > goal.revision:
             return False
         return (
-            self.digest.matches(goal.text)
+            self.digest.matches(goal.instructions)
             and self.incarnation.resolved(registry) == owner.incarnation
         )
 
@@ -192,7 +195,40 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
     revision: GoalRevision
 
 
+@dataclass(frozen=True)
+class OrderCheck:
+    directory: str
+    command: str
+
+    def __post_init__(self):
+        if not self.directory.strip() or not self.command.strip():
+            raise ValueError("An order check requires a directory, a silent command and exit status zero.")
+
+    def require_directory(self):
+        if not Path(self.directory).is_dir():
+            raise ValueError("The order check directory does not exist.")
+
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
+    def require_slot(self, goal, goal_id, problem):
+        if goal.id == goal_id:
+            raise ValueError("Goal ID belongs to another problem.")
+        goal.state.require_order_slot()
+
+    def require_completion(self) -> None:
+        pass
+
+    def installed(self, works: str, artifact: str) -> GoalOrder:
+        raise ValueError("This goal is not a problem order.")
+
+    def require_close(self) -> None:
+        raise ValueError("Closing a problem requires recorded installed application evidence.")
+
+    def delivery_check(self) -> OrderCheck:
+        raise ValueError("This goal is not a problem order.")
+
+    def instructions(self, text: str) -> str:
+        return text
+
     @abstractmethod
     def require_order(self, goal, goals, owner) -> None: ...
 
@@ -212,12 +248,60 @@ class UnorderedGoalOrder(GoalOrder):
 @dataclass(frozen=True)
 class ProblemGoalOrder(GoalOrder):
     problem: str
+    owner: FileLine
+    check: OrderCheck
+    edits: tuple[str, ...]
+    banned: tuple[str, ...]
+    report: str
+
+    def __post_init__(self):
+        if not self.edits or not self.banned:
+            raise ValueError("An order requires edits and banned actions.")
+        if any(not text.strip() for text in (self.problem, self.report, *self.edits, *self.banned)):
+            raise ValueError("Order text cannot be empty.")
+
+    def require_slot(self, goal, goal_id, problem):
+        if (goal.id, self.problem) != (goal_id, problem):
+            super().require_slot(goal, goal_id, problem)
+
+    def delivery_check(self):
+        return self.check
+
+    def instructions(self, text):
+        return "\n".join((text, f"Problem: {self.problem}", f"Owner: {self.owner.to_wire()}",
+            f"Check: {self.check.directory} :: {self.check.command}",
+            *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
+            "Banned: " + "; ".join(self.banned), "Report: " + self.report))
+
+    def copy_as(self, kind, **evidence):
+        return kind(**{f.name: getattr(self, f.name) for f in fields(ProblemGoalOrder)}, **evidence)
+
+    def installed(self, works, artifact):
+        return self.copy_as(InstalledProblemGoalOrder, works=works, artifact=artifact)
+
+    def require_completion(self) -> None:
+        raise ValueError("Complete a problem order with its checked delivered commit.")
 
     def require_order(self, goal, goals, owner) -> None:
-        goals.todos.get(self.problem).require_assignee(owner, goal.id)
+        todo = goals.todos.get(self.problem)
+        todo.require_assignee(owner, goal.id)
 
     def require_replacement(self, goal, goals, owner) -> None:
         goals.todos.get(self.problem).require_released_order(owner, goal.id)
+
+
+@dataclass(frozen=True)
+class InstalledProblemGoalOrder(ProblemGoalOrder):
+    works: str
+    artifact: str
+
+    def __post_init__(self):
+        super().__post_init__()
+        if len(self.works.split()) < 8 or not self.artifact.strip():
+            raise ValueError("Describe the installed application result (8+ words) and name its artifact file.")
+
+    def require_close(self):
+        pass
 
 
 @dataclass(frozen=True)
@@ -232,6 +316,10 @@ class Goal:
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
+
+    @property
+    def instructions(self) -> str:
+        return self.order.instructions(self.text)
 
     def require_order(self, goals, owner) -> None:
         self.order.require_order(self, goals, owner)

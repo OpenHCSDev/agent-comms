@@ -838,7 +838,7 @@ class PeerState:
             view.activity.detail,
             relation.relevance,
             relation.note,
-            goal.text if goal is not None else None,
+            goal.instructions if goal is not None else None,
         )
 
 
@@ -895,7 +895,7 @@ class GoalSegment(InstructionSegment):
         return super().capture((OwnerProvenance(owner.incarnation, str(goal.revision)),), goal=goal)
 
     def values(self) -> dict[str, object]:
-        return dict(goal_id=self.goal.id, goal_text=self.goal.text, progress=self.goal.progress)
+        return dict(goal_id=self.goal.id, goal_text=self.goal.instructions, progress=self.goal.progress)
 
 
 @dataclass(frozen=True, kw_only=True)
