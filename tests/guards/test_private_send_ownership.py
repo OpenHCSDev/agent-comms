@@ -40,12 +40,8 @@ def test_private_admission_owners_stay_within_s7_bounds_without_runner_state():
         for node in ast.walk(ast.parse(source)):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 assert node.end_lineno - node.lineno + 1 <= 100, (path, node.name)
-            if isinstance(node, ast.AnnAssign):
-                # A call parameter is not stored runner state; declared fields are.
-                assert not any(
-                    isinstance(value, ast.Name) and value.id == "SelectedExecution"
-                    for value in ast.walk(node.annotation)
-                ), (path, node.lineno)
+            if isinstance(node, ast.Name):
+                assert node.id != "SelectedExecution", (path, node.lineno)
 
 
 def test_private_send_does_not_rebuild_identity_tuples_or_compare_bare_pids():
