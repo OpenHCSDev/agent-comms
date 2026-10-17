@@ -168,12 +168,38 @@ private screenshot is `ui-after-stopped-home/ready.png`. Proofs:
 `.artifacts/p107-after-ui-preservation.json`. Background indexing completion and
 new Goal execution were not claimed.
 
-This clears private data/start/readiness, not public installation. The draft
-still conflicts with current main's deferred P107/commander code. The old C8
+This clears private data/start/readiness, not public installation. The old C8
 private pair predates newer P130/P108 work and must not replace the public
-installation. Integrate the restoration with current main and build a fresh
-paired target before reviewing a fresh public stopped carry. Its actual store
-counts must be derived anew, never assumed to be the private1045.
+installation. Public store counts must be derived anew, never assumed to be
+the private1045.
+
+## Current-main integration
+
+Normal merge c02e729f447a6c38be027a088189dd42dbed1d6b incorporates Core main
+ab3848214. Three conflicts were resolved at their owners: keep main's
+ChoiceTargetField and codec-owned editor behavior, removing the restored old
+manual choice/JSON branches; inject the restored TodoStore through Comms/Goals
+while retaining main's AgentActivity type. P130 native_tools, tool_declaration,
+transcript_events and native_custody, plus Core sidebar models, remain identical
+to main. No aliases, decoder defaults, lifecycle bypasses or budget increases.
+
+The current-main native gate exits0: no positive deltas or introduced findings;
+SourceLines budget delta−3 uses the existing approved520 trailer. Actual Python
+restoration is net517 plus2 markdown lines. Evidence:
+`.artifacts/p107-current-main-merged-gate.json`. The complete focused before
+NRA pass covers1005 modules with zero omissions, including the frozen main
+snapshot and production/dependency consumers. The verbose all-node attempts
+timed out and are not claimed complete. A separate complete after pass and
+`.artifacts/p107-current-main-real-status.json` confirm source relationships and
+the real source CLI status path (exit0), not fresh paired-runtime acceptance.
+Arbitrary dynamic callbacks/getattr/MRO and JS resolution remain explicitly
+outside syntactic proof.
+
+Codex has the merged head for a fresh paired private target. The existing
+private root is already converted: never repeat its Goal carry or operations5/6.
+Fresh paired native/UI acceptance remains pending before public installation.
+The separate normal welcome startup crash belongs to P152/core-read-locks-2;
+this integration did not edit sidebar_tree.py or welcome.py.
 
 Do not repeat a failed attempt. Inspect its original receipt, preimages, process
 and current pointer before disposition. Any changed/uncertain result stays
