@@ -1,0 +1,1 @@
+owner=core-read-locks-2; purpose=fresh no-provider SDK event and compaction checks; original takeover stores retained; no P107 replay

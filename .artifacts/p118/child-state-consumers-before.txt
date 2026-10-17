@@ -1,0 +1,112 @@
+tests/turn_context_installed_journey.py:63:        child = owner.turns.persistent_backends[thread.name].custody.idle().child
+tests/turn_context_installed_journey.py:119:        assert owner.turns.persistent_backends[thread.name].custody.idle().child is child
+tests/turn_context_installed_journey.py:287:            child = persistent.custody.idle().child
+tests/turn_context_installed_journey.py:291:            assert persistent.custody.idle().child is child
+src/agent_comms/native_session_prepare.py:54:        if not self.native_session.custody.retained:
+src/agent_comms/native_session_prepare.py:89:            persistent.custody.managed_launch,
+src/agent_comms/backend.py:125:                    persistent_session.custody.managed_launch,
+src/agent_comms/backend.py:469:                if not self.native_session.custody.retained:
+src/agent_comms/backend.py:585:        if not self.native_session.custody.retained:
+src/agent_comms/tracked_turn.py:311:                self.custody = custody
+src/agent_comms/tracked_turn.py:500:            self.evidence = self.custody.enter_context(
+src/agent_comms/turn_output.py:101:            session.native_session.custody.retained or session.native.proc.returncode == 0
+src/agent_comms/coordinated_runtime.py:81:            retained = self.pi_session.custody.idle()
+tests/test_runtime_collaboration_documents.py:47:            child = agent.turns.persistent_backends[name].custody.child.proc
+src/agent_comms/owner_restart.py:176:        self.custody.close()
+src/agent_comms/owner_restart.py:231:        self.custody.close()
+src/agent_comms/owner_restart.py:261:            wire = self.custody.enter_context(self.lifecycle.restart_wire())
+src/agent_comms/owner_restart.py:271:            stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, self.custody.pop_all())
+src/agent_comms/native_custody.py:150:class NativeCustody(ABC):
+src/agent_comms/native_custody.py:172:        return await persistent.custody.idle().inspect_acquired(persistent, request)
+src/agent_comms/native_custody.py:174:    def retire(self, successor: NativeCustody | None = None) -> NativeCustody:
+src/agent_comms/native_custody.py:178:    def settled(self) -> NativeCustody:
+src/agent_comms/native_custody.py:184:class EmptyNative(NativeCustody):
+src/agent_comms/native_custody.py:189:class ChildNative(NativeCustody):
+src/agent_comms/native_custody.py:194:    def _shutdown_successor(self) -> NativeCustody: ...
+src/agent_comms/native_custody.py:206:    successor: NativeCustody
+src/agent_comms/native_custody.py:208:    def _shutdown_successor(self) -> NativeCustody:
+src/agent_comms/native_custody.py:225:    def settled(self) -> NativeCustody:
+src/agent_comms/native_custody.py:255:            current = persistent.custody.idle()
+src/agent_comms/native_custody.py:284:    def _shutdown_successor(self) -> NativeCustody:
+src/agent_comms/pi_native_backend.py:50:    from .native_custody import NativeCustody, PiSessionChild
+src/agent_comms/pi_native_backend.py:117:        self.custody: NativeCustody = EmptyNative()
+src/agent_comms/pi_native_backend.py:121:        return self.custody.available
+src/agent_comms/pi_native_backend.py:127:        child = self.custody.reuse(key) if reuse else None
+src/agent_comms/pi_native_backend.py:135:            self.custody = BorrowedNative(child, self.custody)
+src/agent_comms/pi_native_backend.py:138:            self.custody = BorrowedNative(child, EmptyNative())
+src/agent_comms/pi_native_backend.py:152:        self.custody = RetainedNative(child, identity, revision)
+src/agent_comms/pi_native_backend.py:156:        await self._finish_retirement(self.custody.retire())
+src/agent_comms/pi_native_backend.py:158:    async def _finish_retirement(self, retiring: NativeCustody) -> None:
+src/agent_comms/pi_native_backend.py:159:        self.custody = retiring
+src/agent_comms/pi_native_backend.py:163:            self.custody = retiring.settled
+src/agent_comms/pi_native_backend.py:245:        return await self.custody.inspect(self, partial(self.prepare, thread), request)
+tests/guards/test_debt_ratchet.py:586:    base = repo.commit({"names.py": "def old_admit():\n    return (\n        peer\n        .custody\n    )\n"})
+tests/guards/test_debt_ratchet.py:587:    head = repo.commit({"names.py": "def old_admit():\n    return (\n        other\n        .custody\n    )\n"})
+tests/test_backend_native_custody.py:27:            child = owner.persistent.custody.child
+tests/test_backend_native_custody.py:53:            assert isinstance(owner.persistent.custody, RetiringNative)
+tests/test_backend_native_custody.py:54:            assert owner.persistent.custody.child is child
+tests/test_backend_native_custody.py:71:            child = owner.persistent.custody.child
+tests/test_backend_native_custody.py:84:            assert isinstance(owner.persistent.custody, RetiringNative)
+tests/test_backend_native_custody.py:85:            assert owner.persistent.custody.child is child
+tests/test_backend_native_custody.py:100:    child = owner.persistent.custody.child
+tests/test_backend_native_custody.py:103:        owner.persistent.custody = BorrowedNative(child, following)
+tests/test_backend_native_custody.py:126:        retiring = owner.persistent.custody.retire()
+tests/test_backend_native_custody.py:141:        assert isinstance(owner.persistent.custody, EmptyNative)
+tests/test_backend_native_custody.py:143:            assert owner.persistent.custody is following
+tests/test_backend_native_custody.py:155:    previous = owner.persistent.custody.child.proc
+tests/test_backend_native_custody.py:159:    owner.persistent.custody.identity = NativeSessionIdentity(str(uuid4()), str(owner.session))
+tests/test_backend_native_custody.py:175:    previous = owner.persistent.custody.child.proc
+tests/test_backend_native_custody.py:192:    assert len(owner.children) == 2 and owner.persistent.custody.child.proc is not previous
+tests/test_backend_native_custody.py:206:    previous = owner.persistent.custody.child.proc
+tests/test_backend_native_custody.py:222:        assert isinstance(owner.persistent.custody, RetiringNative)
+tests/test_backend_native_custody.py:223:        retained_cleanup = owner.persistent.custody.child._close_job
+tests/test_backend_native_custody.py:229:            assert owner.persistent.custody.child._close_job is retained_cleanup
+tests/test_backend_native_custody.py:260:            child = owner.persistent.custody.child
+tests/test_backend_native_custody.py:271:                    retiring = owner.persistent.custody.retire()
+tests/test_backend_native_custody.py:285:            assert isinstance(owner.persistent.custody, RetiringNative)
+tests/test_stack_goal_standby.py:235:            first_proc = agent.turns.persistent_backends["parent"].custody.idle().child.proc
+tests/test_stack_goal_standby.py:260:                    agent.turns.persistent_backends["parent"].custody.idle().child.proc
+tests/test_backend_native_output.py:62:    assert owner.persistent.available and owner.persistent.custody.child.proc.alive()
+tests/test_backend_native_output.py:139:    retained = owner.persistent.custody.child.proc
+tests/test_backend_native_output.py:140:    assert retained is not None and owner.persistent.custody.child.sensitive_diagnostics
+tests/test_backend_native_lifecycle.py:45:    retained = owner.persistent.custody.child.proc
+tests/test_backend_native_lifecycle.py:53:    assert owner.persistent.custody.child.proc is not retained
+tests/test_backend_native_lifecycle.py:54:    assert owner.persistent.custody.child.proc.alive()
+tests/test_backend_native_lifecycle.py:55:    assert owner.persistent.custody.idle().current
+tests/test_backend_native_lifecycle.py:56:    reopened_child = owner.persistent.custody.child.proc
+tests/test_backend_native_lifecycle.py:63:    assert owner.persistent.custody.child.proc is reopened_child
+tests/test_backend_native_lifecycle.py:198:        assert isinstance(owner.persistent.custody, RetiringNative)
+tests/test_backend_native_lifecycle.py:199:        assert not owner.persistent.custody.child._close_job.done()
+tests/test_backend_native_lifecycle.py:247:            selected_child = native_owner.custody.child.proc
+tests/test_native_fork_first_input.py:147:    retained = native.persistent.custody.idle()
+tests/test_backend_settlement.py:116:        assert persistent.available and persistent.custody.child.proc.returncode is None
+tests/test_turn_runner.py:107:    child = owner.turns.persistent_backends[session].custody.child.proc
+tests/test_turn_runner.py:158:        assert persistent.available and persistent.custody.child.proc.alive()
+tests/native_context_reader_journey.py:78:                prepared_child = owner.turns.persistent_backends[thread.name].custody.idle().child.proc
+tests/native_backend_fixture.py:82:        child = agent.turns.persistent_backends[session_id].custody.child.proc
+tests/native_backend_fixture.py:134:        self.persistent.custody.child.attestation.require_identity()
+tests/native_backend_fixture.py:142:        assert self.persistent.custody.child.proc is child
+tests/native_backend_fixture.py:143:        assert self.persistent.custody.child.reader is not None
+tests/test_stack_persistent_compaction.py:250:            retained = owner.turns.persistent_backends["worker"].custody.idle().child.proc
+tests/test_stack_persistent_compaction.py:255:            assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
+tests/test_stack_persistent_compaction.py:277:            assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
+tests/test_stack_persistent_compaction.py:313:            assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
+tests/test_stack_persistent_compaction.py:322:            resumed = owner.turns.persistent_backends["worker"].custody.idle().child.proc
+tests/test_owner_partial_retirement.py:131:    assert phase.custody is batch.custody
+tests/test_agent_backend.py:384:        assert backend.custody.retained
+tests/test_managed_project_native_latency.py:151:        children = [persistent.custody.idle().child.proc
+tests/test_native_proof_recovery.py:80:        child = owner.persistent.custody.child.proc
+tests/test_native_proof_recovery.py:264:    child = owner.persistent.custody.child
+tests/shared_bus_restart_native.py:861:                with AdmissionContention.decode(arguments.contention_resource).custody(
+tests/test_backend.py:2609:            first_proc = persistent.custody.child.proc
+tests/test_backend.py:2622:            assert persistent.custody.child.proc is first_proc and first_proc is not None
+tests/test_backend.py:2643:            assert persistent.custody.child.proc is not first_proc
+tests/test_backend.py:2645:            third_proc = persistent.custody.child.proc
+tests/test_backend.py:2659:            assert persistent.custody.child.proc is not third_proc
+tests/test_backend.py:2661:            fourth_proc = persistent.custody.child.proc
+tests/test_backend.py:2729:            before_image_proc = persistent.custody.child.proc
+tests/test_backend.py:2744:            assert persistent.custody.child.proc is before_image_proc and before_image_proc is not None
+tests/test_backend.py:2771:            borrowed_proc = persistent.custody.child.proc
+tests/test_native_arguments.py:163:            child = owner.turns.persistent_backends[sid].custody.child
+tests/test_stack_channel_delivery.py:124:                warmup_proc = agent.turns.persistent_backends["worker"].custody.idle().child.proc
+tests/test_stack_channel_delivery.py:169:                    agent.turns.persistent_backends["worker"].custody.idle().child.proc
