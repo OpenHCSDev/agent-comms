@@ -112,10 +112,6 @@ def test_one_selected_turn_answers_one_reply_route() -> None:
         assert (reply.target, reply.body) == ("sender", "One answer for everyone.")
 
 
-@pytest.mark.skipif(
-    not os.environ.get("PI_COMPACTION_TEST_PACKAGE"),
-    reason="Set PI_COMPACTION_TEST_PACKAGE to the immutable native bundle",
-)
 async def test_direct_message_answered_in_plain_text_is_delivered(tmp_path) -> None:
     async with native_backend_fixture(tmp_path) as native:
         await native.author_history()

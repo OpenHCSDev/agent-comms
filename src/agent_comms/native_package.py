@@ -44,6 +44,14 @@ MANIFEST = _resource_root() / "pi-native.sha256"
 OWNER_INSTRUCTIONS = _resource_root() / "APPEND_SYSTEM.md"
 
 
+def pinned_native_package() -> Path:
+    build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
+    package = MANIFEST.parent / f".pi-native-{build}" / "node_modules/@earendil-works/pi-coding-agent"
+    if not package.is_dir():
+        raise NativePackageError(f"Pinned native package directory is missing: {package}")
+    return package
+
+
 def package_tree_digest(root: Path) -> str:
     """Hash sorted path/type/execute-mode/size/content records with bounded reads."""
     if os.name != "posix":

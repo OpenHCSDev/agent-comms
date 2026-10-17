@@ -1,4 +1,5 @@
 """Installed owner IPC/native over original retained history; provider only is controlled."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import functools
@@ -38,7 +39,7 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
     assert source.stat().st_size > 40_000_000
     # The installed candidate must not be an editable/source overlay.
     assert "site-packages" in native_package.__file__
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     extension = package / "agent-comms-extensions/global-project-sync/index.mjs"
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     monkeypatch.setenv("PATH", str(Path(os.sys.executable).parent) + os.pathsep + os.environ["PATH"])

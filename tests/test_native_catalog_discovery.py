@@ -1,4 +1,5 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -46,7 +47,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     native = native_backend
     source = Path(source_name).resolve(strict=True)
     before = hashlib.sha256(source.read_bytes()).hexdigest()
-    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    package = pinned_native_package()
     created = await ForkSessionHelper.run(ForkSessionRequest(
         str(package), str(source), str(native.project),
         directory=str(native.project / "launch-sessions"),
@@ -354,7 +355,7 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
     source = Path(source_name).resolve(strict=True)
     source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
     created = await ForkSessionHelper.run(ForkSessionRequest(
-        os.environ["PI_COMPACTION_TEST_PACKAGE"], str(source), str(native.project),
+        str(pinned_native_package()), str(source), str(native.project),
         directory=str(native.project / "replacement-sessions"),
     ), cwd=native.project)
     events = native.project / "replacement-events.jsonl"

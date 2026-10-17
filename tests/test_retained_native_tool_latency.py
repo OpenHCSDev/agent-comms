@@ -1,4 +1,5 @@
 """Real selected native tools over an isolated retained source; localhost only."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import functools
@@ -24,9 +25,9 @@ from agent_comms.tracked_turn import TrackedTurnSession
 from compaction_loopback import LoopbackProvider
 from test_coordinated_runtime import _root
 
-PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
+PACKAGE = str(pinned_native_package())
 SOURCE = os.environ.get("NATIVE_TOOL_LATENCY_SOURCE")
-pytestmark = pytest.mark.skipif(not PACKAGE or not SOURCE, reason="Pinned native and isolated retained source required")
+pytestmark = pytest.mark.skipif(not SOURCE, reason="Isolated retained source required")
 
 
 @pytest.fixture

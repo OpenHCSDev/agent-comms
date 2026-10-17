@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
-from .native_package import OWNER_INSTRUCTIONS
+from .native_package import MANIFEST, OWNER_INSTRUCTIONS, pinned_native_package
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .field_codec import FieldCodec
 from .jsonl_stream import unique_fields
@@ -436,9 +436,6 @@ class NativePiRpcLaunch:
         name this installation's entrypoint, its pinned CLI, or the source stack
         launcher; execution always uses the verified native package.
         """
-        import hashlib
-
-        from .native_package import MANIFEST
         from .private_nk_entrypoint import PrivateNkLaunch
 
         stack_launcher = MANIFEST.parent / "bin" / "pi-native"
@@ -449,12 +446,7 @@ class NativePiRpcLaunch:
         if route is not None:
             package = route.native_package
         elif executable is not None and executable == stack_launcher.resolve():
-            build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
-            package = (
-                MANIFEST.parent
-                / f".pi-native-{build}"
-                / "node_modules/@earendil-works/pi-coding-agent"
-            )
+            package = pinned_native_package()
         else:
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         allowed = (

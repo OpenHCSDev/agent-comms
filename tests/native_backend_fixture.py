@@ -1,4 +1,5 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -41,7 +42,7 @@ class NativeBackendFixture:
 
     async def author_history(self):
         """The SDK authors saved rows; no provider or acknowledgement is invented."""
-        package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+        package = str(pinned_native_package())
         result = await BoundedRun.run(
             ("node", "--input-type=module", "-e", """
 import {pathToFileURL} from 'node:url';
@@ -182,10 +183,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
 
 @asynccontextmanager
 async def native_backend_fixture(tmp_path):
-    pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
-    if not pin:
-        raise ValueError("Set PI_COMPACTION_TEST_PACKAGE to the immutable native bundle")
-    package = Path(pin).resolve(strict=True)
+    package = pinned_native_package()
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
     project.mkdir(mode=0o700)
     config.mkdir(mode=0o700)

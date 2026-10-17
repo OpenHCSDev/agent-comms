@@ -207,10 +207,6 @@ def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
         assert dict(comms.bus.log.claim_projection()) == {str(resource): again}
 
 
-@pytest.mark.skipif(
-    not os.environ.get("PI_COMPACTION_TEST_PACKAGE"),
-    reason="Set PI_COMPACTION_TEST_PACKAGE to the immutable native bundle",
-)
 async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

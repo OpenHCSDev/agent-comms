@@ -1,4 +1,5 @@
 """A published native reply automatically reaches the original channel sender."""
+from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import hashlib
@@ -44,10 +45,7 @@ tmp_path = private_root_fixture
 async def test_native_channel_reply_automatically_reaches_original_sender(
     tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast
 ):
-    pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
-    if not pin:
-        pytest.skip("Actual immutable native bundle required")
-    package = Path(pin).resolve(strict=True)
+    package = pinned_native_package()
     requests = []
     failures = []
     request_times = []
@@ -523,9 +521,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.native_pi import NativePiUnavailable
 
-    pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
-    if not pin:
-        pytest.skip("Actual immutable native bundle required")
+    pin = pinned_native_package()
     comms = Comms(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     before = comms.registry.snapshot()

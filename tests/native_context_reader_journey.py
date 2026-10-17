@@ -1,4 +1,5 @@
 """Original acquired SDK context reader through the installed owner RPC."""
+from agent_comms.native_package import pinned_native_package
 
 import argparse
 import asyncio
@@ -31,7 +32,7 @@ async def read_original_context(
             seed_root = fixture.root.parent / 'recorded-sdk-source'
             seed = await asyncio.create_subprocess_exec(
                 'node', str(Path(__file__).with_name('native_turn_context_contract.mjs')),
-                os.environ['PI_COMPACTION_TEST_PACKAGE'], str(seed_root), '--recorded-readers',
+                str(pinned_native_package()), str(seed_root), '--recorded-readers',
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
             output, error = await seed.communicate()

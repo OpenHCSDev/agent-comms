@@ -1,4 +1,5 @@
 """Channel membership and notifications have one canonical bus authority."""
+from agent_comms.native_package import pinned_native_package
 
 from dataclasses import replace
 from contextlib import AsyncExitStack
@@ -82,17 +83,13 @@ def test_awareness_refuses_changed_checkpoint_without_rebuild(tmp_path):  # noqa
 
 
 async def test_natural_owned_turn_prepares_observer_pointer_without_native_start(tmp_path):  # noqa: F811
-    import os
     from pathlib import Path
 
-    import pytest
 
     from agent_comms.acp import CommsAgent
     from agent_comms.owned_turn import OwnedTurn
 
-    package = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
-    if not package:
-        pytest.skip("Prepared native package required; no model request")
+    package = str(pinned_native_package())
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     agent = CommsAgent(
         comms,
