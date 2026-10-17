@@ -15,7 +15,6 @@ import logging
 import os
 import re
 import socket
-import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
@@ -297,13 +296,10 @@ def verify_sent_full_input(
     refusal of the call and not as an unknown outcome.
     """
     try:
-        with Coordination(str(store.session.path)) as scoped, scoped.session.read():
+        with CoordinationReadUnavailable.checking(), Coordination(str(store.session.path)) as scoped, scoped.session.read():
             _require_sent_full_input(scoped, admission, owner_name, input_id)
-    except sqlite3.OperationalError as error:
-        try:
-            CoordinationReadUnavailable.raise_from(error)
-        except CoordinationReadUnavailable as unavailable:
-            raise CoordinationBusy() from unavailable
+    except CoordinationReadUnavailable as unavailable:
+        raise CoordinationBusy() from unavailable
 
 
 def _require_sent_full_input(
