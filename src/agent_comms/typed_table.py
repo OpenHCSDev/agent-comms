@@ -380,7 +380,7 @@ class TypedRow:
     @classmethod
     def _select_list(cls, table: type[TypedTable]) -> str:
         return ", ".join(
-            (table._sql(item.column.generated) if item.column.generated is not None
+            (table._sql(item.column.generated) if not item.column.writable
              else table._column_list((item.name,))) + f" AS {_identifier(item.wire_name)}"
             for item in cls._fields())
 
