@@ -141,7 +141,7 @@ def test_a_read_tool_changes_no_store_for_any_caller(comms, tmp_path, monkeypatc
             tool.invoke(comms, arguments, caller=caller)
             continue
         before = stores(comms)
-        for reader in (caller, NoThreadCaller("claude-ai")):
+        for reader in (caller, NoThreadCaller()):
             tool.invoke(comms, arguments, caller=reader)
             assert stores(comms) == before, (tool.declared_name, reader)
         read.add(tool)

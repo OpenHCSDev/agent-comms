@@ -32,16 +32,15 @@ class StorageRoots:
 @dataclass(frozen=True)
 class StorageRule:
     floor_gib: float = 5.0
-    unit_cap_gib: float = 3.0
     max_checkouts: int = 2
     volume: StoragePath = Path.home()
     scratch_base: StoragePath = Path.home() / '.cache' / 'agent-scratch'
     checkout_base: StoragePath = Path.home() / 'wt'
 
     def __post_init__(self):
-        if not all(math.isfinite(n) for n in (self.floor_gib, self.unit_cap_gib)):
+        if not all(math.isfinite(n) for n in (self.floor_gib,)):
             raise ValueError("Storage limits must be finite.")
-        if min(self.floor_gib, self.unit_cap_gib, self.max_checkouts) < 0:
+        if min(self.floor_gib, self.max_checkouts) < 0:
             raise ValueError("Storage limits cannot be negative.")
 
     @classmethod
@@ -94,13 +93,6 @@ class StorageRule:
         checkouts = tuple(dict.fromkeys((*self.checkouts_of(thread), *proposed)))
         if len(checkouts) > self.max_checkouts + 1:
             self.deny(f'at most {self.max_checkouts} checkouts besides the home checkout')
-        paths = tuple(dict.fromkeys(path for path in (*checkouts, thread.storage_roots.scratch)
-                                    if path.exists()))
-        if paths:
-            result = subprocess.run(('du', '-sbc', '--', *(str(path) for path in paths)),
-                                    capture_output=True, text=True, check=True, timeout=30)
-            if int(result.stdout.splitlines()[-1].split()[0]) > self.unit_cap_gib * 2**30:
-                self.deny(f'checkout and scratch usage exceeds {self.unit_cap_gib:g} GiB')
 
     def require_allocation(self, thread: Thread, *proposed: Path):
         if self.free_gib() < self.floor_gib:
@@ -119,7 +111,7 @@ class StorageRule:
                 self.deny(f'{checkout} is not a checkout of {thread.name}')
 
     def render(self, roots):
-        return (f'StorageRule: scratch {roots.scratch}; {self.unit_cap_gib:g} GiB combined cap; '
+        return (f'StorageRule: scratch {roots.scratch}; '
                 f'{self.max_checkouts} extra checkouts; allocation floor {self.floor_gib:g} GiB. '
                 'No clones, virtualenv creation, uv sync or .artifacts writes.')
 

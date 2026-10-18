@@ -275,6 +275,17 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     for path, line in re.findall(r'(?<![\w.])(/\S+?\.\w+):(\d+)', body):
         if not os.path.exists(path) or int(line) > sum(1 for _ in open(path, errors='replace')):
             problems.append(f'cited {path}:{line} does not exist; read the code before citing it')
+    # A module deleted here can still be imported by another repo:
+    # P12 deleted acp_ingress.py, which Toad imports.
+    deleted = {stem for edit in edits
+               for stem in re.findall(r'(?i)\bdelete\s+`?(?:\S*/)?(\w+)\.py\b', edit)}
+    if check and deleted and (unread := importers(deleted, check)):
+        problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
+                        'the check must also count their `from agent_comms` imports')
+    if any(re.search(r'(?<![\w/])tools/', edit) for edit in edits) and not all(
+            said in body for said in ('--root tools', '--root src')):
+        problems.append('the order changes tools/: say "ratchet with --root tools and with '
+                        '--root src, each as its own command"')
     # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
     holders = sorted({listed[pid].holder for pid in group if pid in listed} - {unit, None})
     replaces = not new and all(pid in listed and listed[pid].holder == unit for pid in group)
@@ -299,6 +310,9 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     if not mechanical and fired:
         sys.exit(f'Refused: {unit} has {ProblemGoalOrder.StrikeLimit} strikes on {fired}. '
                  f'Reassign them; only --mechanical orders on them reach {unit}.')
+    # A miss already struck on the order this replaces is one miss:
+    # the send-back records no second strike.
+    struck_already = replaces and listed[group[0]].struck_on_order(unit)
     at = time.time()
     try:
         order = PendingProblemOrder(
@@ -319,11 +333,25 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     for other, text in taken.items():
         post([other], text)
     print(order.id)
-    if replaces and not clean:
+    if replaces and not clean and struck_already:
+        print(f'{unit} already struck on this order of {group[0]}; '
+              'the send-back counts that one miss once')
+    elif replaces and not clean:
         # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
         # Done here so the commander cannot send work back and forget either.
         verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
         strike(unit, f'sent back on {group[0]}: {verdict}')
+
+
+def importers(modules: set[str], check: OrderCheck) -> list[str]:
+    """The other configured repos whose `from agent_comms` imports name a module, unless the
+    check reads them."""
+    pattern = rf'^\s*(from|import) agent_comms\b.*\b({"|".join(sorted(modules))})\b'
+    return [str(repo.checkout) for repo in CONFIG.repos
+            if repo.checkout != Path(check.directory).resolve()
+            and str(repo.checkout) not in check.command
+            and subprocess.run(['grep', '-rqE', '--include=*.py', pattern,
+                                str(repo.checkout / repo.source)]).returncode == 0]
 
 
 def correct_check(pid: str, line: str, why: str) -> None:
