@@ -102,12 +102,10 @@ async def run(stage, package, models, ui, menu_contention=False):
     project = stage / 'project'
     project.mkdir()
     service = Comms(stage / 'wire')
-    root_id = service.messaging.initialize_private_initial_protocol()
-    service.owners.pin_private_nk_launch(service.root, root_id, package)
+    service.messaging.initialize_private_initial_protocol()
     environment = dict(os.environ)
     environment.update(
-        AGENT_COMMS_ROOT=str(service.root), AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
-        AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
+        AGENT_COMMS_ROOT=str(service.root),
     )
     for key in ('PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK',
                 'AGENT_COMMS_STARTUP_INPUT_KEY', 'AGENT_COMMS_AGENT_MODELS'):

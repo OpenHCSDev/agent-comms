@@ -1,5 +1,4 @@
 """Physical native parent -> normal fork -> first ACP send, without replay."""
-from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -182,10 +181,6 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     comms.registry.declare(
         comms.registry.new_thread('physical-parent', frozenset(), str(native.project), session_file=str(native.session), model='response-local/fixture', thinking_level='off')
     )
-    package = pinned_native_package()
-    root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     attachment = CommsClient(
         comms,
         runtime_enabled=True,
