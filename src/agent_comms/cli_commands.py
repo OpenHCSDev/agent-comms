@@ -1707,7 +1707,7 @@ class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
 
     @classmethod
     def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
-        return (cls(name=resolved.channel.view.name),) if resolved.channel.read_only else ()
+        return resolved.channel.delete_view_bindings(cls)
 
     def confirmation(self):
         return f"Delete saved view #{self.name}? Thread tags and messages are preserved."

@@ -15,7 +15,7 @@ from .channel_targets import ChannelTarget, Tag
 from .channels import Channel, SavedView
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
-from .messages import InfoKind, MembershipChange, Message
+from .messages import InfoKind, Message
 from .registration import Registration
 from .store_files import _store_lock
 from .threads import Thread
@@ -182,11 +182,7 @@ class ChannelManagement:
                 **self.catalog.read().views(self.registry.all_threads()),
             }
             for channel in channels.values():
-                if channel.read_only:
-                    continue
-                before, after = channel.matches(thread.tags), channel.matches(updated.tags)
-                if before != after:
-                    change = MembershipChange.JOINED if after else MembershipChange.LEFT
+                for change in channel.membership_changes(thread.tags, updated.tags):
                     self.bus.publisher.publish_ordinary(
                         Message(
                             thread.name,

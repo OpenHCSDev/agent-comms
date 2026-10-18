@@ -12,15 +12,12 @@ from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .messages import MembershipChange
 
 
 @dataclass(frozen=True, slots=True)
-class Channel:
-    """A captured channel presentation, including an optional saved projection.
-
-    Only exact tags and routable builtins admit publication. SavedView owns
-    the predicate and historical target provenance of a read-only projection.
-    """
+class Channel(DeclaredFamily, affix="Channel"):
+    """A captured channel presentation with behavior supplied by its declaration."""
 
     name: str
     tags: frozenset[str] = frozenset()
@@ -30,14 +27,12 @@ class Channel:
     parent: str | None = None
     archived: bool = False
     any_mode: bool = False
-    view: SavedView | None = None
 
     def __post_init__(self) -> None:
         name = ChannelTarget.normalize_name(self.name)
         object.__setattr__(self, "name", name)
         if self.parent is not None:
-            parent = ChannelTarget.normalize_name(self.parent)
-            object.__setattr__(self, "parent", parent)
+            object.__setattr__(self, "parent", ChannelTarget.normalize_name(self.parent))
         if not isinstance(self.order, type) or self.order not in ThreadSort.members_with(ThreadSort):
             raise ValueError("Channel ordering must be a declared ThreadSort.")
         if not isinstance(self.archived, bool) or not isinstance(self.any_mode, bool):
@@ -49,54 +44,53 @@ class Channel:
             ChannelTarget(self.parent).validate()
         if self.parent == name:
             raise RelationViolationError("A channel cannot be its own parent.")
-        if self.builtin is not None:
-            if self.tags:
-                raise ValueError("Built-in channels cannot have tag filters.")
-            if self.parent is not None or self.archived:
-                raise ValueError("Built-in channels cannot be grouped or archived.")
-        elif self.read_only:
-            if name != f"#{self.view.name}" or self.tags != self.view.predicate.tags:
-                raise ValueError("Saved projection must retain its declaration identity.")
-        elif self.tags != frozenset({name.removeprefix("#")}):
-            raise ValueError("A routable channel must be its exact tag.")
+        self.validate_declaration()
 
-    def matches(self, tags: frozenset[str]) -> bool:
-        if self.read_only:
-            return self.view.predicate.matches(tags)
-        builtin = self.builtin
-        return builtin.matches(tags) if builtin is not None else bool(self.tags & tags)
+    @abstractmethod
+    def validate_declaration(self) -> None: ...
 
-    def can_set_archived(self, archived: bool) -> bool:
-        """Only nonbuiltin channels admit a changed archive preference."""
-        return self.builtin is None and self.archived != archived
+    @abstractmethod
+    def matches(self, tags: frozenset[str]) -> bool: ...
 
     @property
-    def builtin(self) -> BuiltinChannel | None:
-        return BuiltinChannel.lookup(self.name)
+    @abstractmethod
+    def exact(self) -> bool: ...
 
     @property
-    def aggregate(self) -> bool:
-        builtin = self.builtin
-        return builtin is not None and builtin.aggregate
+    @abstractmethod
+    def aggregate(self) -> bool: ...
 
     @property
-    def read_only(self) -> bool:
-        return self.view is not None
+    @abstractmethod
+    def read_only(self) -> bool: ...
 
-    def require_routable(self) -> None:
-        if self.aggregate or self.read_only:
-            raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
+    @abstractmethod
+    def can_set_archived(self, archived: bool) -> bool: ...
 
-    @property
-    def exact(self) -> bool:
-        return not self.read_only and self.builtin is None
+    @abstractmethod
+    def require_routable(self) -> None: ...
 
     @property
-    def history_targets(self) -> frozenset[str] | None:
-        if self.read_only:
-            return self.view.history_targets
-        builtin = self.builtin
-        return builtin.history_targets if builtin is not None else frozenset({self.name})
+    @abstractmethod
+    def history_targets(self) -> frozenset[str] | None: ...
+
+    @abstractmethod
+    def require_metadata(self) -> None: ...
+
+    @abstractmethod
+    def require_parent(self) -> None: ...
+
+    @abstractmethod
+    def restore_preferences(self, existing: bool) -> bool: ...
+
+    @abstractmethod
+    def sort_key(self, ordering, view) -> tuple: ...
+
+    @abstractmethod
+    def delete_view_bindings(self, command) -> tuple: ...
+
+    @abstractmethod
+    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]: ...
 
     def pending_count(self, counts: dict[str, int]) -> int:
         targets = self.history_targets
@@ -104,6 +98,152 @@ class Channel:
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
+
+
+class GroupedChannel:
+    """Tag and saved-view declarations share editable presentation metadata."""
+
+    __slots__ = ()
+
+    def can_set_archived(self, archived: bool) -> bool:
+        return self.archived != archived
+
+    def require_metadata(self) -> None:
+        pass
+
+    def require_parent(self) -> None:
+        pass
+
+    def restore_preferences(self, existing: bool) -> bool:
+        return True
+
+    def sort_key(self, ordering, view) -> tuple:
+        return not self.pinned, len(BuiltinChannel), *ordering.sort_fields(view)
+
+    @property
+    def aggregate(self) -> bool:
+        return False
+
+
+class MembershipChannel:
+    """Actual membership channels publish joins/leaves, never saved projections."""
+
+    __slots__ = ()
+
+    @property
+    def read_only(self) -> bool:
+        return False
+
+    def delete_view_bindings(self, command) -> tuple:
+        return ()
+
+    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
+        previous, current = self.matches(before), self.matches(after)
+        if previous == current:
+            return ()
+        return (MembershipChange.JOINED if current else MembershipChange.LEFT,)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BuiltinChannelView(MembershipChannel, Channel):
+    builtin: BuiltinChannel
+
+    def validate_declaration(self) -> None:
+        if self.name != self.builtin.value:
+            raise ValueError("Built-in channel must retain its declaration identity.")
+        if self.tags:
+            raise ValueError("Built-in channels cannot have tag filters.")
+        if self.parent is not None or self.archived:
+            raise ValueError("Built-in channels cannot be grouped or archived.")
+
+    def matches(self, tags: frozenset[str]) -> bool:
+        return self.builtin.matches(tags)
+
+    @property
+    def exact(self) -> bool:
+        return False
+
+    @property
+    def aggregate(self) -> bool:
+        return self.builtin.aggregate
+
+    def can_set_archived(self, archived: bool) -> bool:
+        return False
+
+    def require_routable(self) -> None:
+        if self.aggregate:
+            raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
+
+    @property
+    def history_targets(self) -> frozenset[str] | None:
+        return self.builtin.history_targets
+
+    def require_metadata(self) -> None:
+        raise ValueError("Built-in channels cannot be grouped or archived.")
+
+    def require_parent(self) -> None:
+        raise ValueError("Built-in channels cannot be presentation parents.")
+
+    def restore_preferences(self, existing: bool) -> bool:
+        return not existing
+
+    def sort_key(self, ordering, view) -> tuple:
+        return not self.pinned, tuple(BuiltinChannel).index(self.builtin), 0, 0, self.name
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SavedViewChannel(GroupedChannel, Channel):
+    view: SavedView
+
+    def validate_declaration(self) -> None:
+        if self.name != f"#{self.view.name}" or self.tags != self.view.predicate.tags:
+            raise ValueError("Saved projection must retain its declaration identity.")
+
+    def matches(self, tags: frozenset[str]) -> bool:
+        return self.view.predicate.matches(tags)
+
+    @property
+    def exact(self) -> bool:
+        return False
+
+    @property
+    def read_only(self) -> bool:
+        return True
+
+    def require_routable(self) -> None:
+        raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
+
+    @property
+    def history_targets(self) -> frozenset[str]:
+        return self.view.history_targets
+
+    def delete_view_bindings(self, command) -> tuple:
+        return (command(name=self.view.name),)
+
+    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
+        return ()
+
+
+@dataclass(frozen=True, slots=True)
+class TagChannel(GroupedChannel, MembershipChannel, Channel):
+    def validate_declaration(self) -> None:
+        Tag.validate(self.name.removeprefix("#"))
+        if self.tags != frozenset({self.name.removeprefix("#")}):
+            raise ValueError("A routable channel must be its exact tag.")
+
+    def matches(self, tags: frozenset[str]) -> bool:
+        return bool(self.tags & tags)
+
+    @property
+    def exact(self) -> bool:
+        return True
+
+    def require_routable(self) -> None:
+        pass
+
+    @property
+    def history_targets(self) -> frozenset[str]:
+        return frozenset({self.name})
 
 
 class ViewKind(StrEnum):
