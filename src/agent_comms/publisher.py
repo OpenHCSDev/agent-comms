@@ -53,22 +53,16 @@ from .wire_metadata import WireMetadata
 
 
 class Publisher:
-    def __init__(
-        self,
-        log: WireLog,
-        registry: Registration,
-        channels: ChannelCatalog,
-        *,
-        private_response_writes: bool = False,
-        private_initial_writes: bool = False,
-        private_claim_writes: bool = False,
-    ):
+    """Reads and validates publications; each private write is a capability below."""
+
+    def __init__(self, log: WireLog, registry: Registration, channels: ChannelCatalog):
         self.log = log
         self._registry = registry
         self._channels = channels
-        self._private_response_writes = private_response_writes
-        self._private_initial_writes = private_initial_writes
-        self._private_claim_writes = private_claim_writes
+
+    @classmethod
+    def prepare_root(cls, root: Path) -> None:
+        """A publisher that only reads leaves its root as it finds it."""
 
     def _validate_publish_request(
         self, message: Message, *, registry_snapshot: RegistrySnapshot | None = None,
@@ -119,68 +113,17 @@ class Publisher:
             mentions=ThreadMention.find(message.body, resolve_mention),
         )
 
-    def publish_ordinary(self, message: Message, *, origin: InitialOrigin) -> Message:
-        """Publish through the canonical audience/decision writer.
 
-        A truly fresh root is initialized once under the bus lock. Existing
-        unmarked data requires the explicit archival cutover; a send never
-        rewrites history or falls back to an uncoordinated append.
-        """
-        from .active_route import guard_original_root_write
+class PrivateWrites(Publisher):
+    """A publisher that makes some private write; its root exists before it writes."""
 
-        with guard_original_root_write(self.log.path.parent), self.log.locked() as bus_lock:
-            if not self.log.read_metadata_unlocked().private:
-                # Refuse invalid input before creating a protocol on a fresh
-                # root. Established roots validate against the same guarded
-                # snapshot that selects the audience below.
-                self._validate_publish_request(message)
-                self._initialize_private_protocol_unlocked()
-            return self.publish_initial_cohort(message, origin=origin, _bus_lock=bus_lock)
+    @classmethod
+    def prepare_root(cls, root: Path) -> None:
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
 
-    def initialize_private_protocol(self) -> str:
-        """Marker issuer for a NEW, isolated bus root only.
 
-        Existing unmarked logs require an explicit offline rewrite. This issuer
-        creates a protocol marker only for an empty root.
-        """
-        if self._private_initial_writes is not True:
-            raise RelationViolationError("Private initial publication is disabled.")
-        self.log.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.log.locked():
-            return self._initialize_private_protocol_unlocked()
-
-    def _initialize_private_protocol_unlocked(self) -> str:
-        if self._private_initial_writes is not True:
-            raise RelationViolationError("Private initial publication is disabled.")
-        self.log.require_fresh_private_root_unlocked()
-        from agent_comms.coordinator import Coordination
-
-        # The public marker must never advertise a root whose runtime cannot wake.
-        with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
-            store.install_private_runtime()
-        root_id = uuid.uuid4().hex
-        from .private_bus_checkpoint import install_private_bus_checkpoint
-        from .private_registry_guard import PrivateRegistryGuard
-
-        # Total order: caller's wire lock, bus lock, registry lock. The
-        # durable PENDING guard precedes marker visibility; a failed
-        # marker/directory fsync cannot leave a usable registry witness.
-        if self._registry.store.path.parent != self.log.path.parent:
-            raise RelationViolationError("Private registry must share the bus root")
-        with _store_lock(self._registry.store.path):
-            guard = PrivateRegistryGuard(self._registry.store.path, root_id)
-            guard.create_pending()
-            self.log.write_metadata_unlocked(
-                WireMetadata(
-                    last_seq=0,
-                    writer_protocol_version=1,
-                    wire_root_id=root_id,
-                    claim_envelopes_version=1,
-                )
-            )
-            install_private_bus_checkpoint(self.log, _bus_locked=True)
-            guard.commit_initial()
-            return root_id
+class ClaimWrites(PrivateWrites):
+    """Publishes claim envelopes."""
 
     def publish_claim_envelope(
         self,
@@ -203,8 +146,6 @@ class Publisher:
         """
         from .audience_manifest import MAX_WIRE_SEQ
 
-        if not self._private_claim_writes:
-            raise RelationViolationError("Claim envelope publication is disabled.")
         if message.claim_transition is not None or (not claims and not releases):
             raise RelationViolationError("A claim send needs exactly one fresh transition.")
         if (
@@ -270,6 +211,69 @@ class Publisher:
                 ) from error
             return stored
 
+
+class InitialWrites(PrivateWrites):
+    """Publishes ordinary sends and initial cohorts, and issues a fresh root's protocol."""
+
+    def publish_ordinary(self, message: Message, *, origin: InitialOrigin) -> Message:
+        """Publish through the canonical audience/decision writer.
+
+        A truly fresh root is initialized once under the bus lock. Existing
+        unmarked data requires the explicit archival cutover; a send never
+        rewrites history or falls back to an uncoordinated append.
+        """
+        from .active_route import guard_original_root_write
+
+        with guard_original_root_write(self.log.path.parent), self.log.locked() as bus_lock:
+            if not self.log.read_metadata_unlocked().private:
+                # Refuse invalid input before creating a protocol on a fresh
+                # root. Established roots validate against the same guarded
+                # snapshot that selects the audience below.
+                self._validate_publish_request(message)
+                self._initialize_private_protocol_unlocked()
+            return self.publish_initial_cohort(message, origin=origin, _bus_lock=bus_lock)
+
+    def initialize_private_protocol(self) -> str:
+        """Marker issuer for a NEW, isolated bus root only.
+
+        Existing unmarked logs require an explicit offline rewrite. This issuer
+        creates a protocol marker only for an empty root.
+        """
+        self.log.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.log.locked():
+            return self._initialize_private_protocol_unlocked()
+
+    def _initialize_private_protocol_unlocked(self) -> str:
+        self.log.require_fresh_private_root_unlocked()
+        from agent_comms.coordinator import Coordination
+
+        # The public marker must never advertise a root whose runtime cannot wake.
+        with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
+            store.install_private_runtime()
+        root_id = uuid.uuid4().hex
+        from .private_bus_checkpoint import install_private_bus_checkpoint
+        from .private_registry_guard import PrivateRegistryGuard
+
+        # Total order: caller's wire lock, bus lock, registry lock. The
+        # durable PENDING guard precedes marker visibility; a failed
+        # marker/directory fsync cannot leave a usable registry witness.
+        if self._registry.store.path.parent != self.log.path.parent:
+            raise RelationViolationError("Private registry must share the bus root")
+        with _store_lock(self._registry.store.path):
+            guard = PrivateRegistryGuard(self._registry.store.path, root_id)
+            guard.create_pending()
+            self.log.write_metadata_unlocked(
+                WireMetadata(
+                    last_seq=0,
+                    writer_protocol_version=1,
+                    wire_root_id=root_id,
+                    claim_envelopes_version=1,
+                )
+            )
+            install_private_bus_checkpoint(self.log, _bus_locked=True)
+            guard.commit_initial()
+            return root_id
+
     def publish_initial_cohort(
         self,
         message: Message,
@@ -286,8 +290,6 @@ class Publisher:
         from .audience_manifest import MAX_WIRE_SEQ, FrozenRecipient, freeze_audience
         from .wake import ControlClassification, resolve_wake_cohort
 
-        if self._private_initial_writes is not True:
-            raise RelationViolationError("Private initial publication is disabled.")
         if message.claim_transition is not None:
             raise RelationViolationError("An initial cohort cannot carry resource claims.")
         classification = ControlClassification(control)
@@ -403,6 +405,10 @@ class Publisher:
             origin.append(self.log, metadata, row, stored)
             return stored
 
+
+class ResponseWrites(PrivateWrites):
+    """Publishes keyed responses."""
+
     def _publish_keyed_response_unlocked(
         self,
         intent: PublicationIntents,
@@ -414,8 +420,6 @@ class Publisher:
 
         from .audience_manifest import MAX_WIRE_SEQ
 
-        if self._private_response_writes is not True:
-            raise RelationViolationError("Private response publication is disabled.")
         matched, previous_sequence, metadata = self.log.keyed_publication_unlocked(intent)
         if matched is not None:
             return matched
@@ -448,3 +452,11 @@ class Publisher:
         CommittedDelivery.from_wire(row, metadata.root_id)
         self.log.append_private_unlocked(metadata, row)
         return stored
+
+
+class OwnerPublisher(InitialWrites, ClaimWrites):
+    """An owner's bus: ordinary and initial sends, protocol issue and claims."""
+
+
+class ParticipantPublisher(ResponseWrites, ClaimWrites):
+    """A selected participant's bus: its keyed responses and its claims."""

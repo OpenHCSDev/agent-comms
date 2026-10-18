@@ -15,7 +15,7 @@ def activate_empty_source(agent):
     """Use the real issuer on an empty test bus; never migrate existing data."""
     root = agent._comms.root
     root.chmod(0o700)
-    issuer = Comms(root, private_initial_writes=True)
+    issuer = Comms(root)
     with issuer.bus.log.locked():
         metadata = issuer.bus.log.read_metadata_unlocked()
     if not metadata.private:

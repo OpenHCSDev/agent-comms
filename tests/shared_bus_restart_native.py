@@ -73,7 +73,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
             source_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     if not continue_existing:
         (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
-    service = Comms(stage/'wire', private_initial_writes=True)
+    service = Comms(stage/'wire')
     if continue_existing:
         with service.bus.log.locked():
             root_id = service.bus.log.private_marker_unlocked().root_id
@@ -787,7 +787,7 @@ async def run(arguments):
         'type': 'api_key', 'key': 'local-only'}}))
     (config/'settings.json').write_text(json.dumps({'compaction':{'enabled':False},
         'retry':{'enabled':False,'maxRetries':0,'provider':{'maxRetries':0}}}))
-    service = Comms(stage/'wire', private_initial_writes=True)
+    service = Comms(stage/'wire')
     root_id = service.messaging.initialize_private_initial_protocol()
     env = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),

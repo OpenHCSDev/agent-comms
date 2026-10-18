@@ -130,7 +130,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
 
     # Real registry, private bus/cohort, slot acquisition and publication; only
     # the native model is fake. A different input must run, never the old one.
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     comms.registry.register(
         replace(
             comms.registry.require("beta"), process_identity=ProcessIdentity.capture(os.getpid())

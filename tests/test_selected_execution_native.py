@@ -85,9 +85,9 @@ async def test_native_full_four_tools_publish_and_release(
     if entrypoint := os.environ.get('AC_HEADLESS_ENTRYPOINT'):
         assert not selected_write
         inspection = (
-            'from pathlib import Path; from agent_comms.comms import Comms; '
+            'from pathlib import Path; from agent_comms.comms import Comms; from agent_comms.publisher import Publisher; '
             'from agent_comms.turn_phase import ToolRunningPhase; '
-            f'c=Comms(Path({str(root)!r}), private_initial_writes=False, private_claim_writes=False); '
+            f'c=Comms(Path({str(root)!r}), Publisher); '
             'assert isinstance(c.registry.require("beta").turn_state.phase, ToolRunningPhase); '
             'print("CANONICAL_TOOL_RUNNING")'
         )

@@ -11,6 +11,9 @@ import pytest
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
+from agent_comms.message_bus import MessageBus
+from agent_comms.publisher import Publisher, ResponseWrites
+from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
@@ -32,6 +35,16 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "PI_WORKTREE",
 })
 
+
+
+def reader(root: Path) -> Comms:
+    """A Comms over an existing wire that makes no private write."""
+    return Comms(root, Publisher)
+
+
+def responder(root: Path, registry: Registration) -> MessageBus[ResponseWrites]:
+    """The bus a selected owner publishes its keyed responses through."""
+    return MessageBus(root / "bus.jsonl", registry, ResponseWrites)
 
 
 def publish_initial(comms, sender, target, body, type=InfoKind, *, role=ConversationRole()):
@@ -98,7 +111,7 @@ def private_comms(private_directory):
     """
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     comms.messaging.initialize_private_initial_protocol()
     return comms
 

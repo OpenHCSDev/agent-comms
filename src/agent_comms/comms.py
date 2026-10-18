@@ -15,6 +15,7 @@ from .history_views import HistoryViews
 from .message_bus import MessageBus
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
+from .publisher import OwnerPublisher, Publisher
 from .registration import Registration
 from .relationships import ThreadRelationships
 from .thread_management import ThreadManagement
@@ -24,19 +25,17 @@ from .transcripts import Transcripts
 
 class Comms:
     def __init__(
-        self, root: CommsRoute | Path, *, private_initial_writes: bool = True,
-        private_claim_writes: bool = True, projection: type[OpenedRouteCounts] = OpenedRouteCounts,
+        self, root: CommsRoute | Path, publisher: type[Publisher] = OwnerPublisher, *,
+        projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ) -> None:
         self.route = resolve_comms_route(root)
-        if private_initial_writes or private_claim_writes:
-            self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        publisher.prepare_root(self.root)
         self._wire_lock_path = self.root / "wire"
         self.registry = Registration(self.root / "registry.json")
         self.bus = MessageBus(
             self.root / "bus.jsonl",
             self.registry,
-            private_initial_writes=private_initial_writes,
-            private_claim_writes=private_claim_writes,
+            publisher,
             projection=projection,
         )
         self.messaging = Messaging(self.root, self.registry, self.bus)
