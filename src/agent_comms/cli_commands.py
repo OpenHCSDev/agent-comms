@@ -18,7 +18,7 @@ import types
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import aclosing
-from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
+from dataclasses import MISSING, Field, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
@@ -51,15 +51,12 @@ from .exporting import (
     MaxBytesLimit,
     RecentLimit,
     SelectableWireExportFormat,
-    WireExportProvenance,
 )
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportLimits, ThreadImported
 from .historical_views import HistoryCursor
-from .history_views import ThreadPoll
-from .presentation import ThreadRecord
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .shared_ledger import LedgerDocument
 from .tool_caller import ToolCaller
@@ -71,7 +68,7 @@ from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersio
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
 from .native_settings import NativeThreadDefaults
-from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField
+from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
@@ -636,7 +633,8 @@ class InstallResult(CliResult):
     def encoded(self) -> object:
         # Each harness's installation sits beside the config path on the wire.
         return {"config": self.config,
-                **{name: FieldCodec.encode(installed) for name, installed in self.harnesses.items()}}
+                **{name: FieldCodec.encode(installed)
+                   for name, installed in self.harnesses.items()}}
 
 
 @dataclass(frozen=True)
@@ -1013,7 +1011,6 @@ class UserSendCliCommand(CliCommand, declared_name="user-send"):
     worktree: str = option("--worktree", default_factory=os.getcwd)
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .field_codec import FieldCodec
 
         message = ctx.messaging.send_user_message(self.target, self.body, worktree=self.worktree)
         return UserMessageSentResult(message.reference)
@@ -1028,7 +1025,6 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
     service_tier: ServiceTier | None = option("--service-tier", default=None)
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
 
         thread = ctx.registry.require(self.name)
@@ -1067,7 +1063,6 @@ class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
         return ctx.messaging.pin_user_constraint(self.thread, source, worktree=self.worktree)
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .field_codec import FieldCodec
 
         source = self.original_source(ctx)
         pin = self.pin_original(ctx, source)
@@ -1141,7 +1136,6 @@ class SupersedeConstraintCliCommand(CliCommand, declared_name="supersede-constra
     worktree: str = option("--worktree", default_factory=os.getcwd)
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .field_codec import FieldCodec
         from .task_sources import CorrectionTaskChange, UserTaskSupersession
 
         message = ctx.messaging.send_user_message(self.thread, self.body, worktree=self.worktree,
@@ -1157,7 +1151,6 @@ class DropConstraintCliCommand(CliCommand, declared_name="drop-constraint"):
     worktree: str = option("--worktree", default_factory=os.getcwd)
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .field_codec import FieldCodec
         from .task_sources import CorrectionTaskChange, UserTaskDrop
 
         message = ctx.messaging.send_user_message(self.thread,
