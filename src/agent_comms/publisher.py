@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import uuid
 from collections.abc import Sequence
 from contextlib import ExitStack
 from dataclasses import replace
@@ -38,7 +37,7 @@ from .errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, Id128Text
 from .mentions import ThreadMention
 from .messages import Message
 from .private_bus_checkpoint import (
@@ -211,7 +210,7 @@ class ClaimWrites(PrivateWrites):
             transition = ClaimTransition(
                 stored.sender, owner_incarnation, stored.seq, stored.message_id,
                 requested, tuple(release_records),
-                uuid.uuid4().hex if requested else None, claim,
+                Id128Text.mint() if requested else None, claim,
             )
             source.prepare_claim(transition)  # pre-append conflict is synchronous
         stored = replace(stored, claim_transition=transition)
@@ -260,7 +259,7 @@ class InitialWrites(PrivateWrites):
         # The public marker must never advertise a root whose runtime cannot wake.
         with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
             store.install_private_runtime()
-        root_id = uuid.uuid4().hex
+        root_id = Id128Text.mint()
 
         # Total order: caller's wire lock, bus lock, registry lock. The
         # durable PENDING guard precedes marker visibility; a failed

@@ -13,9 +13,7 @@ from dataclasses import dataclass, field
 from typing import Annotated, TYPE_CHECKING
 
 from .bus_source_page import CoveragePage
-from .bus_publication import StableLookupText
-from .field_codec import FieldCodec
-from .wire_metadata import WireRootIdText
+from .field_codec import FieldCodec, Id128Text
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
@@ -93,8 +91,8 @@ class SourceCoverage:
     ):
         self.bus, self.store = bus, store
         self.contention = contention  # Borrowed lock wait resource; never source evidence.
-        self.wire_root_id = FieldCodec.decode(Annotated[str, WireRootIdText], wire_root_id)
-        self.recipient_lookup = FieldCodec.decode(Annotated[str, StableLookupText], recipient_lookup)
+        self.wire_root_id = FieldCodec.decode(Annotated[str, Id128Text], wire_root_id)
+        self.recipient_lookup = FieldCodec.decode(Annotated[str, Id128Text], recipient_lookup)
 
     def witness_unlocked(self) -> PrefixWitness:
         return verify_private_bus_checkpoint_unlocked(

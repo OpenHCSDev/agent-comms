@@ -5,14 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import field, dataclass
 from typing import TYPE_CHECKING, Final
 
 from .wire_record import MessageWireRecord
-from .field_codec import FieldCodec, MalformedRecord, TextRepresentation
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
 from .errors import HumanInitialUnknownError, RelationViolationError
 
 if TYPE_CHECKING:
@@ -31,22 +30,6 @@ PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
 _PRIVATE_WIRE_PREFIX: Final = "_agent_comms_private"
 INITIAL_CODEC: Final = "audience-v1"
 _DECISION_DOMAIN: Final = b"agent-comms:cohort-decisions:v1\0"
-_HEX32: Final = re.compile(r"[0-9a-f]{32}\Z")
-_HEX64: Final = re.compile(r"[0-9a-f]{64}\Z")
-
-
-class StableLookupText(TextRepresentation):
-    """Private source lookup spelling owned by the original bus publication."""
-
-    @classmethod
-    def encode(cls, value: object) -> object:
-        return cls.decode(value)
-
-    @classmethod
-    def from_text(cls, value: str) -> str:
-        if _HEX32.fullmatch(value) is None:
-            raise ValueError("Invalid private stable recipient lookup")
-        return value
 
 
 def _canonical(value: object) -> bytes:
@@ -159,11 +142,9 @@ class CommittedDelivery(MessageWireRecord):
         if not raw.control.supports_initial:
             raise MalformedRecord("Unsupported delivery control issuer.")
         audience = raw.audience
-        if _HEX64.fullmatch(audience.source_revision) is None:
-            raise MalformedRecord("Delivery source revision is invalid.")
-        lookups = (audience.sender_lookup, *(r.recipient_lookup for r in audience.recipients))
-        if any(_HEX32.fullmatch(lookup) is None for lookup in lookups):
-            raise MalformedRecord("Delivery creator or recipient lookup is invalid.")
+        Sha256Text.from_text(audience.source_revision)
+        for lookup in (audience.sender_lookup, *(r.recipient_lookup for r in audience.recipients)):
+            Id128Text.from_text(lookup)
         candidate = freeze_audience(
             message,
             audience.recipients,
