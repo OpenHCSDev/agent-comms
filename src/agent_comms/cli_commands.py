@@ -977,7 +977,8 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             service_tier=candidate.service_tier,
         )
         return ThreadConfiguredResult(updated.name, updated.model,
-                                      FieldCodec.encode(updated.thinking_level), updated.service_tier.value)
+                                      FieldCodec.encode(updated.thinking_level),
+                                      updated.service_tier.value)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1176,10 +1177,11 @@ class StatusCliCommand(CliCommand):
             thread for name, thread in snapshot.threads.items()
             if snapshot.statuses[name].active
         )
+        activities = ctx.agents.all_activity(running, snapshot=snapshot)
         return ActiveStatusResult(tuple(
             {"thread": thread, "state": activity.state.value, "detail": activity.detail,
              "ts": activity.timestamp}
-            for thread, activity in sorted(ctx.agents.all_activity(running, snapshot=snapshot).items())))
+            for thread, activity in sorted(activities.items())))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1202,8 +1204,9 @@ class HistoryCliCommand(CliCommand):
             page = ctx.views.channel_history_page(self.channel, **paging)
         else:
             page = ctx.views.full_history_page(**paging)
-        return HistoryPageResult(tuple({**m.to_wire(), **m.display_metadata} for m in reversed(page.messages)),
-                                 page.oldest_cursor, page.has_older)
+        return HistoryPageResult(
+            tuple({**m.to_wire(), **m.display_metadata} for m in reversed(page.messages)),
+            page.oldest_cursor, page.has_older)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1255,7 +1258,7 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
             export_limit = MaxBytesLimit(self.max_bytes)
         else:
             export_limit = RecentLimit(started_at - self.last)
-        export_receipt = ctx.views.export_wire(
+        exported = ctx.views.export_wire(
             self.output,
             format=self.format,
             scope=scope,
@@ -1263,7 +1266,7 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
             overwrite=self.overwrite,
             export_started_at=started_at,
         )
-        return WireDocumentResult(export_receipt.to_wire())
+        return WireDocumentResult(exported.to_wire())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1292,7 +1295,8 @@ class ThreadCliCommand(CliCommand):
     )
 
     def apply(self, ctx: Comms) -> CliResult:
-        return WireDocumentResult(ctx.views.thread_detail(self.name, include_pending=not self.no_pending))
+        return WireDocumentResult(
+            ctx.views.thread_detail(self.name, include_pending=not self.no_pending))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1345,9 +1349,10 @@ class InstallCliCommand(CliCommand):
             repos=tuple(Repo.of(repo) for repo in self.repos or (project,)),
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
-        return WireDocumentResult({"config": str(config.write(home)),
-                                   **{type(harness).declared_name: harness.install(ctx, self.commander, project)
-                                      for harness in Harness.present(home)}})
+        return WireDocumentResult({
+            "config": str(config.write(home)),
+            **{type(harness).declared_name: harness.install(ctx, self.commander, project)
+               for harness in Harness.present(home)}})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1409,8 +1414,9 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
 
         code, out, _ = git("rev-parse", "--is-inside-work-tree")
         if code != 0 or out.strip() != "true":
-            return CheckpointResult(self.name, "refused", branch,
-                                    reason="the thread declaration's worktree is not a git worktree")
+            return CheckpointResult(
+                self.name, "refused", branch,
+                reason="the thread declaration's worktree is not a git worktree")
         if not git("status", "--porcelain")[1].strip():
             return CheckpointResult(self.name, "clean", branch)
         git("add", "-A")
@@ -1418,7 +1424,8 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
         if code != 0 and "nothing to commit" in (out + err):
             return CheckpointResult(self.name, "clean", branch)
         if code != 0:
-            return CheckpointResult(self.name, "failed", branch, reason=(err.strip() or out.strip())[:400])
+            return CheckpointResult(self.name, "failed", branch,
+                                    reason=(err.strip() or out.strip())[:400])
         # The transport can fail mid-flight; the named state is what survives,
         # never a silent skip and never a block on compaction.
         code, out, err = git("push", "--force", "origin", f"HEAD:refs/heads/{branch}", timeout=120)
@@ -1670,8 +1677,9 @@ class ContextCliCommand(CliCommand):
                 raise ValueError("No original context manifest exists for the requested turn")
             if self.diff:
                 raise ValueError("No preceding recorded turn exists for comparison")
-            return WireDocumentResult({"manifests": tuple(reversed(selected)),
-                                       "text_recorded": all(manifest.public_text_recorded for manifest in selected)})
+            return WireDocumentResult({
+                "manifests": tuple(reversed(selected)),
+                "text_recorded": all(manifest.public_text_recorded for manifest in selected)})
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
@@ -1731,7 +1739,8 @@ class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
 
     def apply(self, ctx: Comms) -> TargetCatalogResult:
         return TargetCatalogResult(CliCommand.target_catalog(
-            ctx, CommandTarget.arguments(self.target, self.project), self.channel, project=self.project))
+            ctx, CommandTarget.arguments(self.target, self.project), self.channel,
+            project=self.project))
 
     def encode_result(self, result: TargetCatalogResult) -> object:
         return {'actions': [action.encode() for action in result.actions]}

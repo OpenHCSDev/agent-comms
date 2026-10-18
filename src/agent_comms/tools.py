@@ -679,7 +679,8 @@ class CommsThreadsTool(ToolRequest):
     active_only: bool = tool_field("Exclude stopped threads", default=False)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        return caller.listing(comms, FieldCodec.encode(ThreadsCliCommand(active_only=self.active_only).apply(comms)))
+        threads = ThreadsCliCommand(active_only=self.active_only).apply(comms)
+        return caller.listing(comms, FieldCodec.encode(threads))
 
 
 @dataclass(frozen=True, kw_only=True)
