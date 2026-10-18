@@ -14,6 +14,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from agent_comms.pi_vocabulary import OffThinkingLevel
 
 from agent_comms.assignment_states import CompletedAssignment, FailedAssignment
 from agent_comms.child_process import AttachedChild
@@ -160,7 +161,7 @@ async def journey(tmp_path, monkeypatch, direct):
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=direct)
     comms.registry.register(
         replace(
-            comms.registry.require("beta"), model="selected-offline/fixture", thinking_level="off"
+            comms.registry.require("beta"), model="selected-offline/fixture", thinking_level=OffThinkingLevel
         )
     )
     owned = SelectedNativeJourney(root, root_id, comms, Path(package), direct)

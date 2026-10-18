@@ -1016,7 +1016,7 @@ class StateData(NativeSessionSnapshot, PiResponseData):
 
         return AgentInfo(
             model=self.model.display_name,
-            thinking_level=self.thinking_level.saved_name(),
+            thinking_level=self.thinking_level,
             session_name=self.session_name,
             session_file=session.active_session_file,
             context_size=self.model.context_window,

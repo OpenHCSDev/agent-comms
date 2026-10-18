@@ -8,26 +8,30 @@ T = TypeVar("T")
 
 class RegistrationInheritance(ABC):
     @classmethod
+    def choose(cls, incoming: T, previous: T) -> T:
+        return previous if cls.inherits(incoming) else incoming
+
+    @classmethod
     @abstractmethod
-    def choose(cls, incoming: T, previous: T) -> T: ...
+    def inherits(cls, incoming) -> bool: ...
 
 
 class InheritMissing(RegistrationInheritance):
     @classmethod
-    def choose(cls, incoming: T, previous: T) -> T:
-        return previous if incoming is None else incoming
+    def inherits(cls, incoming) -> bool:
+        return incoming is None
 
 
 class InheritEmpty(RegistrationInheritance):
     @classmethod
-    def choose(cls, incoming: T, previous: T) -> T:
-        return previous if not incoming else incoming
+    def inherits(cls, incoming) -> bool:
+        return not incoming
 
 
 class InheritPrevious(RegistrationInheritance):
     @classmethod
-    def choose(cls, incoming: T, previous: T) -> T:
-        return previous
+    def inherits(cls, incoming) -> bool:
+        return True
 
 
 class InheritThinkingLevel(RegistrationInheritance):

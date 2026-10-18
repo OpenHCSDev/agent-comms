@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import getpass
-import os
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -53,14 +50,6 @@ class NativeStartup:
 
     @classmethod
     def for_launch(
-        cls, launch: NativePiRpcLaunch, *, root: Path | None = None,
+        cls, launch: NativePiRpcLaunch,
     ) -> NativeStartup:
-        if root is not None:
-            return cls(root)
-        return cls(
-            Path(
-                launch.env.get("AGENT_COMMS_ROOT")
-                or os.environ.get("AGENT_COMMS_ROOT")
-                or str(Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}")
-            ).expanduser(),
-        )
+        return cls(Path(launch.env["AGENT_COMMS_ROOT"]).expanduser())

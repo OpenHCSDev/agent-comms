@@ -36,8 +36,7 @@ from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
-from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField
-from .field_codec import FieldCodec
+from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
@@ -482,13 +481,13 @@ class ThreadManagement:
             return updated
 
     def initialize_native_configuration(
-        self, name: str, *, model: str | None, thinking_level: str | None,
+        self, name: str, *, model: str | None, thinking_level: type[ThinkingLevel],
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             updated = thread.initialized_native_configuration(
-                model=model, thinking_level=FieldCodec.decode(ThinkingLevelField, thinking_level),
+                model=model, thinking_level=thinking_level,
             )
             if updated != thread:
                 self.registry.register(updated, self.registry.status(thread.name))

@@ -12,6 +12,7 @@ import pytest
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.agent_events import NativePhaseChanged
 from agent_comms.backend import TurnSession
+from agent_comms.native_startup import NativeStartup
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.pi_events import MessageUpdate, ToolExecutionEnd, ToolExecutionStart, UnknownPiEvent
 from agent_comms.pi_payloads import TextDelta
@@ -27,7 +28,7 @@ from agent_comms.pi_native_backend import PersistentPiSession
 async def test_native_tool_lifecycle_publishes_actual_phase_after_effects(first, second):
     root = Path.cwd()
     session = TurnSession(NativePiRpcLaunch(("unused",), root, {}, SelectedSession(root), root, runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
-                          native_session=PersistentPiSession())
+                          native_session=PersistentPiSession(), startup=NativeStartup(root))
     session.native = SimpleNamespace(proc=SimpleNamespace(identity=ProcessIdentity.capture(os.getpid())))
     session.active_tools = set()
     session.watchdog.clock = asyncio.get_running_loop().time
