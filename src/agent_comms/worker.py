@@ -20,13 +20,13 @@ async def run() -> None:
     comms = wire()
     # Fail before attach; the check verifies the native package once.
     launch = comms.owners.launch_authority
-    verified_cli = launch.validate() if launch is not None else None
+    if launch is not None:
+        launch.validate()
     name = ThreadLaunch.current().name
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
-        private_nk_verified_cli=verified_cli,
         agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
     )
     stopped = asyncio.Event()

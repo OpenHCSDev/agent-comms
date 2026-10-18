@@ -31,11 +31,16 @@ from .change_report import FileLine
 from .goals import OrderCheck, ProblemGoalOrder
 from .child_process import BoundedRun, ExitedOutcome
 from .storage_rules import StorageRule
+from .plan_phases import OrderPhase, UnplannedPhase
 
 
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+
+    @property
+    def work(self) -> str:
+        return "delivered work"
 
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
@@ -70,6 +75,10 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     @property
     def delivered(self) -> str:
         return self.commit
+
+    @property
+    def work(self) -> str:
+        return f"delivered commit {self.delivered}"
 
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
@@ -434,10 +443,19 @@ class PlainText(OrderWords):
 
 
 class StrikeReason(PlainText):
-    """What a unit did, plainly, in enough words to stand on the public record."""
+    """What a unit did, plainly, in enough words to stand on the public record. A unit's
+    wording is answered by a correction, never a strike: a reason whose every quoted span
+    is jargon is about wording alone."""
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
+
+    @classmethod
+    def refused(cls, text: str) -> str | None:
+        cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
+        if cited and all(PlainText.found(span) for span in cited):
+            return f"{cited} is the unit's wording; send it a correction, not a strike."
+        return super().refused(text)
 
 
 class OrderText(OrderWords):
@@ -536,6 +554,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
     run: OrderRun
+    serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -549,6 +568,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         self.first_call_deadline.require_deadline()
 
     pending: ClassVar[bool]
+
+    def require_transfer(self, todo: Todo) -> None:
+        raise ValueError("Only an undelivered order can change owner.")
 
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
@@ -590,6 +612,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
 
+    def require_transfer(self, todo: Todo) -> None:
+        pass
+
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
                             superseded_by=superseded_by)
@@ -599,6 +624,10 @@ class PendingProblemOrder(ProblemOrder):
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
+
+    def require_transfer(self, todo: Todo) -> None:
+        owner = (todo.assignment or todo.released[-1].previous).owner
+        raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
         if delivery != self.delivery:
@@ -916,6 +945,19 @@ class CorrectCheckTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class ServeTodo(TodoOperation):
+    """The commander names the plan phase an open order serves; it keeps its id and holder."""
+    actor: ThreadIncarnation
+    serves: type[OrderPhase]
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        return replace(current, order=replace(current.order, serves=self.serves),
+                       revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class RecordFirstCallTodo(TodoOperation):
     actor: ThreadIncarnation
     event: type[FirstCallEvent]
@@ -1088,6 +1130,7 @@ class Todo(TypedTable):
         return proposed
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+        self.order.require_transfer(self)
         if self.assignment is not None:
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)

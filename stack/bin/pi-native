@@ -18,10 +18,10 @@ fi
 # managed-project override is now copied inside the verified package instead.
 unset NODE_OPTIONS NODE_PATH NODE_COMPILE_CACHE
 export NODE_DISABLE_COMPILE_CACHE=1
-python3 "$stack_root/../src/agent_comms/native_package.py" "${cli%/dist/cli.js}"
+PYTHONPATH="$stack_root/../src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package "${cli%/dist/cli.js}"
 # Each launch derives the installed extension sources from the verified
 # declaration; sources whose bytes already match are not written.
-python3 "$stack_root/../src/agent_comms/native_package.py" \
+PYTHONPATH="$stack_root/../src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package \
     --install-sources "${cli%/dist/cli.js}" "$stack_root/.."
 exec node --no-global-search-paths \
     --import "${cli%/cli.js}/agent-comms-import-fence.mjs" \

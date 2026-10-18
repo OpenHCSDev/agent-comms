@@ -1,6 +1,7 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
 import importlib
 import os
+import shutil
 import sqlite3
 import subprocess
 
@@ -19,13 +20,13 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
+from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
 from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    Assignment, DoneTodoState, RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
+    Assignment, AssignTodo, DoneTodoState, RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
 
 
 def order(root, identity, command='printf 1', expected=1):
@@ -173,6 +174,49 @@ def test_commit_delivery_records_the_actual_clean_commit_time(commander):
     delivery = comms.goals.todos.get('P1').order.delivery
     assert delivery.commit == delivery.delivered == commit
     assert delivery.at == RecordedEventTime(float(git('show', '-s', '--format=%ct', 'HEAD')))
+
+
+def test_delivered_order_is_not_transferred(commander, tmp_path):
+    comms, caller = commander
+
+    def git(*args):
+        return subprocess.check_output(('git', '-C', str(comms.root), '-c', 'user.name=t',
+            '-c', 'user.email=t@t', *args), stderr=subprocess.DEVNULL).decode().strip()
+
+    git('init', '-q', '-b', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'Delivered fix')
+    commit = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/fix', commit)
+    marker = comms.root / 'check-calls'
+    create(commander, 'P1', f"printf x >> '{marker}'; printf 1")
+    create(commander, 'P2')
+    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(
+        commit=commit, delivered_commit=commit)).apply(comms, caller)
+    assert marker.read_text() == 'x'
+
+    copied = Comms(shutil.copytree(comms.root, tmp_path / 'copied-root'))
+    delivered = copied.goals.todos.get('P1')
+    pending = copied.goals.todos.get('P2')
+    successor = Assignment('other', 3.0, 'lead', 1.0, 'next')
+
+    def transfer(todo):
+        return copied.goals.todos.apply(todo.id, AssignTodo(todo.revision, successor,
+            RecordedEventTime(3000), order(copied.root, 'replacement-' + todo.id), todo.goal))
+
+    with pytest.raises(ValueError, match=f'worker already has delivered commit {commit}; worker merges it'):
+        transfer(delivered)
+    assert copied.goals.todos.get('P1') == delivered
+    assert delivered.order.delivery == comms.goals.todos.get('P1').order.delivery
+    transferred = transfer(pending)
+    assert transferred.assignment.owner == 'other'
+    assert transferred.assignment.previous_owners == (pending.assignment.owner_identity,)
+    assert copied.goals.todos.get('P2') == transferred
+    released = copied.goals.todos.apply('P1', ReleaseTodo(delivered.revision,
+        copied.registry.require('lead').incarnation, delivered.assignment, StrikeReason(FIRED)))
+    with pytest.raises(ValueError, match=f'worker already has delivered commit {commit}; worker merges it'):
+        transfer(released)
+    assert copied.goals.todos.get('P1') == released
+    assert marker.read_text() == (copied.root / 'check-calls').read_text() == 'x'
 
 
 def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, commander_script):
@@ -539,6 +583,22 @@ def test_one_fire_call_releases_both_open_orders_with_its_reason(commander):
     assert fired == tuple(map(comms.goals.todos.get, ('P1', 'P2')))
     assert [(t.assignment, t.revision, t.released[0].previous, t.released[0].reason.text) for t in fired] == [
         (None, before.revision + 1, before.assignment, FIRED) for before in held]
+
+
+def test_unit_wording_gets_a_correction_not_a_strike(commander):
+    comms, caller = commander
+    held = create(commander, 'P1')
+    with pytest.raises(ValueError, match="unit's wording; send it a correction"):
+        StrikeTodo(held.revision, comms.registry.require('lead').incarnation, held.assignment,
+                   'The unit wrote "canonical" and "ownership" in its report to the commander again.'
+                   ).apply(held)
+    with pytest.raises(ValueError, match='nothing to correct'):
+        CommsCorrectWordingTool(unit='worker', message_id='m0', text='The tests pass now.').apply(comms, caller)
+    CommsCorrectWordingTool(unit='worker', message_id='m1',
+                            text='The canonical ownership changed').apply(comms, caller)
+    assert comms.bus.inbox('worker')[-1].body.startswith(
+        'Correction, no strike, on P1: message m1 used canonical, ownership.')
+    assert comms.goals.todos.get('P1') == held and held.strike_count == 0
 
 
 @pytest.mark.parametrize('step, name, column', [

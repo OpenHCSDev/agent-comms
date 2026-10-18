@@ -26,6 +26,7 @@ from .coordinator import Coordination
 from .coordination_snapshot import RecoverySnapshot
 from .following_inputs import FollowingInputs
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
+from .native_package import VerifiedNativePackage
 from .selected_actions import CodingSelectedAction, SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
@@ -40,11 +41,11 @@ class NativeExecution(ABC):
     pi_session: PersistentPiSession = field(default_factory=PersistentPiSession, compare=False)
 
     @abstractmethod
-    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch: ...
+    def tracked_launch(self, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch: ...
 
 
 class IndependentExecution(NativeExecution):
-    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
+    def tracked_launch(self, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch:
         return NativePiRpcLaunch.tracked(package, **options)
 
 
@@ -55,34 +56,20 @@ class SelectedExecution(NativeExecution):
     root: Path
     wire_root_id: str
     owner_name: str
-    native_package: Path
+    native_package: VerifiedNativePackage
     opt_in: bool = True
     after_seq: int = 0
     session_file: Path | None = None
     selected_existing_file_write: SelectedAction | None = None
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
-    # The worker verifies its pinned package once (packages never change in
-    # place) and hands every run that one verified launcher, only when needed.
-    verified_launcher: Callable[[], Callable[..., NativePiRpcLaunch]] | None = None
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
     following: FollowingInputs = field(default_factory=FollowingInputs, init=False, compare=False)
-    _tracked_factory: Callable[..., NativePiRpcLaunch] | None = field(
-        init=False, default=None, repr=False, compare=False,
-    )
-
-    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
-        """Consume the original pre-claim acquisition for each stage's launch.
-
-        Every stage rebuilds its complete source/configuration through the
-        executable factory acquired by validate before selecting a participant;
-        no native child, input proof or readiness is borrowed from a prior turn.
-        """
+    def tracked_launch(self, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch:
+        """Every stage derives its complete launch from the original acquired artifact."""
         if package != self.native_package:
             raise IdentityConflict("Selected launch differs from its execution package")
-        if self._tracked_factory is None:
-            raise IdentityConflict("Selected launch precedes its execution package acquisition")
-        return self._tracked_factory(**options)
+        return NativePiRpcLaunch.tracked(package, **options)
 
     def retained_source(self, session_file: Path):
         """The owner's idle child on this saved source with this package, if still current."""
@@ -95,9 +82,7 @@ class SelectedExecution(NativeExecution):
         return retained
 
     def validate(self) -> None:
-        """Acquire this execution's package once; claim acceptance and launch share it."""
-        if self._tracked_factory is not None:
-            return
+        """Check execution authority; the process already owns its acquired package."""
         if not self.opt_in:
             raise PublicationActivationBlocked("coordinated runtime requires explicit activation")
         _private_session_dir(self.root)
@@ -106,13 +91,6 @@ class SelectedExecution(NativeExecution):
                 raise TypeError("selected tool requires a nominal owner intent")
             if self.selected_existing_file_write is not None:
                 raise IdentityConflict("selected tool cannot share an operator file plan")
-        if self.verified_launcher is None:
-            self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package)
-            return
-        launcher = self.verified_launcher()
-        if launcher.args[0] != Path(self.native_package).absolute():
-            raise IdentityConflict("Worker's verified launcher is for a different package")
-        self._tracked_factory = launcher
 
     def action(self) -> SelectedAction:
         if self.selected_tool_intent is not None:
