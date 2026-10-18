@@ -6,8 +6,8 @@ from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .declared_family import DeclaredFamily
 from .child_process import ProcessState
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
 

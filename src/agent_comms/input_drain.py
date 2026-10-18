@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from abc import ABC, abstractmethod
 from dataclasses import field, dataclass, replace
 from contextlib import aclosing
