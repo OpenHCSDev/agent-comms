@@ -1,10 +1,11 @@
 """agent-comms-connector: the claude.ai connector, a Streamable HTTP MCP server beside Core.
 
 The server is a transport over the ToolRequest family: ``tools/list`` reports the schema of
-each member that declares ReadTool, and ``tools/call`` dispatches to that member's
-``invoke()``. OAuth stands in front of every MCP request. The owner approves each
-authorization on this machine with ``agent-comms-connector approve REQUEST``, and tokens
-are kept only as digests under ``~/.local/state/agent-comms/connector/``.
+every member, saying whether it changes the bus, and ``tools/call`` dispatches to that
+member's ``invoke()`` as the declared caller claude-ai. OAuth stands in front of every MCP
+request. The owner approves each authorization on this machine with ``agent-comms-connector
+approve REQUEST``, and tokens are kept only as digests under
+``~/.local/state/agent-comms/connector/``.
 
 Usage:
   agent-comms-connector serve [--root ROOT] [--issuer URL]
@@ -313,9 +314,9 @@ class ToolsListMessage(McpRequest, declared_name="tools/list"):
                 {
                     "name": tool.declared_name,
                     "title": tool.label,
-                    "description": tool.description,
+                    "description": f"{tool.description} {tool.bus_effect}",
                     "inputSchema": FieldCodec.record_schema(tool),
-                    "annotations": {"readOnlyHint": True},
+                    "annotations": {"readOnlyHint": issubclass(tool, ReadTool)},
                 }
                 for tool in Connector.exposed().values()
             ]
@@ -357,7 +358,7 @@ class Connector:
 
     @staticmethod
     def exposed() -> dict[str, type[ToolRequest]]:
-        return {tool.declared_name: tool for tool in ToolRequest.members_with(ReadTool)}
+        return {tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)}
 
     def invoke(
         self, tool: type[ToolRequest], arguments: Mapping[str, object]
