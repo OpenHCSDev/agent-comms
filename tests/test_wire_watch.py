@@ -374,7 +374,7 @@ async def test_native_watch_reopens_when_a_source_directory_is_recreated(tmp_pat
 
 async def test_observation_cancellation_releases_actual_descriptor(tmp_path, monkeypatch):
     from contextlib import aclosing
-    from agent_comms import wire_watch
+    import agent_comms.wire_watch as wire_watch
 
     opened = []
     original = wire_watch.open_wire_watcher

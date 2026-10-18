@@ -14,7 +14,7 @@ import pytest
 from acp import spawn_agent_process
 from acp.schema import TextContentBlock
 
-from agent_comms import restart_queue as queue
+import agent_comms.restart_queue as queue
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.owner_lifecycle import OwnerRestartSelection

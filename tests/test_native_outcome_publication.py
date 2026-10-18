@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from acp import RequestError
 
-from agent_comms import native_pi
+import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import ACPFailure, NativeMessageFailureSource, RequestFailure
 from agent_comms.field_codec import FieldCodec

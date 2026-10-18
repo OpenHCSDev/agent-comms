@@ -15,7 +15,9 @@ import os
 
 import pytest
 
-from agent_comms import coordinated_runtime, native_pi, private_nk_entrypoint
+import agent_comms.coordinated_runtime as coordinated_runtime
+import agent_comms.native_pi as native_pi
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
@@ -658,7 +660,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
 
 async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, monkeypatch):
     """An unpinned private root derives this installation's package; none prepared refuses."""
-    from agent_comms import private_nk_entrypoint as derivation
+    import agent_comms.private_nk_entrypoint as derivation
     from agent_comms.native_package import NativePackageError
 
     def missing():

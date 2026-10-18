@@ -410,7 +410,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         if AgentBackend._sealed:
             raise BackendDeclarationError(
                 f"{cls.__name__}: the AgentBackend registry is sealed; declare backends "
-                "in a module imported by agent_backend before it seals."
+                "before the Thread backend lookup seals its declarations."
             )
         super().__init_subclass__(**options)
         cls.location_type._backend = cls

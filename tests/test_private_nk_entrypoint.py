@@ -13,7 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import acp, active_route, cli, private_nk_entrypoint, worker
+import agent_comms.acp as acp
+import agent_comms.active_route as active_route
+import agent_comms.cli as cli
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
+import agent_comms.worker as worker
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.child_process import ParentedProcess, ProcessIdentity

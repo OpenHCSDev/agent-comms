@@ -481,3 +481,10 @@ def current_thread(registry) -> Thread:
         task=launch.task,
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
+
+
+# Thread's backend field is the lookup boundary. Declare both implementations
+# after the record graph, then reject incomplete declarations before any lookup.
+from . import pi_native_backend, pi_durable_backend  # noqa: E402, F401
+
+AgentBackend.seal()

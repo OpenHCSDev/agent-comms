@@ -62,7 +62,7 @@ def test_message_decode_fields_are_declared_not_a_second_roster():
 
 
 def test_initial_publication_rechecks_current_catalog_revision(tmp_path, monkeypatch):
-    from agent_comms import audience_manifest
+    import agent_comms.audience_manifest as audience_manifest
     from agent_comms.errors import RelationViolationError
     from test_private_human_ingress import _root
 

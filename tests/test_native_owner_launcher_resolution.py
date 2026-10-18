@@ -3,7 +3,8 @@ from agent_comms.native_package import pinned_native_package
 
 import pytest
 
-from agent_comms import native_pi, private_nk_entrypoint
+import agent_comms.native_pi as native_pi
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.native_package import NativePackageError
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable

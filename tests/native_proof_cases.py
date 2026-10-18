@@ -32,7 +32,7 @@ def read_proof_rows(session: Path) -> list[dict]:
 
 def child_writer_imports() -> str:
     """Recorded-RPC children use the same current declaration as their parent."""
-    from agent_comms import native_pi
+    import agent_comms.native_pi as native_pi
 
     return (
         "import sys\n"

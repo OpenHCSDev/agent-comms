@@ -10,7 +10,7 @@ import pytest
 from agent_comms.active_route import ActiveRoute, LocalRoute, read_active_route, resolve_comms_route
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms import private_nk_entrypoint
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument

@@ -16,7 +16,9 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import coordinated_runtime, private_nk_entrypoint, selected_write_plan
+import agent_comms.coordinated_runtime as coordinated_runtime
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
+import agent_comms.selected_write_plan as selected_write_plan
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.acp import CommsAgent

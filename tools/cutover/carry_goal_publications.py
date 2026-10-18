@@ -10,7 +10,7 @@ import sqlite3
 from contextlib import closing, nullcontext
 from pathlib import Path
 
-from agent_comms import private_bus_checkpoint
+import agent_comms.private_bus_checkpoint as private_bus_checkpoint
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.goals import Goal

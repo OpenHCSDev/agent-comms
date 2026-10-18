@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import coordinated_runtime as runtime
-from agent_comms import coordination_response
+import agent_comms.coordinated_runtime as runtime
+import agent_comms.coordination_response as coordination_response
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.historical_native_inputs import FullHistoricalNativeInput, TriageHistoricalNativeInput
 from agent_comms.selected_triage import IgnoreSelectedTriage, FullSelectedTriage

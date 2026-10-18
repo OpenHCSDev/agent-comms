@@ -54,7 +54,7 @@ def violations(tree):
 
 
 def test_production_sqlite_access_uses_the_declared_boundary():
-    from agent_comms import typed_table
+    import agent_comms.typed_table as typed_table
 
     owner = SOURCE / Path(typed_table.__file__).name
     failures = {
