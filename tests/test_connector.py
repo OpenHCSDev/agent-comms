@@ -31,9 +31,8 @@ def store(tmp_path: Path) -> ConnectorStore:
 
 @pytest.fixture
 async def client(store: ConnectorStore, root: Path, comms: Comms):
-    comms.registry.declare(
-        comms.registry.new_thread("worker", frozenset(), str(root), created_at=1.0)
-    )
+    for created_at, name in enumerate(("worker", "claude-ai"), start=1):
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(root), created_at=created_at))
     connector = Connector(store, "http://127.0.0.1:18766", root)
     async with TestClient(TestServer(connector.application())) as client:
         yield client
@@ -98,11 +97,17 @@ async def test_connector_lists_every_tool(client, store, comms):
     assert [tool["name"] for tool in listed] == [tool.declared_name for tool in family]
     assert [tool["annotations"]["readOnlyHint"] for tool in listed] == [
         issubclass(tool, ReadTool) for tool in family]
-    comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), "/tmp", created_at=2.0))
-    send = {"name": "comms_send", "arguments": {"from": "claude-ai", "to": "worker", "body": "Owner said go"}}
-    sent = await (await client.post("/mcp", headers=headers, json={
-        "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": send})).json()
-    assert sent["result"]["isError"] is False
+
+
+async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
+    headers = {"Authorization": f"Bearer {await approved_token(client, store)}"}
+    calls = ({"name": "comms_set_goal", "arguments": {"text": "Ship the connector"}},
+             {"name": "comms_send", "arguments": {"from": "claude-ai", "to": "worker", "body": "Owner said go"}})
+    for call in calls:
+        reply = await (await client.post("/mcp", headers=headers, json={
+            "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": call})).json()
+        assert reply["result"]["isError"] is False, reply
+    print(reply, comms.goals)
     assert [(message.sender, message.body) for message in comms.bus.inbox("worker")] == [
         ("claude-ai", "Owner said go")]
 

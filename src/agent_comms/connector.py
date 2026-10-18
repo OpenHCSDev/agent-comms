@@ -1,7 +1,7 @@
 """agent-comms-connector: the claude.ai connector, a Streamable HTTP MCP server beside Core.
 
 The server is a transport over the ToolRequest family: ``tools/list`` reports every member
-and whether it changes the bus; ``tools/call`` runs ``invoke()`` as the caller claude-ai.
+and whether it changes the bus; ``tools/call`` runs ``invoke()`` as the registered thread claude-ai.
 OAuth stands in front of every MCP request. The owner approves each authorization on this
 machine with ``agent-comms-connector approve REQUEST``, and tokens are kept only as digests
 under ``~/.local/state/agent-comms/connector/``.
@@ -38,13 +38,15 @@ from .cli_protocol import CoreError
 from .comms import client_wire
 from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
+from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .locked_store import LockedStore, RootFile
-from .tool_caller import NoThreadCaller
+from .tool_caller import ThreadCaller
 from .tools import ReadTool, ToolRequest
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
+CALLER = ThreadCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
 CALLBACK: str = get_args(ClaudeCallback)[0]
 PROTOCOL_VERSION = "2025-06-18"
@@ -363,7 +365,7 @@ class Connector:
         self, tool: type[ToolRequest], arguments: Mapping[str, object]
     ) -> dict[str, JsonValue]:
         with client_wire(self.root) as comms:
-            return tool.invoke(comms, arguments, caller=NoThreadCaller("claude-ai"))
+            return tool.invoke(comms, arguments, caller=CALLER)
 
     def refused(self, error: BaseException) -> dict[str, JsonValue]:
         return {
@@ -374,6 +376,8 @@ class Connector:
         }
 
     def application(self) -> web.Application:
+        with client_wire(self.root) as comms:
+            comms.registry.require(CALLER.name)
         app = web.Application()
         app.add_routes(
             [
@@ -552,7 +556,11 @@ class ServeVerb(ConnectorVerb):
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)
-        web.run_app(connector.application(), host=LOOPBACK, port=PORT, access_log=None)
+        try:
+            app = connector.application()
+        except UnregisteredThreadError:
+            return f"Register the connector's thread first: agent-comms register --name {CALLER.name} --worktree DIR --tags comms"
+        web.run_app(app, host=LOOPBACK, port=PORT, access_log=None)
         return 0
 
 
