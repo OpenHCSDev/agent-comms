@@ -73,7 +73,7 @@ async def test_idle_owner_original_input_preserves_autonomous_goal_grant(tmp_pat
             + "\n"
         )
         assert kwargs["native_start"](None, native_id, args[2])
-        yield ae.InputStarted(id=None)
+        yield ae.OriginalInputStarted()
         yield ae.Chunk(text="Read the requested file.")
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Read the requested file.")

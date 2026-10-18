@@ -119,7 +119,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
             assert isinstance(allowed, GrantedSend)
         persist_user(session, "a" * 32, args[2])
         assert kwargs["native_start"](None, "a" * 32, args[2])
-        yield ae.InputStarted(id=None)
+        yield ae.OriginalInputStarted()
         if queued_before_activation:
             public_id, command = await queue_followup(agent, kwargs)
         goal = comms.goals.update_goal("project", SetGoalAction(text="Read files until stopped"))
@@ -131,11 +131,11 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         with kwargs["send_boundary"](public_id, "b" * 32, command.content.text) as allowed:
             assert isinstance(allowed, AuthorityChangedSend if queued_before_activation else GrantedSend)
         if queued_before_activation:
-            yield ae.InputRefused(id=public_id)
+            yield ae.FollowingInputRefused(id=public_id)
         else:
             persist_user(session, "b" * 32, command.content.text)
             assert kwargs["native_start"](public_id, "b" * 32, command.content.text)
-            yield ae.InputStarted(id=public_id)
+            yield ae.FollowingInputStarted(id=public_id)
         yield ae.Chunk(text="Goal set and work completed this turn.")
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="Goal set and work completed this turn.")
@@ -185,7 +185,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
             assert isinstance(allowed, GrantedSend)
         persist_user(session, "a" * 32, args[2])
         assert kwargs["native_start"](None, "a" * 32, args[2])
-        yield ae.InputStarted(id=None)
+        yield ae.OriginalInputStarted()
         if change == "clear":
             comms.goals.update_goal("project", ClearGoalAction())
         elif change == "replace":
@@ -197,9 +197,9 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         if change is None:
             persist_user(session, "b" * 32, command.content.text)
             assert kwargs["native_start"](public_id, "b" * 32, command.content.text)
-            yield ae.InputStarted(id=public_id)
+            yield ae.FollowingInputStarted(id=public_id)
         else:
-            yield ae.InputRefused(id=public_id)
+            yield ae.FollowingInputRefused(id=public_id)
         yield ae.Chunk(text="Finished reading this section.")
         yield ae.StreamSettled()
         yield ae.Done(ok=change is None, text="Finished reading this section.")

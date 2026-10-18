@@ -1229,7 +1229,7 @@ for line in sys.stdin:
             diagnostic={"exit_code": process.returncode},
         )
         assert owner not in backend.TurnSession.active
-        assert [type(e) for e in events].count(ae.InputStarted) == 0
+        assert not any(isinstance(e, ae.InputStarted) for e in events)
         if abort_pipe_closed:
             assert abort_write_failed
         # A sent input on the old owner cannot be replayed after rebind.
@@ -1846,7 +1846,7 @@ time.sleep(60)
         sent = steering_log.read_text()
         assert '"_input_id"' not in sent and '"images"' in sent
         started_events = [event for event in events if isinstance(event, ae.InputStarted)]
-        assert started_events == ([ae.InputStarted(id="queued-1")] if started else [])
+        assert started_events == ([ae.FollowingInputStarted(id="queued-1")] if started else [])
         assert events[-1].ok is False
         # Start evidence informs disposition, but neither case authorizes an
         # automatic replay of the forwarded provider opportunity.
@@ -2931,7 +2931,7 @@ answer_stats({{"contextUsage":{{}}}})
         ]
         assert events[-1].ok is expected_ok, events
         if expected_ok:
-            assert ae.InputRefused(id="bus-42") in events
+            assert ae.FollowingInputRefused(id="bus-42") in events
         else:
             assert events[-1].reason_code == "input_authority_changed"
         assert queue.empty()

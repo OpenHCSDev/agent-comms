@@ -151,7 +151,7 @@ async def test_native_user_dm_reply_ignores_earlier_channel_route(
                 },
             }) + "\n")
         assert kwargs["native_start"](None, native_id, args[2])
-        yield ae.InputStarted(id=None)
+        yield ae.OriginalInputStarted()
         yield ae.Chunk(text="Private DM answer")
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="")

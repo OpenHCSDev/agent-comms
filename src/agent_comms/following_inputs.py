@@ -110,7 +110,7 @@ class OwnerFollowingInputs(FollowingInputs):
 
     async def started(self, input_id: str) -> AcceptedFollowingInput:
         source = self.inputs.following_sources[self.session_id][input_id]
-        await self.inputs.input_started(self.session_id, input_id, self.scope)
+        await source.started(self.inputs, self.session_id, self.scope)
         await self.ready(self.inputs, self.session_id)
         return source
 
