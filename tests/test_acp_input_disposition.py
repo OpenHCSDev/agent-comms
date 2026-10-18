@@ -235,7 +235,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
     native.provider.response_gate = held
     async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
         comms = owner._comms
-        root_id = owner._private_nk_wire_root_id
+        root_id = owner.configured_root_id
         receiver = await Coordination.run_worker(partial(comms.registry.require, session))
         lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
 

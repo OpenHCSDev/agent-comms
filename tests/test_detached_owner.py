@@ -77,8 +77,6 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
     options = dict(
         agent_bin=str(package / "dist/cli.js"),
         agent_args=["--provider", "openrouter", "--model", "fake-compact"],
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
     )
     first, second, third = (CommsClient(comms, **options) for _ in range(3))
 

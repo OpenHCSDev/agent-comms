@@ -48,8 +48,9 @@ async def scripted_owner(tmp_path, selected_model, monkeypatch):
         owner = comms.registry.require('beta')
         store.participants.register(RecordedThreadIncarnation('fixture', owner.created_at).lookup,
                                     'beta', 'beta', committed=True)
-    agent = CommsAgent(comms, runtime_enabled=True, private_nk_native_package=package,
-                       private_nk_wire_root_id=root_id, private_nk_verified_cli=cli)
+    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    agent = CommsAgent(comms, runtime_enabled=True,
+                       private_nk_verified_cli=cli)
     agent.sessions.bindings['beta'] = 'beta'
     agent.sessions.titles['beta'] = 'beta'
     agent.sessions.worktrees['beta'] = str(tmp_path)
