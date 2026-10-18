@@ -196,12 +196,8 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
 
     @classmethod
-    def saved_name(cls):
-        return cls.declared_name
-
-    @classmethod
     def native_arguments(cls):
-        return (ThinkingArgument(cls.declared_name),)
+        return (ThinkingArgument(FieldCodec.encode(cls)),)
 
     @classmethod
     def launch_arguments(cls):
@@ -241,7 +237,7 @@ class ThinkingLevelValue(FieldRepresentation):
 
     @classmethod
     def encode(cls, value):
-        return value.saved_name()
+        return FieldCodec.encode(value)
 
     @classmethod
     def schema(cls):

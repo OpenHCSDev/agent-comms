@@ -150,7 +150,7 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
                     args,
                     "ORIGINAL_INPUT",
                     str(root),
-                    env_extra=env,
+                    root=Path(str(root)), env_extra=env,
                     session_file=str(root / "session.jsonl"),
                     steering_queue=queue,
                     persistent_session=persistent,

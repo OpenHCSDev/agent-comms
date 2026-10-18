@@ -1,4 +1,5 @@
 """Actual fork worker held before its socket, with the pinned native model on loopback."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -46,7 +47,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         root_id = comms.bus.log.read_metadata_unlocked().root_id
     comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
     comms.registry.declare(
-        comms.registry.new_thread('parent', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')
+        comms.registry.new_thread('parent', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level=OffThinkingLevel)
     )
     launched = []
     launch = ParentedProcess.launch
@@ -78,7 +79,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         child = await asyncio.to_thread(
             comms.threads.create,
             ForkSpec.from_task(name="cold-fork", parent="parent", project=str(fixture.project),
-                     model="response-local/fixture", thinking_level="off", task="One new cold fork diagnostic input"),
+                     model="response-local/fixture", thinking_level=OffThinkingLevel, task="One new cold fork diagnostic input"),
             launcher,
         )
         endpoint = socket_path(fixture.root, child.pid)

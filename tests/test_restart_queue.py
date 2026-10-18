@@ -1,4 +1,5 @@
 """Actual queued owner handoff retains history and accepts a fresh native input."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -141,7 +142,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         comms.root, os.environ[ROOT_ID_ENV], pinned_native_package()
     )
     comms.registry.declare(
-        comms.registry.new_thread('worker', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')
+        comms.registry.new_thread('worker', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level=OffThinkingLevel)
     )
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     monkeypatch.setenv(

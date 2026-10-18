@@ -104,6 +104,7 @@ async def stream_agent_events(
     native_start: Callable[[str | None, str, str], bool] | None = None,
     *,
     persistent_session: PersistentPiSession,
+    root: Path,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
     request_observer: RequestObserver = NoRequestObserver(),
@@ -124,6 +125,7 @@ async def stream_agent_events(
                     persistent_session.child_state.managed_launch,
                     agent_bin,
                     tuple(agent_args),
+                    root=root,
                     worktree=Path(cwd),
                     environment=env_extra,
                     session_file=session_file,
@@ -151,6 +153,7 @@ async def stream_agent_events(
                         persistent_session=persistent_session,
                         ui_request=ui_request,
                         request_observer=request_observer,
+                        startup=NativeStartup.for_launch(launch),
                     ).run()
                 ) as stream:
                     async for event in stream:
@@ -181,9 +184,9 @@ class TurnSession:
         persistent_session: PersistentPiSession | None = None,
         native_session: PersistentPiSession | None = None,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
-        startup: NativeStartup | None = None,
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
         request_observer: RequestObserver = NoRequestObserver(),
+        *, startup: NativeStartup,
     ):
         self.launch = launch
         self.task = task
@@ -206,7 +209,7 @@ class TurnSession:
             raise ValueError("A Pi turn runs on its thread's Pi session child")
         self.native_session: PersistentPiSession = session
         self.extension_ui = ExtensionUiSession(ui_request)
-        self.startup = startup if startup is not None else NativeStartup.for_launch(launch)
+        self.startup = startup
         self.inputs = InputForwarding(steering_queue if steering_queue is not None else TurnInbox())
         self.prompt_state = self.prompt_type()
         self.stats = StatsRequest()

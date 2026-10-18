@@ -244,7 +244,7 @@ def test_any_prelaunch_fsync_failure_denies_launch(
     with pytest.raises(NativePiUnavailable, match="could not be committed"):
         NativePiRpcLaunch.tracked(
             tmp_path,
-            worktree=tmp_path,
+            root=tmp_path, worktree=tmp_path,
             session=SelectedSession(sessions),
             model=selected_model,
         )
@@ -279,7 +279,7 @@ def test_nested_session_directory_entries_are_synced_from_leaf_to_private_root(
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", record_fsync)
     launch = NativePiRpcLaunch.tracked(
-        tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
+        tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
         model=selected_model,
     )
     assert launch.session.directory == sessions
@@ -288,7 +288,7 @@ def test_nested_session_directory_entries_are_synced_from_leaf_to_private_root(
     assert observed.index(root) < observed.index(nested) < observed.index(sessions)
     first_count = len(observed)
     NativePiRpcLaunch.tracked(
-        tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
+        tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
         model=selected_model,
     )
     assert root in observed[first_count:] and nested in observed[first_count:]
@@ -350,7 +350,7 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
     sessions = tmp_path / "sessions"
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     NativePiRpcLaunch.tracked(
-        tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
+        tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
         model=selected_model,
     )
     original_fsync = native.os.fsync
@@ -619,7 +619,7 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_resources(
     monkeypatch.setenv("AGENT_COMMS_THREAD", "must-not-leak")
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "wrong-global"))
     launch = NativePiRpcLaunch.tracked(
-        Path(selected), worktree=worktree, session=SelectedSession(sessions),
+        Path(selected), root=worktree, worktree=worktree, session=SelectedSession(sessions),
         model=selected_model,
     )
     assert str(_trusted_package(Path(selected))) in launch.argv
@@ -643,7 +643,7 @@ def test_missing_native_model_fails_before_any_session_side_effect(
     with pytest.raises(IdentityConflict):
         NativePiRpcLaunch.tracked(
             tmp_path,
-            worktree=tmp_path,
+            root=tmp_path, worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
             model=SelectedModel(provider, model),
         )

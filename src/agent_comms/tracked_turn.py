@@ -270,6 +270,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             launch = await Coordination.run_worker(partial(
                 execution.tracked_launch,
                 package,
+                root=startup.root,
                 worktree=worktree,
                 session=session,
                 model=model,

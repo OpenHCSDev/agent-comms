@@ -123,7 +123,7 @@ async def test_native_observation_only_initializes_unset_configuration(owner, tm
     assert thread.service_tier.value == "priority"
     await owner.sessions.observe_native_configuration(
         session.session_id, thread.name, events.AgentInfo(
-            model="test/two", thinking_level="high"
+            model="test/two", thinking_level=HighThinkingLevel
         )
     )
     observed = owner._comms.registry.require(thread.name)
@@ -137,7 +137,7 @@ async def test_native_observation_only_initializes_unset_configuration(owner, tm
     before = (owner._comms.root / "registry.json").read_bytes()
     await owner.sessions.observe_native_configuration(
         session.session_id, thread.name, events.AgentInfo(
-            model="test/two", thinking_level="high"
+            model="test/two", thinking_level=HighThinkingLevel
         )
     )
     assert owner._comms.registry.require(thread.name).thinking_level is OffThinkingLevel

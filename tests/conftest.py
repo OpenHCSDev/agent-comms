@@ -223,7 +223,7 @@ def native_rpc_fixture(monkeypatch):
                 pinned_native_package(),
             ),
             Path(worktree),
-            runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
+            root=Path(worktree), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
         )
 
     def retained(

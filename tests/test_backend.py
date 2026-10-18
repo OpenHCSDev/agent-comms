@@ -2566,7 +2566,7 @@ for line in sys.stdin:
                     [],
                     "first",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2578,7 +2578,7 @@ for line in sys.stdin:
                     [],
                     "second",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2599,7 +2599,7 @@ for line in sys.stdin:
                     [],
                     "third",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2615,7 +2615,7 @@ for line in sys.stdin:
                     [],
                     "proof changed",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2632,7 +2632,7 @@ for line in sys.stdin:
                         [],
                         "cancel",
                         str(tmp_path),
-                        session_file=str(session_file),
+                        root=Path(str(tmp_path)), session_file=str(session_file),
                         persistent_session=persistent,
                     )
                 ]
@@ -2652,7 +2652,7 @@ for line in sys.stdin:
                     [],
                     "after",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2671,7 +2671,7 @@ for line in sys.stdin:
                     [],
                     "denied",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                     send_boundary=revoked_goal,
                 )
@@ -2685,7 +2685,7 @@ for line in sys.stdin:
                     [],
                     "revive",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2699,7 +2699,7 @@ for line in sys.stdin:
                     [],
                     "image turn",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                     images=(image,),
                 )
@@ -2713,7 +2713,7 @@ for line in sys.stdin:
                     [],
                     "fail after image",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2727,7 +2727,7 @@ for line in sys.stdin:
                     [],
                     "revive again",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2742,7 +2742,7 @@ for line in sys.stdin:
                         [],
                         "delayed stats",
                         str(tmp_path),
-                        session_file=str(session_file),
+                        root=Path(str(tmp_path)), session_file=str(session_file),
                         persistent_session=persistent,
                     )
                 ]

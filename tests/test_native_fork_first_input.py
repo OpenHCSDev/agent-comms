@@ -1,4 +1,5 @@
 """Physical native parent -> normal fork -> first ACP send, without replay."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -180,7 +181,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     monkeypatch.setenv("AGENT_COMMS_DEBUG_LOG", str(debug_log))
     comms = Comms(native.root)
     comms.registry.declare(
-        comms.registry.new_thread('physical-parent', frozenset(), str(native.project), session_file=str(native.session), model='response-local/fixture', thinking_level='off')
+        comms.registry.new_thread('physical-parent', frozenset(), str(native.project), session_file=str(native.session), model='response-local/fixture', thinking_level=OffThinkingLevel)
     )
     package = pinned_native_package()
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]

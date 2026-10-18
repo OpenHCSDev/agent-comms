@@ -155,7 +155,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 self.native_arguments(),
                 text,
                 str(self.project),
-                session_file=str(self.session),
+                root=self.root, session_file=str(self.session),
                 persistent_session=self.persistent,
                 steering_queue=queue,
                 native_start=self.started,

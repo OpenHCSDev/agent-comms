@@ -211,7 +211,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                 async with asyncio.timeout(30):
                     async for event in backend.stream_agent_events(
                         native_bin, native_args, "Reply OK.", str(project),
-                        env_extra=child_env, session_file=str(session),
+                        root=Path(str(project)), env_extra=child_env, session_file=str(session),
                         native_start=lambda *_: True,
                         persistent_session=pi_session,
                     ):

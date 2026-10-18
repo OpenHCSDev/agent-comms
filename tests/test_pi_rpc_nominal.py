@@ -106,7 +106,7 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
 )
 def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
     session = TurnSession(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
+        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), root=Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
         native_session=PersistentPiSession(), startup=NativeStartup(Path.cwd()),
     )
     for cls in (left, right, left):

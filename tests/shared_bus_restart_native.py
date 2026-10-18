@@ -3,6 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
 import hashlib
 import shutil
@@ -811,7 +812,7 @@ async def run(arguments):
     for index in range(arguments.registry_size):
         service.registry.declare(service.registry.new_thread(f'unrelated-{index}', frozenset(), str(project)))
     for name in names:
-        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model='restart-local/fixture', thinking_level='off', task='Provider-free isolated restart acceptance; reply to each original once'))
+        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model='restart-local/fixture', thinking_level=OffThinkingLevel, task='Provider-free isolated restart acceptance; reply to each original once'))
     if arguments.saved_source:
         for name in names:
             owner = service.registry.require(name)

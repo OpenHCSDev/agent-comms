@@ -185,7 +185,6 @@ class Thread(ThreadProvenance):
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
         if self.model is not None and not self.model.strip():
             raise ValueError("Thread model cannot be empty.")
-        object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
 
     def require_original_model_configuration(self, original: Thread) -> None:
         changed = any((

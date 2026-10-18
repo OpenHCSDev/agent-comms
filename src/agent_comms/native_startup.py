@@ -52,4 +52,4 @@ class NativeStartup:
     def for_launch(
         cls, launch: NativePiRpcLaunch,
     ) -> NativeStartup:
-        return cls(Path(launch.env["AGENT_COMMS_ROOT"]).expanduser())
+        return cls(launch.root)

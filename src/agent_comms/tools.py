@@ -291,7 +291,7 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
         return {
             "thread": thread.name,
             "model": thread.model,
-            "thinking_level": thread.thinking_level.saved_name(),
+            "thinking_level": FieldCodec.encode(thread.thinking_level),
             "service_tier": thread.service_tier.value,
         }
 

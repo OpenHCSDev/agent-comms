@@ -1,4 +1,5 @@
 """A published native reply automatically reaches the original channel sender."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -223,7 +224,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         project.mkdir()
         projects[name] = project
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset({'team'}), str(project), model=f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture', thinking_level='off')
+            comms.registry.new_thread(name, frozenset({'team'}), str(project), model=f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture', thinking_level=OffThinkingLevel)
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)

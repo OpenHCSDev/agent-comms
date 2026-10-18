@@ -192,7 +192,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     category = "thought_level"
 
     def current_value(self, thread: CatalogSelection) -> str | None:
-        return thread.thinking_level.saved_name()
+        return FieldCodec.encode(thread.thinking_level)
 
     async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
         from .pi_commands import GetAvailableThinkingLevels
@@ -337,7 +337,7 @@ class SessionConfigOptions(ConfigOptions):
             self.agent_bin, arguments.argv, worktree=Path(thread.worktree),
         )
         model = state.model.display_name
-        level = state.thinking_level.saved_name()
+        level = FieldCodec.encode(state.thinking_level)
         if model is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")
         state.model.require_selection(model)
@@ -348,7 +348,7 @@ class SessionConfigOptions(ConfigOptions):
 
     @staticmethod
     def stored_settings(thread: Thread) -> UseSettings:
-        return UseSettings(thread.model, thread.thinking_level.saved_name())
+        return UseSettings(thread.model, FieldCodec.encode(thread.thinking_level))
 
     def turn_started(self, session_id: str, thread: Thread) -> None:
         self.settings_in_use.setdefault(session_id, self.stored_settings(thread))

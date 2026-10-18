@@ -27,7 +27,7 @@ from agent_comms.pi_native_backend import PersistentPiSession
 ])
 async def test_native_tool_lifecycle_publishes_actual_phase_after_effects(first, second):
     root = Path.cwd()
-    session = TurnSession(NativePiRpcLaunch(("unused",), root, {}, SelectedSession(root), root, runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
+    session = TurnSession(NativePiRpcLaunch(("unused",), root, {}, SelectedSession(root), root, root=root, runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
                           native_session=PersistentPiSession(), startup=NativeStartup(root))
     session.native = SimpleNamespace(proc=SimpleNamespace(identity=ProcessIdentity.capture(os.getpid())))
     session.active_tools = set()

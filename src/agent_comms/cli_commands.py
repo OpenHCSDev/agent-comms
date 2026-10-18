@@ -839,7 +839,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
         return {
             "configured": updated.name,
             "model": updated.model,
-            "thinking_level": updated.thinking_level.saved_name(),
+            "thinking_level": FieldCodec.encode(updated.thinking_level),
             "service_tier": updated.service_tier.value,
         }
 

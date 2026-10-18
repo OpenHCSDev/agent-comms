@@ -119,7 +119,7 @@ def test_default_off_and_packaged_extension_selection(
     sessions = tmp_path / "sessions"
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
     default = native_pi.NativePiRpcLaunch.tracked(
-        tmp_path, worktree=tmp_path, session=SelectedSession(sessions), model=selected_model
+        tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions), model=selected_model
     )
     assert "--no-tools" in default.argv and "--no-builtin-tools" not in default.argv
     assert "-e" not in default.argv
@@ -128,7 +128,7 @@ def test_default_off_and_packaged_extension_selection(
     packaged = tmp_path / "dist/selected_claimed_write.mjs"
     packaged.write_bytes(Path(broker.__file__).with_name("selected_claimed_write.mjs").read_bytes())
     selected = native_pi.NativePiRpcLaunch.tracked(
-        tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
+        tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
         model=selected_model, selected_tool_mode=mode
     )
     assert "--no-tools" not in selected.argv
@@ -140,13 +140,13 @@ def test_default_off_and_packaged_extension_selection(
     extension.write_text("evil changed extension", encoding="utf-8")
     with pytest.raises(SelectedToolDenied, match="reviewed"):
         native_pi.NativePiRpcLaunch.tracked(
-            tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
+            tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
             model=selected_model, selected_tool_mode=mode
         )
     with pytest.raises(AttributeError, match="launch_arguments"):
         native_pi.NativePiRpcLaunch.tracked(
             tmp_path,
-            worktree=tmp_path,
+            root=tmp_path, worktree=tmp_path,
             session=SelectedSession(sessions),
             model=selected_model,
             selected_tool_mode=object(),  # type: ignore[arg-type]

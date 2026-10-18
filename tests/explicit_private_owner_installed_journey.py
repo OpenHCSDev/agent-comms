@@ -1,5 +1,6 @@
 """Installed CLI root selection -> detached owner -> stdio ACP -> native reply."""
 
+from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
 import asyncio
 import json
@@ -67,7 +68,7 @@ async def main(package, evidence):
             project.mkdir(mode=0o700)
             comms = Comms(stage / 'wire')
             root_id = comms.messaging.initialize_private_initial_protocol()
-            comms.registry.declare(comms.registry.new_thread('recipient', frozenset({'team'}), str(project), model='selected-offline/fixture', thinking_level='off'))
+            comms.registry.declare(comms.registry.new_thread('recipient', frozenset({'team'}), str(project), model='selected-offline/fixture', thinking_level=OffThinkingLevel))
             env = {key: value for key, value in os.environ.items()
                    if not key.startswith(('PI_', 'AGENT_COMMS_')) and key != 'PYTHONPATH'}
             env.update({ROOT_ID_ENV: root_id, PACKAGE_ENV: str(package),
