@@ -518,6 +518,7 @@ class LaunchPermit(GoalTurnPermit):
         return (self,)
 
     def has_verified_progress(self, store: GoalAttemptStore) -> bool:
+        """Read the original attempt, even after its successor generation advances."""
         with closing(store._connect()) as conn:
             original = AttemptRecord.read_in(conn, self.reservation.attempt_id)
         return original.reserved_by(self.reservation, StaleAttemptError(
