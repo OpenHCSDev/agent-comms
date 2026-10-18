@@ -125,7 +125,7 @@ Todos and `TurnDigestRead`:
   last message to anyone.
 - Unit-to-unit messages since the commander's last look, self-messages removed.
 
-See `commander-game.md` "The screen" for a card sketch with real data. Flags
+See `commander-game.md` "The screen" for a card sketch with real data and "Distilled looking" for the three levels of detail (card, turn, evidence) and the `look` commands. Flags
 are the commander's judgement from reading the card, never regex.
 
 - Works when: the commander runs one command and sees every unit's card;
