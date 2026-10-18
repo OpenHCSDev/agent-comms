@@ -43,7 +43,7 @@ from agent_comms.exporting import (
     JsonlFormat,
 )
 from agent_comms.messages import InfoKind, Message
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience
@@ -332,7 +332,7 @@ def test_all_channel_excludes_sender_and_nonexecutors(
 ) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
     comms.registry.register(
-        comms.registry.new_thread(name='human', tags=frozenset(), worktree=str(tmp_path), role=ThreadRole.USER, created_at=17005.0)
+        comms.registry.new_thread(name='human', tags=frozenset(), worktree=str(tmp_path), role=UserThreadRole, created_at=17005.0)
     )
     sent = publish_initial(comms, "sender", "#all", "ordinary")
     result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)

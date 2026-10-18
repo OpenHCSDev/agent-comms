@@ -12,7 +12,6 @@ from .acp import CommsAgent
 from .comms import wire
 from .native_arguments import NativeArguments
 from .launch_runtime import LaunchRuntime, RestartEnvironment
-from .turn_input_source import OwnerOriginalInput
 
 
 async def run() -> None:
@@ -69,7 +68,7 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
             name,
             row.source_text,
             original_keys=(key,),
-            input_type=OwnerOriginalInput,
+            original_owner_input=True,
         )
 
 

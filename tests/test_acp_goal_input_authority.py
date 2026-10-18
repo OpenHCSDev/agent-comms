@@ -7,7 +7,6 @@ The callbacks, private goal ledger, ACP prompt queue, and transcript replay are 
 import json
 import logging
 from contextlib import nullcontext
-from agent_comms.turn_input_source import AutonomousOriginalInput
 
 import pytest
 from acp import RequestError
@@ -146,8 +145,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         await agent.turns.run_agent_turn(
             "project", "project", "Set a goal for model", initial_display_text="Set a goal as typed"
         )
-        observed_goal = (comms.registry.require("project").goal).require()
-        assert (observed_goal.active() is observed_goal)
+        assert comms.registry.require("project").goal.state.active
         state = comms.goals.open_goal_store().snapshot(observed["goal"].id)
         assert state.lifecycle == ReadyGeneration() and state.number == 2
         key = "acp:" + observed["public_id"]
@@ -209,7 +207,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
     try:
         with nullcontext() if change is None else pytest.raises(RequestError, match="Internal error"):
             await agent.turns.run_agent_turn(
-                "project", "project", "Continue working toward the active goal.", input_type=AutonomousOriginalInput
+                "project", "project", "Continue working toward the active goal.", autonomous_goal=True
             )
         key = "acp:" + observed["public_id"]
         row = stored_inputs(comms.root).lookup(key)
@@ -220,14 +218,12 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         assert await replay(agent) == (["follow-up as typed"] if change is None else [])
         current = comms.registry.require("project").goal
         if change is None:
-            observed_goal = (current).require()
-            assert (observed_goal.active() is observed_goal) and current.id == original_goal.id
+            assert current.state.active and current.id == original_goal.id
             assert store.snapshot(current.id).lifecycle == ReadyGeneration()
         elif change == "clear":
             assert current is None
         else:
-            observed_goal = (current).require()
-            assert (observed_goal.active() is observed_goal) and current.id == observed["replacement"].id
+            assert current.state.active and current.id == observed["replacement"].id
             assert store.snapshot(current.id).lifecycle == ReadyGeneration()
     finally:
         await agent.shutdown()

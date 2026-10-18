@@ -29,10 +29,9 @@ from .goal_attempts import (
     UnresolvedAttemptError,
 )
 from .goal_presentation import ThreadGoalExecution
-from .goals import Goal, GoalDeclaration, GoalRevision
+from .goals import GoalDeclaration, NoGoal, Goal, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
-from .turn_input_source import AutonomousScheduledTurn
 from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
 from .store_files import _store_lock
 
@@ -50,7 +49,7 @@ class GoalScheduler:
         self.comms = comms
         self.effects = effects
         self.pending_goal_origins: dict[str, str] = {}
-        self.goal_execution_signatures: dict[str, tuple[GoalDeclaration, ThreadGoalExecution]] = {}
+        self.goal_execution_signatures: dict[str, tuple[Goal | None, ThreadGoalExecution]] = {}
 
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
         self.sessions = sessions
@@ -87,8 +86,10 @@ class GoalScheduler:
                     thread.require_local_process(ProcessIdentity.capture(os.getpid()))
                     snapshot.status(thread.name).require_running()
                     thread.require_idle()
-                    goal = thread.goal.require_active()
                 except RelationViolationError:
+                    return
+                goal = thread.goal.active()
+                if not goal:
                     return
                 if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
                     return
@@ -120,7 +121,7 @@ class GoalScheduler:
                 diagnostic="Goal launch grant unavailable; explicit Retry required.",
             )
             return
-        return AutonomousScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
+        return ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
 
     async def set_goal(self, session_id: str, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""
@@ -132,8 +133,9 @@ class GoalScheduler:
             SetGoalAction(text=text, expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()))),
             actor=OwnerInvocable,
         ))
+        assert goal
         await self.schedule_goal(session_id)
-        return goal.require()
+        return goal
 
     async def edit_goal(
         self, session_id: str, goal_id: str, expected_revision: int, text: str
@@ -156,8 +158,9 @@ class GoalScheduler:
             ),
             actor=OwnerInvocable,
         ))
+        assert edited is not None
         await self.sessions.config.sync_thread(session_id)
-        return edited.require()
+        return edited
 
     async def update_goal(
         self, session_id: str, action: type[GoalAction], goal_id: str, expected_revision: int
@@ -206,12 +209,13 @@ class GoalScheduler:
             ),
             actor=OwnerInvocable,
         ))
+        assert resumed is not None
         # READY records the accepted owner decision even during an unrelated
         # turn. The scheduler's existing busy fences defer launch until that
         # turn finishes; reserved/claimed attempts remain unretryable above.
         await self.schedule_goal(session_id)
         await self.sync_goal_execution(session_id, name)
-        return resumed.require()
+        return resumed
 
     def in_standby(self, session_id: str) -> bool:
         try:

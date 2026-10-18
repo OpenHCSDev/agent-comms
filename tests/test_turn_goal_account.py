@@ -19,7 +19,7 @@ from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSett
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.turn_goal_account import TurnGoalAccount
-from agent_comms.turn_input_source import AutonomousOriginalInput, OriginalTurnInput, OwnerOriginalInput
+from agent_comms.turn_input_source import OriginalTurnInput
 from test_s1_event_behavior import owner_turn as owner_turn
 from stored_inputs import stored_inputs
 
@@ -102,7 +102,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     goal = await owner.turns.goals.set_goal(session.session_id, "preserve failed original")
-    execution = OwnedTurn(owner.turns, session.session_id, name, "work", input_type=AutonomousOriginalInput)
+    execution = OwnedTurn(owner.turns, session.session_id, name, "work", autonomous_goal=True)
     store = comms.goals.open_goal_store()
     generation_before = store.snapshot(goal.id)
     pending_before = tuple(owner.inputs.pending_turns.get(session.session_id, ()))
@@ -165,7 +165,7 @@ async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     execution = OwnedTurn(owner.turns, session.session_id, name, "cancel before native",
-                          input_type=OwnerOriginalInput)
+                          original_owner_input=True)
     captured, release = Event(), Event()
     reserve = OriginalTurnInput.reserve
 

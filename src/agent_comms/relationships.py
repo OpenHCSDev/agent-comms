@@ -23,7 +23,7 @@ from .channel_targets import CommandTarget
 from .command import Command
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
-from .errors import UnregisteredThreadError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .goals import GoalMentionBinding
 from .locked_store import LockedStore, RootFile
 from .peer_relevance import (
@@ -568,7 +568,9 @@ class RelationshipEditContext:
     def require_peer(self) -> Thread:
         if self.second is None:
             raise UnregisteredThreadError(f"Thread {self.peer_name!r} is not registered.")
-        self.second.role.require_executable()
+        self.second.role.require_executable(RelationViolationError(
+            f"Thread {self.peer_name!r} is human; collaborations relate agents"
+        ))
         if self.first.name == self.second.name:
             raise ValueError("A thread cannot collaborate with itself")
         if self.existing is not None and self.active is None:
@@ -716,9 +718,13 @@ class ThreadRelationships:
         """Resolve only saved incarnations from active goals in ONE registry snapshot."""
         contacts: list[GoalDerivedContact] = []
         diagnostics: list[GoalMentionDiagnostic] = []
-        for owner in registry.threads.values():
-            goal = owner.active_goal
-            if goal is None or not owner.role.executable:
+        for owner in (
+            executor
+            for thread in registry.threads.values()
+            for executor in thread.role.executor(thread)
+        ):
+            goal = owner.goal.active()
+            if not goal:
                 continue
             source = goal.mention_source
             # Missing historical evidence grants no contact or current-name binding.
@@ -833,8 +839,7 @@ class ThreadRelationships:
         command = action(note)
         with _store_lock(self._wire_lock_path):
             first = self.registry.require(owner)
-            if not first.role.executable:
-                raise ValueError("Collaborations relate agent threads")
+            first.role.require_executable(ValueError("Collaborations relate agent threads"))
             registry = self.registry.snapshot()
             peer = registry.canonical_name(peer)
             result = None

@@ -5,7 +5,6 @@ import json
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms.turn_input_source import AutonomousOriginalInput
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -79,7 +78,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
     try:
-        await agent.turns.run_agent_turn("project", "project", "Continue", input_type=AutonomousOriginalInput)
+        await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
         assert paused is not None
         assert wired.registry.require("project").goal == paused
         assert wired.registry.require("project").goal.state.pause_source.instruction() is not None

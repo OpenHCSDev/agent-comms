@@ -224,8 +224,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             await agent.turns.goals.schedule_goal("parent")
             await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
             assert not failures, failures
-            observed_goal = (comms.registry.require("parent").goal).require()
-            assert (observed_goal.active() is observed_goal)
+            assert comms.registry.require("parent").goal.state.active
             assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
             assert len(requests) == 2 + offset
             first_proc = agent.turns.persistent_backends["parent"].child_state.idle().child.proc

@@ -62,8 +62,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
                 "retry_goal", goal_id=goal.id, expected_revision=blocked.revision,
             )
             resumed_goal = FieldCodec.decode(Goal, resumed["goal"])
-            observed_goal = (resumed_goal).require()
-            assert (observed_goal.active() is observed_goal) and resumed_goal.id == goal.id
+            assert resumed_goal.state.active and resumed_goal.id == goal.id
             generation = GoalAttemptStore(store.root).snapshot(goal.id)
             assert (generation.number, generation.lifecycle, generation.attempt_id) == (
                 2, ReadyGeneration(), None,

@@ -31,8 +31,7 @@ if TYPE_CHECKING:
     from .native_turn_context import NativeContextManifestData
     from .comms import Comms
     from .goal_presentation import ThreadGoalExecution
-    from .goals import GoalDeclaration
-    from .goals import Goal
+    from .goals import GoalDeclaration, NoGoal, Goal
     from .pi_events import RetryAttemptEvent
     from .turn_phase import TurnPhase
     from .input_disposition import InputDocument
@@ -61,7 +60,7 @@ class GoalChanged(AgentEvent):
     execution: ThreadGoalExecution
 
     @property
-    def signature(self) -> tuple[GoalDeclaration, ThreadGoalExecution]:
+    def signature(self) -> tuple[Goal | None, ThreadGoalExecution]:
         return self.goal, self.execution
 
 
@@ -162,7 +161,8 @@ class ToolStart(ToolEvent):
     @classmethod
     def from_call(cls, call_id: str, name: str, arguments: dict[str, object]) -> ToolStart:
         declaration = ToolDeclaration.for_name(name)
-        return cls(call_id, name, ToolDeclaration.caption(name, arguments), arguments, declaration.acp_kind)
+        title = ToolDeclaration.caption(name, ToolDeclaration.record(name, arguments))
+        return cls(call_id, name, title, arguments, declaration.acp_kind)
 
 
 @dataclass(frozen=True)

@@ -6,6 +6,7 @@ import os
 import time
 from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
+from typing import TYPE_CHECKING
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
@@ -16,28 +17,28 @@ from .pi_vocabulary import (
     SERVICE_TIER_ENVIRONMENT, NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField,
 )
 from .goals import (
-    Goal, GoalDeclaration, NoGoal, GoalRevision,
+    GoalDeclaration, NoGoal,
+    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
-from .registration_inheritance import (
-    InheritEmpty, InheritMissing, InheritPrevious, InheritThinkingLevel,
-)
+from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious, InheritThinkingLevel
 from .storage_rules import StoragePath, StorageRoots, StorageRule
 from .thread_identity import (
     ThreadProvenance,
+    AgentThreadRole,
     ThreadRole,
     TurnId,
     TurnIdentity,
 )
 from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence, TurnState
 
+if TYPE_CHECKING:
+    from .launch_runtime import ThreadLaunch
 
 class _GeneratedCreationTime(float):
     """Transient marker for default timestamps; never persisted as claim authority."""
 
-
 def _thread_creation_time() -> float:
     return _GeneratedCreationTime(time.time())
-
 
 @dataclass(frozen=True, slots=True)
 class Thread(ThreadProvenance):
@@ -60,7 +61,7 @@ class Thread(ThreadProvenance):
         default=ServiceTier.PRIORITY, kw_only=True,
         metadata={"registration_inheritance": InheritPrevious},
     )
-    goal: GoalDeclaration = field(default_factory=NoGoal)
+    goal: GoalDeclaration = field(default_factory=NoGoal, metadata={"registration_inheritance": InheritEmpty})
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
                               metadata={"wire_required": True})
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
@@ -81,7 +82,7 @@ class Thread(ThreadProvenance):
     )
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
-    role: ThreadRole = ThreadRole.AGENT
+    role: type[ThreadRole] = AgentThreadRole
     execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
                                             metadata={"wire_omit_default": True})
     backend: type[AgentBackend] = field(
@@ -121,6 +122,11 @@ class Thread(ThreadProvenance):
         )
 
     @property
+    def owes_project_resume(self) -> bool:
+        """Idle with the resume still due; a turn for the active goal is that turn."""
+        return self.project_resume_due and not self.executing and not self.goal.active()
+
+    @property
     def turn_state(self) -> TurnState:
         return TurnState(self.active_turn, self.last_finished_turn_id)
 
@@ -136,17 +142,18 @@ class Thread(ThreadProvenance):
         from .runtime_requests import ProjectRuntimeRequest
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
-        from .launch_runtime import RestartEnvironment
-
         return {
-            RestartEnvironment.owner_key: self.name,
+            **replace(self.launch(), worktree=worktree, managed=True).encode(),
             "AGENT_COMMS_ROOT": str(root),
-            "PI_PARENT_ID": self.parent or "",
-            "AGENT_COMMS_MANAGED": "1",
             SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
-            "PI_WORKTREE": worktree,
             **project.environment(root),
         }
+
+    def launch(self) -> ThreadLaunch:
+        """The launch environment this thread's owner process carries."""
+        from .launch_runtime import ThreadLaunch
+
+        return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task)
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
@@ -155,7 +162,7 @@ class Thread(ThreadProvenance):
             object.__setattr__(self, "created_at", float(self.created_at))
         super(Thread, self).__post_init__()
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
-        object.__setattr__(self, "role", ThreadRole(self.role))
+        self.process_identity.require_held_by(self.role)
         if self.active_turn is not None:
             if not self.process_identity.owns_turn(self.active_turn):
                 raise RelationViolationError("A turn must belong to the registered executor.")
@@ -229,17 +236,18 @@ class Thread(ThreadProvenance):
             raise ValueError("live owner requires an exact thread declaration")
 
     def same_local_process(self, process: ProcessIdentity) -> bool:
-        return self.role.executable and self.process_identity == process
+        return self.process_identity == process
 
     def require_local_process(self, process: ProcessIdentity) -> None:
-        self.role.require_executable()
+        self.role.require_executable(RelationViolationError("A human thread owns no local process"))
         if not self.same_local_process(process):
             raise RelationViolationError("live owner is not the current process incarnation")
 
     def require_process(self) -> ProcessIdentity:
-        self.role.require_executable()
+        self.role.require_executable(
+            RelationViolationError(f"Thread {self.name!r} is human; it owns no process")
+        )
         return self.process_identity.require(f"Thread {self.name!r} has no owner process")
-
 
     def require_idle(self) -> None:
         if self.active_turn is not None:
@@ -256,19 +264,54 @@ class Thread(ThreadProvenance):
         if turn is None or TurnId(turn.id) != turn_id:
             raise RelationViolationError("live owner does not hold the requested turn")
 
+    @property
+    def task_scope(self):
+        from .task_sources import GoalTaskScope, TurnTaskScope
+
+        goal = self.goal.active()
+        return (GoalTaskScope(project=self.worktree, goal=goal.checkpoint)
+                if goal else TurnTaskScope(project=self.worktree))
+
+    def context_goal_segments(self, goals):
+        """Project this declaration's active goal without a second goal state."""
+        from .turn_context import GoalSegment
+
+        goal = self.goal.active()
+        return (GoalSegment.capture(self, goal, goals),) if goal else ()
+
     def wake_context(self) -> dict[str, object]:
         """This captured thread owns its selected-wake work and goal projection."""
+        goal = self.goal
         return {
             "name": self.name, "title": self.title, "tags": sorted(self.tags),
             "original_assignment": self.task,
-            "current_goal": FieldCodec.encode(self.goal.wake_context()),
+            "current_goal": (None if not goal else {
+                "text": goal.text, "status": goal.state.declared_name,
+                "progress": goal.progress,
+            }),
         }
 
+    def retained_task_facts(self):
+        from .retained_task_facts import GoalTaskFact
+
+        return (GoalTaskFact(self.goal),) if self.goal else ()
+
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
-        """The current active declaration still belongs to the captured project/goal."""
+        """The current active goal still belongs to this captured project/goal."""
         if self.worktree != original.worktree:
             return NoGoal()
-        return original.goal.active().continuation(self.goal.active())
+        goal, captured = self.goal.active(), original.goal.active()
+        if not goal or not captured:
+            return NoGoal()
+        return goal.matching(captured.require().id)
+
+    def require_goal_replacement(self, goals) -> None:
+        if self.goal:
+            self.goal.require_replacement(goals, self.incarnation)
+
+    def require_order_slot(self, goal_id: str, problem: str) -> None:
+        if self.goal:
+            self.goal.order.require_slot(self.goal, goal_id, problem)
 
     def same_launch(self, other: Thread) -> bool:
         """Whether both records describe one process serving one saved session with one model setting.
@@ -325,8 +368,6 @@ class Thread(ThreadProvenance):
                 for declared in fields(self)
                 if (policy := declared.metadata.get("registration_inheritance")) is not None
             }
-        if previous is not None:
-            inherited["goal"] = self.goal.registration_value(previous.goal)
         resolved = replace(self, name=canonical_name, **inherited)
         return self if resolved == self else resolved
 
@@ -384,7 +425,7 @@ class Thread(ThreadProvenance):
         return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
 
     def has_goal_revision(self, goal_id: str, minimum_revision: int) -> bool:
-        return self.goal.accepts_observation(goal_id, minimum_revision)
+        return bool(self.goal) and self.goal.accepts_observation(goal_id, minimum_revision)
 
     @property
     def is_fork(self) -> bool:
@@ -402,19 +443,16 @@ class Thread(ThreadProvenance):
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
 
-
 def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""
-    from .launch_runtime import RestartEnvironment
+    from .launch_runtime import ThreadLaunch
 
-    name = RestartEnvironment.calling_thread()
-    tag_env = os.environ.get("PI_AGENT_TAGS") or os.environ.get("AGENT_COMMS_TAGS", "")
-    tags = frozenset(t.strip() for t in tag_env.split(",") if t.strip())
+    launch = ThreadLaunch.current()
     return registry.new_thread(
-        name=name,
-        tags=tags,
-        worktree=os.environ.get("PI_WORKTREE", os.getcwd()),
-        parent=os.environ.get("PI_PARENT_ID"),
-        task=os.environ.get("PI_TASK"),
+        name=launch.name,
+        tags=launch.tags,
+        worktree=launch.worktree,
+        parent=launch.parent,
+        task=launch.task,
         process_identity=ProcessIdentity.capture(os.getpid()),
     )

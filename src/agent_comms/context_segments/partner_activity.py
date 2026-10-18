@@ -33,9 +33,10 @@ class PartnerGoalChange:
         if not history:
             return None
         entry = history[-1]
-        for goal in entry.after:
-            return cls(peer, entry.observed_at, goal.checkpoint, type(goal.state), goal.progress)
-        return cls(peer, entry.observed_at, None, None, "")
+        goal = entry.after
+        if not goal:
+            return cls(peer, entry.observed_at, None, None, "")
+        return cls(peer, entry.observed_at, goal.checkpoint, type(goal.state), goal.progress)
 
 
 @dataclass(frozen=True, kw_only=True)

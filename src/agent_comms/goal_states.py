@@ -12,7 +12,6 @@ from .lifecycle import LifecycleState
 
 if TYPE_CHECKING:
     from .goal_actions import GoalAction
-    from .goals import Goal, GoalDeclaration
 
 
 @dataclass(frozen=True)
@@ -49,14 +48,8 @@ class RuntimePause(PauseSource):
 
 @dataclass(frozen=True)
 class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
+    active: ClassVar[bool] = False
     terminal: ClassVar[bool] = False
-
-    def allows_goalless(self) -> bool:
-        return True
-
-    def declaration(self, goal: Goal) -> GoalDeclaration:
-        from .goals import NoGoal
-        return NoGoal()
 
     def after_failed_turn(self, diagnostic: str) -> GoalState:
         return self
@@ -151,11 +144,7 @@ class OpenGoal(BlockingOnFailure, GoalState):
 
 @dataclass(frozen=True)
 class ActiveGoal(OpenGoal, FromOpenGoal):
-    def allows_goalless(self) -> bool:
-        return False
-
-    def declaration(self, goal: Goal) -> GoalDeclaration:
-        return goal
+    active = True
 
     def after_order_delivery(self, pending):
         return self if pending else CompletedGoal()

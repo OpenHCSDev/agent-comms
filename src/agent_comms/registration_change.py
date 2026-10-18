@@ -13,8 +13,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
-from .goals import GoalDeclaration, NoGoal
-from .goals import Goal
+from .goals import GoalDeclaration, NoGoal, Goal
 from .thread_status import ThreadStatus
 from .threads import Thread
 
@@ -33,7 +32,7 @@ class RegistrationChange(ABC):
 
     @property
     @abstractmethod
-    def needs_maintenance_claim(self) -> bool: ...
+    def claims_owner(self) -> bool: ...
 
     @property
     @abstractmethod
@@ -66,8 +65,8 @@ class InitialRegistration(RegistrationChange):
     changes_owner = True
 
     @property
-    def needs_maintenance_claim(self) -> bool:
-        return self.thread.process_identity.needs_maintenance_claim(self.thread.role, self.status)
+    def claims_owner(self) -> bool:
+        return self.thread.process_identity.claims_owner(self.status)
 
     def restarted(self) -> RegistrationChange:
         return InitialOwnerRegistration(thread=self.thread, status=self.status)
@@ -104,8 +103,8 @@ class UpdatedRegistration(RegistrationChange):
         return self.previous.goal
 
     @property
-    def needs_maintenance_claim(self) -> bool:
-        return self.thread.role.executable and (
+    def claims_owner(self) -> bool:
+        return (
             self.previous.process_identity != self.thread.process_identity
             or self.previous_status.starts_owner(self.status)
         )
@@ -151,8 +150,8 @@ class ExplicitOwnerChange(RegistrationChange):
     changes_owner = True
 
     @property
-    def needs_maintenance_claim(self) -> bool:
-        return self.thread.role.executable
+    def claims_owner(self) -> bool:
+        return True
 
     @property
     def installed_thread(self) -> Thread:

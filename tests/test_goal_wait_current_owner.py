@@ -20,7 +20,7 @@ def test_graph_uses_only_wait_for_original_owner_goal(tmp_path, change):
         comms.goals.update_goal(name, SetGoalAction(text=f"Work for {name}"))
     peer = comms.registry.require("peer")
     leaf = comms.registry.require("leaf")
-    goal = peer.goal.require()
+    goal = peer.active_goal
     wait = RecordedGoalWait(
         goal.id, "original-wait", goal.revision, 0,
         (GoalWaitTarget(leaf.incarnation.require_recorded()),), peer.incarnation.require_recorded(),

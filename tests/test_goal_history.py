@@ -58,7 +58,7 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     reopened = Comms(comms.root)
     entries = reopened.goals.goal_history("worker")
     assert [entry.kind for entry in entries] == ["transition"] * 6
-    assert [entry.after for entry in entries] == [first, paused, resumed, completed, second, None]
+    assert [entry.after for entry in entries] == [first, paused, resumed, completed, second, NoGoal()]
     assert entries[0].after.text == "Ask @reviewer about the release"
     assert entries[4].before == completed
     assert entries[5].before == second
@@ -91,7 +91,7 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
     baseline = reopened.goals.goal_history("worker")
     assert len(baseline) == 1
     assert baseline[0].kind == "baseline"
-    assert baseline[0].before is None and baseline[0].after == current
+    assert not baseline[0].before and baseline[0].after == current
     assert Comms(comms.root).goals.goal_history("worker") == baseline
     paused = reopened.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))

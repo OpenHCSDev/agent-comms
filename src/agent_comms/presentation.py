@@ -284,22 +284,22 @@ class MessageNotification:
         message = source.message
         if source.audience.recipients or not viewer.sees_direct_read(source):
             return None
-        target = CommandTarget.named(message.target).direct_peer(snapshot)
-        if target is None or not reads.human(target.role):
-            return None
-        recipient = FrozenRecipient(target.incarnation.lookup, target.name)
-        displayed_to = reads.displayed_recipient(
-            source, recipient, snapshot, document=document
-        )
-        if not displayed_to:
-            return None
-        return cls(
-            recipient,
-            source.audience.sender_lookup,
-            HumanReadProgress(),
-            displayed_to=displayed_to,
-            changed=True,
-        )
+        peer = CommandTarget.named(message.target).direct_peer(snapshot)
+        for target in () if peer is None else peer.role.human(peer):
+            recipient = FrozenRecipient(target.incarnation.lookup, target.name)
+            displayed_to = reads.displayed_recipient(
+                source, recipient, snapshot, document=document
+            )
+            if not displayed_to:
+                return None
+            return cls(
+                recipient,
+                source.audience.sender_lookup,
+                HumanReadProgress(),
+                displayed_to=displayed_to,
+                changed=True,
+            )
+        return None
 
     @classmethod
     def sent_sources(
@@ -689,7 +689,7 @@ class ThreadView(ThreadRecord):
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.statuses[thread.name], activities[thread.name],
-            thread.goal.execution(waits, snapshot, agents), runtime[thread.name],
+            GoalWaits.execution(thread.goal, waits, snapshot, agents), runtime[thread.name],
             snapshot.seen_at(thread.name), snapshot.owner_binding(thread.name),
         ) for thread in threads)
 

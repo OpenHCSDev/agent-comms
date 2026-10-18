@@ -9,13 +9,8 @@ from typing import ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
-from .native_tool_call import SelectedToolDenied
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
-from .tool_declaration import ToolDeclaration
-
-
-def one_line(text: object, limit: int) -> str:
-    return ' '.join(str(text).split())[:limit]
+from .tool_declaration import ToolDeclaration, one_line
 
 
 class NativeExecutableTool(ToolDeclaration):
@@ -59,15 +54,6 @@ class NativeRequestTools:
 class ArgumentTool:
     """One declared execution record supplies validation and native serialization."""
 
-    @classmethod
-    def parse_arguments(cls, arguments: dict[str, object]):
-        if cls.family_discriminator in arguments:
-            raise SelectedToolDenied("Native arguments cannot contain a family selector")
-        try:
-            return FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **arguments})
-        except (TypeError, ValueError, KeyError) as error:
-            raise SelectedToolDenied(f"Invalid {cls.declared_name} arguments: {error}") from error
-
     @property
     def arguments(self) -> dict[str, object]:
         # The native argument object has no family envelope. Its contents come
@@ -79,13 +65,21 @@ class ArgumentTool:
 
 @dataclass(frozen=True, kw_only=True)
 class PathTool:
-    preview_fields: ClassVar[tuple[str, ...]] = ('path',)
     path: str
 
+    def reads(self) -> str:
+        return self.path
 
+
+@dataclass(frozen=True, kw_only=True)
 class PatternSearchTool:
     acp_kind = "search"
-    preview_fields: ClassVar[tuple[str, ...]] = ('pattern',)
+    pattern: str
+    path: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
+
+    def reads(self) -> str:
+        return self.pattern
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -102,8 +96,7 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
 
     def digest(self) -> str:
         """What the call does in one line, enough to judge it."""
-        fields = (one_line(getattr(self, key), 260) for key in self.preview_fields)
-        return f"{self.declared_name} {' '.join(fields)}"
+        return f'{self.declared_name} {one_line(self.reads(), 260)}'
 
     def replacements(self) -> tuple[ReplacementEdit, ...]:
         return ()
@@ -137,7 +130,8 @@ class BashTool(CodingTool):
     command: str
     timeout: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
 
-    preview_fields = ('command',)
+    def reads(self) -> str:
+        return self.command
 
     def _parse_resource(self) -> None:
         return None
@@ -199,6 +193,13 @@ class WriteTool(MutatingPathTool, CodingTool):
         return (ReplacementEdit(old_text='', new_text=self.content),)
 
     claim_type = WritableFileClaim
+
+
+@dataclass(frozen=True, kw_only=True)
+class FilePatchTool(PathTool, ToolDeclaration):
+    """A file change known by its path and diff alone (Codex's patch), without replacement text."""
+    acp_kind = "edit"
+    label = "Edit"
 
 
 class GrepTool(PatternSearchTool, ToolDeclaration):

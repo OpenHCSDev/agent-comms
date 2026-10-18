@@ -21,7 +21,6 @@ from typing import Literal
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
 from .goals import GoalDeclaration, NoGoal
-from .goals import Goal
 from .typed_table import Column, Index, JsonStorage, SQLiteSchemaObject, TypedTable
 
 
@@ -35,8 +34,8 @@ class RecordedGoalRevision:
     sequence: int | None
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
-    before: Goal | None
-    after: Goal | None
+    before: GoalDeclaration
+    after: GoalDeclaration
 
 
 @dataclass(frozen=True)
@@ -253,15 +252,13 @@ class GoalHistoryStore:
                 self._set_state(row.sequence, "uncertain")
         committed = [row for row in self._rows(owner_created_at) if row.state == "committed"]
         if not committed:
-            current.capture_baseline(self, owner_created_at)
+            if current:
+                self._insert(owner_created_at, "baseline", "committed", NoGoal(), current)
             return
         last = committed[-1].after
         if last != current:
             # Known endpoints do not manufacture unobserved revisions or timing.
             self._insert(owner_created_at, "observed_gap", "committed", last, current)
-
-    def baseline(self, owner_created_at: float, goal: Goal) -> None:
-        self._insert(owner_created_at, "baseline", "committed", NoGoal(), goal)
 
     def begin(self, owner_created_at: float, before: GoalDeclaration, after: GoalDeclaration) -> int:
         self.observe(owner_created_at, before)
@@ -280,7 +277,10 @@ class GoalHistoryStore:
             if row.state == "committed"
             and (
                 goal_id is None
-                or row.before.continues(goal_id)
-                or row.after.continues(goal_id)
+                or goal_id
+                in {
+                    row.before.require().id if row.before else None,
+                    row.after.require().id if row.after else None,
+                }
             )
         )

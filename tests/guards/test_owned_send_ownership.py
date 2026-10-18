@@ -5,10 +5,10 @@ import inspect
 from pathlib import Path
 
 import pytest
-from agent_comms.goals import TurnGoalPermission
 
 from agent_comms.owned_send import OwnedSend
 from agent_comms.owned_turn import OwnedTurn
+from agent_comms.turn_goal_permission import TurnGoalPermission
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.turn_input_source import OriginalTurnInput, TurnInputSource
 

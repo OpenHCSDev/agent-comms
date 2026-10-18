@@ -102,8 +102,7 @@ def test_delivery_checks_once_and_only_last_problem_completes_goal(commander):
     create(commander, 'P2')
     CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
     assert marker.read_text() == 'x'
-    observed_goal = (comms.registry.require('worker').goal).require()
-    assert (observed_goal.active() is observed_goal)
+    assert comms.registry.require('worker').goal.state.active
     assert not comms.goals.todos.get('P1').pending
     assert comms.goals.todos.get('P1').order.delivery.at.at > 0
     goal = comms.registry.require('worker').goal
@@ -120,8 +119,7 @@ def test_failed_check_keeps_problem_pending(commander):
     with pytest.raises(ValueError, match='expected last integer'):
         CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
     assert comms.goals.todos.get('P1') == original
-    observed_goal = (comms.registry.require('worker').goal).require()
-    assert (observed_goal.active() is observed_goal)
+    assert comms.registry.require('worker').goal.state.active
 
 
 def test_close_records_evidence_once_and_does_not_depend_on_artifact_lifetime(commander):

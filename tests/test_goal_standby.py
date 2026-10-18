@@ -316,8 +316,7 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
     with pytest.raises(OSError, match="wait-clear failure"):
         comms.goals.recover_closed_goal_wait("alice")
     reopened = wire(tmp_path)
-    observed_goal = (reopened.registry.require("alice").goal).require()
-    assert (observed_goal.active() is observed_goal)
+    assert reopened.registry.require("alice").goal.state.active
     assert reopened.goals.goal_execution("alice").state is GoalExecutionState.STANDBY
     monkeypatch.setattr(GoalWaits, "clear", original_clear)
     assert reopened.goals.recover_closed_goal_wait("alice") == ("alice", "bob")

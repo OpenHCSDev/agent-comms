@@ -17,12 +17,7 @@ from acp import RequestError
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
-from .goals import (
-    AcceptedGoalPermission,
-    GoalDeclaration,
-    NoGoal,
-)
-from .goals import Goal
+from .goals import GoalDeclaration, NoGoal, Goal
 from .image_inputs import ImageInput
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .coordination_cohort import pending_sealed_assignments
@@ -33,7 +28,8 @@ from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .store_files import _store_lock
 from .coordinator import Coordination
 from .coordination_session import ReadNativeCoordinationSession
-from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput, DependencyScheduledTurn, OwnerOriginalInput
+from .turn_goal_permission import AcceptedGoalPermission
+from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
 
@@ -79,8 +75,8 @@ class QueuedInputContext:
         return self.named(claim_scope.incarnation.name).claim_scope == claim_scope
 
     @property
-    def goal_permission(self) -> AcceptedGoalPermission:
-        return AcceptedGoalPermission(self.goal.active().accepted_goal_id())
+    def active_goal_id(self) -> str | None:
+        return self.goal.id if self.goal and self.goal.state.active else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,7 +107,7 @@ class QueuedInput:
         return AcceptedFollowingInput(
             keys=(self.key,),
             accepted_id=self.input_id,
-            goal_permission=self.context.goal_permission,
+            goal_permission=AcceptedGoalPermission(self.context.active_goal_id),
         )
 
     @classmethod
@@ -237,8 +233,8 @@ class QueuedInput:
             images=self.images,
             original_keys=(self.key,),
             initial_display_text=self.text if self.echo else None,
-            input_type=OwnerOriginalInput,
-            original_goal_permission=self.context.goal_permission,
+            original_owner_input=True,
+            original_goal_id=self.context.active_goal_id,
             accepted_input_id=self.accepted_id,
         )
 
@@ -324,7 +320,7 @@ class DeliveredInput(QueuedInput):
         return DeliveredFollowingInput(
             keys=(self.key,),
             accepted_id=self.input_id,
-            goal_permission=self.context.goal_permission,
+            goal_permission=AcceptedGoalPermission(self.context.active_goal_id),
             origins=(self.message,),
         )
 
@@ -343,6 +339,7 @@ class DeliveredInput(QueuedInput):
         """
         from .agent_backend import InputContent
         from .context_segments.wake import DeliveredMessageSegment
+        from .routing import ScheduledTurn
         from .turn_context import TurnContext
 
         with _store_lock(inputs.comms._wire_lock_path):
@@ -368,7 +365,7 @@ class DeliveredInput(QueuedInput):
                     row = ReservedInput(
                         key, message.seq, canonical, context.claim_scope.claimed_generation,
                         message.target,
-                        DependencyScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
+                        ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                         origin=WireInputOrigin(root_id, message.reference),
                     )
                     with ExitStack() as ownership:

@@ -22,7 +22,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goals import (
     AliasMentionBinding, LimitExceededMentionBinding, MalformedMentionBinding, NonExecutableMentionBinding, ResolvedMentionBinding, SelfMentionBinding, UnknownMentionBinding,
 )
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
@@ -33,7 +33,7 @@ def _wire(tmp_path: Path) -> Comms:
     for name, created in (("owner", 17001.0), ("peer", 17002.0), ("other", 17003.0)):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=created))
     comms.registry.declare(
-        comms.registry.new_thread('human', frozenset(), str(tmp_path), role=ThreadRole.USER, created_at=17004.0)
+        comms.registry.new_thread('human', frozenset(), str(tmp_path), role=UserThreadRole, created_at=17004.0)
     )
     return comms
 
@@ -267,7 +267,7 @@ def test_registry_write_failure_never_exposes_uncommitted_contact(
         comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
     assert comms.registry.store.path.read_bytes() == before
     fresh = Comms(comms.root)
-    assert fresh.registry.require("owner").goal.to_wire() is None
+    assert not fresh.registry.require("owner").goal
     assert _rows(fresh, "peer")[0] == ()
     assert not fresh.relationships.store.path.exists()
 

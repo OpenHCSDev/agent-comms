@@ -29,7 +29,6 @@ from .goal_actions import (
     PausedGoalAction,
 )
 from .goal_scheduler import GoalScheduler
-from .goals import NoGoal, TurnGoalPermission
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import NativeArguments
@@ -44,7 +43,6 @@ from .pi_payloads import StateData
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
-from .turn_input_source import OriginalTurnInput, ScheduledOriginalInput
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 
@@ -221,21 +219,18 @@ class TurnRunner:
                 self.turn_tasks.pop(session_id, None)
             self.inputs.ensure_live_drain(session_id)
 
-    async def pause_goal(self, name: str, goal_id: str) -> None:
-        await Coordination.run_worker(partial(
-            self.comms.goals.update_goal, name,
-            PausedGoalAction(expect=GoalPrecondition(goal_id=goal_id)),
-            actor=OwnerInvocable,
-        ))
-
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         if session_id in self.sessions.proxies:
             await self.sessions.proxies[session_id].request("cancel")
             return
         name = self.sessions.bindings.get(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
-        if thread is not None:
-            await thread.goal.active().pause_for_cancel(self, name)
+        if thread is not None and (goal := thread.goal) and goal.state.active:
+            await Coordination.run_worker(partial(
+                self.comms.goals.update_goal, name,
+                PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                actor=OwnerInvocable,
+            ))
         task = self.turn_tasks.get(session_id)
         if task is not None:
             current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
@@ -442,8 +437,9 @@ class TurnRunner:
         images: tuple[Any, ...] = (),
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
-        input_type: type[OriginalTurnInput] = ScheduledOriginalInput,
-        original_goal_permission: TurnGoalPermission = NoGoal(),
+        autonomous_goal: bool = False,
+        original_owner_input: bool = False,
+        original_goal_id: str | None = None,
         accepted_input_id: str | None = None,
         dependency_wait_id: str | None = None,
     ) -> None:
@@ -458,8 +454,9 @@ class TurnRunner:
             images=images,
             original_keys=original_keys,
             initial_display_text=initial_display_text,
-            input_type=input_type,
-            original_goal_permission=original_goal_permission,
+            autonomous_goal=autonomous_goal,
+            original_owner_input=original_owner_input,
+            original_goal_id=original_goal_id,
             accepted_input_id=accepted_input_id,
             dependency_wait_id=dependency_wait_id,
         ).run()

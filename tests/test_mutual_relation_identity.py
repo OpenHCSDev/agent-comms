@@ -1,7 +1,7 @@
 """Shared relation behavior extends without endpoint-comparison consumer edits."""
 
 from agent_comms.peer_relevance import GoalContactRelevance
-from agent_comms.thread_relations import MutualThreadRelation, RelationRecord
+from agent_comms.relationships import MutualThreadRelation, RelationRecord
 from agent_comms.threads import Thread
 
 

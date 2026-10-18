@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 
 from ..field_codec import FieldCodec
-from ..thread_relations import RelationRecord
+from ..relationships import RelationRecord
 from ..turn_context import InstructionSegment, OwnerProvenance
 
 

@@ -93,8 +93,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     reservation.fail(store, "Observed failure")
     assert not store.snapshot(goal.id).lifecycle.allows_resume(False)
     changed = comms.goals.update_goal("owner", retry, actor=OwnerInvocable)
-    observed_goal = (changed).require()
-    assert (observed_goal.active() is observed_goal) and changed.id == goal.id
+    assert changed.state.active and changed.id == goal.id
     assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
     assert store.snapshot(goal.id).number == 2
     with sqlite3.connect(store.path) as database:
@@ -127,7 +126,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
         comms.goals.update_goal("owner", action)
     review = comms.goals.goal_input_review("owner", goal.id, ["peer"])
-    assert review["reviewed_inputs"] == [key]
+    assert list(review.reviewed_inputs) == [key]
     comms.goals.update_goal("owner", replace(action, reviewed_inputs=(key,)))
     row = stored_inputs(store.root).rows[key]
     assert row.accepts_reservation and row.reviewed_for_goal(goal.id)

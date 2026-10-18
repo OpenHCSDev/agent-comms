@@ -112,6 +112,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     from agent_comms.goal_presentation import GoalWaitTarget
     from agent_comms.goals import Goal
     from agent_comms.threads import Thread
+    from agent_comms.turn_goal_permission import ContinuationGoalPermission
     from agent_comms.turn_input_source import (
         CapturedInputDependency,
         DependencyOriginalInput,
@@ -141,7 +142,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     )
     common = dict(
         accepted_id=None,
-        goal_permission=goal,
+        goal_permission=ContinuationGoalPermission(goal),
         prompt="Result",
         original_display="Result",
         origins=(message,),

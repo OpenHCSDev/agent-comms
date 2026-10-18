@@ -47,8 +47,7 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 
     assert result["id"] == started["id"]
     assert result["text"] == started["text"]
-    observed_goal = (FieldCodec.decode(Goal, result)).require()
-    assert (observed_goal.active() is observed_goal)
+    assert FieldCodec.decode(Goal, result).state.active
     assert result["progress"] == "user resumed"
     assert comms.registry.require("owner").goal.id == started["id"]
 
@@ -123,7 +122,7 @@ def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
 
     comms.goals.update_goal("owner", ClearGoalAction(expect=GoalPrecondition(goal_id=goal["id"])))
 
-    assert comms.registry.require("owner").goal.to_wire() is None
+    assert not comms.registry.require("owner").goal
     assert GoalAttemptStore(private).snapshot(goal["id"]).lifecycle == CancelledGeneration()
     assert store.snapshot(goal["id"]).attempt_id == reservation.attempt_id
 

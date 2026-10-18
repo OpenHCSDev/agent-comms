@@ -223,7 +223,7 @@ class FailedTurnProjection:
             return cls("unavailable", "missing_binding")
         if not row.matches_owner(owner, claim_scope):
             return cls("unavailable", "owner_or_goal_changed")
-        state, explanation = goal.failure_projection(row.reason.value)
+        state, explanation = goal.state.failure_projection(row.reason.value)
         return cls(state, explanation)
 
 
@@ -245,12 +245,12 @@ def read_failed_turn_projection(
         return FailedTurnProjection("unavailable", reason)
 
     goal = owner.goal
-    if not owner.process_identity.allows_goal_observation(owner_status):
+    if not goal or not owner.process_identity.allows_goal_observation(owner_status):
         return unavailable("owner_or_goal_changed")
     try:
         # Resolve lifecycle eligibility before reading the ledger; active goals
         # must not surface a historical failure, even from a damaged store.
-        goal.failure_projection("")
+        goal.state.failure_projection("")
     except FailureNotObserved as error:
         return unavailable(str(error))
     if type(claim_scope) is not int or claim_scope <= 0:

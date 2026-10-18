@@ -10,7 +10,6 @@ from acp import RequestError
 from acp.agent.router import build_agent_router
 
 from agent_comms.comms import Comms
-from agent_comms.turn_input_source import AutonomousOriginalInput
 from agent_comms.acp_extension import (
     CompactionChangedUpdate,
     decode_updates,
@@ -224,7 +223,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             # session; the real backend, input journal and settlement remain live.
             with pytest.raises(RequestError) as error:
                 await agent.turns.run_agent_turn(
-                    sid, sid, "One new failed goal input", input_type=AutonomousOriginalInput
+                    sid, sid, "One new failed goal input", autonomous_goal=True
                 )
             request_failure = RequestFailure.from_error(
                 error.value.code, str(error.value), error.value.data

@@ -724,8 +724,9 @@ def _text(value: str, label: str, limit: int) -> str:
 
 
 def _thread(thread: Thread) -> ThreadIncarnation:
-    if not thread.role.executable:
-        raise TodoError("Assignments require an executable registered thread snapshot.")
+    thread.role.require_executable(
+        TodoError("Assignments require an executable registered thread snapshot.")
+    )
     return _participant(thread)
 
 
@@ -817,7 +818,7 @@ class TodoStore(TypedStore):
         repo_id = _repo(repo)
         identity, assignee = _participant(creator), _thread(owner)
         deadline.require_deadline()
-        if goal is not None and type(goal) is not GoalRef:
+        if type(goal) not in (GoalRef, type(None)):
             raise TodoError("Goal reference must be a typed GoalRef.")
         proposed = Todo(
             id=todo_id,

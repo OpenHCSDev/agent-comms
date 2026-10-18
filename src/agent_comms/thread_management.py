@@ -489,16 +489,21 @@ class ThreadRename(ABC):
     """One rename, its kind derived from the registry's privacy."""
 
     privacy: ClassVar[type[RegistryPrivacy]]
+    kinds: ClassVar[dict[type[RegistryPrivacy], type[ThreadRename]]] = {}
     threads: ThreadManagement
     before: Thread
     new_name: str
     registry_privacy: RegistryPrivacy
 
+    def __init_subclass__(cls, **kwargs):
+        # slots=True rebuilds the class; its final declaration replaces the first.
+        super(ThreadRename, cls).__init_subclass__(**kwargs)
+        cls.kinds[cls.privacy] = cls
+
     @classmethod
-    def chosen(cls, threads: ThreadManagement, before: Thread, new_name: str) -> Self:
+    def chosen(cls, threads: ThreadManagement, before: Thread, new_name: str) -> ThreadRename:
         privacy = threads._privacy()
-        kind, = (k for k in cls.__subclasses__() if isinstance(privacy, k.privacy))
-        return kind(threads, before, new_name, privacy)
+        return cls.kinds[type(privacy)](threads, before, new_name, privacy)
 
     @abstractmethod
     def renamed(self) -> tuple[str, str]:

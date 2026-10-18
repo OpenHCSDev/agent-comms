@@ -97,7 +97,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
                         await release.wait()
                     if number == 2 and isinstance(event, ae.Done):
                         current = comms.registry.require(session).goal
-                        assert current.permits_continuation(goal.id)
+                        assert current.state.active and current.id == goal.id
                         assert store.snapshot(goal.id).number == 2
                         comms.goals.update_goal(
                             session,
@@ -152,10 +152,10 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
         await owner.turns.goals.schedule_goal(session)
         assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
         assert any(
-            fact.goal.permits_continuation(goal.id)
+            fact.goal.state.active
             for update in updates
             for fact in decode_updates(update.get("_meta"))
-            if isinstance(fact, GoalChangedUpdate)
+            if isinstance(fact, GoalChangedUpdate) and fact.goal is not None
         )
         if outcome == "cancel":
             await proxy.request("cancel")

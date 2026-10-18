@@ -47,7 +47,7 @@ def test_review_and_command_refuse_replaced_or_cleared_goal(selected_goal, repla
         ))
     assert comms.registry.require("worker") == before
     assert before.goal == current
-    assert before.goal.matching(original.id).to_wire() is None
+    assert before.goal_for(original.id) is None
 
 
 def test_failed_turn_retains_later_progress_of_same_goal(selected_goal):
@@ -56,7 +56,7 @@ def test_failed_turn_retains_later_progress_of_same_goal(selected_goal):
         expect=GoalPrecondition(goal_id=original.id), progress="Newer verified work",
     ))
     assert later.revision > original.revision
-    assert comms.registry.require("worker").goal.matching(original.id).require() == later
+    assert comms.registry.require("worker").goal_for(original.id) == later
     result = comms.goals.block_goal_after_failed_turn(
         "worker", started_goal=original,
         expected_worktree=comms.registry.require("worker").worktree,
@@ -109,8 +109,7 @@ def test_model_edit_and_resume_use_current_goal_selection(selected_goal, monkeyp
     comms.goals.update_goal("worker", PausedGoalAction())
     resumed = CommsResumeGoalTool(goal_id=original.id, progress="Explicit model resume").apply(comms, caller)
     assert resumed.goal.id == original.id
-    observed_goal = comms.registry.require("worker").goal.require()
-    assert observed_goal.active() is observed_goal
+    assert comms.registry.require("worker").goal.state.active
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="Replacement"))
     with pytest.raises(ValueError, match="replaced or cleared"):
         CommsEditGoalTool(goal_id=original.id, text="Stale edit").apply(comms, caller)

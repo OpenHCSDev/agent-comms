@@ -25,7 +25,7 @@ from agent_comms.errors import (
     UnregisteredThreadError,
 )
 from agent_comms.messages import Message, InfoKind
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
@@ -51,7 +51,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
 def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
     channel = comms.messaging.send_user_message("#team", "hello @alice", worktree=str(tmp_path))
-    assert channel.sender_role is ThreadRole.USER
+    assert channel.sender_role == UserThreadRole
     assert [row.body for row in list(comms.views.channel_history_page("#team").messages)] == ["hello @alice"]
     initial = comms.bus.log.read_delivery_cohort(root_id, channel.seq)
     assert initial.message == channel
@@ -286,7 +286,7 @@ def test_separate_processes_serialize_one_private_user_identity(tmp_path: Path) 
     seqs = sorted(int(stdout.split()[0]) for stdout, _ in receipts)
     assert seqs == [1, 2]
     members = comms.registry.all_threads().values()
-    humans = [thread for thread in members if thread.role is ThreadRole.USER]
+    humans = [human for thread in members for human in thread.role.human(thread)]
     assert len(humans) == 1
     assert [comms.bus.log.read_delivery_cohort(root_id, seq).message.seq for seq in seqs] == seqs
 

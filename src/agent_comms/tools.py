@@ -43,9 +43,11 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_history import RecordedGoalRevision
+from .goal_waits import StandbyReview, StandbyReviewSummary
+from .input_attempt import UnresolvedInput
 from .goal_presentation import ThreadGoalExecution
 from .goal_states import ActiveGoal
-from .goals import Goal, OrderCheck
+from .goals import GoalDeclaration, NoGoal, Goal, OrderCheck
 from .message_reference import MessageReference
 from .messages import Message
 from .owner_lifecycle import OwnerStartResult
@@ -125,19 +127,19 @@ class ProjectSet(ToolResult):
 
 @dataclass(frozen=True)
 class GoalSet(ToolResult):
-    goal: Goal | None
+    goal: GoalDeclaration
     instruction: str
 
 
 @dataclass(frozen=True)
 class GoalProgress(ToolResult):
-    goal: Goal | None
+    goal: GoalDeclaration
     goal_execution: ThreadGoalExecution
 
 
 @dataclass(frozen=True)
 class GoalRead(ToolResult):
-    goal: Goal | None
+    goal: GoalDeclaration
 
 
 @dataclass(frozen=True)
@@ -214,13 +216,13 @@ class InboxRead(ToolResult):
     """An oversized read names its snapshot file and counts in place of the arrays."""
     messages: tuple[Message, ...]
     acknowledged: int
-    unresolved_inputs: tuple[dict[str, JsonValue], ...]
+    unresolved_inputs: tuple[UnresolvedInput, ...]
     complete: bool | None = _omitted_when_absent()
     ack_deferred: bool | None = _omitted_when_absent(wire_name="ackDeferred")
     counts: dict[str, int] | None = _omitted_when_absent()
     result_file: str | None = _omitted_when_absent()
     instruction: str | None = _omitted_when_absent()
-    standby_review: dict[str, JsonValue] | None = _omitted_when_absent()
+    standby_review: StandbyReview | StandbyReviewSummary | None = _omitted_when_absent()
 
 
 @dataclass(frozen=True)
@@ -282,7 +284,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
         return {
-            declared.metadata.get("wire_name", declared.name): declared.metadata["context_binding"]
+            FieldCodec.wire_key(declared): declared.metadata["context_binding"]
             for declared in fields(cls)
             if "context_binding" in declared.metadata
         }
@@ -348,8 +350,8 @@ def _tag_set(value: str) -> frozenset[str]:
 
 def _bounded_inbox_response(
     messages: tuple[Message, ...],
-    unresolved: tuple[dict[str, JsonValue], ...],
-    review: dict[str, JsonValue] | None,
+    unresolved: tuple[UnresolvedInput, ...],
+    review: StandbyReview | None,
     result_file: str,
     *,
     ack: bool,
@@ -371,22 +373,8 @@ def _bounded_inbox_response(
         ),
     )
     if review is not None:
-        review_summary = {
-            "complete": False,
-            "counts": {
-                key: len(review[key])
-                for key in ("messages", "already_reviewed_inputs", "excluded_inputs")
-            },
-        }
-        bounded = replace(bounded, standby_review=review_summary)
-        candidate = replace(bounded, standby_review={
-            **review_summary,
-            "goal_id": review["goal_id"],
-            "wait_for": review["wait_for"],
-            "messages": review["messages"],
-            "reviewed_inputs": review["reviewed_inputs"],
-            "messages_complete": True,
-        })
+        bounded = replace(bounded, standby_review=review.summary())
+        candidate = replace(bounded, standby_review=review.eligible_summary())
         if len(serialize_tool_output(candidate).encode("utf-8")) <= MAX_INLINE_OUTPUT_BYTES:
             return candidate
     return bounded
@@ -683,7 +671,10 @@ class CommsResumeGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal.matching(goal_id).require_model_resume()
+        current = comms.registry.require(name).goal.matching(goal_id)
+        if not current:
+            raise ValueError("This goal cannot be resumed; refresh its state.")
+        current.state.require_model_resume()
         progress = self.progress
         goal = comms.goals.update_goal(
             name,
@@ -695,10 +686,9 @@ class CommsResumeGoalTool(ThreadToolRequest):
                 progress=progress,
             ),
         )
-        current = goal.require_active()
-        if current.progress != progress:
+        if not goal or not goal.state.active or goal.progress != progress:
             raise ValueError("Goal changed during resume; refresh its state.")
-        return GoalRead(current)
+        return GoalRead(goal)
 
 
 @dataclass(frozen=True, kw_only=True)

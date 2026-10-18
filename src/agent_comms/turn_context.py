@@ -18,6 +18,7 @@ from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
+from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
     from .input_attempt import StoredInput
@@ -198,7 +199,7 @@ class UnattributedProvenance(Provenance):
 
 
 @dataclass(frozen=True)
-class ContextSourceText:
+class ContextSourceText(DeclaredReply):
     """A public source-read result, not another context or input record."""
 
     description: str
@@ -825,9 +826,13 @@ class PeerState:
 
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
-        instructions = (view.thread.goal.active().peer_instructions(view.thread, goals)
-                        if relation.relevance.grants(GoalShown) else None)
-        return cls(view.thread.name, relation.relevance, relation.note, instructions)
+        goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else None
+        return cls(
+            view.thread.name,
+            relation.relevance,
+            relation.note,
+            goal.instructions(goal.order.todos(goals, view.thread.incarnation, goal.id)) if goal else None,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1056,7 +1061,7 @@ class RecordedContextManifest:
 
 
 @dataclass(frozen=True)
-class TurnContext:
+class TurnContext(DeclaredReply):
     thread: ThreadIncarnation
     turn: ContextTurn
     segments: tuple[ContextSegment, ...]
@@ -1070,12 +1075,9 @@ class TurnContext:
         """
         relations = comms.relationships.context_relations(owner.name)
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
-        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations, blocking=True)
-
-    def with_goal(self, owner: Thread, goals) -> TurnContext:
-        return owner.goal.active().prepend_context(
-            self, lambda goal: GoalSegment.capture(owner, goal, goals),
-        )
+        for segment in owner.context_goal_segments(comms.goals):
+            context = context.prepend(segment)
+        return context.with_awareness(comms, owner, relations, blocking=True)
 
     def with_awareness(
         self, comms, owner: Thread, relations: tuple[PeerRelation, ...], *, blocking: bool = False

@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from .drain_failures import drain_failures
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
-from .turn_input_source import DependencyScheduledTurn
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
@@ -48,8 +47,8 @@ class ProjectResumeCheck(OwnerTurnScheduleCheck):
             self.require_valid()
         except ReservationViolationError:
             return
-        if entry.status.running and entry.thread.goal.active().owes_project_resume(entry.thread):
-            resume = DependencyScheduledTurn.resuming_in_project(entry.thread.worktree)
+        if entry.status.running and entry.thread.owes_project_resume:
+            resume = ScheduledTurn.resuming_in_project(entry.thread.worktree)
             pending = inputs.pending_turns.setdefault(session_id, [])
             if resume not in pending:
                 pending.append(resume)
@@ -93,7 +92,8 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     continue
                 pending = inputs.pending_turns.pop(session_id, [])
                 goal = owner.goal.active()
-                pending = goal.filter_scheduled(pending)
+                if goal:
+                    pending = [turn for turn in pending if turn.goal_id == goal.id]
                 if not pending:
                     continue
                 pending, remaining = ScheduledTurn.take_batch(pending)
@@ -106,11 +106,22 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         inputs.sessions.require(session_id),
                         "\n\n".join(turn.prompt for turn in pending),
                         origins=tuple(origin for turn in pending for origin in turn.origins),
+                        autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
                         dependency_wait_id=pending[0].goal_wait_id,
-                        input_type=pending[0].input_type,
                     )
                 except RequestError as error:
-                    await goal.failed_schedule(error, pending[0], inputs.comms, owner, Coordination.run_worker)
+                    if not goal:
+                        raise
+                    pending[0].require_dependency_wake(error)
+                    await Coordination.run_worker(partial(inputs.comms.goals.block_goal_after_failed_turn,
+                        owner.name,
+                        started_goal=goal,
+                        expected_worktree=owner.worktree,
+                        diagnostic=(
+                            "Standby wake launch authority unavailable; inspect the UNKNOWN "
+                            "input before explicit Retry. No input was replayed."
+                        ),
+                    ))
                     await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                 finally:
                     inputs.effects.turns.turn_tasks.pop(session_id, None)

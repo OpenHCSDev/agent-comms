@@ -4,14 +4,20 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .goals import Goal, GoalDeclaration, GoalRevision, GoalTaskScope, ProjectTaskScope, TaskScope, TurnTaskScope
+from .goals import GoalRevision
 from .message_reference import MessageReference
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
+from .thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+    TurnId,
+    TurnIdentity,
+    UserThreadRole,
+)
 from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
@@ -21,6 +27,76 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .private_bus_checkpoint import CertifiedSourceRead
+
+
+@dataclass(frozen=True, kw_only=True)
+class TaskScope(DeclaredFamily, affix="TaskScope"):
+    project: str
+
+    def require_current(self, owner: Thread) -> None:
+        if self.project != owner.worktree:
+            raise RelationViolationError("Task project differs from its declared owner")
+        self.require_context(owner)
+
+    def require_human_context(self, owner: Thread) -> None:
+        self.require_current(owner)
+
+    def for_human(self) -> TaskScope:
+        return self
+
+    @abstractmethod
+    def require_context(self, owner: Thread) -> None: ...
+
+    @abstractmethod
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool: ...
+
+    def require_correction(self, previous: ScopedTaskDeclaration, correction: ScopedTaskDeclaration,
+                           registry: RegistrySnapshot) -> None:
+        if previous.scope != self:
+            raise RelationViolationError("Decision correction must preserve its original scope")
+
+@dataclass(frozen=True, kw_only=True)
+class GoalTaskScope(TaskScope):
+    goal: GoalRevision
+
+    def require_context(self, owner: Thread) -> None:
+        owner.goal.require_id(self.goal.id).require_active()
+        owner.goal.require_checkpoint(self.goal)
+
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
+        return owner.task_scope == self
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProjectTaskScope(TaskScope):
+    def require_context(self, owner: Thread) -> None:
+        pass
+
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
+        return owner.worktree == self.project
+
+
+@dataclass(frozen=True, kw_only=True)
+class TurnTaskScope(TaskScope):
+    """The enclosing declaration's original turn determines this scope."""
+
+    def require_context(self, owner: Thread) -> None:
+        if owner.task_scope != self:
+            raise RelationViolationError("An active goal requires its revision scope")
+
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
+        return owner.worktree == self.project and declaration.turn_scope_matches(owner, registry)
+
+    def require_human_context(self, owner: Thread) -> None:
+        raise RelationViolationError("A USER constraint cannot borrow a model turn scope")
+
+    def for_human(self) -> TaskScope:
+        return ProjectTaskScope(project=self.project)
+
+    def require_correction(self, previous: ScopedTaskDeclaration, correction: ScopedTaskDeclaration,
+                           registry: RegistrySnapshot) -> None:
+        super().require_correction(previous, correction, registry)
+        previous.require_same_turn(correction, registry)
 
 
 class TaskScopeSelection(DeclaredFamily, affix="ScopeSelection"):
@@ -34,10 +110,10 @@ class TaskScopeSelection(DeclaredFamily, affix="ScopeSelection"):
 @dataclass(frozen=True)
 class CurrentTaskScopeSelection(TaskScopeSelection, declared_name="current"):
     def select(self, owner: Thread) -> TaskScope:
-        return owner.goal.active().task_scope(owner)
+        return owner.task_scope
 
     def select_human(self, owner: Thread) -> TaskScope:
-        return owner.goal.active().task_scope(owner).for_human()
+        return owner.task_scope.for_human()
 
 
 @dataclass(frozen=True)
@@ -142,7 +218,7 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
 
     def original_wording_provenance(self, original: Message) -> dict[str, object]:
         return dict(wording=FieldCodec.encode(original.reference),
-                    author=original.sender, author_role=original.sender_role.value)
+                    author=original.sender, author_role=FieldCodec.encode(original.sender_role))
 
     def selected_sources(self, message: Message) -> tuple[Message, ...]:
         return (message,)
@@ -210,7 +286,9 @@ class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
         return True
 
     def require_publication(self, sender, registry, original_source) -> None:
-        registry.require(sender).role.require_user()
+        registry.require(sender).role.require_user(
+            RelationViolationError("A task revision requires the original human sender")
+        )
         previous = self.change.require_original(original_source).task.require_scoped_task()
         previous.require_user_revision(sender, registry)
 
@@ -421,7 +499,9 @@ class HumanConstraintPin(ScopedTaskDeclaration):
             raise RelationViolationError("USER pin must address its original recipient")
 
     def require_publication(self, sender, registry, original_source):
-        registry.require(sender).role.require_user()
+        registry.require(sender).role.require_user(
+            RelationViolationError("A USER pin requires the original human sender")
+        )
         self.require_user_revision(sender, registry)
         if original_source is None:
             raise RelationViolationError("USER pin requires the certified original message")
@@ -434,7 +514,9 @@ class HumanConstraintPin(ScopedTaskDeclaration):
 
     def require_wording_publication(self, registry, original_source):
         delivery, = original_source.references((self.subject,))
-        delivery.message.sender_role.require_user()
+        delivery.message.sender_role.require_user(
+            RelationViolationError("Original wording must come from a human sender")
+        )
         if delivery.audience.sender_lookup != self.source_user.lookup:
             raise RelationViolationError("USER pin differs from its original human author")
         if not delivery.audience.includes_lookup(self.recipient.lookup):
@@ -471,7 +553,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
     def original_wording_provenance(self, original: StoredInput) -> dict[str, object]:
         origin = original.origin.require_human()
         return dict(wording=FieldCodec.encode(original.context_provenance()),
-                    author=origin.author.sender, author_role=ThreadRole.USER.value)
+                    author=origin.author.sender, author_role=FieldCodec.encode(UserThreadRole))
 
     def require_wording_publication(self, registry, original_source):
         from .input_disposition import InputDispositions

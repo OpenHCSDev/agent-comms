@@ -848,8 +848,7 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
     await asyncio.wait_for(entered.wait(), timeout=5)
     try:
         goal = comms.goals.update_goal("beta", SetGoalAction(text="Work on a separate task"))
-        observed_goal = (goal).require()
-        assert (observed_goal.active() is observed_goal)
+        assert goal.state.active
     finally:
         release.set()
     assert await asyncio.wait_for(running, timeout=5) == 1

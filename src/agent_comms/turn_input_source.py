@@ -7,25 +7,16 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from acp import RequestError
-
 from .agent_backend import WhenBusy
-from .goal_attempts import GoalAttemptError, NoGoalPermit
 from .channel_input_batch import InputBatch, SingleInputBatch
-from .goals import (
-    NoGoal,
-    OwnerGoalPermission,
-    TurnGoalPermission,
-)
 from .messages import Message
-from .routing import ScheduledTurn
 from .started_input import StartedInput
+from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .goal_waits import GoalWait
-    from .goals import GoalDeclaration
-    from .goals import Goal
+    from .goals import GoalDeclaration, NoGoal, Goal
     from .input_disposition import InputDispositions
     from .thread_identity import RecordedThreadIncarnation, TurnId
     from .threads import Thread
@@ -35,6 +26,7 @@ if TYPE_CHECKING:
 class TurnInputSource(StartedInput, ABC):
     accepted_id: str | None
     goal_permission: TurnGoalPermission
+    bypasses_goal_permit: ClassVar[bool] = False
     origins: ClassVar[tuple[Message, ...]] = ()
 
     if TYPE_CHECKING:
@@ -59,11 +51,8 @@ class TurnInputSource(StartedInput, ABC):
     def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
         return True
 
-    def defers_for_goal(self, original: GoalDeclaration, current: GoalDeclaration) -> bool:
+    def defers_for_goal(self, original: Goal | None, current: Goal | None) -> bool:
         return False
-
-    def require_goal_grant(self, permit, store) -> None:
-        permit.require_send(store)
 
 
 class InputDependency(ABC):
@@ -122,45 +111,6 @@ class OriginalTurnInput(TurnInputSource):
     dependency: InputDependency
     batch: InputBatch
 
-    @classmethod
-    def allows_start_wait(cls, wait) -> bool:
-        return wait.allows_routed_input()
-
-    @classmethod
-    def require_start_goal(cls, turn) -> None:
-        pass
-
-    @classmethod
-    def prepare_goal(cls, turn, permits) -> bool:
-        return turn.thread.goal.active().prepare_turn(turn, permits)
-
-    @classmethod
-    def reserve_goal(cls, turn, goal):
-        try:
-            return turn.runner.comms.goals.reserve_turn(goal, owner=turn.thread)
-        except GoalAttemptError as error:
-            return cls.reservation_failed(error)
-
-    @classmethod
-    def reservation_failed(cls, error):
-        raise RequestError.invalid_params({
-            "reason": "goal_attempt_unavailable",
-            "details": "The goal has no launchable attempt. Inspect its state and use "
-                       "Retry for a failed attempt; no prompt was sent to Pi.",
-        }) from error
-
-    @classmethod
-    def prepare_without_goal(cls):
-        return True
-
-    @classmethod
-    def original_display(cls, initial, task):
-        return initial or task
-
-    @classmethod
-    def permission(cls, turn):
-        return turn.thread.goal.active()
-
     @property
     def keys(self) -> tuple[str, ...]:
         return self.batch.keys
@@ -204,23 +154,6 @@ class DirectInput(TurnInputSource):
 
 
 class OwnerOriginalInput(OriginalTurnInput, DirectInput):
-    @classmethod
-    def allows_start_wait(cls, wait) -> bool:
-        return True
-
-    @classmethod
-    def require_start_goal(cls, turn) -> None:
-        if not turn.original_goal_permission.allows(turn.thread.goal):
-            raise RequestError.invalid_params({"reason": "input_authority_changed"})
-
-    @classmethod
-    def prepare_goal(cls, turn, permits) -> bool:
-        return True
-
-    @classmethod
-    def permission(cls, turn):
-        return OwnerGoalPermission(turn.thread.goal)
-
     @property
     def notice_keys(self) -> tuple[str, ...]:
         return self.keys
@@ -236,7 +169,7 @@ class RoutedInput(TurnInputSource):
         return wait.allows_routed_input()
 
     def allows_goal_input(self, goal: GoalDeclaration) -> bool:
-        return not self.keys or goal.allows_goalless()
+        return not self.keys or InactiveGoalPermission().allows(goal)
 
 
 class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
@@ -250,7 +183,7 @@ class SelectedOriginalInput(RoutedOriginalInput):
     def answering(cls, prompt: str) -> SelectedOriginalInput:
         return cls(
             accepted_id=None,
-            goal_permission=NoGoal(),
+            goal_permission=InactiveGoalPermission(),
             prompt=prompt,
             original_display=None,
             origins=(),
@@ -273,34 +206,6 @@ class ScheduledOriginalInput(DependencyOriginalInput):
     """
 
 
-class AutonomousOriginalInput(DependencyOriginalInput):
-    @classmethod
-    def reservation_failed(cls, error):
-        return NoGoalPermit()
-
-    @classmethod
-    def prepare_without_goal(cls):
-        return False
-
-    @classmethod
-    def original_display(cls, initial, task):
-        return None
-
-
-class DependencyScheduledTurn(ScheduledTurn):
-    input_type = DependencyOriginalInput
-
-
-class AutonomousScheduledTurn(ScheduledTurn):
-    def joins(self, head: ScheduledTurn) -> bool:
-        return False
-
-    input_type = AutonomousOriginalInput
-
-    def batch(self, pending):
-        return pending[:1], pending[1:]
-
-
 @dataclass(frozen=True, kw_only=True)
 class FollowingTurnInput(TurnInputSource):
     keys: tuple[str, ...]
@@ -314,13 +219,16 @@ class FollowingTurnInput(TurnInputSource):
         row = dispositions.lookup(self.keys[0]) if self.keys else None
         return row.source_text if row is not None and row.exists else text
 
-    def defers_for_goal(self, original: GoalDeclaration, current: GoalDeclaration) -> bool:
-        return current.active().defers_following_from(original.active())
+    def defers_for_goal(self, original: Goal | None, current: Goal | None) -> bool:
+        return (
+            (original is None or not original.state.active)
+            and current is not None
+            and current.state.active
+        )
 
 
 class AcceptedFollowingInput(FollowingTurnInput, DirectInput):
-    def require_goal_grant(self, permit, store) -> None:
-        pass
+    bypasses_goal_permit = True
 
 
 class RoutedFollowingInput(FollowingTurnInput, RoutedInput):

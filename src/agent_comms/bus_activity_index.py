@@ -65,11 +65,7 @@ class ChannelActivity:
     def observe(self, message: Message) -> ChannelActivity:
         return ChannelActivity(
             max(self.last_message, message.timestamp),
-            (
-                max(self.last_user_input, message.timestamp)
-                if not message.sender_role.executable
-                else self.last_user_input
-            ),
+            message.sender_role.last_user_input(self.last_user_input, message.timestamp),
         )
 
     @classmethod

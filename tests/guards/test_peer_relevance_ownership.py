@@ -8,7 +8,7 @@ import pytest
 import agent_comms
 from agent_comms import peer_relevance, relationships
 from agent_comms.peer_relevance import PeerRelevance, RelevanceCapability
-from agent_comms.thread_relations import MutualThreadRelation
+from agent_comms.relationships import MutualThreadRelation
 
 pytestmark = pytest.mark.refactor_guard
 

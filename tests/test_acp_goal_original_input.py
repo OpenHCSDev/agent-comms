@@ -84,8 +84,7 @@ async def test_idle_owner_original_input_preserves_autonomous_goal_grant(tmp_pat
         rows = disposition_rows(agent)
         assert len(rows) == 1 and rows[0].declared_name == "started"
         current = comms.registry.require("project").goal
-        observed_goal = (current).require()
-        assert current.id == goal.id and (observed_goal.active() is observed_goal)
+        assert current.id == goal.id and current.state.active
         generation = store.snapshot(goal.id)
         # Fresh owner input has its own authority; it does not spend the autonomous grant.
         assert generation == prior_generation
@@ -129,8 +128,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         assert len(rows) == 1 and rows[0].unresolved
         assert not rows[0].has_native_binding
         current = comms.registry.require("project").goal
-        observed_goal = (current).require()
-        assert current.id == replacement.id and (observed_goal.active() is observed_goal)
+        assert current.id == replacement.id and current.state.active
         generation = store.snapshot(replacement.id)
         assert generation.lifecycle == ReadyGeneration() and generation.number == 1
         reopened = InputDispositions(comms.root)
