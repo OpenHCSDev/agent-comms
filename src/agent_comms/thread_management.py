@@ -30,7 +30,7 @@ from .agent_activity import AgentActivity
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .importing import ImportLimits, ImportReceipt, ImportSnapshot
+from .importing import ImportLimits, ThreadImported, ImportSnapshot
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
@@ -158,7 +158,7 @@ class ThreadManagement:
         model: str | None = None,
         tags: frozenset[str] = frozenset(),
         limits: ImportLimits | None = None,
-    ) -> ImportReceipt:
+    ) -> ThreadImported:
         """Import a stopped, resumable snapshot of any harness session, without adopting its executor."""
         snapshot = ImportSnapshot.read(history, limits or ImportLimits())
         directory = worktree or snapshot.project
@@ -198,7 +198,7 @@ class ThreadManagement:
                     self.registry.remove(name)
                 session_path.unlink(missing_ok=True)
                 raise
-        return ImportReceipt(
+        return ThreadImported(
             name,
             str(session_path),
             snapshot.harness,

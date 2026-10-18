@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
 
+from .cli_result import CliResult
 from .coordination_database import CoordinationStore
 from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedRow, TypedTable
 
@@ -80,3 +81,9 @@ class StoreSchemaReport:
 class UnavailableStoreSchemaReport:
     path: str
     error: str
+
+
+@dataclass(frozen=True)
+class StoreSchemaReports(CliResult):
+    """Every store scanned at one read, available or not."""
+    reports: tuple[StoreSchemaReport | UnavailableStoreSchemaReport, ...]

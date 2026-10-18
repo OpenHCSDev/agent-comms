@@ -17,6 +17,7 @@ from typing import BinaryIO, ClassVar
 
 from .bus_publication import reject_private_wire_fields
 from .catalog_store import ChannelCatalog
+from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
@@ -305,7 +306,7 @@ class WireExportBoundary:
 
 
 @dataclass(frozen=True, slots=True)
-class WireExportReceipt:
+class WireExportProvenance(CliResult):
     """Artifact provenance, never a delivery or source-session acknowledgement."""
 
     destination: str
@@ -383,7 +384,7 @@ class WireTranscriptExporter:
         destination: Path,
         *,
         overwrite: bool = False,
-    ) -> WireExportReceipt:
+    ) -> WireExportProvenance:
         """Consume ascending envelopes once and atomically publish the artifact."""
         header = self._header()
         self.limit.validate_header(len(header))
@@ -424,7 +425,7 @@ class WireTranscriptExporter:
             temporary_path.unlink(missing_ok=True)
 
         omitted = stats.source_messages - exported
-        return WireExportReceipt(
+        return WireExportProvenance(
             destination=str(destination),
             format=self.format,
             scope=self.scope,

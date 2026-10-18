@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Type
+from typing import TYPE_CHECKING, ClassVar, TextIO, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
 from .cli_commands import (
     ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
     PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
-    ThreadsCliCommand, WireDocumentResult, _json_object, option,
+    ThreadsCliCommand, _json_object, option,
 )
 from .cli_result import CliResult
 from .thread_execution import (
@@ -1064,13 +1065,19 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )
     tool: str = option("--tool")
-    arguments: str = option(
-        "--arguments", help="Tool arguments as a JSON object", default="{}",
-    )
+    arguments: JsonObject = option(
+        "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
+        parser_default="{}", normalize=_json_object)
 
-    def apply(self, ctx: Comms) -> WireDocumentResult:
-        return WireDocumentResult(invoke_tool(ctx, self.tool, _json_object(self.arguments),
-                                              caller=ToolCaller.from_actor(self.caller)))
+    def apply(self, ctx: Comms) -> JsonObject:
+        return invoke_tool(ctx, self.tool, self.arguments,
+                           caller=ToolCaller.from_actor(self.caller))
+
+    def run(self, ctx: Comms, output: TextIO) -> int:
+        """The tool protocol's own reply, the one every adapter receives, not a CLI result."""
+        json.dump(self.apply(ctx), output, indent=2)
+        output.write("\n")
+        return 0
 
 
 def tool_catalog() -> list[JsonObject]:

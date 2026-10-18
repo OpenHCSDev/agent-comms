@@ -16,7 +16,7 @@ import shlex
 import time
 import types
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import aclosing
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
@@ -34,7 +34,7 @@ from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
 from .cli_protocol import ArrivedMessage, EarlierItems
-from .field_codec import FieldCodec, PathText, WireValue, compile_decoder
+from .field_codec import FieldCodec, PathText, compile_decoder
 from .comms import Comms
 from .config_options import (
     CatalogConfigOption, CatalogSelection, ConfigOptions,
@@ -51,14 +51,22 @@ from .exporting import (
     MaxBytesLimit,
     RecentLimit,
     SelectableWireExportFormat,
+    WireExportProvenance,
 )
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
-from .harness_install import Harness
-from .importing import ImportLimits
+from .harness_install import Harness, HarnessInstalled
+from .importing import ImportLimits, ThreadImported
 from .historical_views import HistoryCursor
+from .history_views import ThreadPoll
+from .presentation import ThreadRecord
+from .schema_report import StoreSchemaReport, StoreSchemaReports
+from .shared_ledger import LedgerDocument
 from .tool_caller import ToolCaller
-from .turn_context import ContextSegment
+from .turn_context import (
+    CodexRolloutProvenance, ContextManifest, ContextSegment, ContributionCoordinates, Provenance,
+    TurnContext,
+)
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
@@ -73,7 +81,7 @@ from .thread_execution import (
     ArchiveOwnerControl, ExternalThreadExecution, NativeOwnerCommand,
     OwnerLifecycleControl, StartOwnerControl, ThreadCommandAvailability, ThreadExecution,
 )
-from .owner_lifecycle import OwnerStartResult
+from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
 
 
@@ -475,19 +483,6 @@ class ThreadPinnedResult(CliResult):
 
 
 @dataclass(frozen=True)
-class WireDocumentResult(CliResult, WireValue):
-    """A result whose wire document the producing subsystem already builds."""
-    document: Any
-
-    def to_wire(self) -> Any:
-        return self.document
-
-    @classmethod
-    def from_wire(cls, data: Any) -> Self:
-        return cls(data)
-
-
-@dataclass(frozen=True)
 class TargetCatalogResult(CliResult):
     actions: tuple[TargetAction, ...]
 
@@ -499,68 +494,76 @@ class MessageSentResult(CliResult):
 
 @dataclass(frozen=True)
 class UserMessageSentResult(CliResult):
-    sent: Any
+    sent: MessageReference
 
 
 @dataclass(frozen=True)
 class ThreadConfiguredResult(CliResult):
     configured: str
     model: str | None
-    thinking_level: Any
-    service_tier: str
+    thinking_level: ThinkingLevelField
+    service_tier: ServiceTier
 
 
 @dataclass(frozen=True)
 class ConstraintPinnedResult(CliResult):
-    pin: Any
-    source: Any
+    pin: MessageReference
+    source: MessageReference
 
 
 @dataclass(frozen=True)
 class ConstraintSupersededResult(CliResult):
-    supersession: Any
+    supersession: MessageReference
 
 
 @dataclass(frozen=True)
 class ConstraintDroppedResult(CliResult):
-    drop: Any
+    drop: MessageReference
 
 
 @dataclass(frozen=True)
 class InboxResult(CliResult):
-    messages: tuple[Any, ...]
+    messages: tuple[Message, ...]
 
 
 @dataclass(frozen=True)
 class AcknowledgedResult(CliResult):
-    acknowledged: Any
+    acknowledged: int
 
 
 @dataclass(frozen=True)
 class WhoResult(CliResult):
-    who: tuple[Any, ...]
+    who: tuple[Mapping[str, object], ...]
+
+
+@dataclass(frozen=True)
+class ThreadActivityRow:
+    thread: str
+    state: ActivityState
+    detail: str
+    ts: float
 
 
 @dataclass(frozen=True)
 class ActiveStatusResult(CliResult):
-    status: tuple[Any, ...]
+    status: tuple[ThreadActivityRow, ...]
 
 
 @dataclass(frozen=True)
 class HistoryPageResult(CliResult):
-    messages: tuple[Any, ...]
-    before: Any
+    messages: tuple[Message, ...]
+    before: int | HistoryCursor | None
     has_older: bool
 
 
 @dataclass(frozen=True)
 class ChannelsResult(CliResult):
-    channels: tuple[Any, ...]
+    channels: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class ThreadsResult(CliResult):
-    threads: tuple[Any, ...]
+    threads: tuple[Mapping[str, object], ...]
 
 
 @dataclass(frozen=True)
@@ -597,7 +600,7 @@ class ActivitySetResult(CliResult):
 
 @dataclass(frozen=True)
 class OwnersRestartedResult(CliResult):
-    restarted: tuple[Any, ...]
+    restarted: tuple[OwnerRestartResult, ...]
 
 
 @dataclass(frozen=True)
@@ -609,10 +612,67 @@ class OwnerReleasedResult(CliResult):
 class LedgerMergedResult(CliResult):
     merged: bool = True
 
+    def to_wire(self) -> dict[str, object]:
+        return {"merged": self.merged}
+
 
 @dataclass(frozen=True)
 class SubagentsImportedResult(CliResult):
-    imported: tuple[Any, ...]
+    imported: tuple[ThreadImported, ...]
+
+
+@dataclass(frozen=True)
+class InstallResult(CliResult):
+    config: str
+    harnesses: Mapping[str, HarnessInstalled]
+
+
+@dataclass(frozen=True)
+class ImportedContextSources(CliResult):
+    scope: str
+    sources: tuple[CodexRolloutProvenance, ...]
+
+
+@dataclass(frozen=True)
+class RecordedContextManifests(CliResult):
+    manifests: tuple[ContextManifest, ...]
+    text_recorded: bool
+
+
+@dataclass(frozen=True)
+class CoreSegmentText:
+    kind: type[ContextSegment]
+    provenance: tuple[Provenance, ...]
+    text: str
+
+
+@dataclass(frozen=True)
+class CoreContextInspection(CliResult):
+    """Current core contributors; native_error says why the native base is absent."""
+    scope: str
+    input_supplied: bool
+    core_context: TurnContext
+    segments: tuple[CoreSegmentText, ...]
+    native_error: str
+
+
+@dataclass(frozen=True)
+class NativeSourceSpans:
+    segment: int
+    sha256: str
+    spans: tuple[ContributionCoordinates, ...]
+
+
+@dataclass(frozen=True)
+class NativeContextInspection(CliResult):
+    """The next native base together with the current core contributors."""
+    scope: str
+    input_supplied: bool
+    core_context: TurnContext
+    segments: tuple[CoreSegmentText, ...]
+    native_manifest: tuple[ContextSegment, ...]
+    native_provider_context: Mapping[str, object]
+    native_source_spans: tuple[NativeSourceSpans, ...]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -861,11 +921,11 @@ class ImportingCliCommand(CliCommand):
     max_characters: int = option("--max-characters", default=120000)
     max_message_characters: int = option("--max-message-characters", default=12000)
 
-    def imported(self, ctx: Comms, history: History, name: str) -> WireDocumentResult:
-        return WireDocumentResult(ctx.threads.import_thread(
+    def imported(self, ctx: Comms, history: History, name: str) -> ThreadImported:
+        return ctx.threads.import_thread(
             history, name=name, worktree=self.worktree, model=self.model, tags=self.tags,
             limits=ImportLimits(self.max_messages, self.max_characters, self.max_message_characters),
-        ).to_wire())
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -944,7 +1004,7 @@ class UserSendCliCommand(CliCommand, declared_name="user-send"):
         from .field_codec import FieldCodec
 
         message = ctx.messaging.send_user_message(self.target, self.body, worktree=self.worktree)
-        return UserMessageSentResult(FieldCodec.encode(message.reference))
+        return UserMessageSentResult(message.reference)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -976,9 +1036,8 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             thinking_level=candidate.thinking_level,
             service_tier=candidate.service_tier,
         )
-        return ThreadConfiguredResult(updated.name, updated.model,
-                                      FieldCodec.encode(updated.thinking_level),
-                                      updated.service_tier.value)
+        return ThreadConfiguredResult(updated.name, updated.model, updated.thinking_level,
+                                      updated.service_tier)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1000,7 +1059,7 @@ class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
 
         source = self.original_source(ctx)
         pin = self.pin_original(ctx, source)
-        return ConstraintPinnedResult(FieldCodec.encode(pin.reference), FieldCodec.encode(source))
+        return ConstraintPinnedResult(pin.reference, source)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1078,7 +1137,7 @@ class SupersedeConstraintCliCommand(CliCommand, declared_name="supersede-constra
 
         message = ctx.messaging.send_user_message(self.thread, self.body, worktree=self.worktree,
             task=UserTaskSupersession(CorrectionTaskChange(self.source)))
-        return ConstraintSupersededResult(FieldCodec.encode(message.reference))
+        return ConstraintSupersededResult(message.reference)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1095,7 +1154,7 @@ class DropConstraintCliCommand(CliCommand, declared_name="drop-constraint"):
         message = ctx.messaging.send_user_message(self.thread,
             f"Dropped constraint {self.source.seq}:{self.source.message_id}", worktree=self.worktree,
             task=UserTaskDrop(CorrectionTaskChange(self.source)))
-        return ConstraintDroppedResult(FieldCodec.encode(message.reference))
+        return ConstraintDroppedResult(message.reference)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1106,8 +1165,11 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
     overwrite: bool = option("--overwrite", default=False)
 
     def apply(self, ctx: Comms) -> CliResult:
-        return WireDocumentResult(ctx.bus.log.retained_context(self.thread, ctx.registry).export(
-            self.output, overwrite=self.overwrite).to_wire())
+        return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
+            self.output, overwrite=self.overwrite)
+
+    def encode_result(self, result: WireExportProvenance) -> object:
+        return result.to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1116,7 +1178,10 @@ class InboxCliCommand(CliCommand):
     thread: str = option("--thread")
 
     def apply(self, ctx: Comms) -> CliResult:
-        return InboxResult(tuple(m.to_wire() for m in ctx.bus.inbox(self.thread)))
+        return InboxResult(tuple(ctx.bus.inbox(self.thread)))
+
+    def encode_result(self, result: InboxResult) -> object:
+        return {"messages": [message.to_wire() for message in result.messages]}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1179,8 +1244,7 @@ class StatusCliCommand(CliCommand):
         )
         activities = ctx.agents.all_activity(running, snapshot=snapshot)
         return ActiveStatusResult(tuple(
-            {"thread": thread, "state": activity.state.value, "detail": activity.detail,
-             "ts": activity.timestamp}
+            ThreadActivityRow(thread, activity.state, activity.detail, activity.timestamp)
             for thread, activity in sorted(activities.items())))
 
 
@@ -1204,9 +1268,11 @@ class HistoryCliCommand(CliCommand):
             page = ctx.views.channel_history_page(self.channel, **paging)
         else:
             page = ctx.views.full_history_page(**paging)
-        return HistoryPageResult(
-            tuple({**m.to_wire(), **m.display_metadata} for m in reversed(page.messages)),
-            page.oldest_cursor, page.has_older)
+        return HistoryPageResult(tuple(reversed(page.messages)), page.oldest_cursor, page.has_older)
+
+    def encode_result(self, result: HistoryPageResult) -> object:
+        return {"messages": [{**m.to_wire(), **m.display_metadata} for m in result.messages],
+                "before": FieldCodec.encode(result.before), "has_older": result.has_older}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1266,7 +1332,10 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
             overwrite=self.overwrite,
             export_started_at=started_at,
         )
-        return WireDocumentResult(exported.to_wire())
+        return exported
+
+    def encode_result(self, result: WireExportProvenance) -> object:
+        return result.to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1295,8 +1364,10 @@ class ThreadCliCommand(CliCommand):
     )
 
     def apply(self, ctx: Comms) -> CliResult:
-        return WireDocumentResult(
-            ctx.views.thread_detail(self.name, include_pending=not self.no_pending))
+        return ctx.views.thread_detail(self.name, include_pending=not self.no_pending)
+
+    def encode_result(self, result: ThreadRecord) -> object:
+        return result.to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1349,10 +1420,14 @@ class InstallCliCommand(CliCommand):
             repos=tuple(Repo.of(repo) for repo in self.repos or (project,)),
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
-        return WireDocumentResult({
-            "config": str(config.write(home)),
-            **{type(harness).declared_name: harness.install(ctx, self.commander, project)
-               for harness in Harness.present(home)}})
+        return InstallResult(str(config.write(home)), {
+            type(harness).declared_name: harness.install(ctx, self.commander, project)
+            for harness in Harness.present(home)})
+
+    def encode_result(self, result: InstallResult) -> object:
+        # Each harness's installation sits beside the config path on the wire.
+        return {"config": result.config,
+                **{name: FieldCodec.encode(installed) for name, installed in result.harnesses.items()}}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1384,9 +1459,10 @@ class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
     help = "Report declared DDL differences in existing SQLite stores (including retained copies)"
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .schema_report import StoreSchemaReport
+        return StoreSchemaReports(StoreSchemaReport.scan(ctx))
 
-        return WireDocumentResult(FieldCodec.encode(StoreSchemaReport.scan(ctx)))
+    def encode_result(self, result: StoreSchemaReports) -> object:
+        return FieldCodec.encode(result.reports)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1524,7 +1600,7 @@ class RestartCliCommand(CliCommand):
         results = ctx.owners.restart_owners(
             None if self.all_ else [self.name], agent_bin=self.agent_bin, agent_args=self.agent_args
         )
-        return OwnersRestartedResult(tuple(asdict(result) for result in results))
+        return OwnersRestartedResult(results)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1627,7 +1703,10 @@ class LedgerCliCommand(CliCommand):
             ctx.ledger.merge(updates, self.author)
             return LedgerMergedResult()
         else:
-            return WireDocumentResult(ctx.ledger.read())
+            return ctx.ledger.document()
+
+    def encode_result(self, result: LedgerMergedResult | LedgerDocument) -> object:
+        return result.to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1636,7 +1715,10 @@ class PollCliCommand(CliCommand):
     thread: str | None = option("--thread", default=None)
 
     def apply(self, ctx: Comms) -> CliResult:
-        return WireDocumentResult(ctx.views.poll(self.thread))
+        return ctx.views.poll(self.thread)
+
+    def encode_result(self, result: ThreadPoll) -> object:
+        return result.to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1655,9 +1737,9 @@ class ContextCliCommand(CliCommand):
             if self.turn is not None or self.diff:
                 raise ValueError("Imported source references are not recorded native turns")
             owner = ctx.registry.require(self.thread)
-            return WireDocumentResult({
-                "scope": "historical-imported-instructions; not current or recorded native context",
-                "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)})
+            return ImportedContextSources(
+                "historical-imported-instructions; not current or recorded native context",
+                ImportedSessionMetadata.sources_for_owner(ctx.registry, owner))
         if self.turn is not None or self.diff:
             selected = []
             cursor = None
@@ -1667,7 +1749,7 @@ class ContextCliCommand(CliCommand):
                     manifest = resource.value
                     if self.diff and selected:
                         if not selected[0].turn.same_recording(manifest.turn):
-                            return WireDocumentResult(selected[0].changed_since(manifest))
+                            return selected[0].changed_since(manifest)
                     elif self.turn is None or manifest.turn.matches_generation(self.turn):
                         selected.append(manifest)
                 if not page.has_older():
@@ -1677,9 +1759,9 @@ class ContextCliCommand(CliCommand):
                 raise ValueError("No original context manifest exists for the requested turn")
             if self.diff:
                 raise ValueError("No preceding recorded turn exists for comparison")
-            return WireDocumentResult({
-                "manifests": tuple(reversed(selected)),
-                "text_recorded": all(manifest.public_text_recorded for manifest in selected)})
+            return RecordedContextManifests(
+                tuple(reversed(selected)),
+                all(manifest.public_text_recorded for manifest in selected))
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
@@ -1705,28 +1787,18 @@ class ContextCliCommand(CliCommand):
                 await connection.close()
 
         context, native, native_error = asyncio.run(inspect())
-        result = {
-            "scope": "current-core-contributors; before future input",
-            "input_supplied": False,
-            "core_context": context,
-            "segments": [dict(kind=type(segment), provenance=segment.provenance,
-                              text=segment.text()) for segment in context.segments],
-        }
+        segments = tuple(CoreSegmentText(type(segment), segment.provenance, segment.text())
+                         for segment in context.segments)
         if native is None:
-            return WireDocumentResult({**result, "native_error": native_error})
+            return CoreContextInspection("current-core-contributors; before future input",
+                                         False, context, segments, native_error)
         native_context = native.for_turn(owner, NextContextTurn())
-        return WireDocumentResult({
-            **result,
-            "scope": "next-native-base-and-core-contributors; before future input and provider hooks",
-            "input_supplied": False,
-            "native_manifest": native_context.segments,
-            "native_provider_context": native_context.render().provider,
-            "native_source_spans": [
-                {"segment": position, "sha256": segment.measured_manifest().sha256,
-                 "spans": FieldCodec.encode(segment.source_ranges())}
-                for position, segment in enumerate(native.segments)
-            ],
-        })
+        return NativeContextInspection(
+            "next-native-base-and-core-contributors; before future input and provider hooks",
+            False, context, segments, native_context.segments, native_context.render().provider,
+            tuple(NativeSourceSpans(position, segment.measured_manifest().sha256,
+                                    segment.source_ranges())
+                  for position, segment in enumerate(native.segments)))
 
 
 @dataclass(frozen=True, kw_only=True)
