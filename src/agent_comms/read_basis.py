@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO
+from typing import TYPE_CHECKING, TextIO, cast
 
 from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
@@ -293,11 +293,7 @@ class ReadCursor:
     conversations: dict[Conversation, ConversationCursor] = field(default_factory=dict)
 
     def lower_bound(self, scope: ChannelDisplayScope, snapshot: RegistryProvenance) -> int:
-        targets = scope.index_targets
-        if targets is None:
-            return 0
-        return min((self.for_conversation(ChannelConversation(target)).high_water
-                    for target in targets), default=0)
+        return scope.lower_bound(self, snapshot)
 
     @staticmethod
     def sql(parameter: str) -> str:
@@ -320,9 +316,7 @@ class ReadCursor:
 
     def counted(self, scope: MessageDisplayScope, snapshot: RegistryProvenance
                 ) -> Iterable[tuple[Conversation, ConversationCursor]]:
-        targets = scope.index_targets
-        return ((key, value) for key, value in self.conversations.items()
-                if targets is None or key.in_targets(targets, snapshot))
+        return scope.counted(self, snapshot)
 
     @staticmethod
     def sql_bindings(snapshot: RegistryProvenance,
@@ -730,8 +724,14 @@ class MessageDisplayScope(ABC):
 
     @property
     @abstractmethod
-    def index_targets(self) -> frozenset[str] | None:
-        """The target reduction used by conversation-cursor counting."""
+    def index_targets(self) -> frozenset[str]:
+        """The explicitly addressed targets included by this scope."""
+
+    def counted(self, cursor: ReadCursor, snapshot: RegistryProvenance
+                ) -> Iterable[tuple[Conversation, ConversationCursor]]:
+        targets = self.index_targets
+        return ((key, value) for key, value in cursor.conversations.items()
+                if key.in_targets(targets, snapshot))
 
     @abstractmethod
     def includes(self, message: Message) -> bool:
@@ -801,51 +801,39 @@ class ChannelDisplayScope(MessageDisplayScope):
     """One captured local display predicate; it never changes delivery or history ownership."""
 
     channel: str
-    targets: frozenset[str] | None
-    any_mode: bool = False
-    participant_names: frozenset[str] = frozenset()
+    targets: frozenset[str]
     displayed: DisplayBasis | None = field(default=None, compare=False)
 
     @classmethod
     def capture(
         cls, channel: Channel, snapshot: RegistryProvenance
     ) -> ChannelDisplayScope:
-        members = frozenset(
-            name
-            for name, thread in snapshot.threads.items()
-            if channel.any_mode and channel.exact and channel.tags <= thread.tags
-        )
-        participant_names = members | frozenset(
-            alias for alias, owner in snapshot.aliases.items() if owner in members
-        )
-        targets = channel.history_targets
-        return cls(channel.name, targets, channel.any_mode, participant_names)
+        if channel.any_mode:
+            return MemberActivityDisplayScope.capture(channel, snapshot)
+        return cls.history(channel)
+
+    @classmethod
+    def history(cls, channel: Channel) -> ChannelDisplayScope:
+        if channel.aggregate:
+            return AllChannelDisplayScope(channel.name)
+        # Nonaggregate channel declarations always supply their finite targets.
+        return cls(channel.name, cast(frozenset[str], channel.history_targets))
 
     @property
-    def index_targets(self) -> frozenset[str] | None:
-        # The existing offset index has no mention column. Any-mode can match
-        # sender, DM peer or a mention regardless of target; never drop those rows.
-        return None if self.any_mode else self.targets
+    def index_targets(self) -> frozenset[str]:
+        return self.targets
+
+    def lower_bound(self, cursor: ReadCursor, snapshot: RegistryProvenance) -> int:
+        return min((cursor.for_conversation(ChannelConversation(target)).high_water
+                    for target in self.index_targets), default=0)
 
     @property
     def index_predicate(self) -> tuple[str, tuple]:
-        targets, names = tuple(self.targets or ()), tuple(self.participant_names)
-        target_marks, name_marks = ",".join("?" for _ in targets), ",".join("?" for _ in names)
-        if self.targets is None:
-            return "1", ()
-        predicate = f"target IN ({target_marks})"
-        if not self.any_mode:
-            return predicate, targets
-        return (f"{predicate} OR sender IN ({name_marks}) OR "
-                f"(target NOT LIKE '#%' AND target IN ({name_marks})) OR "
-                f"EXISTS (SELECT 1 FROM json_each(mentions) WHERE value IN ({name_marks}))",
-                (*targets, *names, *names, *names))
+        targets = tuple(self.index_targets)
+        return "target IN (" + ",".join("?" for _ in targets) + ")", targets
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
-        if self.any_mode or self.targets is None:
-            return reads.capture_indexed(viewer, index.scope_rows(self, source.boundary),
-                                         snapshot, source, index, document=document)
         return DisplayBasis(viewer, snapshot.require(viewer).created_at,
             tuple(DisplayedConversation(ChannelConversation(target), (), row.seq)
                   for target in self.targets
@@ -866,12 +854,60 @@ class ChannelDisplayScope(MessageDisplayScope):
         return self.displayed
 
     def includes(self, message: Message) -> bool:
-        if self.targets is None or message.target in self.targets:
-            return True
-        if not self.any_mode:
-            return False
-        return (
-            message.sender in self.participant_names
-            or any(name in self.participant_names for name in CommandTarget.named(message.target).direct_names)
-            or any(mention.thread in self.participant_names for mention in message.mentions)
-        )
+        return message.target in self.targets
+
+
+@dataclass(frozen=True, slots=True)
+class AllChannelDisplayScope(ChannelDisplayScope):
+    """A complete wire view cannot reduce cursors to explicit target names."""
+
+    targets: frozenset[str] = frozenset()
+
+    def counted(self, cursor: ReadCursor, snapshot: RegistryProvenance
+                ) -> Iterable[tuple[Conversation, ConversationCursor]]:
+        return cursor.conversations.items()
+
+    def lower_bound(self, cursor: ReadCursor, snapshot: RegistryProvenance) -> int:
+        return 0
+
+    @property
+    def index_predicate(self) -> tuple[str, tuple]:
+        return "1", ()
+
+    def includes(self, message: Message) -> bool:
+        return True
+
+    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
+        return reads.capture_indexed(viewer, index.scope_rows(self, source.boundary),
+                                     snapshot, source, index, document=document)
+
+
+@dataclass(frozen=True, slots=True)
+class MemberActivityDisplayScope(AllChannelDisplayScope):
+    """Member activity may match a sender, DM peer or mention on any target."""
+
+    participant_names: frozenset[str] = frozenset()
+
+    @classmethod
+    def capture(cls, channel: Channel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
+        members = frozenset(name for name, thread in snapshot.threads.items()
+                            if channel.tags <= thread.tags)
+        names = members | frozenset(alias for alias, owner in snapshot.aliases.items()
+                                    if owner in members)
+        return cls(channel.name, cast(frozenset[str], channel.history_targets), participant_names=names)
+
+    @property
+    def index_predicate(self) -> tuple[str, tuple]:
+        targets, names = tuple(self.targets), tuple(self.participant_names)
+        target_marks, name_marks = ",".join("?" for _ in targets), ",".join("?" for _ in names)
+        return (f"target IN ({target_marks}) OR sender IN ({name_marks}) OR "
+                f"(target NOT LIKE '#%' AND target IN ({name_marks})) OR "
+                f"EXISTS (SELECT 1 FROM json_each(mentions) WHERE value IN ({name_marks}))",
+                (*targets, *names, *names, *names))
+
+    def includes(self, message: Message) -> bool:
+        return (message.target in self.targets or message.sender in self.participant_names
+                or any(name in self.participant_names
+                       for name in CommandTarget.named(message.target).direct_names)
+                or any(mention.thread in self.participant_names for mention in message.mentions))

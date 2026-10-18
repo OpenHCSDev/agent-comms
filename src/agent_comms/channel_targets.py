@@ -291,7 +291,7 @@ class ChannelTarget(NamedTarget):
         return self, message, names
 
     def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
-        return channel_scope(self.name, catalog.resolve(self.name).history_targets)
+        return channel_scope.history(catalog.resolve(self.name))
 
     def conversation_key(self, sender, snapshot, channel, direct):
         return channel(target=self.name)

@@ -251,9 +251,9 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
 
 
 def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
-    from agent_comms.read_basis import ChannelDisplayScope
+    from agent_comms.read_basis import AllChannelDisplayScope
 
-    class AlternateMessages(ChannelDisplayScope):
+    class AlternateMessages(AllChannelDisplayScope):
         def includes(self, message):
             return message.seq % 2 == 0
 
@@ -261,7 +261,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for i in range(6):
         comms.messaging.send("alice", "#team", str(i))
-    scope = AlternateMessages("alternating", None)
+    scope = AlternateMessages("alternating")
     page = comms.bus.log.read_page(MessagePageRequest(scope))
     document = comms.bus.reads.read()
     with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:

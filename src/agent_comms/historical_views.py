@@ -111,14 +111,13 @@ class ConversationHistoryView:
 
 @dataclass(frozen=True, slots=True)
 class ChannelHistory(HistoryView):
-    target: str
-    targets: frozenset[str] | None
+    scope: ChannelDisplayScope
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
-        return presentation.bus.channel_history_page(ChannelTarget(self.target), bounds)
+        return presentation.bus.channel_history_page(ChannelTarget(self.scope.channel), bounds)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
-        return ChannelDisplayScope(self.target, self.targets)
+        return self.scope
 
 
 @dataclass(frozen=True, slots=True)

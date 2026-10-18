@@ -24,7 +24,7 @@ from .messages import Message
 from .read_basis import (
     AnonymousViewer,
     DisplayViewer,
-    ChannelDisplayScope,
+    AllChannelDisplayScope, ChannelDisplayScope,
     DMDisplayScope,
     ListedDeliveries,
     DisplayBasis,
@@ -310,12 +310,12 @@ class MessageBus[Writes: Publisher]:
     ) -> MessagePage:
         """Return one bounded page from a channel in ascending order."""
         channel = self._channels.read().resolve(target.name)
-        scope = ChannelDisplayScope(channel.name, channel.history_targets)
+        scope = ChannelDisplayScope.history(channel)
         return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded combined view of explicit channel and direct wire messages."""
-        scope = ChannelDisplayScope(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets)
+        scope = AllChannelDisplayScope(BuiltinChannel.ANY.value)
         return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def channels(self) -> Sequence[str]:
