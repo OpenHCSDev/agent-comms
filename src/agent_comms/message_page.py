@@ -13,14 +13,13 @@ from .bus_page_index import BusPageIndex
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import (
-    ChannelDisplayScope, DisplaySelection, DMDisplayBasis, DMDisplayScope,
-    MessageDisplayScope, NoDisplaySelection, ReadCursor,
+    ChannelDisplayScope, DisplaySelection, DMDisplayBasis,
+    MessageDisplayScope, NoDisplaySelection,
 )
 from .wire_log import CurrentSnapshotOpening, WireSnapshot
 
 if TYPE_CHECKING:
     from .read_basis import HistoricalDisplay
-    from .bus_page_index import BusPageRow
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,24 +279,6 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
                     more = True
                     break
         return traversal.result(window, more, opposite)
-
-
-@dataclass(frozen=True, slots=True)
-class UnreadBeforeRequest(MessageReadRequest[bool]):
-    """Existence, not a one-item page that searches for a second result."""
-
-    scope: DMDisplayScope
-    before: int
-    seen: ReadCursor
-    empty: ClassVar[bool] = False
-
-    def includes(self, message: Message | BusPageRow) -> bool:
-        return self.scope.unread_before(message, self.before, self.seen)
-
-    def indexed(self, index, source: WireSnapshot) -> bool:
-        with closing(self.scope.offsets(index, lower=self.seen.high_water, upper=self.before, descending=True, before_offset=source.boundary)) as rows:
-            candidates = (row for row in rows if self.includes(row))
-            return any(True for _ in self.indexed_records(source, candidates))
 
 
 class ConversationMessagePageRequest(MessagePageRequest):
