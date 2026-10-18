@@ -47,6 +47,7 @@ from .pi_payloads import PiContent, ToolCallContent
 from .jsonl_stream import unique_fields
 from .private_path import PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole, fsync_directory
 from .selected_actions import SelectedAction
+from .turn_context import InstructionFile
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024
@@ -66,14 +67,9 @@ class SelectedToolIntent(SelectedAction):
     the exact FULL input. Do not construct this from injected/model text.
     """
 
-    instruction = (
-        "Answer the original committed message directly and concisely. "
-        "You may call selected_claimed_write at most once to request a complete UTF-8 "
-        "replacement of an existing worktree file (maximum 128 KiB); the owner "
-        "independently checks the active selected wake, claim and write before the tool "
-        "returns. Tool failure/UNKNOWN must not be retried. "
-        "No shell, generic edits or other tools. "
-    )
+    @property
+    def instruction_files(self) -> tuple[InstructionFile, ...]:
+        return (InstructionFile.read("selected-claimed-write.md"),)
 
     def mode(self, owner):
         return selected_tool_mode_for_owner(

@@ -28,7 +28,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, Self, TypeVar, final
+from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar, final
 
 from acp import RequestError
 
@@ -163,6 +163,8 @@ class AwaitedRead(ObservationRequest):
 class ReadRequest(AwaitedRead):
     """A read of Core's stores, served one at a time in arrival order."""
 
+    deferred_reads: ClassVar[tuple[type[Exception], ...]] = (CoordinationReadUnavailable,)
+
     def receive(self, service: ObservationService) -> None:
         service.pending[self.request_id] = self
         service.changed.set()
@@ -173,10 +175,12 @@ class ReadRequest(AwaitedRead):
     def answer(self, comms: Comms) -> ReadAnswered | ReadRefused | ReadBusy:
         try:
             self.require_root(comms)
-            return ReadAnswered(self.request_id, self.read(comms))
-        except CoordinationReadUnavailable:
-            return ReadBusy(self.request_id)
-        except (RelationViolationError, UnreadableHistory, StaleRevision) as error:
+            try:
+                value = self.read(comms)
+            except self.deferred_reads:
+                return ReadBusy(self.request_id)
+            return ReadAnswered(self.request_id, value)
+        except (CoordinationReadUnavailable, RelationViolationError, UnreadableHistory, StaleRevision) as error:
             return self.refused(error)
 
 
@@ -283,8 +287,19 @@ class TranscriptRequest(ReadRequest, Generic[TranscriptResult]):
 class ReadTranscript(TranscriptRequest[TranscriptSnapshotUpdate]):
     """Read a complete page, including its current draft."""
 
+    deferred_reads: ClassVar[tuple[type[Exception], ...]] = UnreadableHistory.DEFERRED_READS
+
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
         return TranscriptSnapshotUpdate.from_read(read)
+
+
+class SubscribeTranscript(ReadTranscript):
+    """A subscription answers contention instead of waiting for another revision."""
+
+    deferred_reads: ClassVar[tuple[type[Exception], ...]] = tuple(
+        error for error in ReadTranscript.deferred_reads
+        if not issubclass(error, CoordinationReadUnavailable)
+    )
 
 
 @dataclass(frozen=True)
