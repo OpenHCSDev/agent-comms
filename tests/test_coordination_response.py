@@ -23,7 +23,6 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import (
     IdentityConflict,
-    PublicationActivationBlocked,
     PublicationUncertain,
     StaleRevision,
 )
@@ -40,7 +39,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.execution_states import CompletedExecution
 from agent_comms.message_bus import MessageBus
-from agent_comms.publisher import Publisher
+from agent_comms.publisher import ResponseWrites
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.registration import Registration
@@ -58,7 +57,7 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus needs PO
 @dataclass
 class Fixture:
     comms: Comms
-    bus: MessageBus
+    bus: MessageBus[ResponseWrites]
     store: Coordination
     root_id: str
     origin_seq: int
@@ -267,14 +266,9 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         case.close()
 
 
-def test_response_requires_explicit_writer_and_exact_same_root_coordinator(tmp_path: Path) -> None:
+def test_response_requires_exact_same_root_coordinator(tmp_path: Path) -> None:
     case = _ready(tmp_path)
     try:
-        disabled = MessageBus(case.comms.root / "bus.jsonl", case.comms.registry, Publisher)
-        with pytest.raises(PublicationActivationBlocked):
-            prepare_fenced_response(
-                case.store, disabled, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
-            )
         with (
             Coordination(str(case.comms.root / "other.sqlite3")) as wrong_database,
             pytest.raises(IdentityConflict, match="different trusted roots"),
