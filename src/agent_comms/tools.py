@@ -12,24 +12,14 @@ from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type
 from pydantic import JsonValue
 
 from .change_report import ChangeReport
-from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
+from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
 from .channel_targets import ChannelTarget
 from .channels import Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .cli_commands import (
-    ArchiveCliCommand,
-    CliCommand,
-    DeleteViewCliCommand,
-    ForkCliCommand,
-    PinChannelCliCommand,
-    PinThreadCliCommand,
-    StartCliCommand,
-    StopCliCommand,
-    ThreadArchivedResult,
-    ThreadCreatedResult,
-    ThreadsCliCommand,
-    ThreadStoppedResult,
-    _json_object,
-    option,
+    ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
+    PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
+    ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand,
+    _json_object, option,
 )
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -54,41 +44,27 @@ from .goals import Goal, GoalDeclaration, OrderCheck
 from .input_attempt import UnresolvedInput
 from .launch_runtime import LaunchRuntime
 from .message_reference import MessageReference
-from .messages import InfoKind, Message, MessageKind, NoticeRole
+from .messages import Message
+from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
 from .owner_lifecycle import OwnerStartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
 from .presentation import ChannelView
-from .relationships import (
-    Collaboration,
-    GoalDerivedContact,
-    GoalMentionDiagnostic,
-    RelationshipEdit,
-)
-from .restart_queue import QueuedRestart
-from .restart_queue import cancel as cancel_restart
-from .restart_queue import enqueue as enqueue_restart
+from .relationships import Collaboration, GoalDerivedContact, GoalMentionDiagnostic
+from .relationships import RelationshipEdit
+from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as enqueue_restart
 from .restart_queue import status as restart_status
 from .task_sources import (
-    Constraint,
-    CurrentTaskScopeSelection,
-    Decision,
-    OriginalTaskChange,
-    Subtask,
-    TaskAttachment,
-    TaskChange,
-    TaskScopeSelection,
+    CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
+    TaskScopeSelection, OriginalTaskChange,
 )
 from .thread_execution import (
-    ArchiveOwnerControl,
-    NativeOwnerCommand,
-    OwnerLifecycleControl,
-    StartOwnerControl,
-    ThreadCommandAvailability,
+    ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl,
+    StartOwnerControl, ThreadCommandAvailability,
 )
 from .thread_management import RenameThreadResult
 from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, Todo, TodoOperation
-from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller, ToolCatalogResult
+from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing, ToolCatalogResult
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
     materialize_oversized_output,

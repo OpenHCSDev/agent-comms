@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import field, dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
 

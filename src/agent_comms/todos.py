@@ -7,10 +7,10 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
-import asyncio
 import re
 import sqlite3
 import time
+import asyncio
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path

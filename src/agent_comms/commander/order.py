@@ -14,15 +14,7 @@ error is voided with `unstrike`, never deleted: it stays readable beside its voi
 counting. Nothing here judges code; it refuses orders that leave a unit room to interpret,
 and refuses to let a deadline lapse silently.
 """
-import argparse
-import asyncio
-import calendar
-import json
-import os
-import re
-import subprocess
-import sys
-import time
+import argparse, asyncio, calendar, json, os, re, subprocess, sys, time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,41 +23,18 @@ from uuid import uuid4
 from ..change_report import FileLine
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
-from ..comms import Comms
 from ..declared_family import DeclaredFamily
+from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CountCheckResult, OrderCheck
 from ..native_tool_call import SelectedToolDenied
 from ..recorded_time import RecordedEventTime
-from ..todos import (
-    ApplicationOrderRun,
-    BluntText,
-    CleanHunt,
-    CommitDelivery,
-    FairText,
-    HierarchyText,
-    MechanicalOrderRun,
-    NotifiedFirstCallEvent,
-    ObservedFirstCallEvent,
-    OperationDelivery,
-    OrderedHunt,
-    OrderRun,
-    PendingProblemOrder,
-    PlainText,
-    RecordFirstCallTodo,
-    RecordHuntTodo,
-    StrikeTodo,
-    VoidStrikeTodo,
-)
 from ..tool_caller import ThreadCaller
-from ..tools import (
-    CommsOrderCheckTool,
-    CommsOrderDoneTool,
-    CommsOrderTool,
-    CommsProblemCloseTool,
-    CommsTodoCreateTool,
-    CommsTodoTool,
-)
+from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
+                     CommsTodoCreateTool, CommsTodoTool)
+from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+                     OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
+                     RecordHuntTodo, StrikeTodo, VoidStrikeTodo)
 from . import capacity, rules, storage
 from .config import CommanderConfig, Repo
 

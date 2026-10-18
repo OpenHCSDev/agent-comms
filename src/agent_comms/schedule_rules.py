@@ -10,7 +10,7 @@ from acp import RequestError
 from .coordinator import Coordination
 from .drain_failures import drain_failures
 from .errors import RelationViolationError
-from .reservation_rules import ReservationRule, ReservationViolationError, RuleCheck
+from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
 
 if TYPE_CHECKING:

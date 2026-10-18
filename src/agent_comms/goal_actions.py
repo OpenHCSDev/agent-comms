@@ -133,7 +133,9 @@ class GoalAction[Result: GoalDeclaration](DeclaredFamily, Command, affix="GoalAc
             for entry in ctx.goals.registry.goal_history(ctx.thread.name)
         ):
             raise ValueError("This goal was already reported in this turn.")
-        goal = ctx.thread.goal.apply_action(self, ctx)
+        goal = ctx.thread.goal.project(
+            lambda current: self.change(current, ctx), lambda: self.create(ctx),
+        )
         if goal == ctx.thread.goal:
             return goal
         self.before_publish(goal, ctx)

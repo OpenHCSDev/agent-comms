@@ -25,7 +25,6 @@ if TYPE_CHECKING:
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-    from .goal_actions import GoalAction, GoalActionContext
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .turn_goal_account import VerifiedGoalSettlement
     from .thread_identity import TurnId
@@ -356,10 +355,6 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
         return previous
-
-    def apply_action[Result: GoalDeclaration](self, action: GoalAction[Result],
-                                              ctx: GoalActionContext) -> Result:
-        return self.project(lambda goal: action.change(goal, ctx), lambda: action.create(ctx))
 
     @abstractmethod
     def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T: ...

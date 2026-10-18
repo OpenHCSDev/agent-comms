@@ -15,17 +15,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .coordination_database import CoordinationStore
 from .diagnostics import FailureReason
+from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goals import Goal
-from .thread_identity import (
-    ClaimedIdentity,
-    RecordedThreadIncarnation,
-    ThreadIncarnation,
-    TurnIdentity,
-)
+from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnIdentity
 from .thread_status import ThreadStatus
 from .threads import Thread
 from .turn_lease import TurnFence, TurnLeaseFence

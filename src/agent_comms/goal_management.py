@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from .agent_events import GoalChanged
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
-from .goal_presentation import GoalSnapshot, GoalWaitTarget, ThreadGoalExecution
+from .goal_presentation import GoalSnapshot, ThreadGoalExecution, GoalWaitTarget
 from .goals import Goal, GoalDeclaration
 from .input_attempt import ReservedInput, UnresolvedInput
 from .input_disposition import DeliveryOverview, InputDispositions

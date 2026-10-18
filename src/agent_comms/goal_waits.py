@@ -9,13 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
-from .goal_presentation import (
-    GoalExecution,
-    GoalExecutionState,
-    GoalWaitTarget,
-    IdleGoalExecution,
-    ThreadGoalExecution,
-)
+from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import LockedStore, RootFile

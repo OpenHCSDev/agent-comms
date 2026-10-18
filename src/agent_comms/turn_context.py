@@ -960,10 +960,6 @@ class GoalSegment(InstructionSegment):
     orders_text: str = ""
 
     @classmethod
-    def for_owner(cls, owner: Thread, goals) -> tuple[GoalSegment, ...]:
-        return owner.goal.active().project(lambda goal: (cls.capture(owner, goal, goals),), tuple)
-
-    @classmethod
     def capture(cls, owner: Thread, goal: Goal, goals) -> GoalSegment:
         todos = goal.order.todos(goals, owner.incarnation, goal.id)
         orders_text = goal.order.instructions(todos)
@@ -1176,10 +1172,9 @@ class TurnContext(DeclaredReply):
         return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations, blocking=True)
 
     def with_goal(self, owner: Thread, goals) -> TurnContext:
-        context = self
-        for segment in GoalSegment.for_owner(owner, goals):
-            context = context.prepend(segment)
-        return context
+        return owner.goal.active().project(
+            lambda goal: self.prepend(GoalSegment.capture(owner, goal, goals)), lambda: self,
+        )
 
     def with_awareness(
         self, comms, owner: Thread, relations: tuple[PeerRelation, ...], *, blocking: bool = False
