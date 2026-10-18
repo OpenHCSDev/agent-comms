@@ -109,6 +109,15 @@ class DisplaySelection(ABC):
     @abstractmethod
     def has_evidence(self) -> bool: ...
 
+    def select(self, page, sequences):
+        selected = frozenset(sequences)
+        return self.select_evidence(replace(page,
+            messages=tuple(message for message in page.messages if message.seq in selected),
+            source_pages=tuple(source.select(selected) for source in page.source_pages)), selected)
+
+    @abstractmethod
+    def select_evidence(self, page, selected): ...
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SelectedDisplay(DisplaySelection):
@@ -126,6 +135,9 @@ class SelectedDisplay(DisplaySelection):
 
 @dataclass(frozen=True, slots=True)
 class NoDisplaySelection(DisplaySelection):
+    def select_evidence(self, page, selected):
+        return page
+
     @property
     def has_evidence(self) -> bool:
         return False
@@ -135,6 +147,10 @@ class NoDisplaySelection(DisplaySelection):
 class ChannelSelection(SelectedDisplay):
     bus_identity: tuple[int, int] | None
     scope: ChannelDisplayScope
+
+    def select_evidence(self, page, selected):
+        return replace(page, display_scope=replace(self.scope,
+            displayed=self.scope.require_displayed().select(selected)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,10 +162,17 @@ class DMSelection(SelectedDisplay):
     peer: ThreadIncarnation
     scope: DMDisplayScope
 
+    def select_evidence(self, page, selected):
+        basis = page.display_basis
+        return replace(page, display_basis=replace(basis, displayed=basis.displayed.select(selected)))
+
 
 @dataclass(frozen=True, slots=True)
 class HistoricalSelection(SelectedDisplay):
     """The original viewer and attached-source revision select an archive page."""
+
+    def select_evidence(self, page, selected):
+        return replace(page, historical_display=page.historical_display.select(selected))
 
 
 @dataclass(frozen=True, slots=True)

@@ -41,6 +41,10 @@ class MessagePage:
     source_pages: tuple[MessagePage, ...] = ()
     bytes_read: int = 0
 
+    def select(self, sequences) -> MessagePage:
+        """Keep only painted messages and the corresponding original read proof."""
+        return self.selection.select(self, sequences)
+
     @classmethod
     def combine(cls, pages: tuple[MessagePage, ...]) -> MessagePage:
         latest = next((page for page in reversed(pages) if page.messages), pages[-1])
