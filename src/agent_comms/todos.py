@@ -872,7 +872,7 @@ class OrderVerdict(TodoOperation, declared_name=None):
     actor: ThreadIncarnation
     previous: Assignment
     tool_call_id: str
-    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
 
     @abstractmethod
     def judged(self, current: Todo) -> Todo: ...
