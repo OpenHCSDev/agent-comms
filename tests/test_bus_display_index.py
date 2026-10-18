@@ -6,6 +6,7 @@ import json
 import pytest
 
 from agent_comms.bus_activity_index import BusActivityIndex
+from agent_comms.bus_projection import NoCheckpoint
 from agent_comms.bus_display_index import BusDisplayIndex, DisplayMetricScope, DisplaySnapshot
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.messages import InfoKind, Message
@@ -121,5 +122,5 @@ def test_checkpoint_write_failure_is_visible_and_not_remembered(tmp_path, activi
         index.path.mkdir()  # Real publication failure, not a mocked write.
         with pytest.raises(OSError):
             index.snapshot(source, MessageBus._bus_activity_fields if activity else semantics())
-        assert index._held is None
-        assert source._append_checkpoints[index] is None
+        assert index._held == NoCheckpoint()
+        assert source._append_checkpoints[index] == NoCheckpoint()

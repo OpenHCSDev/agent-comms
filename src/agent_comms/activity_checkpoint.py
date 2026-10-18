@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar, Literal
 
 from .activity import Activity
-from .bus_projection import AppendCheckpoint, AppendProjectionStore
+from .bus_projection import AppendCheckpoint, AppendProjectionStore, NoCheckpoint
 from .locked_store import JsonDocument, RootFile
 from .private_path import FileRevision
 
@@ -22,6 +22,9 @@ class ActivityCheckpoint(AppendCheckpoint):
         if any(name != event.thread for name, event in self.latest.items()):
             raise ValueError("Activity checkpoint identity does not match its event")
 
+    def restore_latest(self):
+        return dict(self.latest), self.offset
+
     @classmethod
     def capture(
         cls,
@@ -35,7 +38,7 @@ class ActivityCheckpoint(AppendCheckpoint):
 
 @dataclass(frozen=True, slots=True)
 class ActivityCheckpointStore(
-    RootFile, JsonDocument[ActivityCheckpoint | None], AppendProjectionStore[ActivityCheckpoint]
+    RootFile, JsonDocument[ActivityCheckpoint | NoCheckpoint], AppendProjectionStore[ActivityCheckpoint]
 ):
     """Keep the established activity document codec and shared prefix publisher."""
 
@@ -43,12 +46,12 @@ class ActivityCheckpointStore(
     filename: ClassVar[str] = "activity_latest.json"
 
     @property
-    def record_type(self) -> type[ActivityCheckpoint | None]:
-        return ActivityCheckpoint | None
+    def record_type(self) -> type[ActivityCheckpoint | NoCheckpoint]:
+        return ActivityCheckpoint | NoCheckpoint
 
-    def empty(self) -> None:
-        return None
+    def empty(self) -> NoCheckpoint:
+        return NoCheckpoint()
 
-    def _unreadable(self, error: Exception) -> None:
+    def _unreadable(self, error: Exception) -> NoCheckpoint:
         # Never recover authoritative log data from an invalid derived cache.
-        return None
+        return NoCheckpoint()

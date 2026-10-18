@@ -30,7 +30,7 @@ from .bus_publication import (
 )
 from .bus_source_page import AddressedPage
 from .bus_page_index import BusPageIndex, BusPageRow, StaleBusPageIndexError
-from .bus_projection import (AppendCheckpoint, BusAppendIndex, Checkpoint,
+from .bus_projection import (AppendCheckpoint, BusAppendIndex, Checkpoint, NoCheckpoint,
                              WirePrefix, EmptyWirePrefix, CompleteWirePrefix)
 from .envelope_claim_transitions import (
     ClaimProjection,
@@ -67,7 +67,7 @@ class WireSnapshot(ABC):
 
     metadata: WireMetadata
     through: int
-    _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | None] = field(
+    _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | NoCheckpoint] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
 
@@ -113,7 +113,7 @@ class WireSnapshot(ABC):
     def indexed_records(self, rows: Iterable[BusPageRow], *, before_offset: int) -> Iterator[tuple[Message, int]]: ...
 
     @abstractmethod
-    def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None: ...
+    def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | NoCheckpoint: ...
 
     @abstractmethod
     def remember_append_checkpoint(self, index: BusAppendIndex[Checkpoint], record: Checkpoint) -> None: ...
@@ -218,8 +218,8 @@ class AbsentWireSnapshot(WireSnapshot):
             raise RelationViolationError("Indexed read exceeds its opened wire cut")
         return iter(())
 
-    def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
-        return None
+    def append_checkpoint(self, index: BusAppendIndex) -> NoCheckpoint:
+        return NoCheckpoint()
 
     def remember_append_checkpoint(self, index: BusAppendIndex[Checkpoint], record: Checkpoint) -> None:
         raise ValueError("Computed append checkpoint belongs to another source cut")
@@ -343,9 +343,9 @@ class OpenedWireSnapshot(WireSnapshot):
             )
             yield message, size
 
-    def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
+    def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | NoCheckpoint:
         """Validate the captured candidate only when a consumer reads this cut."""
-        record = index.capture(self._append_checkpoints.get(index), self)
+        record = index.capture(self._append_checkpoints.get(index, NoCheckpoint()), self)
         self._append_checkpoints[index] = record
         return record
 
@@ -827,14 +827,14 @@ class WireLog:
         with self.certified_read() as source:
             return source.keyed_receipt(intent)
 
-    def prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...]:
+    def prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...]:
         """Read registered index candidates before taking any source locks."""
         return tuple((index, index.prepare()) for index in self._append_indexes)
 
     @contextmanager
     def _opened_wire_snapshot(
         self, *,
-        prepared_indexes: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...] = (),
+        prepared_indexes: tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...] = (),
         opening: SnapshotOpening = SequencedSnapshotOpening(),
     ):
         """Keep one owned descriptor/cut; acquisition follows its source contract."""

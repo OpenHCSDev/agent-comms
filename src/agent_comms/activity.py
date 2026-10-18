@@ -14,6 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from .bus_projection import NoCheckpoint
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
@@ -258,12 +259,12 @@ class ObservedActivity(ActivityData):
 class ActivitySnapshot:
     """One inseparable source cut and its visible events, including a partial EOF."""
 
-    checkpoint: ActivityCheckpoint | None = None
+    checkpoint: ActivityCheckpoint | NoCheckpoint = field(default_factory=NoCheckpoint)
     latest: Mapping[str, Activity] = field(default_factory=dict)
 
     @property
     def revision(self) -> FileRevision | None:
-        return self.checkpoint.source if self.checkpoint is not None else None
+        return self.checkpoint.source_revision
 
     def current_at(self, path: Path) -> bool:
         return self.revision == FileRevision.capture(path)
@@ -324,11 +325,7 @@ class ActivityLog(ThreadOwnedState):
             self._publish_checkpoint()
 
     def _publish_checkpoint(self) -> None:
-        checkpoint = self._read_snapshot().checkpoint
-        if checkpoint is not None:
-            # Its prefix is validated by the shared publisher; it may lag an
-            # append without claiming those later events or delaying appenders.
-            self.checkpoint.write(checkpoint)
+        self._read_snapshot().checkpoint.publish(self.checkpoint)
 
     def emit(self, activity: Activity) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -397,20 +394,18 @@ class ActivityLog(ThreadOwnedState):
                 started_from = read.snapshot
                 if revision == started_from.revision:
                     return started_from
-                checkpoint = None
+                checkpoint = NoCheckpoint()
                 if revision is not None:
-                    checkpoint = started_from.checkpoint or self.checkpoint.read()
+                    checkpoint = started_from.checkpoint.prepare(self.checkpoint)
             latest = {}
-            captured = None
+            captured = NoCheckpoint()
             if revision is not None:
                 try:
                     with self._path.open("rb") as stream:
                         if not revision.opened_by(stream):
                             continue
-                        if checkpoint is not None and not checkpoint.accepts(revision, stream):
-                            checkpoint = None
-                        complete = dict(checkpoint.latest) if checkpoint is not None else {}
-                        offset = checkpoint.offset if checkpoint is not None else 0
+                        checkpoint = checkpoint.validated(revision, stream)
+                        complete, offset = checkpoint.restore_latest()
                         latest = complete
                         stream.seek(offset)
                         while stream.tell() < revision.size:

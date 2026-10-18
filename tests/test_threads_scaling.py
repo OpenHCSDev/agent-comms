@@ -151,7 +151,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
     # Prepare both actual index owners before taking a cold observer's cut.
     wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
     captured = wired if same_owner else wire(wired.root)
-    with captured.views.presentation.snapshot(viewer=viewer) as (basis, source):
+    with captured.views.presentation.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         appended = wired.messaging.send_message("fixer", "#base", "later activity")
         # B advances both index owners; A keeps the prefix read with its source.
         wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
@@ -180,7 +180,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
 def test_computed_checkpoint_stays_with_the_same_opened_cut(wired, monkeypatch):
     first = wired.messaging.send_message("PR111", "#base", "first exact-cut row")
     viewer = wired.messaging.user_identity("/same-cut-viewer").name
-    with wired.views.presentation.snapshot(viewer=viewer) as (basis, source):
+    with wired.views.presentation.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         parsed = []
         original = Message.from_wire
 
