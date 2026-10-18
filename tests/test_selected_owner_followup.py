@@ -55,7 +55,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
     comms.messaging.send_message("sender", "beta", "Selected direct message")
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
-        await recorded_request(control)
+        await recorded_request(control, agent)
         wake = agent.inputs.wake_tasks["beta"]
         assert comms.registry.require("beta").active_turn is not None
         response = await asyncio.wait_for(

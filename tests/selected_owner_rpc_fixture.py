@@ -12,6 +12,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.native_package import pinned_native_package
 
 
 @pytest.fixture
@@ -34,13 +35,7 @@ async def scripted_owner(tmp_path, selected_model, monkeypatch):
     # Pi package. Do not claim package/import-fence verification from this test.
     for name in ('agent-comms-import-fence.mjs', 'agent-comms-project-bootstrap.mjs'):
         (control / name).write_text('')
-    dist = tmp_path / 'dist'
-    dist.mkdir()
-    for name, origin in (
-        ('channel_coding_tools.mjs', source / 'agent_comms/channel_coding_tools.mjs'),
-        ('agent-comms-import-fence.mjs', tests.parent / 'stack/native-import-fence.mjs'),
-    ):
-        (dist / name).write_bytes(origin.read_bytes())
+    package = pinned_native_package().resolve(strict=True)
     comms = Comms(tmp_path / 'wire')
     for name in ('sender', 'beta'):
         comms.registry.declare(comms.registry.new_thread(
@@ -52,13 +47,14 @@ async def scripted_owner(tmp_path, selected_model, monkeypatch):
         owner = comms.registry.require('beta')
         store.participants.register(RecordedThreadIncarnation('fixture', owner.created_at).lookup,
                                     'beta', 'beta', committed=True)
-    agent = CommsAgent(comms, runtime_enabled=True, private_nk_native_package=tmp_path,
+    agent = CommsAgent(comms, runtime_enabled=True, private_nk_native_package=package,
                        private_nk_wire_root_id=root_id, private_nk_verified_cli=cli)
     agent.sessions.bindings['beta'] = 'beta'
     agent.sessions.titles['beta'] = 'beta'
     agent.sessions.worktrees['beta'] = str(tmp_path)
     # The test owns one explicit observer; ACP input must not start another.
     monkeypatch.setattr(agent.inputs, 'ensure_live_drain', lambda _: None)
+    await agent._runtime.start()
     try:
         yield comms, agent, control
     finally:
@@ -66,10 +62,15 @@ async def scripted_owner(tmp_path, selected_model, monkeypatch):
         await agent.shutdown()
 
 
-async def recorded_request(control):
-    async with asyncio.timeout(15):
-        while not (control / 'entered').exists():
-            await asyncio.sleep(.005)
+async def recorded_request(control, agent):
+    try:
+        async with asyncio.timeout(15):
+            while not (control / 'entered').exists():
+                await asyncio.sleep(.005)
+    except TimeoutError:
+        from delivery_owner_fixture import drain_diagnostic
+
+        raise AssertionError(f'Scripted input never arrived: {drain_diagnostic(agent._comms, "beta")!r}') from None
 
 
 def requests(control):
