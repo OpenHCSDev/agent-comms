@@ -225,7 +225,6 @@ its limit triggers the fork.
 
 ## Next (small edits to the commander scripts)
 
-- [ ] `vibe_watch.py`: drop messages a unit sends to its own thread.
 - [ ] `order.py overdue`: raise OVERDUE once per order, not every tick.
 - [ ] Drop the duplicate path so unit reports reach the commander once.
 - [ ] DISK LOW only when crossing a threshold.
