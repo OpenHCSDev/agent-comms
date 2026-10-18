@@ -33,7 +33,7 @@ from .threads import Thread
 from .input_attempt import ReservedInput, UnresolvedInput
 from .input_disposition import DeliveryOverview, InputDispositions
 from .turn_lease import FinishedTurnFence
-from .todos import SendBackVerdict, StrikeReason, Todo, TodoStore
+from .todos import SendBackVerdict, StrikeReason, Todo, TodoOperation, TodoStore
 from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class Goals:
         self.goal_store: GoalAttemptStore | None = None
 
     @cached_property
-    def todos(self):
+    def todos(self) -> TodoStore:
         return TodoStore(self.root)
 
     def change_problem(self, problem, operation, commander):
@@ -59,14 +59,15 @@ class Goals:
         current.require_commander(actor)
         return operation.prepare(self, current).record(self, problem)
 
-    def apply_problem(self, problem, operation):
+    def apply_problem(self, problem: str, operation: TodoOperation) -> Todo:
         with _store_lock(self._wire_lock_path):
             return self.todos.apply(problem, operation)
 
     def send_back(self, problem: str, verdict: SendBackVerdict) -> Todo:
-        """The send-back's verdict and strike land on the Todo in the same write that revises the holder's Goal."""
-        self.update_goal(verdict.previous.owner, SentBackOrderGoalAction(
-            expect=GoalPrecondition(goal_id=verdict.previous.generation), problem=problem, operation=verdict))
+        """The verdict and strike land on the Todo in the write that revises the holder's Goal."""
+        holder = verdict.previous
+        self.update_goal(holder.owner, SentBackOrderGoalAction(
+            expect=GoalPrecondition(goal_id=holder.generation), problem=problem, operation=verdict))
         return self.todos.get(problem)
 
     def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:

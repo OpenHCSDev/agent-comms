@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
-from typing import ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, WireValue
 from .command import Command
@@ -31,6 +31,9 @@ from .change_report import FileLine
 from .goals import OrderCheck, ProblemGoalOrder
 from .child_process import BoundedRun, ExitedOutcome
 from .storage_rules import StorageRule
+
+if TYPE_CHECKING:
+    from .goal_management import Goals
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -817,7 +820,7 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     def prepare(self, goals, current):
         return self
 
-    def record(self, goals, problem: str) -> Todo:
+    def record(self, goals: Goals, problem: str) -> Todo:
         """Write this operation; one that also revises the holder's Goal routes through it."""
         return goals.apply_problem(problem, self)
 
@@ -865,7 +868,7 @@ class StrikeTodo(TodoOperation):
 
 @dataclass(frozen=True)
 class OrderVerdict(TodoOperation, declared_name=None):
-    """The commander's verdict on one tool call the holder made for this order; it stays on the order."""
+    """The commander's verdict on one tool call the holder made for its order, kept on the order."""
     actor: ThreadIncarnation
     previous: Assignment
     tool_call_id: str
@@ -890,7 +893,8 @@ class AcceptedVerdict(OrderVerdict):
 
     def judged(self, current: Todo) -> Todo:
         quoted = " ".join(self.quote.split())
-        if len(quoted.split()) < 4 or quoted not in " ".join(current.order.instructions(current).split()):
+        order = " ".join(current.order.instructions(current).split())
+        if len(quoted.split()) < 4 or quoted not in order:
             raise ValueError("Quote 4+ words of the order this tool call carries out.")
         return current
 
@@ -901,9 +905,10 @@ class SendBackVerdict(OrderVerdict):
     reason: StrikeReason
 
     def judged(self, current: Todo) -> Todo:
-        return StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text, self.at).apply(current)
+        strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text, self.at)
+        return strike.apply(current)
 
-    def record(self, goals, problem: str) -> Todo:
+    def record(self, goals: Goals, problem: str) -> Todo:
         return goals.send_back(problem, self)
 
 

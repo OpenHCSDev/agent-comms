@@ -371,7 +371,7 @@ class DeliveredOrderGoalAction(HeldOrderGoalAction):
     operation: DeliverTodo
     progress: str = ""
 
-    def revised(self, goal, ctx):
+    def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         pending = ctx.goals.todos.holds_pending(ctx.thread.incarnation)
         return replace(goal, state=goal.state.after_order_delivery(pending), progress=self.progress)
 
@@ -380,7 +380,7 @@ class DeliveredOrderGoalAction(HeldOrderGoalAction):
 class SentBackOrderGoalAction(HeldOrderGoalAction):
     operation: SendBackVerdict
 
-    def revised(self, goal, ctx):
+    def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         return replace(goal, progress=f"Sent back on {self.problem}: {self.operation.reason.text}")
 
 

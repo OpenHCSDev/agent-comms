@@ -750,9 +750,9 @@ class CommsTodoTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsVerdictTool(CommsTodoTool):
     label = "Judge order tool call"
-    description = ("Record the commander's verdict on one tool call the holder made for its order: an accepted "
-                   "verdict quotes 4+ words of the order; a send-back strikes the holder and revises its Goal "
-                   "in the same write.")
+    description = ("Record the commander's verdict on one tool call the holder made for its "
+                   "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
+                   "the holder and revises its Goal in the same write.")
     operation: OrderVerdict = tool_field("Accepted or send-back verdict on the judged tool call ID")
 
 
