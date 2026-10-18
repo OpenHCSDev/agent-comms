@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
-from typing import ClassVar, Final, Self
+from typing import ClassVar, Self
 
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, WireValue
 from .command import Command
@@ -28,7 +28,7 @@ from .threads import Thread
 from .typed_table import Column, TypedStore, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
 from .change_report import FileLine
-from .goals import OrderCheck
+from .goals import OrderCheck, ProblemGoalOrder
 from .child_process import BoundedRun, ExitedOutcome
 from .storage_rules import StorageRule
 
@@ -434,9 +434,6 @@ class StrikeReason(PlainText):
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
-
-
-StrikeLimit: Final = 2  # live strikes one unit may take on one problem
 
 
 class OrderText(OrderWords):
@@ -907,11 +904,7 @@ class SendBackVerdict(OrderVerdict):
         return StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text, self.at).apply(current)
 
     def record(self, goals, problem: str) -> Todo:
-        from .goal_actions import GoalPrecondition, SentBackOrderGoalAction
-
-        goals.update_goal(self.previous.owner, SentBackOrderGoalAction(
-            expect=GoalPrecondition(goal_id=self.previous.generation), problem=problem, operation=self))
-        return goals.todos.get(problem)
+        return goals.send_back(problem, self)
 
 
 @dataclass(frozen=True)
@@ -1105,8 +1098,9 @@ class Todo(TypedTable):
                      if unit in (None, recorded.previous.owner) and recorded not in taken_back)
 
     def struck_out(self, unit: str) -> bool:
-        """The unit has taken StrikeLimit live strikes here; only mechanical orders reach it."""
-        return len(self.live_strikes(unit)) >= StrikeLimit
+        """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
+        orders reach it."""
+        return len(self.live_strikes(unit)) >= ProblemGoalOrder.StrikeLimit
 
     def require_result(self, result: Todo) -> None:
         if self != result:
@@ -1309,6 +1303,22 @@ class TodoStore(TypedStore):
                 return current
             result.upsert(db)
             return self._current(db, todo_id)
+
+    def fire(self, unit: str, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
+        """Release every open problem the unit holds from this commander in one write; each
+        records the same reason, and its order and strikes stay."""
+        with self.writing() as db:
+            held = tuple((todo, assignment) for todo in self._rows(
+                db, "json_extract(assignment,'$.owner')=? AND creator=? AND creator_created=?",
+                (unit, actor.name, actor.wire_birth))
+                if todo.state.open and (assignment := todo.assignment))
+            if not held:
+                raise TodoError(f"{unit} holds no open problem.")
+            released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).apply(todo)
+                             for todo, assignment in held)
+            for todo in released:
+                todo.upsert(db)
+            return released
 
     def assign(
         self,

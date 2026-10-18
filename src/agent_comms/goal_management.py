@@ -10,7 +10,8 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
+from .goal_actions import (GoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable,
+                           SentBackOrderGoalAction)
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
@@ -32,7 +33,7 @@ from .threads import Thread
 from .input_attempt import ReservedInput, UnresolvedInput
 from .input_disposition import DeliveryOverview, InputDispositions
 from .turn_lease import FinishedTurnFence
-from .todos import TodoStore
+from .todos import SendBackVerdict, StrikeReason, Todo, TodoStore
 from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)
@@ -61,6 +62,18 @@ class Goals:
     def apply_problem(self, problem, operation):
         with _store_lock(self._wire_lock_path):
             return self.todos.apply(problem, operation)
+
+    def send_back(self, problem: str, verdict: SendBackVerdict) -> Todo:
+        """The send-back's verdict and strike land on the Todo in the same write that revises the holder's Goal."""
+        self.update_goal(verdict.previous.owner, SentBackOrderGoalAction(
+            expect=GoalPrecondition(goal_id=verdict.previous.generation), problem=problem, operation=verdict))
+        return self.todos.get(problem)
+
+    def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
+        actor = self.registry.require(commander).incarnation
+        store: TodoStore = self.todos
+        with _store_lock(self._wire_lock_path):
+            return store.fire(unit, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

@@ -6,10 +6,10 @@ only the new declared schema.
 
 from __future__ import annotations
 
-from cutover.carry import TodoColumnCarry
+from cutover import carry
 
 
-class TodoVerdicts(TodoColumnCarry):
+class TodoVerdicts(carry.TodoColumnCarry):
     """Todo rows gain the empty verdicts record; every stored strike stays as it was."""
 
     after = "carry_problem_goals"
