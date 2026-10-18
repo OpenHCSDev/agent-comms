@@ -10,7 +10,7 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import closing, contextmanager
 from sqlite3 import Connection
 from dataclasses import dataclass, field
@@ -159,7 +159,7 @@ class ExternalItemRow(ExternalPageRow, TypedTable):
     unique = (("thread", "seq"),)
 
     @classmethod
-    def recent_turn_ids(cls, connection: Connection, thread: str) -> Iterator[str]:
+    def recent_turn_ids(cls, connection: Connection, thread: str) -> Generator[str]:
         """Yield identities newest first without decoding bodies or grouping the full history."""
         identities: set[str] = set()
         with closing(cls.stream(connection, row_type=ExternalTurn, thread=thread,

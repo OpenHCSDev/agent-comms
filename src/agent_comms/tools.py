@@ -864,10 +864,8 @@ class CommsOrderWorkTool(ReadTool, ToolRequest):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OrderWork:
         todo = comms.goals.todos.get(self.problem)
-        if todo.assignment is None:
-            raise ValueError(f"{self.problem} has no open order.")
         since = todo.order.at.recorded_at("An order")
-        turns = comms.transcripts.turns(todo.assignment.owner, TurnsSince(since))
+        turns = comms.transcripts.turns(todo.held().owner, TurnsSince(since))
         return OrderWork.read(self.problem, turns.thread, since, turns.turns)
 
 

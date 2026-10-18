@@ -1038,6 +1038,12 @@ class Todo(TypedTable):
         """The unit holding this problem; None once it is closed or released."""
         return None if self.assignment is None else self.assignment.owner
 
+    def held(self) -> Assignment:
+        """The open order's assignment; a problem nobody holds has no order work."""
+        if self.assignment is None:
+            raise TodoError(f"{self.id} has no open order.")
+        return self.assignment
+
     @property
     def strike_count(self) -> int:
         return 0 if self.assignment is None else len(self.live_strikes(self.assignment.owner))

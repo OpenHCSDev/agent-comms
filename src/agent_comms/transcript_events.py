@@ -98,6 +98,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         """Only tool events change a unit's calls."""
 
+    @property
+    def dated(self) -> tuple[float, ...]:
+        return () if self.timestamp is None else (self.timestamp,)
+
 
 @dataclass(frozen=True)
 class TranscriptCoverage:
@@ -381,5 +385,5 @@ class TurnDigest:
 
     def before(self, at: float) -> bool:
         """Every dated event of this turn precedes ``at``; an undated turn is never before."""
-        dated = [event.timestamp for event in self.events if event.timestamp is not None]
+        dated = [time for event in self.events for time in event.dated]
         return bool(dated) and max(dated) < at

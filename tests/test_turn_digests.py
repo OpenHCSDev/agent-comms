@@ -111,7 +111,7 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
                 async with aclosing(WireWatch.observations(*(
                         WatchSource.modified_file(item) for item in source.source_paths(comms.root)))) as changes:
                     async for _ in changes:
-                        turns = await asyncio.to_thread(comms.transcripts.turns, 'claude')
+                        turns = await asyncio.to_thread(comms.transcripts.turns, 'claude', LastTurns())
                         if any(event == AssistantTranscript('done', timestamp=datetime.fromisoformat(final['timestamp']).timestamp())
                                for turn in turns.turns for event in turn.events):
                             break
