@@ -44,6 +44,16 @@ class RecipientDecision(ABC):
     @abstractmethod
     def to_wire(self) -> dict[str, str]: ...
 
+    @staticmethod
+    def from_wire(row: dict[str, str]) -> RecipientDecision:
+        """A committed row's decision, whose digest its first read proved."""
+        match row:
+            case {"recipient_lookup": lookup, "no_wake": reason}:
+                return NoWakeDecision(lookup, NoWakeReason(reason))
+            case {"recipient_lookup": lookup, "audience": audience, "wake_mode": mode}:
+                return WakeDecision(lookup, MessageAudience(audience), WakePolicy.decode(mode)())
+        raise IntegrityViolationError("A committed decision row names no decision.")
+
     def initial_notification(self, recipient, sender_lookup, *, observation):
         return self.wake_policy().initial_state()().notification(
             recipient, sender_lookup, observation=observation)

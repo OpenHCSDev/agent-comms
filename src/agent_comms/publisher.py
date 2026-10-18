@@ -19,7 +19,6 @@ from .active_route import guard_original_root_write
 from .audience_manifest import MAX_WIRE_SEQ, FrozenRecipient, freeze_audience
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
-    CommittedDelivery,
     InitialOrigin,
     initial_sideband,
 )
@@ -383,8 +382,7 @@ class InitialWrites(PrivateWrites):
                     )
                 ),
             }
-            # Check the exact bytes and one coherent source revision before any append.
-            CommittedDelivery.from_wire(row, metadata.root_id)
+            # One coherent source revision before any append; the append attests the row.
             if before_revisions != tuple(FileRevision.capture(path) for path in source_paths):
                 raise RelationViolationError("Send-time registry/catalog revision changed.")
             # Every frozen subscriber needs an identity, including stopped
@@ -439,7 +437,6 @@ class ResponseWrites(PrivateWrites):
         if not intent.matches_publication(stored):
             raise RelationViolationError("Stored response does not match publication intent.")
         row = conversation.record(metadata.root_id, stored, intent)
-        CommittedDelivery.from_wire(row, metadata.root_id)
         self.log.append_private_unlocked(metadata, row)
         return stored
 
