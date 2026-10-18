@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.config import CommanderConfig, Repo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
@@ -154,3 +154,35 @@ def test_storage_rules_report_each_threshold_on_a_scratch_root(commander, tmp_pa
     assert "cleanup due under" in cleanup.line() and "floor" not in cleanup.line()
     floor, = broken(DiskLow, cleanup_gib=free + 100, floor_gib=free + 50)
     assert floor.line().endswith("floor nothing allocates) -> put a cleanup owner on it now")
+
+
+def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monkeypatch, tmp_path):
+    comms, _, module = standing
+    origin, checkout = tmp_path / "growth.git", tmp_path / "growth"
+    subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    checkout.mkdir()
+
+    def git(*args):
+        identity = ("-c", "user.name=t", "-c", "user.email=t@t")
+        command = ["git", "-C", str(checkout), *identity, *args]
+        run = subprocess.run(command, check=True, capture_output=True, text=True)
+        return run.stdout.strip()
+
+    git("init", "-q", "-b", "main")
+    git("remote", "add", "origin", str(origin))
+    git("commit", "-q", "--allow-empty", "-m", "base")
+    for branch, grown in (("big", 41), ("small", 40)):
+        git("checkout", "-q", "-b", branch, "main")
+        (checkout / "src").mkdir(exist_ok=True)
+        (checkout / "src" / f"{branch}.py").write_text("x = 1\n" * grown)
+        git("add", "-A")
+        git("commit", "-q", "-m", f"{branch} work")
+        git("checkout", "-q", "main")
+        git("merge", "-q", "--no-ff", "-m", f"Merge {branch}", branch)
+    git("push", "-q", "origin", "main")
+    monkeypatch.setattr(module, "CONFIG", module.CONFIG.model_copy(update={"repos": (
+        Repo(checkout=checkout, github="fleet/growth"),)}))
+    big = git("rev-parse", "main~1")[:9]
+    assert lines(comms, module.MergeGrowth) == [
+        f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "
+        "-> justify or send back the owner with a deletion order"]
