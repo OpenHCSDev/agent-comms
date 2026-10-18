@@ -11,8 +11,9 @@
 These are standing reminders for every turn, including after compaction. Read
 them through this existing instruction file; do not build a second reminder
 store, timer or injection mechanism. Report what changed, what still fails and
-what you are doing next in ordinary language. Expand only when the detail helps
-Tristan make a decision.
+what you are doing next in ordinary language. Say what you did and what broke;
+do not substitute internal labels for those facts. Expand only when the detail
+helps Tristan make a decision.
 
 ## Low tolerance for needless complexity
 

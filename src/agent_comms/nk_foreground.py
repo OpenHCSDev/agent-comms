@@ -34,7 +34,6 @@ from .field_codec import FieldCodec, MalformedRecord
 from .native_pi import _private_session_dir, _trusted_package
 from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
-from .threads import Thread
 
 _MAX_GO_WAIT_SECONDS = 120
 _GO = re.compile(r"GO (0|[1-9][0-9]{0,17})\Z")
@@ -119,10 +118,17 @@ def reserve_foreground_owner(
         comms.registry.register(owner)
         with comms.channels.catalog.editing() as document:
             document.remember_tags(owner.tags, owner.created_at)
-    from .acp import CommsAgent
+    from .agent_events import AgentEventConsumer
+    from .launch_runtime import LaunchRuntime
+    from .native_arguments import NativeArguments
+    from .pi_native_backend import PiNativeBackend
 
-    agent = CommsAgent(comms, auto_wake=False)
-    backend = agent.turns.backend_for(owner.name, owner)
+    async def observe_preparation(thread, state, info):
+        state.model.require_selection(thread.model)
+        await AgentEventConsumer(comms=comms, thread_name=thread.name).dispatch(info)
+
+    backend = PiNativeBackend(LaunchRuntime.running().native_entrypoint,
+                              NativeArguments(()), comms, observe_preparation)
     return ForegroundOwner(root, wire_root_id, owner.name, package, backend)
 
 

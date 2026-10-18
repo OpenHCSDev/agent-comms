@@ -1,4 +1,5 @@
 """Pi operations shared by RPC and Durable; each transport owns its queries."""
+
 from __future__ import annotations
 
 from abc import abstractmethod
@@ -23,7 +24,9 @@ if TYPE_CHECKING:
 
 class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
     @staticmethod
-    async def configure_tools(child: PiChild, mode: NativeToolMode, transport: ToolTransport) -> None:
+    async def configure_tools(
+        child: PiChild, mode: NativeToolMode, transport: ToolTransport
+    ) -> None:
         from .pi_commands import ConfigureTools
 
         await child.request(ConfigureTools(tools=mode.tool_names, broker=transport.host_binding()))
@@ -49,8 +52,11 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
         from .pi_commands import GetSessionStats
 
         usage = (await self.inspect(thread, GetSessionStats())).context_usage
-        return (ContextUsage(None, None) if usage is None else
-                ContextUsage(usage.tokens, usage.context_window))
+        return (
+            ContextUsage(None, None)
+            if usage is None
+            else ContextUsage(usage.tokens, usage.context_window)
+        )
 
     async def discover_models(self, thread: Thread) -> ModelsData:
         from .pi_commands import GetAvailableModels
@@ -60,9 +66,9 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
 
     async def models(self, thread: Thread) -> tuple[str, ...]:
         data = await self.discover_models(thread)
-        return tuple(dict.fromkeys(
-            name for model in data.models if (name := model.display_name) is not None
-        ))
+        return tuple(
+            dict.fromkeys(name for model in data.models if (name := model.display_name) is not None)
+        )
 
     async def apply_settings(self, thread: Thread, commands: list[SettingCommand]) -> StateData:
         from .pi_commands import GetState
@@ -72,7 +78,9 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
             await self.inspect(thread, command)
         return cast(StateData, await self.inspect(thread, GetState()))
 
-    async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
+    async def configure(
+        self, thread: Thread, model: str | None, thinking: str | None
+    ) -> tuple[str, str]:
         from .native_pi import NativePiUnavailable
         from .pi_commands import SetModel, SetThinkingLevel
 
@@ -84,6 +92,8 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
         if not commands:
             raise ValueError("A configuration change names a model or a thinking level")
         state = await self.apply_settings(thread, commands)
+        if model is not None:
+            state.model.require_selection(model)
         selected, level = state.model.display_name, state.thinking_level.wire_value()
         if selected is None or level is None:
             raise NativePiUnavailable("Pi configuration did not report model and thinking level")

@@ -49,14 +49,16 @@ class SelectedTurnDelivery(TurnDelivery):
 
     @staticmethod
     @contextmanager
-    def boundary(claim: PrivateSendClaim, public_id: str | None, native_id: str,
-                 text: str) -> Iterator[GrantedSend]:
+    def boundary(
+        claim: PrivateSendClaim, public_id: str | None, native_id: str, text: str
+    ) -> Iterator[GrantedSend]:
         if public_id is not None or native_id != claim.input_id or text != claim.prompt.text:
             raise IdentityConflict("Selected write differs from its original claim")
         yield GrantedSend()
 
-    async def native_events(self, backend: Any, thread: Thread,
-                            content: InputContent) -> AsyncIterator[AgentEvent]:
+    async def native_events(
+        self, backend: Any, thread: Thread, content: InputContent
+    ) -> AsyncIterator[AgentEvent]:
         result = await backend.run_tracked_turn(
             self.claim,
             self.execution,
@@ -69,8 +71,14 @@ class SelectedTurnDelivery(TurnDelivery):
 
     @classmethod
     async def execute(
-        cls, claim: PrivateSendClaim, execution: SelectedExecution, *, model: SelectedModel,
-        selected_tool_mode: Any, observe_event: NativeObserver, following: FollowingInputs
+        cls,
+        claim: PrivateSendClaim,
+        execution: SelectedExecution,
+        *,
+        model: SelectedModel,
+        selected_tool_mode: Any,
+        observe_event: NativeObserver,
+        following: FollowingInputs,
     ) -> NativeTurnResult:
         thread = replace(
             claim.owner.thread, session_file=str(claim.session.path), model=model.qualified
