@@ -95,8 +95,9 @@ class Thread(ThreadProvenance):
                 yield location, True
 
     def contains_worktree(self, worktree: str, rule: StorageRule) -> bool:
-        """Only this unit's current home and Git-registered extra checkouts."""
-        return Path(worktree).expanduser().resolve() in rule.checkouts_of(self)
+        """The selected project, or this unit's physical home and extra checkouts."""
+        selected = Path(worktree).expanduser().resolve()
+        return selected == Path(self.worktree).expanduser().resolve() or selected in rule.checkouts_of(self)
 
     def moved_to_project(self, project: str) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
