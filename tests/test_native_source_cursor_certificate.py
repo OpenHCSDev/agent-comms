@@ -95,7 +95,8 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
             owner_name="alpha"
         )
         assert cursor is not None and cursor.input_id == second.input_id
-        assert cursor.injected_seq == selected.seq and cursor.covered_seq == selected.seq
+        assert cursor.injected_seq == selected.seq
+        assert cursor.covered_seq == comms.views.full_history_page().messages[-1].seq
         assert first.seq < selected.seq
 
 
@@ -123,7 +124,8 @@ async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_pat
             owner_name="alpha"
         )
         assert cursor is not None and cursor.input_id == second.input_id
-        assert cursor.covered_seq == selected.seq and cursor.injected_seq == selected.seq
+        assert cursor.injected_seq == selected.seq
+        assert cursor.covered_seq == comms.views.full_history_page().messages[-1].seq
         assert cursor.injected_seq != first.seq
 
 
@@ -148,7 +150,9 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
         )
     reconnect_ms = (time.perf_counter() - start) * 1000
     assert current is not None and current.input_id == turn.input_id
-    assert current.injected_seq == current.covered_seq == source.seq
+    assert current.injected_seq == source.seq
+    # The passive reply advances coverage, not the source injected into Pi.
+    assert current.covered_seq == comms.views.full_history_page().messages[-1].seq
     print(
         f"certified frozen N={recipients}: fake full runner {delivery_ms:.3f} ms, "
         f"reconnect {reconnect_ms:.3f} ms"
