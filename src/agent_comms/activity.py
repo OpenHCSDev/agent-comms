@@ -300,9 +300,7 @@ class ActivityLog(ThreadOwnedState):
         self._path = store_path
         from .activity_checkpoint import ActivityCheckpointStore
 
-        self.checkpoint = ActivityCheckpointStore(
-            store_path.with_name(ActivityCheckpointStore.filename), source_path=store_path
-        )
+        self.checkpoint = ActivityCheckpointStore.at(store_path.parent, source_path=store_path)
         self._stale_after = stale_after
         self._read = ActivityReadState.for_path(store_path)
 

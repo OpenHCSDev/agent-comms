@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .locked_store import LockedStore
+from .locked_store import LockedStore, RootFile
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
@@ -78,7 +78,7 @@ class AgentRuntimeInfo(RuntimeInfo):
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoStore(ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]]):
+class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]]):
     """Latest observations, independently committed from the registry/log."""
 
     lock_rank = 7

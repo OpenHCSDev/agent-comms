@@ -76,7 +76,7 @@ def main():
 
     before = protected()
     (output / 'protected-before.json').write_text(json.dumps(before, indent=2) + '\n')
-    ledger = root / ReadLedger.filename
+    ledger = ReadLedger.path_in(root)
     ledger_before = ledger.read_bytes() if ledger.exists() else b''
     (output / 'read-ledger-before.private').write_bytes(ledger_before)
     arguments = [str(args.recorder), '--output', str(output / 'physical'), '--owner', 'Arendt-certified508',

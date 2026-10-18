@@ -23,7 +23,7 @@ from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import UnregisteredThreadError
 from .goals import GoalMentionBinding
-from .locked_store import LockedStore
+from .locked_store import LockedStore, RootFile
 from .peer_relevance import (
     ChannelmateRelevance,
     CollaboratorRelevance,
@@ -646,7 +646,7 @@ class RemoveRelationshipEdit(RelationshipEdit):
         )
 
 
-class RelationshipStore(ThreadOwnedState, LockedStore[RelationshipDocument]):
+class RelationshipStore(RootFile, ThreadOwnedState, LockedStore[RelationshipDocument]):
     """One current durable typed schema; retired formats are rejected."""
 
     lock_rank = 5
@@ -690,7 +690,7 @@ class ThreadRelationships:
         self.bus = bus
         self.views = views
         self._wire_lock_path = root / "wire"
-        self.store = RelationshipStore(root / RelationshipStore.filename)
+        self.store = RelationshipStore.at(root)
         self._lock = RLock()
         self._recent_revision: FileRevision | None = None
         self._recent: tuple[Message, ...] = ()

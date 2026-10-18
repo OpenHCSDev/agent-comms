@@ -62,11 +62,11 @@ class MessageBus:
         from .catalog_store import ChannelCatalog
         from .read_ledger import ReadLedger
 
-        self.reads = ReadLedger(bus_path.parent / ReadLedger.filename)
+        self.reads = ReadLedger.at(bus_path.parent)
         self.log = WireLog(bus_path)
         self.history = HistoryArchive(bus_path)
         self._registry = registry
-        self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
+        self._channels = ChannelCatalog.at(bus_path.parent)
         self._activity = self.log.register_append_index(BusActivityIndex(bus_path))
         self.publisher = Publisher(
             self.log,

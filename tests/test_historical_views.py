@@ -115,7 +115,7 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
     )
     live.views.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
     snapshot = live.registry.snapshot()
-    assert ReadLedger(Path(source.root) / ReadLedger.filename).read().messages == {
+    assert ReadLedger.at(source.root).read().messages == {
         viewer.incarnation: {Conversation('#team'): ReadCursor(exceptions=(page.messages[1].seq,))}
     }
     assert live.bus.reads.cursor(viewer.name, snapshot) == ReadCursor()

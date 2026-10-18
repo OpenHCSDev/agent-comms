@@ -121,13 +121,13 @@ class Registration:
         self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS,
     ) -> None:
         """Refuse a known-invalid declaration before its producer performs side effects."""
-        catalog = ChannelCatalog(self.store.path.parent / ChannelCatalog.filename)
+        catalog = ChannelCatalog.at(self.store.path.parent)
         with self.store.reading() as document, catalog.reading() as channels:
             self._prepare_declaration(document, channels, thread, status)
 
     def _declare_in(self, edit: RegistryEdit, thread: Thread, status: ThreadStatus) -> Thread:
         root = self.store.path.parent
-        catalog = ChannelCatalog(root / ChannelCatalog.filename)
+        catalog = ChannelCatalog.at(root)
         with catalog.editing() as channels:
             change = self._prepare_declaration(edit.document, channels, thread, status)
             change = self._commit_registration(edit, change)

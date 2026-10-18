@@ -208,7 +208,7 @@ class MessageNotification:
         if not keys:
             return {}
         rows = assignment_read.resolve(root)
-        reads = ReadLedger(root / ReadLedger.filename)
+        reads = ReadLedger.at(root)
         document = reads.read()
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
@@ -675,7 +675,7 @@ class CoordinationSnapshot:
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
         threads = OrderedDict((view.thread.name, view) for view in ThreadView.roster(
-            registry, agents, GoalWaits(root / GoalWaits.filename),
+            registry, agents, GoalWaits.at(root),
             show_stopped=show_stopped, show_archived=show_archived,
         ))
         activities = {name: view.activity for name, view in threads.items()}
@@ -734,8 +734,8 @@ class WireRevision:
     runtime_info: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.runtime_info.path,))
     reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,))
     native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,))
-    goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: (views.root / GoalWaits.filename,))
-    relationships: tuple[FileRevision, ...] = revision_source(lambda views: (views.root / RelationshipStore.filename,))
+    goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: (GoalWaits.path_in(views.root),))
+    relationships: tuple[FileRevision, ...] = revision_source(lambda views: (RelationshipStore.path_in(views.root),))
     notifications: tuple[FileRevision, ...] = revision_source(lambda views: NotificationAssignment.handling_paths(views.root))
     external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root))
     expiry_tick: int
