@@ -7,14 +7,14 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, partial
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
-from .thread_identity import ThreadIncarnation, ThreadProvenance
 from .routing import DeliveryScope
+from .thread_identity import ThreadIncarnation, ThreadProvenance
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
@@ -177,7 +177,7 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         unrecorded = []
         for name, source in self.named_members():
             senders[name] = tuple(DeliveryScope.sender_lookups(
-                source.incarnation, lambda: unrecorded.append(name)
+                source.incarnation, partial(unrecorded.append, name)
             ))
         return MappingProxyType({
             "senders": json.dumps(senders), "unrecorded": json.dumps(unrecorded),
