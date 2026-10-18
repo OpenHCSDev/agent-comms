@@ -261,8 +261,7 @@ class UnreadBeforeRequest(MessageReadRequest[bool]):
         return self.scope.unread_before(message, self.before, self.seen)
 
     def indexed(self, index, source: WireSnapshot) -> bool:
-        with closing(self.scope.offsets(index, lower=self.seen.high_water, upper=self.before,
-                                       descending=True, before_offset=source.boundary)) as rows:
+        with closing(self.scope.offsets(index, lower=self.seen.high_water, upper=self.before, descending=True, before_offset=source.boundary)) as rows:
             candidates = (row for row in rows if self.includes(row))
             return any(True for _ in self.indexed_records(source, candidates))
 
