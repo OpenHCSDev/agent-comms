@@ -57,7 +57,7 @@ from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
 from .todos import (CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, OrderProgress,
-                    PullRequests, Todo, TodoOperation)
+                    PullRequests, StrikeReason, Todo, TodoOperation)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -277,6 +277,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool
 ):
     description: ClassVar[str]
+    bus_effect: ClassVar[str] = "Changes the bus; call it only when the owner says to."
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
     action_order: ClassVar[int] = 0
@@ -338,9 +339,10 @@ class LiveOwnerTool:
 
 
 class ReadTool:
-    """A tool whose apply changes nothing on the bus; the claude.ai connector lists only these."""
+    """A tool whose apply changes nothing on the bus."""
 
     __slots__ = ()
+    bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -743,6 +745,18 @@ class CommsTodoTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
         todo = comms.goals.change_problem(self.id, self.operation, caller.name)
         return TodoChanged(todo, todo.strike_count)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsFireTool(ThreadToolRequest):
+    label = "Fire unit"
+    description = ("Release every open problem the unit holds in one operation, recording one "
+                   "plain reason on each; only their commander may invoke this tool.")
+    unit: str = tool_field("Unit thread to fire")
+    reason: StrikeReason = tool_field("What the unit did, plainly")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
+        return TodoList(comms.goals.fire(self.unit, self.reason, caller.name))
 
 
 @dataclass(frozen=True, kw_only=True)
