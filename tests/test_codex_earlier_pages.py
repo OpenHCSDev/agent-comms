@@ -52,7 +52,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
     app.router.add_get('/', serve)
     runner = web.AppRunner(app)
     await runner.setup()
-    socket_path = tmp_path / 'codex.sock'
+    socket_path = tmp_path.parent / 'codex.sock'
     await web.UnixSite(runner, str(socket_path)).start()
     comms = wire(tmp_path / 'root')
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path),
