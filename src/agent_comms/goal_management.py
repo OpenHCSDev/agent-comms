@@ -49,7 +49,7 @@ class Goals:
         self.goal_store: GoalAttemptStore | None = None
 
     @cached_property
-    def todos(self) -> TodoStore:
+    def todos(self):
         return TodoStore(self.root)
 
     def change_problem(self, problem, operation, commander):
@@ -62,8 +62,9 @@ class Goals:
 
     def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
         actor = self.registry.require(commander).incarnation
+        store: TodoStore = self.todos
         with _store_lock(self._wire_lock_path):
-            return self.todos.fire(unit, actor, reason)
+            return store.fire(unit, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
