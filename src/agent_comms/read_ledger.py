@@ -7,7 +7,7 @@ identity still determine whether those reads apply.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,6 +19,7 @@ from .private_path import FileIdentity, ObservedPath
 from .read_basis import (
     ChannelConversation,
     Conversation,
+    ConversationCursor,
     DisplayBasis,
     DisplayedConversation,
     DMConversation,
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
+    from .wire_log import OpenedWireSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,18 +46,26 @@ class ReadDocument:
     transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
     notice: str | None = None
 
-    def cursor(
-        self, viewer: str, snapshot: RegistryProvenance, source
-    ) -> ReadCursor:
-        """Project this document against the reader's actual source identity."""
-        viewer = snapshot.canonical_name(viewer)
-        thread = snapshot.threads[viewer]
+    def cursors(self, viewer: str, snapshot: RegistryProvenance,
+                source: ObservedPath | OpenedWireSource) -> Iterator[ReadCursor]:
         recorded = FileIdentity(*self.bus_identity) if self.bus_identity is not None else None
-        if recorded is None or not source.same_file(recorded):
-            return ReadCursor()
-        return ReadCursor.union(
-            self.messages.get(owner, ReadCursor()).current(snapshot)
-            for owner in thread.incarnation.recorded_names(snapshot)
+        if recorded is not None and source.same_file(recorded):
+            thread = snapshot.threads[snapshot.canonical_name(viewer)]
+            for owner in thread.incarnation.recorded_names(snapshot):
+                yield self.messages.get(owner, ReadCursor())
+
+    def cursor(self, viewer: str, snapshot: RegistryProvenance,
+               source: ObservedPath | OpenedWireSource) -> ReadCursor:
+        return ReadCursor.union(cursor.current(snapshot)
+                                for cursor in self.cursors(viewer, snapshot, source))
+
+    def for_conversation(self, viewer: str, conversation: Conversation,
+                         snapshot: RegistryProvenance,
+                         source: ObservedPath | OpenedWireSource) -> ConversationCursor:
+        keys = tuple(conversation.recorded_keys(snapshot))
+        return ConversationCursor.union(
+            cursor.for_conversation(key)
+            for cursor in self.cursors(viewer, snapshot, source) for key in keys
         )
 
 
@@ -90,28 +100,31 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         bus_path: Path,
         *,
         conversation_snapshot: RegistryProvenance | None = None,
+        document: ReadDocument | None = None,
     ) -> DisplayBasis:
         messages = tuple(messages)
         with WireLog(bus_path).opened_wire_snapshot() as source:
             return source.query_page_index(lambda index: self.capture_indexed(
                 viewer, messages, snapshot, source, index,
-                conversation_snapshot=conversation_snapshot,
+                conversation_snapshot=conversation_snapshot, document=document,
             ))
 
-    def capture_indexed(self, viewer, messages, snapshot, source, index, *, conversation_snapshot=None) -> DisplayBasis:
+    def capture_indexed(self, viewer, messages, snapshot, source, index, *,
+                        conversation_snapshot=None, document: ReadDocument | None = None) -> DisplayBasis:
         viewer = snapshot.canonical_name(viewer)
         provenance = conversation_snapshot or snapshot
         grouped: dict[Conversation, set[int]] = {}
         for message in messages:
             conversation = self.conversation(message, provenance)
             grouped.setdefault(conversation, set()).add(message.seq)
-        seen = self.cursor(viewer, snapshot)
+        document = self.read() if document is None else document
         return DisplayBasis(
             viewer, snapshot.threads[viewer].created_at,
             tuple(DisplayedConversation(
                 conversation, sequences := tuple(sorted(members)),
                 index.proved_read_prefix(conversation.scope(provenance),
-                    seen.for_conversation(conversation), sequences, source.boundary),
+                    document.for_conversation(viewer, conversation, provenance, source),
+                    sequences, source.boundary),
             ) for conversation, members in grouped.items()),
             source.bus_identity,
         )

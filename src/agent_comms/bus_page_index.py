@@ -340,8 +340,8 @@ class BusPageIndex:
     def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
                        seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
         counts = {}
-        bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen})
         for scope in scopes:
+            bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
             predicate, parameters = scope.index_predicate
             counts[scope.channel] = self.connection.execute(
                 f'WITH {ReadCursor.sql("?")} SELECT count(*) FROM '

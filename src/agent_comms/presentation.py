@@ -353,8 +353,12 @@ class DisplaySelection:
     registry: RegistrySnapshot
     catalog: CatalogDocument
     viewer: DisplayViewer
-    seen: ReadCursor
+    reads: ReadLedger
     document: ReadDocument
+
+    @property
+    def seen(self) -> ReadCursor:
+        return self.viewer.cursor(self.reads, self.registry, self.document)
 
     @classmethod
     def capture(
@@ -362,7 +366,7 @@ class DisplaySelection:
         reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
     ) -> DisplaySelection:
         viewer = viewer.resolve(snapshot)
-        return cls(snapshot, catalog, viewer, viewer.cursor(reads, snapshot, document), document)
+        return cls(snapshot, catalog, viewer, reads, document)
 
     @classmethod
     @contextmanager

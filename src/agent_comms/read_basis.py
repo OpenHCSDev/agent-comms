@@ -14,7 +14,7 @@ from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from functools import partial
-from heapq import merge
+from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
@@ -102,6 +102,7 @@ class NamedViewer(DisplayViewer):
     def displayed_scope(self, scope, page, basis, presentation):
         return replace(scope, displayed=presentation.bus.reads.capture(
             self.name, page.messages, basis.registry, presentation.bus.log.path,
+            document=basis.document,
         ))
 
 
@@ -248,21 +249,13 @@ class ConversationCursor:
     def union(cls, cursors: Iterable[ConversationCursor]) -> ConversationCursor:
         cursors = tuple(cursors)
         through = max((cursor.high_water for cursor in cursors), default=0)
-        values: list[int] = []
-        for sequence in merge(*(cursor.exceptions for cursor in cursors)):
-            if sequence > through and (not values or values[-1] != sequence):
-                values.append(sequence)
-        return cls(through, tuple(values))
+        return cls(through, tuple(sorted({sequence for cursor in cursors
+                                          for sequence in cursor.exceptions if sequence > through})))
 
     def add(self, sequences: tuple[int, ...]) -> ConversationCursor:
-        values = list(self.exceptions)
-        for sequence in sequences:
-            if sequence <= self.high_water:
-                continue
-            index = bisect_left(values, sequence)
-            if index == len(values) or values[index] != sequence:
-                values.insert(index, sequence)
-        return type(self)(self.high_water, tuple(values))
+        return type(self)(self.high_water, tuple(sorted(
+            n for n in set(self.exceptions).union(sequences) if n > self.high_water
+        )))
 
     def through(self, sequence: int) -> ConversationCursor:
         sequence = max(sequence, self.high_water)
@@ -296,12 +289,19 @@ class ReadCursor:
                json_extract(value,'$[4]') AS exceptions
         FROM json_each({parameter}))"""
 
+    def counted(self, scope: MessageDisplayScope, snapshot: RegistryProvenance
+                ) -> Iterable[tuple[Conversation, ConversationCursor]]:
+        targets = scope.index_targets
+        return ((key, value) for key, value in self.conversations.items()
+                if targets is None or key.in_targets(targets, snapshot))
+
     @staticmethod
-    def sql_bindings(snapshot: RegistryProvenance, cursors: Mapping[str, ReadCursor]) -> dict[str, str]:
+    def sql_bindings(snapshot: RegistryProvenance,
+                     cursors: Mapping[str, Iterable[tuple[Conversation, ConversationCursor]]]
+                     ) -> dict[str, str]:
         return {"read_cursors": json.dumps([
             (actor, target, sender, cursor.high_water, cursor.exceptions)
-            for actor, seen in cursors.items()
-            for conversation, cursor in seen.conversations.items()
+            for actor, selected in cursors.items() for conversation, cursor in selected
             for target, sender in conversation.sql_keys(snapshot)
         ])}
 
@@ -344,6 +344,12 @@ class Conversation(DeclaredFamily, ABC, affix="Conversation"):
     @abstractmethod
     def sql_keys(self, snapshot: RegistryProvenance) -> Iterable[tuple[str, str]]: ...
 
+    @abstractmethod
+    def recorded_keys(self, snapshot: RegistryProvenance) -> Iterable[Conversation]: ...
+
+    @abstractmethod
+    def in_targets(self, targets: Collection[str], snapshot: RegistryProvenance) -> bool: ...
+
 
 @dataclass(frozen=True, slots=True)
 class ChannelConversation(Conversation):
@@ -357,6 +363,12 @@ class ChannelConversation(Conversation):
 
     def sql_keys(self, snapshot: RegistryProvenance) -> Iterable[tuple[str, str]]:
         return ((self.target, ""),)
+
+    def recorded_keys(self, snapshot: RegistryProvenance) -> Iterable[Conversation]:
+        return (self,)
+
+    def in_targets(self, targets: Collection[str], snapshot: RegistryProvenance) -> bool:
+        return self.target in targets
 
 
 @dataclass(frozen=True, slots=True)
@@ -372,6 +384,13 @@ class DMConversation(Conversation):
     def scope(self, snapshot: RegistryProvenance) -> DMDisplayScope:
         first, second = self.participants
         return DMDisplayScope.capture(first.name, second.name, snapshot)
+
+    def recorded_keys(self, snapshot: RegistryProvenance) -> Iterable[Conversation]:
+        return (type(self)(tuple(sorted(pair, key=lambda p: p.name)))
+                for pair in product(*(p.recorded_names(snapshot) for p in self.participants)))
+
+    def in_targets(self, targets: Collection[str], snapshot: RegistryProvenance) -> bool:
+        return any(snapshot.names_for(p.name).intersection(targets) for p in self.participants)
 
     def sql_keys(self, snapshot: RegistryProvenance) -> Iterable[tuple[str, str]]:
         first, second = self.participants

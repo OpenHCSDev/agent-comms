@@ -591,7 +591,9 @@ class OpenedRouteCounts(BusRouteCounts):
                         AND seq<=min(request.high_water,:through)
                     ORDER BY seq DESC LIMIT 1)
                 LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
-                self._request_bindings(self.deliveries) | ReadCursor.sql_bindings(self.registry, seen)))
+                self._request_bindings(self.deliveries) | ReadCursor.sql_bindings(self.registry,
+                    {actor: cursor.counted(self.deliveries[actor], self.registry)
+                     for actor, cursor in seen.items()})))
 
     def _read_deliveries(self, actor: str, seen: ReadCursor, after: int) -> list[UnseenDelivery]:
         return UnseenDelivery.read(self.connection.execute(
@@ -610,7 +612,8 @@ class OpenedRouteCounts(BusRouteCounts):
                         SELECT value FROM json_each(request.exceptions)
                     ) ORDER BY row.seq''',
                 self._request_bindings((actor,)) | {"actor":actor,"after":after}
-                | ReadCursor.sql_bindings(self.registry, {actor: seen})))
+                | ReadCursor.sql_bindings(self.registry,
+                    {actor: seen.counted(self.deliveries[actor], self.registry)})))
 
 
 class CompletingRouteCounts(OpenedRouteCounts):
