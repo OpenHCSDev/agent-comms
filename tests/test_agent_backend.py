@@ -11,6 +11,8 @@ from types import MappingProxyType
 
 import pytest
 
+from agent_comms.context_reading import ContextUsage
+
 import agent_comms.agent_backend as ab
 import agent_comms.agent_events as ae
 from agent_comms.child_process import ProcessIdentity
@@ -382,7 +384,7 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         assert backend.child_state.retained
 
         usage = await backend.context_usage(thread)
-        assert usage == ab.ContextUsage(tokens=321, window=1000)
+        assert usage == ContextUsage(321, 1000)
         outcome = await backend.compact(thread, "keep the plan")
         assert outcome == ab.PlacedCompaction(
             summary="summary of keep the plan", first_kept="k1", tokens_before=900,

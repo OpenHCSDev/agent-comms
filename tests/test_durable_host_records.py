@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agent_comms.agent_backend import ContextUsage, FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction
+from agent_comms.agent_backend import FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction
 from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
 from agent_comms.pi_durable_backend import (
     CompactDurable, DurableDatabase,
@@ -12,7 +12,8 @@ from agent_comms.pi_durable_backend import (
 )
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_commands import GetSessionStats
-from agent_comms.pi_payloads import PiContextUsage
+from agent_comms.pi_payloads import PiContextUsage, UnreportedTokens
+from agent_comms.context_reading import UnmeasuredContext
 from agent_comms.pi_events import PiEvent, UnknownPiEvent
 from agent_comms.threads import Thread
 
@@ -94,12 +95,12 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
             await backend.close_idle()
             first, second = await asyncio.gather(backend.open(thread), backend.open(thread))
             assert first is second
-            assert await backend.context_usage(thread) == ContextUsage(0, None)
+            assert await backend.context_usage(thread) == UnmeasuredContext()
             assert (await (await backend.open(thread)).request(Inspect())).work == ()
             with pytest.raises(RuntimeError, match='Recovery is only available before resume'):
                 await backend.child.request(Settle('task:missing', 'ABANDON'))
             assert (await backend.child.request(Inspect())).work == ()
-            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(0, None)
+            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(0, UnreportedTokens())
             assert (await backend.child.request(Inspect())).work == ()
             assert backend.child.proc.alive()
         finally:

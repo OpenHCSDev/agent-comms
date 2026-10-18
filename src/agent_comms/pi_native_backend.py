@@ -23,7 +23,6 @@ from .agent_backend import (
     Compacts,
     CompactionOutcome,
     ConfiguresModel,
-    ContextUsage,
     FailedCompaction,
     Forks,
     InputContent,
@@ -34,6 +33,7 @@ from .agent_backend import (
     RuntimeLocation,
     TurnDelivery,
 )
+from .context_reading import ContextReading, UnmeasuredContext
 from .unstarted_runtime import UnstartedRuntime
 from .native_pi import NativePiRpcLaunch
 from .native_transcript import NativeTranscript
@@ -285,13 +285,13 @@ class PiNativeBackend(
 
     # -- ReportsContext ---------------------------------------------------
 
-    async def context_usage(self, thread: Thread) -> ContextUsage:
+    async def context_usage(self, thread: Thread) -> ContextReading:
         from .pi_commands import GetSessionStats
 
         stats = await self.inspect(thread, GetSessionStats())
         usage = stats.context_usage
         if usage is None:
-            return ContextUsage(tokens=None, window=None)
+            return UnmeasuredContext()
         return usage.context_window.reading(usage.token_total)
 
     # -- Compacts ---------------------------------------------------------

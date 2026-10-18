@@ -31,6 +31,7 @@ from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
+    from .context_reading import ContextReading
     from .launch_runtime import LaunchRuntime
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
@@ -243,14 +244,6 @@ class ClearQueue(TurnInboxItem):
         return receiver.clear_queue(turn, self)
 
 
-@dataclass(frozen=True)
-class ContextUsage:
-    """Context size measured by the backend's own estimator."""
-
-    tokens: int | None
-    window: int | None
-
-
 class CompactionOutcome(DeclaredFamily, DeclaredReply, affix="Compaction"):
     """The result of one requested compaction."""
 
@@ -350,7 +343,7 @@ class ReportsContext(ABC):
     """Context size from the backend's own estimator. Core never estimates."""
 
     @abstractmethod
-    async def context_usage(self, thread: Thread) -> ContextUsage:
+    async def context_usage(self, thread: Thread) -> ContextReading:
         """The thread's current context size."""
 
 

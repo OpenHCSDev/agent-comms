@@ -290,7 +290,7 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
         )
         assert not refused.success and "Conflicting replay" in refused.error
     idle = await probe(GetState(id="after-dedup"))
-    assert idle.success and idle.data.is_streaming is False and idle.data.pending_message_count == 0
+    assert idle.success and idle.data.is_streaming is False and idle.data.pending_message_count.matches(0)
     assert owner.session.read_bytes() == before and owner.provider.posts == 1
     with NativeContextJournal.open_evidence(owner.session) as db:
         assert NativeContextJournal.for_input(db, unknown_id) is None

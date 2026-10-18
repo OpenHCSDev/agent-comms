@@ -23,7 +23,8 @@ from .pi_vocabulary import NoThinkingOverride, PiStopReason, ThinkingLevel, Thin
 from .transcript_events import SentTranscript
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent, ProviderUsage
+    from .agent_events import AgentEvent, AgentInfo, ProviderUsage
+    from .context_reading import ContextReading
     from .backend import TurnSession
     from .turn_usage import UsageAccount
 
@@ -220,7 +221,7 @@ class PiCost(PiPayload):
 
 
 class TokenTotal(WireValue):
-    """Whether Pi reported a positive token total, decided once where its usage is decoded."""
+    """Whether Pi reported a count; wire omission is decided once at the field boundary."""
 
     accepts_null = True
     external_json_shape = True
@@ -229,13 +230,17 @@ class TokenTotal(WireValue):
     def from_wire(cls, value: object) -> TokenTotal:
         return UnreportedTokens() if value is None else ReportedTokens(FieldCodec.decode(int, value))
 
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(int | None)
+
     def matches(self, count: int) -> bool:
         return False
 
     def require_count(self) -> int:
         raise ValueError("Pi has not reported this count")
 
-    def context_info(self, info):
+    def context_info(self, info: AgentInfo) -> AgentInfo:
         return info
 
     def observe_size(self, account: UsageAccount) -> None:
@@ -244,11 +249,11 @@ class TokenTotal(WireValue):
     def update_size(self, account: UsageAccount) -> None:
         pass
 
-    def reading(self, used: TokenTotal):
+    def reading(self, used: TokenTotal) -> ContextReading:
         from .context_reading import UnmeasuredContext
         return UnmeasuredContext()
 
-    def with_size(self, size: int):
+    def with_size(self, size: int) -> ContextReading:
         from .context_reading import UnmeasuredContext
         return UnmeasuredContext()
 
@@ -290,7 +295,7 @@ class ReportedTokens(TokenTotal):
     def require_count(self) -> int:
         return self.count
 
-    def context_info(self, info):
+    def context_info(self, info: AgentInfo) -> AgentInfo:
         return replace(info, context_size=self.count)
 
     def observe_size(self, account: UsageAccount) -> None:
@@ -299,10 +304,10 @@ class ReportedTokens(TokenTotal):
     def update_size(self, account: UsageAccount) -> None:
         account.size = self.count
 
-    def reading(self, used: TokenTotal):
-        return used.with_size(self.count)
+    def reading(self, used: TokenTotal) -> ContextReading:
+        return used.with_size(self.count) if self.count > 0 else super().reading(used)
 
-    def with_size(self, size: int):
+    def with_size(self, size: int) -> ContextReading:
         from .context_reading import ContextUsage
         return ContextUsage(self.count, size)
 

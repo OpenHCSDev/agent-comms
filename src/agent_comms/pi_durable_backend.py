@@ -11,7 +11,8 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import AgentBackend, Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation
+from .agent_backend import AgentBackend, Compacts, CompactionOutcome, ConfiguresModel, ReportsContext, RuntimeLocation
+from .context_reading import ContextReading
 from .agent_events import Error
 from .coordination_database import CoordinationStore
 from .native_child import PiChild
@@ -234,7 +235,7 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
         child = await self.open(thread)
         return (await child.request(CompactDurable(custom_instructions=instructions))).outcome
 
-    async def context_usage(self, thread):
+    async def context_usage(self, thread) -> ContextReading:
         child = await self.open(thread)
         usage = (await child.request(GetSessionStats())).context_usage
         if usage is None:
