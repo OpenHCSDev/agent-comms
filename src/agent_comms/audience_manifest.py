@@ -18,6 +18,7 @@ from typing import Final
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 
 from .channel_targets import BuiltinChannel
+from .field_codec import Sha256Text
 from .messages import Message
 
 AUDIENCE_VERSION: Final = 1
@@ -28,7 +29,6 @@ MAX_WIRE_SEQ: Final = (1 << 63) - 1
 _ENVELOPE_DOMAIN: Final = b"agent-comms:wire-envelope:v1\0"
 _AUDIENCE_DOMAIN: Final = b"agent-comms:audience:v1\0"
 _NAME: Final = re.compile(r"[a-zA-Z0-9_-]+\Z")
-_HEX_DIGEST: Final = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _bounded_text(value: str, field: str, *, thread_name: bool = False) -> None:
@@ -110,12 +110,8 @@ class FrozenAudience:
             raise ValueError("frozen recipient lookups and canonical names must be unique")
         if self.sender_lookup in lookups or self.sender_name in names:
             raise ValueError("the sender cannot be an eligible recipient")
-        if not isinstance(self.wire_envelope_digest, str) or not _HEX_DIGEST.fullmatch(
-            self.wire_envelope_digest
-        ):
-            raise ValueError("wire_envelope_digest must be lowercase SHA-256 hex")
-        if not isinstance(self.digest, str) or not _HEX_DIGEST.fullmatch(self.digest):
-            raise ValueError("digest must be lowercase SHA-256 hex")
+        Sha256Text.decode(self.wire_envelope_digest)
+        Sha256Text.decode(self.digest)
         if self.digest != _digest(
             _AUDIENCE_DOMAIN, _canonical_json(self._digest_record(), limit=MAX_AUDIENCE_BYTES)
         ):

@@ -21,9 +21,8 @@ from typing import Annotated, Literal
 
 from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, PathText
+from .field_codec import FieldCodec, Id128Text, PathText
 from .private_nk_entrypoint import PrivateNkLaunch
-from .wire_metadata import WireRootIdText
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,7 +82,7 @@ class AbsoluteRoutePathText(PathText):
 class ActiveRoute(CommsRoute):
     """The default private root; each installation launches its own pinned native package."""
     root: Annotated[Path, AbsoluteRoutePathText]
-    wire_root_id: Annotated[str, WireRootIdText]
+    wire_root_id: Annotated[str, Id128Text]
     version: Literal[2] = field(default=2, kw_only=True, metadata={"wire_required": True})
 
     @classmethod

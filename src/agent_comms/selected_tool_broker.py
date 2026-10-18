@@ -33,8 +33,8 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from .field_codec import FieldCodec
-from .native_input_record import FullNativeExecution, NativeInputIdentity, NativeInputIdText
+from .field_codec import FieldCodec, Id128Text
+from .native_input_record import FullNativeExecution, NativeInputIdentity
 from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import (
     CoordinationBusy,
@@ -188,7 +188,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
     An existing slot is never reopened or reclaimed, even after a process crash.
     """
     try:
-        NativeInputIdText.decode(input_id)
+        Id128Text.decode(input_id)
     except (ValueError, TypeError) as error:
         raise SelectedToolDenied("Selected input identity is invalid") from error
     if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
@@ -251,7 +251,7 @@ def selected_tool_mode_for_owner(
     tracked input. Never derive this mode from user/model/wake-injected text.
     """
     try:
-        NativeInputIdText.decode(input_id)
+        Id128Text.decode(input_id)
         FieldCodec.decode(str, owner_name)
     except (ValueError, TypeError) as error:
         raise SelectedToolDenied("Selected mode has no typed owner attempt") from error
@@ -314,7 +314,7 @@ def _require_sent_full_input(
 def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:
     """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
     try:
-        NativeInputIdText.decode(input_id)
+        Id128Text.decode(input_id)
     except (ValueError, TypeError) as error:
         raise SelectedToolDenied("Selected input identity is invalid") from error
     acknowledgement = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")

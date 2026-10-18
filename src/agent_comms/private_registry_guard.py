@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 from . import store_files
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, Id128Text
 from .private_path import fsync_directory
 
 if TYPE_CHECKING:
@@ -128,11 +128,9 @@ class PublicRegistry(RegistryPrivacy):
 
 class PrivateRegistryGuard(RegistryPrivacy):
     def __init__(self, registry_path: Path, wire_root_id: str):
-        if (
-            type(wire_root_id) is not str
-            or len(wire_root_id) != 32
-            or any(ch not in "0123456789abcdef" for ch in wire_root_id)
-        ):
+        try:
+            Id128Text.decode(wire_root_id)
+        except ValueError:
             _reject("root ID is invalid")
         self.registry_path = registry_path
         self.path = registry_path.parent / ".registry-owner-guard"

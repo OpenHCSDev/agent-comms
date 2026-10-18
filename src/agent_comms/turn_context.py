@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, Sha256Text
 from .message_reference import MessageReference
 from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
@@ -239,8 +239,7 @@ class SegmentManifest:
     def __post_init__(self):
         if not self.provenance or min(self.utf8_bytes, self.tokens) < 0:
             raise ValueError("Invalid original context segment observation")
-        if len(self.sha256) != 64 or not set(self.sha256) <= set("0123456789abcdef"):
-            raise ValueError("Context segment requires its measured byte digest")
+        Sha256Text.from_text(self.sha256)
 
     def remember_received(self, child) -> None:
         self.kind.remember_received(child, self.provenance)
@@ -552,8 +551,7 @@ class ContributionCoordinates:
     def __post_init__(self):
         if not self.provenance or min(self.offset, self.length) < 0:
             raise ValueError("Contribution requires original sources and nonnegative byte coordinates")
-        if len(self.sha256) != 64 or not set(self.sha256) <= set("0123456789abcdef"):
-            raise ValueError("Contribution requires its original byte digest")
+        Sha256Text.from_text(self.sha256)
 
     @classmethod
     def capture(cls, kind, provenance, offset, text):

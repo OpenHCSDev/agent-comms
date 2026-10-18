@@ -19,9 +19,9 @@ from .acp_failure import (
 from .agent_events import CompactionEvent
 from .declared_family import DeclaredFamily
 from .context_reading import ContextReading
-from .input_attempt import ACPInputIdText, InputAttempt
+from .input_attempt import InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, Id128Text, WireValue
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
@@ -30,7 +30,6 @@ from .routing import MessageRoute
 from .thread_identity import ClaimedIdentity, ThreadIncarnation
 from .tool_result import DeclaredReply
 from .turn_lease import TurnState
-from .wire_metadata import WireRootIdText
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
 from .external_transcript import ExternalDraftRow
 from .turn_context import ContextManifest
@@ -301,7 +300,7 @@ class LiveCursorScope(CursorScope, LiveAttachmentScope):
     owner_pid: int
 
     def __post_init__(self):
-        WireRootIdText.decode(self.wire_root_id)
+        Id128Text.decode(self.wire_root_id)
         self.claim_scope.incarnation.require_recorded()
         if (
             not self.session_id
@@ -676,12 +675,12 @@ class CommsRequest(DeclaredFamily, affix="Request"):
 class PromptRequest(CommsRequest):
     user_text: str | None = None
     defer_display: bool = False
-    input_id: Annotated[str, ACPInputIdText] = field(default_factory=ACPInputIdText.new)
+    input_id: Annotated[str, Id128Text] = field(default_factory=Id128Text.mint)
     origin: InputOrigin = field(default_factory=UnattributedInputOrigin, kw_only=True,
                                metadata={"wire_omit_default": True})
 
     def __post_init__(self):
-        ACPInputIdText.decode(self.input_id)
+        Id128Text.decode(self.input_id)
 
     @property
     def draft_text(self) -> str | None:

@@ -431,19 +431,14 @@ class MessageEntry(NativeEntry):
 
     @property
     def tracked_user(self) -> MessageEntry | None:
-        from .native_pi import _DIGEST
-        from .native_input_record import NativeInputIdText
+        from .field_codec import Id128Text, Sha256Text
 
         if self.message.input_id is None:
             return None
-        NativeInputIdText.decode(self.message.input_id)
-        if (
-            not self.message.user
-            or self.message.input_digest is None
-            or not _DIGEST.fullmatch(self.message.input_digest)
-            or not self.id
-        ):
+        Id128Text.decode(self.message.input_id)
+        if not self.message.user or self.message.input_digest is None or not self.id:
             raise ValueError("Native Pi session has ambiguous tracked user input")
+        Sha256Text.from_text(self.message.input_digest)
         return self
 
     def require_failed_terminal(self, parent_id: str) -> None:

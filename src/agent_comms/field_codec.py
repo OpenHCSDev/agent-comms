@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import json
+import re
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping
@@ -14,6 +15,7 @@ from functools import cached_property, lru_cache, reduce
 from operator import or_
 from pathlib import Path
 from typing_extensions import TypeAliasType
+from uuid import uuid4
 from typing import (
     Annotated,
     Any,
@@ -297,6 +299,47 @@ class TimestampText(TextRepresentation):
     @classmethod
     def from_text(cls, value: str) -> datetime:
         return datetime.fromisoformat(value)
+
+
+class LowerHexText(TextRepresentation):
+    """Lowercase hex text; each member declares how many digits its fact is written in."""
+
+    digits: ClassVar[range]
+    spelling: ClassVar[re.Pattern[str]] = re.compile("[0123456789abcdef]*")
+
+    @classmethod
+    def encode(cls, value: object) -> str:
+        return cls.decode(value)
+
+    @classmethod
+    def decode(cls, value: object) -> str:
+        return cls.from_text(FieldCodec.decode(str, value))
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if len(value) not in cls.digits or cls.spelling.fullmatch(value) is None:
+            raise ValueError(f"{cls.__name__} requires lowercase hex of length {cls.digits}")
+        return value
+
+
+class Id128Text(LowerHexText):
+    """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
+
+    digits = range(32, 33)
+
+    @classmethod
+    def mint(cls) -> str:
+        return uuid4().hex
+
+
+class Sha256Text(LowerHexText):
+    digits = range(64, 65)
+
+
+class GitCommitText(LowerHexText):
+    """A git commit, abbreviated to no fewer than seven digits."""
+
+    digits = range(7, 41)
 
 
 class Projected(property):

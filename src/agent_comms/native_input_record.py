@@ -8,30 +8,15 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
-import re
 from typing import Annotated, ClassVar, Literal
 
-from .field_codec import FieldCodec, TextRepresentation
+from .field_codec import FieldCodec, Id128Text
 from .declared_family import DeclaredFamily
 from .coordination_errors import IdentityConflict
 from .coordination_contracts import validate_execution_id
 
 from .coordination_tables.participants import OwnerGenerations
 from .typed_table import TextStorage
-
-
-class NativeInputIdText(TextRepresentation):
-    """The native-input declaration owns the external 128-bit input spelling."""
-
-    @classmethod
-    def encode(cls, value):
-        return cls.decode(value)
-
-    @classmethod
-    def from_text(cls, value: str) -> str:
-        if re.fullmatch(r"[0-9a-f]{32}", value) is None:
-            raise ValueError("Native input requires a 128-bit lowercase hex identity")
-        return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,7 +249,7 @@ class UnrecordedNativeInputReference(NativeContextReference):
 class NativeInputReference(NativeContextReference):
     """A cursor's bounded reference to original recorded native context."""
 
-    input_id: Annotated[str, NativeInputIdText]
+    input_id: Annotated[str, Id128Text]
     stage: type[NativeInputExecution]
     session_id: str
     request_generation: int

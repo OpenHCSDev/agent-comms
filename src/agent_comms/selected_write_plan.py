@@ -30,7 +30,7 @@ from .coordination_cohort import sealed_cohort_assignments
 from .envelope_claim_transitions import ExistingFileClaim
 from .store_files import _store_lock
 from .threads import Thread
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, Id128Text
 from .declared_family import DeclaredFamily
 from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
 from .jsonl_stream import unique_fields
@@ -85,8 +85,10 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
         raise IdentityConflict("Selected write intent is already applied or uncertain")
 
     def __post_init__(self):
-        if len(self.operation_id) != 32:
-            raise IdentityConflict("Selected write intent operation is invalid")
+        try:
+            Id128Text.decode(self.operation_id)
+        except ValueError as error:
+            raise IdentityConflict("Selected write intent operation is invalid") from error
 
 
 class AcceptedWriteIntent(SelectedWriteIntent, declared_name="accepted"):
@@ -208,7 +210,7 @@ class SelectedWritePlans:
             path = ExistingFileClaim(Path(resource)).normalized(Path(owner.worktree))
             self._prepare_dir()
             record_path = self._path(source_seq, lookup)
-            operation_id = secrets.token_hex(16)
+            operation_id = Id128Text.mint()
             record = AcceptedWriteIntent(
                 schema=1, root_id=self.root_id, source_seq=source_seq,
                 source_message_id=source_message_id, claim_id=selected[0].assignment_id,

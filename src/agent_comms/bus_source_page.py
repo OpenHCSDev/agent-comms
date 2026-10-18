@@ -5,10 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated, Self
 
-from .bus_publication import StableLookupText
 from .coordination_errors import IdentityConflict
-from .field_codec import FieldCodec
-from .wire_metadata import WireRootIdText
+from .field_codec import FieldCodec, Id128Text
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -32,7 +30,7 @@ class SourcePage:
 
 @dataclass(frozen=True, kw_only=True)
 class AddressedPage(SourcePage):
-    lookup: Annotated[str, StableLookupText]
+    lookup: Annotated[str, Id128Text]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -52,8 +50,8 @@ class CoveragePage(AddressedPage):
 
 @dataclass(frozen=True, kw_only=True)
 class CandidateQuery(SourcePage):
-    root_id: Annotated[str, WireRootIdText]
-    recipient_lookup: Annotated[str, StableLookupText]
+    root_id: Annotated[str, Id128Text]
+    recipient_lookup: Annotated[str, Id128Text]
     required_through_seq: int
     delivery_only: bool = False
 

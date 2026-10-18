@@ -18,7 +18,7 @@ from pathlib import Path
 from abc import abstractmethod
 from typing import ClassVar
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, GitCommitText
 from .command import Command
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -61,9 +61,8 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     commit: str
 
     def __post_init__(self) -> None:
-        if any(not isinstance(sha, str) or not 7 <= len(sha) <= 40
-               or sha.strip("0123456789abcdef") for sha in (self.commit, self.delivered)):
-            raise ValueError("Delivery requires a checked and a delivered commit hash.")
+        GitCommitText.decode(self.commit)
+        GitCommitText.decode(self.delivered)
 
     @property
     def delivered(self) -> str:
