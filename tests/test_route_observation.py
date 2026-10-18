@@ -11,10 +11,17 @@ from agent_comms.active_route import ActiveRoute, LocalRoute, read_active_route,
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
+from agent_comms import private_nk_entrypoint
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.wire_log import WireLog
+
+
+@pytest.fixture(autouse=True)
+def installed_package(tmp_path, monkeypatch):
+    """This installation's pinned native package; a route no longer names one."""
+    monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: tmp_path)
 
 
 def route_fixture(tmp_path, monkeypatch):
@@ -27,14 +34,13 @@ def route_fixture(tmp_path, monkeypatch):
     root_id = comms.messaging.initialize_private_initial_protocol()
     route = tmp_path / ".local/state/agent-comms/active-route.json"
     route.parent.mkdir(parents=True, mode=0o700)
-    install_route(route, root, root_id, tmp_path)
+    install_route(route, root, root_id)
     return route, root, root_id
 
 
-def install_route(route, root, root_id, package):
+def install_route(route, root, root_id):
     stage = route.with_suffix(".new")
-    stage.write_text(json.dumps(dict(version=1, root=str(root), wire_root_id=root_id,
-                                    native_package=str(package))))
+    stage.write_text(json.dumps(dict(version=2, root=str(root), wire_root_id=root_id)))
     stage.chmod(0o600)
     os.replace(stage, route)
 
@@ -49,7 +55,7 @@ def test_observation_never_composes_decodes_or_waits_for_bus_lock(tmp_path, monk
           patch.object(RegistryDocument, "from_wire", side_effect=AssertionError("decoded registry")),
           patch.object(WireLog, "locked", side_effect=AssertionError("acquired mutation lock"))):
         selected = resolve_comms_route()
-        assert selected == ActiveRoute(root, root_id, tmp_path)
+        assert selected == ActiveRoute(root, root_id)
         assert selected.observe_root() == root
         assert list(tmp_path.glob("private*/registry.json")) == []
 
@@ -59,12 +65,12 @@ def test_observation_revalidates_rotation_id_permissions_and_shape(tmp_path, mon
     second = tmp_path / "second"
     second_id = Comms(second).messaging.initialize_private_initial_protocol()
     assert resolve_comms_route().observe_root() == root
-    install_route(route, second, second_id, tmp_path)
+    install_route(route, second, second_id)
     assert resolve_comms_route().observe_root() == second
-    install_route(route, second, root_id, tmp_path)
+    install_route(route, second, root_id)
     with pytest.raises(RelationViolationError, match="root ID"):
         resolve_comms_route().observe_root()
-    install_route(route, second, second_id, tmp_path)
+    install_route(route, second, second_id)
     marker = second / "bus_meta.json"
     marker.chmod(0o644)
     with pytest.raises(RelationViolationError, match="owner-only"):
@@ -105,12 +111,9 @@ def test_route_record_retains_the_external_format_and_private_marker(tmp_path):
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
     root_id = Comms(root).messaging.initialize_private_initial_protocol()
-    selected = ActiveRoute(root, root_id, tmp_path)
+    selected = ActiveRoute(root, root_id)
     encoded = FieldCodec.encode(selected)
-    assert encoded == {
-        "version": 1, "root": str(root), "wire_root_id": root_id,
-        "native_package": str(tmp_path),
-    }
+    assert encoded == {"version": 2, "root": str(root), "wire_root_id": root_id}
     route_file = tmp_path / "active-route.json"
     route_file.write_text(json.dumps(encoded))
     route_file.chmod(0o600)
@@ -120,16 +123,15 @@ def test_route_record_retains_the_external_format_and_private_marker(tmp_path):
 
 
 @pytest.mark.parametrize("change", [
-    {"version": True}, {"version": "1"}, {"version": 2}, {"version": None},
+    {"version": True}, {"version": "2"}, {"version": 1}, {"version": None},
     {"root": ""}, {"root": "relative"}, {"root": "/tmp/../private"}, {"root": None},
-    {"native_package": 7}, {"native_package": "relative"},
-    {"native_package": "/tmp/../package"}, {"wire_root_id": 9},
+    {"native_package": str(Path("/package"))}, {"wire_root_id": 9},
     {"wire_root_id": "A" * 32}, {"wire_root_id": "a" * 31}, {"unexpected": True},
 ])
 def test_malformed_route_identity_is_denied_at_the_real_file_boundary(tmp_path, change):
     tmp_path.chmod(0o700)
     route_file = tmp_path / "active-route.json"
-    value = FieldCodec.encode(ActiveRoute(tmp_path, "a" * 32, tmp_path))
+    value = FieldCodec.encode(ActiveRoute(tmp_path, "a" * 32))
     value.update(change)
     route_file.write_text(json.dumps(value))
     route_file.chmod(0o600)
@@ -138,9 +140,9 @@ def test_malformed_route_identity_is_denied_at_the_real_file_boundary(tmp_path, 
     assert not (tmp_path / "registry.json").exists()
 
 
-@pytest.mark.parametrize("missing", ["version", "root", "wire_root_id", "native_package"])
+@pytest.mark.parametrize("missing", ["version", "root", "wire_root_id"])
 def test_route_fields_remain_required_even_with_constructor_defaults(tmp_path, missing):
-    value = FieldCodec.encode(ActiveRoute(tmp_path, "a" * 32, tmp_path))
+    value = FieldCodec.encode(ActiveRoute(tmp_path, "a" * 32))
     value.pop(missing)
     with pytest.raises(ValueError):
         ActiveRoute.from_record(value)

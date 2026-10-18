@@ -15,6 +15,7 @@ from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
 from . import launch_runtime
+from .native_package import NativePackageError, pinned_native_package
 from .native_pi import _private_session_dir, _trusted_package
 from .wire_log import WireLog
 from .wire_metadata import WireRootIdText
@@ -54,19 +55,27 @@ class PrivateNkLaunch:
         return cls(validated_root, root_id, native_package)
 
     @classmethod
+    def installed(cls, root: Path, wire_root_id: str) -> PrivateNkLaunch:
+        """A private root's launch with this installation's pinned native package."""
+        try:
+            package = pinned_native_package()
+        except NativePackageError as error:
+            raise PublicationActivationBlocked(
+                "private owner launch needs this installation's prepared native package"
+            ) from error
+        return cls(root, wire_root_id, package)
+
+    @classmethod
     def current(cls) -> PrivateNkLaunch | None:
-        """Decode the parent's handoff or the owner-installed route."""
-        environment = dict(os.environ)
-        if "AGENT_COMMS_ROOT" not in environment:
+        """Decode the parent's handoff, or else the owner-installed route."""
+        if "AGENT_COMMS_ROOT" not in os.environ:
             from .active_route import read_active_route
 
-            active_route = read_active_route()
-            if active_route is not None:
-                environment["AGENT_COMMS_ROOT"] = str(active_route.root)
-                environment.setdefault(launch_runtime.ROOT_ID_ENV, active_route.wire_root_id)
-                environment.setdefault(launch_runtime.PACKAGE_ENV, str(active_route.native_package))
-        root = Path(environment.get("AGENT_COMMS_ROOT", "~/.agent-comms")).expanduser().absolute()
-        return cls.from_environment(root, environment)
+            route = read_active_route()
+            if route is not None:
+                return cls.from_environment(route.root, os.environ) or route.launch()
+        root = Path(os.environ.get("AGENT_COMMS_ROOT", "~/.agent-comms")).expanduser().absolute()
+        return cls.from_environment(root, os.environ)
 
     def validate(self) -> Path:
         """Recheck this authority before a new owner process can be reserved.

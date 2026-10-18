@@ -68,7 +68,7 @@ class LocalRoute(CommsRoute):
 
 
 class AbsoluteRoutePathText(PathText):
-    """Root and native-package fields share the same absolute-path boundary."""
+    """Route roots and handed-down native packages share one absolute-path boundary."""
 
     @classmethod
     def require_absolute(cls, path: Path) -> Path:
@@ -89,10 +89,12 @@ class AbsoluteRoutePathText(PathText):
 
 @dataclass(frozen=True, slots=True)
 class ActiveRoute(CommsRoute):
+    """The default private root. The native package is not part of it: each
+    installation launches its own pinned package, so a rebuild never strands it."""
+
     root: Annotated[Path, AbsoluteRoutePathText]
     wire_root_id: Annotated[str, WireRootIdText]
-    native_package: Annotated[Path, AbsoluteRoutePathText]
-    version: Literal[1] = field(default=1, kw_only=True, metadata={"wire_required": True})
+    version: Literal[2] = field(default=2, kw_only=True, metadata={"wire_required": True})
 
     @classmethod
     def from_record(cls, value: object) -> ActiveRoute:
@@ -116,7 +118,7 @@ class ActiveRoute(CommsRoute):
         return super(ActiveRoute, self).observe_root()
 
     def launch(self) -> PrivateNkLaunch:
-        return PrivateNkLaunch(self.root, self.wire_root_id, self.native_package)
+        return PrivateNkLaunch.installed(self.root, self.wire_root_id)
 
 
 def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRoute:
@@ -293,7 +295,7 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     if path.name != "active-route.json" or not path.is_absolute():
         raise ValueError("active comms route requires its absolute route path")
     FieldCodec.encode(route)
-    PrivateNkLaunch(route.root, route.wire_root_id, route.native_package).validate()
+    route.launch().validate()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
@@ -348,7 +350,7 @@ def _publish_active_route_locked(
             os.fsync(fd)
         finally:
             os.close(fd)
-        PrivateNkLaunch(route.root, route.wire_root_id, route.native_package).validate()
+        route.launch().validate()
         parent = path.parent.lstat()
         if (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino):
             raise ValueError("active comms route directory changed before publication")

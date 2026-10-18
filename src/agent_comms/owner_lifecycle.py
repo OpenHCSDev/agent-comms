@@ -19,7 +19,6 @@ from .diagnostics import owner_process_output
 from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
-from .native_package import NativePackageError, pinned_native_package
 from .native_arguments import NativeArguments
 from .launch_runtime import LaunchRuntime, RestartEnvironment, PACKAGE_ENV, ROOT_ID_ENV
 from .private_nk_entrypoint import PrivateNkLaunch
@@ -325,13 +324,8 @@ class OwnerLifecycle:
             metadata = self.bus.log.read_metadata_unlocked()
             if not metadata.private:
                 return None
-            try:
-                package = pinned_native_package()
-            except NativePackageError as error:
-                raise PublicationActivationBlocked(
-                    "private owner launch needs this installation's prepared native package"
-                ) from error
-            self.pin_private_nk_launch(self.root, metadata.wire_root_id, package)
+            launch = PrivateNkLaunch.installed(self.root, metadata.wire_root_id)
+            self.pin_private_nk_launch(launch.validated_root, launch.wire_root_id, launch.native_package)
         return self._private_nk_launch
 
     def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:

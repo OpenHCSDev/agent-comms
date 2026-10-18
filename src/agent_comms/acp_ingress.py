@@ -102,9 +102,10 @@ class AcpIngress:
                 return
             if route != self.selection.route:
                 raise ValueError("ACP root changed before private launch")
+            launch = route.launch()
             for key, expected in (
-                (ROOT_ID_ENV, route.wire_root_id),
-                (PACKAGE_ENV, str(route.native_package)),
+                (ROOT_ID_ENV, launch.wire_root_id),
+                (PACKAGE_ENV, str(launch.native_package)),
             ):
                 if key in child_env and child_env[key] != expected:
                     raise ValueError("ACP private launch identity conflicts with route")
