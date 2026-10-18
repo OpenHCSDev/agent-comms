@@ -84,7 +84,7 @@ class GoalActionContext:
 
     @property
     def report_turn(self) -> str:
-        return self.thread.active_turn.report_turn
+        return self.thread.turn_record.read().report_turn
 
     @property
     def model_report(self) -> bool:
@@ -102,7 +102,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
 
     @classmethod
     def model_choices(cls) -> tuple[str, ...]:
-        return tuple(member.require_name() for member in cls.members_with(ModelInvocable))
+        return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
 
     @classmethod
     async def submit_control(
@@ -216,7 +216,7 @@ class ActiveGoalAction(
                 replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
             )
             raise ValueError(refusal)
-        elif not generation.lifecycle.allows_resume(thread.active_turn.executing):
+        elif not generation.lifecycle.allows_resume(thread.turn_record.read().executing):
             raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
 

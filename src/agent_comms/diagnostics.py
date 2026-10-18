@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from .store_files import _atomic_write_text
-from .field_codec import FieldCodec, Id128Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 
 _LOG = logging.getLogger(__name__)
 
@@ -144,9 +144,9 @@ def terminal_failure_reason(event: dict) -> FailureReason:
     if not isinstance(measurements, dict):
         measurements = {}
     try:
-        value = measurements.get("reason") or event.get("reason_code")
-        return FailureReason(value) if isinstance(value, str) else FailureReason.BACKEND_FAILED
-    except (ValueError, TypeError):
+        reason = measurements.get("reason") or event.get("reason_code")
+        return FieldCodec.decode(FailureReason, reason)
+    except MalformedRecord:
         return FailureReason.BACKEND_FAILED
 
 

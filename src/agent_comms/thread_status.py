@@ -81,7 +81,7 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
         return ordinary
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
-        return ThreadPresentation(title, "○", self.require_name().title())
+        return ThreadPresentation(title, "○", self.declared_name.title())
 
 
 class ActiveThreadPresence:

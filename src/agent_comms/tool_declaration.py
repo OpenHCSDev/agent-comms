@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from typing import ClassVar, Self
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .native_tool_call import SelectedToolDenied
 
 
@@ -16,6 +16,7 @@ def one_line(text: str, limit: int) -> str:
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
+    family_discriminator: ClassVar[str] = "tool"
     acp_kind: ClassVar[str] = "other"
     label: ClassVar[str]
 
@@ -41,7 +42,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         selected = {cls.family_discriminator: cls.declared_name}
         try:
             return FieldCodec.decode(cls, {**selected, **arguments})
-        except (TypeError, ValueError, KeyError) as error:
+        except MalformedRecord as error:
             raise SelectedToolDenied(f"Invalid {cls.declared_name} arguments: {error}") from error
 
     @classmethod
@@ -50,7 +51,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         try:
             decoded = FieldCodec.decode(dict[str, object], arguments)
             return cls.for_name(name).parse_arguments(decoded)
-        except (TypeError, ValueError):
+        except (MalformedRecord, SelectedToolDenied):
             return None
 
     def reads(self) -> str:
@@ -70,10 +71,9 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
 
 @dataclass(frozen=True)
-class UndeclaredTool(ToolDeclaration):
+class UndeclaredTool(ToolDeclaration, declared_name=None):
     """An external name is visible as supplied, without becoming a declaration."""
 
-    declared_name = None
     name: str
 
     @property

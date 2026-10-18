@@ -117,7 +117,9 @@ class InputForwarding:
         await self.write(
             session,
             commands.SetModel(provider=provider, model_id=model_id),
-            commands.SetThinkingLevel(level=item.thinking_level),
+            *item.thinking_level.native_arguments(
+                lambda level: commands.SetThinkingLevel(level=level.wire_value())
+            ),
         )
         return True
 

@@ -20,7 +20,7 @@ from acp.schema import (
     SetSessionConfigOptionResponse,
 )
 
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import ThinkingChoice
 from .comms import Comms
 from .agent_backend import UseSettings
 from .coordinator import Coordination
@@ -49,7 +49,7 @@ class CatalogSelection(Protocol):
     def model(self) -> str | None: ...
 
     @property
-    def thinking_level(self) -> type[ThinkingLevel]: ...
+    def thinking_level(self) -> type[ThinkingChoice]: ...
 
 
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
@@ -195,7 +195,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     category = "thought_level"
 
     def current_value(self, thread: CatalogSelection) -> str | None:
-        return FieldCodec.encode(thread.thinking_level)
+        return thread.thinking_level.wire_value()
 
     async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
         from .pi_commands import GetAvailableThinkingLevels
@@ -203,7 +203,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         data = await GetAvailableThinkingLevels().discover(
             self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root
         )
-        levels = [member.require_name() for member in data.levels]
+        levels = [member.declared_name for member in data.levels]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
 
     async def apply(
@@ -344,7 +344,7 @@ class SessionConfigOptions(ConfigOptions):
             self.agent_bin, arguments.argv, worktree=Path(thread.worktree), root=self.comms.root,
         )
         model = state.model.display_name
-        level = FieldCodec.encode(state.thinking_level)
+        level = state.thinking_level.wire_value()
         if model is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")
         state.model.require_selection(model)
@@ -355,7 +355,7 @@ class SessionConfigOptions(ConfigOptions):
 
     @staticmethod
     def stored_settings(thread: Thread) -> UseSettings:
-        return UseSettings(thread.model, FieldCodec.encode(thread.thinking_level))
+        return UseSettings(thread.model, thread.thinking_level)
 
     def turn_started(self, session_id: str, thread: Thread) -> None:
         self.settings_in_use.setdefault(session_id, self.stored_settings(thread))

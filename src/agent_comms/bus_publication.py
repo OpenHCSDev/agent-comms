@@ -11,9 +11,8 @@ from dataclasses import field, dataclass
 from typing import TYPE_CHECKING, Final
 
 from .wire_record import MessageWireRecord
-from .field_codec import Id128Text, Sha256Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
 from .errors import HumanInitialUnknownError, RelationViolationError
-from .jsonl_stream import unique_fields
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
@@ -47,22 +46,10 @@ def public_envelope_digest(record: Mapping[str, object]) -> str:
         or not isinstance(timestamp, (int, float))
         or not math.isfinite(timestamp)
     ):
-        raise ValueError("A keyed wire timestamp must be finite.")
+        raise MalformedRecord("A keyed wire timestamp must be finite.")
     if has_private_wire_fields(record):
-        raise ValueError("Digest input must be a public envelope.")
+        raise MalformedRecord("Digest input must be a public envelope.")
     return hashlib.sha256(_canonical(record)).hexdigest()
-
-
-class DuplicateWireKeyError(ValueError):
-    """Ambiguous JSON cannot carry a canonical wire acknowledgement."""
-
-
-def unique_wire_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    """Reject ambiguous JSON objects, including nested acknowledgement keys."""
-    try:
-        return unique_fields(pairs)
-    except ValueError as error:
-        raise DuplicateWireKeyError("Duplicate bus object key.") from error
 
 
 def has_private_wire_fields(record: Mapping[str, object]) -> bool:
@@ -136,25 +123,24 @@ class CommittedDelivery(MessageWireRecord):
 
         from .audience_manifest import freeze_audience
         from .delivery_policy import DeliveryPolicy
-        from .field_codec import FieldCodec
 
         if set(key for key in record if key.startswith(_PRIVATE_WIRE_PREFIX)) != {
             PRIVATE_WIRE_FIELD
         }:
-            raise ValueError("Unknown private bus namespace.")
+            raise MalformedRecord("Unknown private bus namespace.")
         private = record[PRIVATE_WIRE_FIELD]
         policy = FieldCodec.decode(DeliveryPolicy, private)
         if _canonical(private) != _canonical(FieldCodec.encode(policy)):
-            raise ValueError("Private publication is not canonical.")
+            raise MalformedRecord("Private publication is not canonical.")
         raw = policy.initial
         if raw.wire_root_id != wire_root_id:
-            raise ValueError("Delivery belongs to another wire root.")
+            raise MalformedRecord("Delivery belongs to another wire root.")
         if raw.manifest_codec != INITIAL_CODEC:
-            raise ValueError("Unsupported delivery manifest codec.")
+            raise MalformedRecord("Unsupported delivery manifest codec.")
         if raw.resolver_version != RESOLVER_VERSION or raw.policy_version != POLICY_VERSION:
-            raise ValueError("Unsupported delivery decision versions.")
+            raise MalformedRecord("Unsupported delivery decision versions.")
         if not raw.control.supports_initial:
-            raise ValueError("Unsupported delivery control issuer.")
+            raise MalformedRecord("Unsupported delivery control issuer.")
         audience = raw.audience
         Sha256Text.from_text(audience.source_revision)
         for lookup in (audience.sender_lookup, *(r.recipient_lookup for r in audience.recipients)):
@@ -167,11 +153,11 @@ class CommittedDelivery(MessageWireRecord):
             sender_name=audience.sender_name,
         )
         if audience != candidate:
-            raise ValueError("Delivery audience differs from committed public envelope.")
+            raise MalformedRecord("Delivery audience differs from committed public envelope.")
         decisions = policy.resolve(message, candidate, raw.control)
         rows = decisions_wire(decisions)
         if raw.decisions != rows or raw.decisions_digest != decisions_digest(rows):
-            raise ValueError("Delivery decisions do not match the full committed N.")
+            raise MalformedRecord("Delivery decisions do not match the full committed N.")
         acknowledgement = policy.require_acknowledgement(wire_root_id, message)
         return cls(
             wire_root_id,

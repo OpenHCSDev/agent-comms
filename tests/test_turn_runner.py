@@ -92,7 +92,7 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
     with pytest.raises(RequestError) as caught:
         await owner.prompt(session, [{"type": "text", "text": "Work"}])
     assert caught.value.__cause__ is failure and failure.__cause__ is source
-    request_failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
+    request_failure = RequestFailure.from_error(caught.value)
     assert request_failure.notification_published and request_failure.failure.input_state.public_status == "not_sent"
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
@@ -164,7 +164,7 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
         await owner.prompt(session, [{"type": "text", "text": "Work"}])
     assert isinstance(caught.value.__cause__, RuntimeError)
     assert str(caught.value.__cause__) == "execution failed"
-    request_failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
+    request_failure = RequestFailure.from_error(caught.value)
     errors = failure_facts(updates, RequestFailedUpdate)
     from agent_comms.input_attempt import NotSentInput, ReservedInput
 
@@ -199,7 +199,7 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
     with pytest.raises(RequestError) as caught:
         async with asyncio.timeout(30):
             await owner.prompt(session, [{"type": "text", "text": "Actual failed input"}])
-    request_failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
+    request_failure = RequestFailure.from_error(caught.value)
     errors = failure_facts(updates, RequestFailedUpdate)
     assert len(errors) == 1
     assert request_failure.notification_published and request_failure.failure == errors[0].failure

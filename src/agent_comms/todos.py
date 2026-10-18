@@ -550,6 +550,24 @@ class StrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class VoidStrikeTodo(TodoOperation):
+    """The commander takes back a strike recorded in error; the strike stays on the record."""
+    actor: ThreadIncarnation
+    strike: StrikeTodo
+    reason: str
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        if self.strike not in current.live_strikes(self.strike.previous.owner):
+            raise TodoConflict(current)
+        _text(self.reason, "Void reason", 2000)
+        StrikeReason(self.reason)
+        return replace(current, voided=(*current.voided, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class CorrectCheckTodo(TodoOperation):
     """The commander replaces a wrong check of an open order.
 
@@ -654,6 +672,7 @@ class Todo(TypedTable):
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
     strikes: tuple[StrikeTodo, ...] = ()
     hunts: tuple[Hunt, ...] = ()
+    voided: tuple[VoidStrikeTodo, ...] = ()
 
     @property
     def pending(self):
@@ -665,7 +684,13 @@ class Todo(TypedTable):
 
     @property
     def strike_count(self) -> int:
-        return sum(strike.previous == self.assignment for strike in self.strikes)
+        return 0 if self.assignment is None else len(self.live_strikes(self.assignment.owner))
+
+    def live_strikes(self, unit: str | None = None) -> tuple[StrikeTodo, ...]:
+        """The strikes still counting on this task, against ``unit`` on any order of it."""
+        taken_back = tuple(void.strike for void in self.voided)
+        return tuple(recorded for recorded in self.strikes
+                     if unit in (None, recorded.previous.owner) and recorded not in taken_back)
 
     def require_result(self, result: Todo) -> None:
         if self != result:

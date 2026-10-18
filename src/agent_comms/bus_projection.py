@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar, Generic, TypeVar, TYPE_CHECKING
 from abc import ABC, abstractmethod
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .private_path import FileRevision
 from .store_files import _atomic_write_text, _store_lock
 
@@ -149,10 +149,12 @@ class AppendProjectionStore(Generic[Checkpoint]):
     def _encode(self, record: Checkpoint) -> dict:
         return record.signed_payload()
 
-    def _decode(self, payload: dict) -> Checkpoint:
+    def _decode(self, payload: object) -> Checkpoint:
+        if not isinstance(payload, dict) or "integrity" not in payload:
+            raise MalformedRecord("Disposable projection has no integrity digest")
         integrity = payload.pop("integrity")
         if integrity != AppendCheckpoint.payload_digest(payload):
-            raise ValueError("Damaged disposable projection")
+            raise MalformedRecord("Damaged disposable projection")
         return FieldCodec.decode(self.record_type, payload)
 
     def read(self) -> Checkpoint | NoCheckpoint:
@@ -160,8 +162,8 @@ class AppendProjectionStore(Generic[Checkpoint]):
 
     def _read_unlocked(self) -> Checkpoint | NoCheckpoint:
         try:
-            return self._decode(json.loads(self.path.read_text()))
-        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            return self._decode(FieldCodec.parse(self.path.read_bytes()))
+        except (OSError, MalformedRecord):
             return NoCheckpoint()  # Unreadable disposable index: rebuilt from its source.
 
     def _write_unlocked(self, text: str) -> None:

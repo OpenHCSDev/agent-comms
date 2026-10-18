@@ -14,8 +14,8 @@ async function project(socket: string, request: string) {
     try {
       for await (const line of records) {
         const reply = JSON.parse(line);
-        if (reply.error) throw new Error(reply.error);
-        if (typeof reply.result?.worktree !== "string") {
+        if (reply.kind === "owner_failure") throw new Error(reply.error);
+        if (reply.kind !== "owner_result" || typeof reply.result?.worktree !== "string") {
           throw new Error("Original project observation is unavailable");
         }
         return reply.result.worktree;

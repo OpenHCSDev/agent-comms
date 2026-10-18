@@ -9,14 +9,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Type
+from typing import ClassVar, Type
 
 from .channel_targets import CommandTarget
 from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, InlineRecord, NullMember, projected
+from .field_codec import FieldCodec, InlineRecord, MalformedRecord, NullMember, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .response_policy import InformationalPolicy, ResponseEligibility
@@ -24,8 +24,7 @@ from .thread_identity import AgentThreadRole, ThreadRole
 from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 from .wake_policy import BoundedTriageWake, PassiveWake
 
-if TYPE_CHECKING:
-    from .message_page import HistoryCursor
+from .page_traversal import LiveCursor, PageCursor
 
 
 class SendableMessageKind:
@@ -44,7 +43,7 @@ class MessageKind(DeclaredFamily, affix="Kind"):
 
     @classmethod
     def sendable_names(cls) -> tuple[str, ...]:
-        return tuple(member.require_name() for member in cls.members_with(SendableMessageKind))
+        return tuple(member.declared_name for member in cls.members_with(SendableMessageKind))
 
     @classmethod
     def require_sendable(cls) -> None:
@@ -401,8 +400,8 @@ class Message:
         CommandTarget.named(self.target).validate(self)
 
     @property
-    def view_cursor(self) -> int | HistoryCursor:
-        return self.seq
+    def view_cursor(self) -> PageCursor:
+        return LiveCursor(self.seq)
 
     @property
     def view_key(self) -> tuple[str, int]:
@@ -446,13 +445,13 @@ class Message:
         from .bus_publication import PRIVATE_WIRE_FIELD, _canonical, public_envelope_digest
 
         if not isinstance(record, Mapping):
-            raise ValueError("Bus row is not an object.")
+            raise MalformedRecord("Bus row is not an object.")
         public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
         message = cls.from_wire(public)
         if _canonical(public) != _canonical(message.to_wire()):
-            raise ValueError("Noncanonical public bus envelope.")
+            raise MalformedRecord("Noncanonical public bus envelope.")
         if not 0 < message.seq <= MAX_WIRE_SEQ:
-            raise ValueError("Bus sequence is outside the durable range.")
+            raise MalformedRecord("Bus sequence is outside the durable range.")
         public_envelope_digest(public)
         return message
 

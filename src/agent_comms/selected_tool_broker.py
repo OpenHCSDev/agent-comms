@@ -33,7 +33,7 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from .field_codec import FieldCodec, Id128Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .native_input_record import FullNativeExecution, NativeInputIdentity
 from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import (
@@ -46,7 +46,6 @@ from .native_tool_call import (
 )
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
-from .jsonl_stream import unique_fields
 from .private_path import PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole, fsync_directory
 from .selected_actions import SelectedAction
 from .turn_context import InstructionFile
@@ -189,7 +188,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
     """
     try:
         Id128Text.decode(input_id)
-    except (ValueError, TypeError) as error:
+    except MalformedRecord as error:
         raise SelectedToolDenied("Selected input identity is invalid") from error
     if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
         raise SelectedToolDenied("Selected tool call identity is invalid")
@@ -253,7 +252,7 @@ def selected_tool_mode_for_owner(
     try:
         Id128Text.decode(input_id)
         FieldCodec.decode(str, owner_name)
-    except (ValueError, TypeError) as error:
+    except MalformedRecord as error:
         raise SelectedToolDenied("Selected mode has no typed owner attempt") from error
 
     path = store.session.path
@@ -315,7 +314,7 @@ def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
     """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
     try:
         Id128Text.decode(input_id)
-    except (ValueError, TypeError) as error:
+    except MalformedRecord as error:
         raise SelectedToolDenied("Selected input identity is invalid") from error
     acknowledgement = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
     info = acknowledgement.lstat()
@@ -668,7 +667,7 @@ class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
             return FieldCodec.decode(
                 SelectedToolRequest, {"call_id": call_id, "arguments": arguments}
             )
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise SelectedToolDenied("Invalid selected tool call") from error
 
     def decode_request(self, raw: bytes) -> SelectedToolRequest:
@@ -677,9 +676,9 @@ class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
         try:
             envelope = FieldCodec.decode(
                 SelectedToolEnvelope,
-                json.loads(raw.decode("utf-8"), object_pairs_hook=unique_fields),
+                FieldCodec.parse(raw),
             )
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise SelectedToolDenied("Invalid selected tool request") from error
         return envelope.authenticate(self.token)
 

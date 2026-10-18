@@ -30,10 +30,9 @@ from .coordination_cohort import sealed_cohort_assignments
 from .envelope_claim_transitions import ExistingFileClaim
 from .store_files import _store_lock
 from .threads import Thread
-from .field_codec import FieldCodec, Id128Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .declared_family import DeclaredFamily
 from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
-from .jsonl_stream import unique_fields
 from .message_reference import MessageReference
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 
@@ -156,8 +155,8 @@ class SelectedWritePlans:
             with os.fdopen(fd, "rb") as stream:
                 fd = -1
                 try:
-                    return FieldCodec.decode(SelectedWriteIntent, json.loads(stream.read(), object_pairs_hook=unique_fields))
-                except (ValueError, TypeError) as error:
+                    return FieldCodec.decode(SelectedWriteIntent, FieldCodec.parse(stream.read()))
+                except MalformedRecord as error:
                     raise IdentityConflict("Selected write intent is malformed") from error
         finally:
             if fd >= 0:
@@ -177,7 +176,7 @@ class SelectedWritePlans:
             FieldCodec.decode(str, source_message_id)
             FieldCodec.decode(str, resource)
             FieldCodec.decode(str, contents)
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise IdentityConflict("Selected write request is not typed") from error
         if not source_message_id or not resource:
             raise IdentityConflict("Selected write request requires its source and resource")
@@ -190,7 +189,7 @@ class SelectedWritePlans:
             if marker.root_id != self.root_id or not marker.claims:
                 raise IdentityConflict("Selected write requires matching private claim root")
             owner, claimed_generation = self.comms.registry.live_owner_with_claim(owner_name)
-            if not owner.process_identity.runs_here() or owner.active_turn.executing:
+            if not owner.process_identity.runs_here() or owner.turn_record.read().executing:
                 raise IdentityConflict("Selected write owner is not idle in this process")
             initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
             if initial.message.message_id != source_message_id:

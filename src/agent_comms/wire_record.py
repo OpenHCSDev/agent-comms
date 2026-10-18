@@ -7,14 +7,13 @@ it creates no durable representation, codec or second proof store.
 
 from __future__ import annotations
 
-import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
@@ -114,7 +113,7 @@ class MessageWireRecord(WireRecord):
 
     def sequence_after(self, previous: int) -> int:
         if self.message.seq <= previous:
-            raise ValueError("Bus sequence is not increasing.")
+            raise MalformedRecord("Bus sequence is not increasing.")
         return self.message.seq
 
     def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
@@ -227,23 +226,19 @@ class WireScan:
     seen_keys: set[str] = field(default_factory=set)
 
     def read(self, line: bytes) -> WireRecord:
-        from .bus_publication import unique_wire_object
-
         WireRecord.require_row_size(line)
         if not line.endswith(b"\n"):
             raise RelationViolationError("Incomplete bus row blocks keyed publication.")
         try:
-            value = json.loads(line, object_pairs_hook=unique_wire_object)
+            value = FieldCodec.parse(line)
             if not isinstance(value, dict):
-                raise ValueError("Bus row is not an object.")
+                raise MalformedRecord("Bus row is not an object.")
             record = WireRecord.from_wire(value, self.metadata.root_id)
             record.require_claim(self.metadata)
             record.record_key(self.seen_keys)
             self.previous_sequence = record.sequence_after(self.previous_sequence)
             return record
-        except RelationViolationError:
-            raise
-        except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as error:
+        except MalformedRecord as error:
             raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
 
 

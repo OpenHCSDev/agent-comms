@@ -19,9 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
 
-from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, PathText
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
 from .private_nk_entrypoint import PrivateNkLaunch
 
 
@@ -89,8 +88,8 @@ class ActiveRoute(CommsRoute):
     def from_record(cls, value: object) -> ActiveRoute:
         try:
             route = FieldCodec.decode(cls, value)
-        except TypeError as error:
-            raise ValueError(f"active comms route is invalid: {error}") from error
+        except MalformedRecord as error:
+            raise MalformedRecord(f"active comms route is invalid: {error}") from error
         if not route.root.is_dir():
             raise ValueError("active comms route root is missing")
         return route
@@ -179,9 +178,9 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     ):
         raise ValueError("active comms route changed while reading")
     try:
-        value = json.loads(raw, object_pairs_hook=unique_wire_object)
-    except (ValueError, UnicodeError) as error:
-        raise ValueError("active comms route is invalid JSON") from error
+        value = FieldCodec.parse(raw)
+    except MalformedRecord as error:
+        raise MalformedRecord("active comms route is invalid JSON") from error
     return ActiveRoute.from_record(value)
 
 

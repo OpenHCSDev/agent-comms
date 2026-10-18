@@ -225,9 +225,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
                 await agent.turns.run_agent_turn(
                     sid, sid, "One new failed goal input", autonomous_goal=True
                 )
-            request_failure = RequestFailure.from_error(
-                error.value.code, str(error.value), error.value.data
-            )
+            request_failure = RequestFailure.from_error(error.value)
             assert request_failure.notification_published
             assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
             assert len(native.saved_inputs()) == 3

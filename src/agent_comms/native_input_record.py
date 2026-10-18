@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
 from typing import Annotated, ClassVar, Literal
 
-from .field_codec import FieldCodec, Id128Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .declared_family import DeclaredFamily
 from .coordination_errors import IdentityConflict
 from .coordination_contracts import validate_execution_id
@@ -263,19 +263,19 @@ class NativeInputReference(NativeContextReference):
     def acquire(cls, row) -> NativeInputReference:
         """Decode the complete original SQL reference, never a partial projection."""
         try:
-            result = cls(
+            result = FieldCodec.construct(cls, dict(
                 input_id=row.input_id,
                 stage=row.reference_stage,
                 session_id=row.session_id,
                 request_generation=row.request_generation,
-            )
+            ))
             result = FieldCodec.decode(cls, FieldCodec.encode(result, cls))
             if not 0 < result.request_generation <= 2**53 - 1:
-                raise ValueError("Native reference generation is outside its native range")
+                raise MalformedRecord("Native reference generation is outside its native range")
             if not result.session_id:
-                raise ValueError("Native reference lacks recorded identity")
+                raise MalformedRecord("Native reference lacks recorded identity")
             return result
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise IdentityConflict("Native recorded context reference is incomplete") from error
 
     def require_recorded_input(self, owner, db) -> None:
@@ -343,7 +343,7 @@ class NativeInputContext:
                 for item in fields(self):
                     if item.metadata.get("native_context"):
                         FieldCodec.decode(type(None), getattr(self, item.name))
-            except (TypeError, ValueError) as error:
+            except MalformedRecord as error:
                 raise IdentityConflict("Native unrecorded context group is partial") from error
             return UnrecordedNativeInputReference()
         try:
@@ -351,6 +351,6 @@ class NativeInputContext:
                 annotation = item.metadata.get("native_context")
                 if annotation is not None:
                     FieldCodec.decode(annotation, FieldCodec.encode(getattr(self, item.name), annotation))
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise IdentityConflict("Native recorded context group is partial") from error
         return NativeInputReference.acquire(self)

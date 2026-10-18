@@ -20,7 +20,7 @@ from .bus_source_page import CandidateQuery
 from .checkpoint_seals import PrefixSource
 from .delivery_policy import KeyedResponseAcknowledgement
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .private_path import FileIdentity, FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
 from .wake_policy import WakePolicy
@@ -84,7 +84,7 @@ class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
     def current(cls, db: sqlite3.Connection) -> CheckpointState:
         try:
             return next(iter(cls.select(db, singleton=1)), NoCheckpoint())
-        except (ValueError, TypeError) as error:
+        except MalformedRecord as error:
             raise ProjectionRebuildRequiredError("candidate index schema is unavailable") from error
 
     @property
@@ -361,16 +361,13 @@ class WakeCandidateIndex(TypedStore):
                 return advanced.byte_offset >= source.boundary
         except (
             OSError,
-            ValueError,
-            TypeError,
+            MalformedRecord,
             KeyError,
             OverflowError,
             AttributeError,
             RelationViolationError,
             sqlite3.DatabaseError,
         ) as error:
-            if isinstance(error, ProjectionUnavailableError):
-                raise
             raise ProjectionUnavailableError("candidate index maintenance unavailable") from error
 
     def notify_committed_append(self, *, root_id: str, through_bytes: int) -> CommittedAppendHint:
@@ -487,5 +484,5 @@ class WakeCandidateIndex(TypedStore):
                     tuple(data[:request.limit]),
                     len(data) > request.limit,
                 )
-        except (OSError, sqlite3.DatabaseError, ValueError, TypeError) as error:
+        except (OSError, sqlite3.DatabaseError, MalformedRecord) as error:
             raise ProjectionUnavailableError("candidate projection read unavailable") from error
