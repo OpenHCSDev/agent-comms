@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/ts/.local/share/agent-comms/current/bin/python
 """Check desktop headroom before agent work and notify on sustained pressure."""
 
 import argparse
@@ -18,15 +18,18 @@ GIB = 1024**3
 STATE = Path.home() / ".local/state/agent-comms/resource-alert.json"
 LIMITS = {
     "/": (8, 4),
-    "/home": (20, StorageRule().floor_gib),
     "/tmp": (4, 2),
     "/dev/shm": (4, 2),
 }
 
 
-def headroom():
+def limits_for(root):
+    return {**LIMITS, "/home": (20, StorageRule.load(root).floor_gib)}
+
+
+def headroom(limits):
     free = {}
-    for path in LIMITS:
+    for path in limits:
         info = os.statvfs(path)
         free[path] = info.f_bavail * info.f_frsize
     memory = {}
@@ -39,10 +42,10 @@ def headroom():
     return free, memory
 
 
-def severity(free, memory):
+def severity(free, memory, limits):
     warnings = []
     critical = []
-    for path, (warn_gib, critical_gib) in LIMITS.items():
+    for path, (warn_gib, critical_gib) in limits.items():
         if free[path] < critical_gib * GIB:
             critical.append(f"{path} free {free[path] / GIB:.1f} GiB")
         elif free[path] < warn_gib * GIB:
@@ -216,6 +219,7 @@ class DirectoryUsers:
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--root", type=Path, default=Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'))
     parser.add_argument("--assert-headroom", action="store_true")
     parser.add_argument("--monitor", action="store_true")
     parser.add_argument("--users", type=Path, metavar="PATH", help="list directory users and unreadable processes (excluding this checker); exit 1 if any")
@@ -229,8 +233,9 @@ def main():
             print(json.dumps(process, sort_keys=True))
             found = True
         raise SystemExit(int(found))
-    free, memory = headroom()
-    level, reasons = severity(free, memory)
+    limits = limits_for(args.root)
+    free, memory = headroom(limits)
+    level, reasons = severity(free, memory, limits)
     print(json.dumps({
         "level": level,
         "reasons": reasons,

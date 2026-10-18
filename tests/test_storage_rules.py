@@ -15,17 +15,25 @@ from agent_comms.storage_rules import (
 from agent_comms.threads import Thread
 
 
-def test_resource_checker_uses_storage_allocation_floor():
+def test_resource_checker_uses_storage_allocation_floor(tmp_path):
     checker = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tools' / 'agent_resource_check.py'))
-    floor = StorageRule().floor_gib
-    assert floor == 5.0
-    assert checker['LIMITS']['/home'][1] == floor
-    free = {path: 100 * checker['GIB'] for path in checker['LIMITS']}
+    floor = StorageRule.load(tmp_path).floor_gib
+    limits = checker['limits_for'](tmp_path)
+    assert limits['/home'][1] == floor
+    free = {path: 100 * checker['GIB'] for path in limits}
     memory = {'MemAvailable': 100 * checker['GIB'], 'SwapTotal': 0, 'SwapFree': 0, 'full_avg60': 0}
     free['/home'] = (floor - 0.1) * checker['GIB']
-    assert checker['severity'](free, memory)[0] == 'critical'
+    assert checker['severity'](free, memory, limits)[0] == 'critical'
     free['/home'] = (floor + 0.1) * checker['GIB']
-    assert checker['severity'](free, memory)[0] == 'warning'
+    assert checker['severity'](free, memory, limits)[0] == 'warning'
+
+
+def test_resource_checker_reads_root_override(tmp_path):
+    import json
+    checker = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tools' / 'agent_resource_check.py'))
+    floor = StorageRule.load(tmp_path).floor_gib
+    (tmp_path / 'storage.json').write_text(json.dumps({'floor_gib': floor + 1}))
+    assert checker['limits_for'](tmp_path)['/home'][1] == StorageRule.load(tmp_path).floor_gib
 
 
 def test_storage_paths_round_trip_inside_collections(tmp_path):
