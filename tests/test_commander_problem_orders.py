@@ -211,6 +211,11 @@ def test_delivered_order_is_not_transferred(commander, tmp_path):
     assert transferred.assignment.owner == 'other'
     assert transferred.assignment.previous_owners == (pending.assignment.owner_identity,)
     assert copied.goals.todos.get('P2') == transferred
+    released = copied.goals.todos.apply('P1', ReleaseTodo(delivered.revision,
+        copied.registry.require('lead').incarnation, delivered.assignment, StrikeReason(FIRED)))
+    with pytest.raises(ValueError, match=f'worker already has delivered commit {commit}; worker merges it'):
+        transfer(released)
+    assert copied.goals.todos.get('P1') == released
     assert marker.read_text() == (copied.root / 'check-calls').read_text() == 'x'
 
 

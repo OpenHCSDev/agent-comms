@@ -558,7 +558,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     pending: ClassVar[bool]
 
-    def require_transfer(self, owner: str) -> None:
+    def require_transfer(self, todo: Todo) -> None:
         raise ValueError("Only an undelivered order can change owner.")
 
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
@@ -601,7 +601,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
 
-    def require_transfer(self, owner: str) -> None:
+    def require_transfer(self, todo: Todo) -> None:
         pass
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
@@ -614,7 +614,8 @@ class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
 
-    def require_transfer(self, owner: str) -> None:
+    def require_transfer(self, todo: Todo) -> None:
+        owner = (todo.assignment or todo.released[-1].previous).owner
         raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
@@ -1105,8 +1106,8 @@ class Todo(TypedTable):
         return proposed
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+        self.order.require_transfer(self)
         if self.assignment is not None:
-            self.order.require_transfer(self.assignment.owner)
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
