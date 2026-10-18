@@ -18,8 +18,9 @@ the commander to that unit. Nothing here judges code; it only refuses to let an 
 import hashlib, json, os, re, sys, time
 from abc import abstractmethod
 from dataclasses import dataclass
+from typing import NotRequired, TypedDict
 
-from ..todos import AcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason
+from ..todos import AcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo
 from ..tools import CommsVerdictTool
 from . import order
 from ..cli_commands import option
@@ -32,19 +33,33 @@ RTS = str(CONFIG.state)
 EDITS = f'{RTS}/edits.jsonl'
 
 
-def rows(path):
+class Hunk(TypedDict):
+    old: str
+    new: str
+
+
+class Edit(TypedDict):
+    """One row of edits.jsonl: a unit's file edit awaiting its verdict."""
+    id: str
+    thread: str
+    at: float
+    path: NotRequired[str]
+    hunks: list[Hunk]
+
+
+def rows(path: str) -> list[Edit]:
     if not os.path.exists(path):
         return []
     with open(path) as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def unjudged():
+def unjudged() -> list[Edit]:
     judged = {v.tool_call_id for todo in order.todos() for v in todo.verdicts}
     return [e for e in rows(EDITS) if e['id'] not in judged]
 
 
-def my_messages(thread):
+def my_messages(thread: str) -> list[dict[str, str]]:
     """The commander's messages to thread, newest first: one bounded page of the bus's DM history."""
     page = order.COMMS.views.dm_history_page(ME, thread)
     return [dict(id=m.message_id, text=m.body) for m in reversed(page.messages) if m.sender == ME]
@@ -53,13 +68,13 @@ def my_messages(thread):
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
 
 
-def branches_added(edit) -> int:
+def branches_added(edit: Edit) -> int:
     """Branches the edit's new text has beyond its old text (branch-vs-polymorphism: presumed slop)."""
     count = lambda text: sum(1 for line in text.splitlines() if BRANCH.search(line))
     return sum(count(h['new']) - count(h['old']) for h in edit['hunks'])
 
 
-def check_code(edit):
+def check_code(edit: Edit) -> str:
     """Four hex digits derived from the edit's own text; shown only after its full hunks."""
     return hashlib.sha256((edit['id'] + json.dumps(edit['hunks'])).encode()).hexdigest()[:4]
 
@@ -136,20 +151,20 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         "--line", action="append", metavar="LINE", help="an exact diff line; repeat for each")
 
     @abstractmethod
-    def operation(self, todo, edit_id) -> OrderVerdict: ...
+    def operation(self, todo: Todo, edit_id: str) -> OrderVerdict: ...
 
     @abstractmethod
-    def check_edits(self, edits) -> None: ...
+    def check_edits(self, edits: list[Edit]) -> None: ...
 
     @abstractmethod
-    def report(self, todos) -> None: ...
+    def report(self, todos: tuple[Todo, ...]) -> None: ...
 
-    def held_order(self, edit):
+    def held_order(self, edit: Edit) -> Todo:
         """Resolve an edit to the order my cited message names; never record a verdict without that Todo."""
         cited = next((m for m in my_messages(edit['thread']) if m['id'] == self.msg), None)
         if cited is None:
             sys.exit(f'Refused: edit {edit["id"]}: {self.msg} is not a message from {ME} to {edit["thread"]}')
-        candidates = order.open_todos(edit['thread'])
+        candidates: list[Todo] = order.open_todos(edit['thread'])
         if found := re.search(r'\bP\d+\b', cited['text']):
             candidates = [todo for todo in candidates if todo.id == found.group()]
         if len(candidates) != 1:
@@ -189,11 +204,11 @@ class OkVerb(VerdictVerb):
     help = "the edit serves the order"
     serves: str = option("--serves", help="exact words of the order")
 
-    def operation(self, todo, edit_id):
+    def operation(self, todo: Todo, edit_id: str) -> AcceptedVerdict:
         return AcceptedVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
-                               todo.assignment, edit_id, quote=self.serves)
+                               todo.held(), edit_id, quote=self.serves)
 
-    def check_edits(self, edits):
+    def check_edits(self, edits: list[Edit]) -> None:
         for edit in edits:
             diff = ''.join('+' + line + '\n' for h in edit['hunks'] for line in h['new'].splitlines())
             path = edit.get('path') or ''
@@ -203,20 +218,20 @@ class OkVerb(VerdictVerb):
             if (extra := branches_added(edit)) > 0:
                 self.own_branches(edit, extra)
 
-    def own_branches(self, edit, extra) -> None:
+    def own_branches(self, edit: Edit, extra: int) -> None:
         sys.exit(f'Refused: edit {edit["id"]} adds {extra} branch(es); send it back, or judge it with ok-unowned '
                  'and --no-owner proving no type could own them')
 
-    def report(self, todos):
+    def report(self, todos: tuple[Todo, ...]) -> None:
         pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class OkUnownedVerb(OkVerb):
+class OkUnownedVerb(OkVerb, declared_name="ok-unowned"):
     help = "the edit serves the order and its added branches have no type that could own them"
     no_owner: str = option("--no-owner", help="12+ words with because and file:line")
 
-    def own_branches(self, edit, extra) -> None:
+    def own_branches(self, edit: Edit, extra: int) -> None:
         if not (len(self.no_owner.split()) >= 12 and re.search(r'\bbecause\b', self.no_owner)
                 and re.search(r'\S+\.py:\d+', self.no_owner)):
             sys.exit(f'Refused: edit {edit["id"]} adds {extra} branch(es); --no-owner needs 12+ words, '
@@ -237,12 +252,12 @@ class BackVerb(VerdictVerb):
     def slop(self) -> order.Slop:
         return order.Slop(self.slop_kind, self.fact, self.at, self.derive, self.by)
 
-    def operation(self, todo, edit_id):
+    def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
-                               todo.assignment, edit_id,
+                               todo.held(), edit_id,
                                reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
 
-    def check_edits(self, edits):
+    def check_edits(self, edits: list[Edit]) -> None:
         if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):
             sys.exit('Refused: --roast needs 12+ words with because, naming the duplicated fact and its owner')
         if len(self.fix.split()) < 8:
@@ -251,12 +266,12 @@ class BackVerb(VerdictVerb):
         order.refuse(self.roast, BluntText)
         order.refuse(' '.join((self.why, self.roast, self.fix)), *order.OUTGOING)
 
-    def report(self, todos):
+    def report(self, todos: tuple[Todo, ...]) -> None:
         for todo in todos:
             roast(todo.holder, self.lines, self.roast, self.fix, self.slop())
             line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
                     f'(strike {todo.strike_count} on {todo.id}; caught by {ME} at review): '
-                    f'{todo.verdicts[-1].reason.text}')
+                    f'{todo.strikes[-1].reason}')
             order.on_record(line, 'Send-back')
 
 
