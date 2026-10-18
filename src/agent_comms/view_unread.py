@@ -542,8 +542,8 @@ class TranscriptReadState(ThreadOwnedState):
 
     def _discard_database(self) -> None:
         self._close_database()
-        for suffix in ("", "-journal", "-wal", "-shm"):
-            self.index_path.with_name(self.index_path.name + suffix).unlink(missing_ok=True)
+        for path in CoordinationStore.files(self.index_path):
+            path.unlink(missing_ok=True)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """Drop the reply projection of each deleted thread's transcript."""
