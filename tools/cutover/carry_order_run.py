@@ -37,11 +37,12 @@ def carry(root: Path, *, apply: bool) -> Counter[str]:
         db.execute("BEGIN IMMEDIATE")
         try:
             table = Todo.declared_name
-            rows = db.execute(f'SELECT "id", "text", "order" FROM "{table}"').fetchall()
+            rows = db.execute(
+                f'SELECT "id", "text", "order" FROM "{table}" '
+                """WHERE json_type("order", '$.run') IS NULL"""
+            ).fetchall()
             for todo_id, body, saved in rows:
                 order = json.loads(saved)
-                if "run" in order:
-                    continue
                 run = declared_run(body)
                 counts[run.declared_name] += 1
                 db.execute(
