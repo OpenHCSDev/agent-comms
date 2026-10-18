@@ -206,8 +206,8 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(tm
     assert status == 1
     assert report["delta"][f"FamilyFlattened:{repo.root}/first.py"] == -2
     assert report["delta"][f"FamilyFlattened:{repo.root}/second.py"] == 1
-    assert FamilyFlattened.occurrences(ast.parse(original).body[0].body[0]) == (
-        AuditFamilyFlattened.count(ast.parse(original).body[0].body[0])
+    assert FamilyFlattened.count(original.encode(), "consumer.py") == (
+        AuditFamilyFlattened.count(ast.parse(original))
     )
     original_modules = tuple(module for module in FamilyFlattened.mechanism_modules
                              if module.parent == Path(repo.root))
@@ -244,10 +244,7 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(tm
 def test_family_name_owner_reads_and_codec_detours(source: str, expected: int):
     from tools.debt_ratchet import FamilyFlattened
 
-    tree = ast.parse(source)
-    before = ast.dump(tree)
-    assert FamilyFlattened.occurrences(tree) == expected
-    assert ast.dump(tree) == before
+    assert FamilyFlattened.count(source.encode(), "consumer.py") == expected
 
 
 def test_small_owners_stay_within_the_class_threshold(repo: Repository) -> None:

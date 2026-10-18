@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import copy
 import io
 import json
 import os
@@ -419,7 +418,7 @@ class BroadExceptDefault(PerFileOccurrenceMeasure):
                    and any(cls.returns_default(statement) for statement in node.body))
 
 
-class FamilyFlattened(PerFileOccurrenceMeasure, ast.NodeTransformer):
+class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
     """Keep audit behavior checks, excluding owned identity and exposing codec detours."""
 
     def __init__(self) -> None:
@@ -462,18 +461,12 @@ class FamilyFlattened(PerFileOccurrenceMeasure, ast.NodeTransformer):
     })
 
     @classmethod
-    def occurrences(cls, node: ast.AST) -> int:
-        if not isinstance(node, ast.Module):
-            return 0
-        projection = cls()
-        tree = projection.visit(copy.deepcopy(node))
-        return AuditFamilyFlattened.count(tree) + projection.round_trips
-
-    @classmethod
     def count(cls, source: bytes, filename: str) -> int:
         if Path(filename) in cls.mechanism_modules:
             return 0
-        return super().count(source, filename)
+        projection = cls()
+        tree = projection.visit(ast.parse(source, filename))
+        return AuditFamilyFlattened.count(tree) + projection.round_trips
 
 
 class DispatchCases(MroDispatch):
