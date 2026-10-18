@@ -6,6 +6,7 @@ import logging
 import os
 import shlex
 import shutil
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
@@ -102,8 +103,17 @@ class OwnerStartResult:
     launched: bool
 
 
-class OwnerRelease:
+class OwnerRelease(ABC):
     """An exact release or its absence; neither grants permission to replay."""
+    @abstractmethod
+    def current(self, snapshot, expected, claim_scope) -> bool: ...
+    @abstractmethod
+    def matches(self, expected) -> bool: ...
+    @abstractmethod
+    def require_native_loss(self, snapshot, source): ...
+
+
+class NoRelease(OwnerRelease):
     def current(self, snapshot, expected, claim_scope) -> bool:
         return False
 
@@ -112,10 +122,6 @@ class OwnerRelease:
 
     def require_native_loss(self, snapshot, source):
         raise RelationViolationError("native owner release acknowledgement is missing")
-
-
-class NoRelease(OwnerRelease):
-    pass
 
 
 @dataclass(frozen=True)
