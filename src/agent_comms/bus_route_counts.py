@@ -437,8 +437,6 @@ class BusRouteCounts:
 
 
 class OpenedRouteCounts(BusRouteCounts):
-    blocking: ClassVar[bool] = False
-
     def __init__(
         self, bus_path: Path, source: WireSnapshot,
         registry: RegistryProvenance, deliveries: Mapping[str, DeliveryScope],
@@ -456,7 +454,7 @@ class OpenedRouteCounts(BusRouteCounts):
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
     def _prepare(self) -> None:
-        self._preparation = self.sync(self.source, self._decode, blocking=self.blocking)
+        self._preparation = self.sync(self.source, self._decode, blocking=False)
 
     def _acquire(self) -> OpenedRouteCounts:
         self._prepare()
@@ -620,12 +618,10 @@ class OpenedRouteCounts(BusRouteCounts):
                 "exceptions":json.dumps(seen.exceptions)}))
 
 
-class WaitingRouteCounts(OpenedRouteCounts):
-    """A stream waits for its projection writer, without replacing the stream."""
-
-    blocking = True
+class CompletingRouteCounts(OpenedRouteCounts):
+    """A reader that may wait completes the index one short-locked unit at a time."""
 
     def _prepare(self) -> None:
-        super()._prepare()
+        self._preparation = self.sync(self.source, self._decode)
         while not self._preparation.complete:
-            super()._prepare()
+            self._preparation = self.sync(self.source, self._decode)

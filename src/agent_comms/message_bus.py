@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_activity_index import ActivityClocks, BusActivityIndex
-from .bus_route_counts import OpenedRouteCounts, WaitingRouteCounts
+from .bus_route_counts import CompletingRouteCounts, OpenedRouteCounts
 from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
@@ -60,11 +60,13 @@ class MessageBus:
         private_response_writes: bool = False,
         private_initial_writes: bool = False,
         private_claim_writes: bool = False,
+        projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ):
         from .catalog_store import ChannelCatalog
         from .read_ledger import ReadLedger
 
         self.reads = ReadLedger.at(bus_path.parent)
+        self.projection = projection
         self.log = WireLog(bus_path)
         self.history = HistoryArchive(bus_path)
         self._registry = registry
@@ -164,7 +166,7 @@ class MessageBus:
             async for _ in changes:
                 snapshot = self._registry.snapshot()
                 messages = await asyncio.to_thread(
-                    self.inbox_at, name, snapshot, after=after, projection=WaitingRouteCounts)
+                    self.inbox_at, name, snapshot, after=after, projection=CompletingRouteCounts)
                 if not reader.current(self._registry.snapshot()):
                     raise UnregisteredThreadError("Watched thread was removed or replaced")
                 for message in messages:
@@ -201,7 +203,7 @@ class MessageBus:
         seen = {
             actor: basis.document.cursor(actor, basis.registry, source) for actor in deliveries
         }
-        with OpenedRouteCounts(self.log.path, source, basis.registry, deliveries) as index:
+        with self.projection(self.log.path, source, basis.registry, deliveries) as index:
             counts = index.unseen_counts(seen)
         return {name: counts[actor] for name, actor in actors.items()}
 

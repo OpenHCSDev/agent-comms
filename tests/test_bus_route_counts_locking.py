@@ -90,3 +90,31 @@ def test_reader_beyond_rebuild_bound_is_rebuilding(tmp_path, monkeypatch):
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
     with pytest.raises(RouteIndexRebuilding), comms.bus.snapshot(viewer=NamedViewer("recipient")) as (basis, source):
         comms.bus.pending_counts_opened(source, basis)
+
+
+def test_cli_who_completes_unindexed_history_that_the_ui_reads_unit_by_unit(
+    tmp_path, monkeypatch, capsys
+):
+    import json
+
+    from agent_comms.cli import main
+
+    monkeypatch.setattr(
+        "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
+    )
+    comms = wire(tmp_path)
+    comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
+    comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(tmp_path)))
+    for body in ("first", "second", "third"):
+        comms.messaging.send_message("sender", "recipient", body)
+    assert not BusRouteCounts(comms.bus.log.path).path.exists()
+    monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
+
+    with pytest.raises(RouteIndexRebuilding), comms.bus.snapshot(
+        viewer=NamedViewer("recipient")
+    ) as (basis, source):
+        comms.bus.pending_counts_opened(source, basis)
+
+    assert main(["--root", str(tmp_path), "who"]) == 0
+    who = {row["name"]: row["pending"] for row in json.loads(capsys.readouterr().out)["who"]}
+    assert who["recipient"] == 3
