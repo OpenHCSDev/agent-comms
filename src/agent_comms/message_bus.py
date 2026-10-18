@@ -13,6 +13,7 @@ from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
+from .maintenance_barrier import MaintenanceBarrier
 from .historical_views import HistoryArchive
 from .message_page import (
     NEWEST_PAGE, MessagePage, MessagePageRequest, PageBounds,
@@ -146,10 +147,13 @@ class MessageBus[Writes: Publisher]:
         Closing before the next read leaves the last message unread.
         """
         reader = self._registry.require(name).incarnation
+        maintenance = MaintenanceBarrier(self._registry.store.path)
         async with aclosing(
-            WireWatch.observations(WatchSource.wire(self.log.path.parent))
+            WireWatch.observations(WatchSource.wire(self.log.path.parent),
+                                   WatchSource.file(maintenance.state_path))
         ) as changes:
             async for _ in changes:
+                maintenance.read().require_open()
                 snapshot = self._registry.snapshot()
                 messages = await asyncio.to_thread(
                     self.inbox_at, name, snapshot, after=after)
@@ -160,6 +164,15 @@ class MessageBus[Writes: Publisher]:
                     yield message
                     acknowledgment.taken(self.reads, displayed)
                     after = message.reference
+
+    async def resumed(self) -> None:
+        """Return once maintenance has cleared; each change to its state wakes the check."""
+        maintenance = MaintenanceBarrier(self._registry.store.path)
+        watched = WatchSource.file(maintenance.state_path)
+        async with aclosing(WireWatch.observations(watched)) as changes:
+            async for _ in changes:
+                if not maintenance.read().turn_pending:
+                    return
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
