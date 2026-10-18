@@ -7,23 +7,23 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
 import asyncio
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
 from typing import ClassVar
 
-from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
 from .command import Command
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, TypedRow, TypedTable
+from .typed_table import Column, TypedStore, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
 from .change_report import FileLine
 from .goals import OrderCheck
@@ -128,6 +128,104 @@ class NotifiedFirstCallEvent(FirstCallEvent):
         return current.notify()
 
 
+class OrderWords(str):
+    """Text the commander writes; quoted, backticked, indented and path-like spans are someone else's words."""
+
+    CITED: ClassVar[re.Pattern] = re.compile(
+        r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b')
+    REFUSED: ClassVar[re.Pattern]
+    refusal: ClassVar[str]
+    least_words: ClassVar[int] = 1
+
+    def __new__(cls, text: str):
+        if refused := cls.refused(text):
+            raise ValueError(refused)
+        return super().__new__(cls, text)
+
+    @classmethod
+    def refused(cls, text: str) -> str | None:
+        found = cls.found(text)
+        if len(text.split()) < cls.least_words or cls.refuses(found):
+            return cls.refusal.format(cls.least_words, found)
+        return None
+
+    @staticmethod
+    def refuses(found: list[str]) -> bool:
+        return bool(found)
+
+    @classmethod
+    def found(cls, text: str) -> list[str]:
+        return sorted({m.group(0).lower() for m in cls.REFUSED.finditer(cls.CITED.sub(' ', text))})
+
+
+class PlainText(OrderWords):
+    """Prose in the words the user uses: no word that hides what happened."""
+
+    REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
+    refusal = "Jargon {1} hides what happened; say it plainly."
+
+
+class StrikeReason(PlainText):
+    """What a unit did, plainly, in enough words to stand on the public record."""
+
+    refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
+    least_words = 10
+
+
+class OrderText(OrderWords):
+    """An order states the edit; it never hands the decision back or asks permission."""
+
+    REFUSED = re.compile(r"\b(please|could you|would you|can you|if possible|consider|maybe|perhaps|when you get a chance|"
+                         r"feel free|if you (think|agree|want)|thoughts\??|what do you think|thanks|thank you|sorry|"
+                         r"no rush|optional(ly)?|up to you|might want|suggest)\b", re.I)
+    refusal = "Soft wording {1}: state the edit, do not ask."
+
+
+class BluntText(OrderWords):
+    """Witnessed incompetence is named as such: the text must call something stupid, slop or wrong."""
+
+    REFUSED = re.compile(r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|sloppy|theater|dumb|"
+                         r"worthless|broke|broken|pointless|waste)\b", re.I)
+    refusal = "Not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was."
+
+    @staticmethod
+    def refuses(found: list[str]) -> bool:
+        return not found
+
+
+class FairText(OrderWords):
+    """Paper 1 proves multiple parents derive every required pair with nothing outside, which composition and
+    forwarding supply outside (Fig 3, Thm 4.6): faulting inheritance itself is dogma, not a restated fact.
+    A Banned: line may name it."""
+
+    CITED = re.compile(OrderWords.CITED.pattern + r'|^Banned:.*$')
+    REFUSED = re.compile(r"composition over inheritance|(prefer|favou?r|use) composition|inherits (two|both|multiple|several|\d+)\b"
+                         r"|multiple (inheritance|parents) (is (bad|wrong|dangerous|confusing|fragile|slop)|causes|creates|smells|complicates)"
+                         r"|diamond problem|fragile base|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))"
+                         r"|too many (parents|base classes|mixins)|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+"
+                         r"|inheritance (abuse|soup|hell|is wrong)", re.I)
+    refusal = ("{1} faults inheritance itself. Name the restated fact in a Slop: line (identity, membership, "
+               "implementation or state) and the declaration that derives it.")
+
+
+class HierarchyText(OrderWords):
+    """A forwarder restates an implementation pair, so the cure is the hierarchy, never a route: text may not keep
+    a forwarder, and a Banned: item may forbid removing classes, bases or parents but not adding them."""
+
+    REFUSED = re.compile(r"(leave|keep|retain|preserve)[^.\n]{0,60}\bforward|forwarders? (stay|remain)|reach(es|ing)? through", re.I)
+    BANS: ClassVar[re.Pattern] = re.compile(r"\b(new class(es)?|new base|base class|changing the hierarchy|inheritance|mixins?|"
+                                            r"multiple parents|changing \w+State)\b", re.I)
+    UNDOES: ClassVar[re.Pattern] = re.compile(r"\b(flatten\w*|remov\w*|replac\w*|delet\w*|collaps\w*|single-parent|one-parent|merg\w*)\b", re.I)
+    refusal = ("{1} keeps a forwarder or bans fixing the hierarchy: fold the false owner into the real one or compose "
+               "providers as parents, and delete every route.")
+
+    @classmethod
+    def found(cls, text: str) -> list[str]:
+        banned = re.findall(r'(?m)^Banned:(.*)$', cls.CITED.sub(' ', text))
+        return super().found(text) + [item.strip() for line in banned for item in re.split(r',|;|\bor\b', line)
+                                      if cls.BANS.search(item) and not cls.UNDOES.search(item)]
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """One checked order lives on its Todo, independently of the unit's Goal."""
@@ -147,6 +245,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
             raise ValueError("An order requires edits and banned actions.")
         if any(not text.strip() for text in (self.id, self.report, *self.edits, *self.banned)):
             raise ValueError("Order text cannot be empty.")
+        for text in (self.report, *self.edits):
+            for family in (OrderText, FairText, HierarchyText):
+                family(text)
         self.at.require_recorded("An order")
         self.first_call_deadline.require_deadline()
 
@@ -308,6 +409,8 @@ class Assignment:
 
 
 class TodoState(DeclaredFamily, affix="TodoState"):
+    open: ClassVar[bool] = True  # on the board until closed with installed evidence
+
     @classmethod
     def prepare_change(cls, goals, current):
         pass
@@ -341,6 +444,8 @@ class BlockedTodoState(TodoState):
 
 
 class DoneTodoState(TodoState):
+    open: ClassVar[bool] = False
+
     @classmethod
     def prepare_change(cls, goals, current):
         current.order.require_close()
@@ -398,6 +503,7 @@ class StrikeTodo(TodoOperation):
         current.require_commander(self.actor)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
+        StrikeReason(self.reason)
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
 
 
@@ -550,11 +656,6 @@ class Todo(TypedTable):
         )
 
 
-@dataclass(frozen=True)
-class _TodoTable(TypedRow):
-    name: str
-
-
 def _text(value: str, label: str, limit: int) -> str:
     if type(value) is not str or not value.strip() or len(value) > limit:
         raise TodoError(f"{label} must be nonempty and at most {limit} characters.")
@@ -589,7 +690,8 @@ def _repo(value: str) -> str:
     return value.lower()
 
 
-class TodoStore:
+@dataclass(frozen=True, slots=True)
+class TodoStore(TypedStore):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain
@@ -597,75 +699,46 @@ class TodoStore:
     This store never launches a child.
     """
 
-    def __init__(self, root: Path):
-        directory = Path(root).resolve(strict=True)
-        if not directory.is_dir():
-            raise TodoError("Todo root must already exist.")
-        self.path = directory / "todos.sqlite3"
-        with closing(self._connect()) as db:
-            db.execute("PRAGMA journal_mode=WAL")
-            db.execute("BEGIN IMMEDIATE")
-            tables = _TodoTable.read(
-                db.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            )
-            if not tables:
-                Todo.create(db)
-            elif tables != [_TodoTable(FieldCodec.encode(Todo))]:
-                raise TodoError("Todo storage requires the one-shot durable migration.")
-            # Decode exactly the current declared columns; no runtime converters.
-            Todo.select(db, where="0")
-            db.execute("COMMIT")
+    root: Path
+    filename: ClassVar[str] = "todos.sqlite3"
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo,)
 
-    def _connect(self) -> sqlite3.Connection:
-        db = CoordinationStore.writer(self.path, isolation_level=None)
-        db.execute("PRAGMA synchronous=FULL")
-        return db
-
-    @contextmanager
-    def _write(self) -> Iterator[sqlite3.Connection]:
-        with closing(self._connect()) as db:
-            try:
-                db.execute("BEGIN IMMEDIATE")
-                yield db
-                db.execute("COMMIT")
-            except BaseException:
-                if db.in_transaction:
-                    db.execute("ROLLBACK")
-                raise
+    def _select(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
+        """Rows in creation order; an absent store has none, and a read never creates one."""
+        if not self.path.exists():
+            return ()
+        with self.snapshot() as db:
+            return self._rows(db, where, parameters)
 
     @staticmethod
-    def _current(db: sqlite3.Connection, todo_id: str) -> Todo:
-        row = Todo.one(db, id=todo_id)
-        if row is None:
+    def _rows(db: sqlite3.Connection, where: str, parameters: tuple) -> tuple[Todo, ...]:
+        return tuple(Todo.read(db.execute(
+            f"SELECT * FROM {Todo.declared_name} WHERE {where} ORDER BY rowid", parameters)))
+
+    @classmethod
+    def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:
+        if not rows:
             raise TodoError(f"Unknown todo: {todo_id}.")
-        return row
+        return rows[0]
+
+    @classmethod
+    def _current(cls, db: sqlite3.Connection, todo_id: str) -> Todo:
+        return cls._one(cls._rows(db, "id=?", (todo_id,)), todo_id)
 
     def get(self, todo_id: str) -> Todo:
         _text(todo_id, "Todo ID", 128)
-        with closing(self._connect()) as db:
-            return self._current(db, todo_id)
+        return self._one(self._select("id=?", (todo_id,)), todo_id)
 
     def list(self, repo: str) -> tuple[Todo, ...]:
-        with closing(self._connect()) as db:
-            return tuple(
-                Todo.read(
-                    db.execute(
-                        f"SELECT * FROM {Todo.declared_name} WHERE repo=? ORDER BY rowid",
-                        (_repo(repo),),
-                    )
-                )
-            )
+        return self._select("repo=?", (_repo(repo),))
 
     def for_goal(self, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
-        with closing(self._connect()) as db:
-            return tuple(Todo.select(db,
-                where="json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? AND json_extract(assignment,'$.generation')=?",
-                parameters=(owner.name, owner.created_at, goal_id)))
+        return self._select(
+            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
+            "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        with closing(self._connect()) as db:
-            return tuple(Todo.select(db, where="creator=? AND creator_created=?",
-                parameters=(commander.name, commander.created_at)))
+        return self._select("creator=? AND creator_created=?", (commander.name, commander.created_at))
 
     def create(
         self,
@@ -701,7 +774,7 @@ class TodoStore:
             deadline=deadline,
             order=order,
         )
-        with self._write() as db:
+        with self.writing() as db:
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)
@@ -709,7 +782,7 @@ class TodoStore:
             return current
 
     def apply(self, todo_id: str, command: TodoOperation) -> Todo:
-        with self._write() as db:
+        with self.writing() as db:
             current = self._current(db, todo_id)
             result = command.apply(current)
             if result == current:

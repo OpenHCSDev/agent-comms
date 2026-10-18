@@ -108,9 +108,7 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
 )
 async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tmp_path):
     comms = Comms(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    package = Path(os.environ["AC_NATIVE_COPIED_PACKAGE"])
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(
         comms,
         auto_wake=False,

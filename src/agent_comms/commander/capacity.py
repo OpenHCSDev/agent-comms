@@ -7,7 +7,7 @@ forks/NAME.beat; a beat younger than BEAT_AGE is a live fork. While load needs m
 live, order refuses the main commander's actions and rotate prints FORK NOW, so the only
 way forward is forking a slice.
 """
-import json, math, os, sys, time
+import math, os, sys, time
 
 from .config import CommanderConfig
 
@@ -18,8 +18,8 @@ BEAT_AGE = 10 * 60
 
 def load() -> tuple[float, str]:
     from . import judge, order
-    owed = [o for orders in json.load(open(order.DEADLINES)).values() for o in orders]
-    overdue = sum(1 for o in owed if time.time() > order.due_at(o))
+    owed = [t for t in order.open_todos() if t.pending]
+    overdue = sum(1 for t in owed if time.time() > t.deadline.at)
     unjudged = len(judge.unjudged())
     return len(owed) + 2 * overdue + unjudged / 10, f'{len(owed)} open orders, {overdue} overdue, {unjudged} unjudged edits'
 

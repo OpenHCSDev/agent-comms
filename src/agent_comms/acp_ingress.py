@@ -91,31 +91,11 @@ class AcpIngress:
     def _project_launch(self, child_env: dict[str, str]) -> None:
         """Publish the captured root into the child only after acquiring the locks."""
         from .active_route import read_active_route
-        from .private_nk_entrypoint import PrivateNkLaunch
-        from .launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 
-        root = self.selection.root
-        child_env["AGENT_COMMS_ROOT"] = str(root)
-        if self.selection.implicit:
-            route = read_active_route()
-            if route is None:
-                return
-            if route != self.selection.route:
-                raise ValueError("ACP root changed before private launch")
-            for key, expected in (
-                (ROOT_ID_ENV, route.wire_root_id),
-                (PACKAGE_ENV, str(route.native_package)),
-            ):
-                if key in child_env and child_env[key] != expected:
-                    raise ValueError("ACP private launch identity conflicts with route")
-                child_env[key] = expected
-        elif ROOT_ID_ENV in child_env or PACKAGE_ENV in child_env:
-            # An explicit child root is independent of the default route, but
-            # inherited private-owner flags must belong to that explicit root.
-            launch = PrivateNkLaunch.from_environment(root, child_env)
-            if launch is None:
-                raise ValueError("ACP private launch selection is absent")
-            launch.validate()
+        child_env["AGENT_COMMS_ROOT"] = str(self.selection.root)
+        # The child derives its launch from this root; only the route must not move.
+        if self.selection.implicit and read_active_route() not in (None, self.selection.route):
+            raise ValueError("ACP root changed before private launch")
 
     async def spawn(
         self, argv: tuple[str, ...], *, env: Mapping[str, str],

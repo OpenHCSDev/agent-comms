@@ -8,6 +8,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from .channel_targets import BuiltinChannel, ChannelTarget, Tag
 from .declared_family import DeclaredFamily
@@ -16,6 +17,9 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .messages import MembershipChange
 from .threads import Thread
+
+if TYPE_CHECKING:
+    from .registry_document import RosterVisibility
 
 
 class ChannelMemberIndex(dict[str, tuple[Thread, ...]]):
@@ -129,8 +133,8 @@ class Channel(DeclaredFamily, affix="Channel"):
 class Channels(dict[str, Channel]):
     """The captured declarations select the channels shown by a roster."""
 
-    def visible(self, show_archived: bool) -> Iterator[Channel]:
-        return (channel for channel in self.values() if show_archived or not channel.archived)
+    def visible(self, visibility: RosterVisibility) -> Iterator[Channel]:
+        return (channel for channel in self.values() if visibility.archived or not channel.archived)
 
 
 class PredicateChannel:

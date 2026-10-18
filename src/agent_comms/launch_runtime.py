@@ -13,9 +13,6 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText
 
-ROOT_ID_ENV = "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"
-PACKAGE_ENV = "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE"
-
 
 class CallingThreadUnavailable(RelationViolationError):
     """The process environment does not declare its owner thread."""
@@ -108,14 +105,6 @@ class RestartEnvironment:
     root: str | None = field(
         default=None,
         metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_ROOT", "runtime": True},
-    )
-    root_id: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": ROOT_ID_ENV, "runtime": True},
-    )
-    package: str | None = field(
-        default=None,
-        metadata={"wire_omit_default": True, "wire_name": PACKAGE_ENV, "runtime": True},
     )
     default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
     native_config: Annotated[Path, PathText] = field(

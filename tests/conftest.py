@@ -3,6 +3,8 @@ from agent_comms.native_package import pinned_native_package
 
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
+import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -14,8 +16,6 @@ from native_backend_fixture import native_backend_fixture
 
 _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "AGENT_COMMS_MANAGED",
-    "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE",
-    "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID",
     "AGENT_COMMS_PROJECT_REQUEST",
     "AGENT_COMMS_PROJECT_SOCKET",
     "AGENT_COMMS_ROOT",
@@ -47,6 +47,47 @@ def _deferred_candidate_scheduler_is_explicit(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
     )
+
+
+@pytest.fixture
+def private_directory():
+    """A throwaway directory on physical /var/tmp; private N/K publication refuses /tmp."""
+    if (
+        os.name != "posix"
+        or not Path("/var/tmp").is_dir()
+        or Path("/var").is_symlink()
+        or Path("/var/tmp").is_symlink()
+    ):
+        pytest.skip("a private bus needs a physical /var/tmp")
+    with tempfile.TemporaryDirectory(prefix="ac-private-", dir="/var/tmp") as directory:
+        yield Path(directory)
+
+
+@pytest.fixture
+def declared_native_package(tmp_path_factory, monkeypatch) -> Path:
+    """This test's own pin and the package directory it names; nothing is prepared."""
+    from agent_comms import native_package
+
+    manifest = tmp_path_factory.mktemp("declared-stack") / native_package.MANIFEST.name
+    manifest.write_text("# a test-owned pin\n")
+    monkeypatch.setattr(native_package, "MANIFEST", manifest)
+    package = native_package.pinned_location()
+    package.mkdir(parents=True)
+    return package
+
+
+@pytest.fixture
+def private_comms(private_directory):
+    """One throwaway private bus, built as production builds one.
+
+    Its launch derives like any private root's: the marker installed here
+    gives the root ID, this installation the package.
+    """
+    root = private_directory / "wire"
+    root.mkdir(mode=0o700)
+    comms = Comms(root, private_initial_writes=True)
+    comms.messaging.initialize_private_initial_protocol()
+    return comms
 
 
 @pytest.fixture
@@ -117,6 +158,43 @@ def root(tmp_path: Path) -> Path:
 @pytest.fixture
 def comms(root: Path) -> Comms:
     return Comms(root)
+
+
+@pytest.fixture
+def commander(comms: Comms, tmp_path: Path):
+    """A commander thread "lead" and a unit "worker" holding an ordinary goal, called as lead."""
+    from agent_comms.goal_actions import SetGoalAction
+    from agent_comms.tool_caller import ThreadCaller
+
+    for created, name in enumerate(("lead", "worker"), 1):
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=float(created)))
+    comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
+    return comms, ThreadCaller("lead")
+
+
+@pytest.fixture
+def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The order script installed for lead on the commander bus, with a git checkout its orders check."""
+    import importlib
+    import subprocess
+    import sys
+
+    from agent_comms.commander.config import CommanderConfig
+
+    comms, _ = commander
+    monkeypatch.setenv("HOME", str(tmp_path))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for command in (("init", "-q"), ("remote", "add", "origin", "https://github.com/OpenHCSDev/agent-comms.git")):
+        subprocess.run(["git", "-C", str(repo), *command], check=True)
+    CommanderConfig(commander="lead", root=comms.root, cli=Path(sys.executable).parent / "agent-comms",
+        state=tmp_path / "state", board=tmp_path / "board.md", narrative=tmp_path / "narrative.md",
+        skill=tmp_path / "skill.md", rules=(), repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
+        disk=tmp_path).write(tmp_path)
+    CommanderConfig.installed.cache_clear()
+    from agent_comms.commander import order
+    yield importlib.reload(order), repo
+    CommanderConfig.installed.cache_clear()
 
 
 @pytest.fixture

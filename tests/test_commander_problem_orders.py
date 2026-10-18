@@ -1,4 +1,5 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
+import importlib
 import subprocess
 
 import pytest
@@ -18,15 +19,6 @@ from agent_comms.todos import (AwaitingFirstCall, CleanHunt, CommitDelivery, Fir
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     RecordHuntTodo, StrikeTodo, Todo)
-
-
-@pytest.fixture
-def commander(tmp_path):
-    comms = Comms(tmp_path / 'wire')
-    for created, name in enumerate(('lead', 'worker'), 1):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=float(created)))
-    comms.goals.update_goal('worker', SetGoalAction(text='Original commander brief', goal_id='ongoing'))
-    return comms, ThreadCaller('lead')
 
 
 def order(root, identity, command='printf 1', expected=1):
@@ -178,3 +170,44 @@ def test_commit_delivery_records_the_actual_clean_commit_time(commander):
 def test_delivery_time_has_its_own_named_requirement():
     with pytest.raises(ValueError, match='delivery'):
         UnrecordedEventTime().require_delivery()
+
+
+def test_commander_script_records_every_order_step_in_core(commander, commander_script):
+    """problem, send, strike, hunt, done and close each change the Todo in Core; no order state is written to files."""
+    comms, _ = commander
+    script, repo = commander_script
+    git = lambda *a: subprocess.run(['git', '-C', str(repo), *a], check=True, capture_output=True, text=True).stdout.strip()
+    (repo / 'count.txt').write_text('0\n')
+    git('add', '.')
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base')
+    body = repo.parent / 'order.txt'
+    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
+                    "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
+                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    due = '23:59'
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', due, str(body))
+    created = comms.goals.todos.get('P1')
+    assert (created.assignment.owner, created.order.edits, created.order.banned) == (
+        'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
+
+    script.send('worker', due, str(body))  # the same holder again without --clean is a send-back
+    sent_back = comms.goals.todos.get('P1')
+    assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    assert 'Set count.txt to 1.' in judge.my_messages('worker')[0]['text']
+
+    script.hunt(f'{__file__}:1', 'the counter is reread per event and the order replaces it with one read', sent_back.order.id)
+    assert [h.sent for h in comms.goals.todos.get('P1').hunts] == [sent_back.order.id]
+
+    (repo / 'count.txt').write_text('1\n')
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'fix')
+    script.done('P1', git('rev-parse', 'HEAD'))
+    assert not comms.goals.todos.get('P1').pending
+
+    artifact = repo.parent / 'seen.png'
+    artifact.write_text('x')
+    script.close('P1', 'the installed app shows the counter at one after restart', str(artifact))
+    assert not comms.goals.todos.get('P1').state.open and script.open_todos() == []
+    assert not {'problems.json', 'deadlines.json', 'closed.jsonl', 'strikes.jsonl', 'done.jsonl',
+                'sent.jsonl', 'hunts.jsonl'} & {
+        path.name for path in (repo.parent / 'state').iterdir()}

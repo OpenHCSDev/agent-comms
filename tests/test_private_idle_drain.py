@@ -465,12 +465,7 @@ async def test_runtime_configuration_invalidates_idle_observation(tmp_path, monk
     assert await agent.inputs.drain_inbox("beta") == 0
     agent.sessions.runtime_enabled = True
     assert await agent.inputs.drain_inbox("beta") == 0
-    owners = agent._comms.owners
-    owners._private_nk_launch = replace(
-        owners.launch_authority, native_package=tmp_path / "replacement-package"
-    )
-    assert await agent.inputs.drain_inbox("beta") == 0
-    assert len(calls) == 6
+    assert len(calls) == 5
 
 
 def test_coordination_read_preserves_revision_and_repairs_exposed_mode(tmp_path):
