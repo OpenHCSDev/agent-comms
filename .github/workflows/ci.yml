@@ -38,7 +38,6 @@ jobs:
 
       - name: Build and check native compaction without a provider
         run: |
-          npm install -g --prefix "$HOME/.local/pi-npm" --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@0.85.1
           stack/bin/prepare-pi-native
           package=$(ls -d stack/.pi-native-*/node_modules/@earendil-works/pi-coding-agent)
           for mode in threshold overflow manual; do

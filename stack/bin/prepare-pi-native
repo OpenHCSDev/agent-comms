@@ -30,7 +30,6 @@ done
 
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_root=$(cd -- "$stack_root/.." && pwd)
-stock=${PI_STOCK_DIR:-$HOME/.local/pi-npm/lib/node_modules/@earendil-works/pi-coding-agent}
 manifest="$stack_root/pi-native.sha256"
 build_id=$(sha256sum "$manifest" | cut -c1-16)
 target="$stack_root/.pi-native-$build_id"
@@ -82,6 +81,31 @@ if [[ "$update_pins" == false && -e "$target" ]]; then
     exit 1
 fi
 
+# Stock Pi is the published package with the dependencies its own
+# npm-shrinkwrap.json names. A global install resolves them afresh, so its tree
+# depends on the day it ran. npm 12 reads only package-lock.json, and `npm ci`
+# also checks devDependencies, which the published lock leaves out; both are
+# changed for the install alone and the published package.json is restored.
+stock_spec=$(sed -n 's/^# agent-comms-native-stock-v1 //p' "$manifest")
+if [[ "$stock_spec" != @earendil-works/pi-coding-agent@* ]]; then
+    printf 'Pinned stock Pi is unavailable in %s\n' "$manifest" >&2
+    exit 1
+fi
+stock_root=$(mktemp -d "${TMPDIR:-/var/tmp}/agent-comms-pi-stock-XXXXXXXX")
+trap 'rm -rf -- "$stock_root"' EXIT
+stock="$stock_root/package"
+tarball=$(cd -- "$stock_root" && npm pack --silent "$stock_spec")
+tar -xzf "$stock_root/$tarball" -C "$stock_root"
+cp -- "$stock/package.json" "$stock_root/package.json"
+(
+    cd -- "$stock"
+    npm pkg delete devDependencies
+    cp -- npm-shrinkwrap.json package-lock.json
+    npm ci --omit=dev --ignore-scripts --no-audit --no-fund --loglevel=error
+    rm -- package-lock.json node_modules/.package-lock.json
+)
+cp -- "$stock_root/package.json" "$stock/package.json"
+
 # The experiment validates stock bytes, applies the pinned native ID patch with
 # zero fuzz, and checks JS syntax. Its Bedrock transport edit is intentionally
 # restored below: the running stack must not fork Pi's network layer.
@@ -97,7 +121,7 @@ if [[ "$prepared" != "${TMPDIR:-/var/tmp}"/agent-comms-pi-native-*/node_modules/
 fi
 
 stage=$(mktemp -d "$stack_root/.pi-native.stage.XXXXXXXX")
-trap 'rm -rf -- "$stage" "$scratch_root"' EXIT
+trap 'rm -rf -- "$stage" "$scratch_root" "$stock_root"' EXIT
 mv -- "$scratch_root/node_modules" "$stage/node_modules"
 cp -- "$stock/$bedrock" "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 compaction=dist/core/compaction/compaction.js
