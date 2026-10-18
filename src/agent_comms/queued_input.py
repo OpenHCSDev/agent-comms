@@ -18,7 +18,7 @@ from acp import RequestError
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import Id128Text
-from .goals import AbsentGoal, Goal, ThreadGoal
+from .goals import AbsentGoal, ThreadGoal
 from .image_inputs import ImageInput
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .coordination_cohort import pending_sealed_assignments

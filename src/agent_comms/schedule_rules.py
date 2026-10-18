@@ -94,10 +94,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                 state = inputs.state(session_id)
                 pending, state.pending_turns = state.pending_turns, []
                 goal = owner.active_goal
-                pending = goal.fold(
-                    lambda active: [turn for turn in pending if turn.goal_id == active.id],
-                    lambda: pending,
-                )
+                pending = [turn for turn in pending if goal.admits(turn.goal_id)]
                 if not pending:
                     continue
                 pending, remaining = ScheduledTurn.take_batch(pending)
@@ -115,8 +112,8 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     )
                 except RequestError as error:
 
-                    def unowned() -> "Goal":
-                        raise error
+                    def unowned() -> Goal:
+                        raise
 
                     started = goal.fold(lambda active: active, unowned)
                     pending[0].require_dependency_wake(error)

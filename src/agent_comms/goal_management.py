@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import replace
-from functools import cached_property
+from functools import cached_property, partial
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -301,9 +301,7 @@ class Goals:
                     continue
                 released.extend(
                     owner.active_goal.matching(goal_id).fold(
-                        lambda goal: self._release_finished_wait(
-                            snapshot, canonical, owner, goal, wait
-                        ),
+                        partial(self._release_finished_wait, snapshot, canonical, owner, wait=wait),
                         tuple,
                     )
                 )

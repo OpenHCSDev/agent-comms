@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .goal_waits import GoalWait
-    from .goals import Goal, ThreadGoal
+    from .goals import ThreadGoal
     from .queued_input import QueuedInput
     from .registry_document import RegistrySnapshot
     from .threads import Thread

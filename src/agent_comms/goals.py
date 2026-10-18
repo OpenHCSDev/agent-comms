@@ -362,6 +362,10 @@ class ThreadGoal(SubclassUnion):
     @abstractmethod
     def identifies(self, goal_id: str) -> bool: ...
 
+    @abstractmethod
+    def admits(self, goal_id: str | None) -> bool:
+        """Whether work queued for this goal identity may run under this record."""
+
     def matching(self, goal_id: str) -> ThreadGoal:
         """This record when it is the named goal, at any later state or revision."""
         return self if self.identifies(goal_id) else AbsentGoal()
@@ -420,6 +424,9 @@ class AbsentGoal(NullMember, ThreadGoal):
 
     def identifies(self, goal_id: str) -> bool:
         return False
+
+    def admits(self, goal_id: str | None) -> bool:
+        return True
 
     def continuing(self, captured: ThreadGoal) -> AbsentGoal:
         return self
@@ -496,6 +503,9 @@ class Goal(ThreadGoal):
 
     def identifies(self, goal_id: str) -> bool:
         return self.id == goal_id
+
+    def admits(self, goal_id: str | None) -> bool:
+        return self.identifies(goal_id)
 
     def continuing(self, captured: ThreadGoal) -> ThreadGoal:
         return self if captured.identifies(self.id) else AbsentGoal()

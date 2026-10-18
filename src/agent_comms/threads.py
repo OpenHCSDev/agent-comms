@@ -81,7 +81,9 @@ class Thread(ThreadProvenance):
         default=ServiceTier.PRIORITY, kw_only=True,
         metadata={"registration_inheritance": InheritPrevious},
     )
-    goal: ThreadGoal = field(default_factory=AbsentGoal, metadata={"registration_inheritance": InheritMissing})
+    goal: ThreadGoal = field(
+        default_factory=AbsentGoal, metadata={"registration_inheritance": InheritMissing}
+    )
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
                               metadata={"wire_required": True})
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)

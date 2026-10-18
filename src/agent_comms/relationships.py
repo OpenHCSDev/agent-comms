@@ -14,7 +14,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, replace
-from functools import cmp_to_key
+from functools import cmp_to_key, partial
 from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, ClassVar, Literal
@@ -724,7 +724,7 @@ class ThreadRelationships:
             for executor in thread.role.executor(thread)
         ):
             for projected, issues in owner.active_goal.fold(
-                lambda goal: ThreadRelationships._mention_projections(registry, owner, goal), tuple
+                partial(ThreadRelationships._mention_projections, registry, owner), tuple
             ):
                 contacts.extend(projected)
                 diagnostics.extend(issues)

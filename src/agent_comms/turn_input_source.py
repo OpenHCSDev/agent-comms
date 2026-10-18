@@ -16,7 +16,7 @@ from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 if TYPE_CHECKING:
     from .comms import Comms
     from .goal_waits import GoalWait
-    from .goals import Goal, ThreadGoal
+    from .goals import ThreadGoal
     from .input_disposition import InputDispositions
     from .thread_identity import RecordedThreadIncarnation, TurnId
     from .threads import Thread
