@@ -175,6 +175,10 @@ class EarlierItems(WatchLine):
     item_id: str
     request: RequestedEarlierPage
 
+    @classmethod
+    def from_row(cls, row):
+        return cls(turn_id=row.turn_id, item_id=row.item_id, request=row.earlier)
+
     async def handle(self, bridge, child: AttachedChild) -> None:
         await bridge.earlier(self)
 

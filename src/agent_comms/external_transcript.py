@@ -23,6 +23,7 @@ from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest
 from .transcript_sources import TranscriptSource
 from .typed_table import Column, TypedRow, TypedStore, TypedTable
+from .wire_watch import WatchSource, WireWatch
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,8 @@ class ExternalTurn(TypedRow):
 class ExternalPage(DeclaredFamily):
     """The continuation belonging to the oldest published item."""
 
-    available: ClassVar[bool] = False
+    def has_older(self, offset: int, row) -> bool:
+        return offset >= row.seq
 
     def request(self, transcript, row) -> bool:
         return False
@@ -50,7 +52,9 @@ class NoEarlierPage(ExternalPage):
 @dataclass(frozen=True)
 class EarlierPage(ExternalPage):
     cursor: str
-    available: ClassVar[bool] = True
+
+    def has_older(self, offset: int, row) -> bool:
+        return True
 
     def request(self, transcript, row) -> bool:
         with transcript.writing() as connection:
@@ -68,8 +72,7 @@ class RequestedEarlierPage(EarlierPage):
         return True  # A deferred read keeps the request without another write.
 
     def frames(self, row) -> tuple:
-        from .cli_protocol import EarlierItems
-        return (EarlierItems(turn_id=row.turn_id, item_id=row.item_id, request=self),)
+        return (row,)
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,9 @@ class ExternalPageRow(TypedRow):
     item_id: str = field(metadata={"sql": Column(primary_key=True)})
     seq: int
     earlier: ExternalPage = field(default_factory=NoEarlierPage, kw_only=True)
+
+    def has_older(self, offset: int) -> bool:
+        return self.earlier.has_older(offset, self)
 
     def continue_with(self, connection, earlier: ExternalPage) -> None:
         ExternalItemRow.update(connection, where="thread=? AND turn_id=? AND item_id=?",
@@ -182,7 +188,7 @@ class ExternalTranscriptRead(TranscriptSource):
         if self.connection is None:
             return False
         rows = self.transcript.oldest(self.connection)
-        return bool(rows) and (offset >= rows[0].seq or rows[0].earlier.available)
+        return bool(rows) and rows[0].has_older(offset)
 
     def current_draft(self) -> ExternalDraftRow | None:
         if self.connection is None:
@@ -275,9 +281,10 @@ class ExternalTranscript(TranscriptSource, TypedStore):
             return False
         with self.snapshot() as connection:
             rows = self.oldest(connection)
-        if not rows or offset >= rows[0].seq or not rows[0].earlier.available:
+        if not rows or offset >= rows[0].seq:
             return False
-        return rows[0].earlier.request(self, rows[0])
+        row, = rows
+        return row.has_older(offset) and row.earlier.request(self, row)
 
     def pending(self, request) -> bool:
         with self.snapshot() as connection:
@@ -305,7 +312,6 @@ class ExternalTranscript(TranscriptSource, TypedStore):
             oldest.continue_with(connection, earlier)
 
     async def watch_requests(self, emit) -> None:
-        from .wire_watch import WatchSource, WireWatch
         previous = ()
         async for _ in WireWatch.observations(*(WatchSource.modified_file(path)
                                                for path in self.source_paths(self.root))):

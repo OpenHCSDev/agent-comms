@@ -37,7 +37,7 @@ from .transcript_sources import (
     AssignedSourceCursor, AssignedTranscriptSource, EarlierTranscript, NoWireFrontier,
     LaterTranscript, LiveAssignedTranscriptSource, TranscriptSource, WireFrontier,
 )
-from .coordination_errors import StaleRevision, TranscriptChanged
+from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
 from .coordination_database import CoordinationStore
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_response import _assert_response_schema
@@ -589,7 +589,6 @@ class Transcripts:
             has_older = reader.has_older(start.offset) or start.wire.sequence > 0
         events = traversal.finish(records)
         if not traversal.ascending and page.records.request_earlier(start.offset) and not events:
-            from .coordination_errors import CoordinationReadUnavailable
             raise CoordinationReadUnavailable("Waiting for the bridge's earlier transcript page")
         if page.inherited and not after and (cursor is None or cursor == frontier):
             events = (*events, *self._fork_start_events(thread))

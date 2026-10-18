@@ -8,7 +8,7 @@ from aiohttp import web
 
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.shared import Binding, ThreadOutput, Watch
-from agent_comms.cli_protocol import WATCH_LINE
+from agent_comms.cli_protocol import EarlierItems, WATCH_LINE
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.external_transcript import ExternalItemRow
@@ -59,7 +59,8 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
                                                    execution=ExternalThreadExecution))
     transcript = comms.transcripts.external('cli')
     frames = asyncio.Queue()
-    watching = asyncio.create_task(transcript.watch_requests(frames.put_nowait))
+    watching = asyncio.create_task(transcript.watch_requests(
+        lambda row: frames.put_nowait(EarlierItems.from_row(row))))
     try:
         binding = Binding(str(comms.root), 'cli', 'thread')
         with Binding.open(tmp_path / 'bridge') as db:
