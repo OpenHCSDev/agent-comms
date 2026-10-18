@@ -59,3 +59,7 @@ class RulesDue(ReasonedStandingRule):
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
         return rules.stale(commander)
+
+    @classmethod
+    def broken_at(cls, comms: Comms, commander: str) -> float | None:
+        return refusal[1] if (refusal := rules.refused(commander)) else None
