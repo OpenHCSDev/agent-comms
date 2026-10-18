@@ -1,5 +1,7 @@
 """The opt-in channel activity feed is a local display, never wire authority."""
 
+from agent_comms.read_basis import NamedViewer
+from agent_comms.presentation import ReadThrough
 import json
 from contextlib import contextmanager
 from dataclasses import replace
@@ -40,7 +42,7 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     comms.messaging.send("outsider", "bob", "explicit @alice mention")
     comms.messaging.send("outsider", "#ui", "unrelated channel")
     comms.messaging.send("outsider", "bob", "ordinary outsider DM")
-    with comms.bus.snapshot(viewer="alice") as (basis, source):
+    with comms.bus.snapshot(viewer=NamedViewer("alice", comms.registry.snapshot())) as (basis, source):
         before_delivery = comms.bus.pending_counts_opened(source, basis)
     before_wire = tmp_path.joinpath("bus.jsonl").read_bytes()
     assert bodies(comms.views.channel_history_page("#api")) == ["exact target"]
@@ -62,7 +64,7 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     assert [message.body for message in list(comms.views.channel_history_page("#api").messages)] == ["exact target"]
     assert bodies(comms.views.channel_display_page("#ui")) == ["unrelated channel"]
     assert tmp_path.joinpath("bus.jsonl").read_bytes() == before_wire
-    with comms.bus.snapshot(viewer="alice") as (basis, source):
+    with comms.bus.snapshot(viewer=NamedViewer("alice", comms.registry.snapshot())) as (basis, source):
         assert comms.bus.pending_counts_opened(source, basis) == before_delivery
     assert not comms.channels.set_channel_any_mode("api", False).any_mode
     assert bodies(comms.views.channel_display_page("#api")) == ["exact target"]
@@ -411,11 +413,11 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
     assert started.wait(timeout=3)
     try:
         for _ in range(20):
-            page = comms.views.channel_display_page("#api", worktree=str(tmp_path))
+            page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name, comms.registry.snapshot()))
             if page.newest_seq is not None:
                 comms.views.mark_channel_view_read(
-                    "#api", worktree=str(tmp_path), through=page.newest_seq,
-                    expected_scope=page.display_scope,
+                    "#api", worktree=str(tmp_path),
+                    mark=ReadThrough(page.newest_seq, page.display_scope),
                 )
             dm = comms.views.dm_display_page("alice", worktree=str(tmp_path))
             assert bodies(dm) == ["DM original"]
@@ -426,7 +428,7 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
     finally:
         writer.join(timeout=10)
     assert finished.is_set() and not writer.is_alive() and not failures
-    page = comms.views.channel_display_page("#api", worktree=str(tmp_path))
+    page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name, comms.registry.snapshot()))
     assert bodies(page) == [f"burst {n}" for n in range(20)]
     comms.registry.rename("alice", "renamed")
     with pytest.raises(ValueError, match="incarnation changed"):

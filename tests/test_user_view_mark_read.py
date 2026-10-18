@@ -1,5 +1,6 @@
 """Explicit human Mark read never acknowledges a persistent agent's inbox."""
 
+from agent_comms.read_basis import NamedViewer
 import json
 
 import pytest
@@ -80,7 +81,7 @@ def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
     comms.messaging.send("sender", "#ci", "Channel message")
     # An open UI has already counted unread messages and shown a page.
     comms.views.viewer_snapshot(str(tmp_path))
-    comms.views.presentation.channel_page("#ci", viewer=viewer)
+    comms.views.presentation.channel_page("#ci", viewer=NamedViewer(viewer, comms.registry.snapshot()))
     comms.messaging.send("sender", viewer, "Later human DM")
     comms.messaging.send("sender", "#ci", "Later channel message")
     log_size = comms.bus.log.path.stat().st_size

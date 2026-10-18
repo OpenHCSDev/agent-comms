@@ -21,6 +21,8 @@ from .message_page import (
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
+    AnonymousViewer,
+    DisplayViewer,
     ChannelDisplayScope,
     DMDisplayScope,
     ListedDeliveries,
@@ -103,7 +105,7 @@ class MessageBus:
 
     @contextmanager
     def snapshot(
-        self, viewer: str | None = None
+        self, viewer: DisplayViewer = AnonymousViewer()
     ) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
         """Keep a fixed bus, namespace and read snapshot after releasing its locks.
 

@@ -1,5 +1,6 @@
 """Retained history never becomes work for a different thread incarnation."""
 
+from agent_comms.read_basis import NamedViewer
 import os
 import sqlite3
 from collections import Counter
@@ -22,7 +23,7 @@ def consistent(comms, *names):
     for name in names:
         inbox = comms.bus.inbox(name)
         assert bulk[name] == comms.bus.pending_count(name) == len(inbox)
-        with comms.bus.snapshot(viewer=name) as (basis, source):
+        with comms.bus.snapshot(viewer=NamedViewer(name, comms.registry.snapshot())) as (basis, source):
             scope = DeliveryScope.capture(name, basis.registry, basis.catalog)
             assert comms.bus.pending_counts_opened(source, basis) == Counter(
                 scope.conversation(row.sender, row.target) for row in inbox
@@ -43,7 +44,7 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, rebound)
     comms.messaging.send("sender", "#team", "current channel input")
     current = wire(tmp_path)
     consistent(current, "sender", "recipient")
-    with current.bus.snapshot(viewer="recipient") as (basis, source):
+    with current.bus.snapshot(viewer=NamedViewer("recipient", current.registry.snapshot())) as (basis, source):
         assert current.bus.pending_counts_opened(source, basis) == {"sender": 1, "#team": 1}
     assert [row.seq for row in current.bus.inbox("recipient", "sender")] == [new.seq]
     assert old in list(current.bus.full_history_page().messages)
@@ -93,15 +94,15 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for number in range(5):
         comms.messaging.send_message("sender", viewer, f"row {number}")
-    with comms.bus.snapshot(viewer=viewer) as (pending_basis, pending_source):
+    with comms.bus.snapshot(viewer=NamedViewer(viewer, comms.registry.snapshot())) as (pending_basis, pending_source):
         assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 5}
 
     reader = wire(tmp_path)
-    with reader.bus.snapshot(viewer=viewer) as (basis, stale):
+    with reader.bus.snapshot(viewer=NamedViewer(viewer, reader.registry.snapshot())) as (basis, stale):
         comms.messaging.send_message("sender", viewer, "after the reader's cut")
         # Another reader indexes a later cut while this cut is held.
         observer = wire(tmp_path)
-        with observer.bus.snapshot(viewer=viewer) as (pending_basis, pending_source):
+        with observer.bus.snapshot(viewer=NamedViewer(viewer, observer.registry.snapshot())) as (pending_basis, pending_source):
             assert observer.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 6}
         with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
             assert reader.bus.pending_counts_opened(stale, basis) == {"sender": 5}
@@ -129,15 +130,15 @@ def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for number in range(5):
         comms.messaging.send_message("sender", viewer, f"row {number}")
-    with comms.bus.snapshot(viewer=viewer) as (pending_basis, pending_source):
+    with comms.bus.snapshot(viewer=NamedViewer(viewer, comms.registry.snapshot())) as (pending_basis, pending_source):
         assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 5}
 
     reader = wire(tmp_path)
-    with reader.bus.snapshot(viewer=viewer) as (basis, stale):
+    with reader.bus.snapshot(viewer=NamedViewer(viewer, reader.registry.snapshot())) as (basis, stale):
         comms.messaging.send_message("sender", viewer, "after the reader's cut")
         comms.messaging.send_message("sender", viewer, "one more after it")
         observer = wire(tmp_path)
-        with observer.bus.snapshot(viewer=viewer) as (pending_basis, pending_source):
+        with observer.bus.snapshot(viewer=NamedViewer(viewer, observer.registry.snapshot())) as (pending_basis, pending_source):
             assert observer.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 7}
         path = comms.bus.log.path
         with open(path, "rb") as scan:
@@ -203,7 +204,7 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_
     first = comms.bus.publisher.publish_ordinary(
         Message("sender", viewer, "inside cut", InfoKind, timestamp=birth + 2)
     )
-    with comms.bus.snapshot(viewer=viewer) as (basis, source):
+    with comms.bus.snapshot(viewer=NamedViewer(viewer, comms.registry.snapshot())) as (basis, source):
         later = comms.bus.publisher.publish_ordinary(Message(
             "sender", viewer, "outside cut", InfoKind,
             timestamp=birth - 1 if birth_crossing else birth + 3,
@@ -211,7 +212,7 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_
         comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
             viewer, (later,), basis.registry, comms.bus.log.path,
         ))
-        with comms.bus.snapshot(viewer=viewer) as (pending_basis, pending_source):
+        with comms.bus.snapshot(viewer=NamedViewer(viewer, comms.registry.snapshot())) as (pending_basis, pending_source):
             assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 1}
         later_reads = comms.bus.reads.read().cursor(
             viewer, basis.registry, source.revision.identity
@@ -235,9 +236,9 @@ def test_retained_source_uses_its_ledger_identity_after_path_replacement(tmp_pat
     comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
         viewer, (message,), comms.registry.snapshot(), comms.bus.log.path,
     ))
-    with comms.bus.snapshot(viewer=viewer) as (pending_basis, pending_source):
+    with comms.bus.snapshot(viewer=NamedViewer(viewer, comms.registry.snapshot())) as (pending_basis, pending_source):
         assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {}
-    with comms.bus.snapshot(viewer=viewer) as (basis, source):
+    with comms.bus.snapshot(viewer=NamedViewer(viewer, comms.registry.snapshot())) as (basis, source):
         replacement = tmp_path / "replacement.jsonl"
         copyfile(comms.bus.log.path, replacement)
         replacement.chmod(0o600)

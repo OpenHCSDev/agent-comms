@@ -13,15 +13,14 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from importlib.metadata import distribution
-from importlib.resources import files
 import os
 from pathlib import Path
 import subprocess
 import sys
-import uuid
 
 from agent_comms.active_route import read_active_route
 from agent_comms.comms import wire
+from agent_comms.harness_install import Harness, replace_link
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.restart_queue import enqueue
@@ -45,9 +44,7 @@ class RuntimePublication:
             for entry in distribution(package).entry_points
             if entry.group == 'console_scripts'
         }
-        links[Path.home() / '.local/share/agent-comms/opencode_tui.ts'] = (
-            Path(files('agent_comms.cli_bridges') / 'opencode_tui.ts')
-        )
+        links |= Harness.published_links(Path.home())
         for link, target in links.items():
             target.stat()
             if link.exists() and not link.is_symlink():
@@ -75,24 +72,10 @@ class RuntimePublication:
             for link, target in self.links.items():
                 if link.resolve(strict=True) != previous / target.relative_to(self.runtime):
                     raise ValueError(f'Existing runtime links disagree: {link}')
-            self.replace_link(self.current, previous)
+            replace_link(self.current, previous)
         for link, target in self.links.items():
-            self.replace_link(link, self.current / target.relative_to(self.runtime))
-        self.replace_link(self.current, self.runtime)
-
-    @staticmethod
-    def replace_link(link: Path, target: Path) -> None:
-        temporary = link.with_name(f'.{link.name}.{uuid.uuid4().hex}')
-        try:
-            temporary.symlink_to(target)
-            os.replace(temporary, link)
-            directory = os.open(link.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-        finally:
-            temporary.unlink(missing_ok=True)
+            replace_link(link, self.current / target.relative_to(self.runtime))
+        replace_link(self.current, self.runtime)
 
 
 def main() -> None:
