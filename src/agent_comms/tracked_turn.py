@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_arguments import SelectedModel
+
 import asyncio
 import math
 import os
@@ -191,8 +193,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         launch,
         command,
         *,
-        provider,
-        model,
+        model: SelectedModel,
         model_wait_timeout,
         prompt_send_boundary,
         maintenance_root,
@@ -217,7 +218,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.command = command
         self.following = following
         self.rejected_commands: list[InputRefused] = []
-        self.provider, self.model = provider, model
+        self.model = model
         self.prompt_send_boundary = prompt_send_boundary
         self.maintenance_root = maintenance_root
         self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
@@ -238,8 +239,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
         worktree: Path,
         session: SelectedSession,
-        provider: str,
-        model: str,
+        model: SelectedModel,
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
@@ -272,7 +272,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 package,
                 worktree=worktree,
                 session=session,
-                provider=provider,
                 model=model,
                 thinking_level=thinking_level,
                 environment=environment,
@@ -286,7 +285,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 message=prompt,
                 context_contributions=context_contributions,
             ),
-            provider=provider,
             model=model,
             model_wait_timeout=model_wait_timeout,
             prompt_send_boundary=prompt_send_boundary,
@@ -595,7 +593,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         with self.startup.measurements.operation("native_terminal_result"):
             with self.startup.measurements.operation("native_terminal_proof"):
                 proof = await self.context_proof()
-            self.output.raise_if_failed(proof, self.provider, self.model)
+            self.output.raise_if_failed(proof, self.model)
             if self.tool_socket is not None:
                 self.tool_socket.assert_complete()
             response = self.terminal.require_response(self.text_parts)
