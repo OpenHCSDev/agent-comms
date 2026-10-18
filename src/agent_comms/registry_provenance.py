@@ -91,9 +91,10 @@ class RegistryNames(Generic[Member]):
         """Resolve this namespace without requiring current membership."""
         return self.aliases.get(name, name)
 
-    def reserves(self, name: str) -> bool:
-        """A canonical name or a permanent alias occupies this text."""
-        return name in self.threads or name in self.aliases
+    def taken(self, name: str, owner: str | None = None) -> bool:
+        """A canonical name or permanent alias occupies this text, and it is not one of
+        ``owner``'s own names; with no owner, any occupied text is taken."""
+        return (name in self.threads or name in self.aliases) and self.canonical_name(name) != owner
 
     @staticmethod
     def thread_slug(text: str) -> str:
@@ -108,7 +109,7 @@ class RegistryNames(Generic[Member]):
         """
         base = self.thread_slug(wanted)
         name, suffix = base, 2
-        while self.reserves(name) and self.canonical_name(name) != owner:
+        while self.taken(name, owner):
             name, suffix = f"{base}-{suffix}", suffix + 1
         return name
 

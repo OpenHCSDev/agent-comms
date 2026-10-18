@@ -13,6 +13,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from cutover.carry import Carried, TodoRows
 
@@ -40,7 +41,7 @@ def declared_run(body: str) -> OrderRun:
 class OrderRuns(TodoRows):
     """Saved problem orders gain their declared closing run; no other stored field changes."""
 
-    after = "carry_todo_voids"
+    after = "carry_wake_index"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
@@ -48,7 +49,10 @@ class OrderRuns(TodoRows):
         with cls.todo_rows(root, apply=apply) as db:
             if db is not None:
                 lacking = """json_type("{order}", '$.run') IS NULL"""
-                for row in Todo.select(db, where=lacking, row_type=SavedOrder):
+                saved = cast(
+                    "list[SavedOrder]", Todo.select(db, where=lacking, row_type=SavedOrder)
+                )
+                for row in saved:
                     run = declared_run(row.text)
                     run.tally(counts)
                     order = {**json.loads(row.order), "run": FieldCodec.encode(run)}

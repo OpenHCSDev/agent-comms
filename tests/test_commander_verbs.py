@@ -6,9 +6,9 @@ import shlex
 import pytest
 
 DOCUMENTED = [
-    ("order", "send worker 23:59 order.txt --clean --reassign 'missed two deadlines' --fork f1",
-     {"unit": "worker", "due": "23:59", "body_file": "order.txt", "clean": True, "mechanical": False,
-      "reassign": "missed two deadlines", "fork": "f1"}),
+    ("order", "send worker 23:59 order.txt --request r1 --clean --reassign 'missed two deadlines' --fork f1",
+     {"unit": "worker", "due": "23:59", "body_file": "order.txt", "request": "r1", "clean": True,
+      "mechanical": False, "reassign": "missed two deadlines", "fork": "f1"}),
     ("order", "strike worker --why late --caught 'lead at install'",
      {"unit": "worker", "why": "late", "caught": "lead at install", "fork": None}),
     ("order", "strike worker --why late", {"unit": "worker", "why": "late", "caught": "lead at review"}),
@@ -16,14 +16,19 @@ DOCUMENTED = [
     ("order", "check P1 --check 'repo :: cat n -> 1' --why 'counted the wrong file'",
      {"pid": "P1", "check": "repo :: cat n -> 1", "why": "counted the wrong file"}),
     ("order", "say worker,#comms note.txt", {"units": "worker,#comms", "body_file": "note.txt"}),
-    ("order", "problem 'the text' --to worker --due 23:59 --order order.txt",
-     {"text": "the text", "to": "worker", "due": "23:59", "order": "order.txt"}),
+    ("order", "problem 'the text' --to worker --due 23:59 --order order.txt --request r1",
+     {"text": "the text", "to": "worker", "due": "23:59", "order": "order.txt", "request": "r1"}),
+    ("order", "unstrike P1 --why 'recorded in error' --at 12:46",
+     {"pid": "P1", "why": "recorded in error", "at": "12:46"}),
     ("order", "close P1 --works seen --artifact seen.png", {"pid": "P1", "works": "seen", "artifact": "seen.png"}),
     ("order", "hunt a.py:1 --why why --sent abc", {"where": "a.py:1", "why": "why", "sent": "abc", "clean": False}),
     ("order", "hunt a.py:1 --why why --clean", {"where": "a.py:1", "why": "why", "sent": None, "clean": True}),
     ("order", "next-hunt", {}),
     ("order", "board", {}),
     ("order", "overdue", {}),
+    ("request", "add 'finish the commander plan'", {"text": "finish the commander plan"}),
+    ("request", "complete r1 --why 'phases delivered'", {"id": "r1", "why": "phases delivered"}),
+    ("request", "list", {}),
     ("judge", "show worker", {"thread": "worker"}),
     ("judge", "show", {"thread": None}),
     ("judge", "alarm", {}),
@@ -39,8 +44,9 @@ DOCUMENTED = [
 @pytest.mark.parametrize("tool,line,fields", DOCUMENTED)
 def test_every_verb_parses_its_documented_command_line(commander_script, tool, line, fields):
     order, _ = commander_script
-    family = (order.OrderVerb if tool == "order"
-              else importlib.reload(importlib.import_module("agent_comms.commander.judge")).JudgeVerb)
+    module = (order if tool == "order"
+              else importlib.reload(importlib.import_module(f"agent_comms.commander.{tool}")))
+    family = getattr(module, f"{tool.capitalize()}Verb")
     verb = family.parse(shlex.split(line), "")
     assert verb.declared_name == line.split()[0]
     assert {name: getattr(verb, name) for name in fields} == fields
