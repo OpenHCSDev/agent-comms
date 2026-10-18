@@ -234,6 +234,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base')
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     due = '23:59'
@@ -278,6 +279,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: grep -c two count.txt -> 1\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
@@ -316,6 +318,7 @@ def test_commander_refuses_jargon_before_core_records_the_problem(commander_scri
     (repo / 'count.txt').write_text('0\n')
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
@@ -328,6 +331,7 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
     script, repo = commander_script
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: git grep -c no-such-text -> 0\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='the check printed no integer'):

@@ -4,6 +4,7 @@
   Problems: P<n>[, P<m>...]                       (the listed problems it owns, batched by surface for one owner; one open order per problem)
   Owner: <path>:<line>                              (the existing owner the fix goes on; must exist)
   Check: <repo> :: <shell command> -> <integer>    (done runs it; the last integer printed must match)
+  Works when: <user-visible closing run, 8+ words> (unless mechanical; close requires the file)
   1. <edit> ...  Banned: <shape>; <shape>  Report: <what the unit sends back>
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
@@ -194,7 +195,7 @@ class Slop:
                 f'{self.by} owns it, and {self.derive} derives it from there, so the copy is deleted.')
 
 
-def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None):
+def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None, traced=None):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -208,6 +209,12 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     Slop.from_order(body)  # calling something slop requires the fact, where it is restated, its owner and the mechanism
     if not clean and (timid := BluntText.refused(body)):  # blunt at all times unless nothing was incompetent
         problems.append(timid)
+    works = re.search(rf'(?m)^{re.escape(PendingProblemOrder.works_label)}\s*(.+)$', body)
+    if not mechanical:
+        try:
+            PendingProblemOrder.require_works_when(works[1] if works else '')
+        except ValueError as refused:
+            problems.append(str(refused))
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
     if not edits:
         problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
@@ -257,6 +264,13 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
     holders = sorted({listed[pid].assignment.owner for pid in group if pid in listed} - {unit})
     replaces = not new and all(pid in listed and listed[pid].assignment.owner == unit for pid in group)
+    try:
+        trace = FileLine.from_wire(traced) if traced is not None else None
+        for pid in group:
+            if pid in listed:
+                listed[pid].assignment.require_trace(unit, trace)
+    except ValueError as refused:
+        problems.append(str(refused))
     if holders and not reassign:
         problems.append(f'fact already owned by {holders}; keep that owner, or pass --reassign "<the concrete failure: provider diagnostic, strikes, missed deadline>"')
     if reassign is not None and len(reassign.split()) < 8:
@@ -273,7 +287,8 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
         order = PendingProblemOrder(
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
             check=check, edits=edits, banned=banned,
-            report=report[1], at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
+            report=report[1], works_when=works[1] if works and not mechanical else '',
+            at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
     goal = COMMS.registry.require(unit).goal
@@ -283,7 +298,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
             problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
     for pid in [] if new else group:
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
-            problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, **common)))
+            problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace, **common)))
     post([unit], message)
     for other, text in taken.items():
         post([other], text)
@@ -685,10 +700,12 @@ class SendVerb(OrderVerb, LoadedVerb):
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     mechanical: bool = option("--mechanical", default=False)
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
+    traced: str | None = option("--traced", default=None, metavar="PATH:LINE",
+                                help="the first failing source line, required after two owners")
 
     def run(self) -> None:
         send(self.unit, self.due, self.body_file, clean=self.clean, mechanical=self.mechanical,
-             reassign=self.reassign)
+             reassign=self.reassign, traced=self.traced)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -273,8 +273,17 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     first_call: FirstCall = field(default_factory=AwaitingFirstCall)
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
+    works_when: str = field(default="", metadata={"wire_omit_default": True})
+    works_label: ClassVar[str] = "Works when:"
+
+    @classmethod
+    def require_works_when(cls, text: str) -> None:
+        if len(text.split()) < 8:
+            raise ValueError(f'Add "{cls.works_label} <the user-visible closing run, 8+ words>"; a grep never closes a problem.')
 
     def __post_init__(self):
+        if self.works_when:
+            self.require_works_when(self.works_when)
         if not self.edits or not self.banned:
             raise ValueError("An order requires edits and banned actions.")
         if any(not text.strip() for text in (self.id, self.report, *self.edits, *self.banned)):
@@ -294,6 +303,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", f"Order: {self.id}",
             f"Owner: {self.owner.to_wire()}",
             f"Check: {self.check.directory} :: {self.check.command}",
+            *((f"{self.works_label} {self.works_when}",) if self.works_when else ()),
             f"Deadline: {FieldCodec.encode(todo.deadline)}",
             *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
             "Banned: " + "; ".join(self.banned), "Report: " + self.report))
@@ -424,6 +434,8 @@ class Assignment:
     parent: str
     parent_created: float
     generation: str
+    previous_owners: tuple[ThreadIncarnation, ...] = field(
+        default=(), metadata={"wire_omit_default": True})
 
     def __post_init__(self) -> None:
         _text(self.owner, "Thread name", 128)
@@ -446,9 +458,20 @@ class Assignment:
     def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
 
-    def require_successor(self, proposed: Assignment, current: Todo) -> None:
+    def require_trace(self, owner: str, traced: FileLine | None) -> None:
+        owners = {self.owner, *(previous.name for previous in self.previous_owners)}
+        if owner != self.owner and len(owners) >= 2 and traced is None:
+            raise ValueError(f"This problem has had {sorted(owners)}; read the failing path and pass --traced PATH:LINE.")
+        if traced is not None:
+            traced.require_exists()
+
+    def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation:
             raise TodoConflict(current)
+        previous = self.previous_owners
+        if self.owner_identity != proposed.owner_identity:
+            previous = (*previous, self.owner_identity)
+        return replace(proposed, previous_owners=previous)
 
 
 class TodoState(DeclaredFamily, affix="TodoState"):
@@ -523,14 +546,20 @@ class AssignTodo(TodoOperation):
     proposed: Assignment
     deadline: EventTime
     order: PendingProblemOrder
+    traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
 
     def apply(self, current):
         self.deadline.require_deadline()
-        if (current.assignment, current.deadline, current.order) == (self.proposed, self.deadline, self.order):
+        proposed = self.proposed
+        if current.assignment is not None:
+            proposed = replace(proposed, previous_owners=current.assignment.previous_owners)
+        if (current.assignment, current.deadline, current.order) == (proposed, self.deadline, self.order):
             return current
         current.require_revision(self.expected_revision)
-        current.require_commander(self.proposed.parent_identity)
-        assigned = current if current.assignment == self.proposed else current.state.assign(current, self.proposed)
+        current.require_commander(proposed.parent_identity)
+        if current.assignment is not None:
+            current.assignment.require_trace(proposed.owner, self.traced)
+        assigned = current if current.assignment == proposed else current.state.assign(current, proposed)
         return replace(assigned, deadline=self.deadline, order=self.order, revision=current.revision + 1)
 
 
@@ -711,7 +740,7 @@ class Todo(TypedTable):
 
     def assigned(self, proposed: Assignment) -> Todo:
         if self.assignment is not None:
-            self.assignment.require_successor(proposed, self)
+            proposed = self.assignment.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
     def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
@@ -885,6 +914,7 @@ class TodoStore(TypedStore):
         generation: str,
         deadline: EventTime,
         order: PendingProblemOrder,
+        traced: FileLine | None = None,
     ) -> Todo:
         identity, parent_identity = _thread(owner), _thread(parent)
         proposed = Assignment(
@@ -894,4 +924,4 @@ class TodoStore(TypedStore):
             parent_identity.created_at,
             generation,
         )
-        return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline, order))
+        return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline, order, traced))
