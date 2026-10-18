@@ -11,6 +11,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.comms import Comms
 from agent_comms.connector import (
+    CALLER,
     CALLBACK,
     AuthorizationQuery,
     Connector,
@@ -18,7 +19,6 @@ from agent_comms.connector import (
     ApproveVerb,
     RevokeVerb,
 )
-from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
@@ -107,7 +107,7 @@ async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
         reply = await (await client.post("/mcp", headers=headers, json={
             "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": call})).json()
         assert reply["result"]["isError"] is False, reply
-    print(reply, comms.goals)
+    assert comms.registry.require("claude-ai").goal.text == "Ship the connector"
     assert [(message.sender, message.body) for message in comms.bus.inbox("worker")] == [
         ("claude-ai", "Owner said go")]
 
@@ -126,9 +126,9 @@ async def test_a_call_returns_what_the_tool_returns_in_process(client, store, ro
             },
         )
     ).json()
-    in_process = invoke_tool(Comms(root), "comms_threads", {}, caller=NoThreadCaller())
+    in_process = invoke_tool(Comms(root), "comms_threads", {}, caller=CALLER)
     assert called["result"]["structuredContent"] == in_process
-    assert [thread["name"] for thread in in_process["threads"]] == ["worker"]
+    assert [thread["name"] for thread in in_process["threads"]] == ["claude-ai", "worker"]
 
 
 async def test_a_revoked_token_is_refused(client, store):
