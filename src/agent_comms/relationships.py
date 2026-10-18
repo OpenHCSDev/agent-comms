@@ -271,10 +271,19 @@ class RelationshipGroup(DeclaredFamily, affix="RelationshipGroup"):
     """A declared group owns its identity, presentation and entry source."""
 
     entries: tuple[RelationshipEntry, ...]
+    _by_target: dict[str, RelationshipEntry] = field(init=False, compare=False, repr=False)
+    targets: frozenset[str] = field(init=False, compare=False, repr=False)
     family_discriminator: ClassVar[str] = "key"
     title: ClassVar[str]
     empty_text: ClassVar[str]
     order: ClassVar[type[ThreadSort] | None] = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_by_target", {entry.target: entry for entry in self.entries})
+        object.__setattr__(self, "targets", frozenset(self._by_target))
+
+    def entry(self, target: str) -> RelationshipEntry:
+        return self._by_target[target]
 
     @classmethod
     @abstractmethod
@@ -295,7 +304,7 @@ class RecentRelationshipGroup(RelationshipGroup):
         for message in reversed(context.messages):
             if not message.role.counts_as_conversation():
                 continue
-            for target in cls.targets(context, message):
+            for target in cls.message_targets(context, message):
                 entries.setdefault(target, context.entry(
                     target, message=message,
                     detail=f"{message.sender} → {message.target}\n{message.body[:240]}",
@@ -304,7 +313,7 @@ class RecentRelationshipGroup(RelationshipGroup):
 
     @staticmethod
     @abstractmethod
-    def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]: ...
+    def message_targets(context: RelationshipContext, message: Message) -> tuple[str, ...]: ...
 
 
 class InboundRelationshipGroup(RecentRelationshipGroup):
@@ -312,7 +321,7 @@ class InboundRelationshipGroup(RecentRelationshipGroup):
     empty_text = "No recent inbound"
 
     @staticmethod
-    def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
+    def message_targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
         sender = context.registry.canonical_name(message.sender)
         if sender == context.thread.name or not context.delivery.delivers(message.sender, message.target):
             return ()
@@ -324,7 +333,7 @@ class OutboundRelationshipGroup(RecentRelationshipGroup):
     empty_text = "No recent outbound"
 
     @staticmethod
-    def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
+    def message_targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
         if context.registry.canonical_name(message.sender) != context.thread.name:
             return ()
         return (CommandTarget.named(message.target).canonical_name(context.registry.canonical_name),)

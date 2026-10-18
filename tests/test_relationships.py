@@ -39,6 +39,26 @@ def setup_wire(tmp_path):
     return comms
 
 
+def test_group_owned_lookup_rebuilds_with_immutable_group(tmp_path):
+    from agent_comms.field_codec import FieldCodec
+
+    comms = setup_wire(tmp_path)
+    comms.messaging.send("owner", "peer", "Output")
+    for group in comms.relationships.snapshot("owner").groups:
+        assert group.targets == frozenset(entry.target for entry in group.entries)
+        for entry in group.entries:
+            assert group.entry(entry.target) is entry
+        with pytest.raises(KeyError, match="missing-target"):
+            group.entry("missing-target")
+        encoded = FieldCodec.encode(group)
+        assert "targets" not in encoded and "_by_target" not in encoded
+        emptied = replace(group, entries=())
+        assert emptied.targets == frozenset()
+        with pytest.raises(KeyError, match="peer"):
+            emptied.entry("peer")
+        assert group.targets == frozenset(entry.target for entry in group.entries)
+
+
 def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkeypatch):
     from agent_comms.tool_caller import ThreadCaller
     comms = setup_wire(tmp_path)
