@@ -159,20 +159,12 @@ class HistoricalDisplay:
             viewer=self.displayed.viewer_identity, history_revision=history_revision,
         )
 
-    @property
-    def viewer(self) -> str:
-        return self.displayed.viewer
-
-    @property
-    def viewer_created_at(self) -> float:
-        return self.displayed.viewer_created_at
-
     def select(self, sequences) -> HistoricalDisplay:
         return HistoricalDisplay(self.source, self.displayed.select(sequences))
 
     def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:
         """Acknowledge exactly painted historical membership in its own ledger."""
-        viewer = registry.require(self.viewer)
+        viewer = registry.require(self.displayed.viewer)
         if viewer.incarnation != self.displayed.viewer_identity or viewer.role.executable:
             raise ValueError("Historical viewer changed; refresh history")
         if self.source not in archive.sources():
