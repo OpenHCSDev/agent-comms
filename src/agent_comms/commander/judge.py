@@ -21,6 +21,7 @@ the commander to that unit. Nothing here judges code; it only refuses to let an 
 """
 import hashlib, json, os, re, sys, time
 
+from . import order
 from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
@@ -103,7 +104,6 @@ def roast(thread, lines, text, fix, slop):
     """Every send-back is a fleet lesson, sent to the unit that wrote the slop and to #comms: the quoted slop,
     the required fact it restates and the declaration that derives it (paper 1's definition), why that is
     stupid, and what replaces it."""
-    from . import order
     body = (f'{thread}, this is stupid slop and it is going back:\n'
             + '\n'.join(f'    {l.strip()}' for l in lines)
             + f'\nThe slop: {slop.render()}'
@@ -118,7 +118,6 @@ def strike_task(thread, msg):
     """
     if found := re.search(r'\bP\d+\b', next(m['text'] for m in my_messages(thread) if m['id'] == msg)):
         return found.group()
-    from . import order
     open_facts = sorted(t.id for t in order.open_todos(thread))
     if len(open_facts) != 1:
         sys.exit(f'Refused: {msg} names no P-number and {thread} has open tasks {open_facts}; cite the order message for the task')
@@ -143,7 +142,6 @@ def verdict(kind, tokens, why, msg=None, serves=None, lines=(), peer=None, roast
         if not any(l in text for l in lines):
             sys.exit(f'Refused: none of your --line quotes is in edit {i}; judge it by its own text')
     if kind == 'ok':
-        from . import order
         for i in ids:
             diff = ''.join(''.join('+' + l + '\n' for l in h['new'].splitlines()) for h in edits[i]['hunks'])
             path = edits[i].get('path') or ''
@@ -163,7 +161,6 @@ def verdict(kind, tokens, why, msg=None, serves=None, lines=(), peer=None, roast
     if kind == 'back':
         if not roast_text or len(roast_text.split()) < 12 or not re.search(r'\bbecause\b', roast_text):
             sys.exit('Refused: --roast (12+ words, with "because"): why this is stupid, naming the fact it restates or guesses and the thing that already answers it')
-        from . import order
         if not order.BLUNT.search(roast_text):
             sys.exit('Refused: --roast is polite; call it stupid, slop, lazy or useless and say why')
         if not fix or len(fix.split()) < 8:
@@ -221,7 +218,6 @@ def main(args):
         peer = args[args.index('--peer') + 1] if '--peer' in args else None
         roast_text = args[args.index('--roast') + 1] if '--roast' in args else None
         fix = args[args.index('--fix') + 1] if '--fix' in args else None
-        from . import order
         slop = order.Slop.from_args(args) if args[0] == 'back' else None
         no_owner = args[args.index('--no-owner') + 1] if '--no-owner' in args else None
         verdict(args[0], ids, why, msg, serves, lines, peer, roast_text, fix, slop, no_owner)

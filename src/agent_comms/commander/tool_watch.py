@@ -5,7 +5,7 @@ long turn) prints one digest of what the unit did, for the commander to judge by
 """
 import json, os, time, glob, collections
 
-from . import storage
+from . import order, storage
 from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
@@ -84,7 +84,6 @@ def enforce_storage(thread, name, args):
         found = storage.write_violations(thread, str(args.get('path') or args.get('file_path') or ''))
     else:
         return
-    from . import order
     task = next((t.id for t in order.open_todos(thread)), None)
     for violation in found:
         if time.time() - STRUCK.get((thread, violation), 0) < 600:
