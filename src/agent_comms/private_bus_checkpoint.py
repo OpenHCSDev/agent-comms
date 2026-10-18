@@ -158,10 +158,6 @@ class CertifiedSourceRead:
         moved: its evidence remains usable if destination publication fails.
         No retired row decoder or second certificate algorithm belongs here.
         """
-        from .wire_log import WireLog
-
-        if not isinstance(bus, WireLog) or bus.path.name != "bus.jsonl":
-            raise TypeError("Canonical private WireLog required")
         self.require_current()
         if bus.path.resolve() == self.path.resolve():
             raise RelationViolationError("Carry destination must differ from its source")
@@ -244,7 +240,7 @@ class CertifiedSourceRead:
     def claim_projection(self) -> ClaimProjection:
         """Explicit current-claim inspection; no historical bus rows are decoded."""
         self.require_open_prefix()
-        return ResourceClaims.projection(self.connection)
+        return ResourceClaims.all_claims(self.connection)
 
     def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
         """Lend bounded original bytes, not this lock/connection, to decoding.
@@ -584,7 +580,7 @@ class ClaimCommits(CheckpointTable, TypedTable):
 
     @classmethod
     def prepare(cls, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
-        projected = transition.apply(ResourceClaims.projection(db, transition.resources))
+        projected = transition.apply(ResourceClaims.claims_for(db, transition.resources))
         transition.require_new_operation(lambda operation: cls.operation_used(db, operation))
         return projected
 
@@ -623,14 +619,17 @@ class ResourceClaims(CheckpointTable, TypedTable):
         return original.transition.claimed(resource) if original is not None else None
 
     @classmethod
-    def projection(
-        cls, db: sqlite3.Connection, resources: tuple[str, ...] | None = None,
-    ) -> ClaimProjection:
-        if resources is None:
-            current = cls.select(db)
-        else:
-            marks = ",".join("?" for _ in resources)
-            current = cls.select(db, where=f'"resource" IN ({marks})', parameters=resources)
+    def all_claims(cls, db: sqlite3.Connection) -> ClaimProjection:
+        return cls._project(db, cls.select(db))
+
+    @classmethod
+    def claims_for(cls, db: sqlite3.Connection, resources: tuple[str, ...]) -> ClaimProjection:
+        marks = ",".join("?" for _ in resources)
+        current = cls.select(db, where=f'"resource" IN ({marks})', parameters=resources)
+        return cls._project(db, current)
+
+    @classmethod
+    def _project(cls, db: sqlite3.Connection, current: list[ResourceClaims]) -> ClaimProjection:
         owners = {}
         if current:
             sequences = tuple(sorted({row.claim_seq for row in current}))
