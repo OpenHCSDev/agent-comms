@@ -29,7 +29,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def line(self) -> str: ...
 
     def began(self) -> float | None:
-        """When this violation began, or None when its rule cannot say and it is current on every read."""
+        """When this violation began, or None when its rule cannot say: it shows on every read."""
         return None
 
     @staticmethod

@@ -62,4 +62,4 @@ class RulesDue(ReasonedStandingRule):
 
     @classmethod
     def broken_at(cls, comms: Comms, commander: str) -> float | None:
-        return rules.stale_since(commander)
+        return refusal[1] if (refusal := rules.refused(commander)) else None

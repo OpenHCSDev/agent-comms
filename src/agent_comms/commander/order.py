@@ -600,6 +600,8 @@ def next_hunt():
 
 def reply(unit, since):
     """The unit's latest message to me after ``since``, or None."""
+    if not os.path.exists(f'{B}/bus.jsonl'):
+        return None
     with open(f'{B}/bus.jsonl', 'rb') as f:
         f.seek(start := max(0, os.path.getsize(f.name) - 3_000_000))
         lines = f.read().splitlines()[bool(start):]
@@ -624,11 +626,11 @@ def replied(latest):
 
 
 def deadline_lines(held: list[Todo], since: float = 0.0) -> list[str]:
-    """Each order that entered a state after the previous poll at ``since``; a tick where nothing changed prints nothing.
+    """Each order that entered a state after the previous poll at ``since``; a still tick is silent.
 
-    An order enters lateness when it crosses its deadline (Core's late_since), and a late order's state changes
-    with its unit's reply or push: OVERDUE when its progress strikes, DUE PASSED when it does not. STALL is
-    entered when its work stopped moving."""
+    An order enters lateness when it crosses its deadline (Core's late_since), and a late order's
+    state changes with its unit's reply or push: OVERDUE when its progress strikes, DUE PASSED
+    when it does not. STALL is entered when its work stopped moving."""
     now = time.time()
     pending = [t for t in held if t.pending]
     read = progress() if pending else {}
@@ -640,9 +642,10 @@ def deadline_lines(held: list[Todo], since: float = 0.0) -> list[str]:
         if (crossed := t.late_since(now)) is None:
             continue
         answer = reply(t.holder, ordered) if work.strikes else None
-        if since < max(crossed, work.moved or 0, float(answer['ts']) if answer else 0):
+        if since < max(crossed, work.moved or 0, float(answer.get('ts', 0)) if answer else 0):
             if work.strikes:
-                late.append(f'{t.holder} (due {hhmm(t.deadline)}, order {t.order.id}, {work.line}{replied(answer)})')
+                due = f'due {hhmm(t.deadline)}, order {t.order.id}'
+                late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
             else:
                 passed.append(f'DUE PASSED {t.id} {t.holder} (due {hhmm(t.deadline)}): {work.line}')
     alarm = (f'OVERDUE: {", ".join(late)} -> read the diff now; '
