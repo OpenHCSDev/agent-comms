@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import os
 import selectors
 import sqlite3
@@ -78,7 +79,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     target = "owner" if direct else "#team"
-    original = comms.messaging.send_initial_cohort(
+    original = publish_initial(comms, 
         "sender", target, "Need owner to consider and reply."
     )
     original_record = comms.bus.log.read_delivery_cohort(root_id, original.seq)
@@ -99,7 +100,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     assignment = accepted.value.assignments[0]
     sources = [SelectedSource(assignment.assignment_id, store.assignments, original_record)]
     for extra_target in extra_targets:
-        message = comms.messaging.send_initial_cohort("sender", extra_target, "Another original question")
+        message = publish_initial(comms, "sender", extra_target, "Another original question")
         delivery = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
         (extra_assignment,) = acknowledgement.assignments
@@ -399,7 +400,7 @@ def test_fresh_selection_completes_saved_reply_before_admitting_new_assignment(
         assert case.bus.log.read_keyed_response(intent) is not None
         monkeypatch.undo()
         case.comms.agents.finish_turn(case.witness.thread.require_turn_lease())
-        fresh = case.comms.messaging.send_initial_cohort(
+        fresh = publish_initial(case.comms, 
             "sender", "#team", "Distinct fresh work"
         )
         accepted = accept_delivery_cohort(case.comms.bus, case.root_id, fresh.seq, case.store)
@@ -443,7 +444,7 @@ def test_fresh_selection_refuses_missing_saved_reply_without_resend(
         assert case.bus.log.read_keyed_response(intent) is None
         monkeypatch.undo()
         case.comms.agents.finish_turn(case.witness.thread.require_turn_lease())
-        fresh = case.comms.messaging.send_initial_cohort(
+        fresh = publish_initial(case.comms, 
             "sender", "#team", "Fresh work must remain blocked"
         )
         accept_delivery_cohort(case.comms.bus, case.root_id, fresh.seq, case.store)

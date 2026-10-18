@@ -1,4 +1,5 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
+from conftest import publish_initial
 from agent_comms.read_basis import NamedViewer
 from agent_comms.presentation import ReadThrough
 import argparse
@@ -45,7 +46,7 @@ async def main():
     comms.owners.stop('stopped')
     comms.owners.stop('archived')
     comms.threads.archive('archived')
-    message = comms.messaging.send_initial_cohort(owner, '#team', 'Original metadata acknowledgement')
+    message = publish_initial(comms, owner, '#team', 'Original metadata acknowledgement')
     original_wire = comms.bus.log.path.read_bytes()
     human = comms.views.viewer_snapshot(str(root))
     assert set(human.threads) == {owner, 'stopped'}

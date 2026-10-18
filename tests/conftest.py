@@ -9,7 +9,10 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
+from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from native_backend_fixture import native_backend_fixture
 
@@ -29,6 +32,16 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "PI_WORKTREE",
 })
 
+
+
+def publish_initial(comms, sender, target, body, type=InfoKind, *, role=ConversationRole()):
+    """Stage an agent's initial message on the bus; no SQL acceptance or live wake."""
+    type.require_sendable()
+    with _store_lock(comms.root / "wire"):
+        return comms.bus.publisher.publish_initial_cohort(
+            Message(sender=sender, target=target, body=body, type=type, role=role),
+            origin=AgentOrigin(),
+        )
 
 @pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:

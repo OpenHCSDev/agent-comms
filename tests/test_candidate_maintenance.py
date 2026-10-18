@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 from agent_comms.read_basis import NamedViewer
 import os
 import threading
@@ -138,7 +139,7 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
         # keep going until the index is caught up, not stop at its old
         # per-delivery batch budget.
         for number in range(40):
-            comms.messaging.send_initial_cohort(
+            publish_initial(comms, 
                 "sender", "beta", f"{number:04d} " + "x" * (300 * 1024)
             )
         assert comms.bus.log.path.stat().st_size > 40 * 256 * 1024

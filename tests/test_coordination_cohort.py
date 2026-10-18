@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import hashlib
 import json
 import sqlite3
@@ -90,7 +91,7 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     comms, coordinator, root_id, lookups = _root(tmp_path)
     assert len(root_id) == 32
     assert (tmp_path / "comms" / "bus_meta.json").stat().st_mode & 0o777 == 0o600
-    message = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
+    message = publish_initial(comms, "sender", "#team", "Hello @Alice")
     raw = json.loads((tmp_path / "comms" / "bus.jsonl").read_text())
     assert (tmp_path / "comms" / "bus.jsonl").stat().st_mode & 0o777 == 0o600
     assert set(raw[PRIVATE_WIRE_FIELD]) == {"kind", "version", "initial"}
@@ -123,8 +124,8 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
 
 def test_initial_sideband_never_enters_export_or_public_page_budget(tmp_path: Path) -> None:
     comms, _coordinator, _root_id, _lookups = _root(tmp_path)
-    first = comms.messaging.send_initial_cohort("sender", "#team", "first @Alice")
-    second = comms.messaging.send_initial_cohort("sender", "#team", "second @Bob")
+    first = publish_initial(comms, "sender", "#team", "first @Alice")
+    second = publish_initial(comms, "sender", "#team", "second @Bob")
     budget = sum(len(json.dumps(message.to_wire()).encode()) + 1 for message in (first, second))
     page = comms.bus.full_history_page(max_bytes=budget)
     assert [item.seq for item in page.messages] == [first.seq, second.seq]
@@ -144,7 +145,7 @@ def test_initial_sideband_never_enters_export_or_public_page_budget(tmp_path: Pa
 
 def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Path) -> None:
     comms, coordinator, root_id, lookups = _root(tmp_path)
-    message = comms.messaging.send_initial_cohort("sender", "#team", "all must respond")
+    message = publish_initial(comms, "sender", "#team", "all must respond")
     # Full bus fsync occurred; coordinator process crashes before BEGIN IMMEDIATE.
     coordinator.close()
     reopened = Comms(tmp_path / "comms")
@@ -185,9 +186,9 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
 
 def test_sealed_receipts_follow_recipient_progress(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    alice_first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
-    bob = comms.messaging.send_initial_cohort("sender", "Bob", "other recipient")
-    alice_second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
+    alice_first = publish_initial(comms, "sender", "Alice", "first")
+    bob = publish_initial(comms, "sender", "Bob", "other recipient")
+    alice_second = publish_initial(comms, "sender", "Alice", "second")
     for message in (alice_first, bob, alice_second):
         accept_delivery_cohort(comms.bus, root_id, message.seq, store)
 
@@ -207,7 +208,7 @@ def test_sealed_receipts_follow_recipient_progress(tmp_path: Path) -> None:
 
 def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    empty = comms.messaging.send_initial_cohort("sender", "#missing", "No recipient")
+    empty = publish_initial(comms, "sender", "#missing", "No recipient")
     result = accept_delivery_cohort(comms.bus, root_id, empty.seq, store)
     assert isinstance(result, Applied)
     assert (result.value.member_count, result.value.assignment_count, result.value.assignments) == (
@@ -216,7 +217,7 @@ def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
         (),
     )
     assert isinstance(accept_delivery_cohort(comms.bus, root_id, empty.seq, store), AlreadyApplied)
-    direct = comms.messaging.send_initial_cohort("sender", "Alice", "Direct")
+    direct = publish_initial(comms, "sender", "Alice", "Direct")
     single = accept_delivery_cohort(comms.bus, root_id, direct.seq, store)
     assert isinstance(single, Applied)
     assert (single.value.member_count, single.value.assignment_count) == (1, 1)
@@ -228,7 +229,7 @@ def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
 
 def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    sent = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
+    sent = publish_initial(comms, "sender", "#team", "Hello @Alice")
     legacy = WakeAssignment(
         assignment_id="singleton-before-cohort",
         recipient="Alice",
@@ -258,7 +259,7 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
 
 def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    sent = comms.messaging.send_initial_cohort("sender", "#team", "@Alice hello")
+    sent = publish_initial(comms, "sender", "#team", "@Alice hello")
     result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
     assert isinstance(result, Applied)
     observer_claim = replace(
@@ -274,7 +275,7 @@ def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) ->
 
 def test_corrupt_initial_and_wrong_root_rejected_before_sql(tmp_path: Path) -> None:
     comms, store, root_id, _lookups = _root(tmp_path)
-    sent = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
+    sent = publish_initial(comms, "sender", "#team", "Hello @Alice")
     with pytest.raises(IdentityConflict, match="root"):
         accept_delivery_cohort(comms.bus, "a" * 32, sent.seq, store)
     bus_path = tmp_path / "comms" / "bus.jsonl"
@@ -339,7 +340,7 @@ def test_all_channel_excludes_sender_and_nonexecutors_and_control_is_not_forgeab
             control="system_control", origin=AgentOrigin(),
         )
     assert comms.bus.log.latest_sequence() == 0
-    sent = comms.messaging.send_initial_cohort("sender", "#all", "ordinary")
+    sent = publish_initial(comms, "sender", "#all", "ordinary")
     result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
     assert isinstance(result, Applied)
     assert (result.value.member_count, result.value.assignment_count) == (3, 3)
@@ -355,7 +356,7 @@ def test_all_channel_excludes_sender_and_nonexecutors_and_control_is_not_forgeab
 
 def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    sent = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
+    sent = publish_initial(comms, "sender", "#team", "Hello @Alice")
     proof = comms.bus.log.read_delivery_cohort(root_id, sent.seq)
     with store.session.transaction() as db:
         db.execute(
@@ -391,7 +392,7 @@ def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path)
 
 def test_reader_rejects_later_corrupt_row_even_for_earlier_valid_seq(tmp_path: Path) -> None:
     comms, store, root_id, _lookups = _root(tmp_path)
-    sent = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+    sent = publish_initial(comms, "sender", "Alice", "first")
     bus_path = tmp_path / "comms" / "bus.jsonl"
     with bus_path.open("ab") as output:
         output.write(b'{"seq": true}\n')
@@ -422,7 +423,7 @@ def test_archived_direct_recipient_has_no_eligible_wake(tmp_path: Path) -> None:
     comms.registry.archive("Alice")
     assert comms.registry.status("Alice") == ArchivedThreadStatus()
     with pytest.raises(RelationViolationError, match="visible"):
-        comms.messaging.send_initial_cohort("sender", "Alice", "must not wake")
+        publish_initial(comms, "sender", "Alice", "must not wake")
     assert comms.bus.log.latest_sequence() == 0
 
 
@@ -451,7 +452,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
 
 def test_simultaneous_accepts_one_applied_one_replay(tmp_path: Path) -> None:
     comms, coordinator, root_id, _ = _root(tmp_path)
-    sent = comms.messaging.send_initial_cohort("sender", "#team", "all")
+    sent = publish_initial(comms, "sender", "#team", "all")
     coordinator.close()
 
     def worker(_: int) -> str:
@@ -470,7 +471,7 @@ def test_message_taken_by_a_running_turn_is_delivered_once_and_stays_delivered(
     tmp_path: Path,
 ) -> None:
     comms, coordinator, root_id, lookups = _root(tmp_path)
-    message = comms.messaging.send_initial_cohort("sender", "#team", "read this while you work")
+    message = publish_initial(comms, "sender", "#team", "read this while you work")
     accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator)
     alice, bob = sorted(accepted.value.assignments, key=lambda item: item.recipient)
 

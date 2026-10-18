@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import os
 import tempfile
@@ -60,7 +61,7 @@ def _root(
 def _accepted(
     comms: Comms, store: Coordination, root_id: str, target: str, body: str
 ) -> tuple[CommittedDelivery, WakeAssignment]:
-    message = comms.messaging.send_initial_cohort("sender", target, body)
+    message = publish_initial(comms, "sender", target, body)
     initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
     for recipient in initial.audience.recipients:
         store.participants.register(
@@ -112,7 +113,7 @@ def test_optional_generation_insert_fault_rolls_back_only_optional_rows(
 ) -> None:
     comms, store, _index, root_id = _root(tmp_path)
     try:
-        message = comms.messaging.send_initial_cohort(
+        message = publish_initial(comms, 
             "sender", "#team", "@member000 @member001 act"
         )
         initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
@@ -169,7 +170,7 @@ def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
 ) -> None:
     comms, store, _index, root_id = _root(tmp_path)
     try:
-        message = comms.messaging.send_initial_cohort("sender", "member000", "fresh")
+        message = publish_initial(comms, "sender", "member000", "fresh")
         initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         for recipient in initial.audience.recipients:
             store.participants.register(
@@ -301,7 +302,7 @@ def test_stale_index_unsealed_candidate_and_replaced_owner_omit(tmp_path: Path) 
         index.maintain(start=RebuildIndex())
         assert _projection(index, store, owner, 0, 1)(initial, assignment, owner).complete
 
-        second = comms.messaging.send_initial_cohort("sender", "member000", "not yet sealed")
+        second = publish_initial(comms, "sender", "member000", "not yet sealed")
         index.maintain()
         # The page checkpoint can outrun the caller's minimum source watermark.
         # It must include the later candidate or omit the whole supplement.
@@ -524,7 +525,7 @@ def test_normal_rename_does_not_inject_old_selected_claim_into_new_owner(
     try:
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
         comms.threads._rename_thread("member000", "gamma")
-        current_message = comms.messaging.send_initial_cohort("sender", "gamma", "new selected")
+        current_message = publish_initial(comms, "sender", "gamma", "new selected")
         current = comms.bus.log.read_delivery_cohort(root_id, current_message.seq)
         acknowledgement = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
         assert len(acknowledgement.assignments) == 1
@@ -588,7 +589,7 @@ def test_101_prior_initials_for_other_recipient_do_not_require_a_bus_scan(
     comms, store, index, root_id = _root(tmp_path)
     try:
         for number in range(100):
-            comms.messaging.send_initial_cohort("sender", "member001", f"other owner {number}")
+            publish_initial(comms, "sender", "member001", f"other owner {number}")
         initial, assignment = _accepted(comms, store, root_id, "member000", "current work")
         assert initial.message.seq == 101
         assert index.maintain(start=RebuildIndex(), max_rows=256, max_bytes=8 * 1024 * 1024)
@@ -615,7 +616,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
     comms, store, index, root_id = _root(tmp_path)
     try:
         initial, assignment = _accepted(comms, store, root_id, "#team", "@member000 act")
-        notice = comms.messaging.send_initial_cohort(
+        notice = publish_initial(comms, 
             "sender", "member000", "Passive retained context", role=NoticeRole()
         )
         passive = accept_delivery_cohort(comms.bus, root_id, notice.seq, store).value.assignments[0]

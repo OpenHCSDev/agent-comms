@@ -1,4 +1,5 @@
 """Canonical original-bus batch capture and one-use native reservation."""
+from conftest import publish_initial
 from binding_reads import binding_rows
 
 import asyncio
@@ -39,7 +40,7 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
         store.participants.register(lookup, "receiver", "receiver", committed=True)
 
         def send(body):
-            message = comms.messaging.send_initial_cohort("sender", "#team", body)
+            message = publish_initial(comms, "sender", "#team", body)
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
             return message
 
@@ -145,7 +146,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path):
         store.participants.register(lookup, "receiver", "receiver", committed=True)
 
         def send(target, body):
-            message = comms.messaging.send_initial_cohort("sender", target, body)
+            message = publish_initial(comms, "sender", target, body)
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
             return message
 
@@ -184,7 +185,7 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
     session = NativeSessionIdentity("native-session", str(tmp_path / "session.jsonl"))
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(lookup, "receiver", "receiver", committed=True)
-        message = comms.messaging.send_initial_cohort("sender", "#team", "Question")
+        message = publish_initial(comms, "sender", "#team", "Question")
         accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         async with SelectedParticipant.select(comms, store, root_id, "receiver", 0) as selected:
             stage = TriageNativeSend(selected.batch.assignments)

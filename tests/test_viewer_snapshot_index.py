@@ -1,5 +1,6 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+from conftest import publish_initial
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
 import asyncio
@@ -586,13 +587,13 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     from test_turn_context_wire import manifest
 
     comms, _ = _root(tmp_path)
-    first = comms.messaging.send_initial_cohort('sender', '#team', '@Alice first')
+    first = publish_initial(comms, 'sender', '#team', '@Alice first')
     comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
     with comms.views.presentation.snapshot(viewer=NamedViewer('Alice')) as (_, source):
         assert isinstance(source, ScannedWireSnapshot)
         # Original lock has ended. A genuine later publication cannot broaden
         # this descriptor's cut or make the captured observation visible.
-        second = comms.messaging.send_initial_cohort('sender', '#team', '@Alice next')
+        second = publish_initial(comms, 'sender', '#team', '@Alice next')
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
     assert source.stream.closed
     assert [message.message_id for message in list(comms.bus.full_history_page().messages)] == [
@@ -643,7 +644,7 @@ def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
     from test_private_bus_checkpoint import _root
 
     comms, _ = _root(tmp_path)
-    first = comms.messaging.send_initial_cohort('sender', '#team', '@Alice first')
+    first = publish_initial(comms, 'sender', '#team', '@Alice first')
     # This is the original durable state between reservation and append.
     # No second input or fabricated successful append resolves that uncertainty.
     with comms.bus.log.locked():

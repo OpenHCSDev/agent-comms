@@ -1,5 +1,6 @@
 """The append owner schedules optional work after the whole lock lifetime."""
 
+from conftest import publish_initial
 from contextvars import Context
 from functools import partial
 from tempfile import TemporaryDirectory
@@ -232,7 +233,7 @@ def test_uncertain_checkpoint_does_not_schedule_or_retry_append(tmp_path, monkey
 
         monkeypatch.setattr("agent_comms.private_bus_checkpoint.append_private_bus_checkpoint_unlocked", fail)
         with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-            comms.messaging.send_initial_cohort("sender", "member000", "one original")
+            publish_initial(comms, "sender", "member000", "one original")
         assert calls == []
         # The controlled fault happens AFTER the source fsync. It is not
         # absence, and no second attempt is made to repair or replay it.
@@ -244,7 +245,7 @@ def test_uncertain_checkpoint_does_not_schedule_or_retry_append(tmp_path, monkey
 def test_retiring_worker_does_not_delete_successor_notification(tmp_path, monkeypatch):
     comms, store, index, root_id = _root(tmp_path, recipients=1)
     try:
-        comms.messaging.send_initial_cohort("sender", "member000", "first")
+        publish_initial(comms, "sender", "member000", "first")
         assert index.maintain(start=RebuildIndex())
         root = index.log.path.parent
         candidate_maintenance._pending[root] = (index.log, index.log.path.stat().st_size)
@@ -261,7 +262,7 @@ def test_retiring_worker_does_not_delete_successor_notification(tmp_path, monkey
                 original_guard.release()
                 if retired and not successor:
                     successor.append(True)
-                    comms.messaging.send_initial_cohort("sender", "member000", "successor")
+                    publish_initial(comms, "sender", "member000", "successor")
 
         monkeypatch.setattr(candidate_maintenance, "_guard", InterleavedLock())
         monkeypatch.setattr(candidate_maintenance, "schedule_candidate_catchup", _SCHEDULE)
