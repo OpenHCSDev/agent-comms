@@ -505,7 +505,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     without_rowid: ClassVar[bool] = False
 
     @classmethod
-    def members_with(cls, capability: type) -> tuple[type[Self], ...]:
+    def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
         """Enumerate the schema owner's already imported row declarations.
 
         Schema owners load their row modules before querying capabilities. A
@@ -513,7 +513,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         holding its bus lock. External table-name decoding still uses the
         registry's complete lazy discovery through DeclaredFamily.decode.
         """
-        return cls._members_with(capability, dict.values(cls.__registry__))
+        return tuple(dict.values(cls.__registry__))
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
