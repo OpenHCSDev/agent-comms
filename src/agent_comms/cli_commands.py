@@ -470,9 +470,97 @@ class ThreadPinnedResult:
     pinned: bool
 
 
-@dataclass(frozen=True, kw_only=True)
-class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package="agent_comms"):
+class DeclaredOptions(Command):
+    """option() fields own a declaration's argparse subcommand and its decoding from the namespace.
+
+    A DeclaredFamily of dataclass Commands inherits it; the namespace's ``command`` names
+    the member."""
     help: ClassVar[str]
+    declared_name: ClassVar[str]
+    __dataclass_fields__: ClassVar[dict[str, Field[object]]]
+
+    @classmethod
+    @abstractmethod
+    def decode(cls, name: str) -> type[Self]:
+        """The family member the namespace names; DeclaredFamily implements it."""
+
+    @classmethod
+    def add_parser(cls, subparsers: Any) -> None:
+        parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
+        groups: dict[str, Any] = {}
+        hints = get_type_hints(cls)
+        for declared in fields(cls):
+            metadata = declared.metadata
+            group = metadata["group"]
+            owner = parser
+            if group is not None:
+                if group not in groups:
+                    groups[group] = parser.add_mutually_exclusive_group(required=True)
+                owner = groups[group]
+            options = dict(metadata["parser_options"])
+            annotation = hints[declared.name]
+            scalar = (
+                get_args(annotation)[0] if get_origin(annotation) is types.UnionType else annotation
+            )
+            if scalar is bool:
+                options.setdefault("action", "store_true")
+            elif scalar in (int, float):
+                options.setdefault("type", scalar)
+            elif isinstance(scalar, type) and issubclass(scalar, Enum):
+                options["choices"] = [kind.value for kind in scalar]
+            elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
+                options.setdefault("choices", scalar.names())
+            elif (
+                get_origin(scalar) is type and get_args(scalar)
+                and issubclass(get_args(scalar)[0], DeclaredFamily)
+            ):
+                options.setdefault("choices", get_args(scalar)[0].names())
+            if metadata["parser_default"] is not MISSING:
+                options["default"] = metadata["parser_default"]
+            elif metadata["parser_default_factory"] is not MISSING:
+                options["default"] = metadata["parser_default_factory"]()
+            elif declared.default is not MISSING:
+                options["default"] = declared.default
+            elif declared.default_factory is not MISSING:
+                options["default"] = declared.default_factory()
+            else:
+                options["required"] = True
+            if isinstance(options.get("default"), DeclaredFamily):
+                options["default"] = options["default"].declared_name
+            elif (
+                isinstance(options.get("default"), type)
+                and issubclass(options["default"], DeclaredFamily)
+            ):
+                options["default"] = options["default"].declared_name
+            if any(flag.startswith("-") for flag in metadata["flags"]):
+                options["dest"] = metadata.get("wire_name", declared.name)
+            else:
+                options.pop("required", None)
+            owner.add_argument(*metadata["flags"], **options)
+
+    @classmethod
+    def from_namespace(cls, args: argparse.Namespace) -> Self:
+        member = cls.decode(args.command)
+        payload = {"kind": member.declared_name}
+        hints = get_type_hints(member)
+        for declared in fields(member):
+            key = declared.metadata.get("wire_name", declared.name)
+            value = getattr(args, key)
+            normalize = declared.metadata["normalize"]
+            if normalize is not None:
+                value = normalize(value)
+            elif isinstance(hints[declared.name], type) and issubclass(
+                hints[declared.name], DeclaredFamily
+            ):
+                value = {"kind": value}
+            payload[key] = value
+        return member.from_payload(payload)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CliCommand(
+    DeclaredFamily, DeclaredOptions, affix="CliCommand", discovery_package="agent_comms"
+):
     multiple_targets: ClassVar[bool] = False
 
     @classmethod
@@ -631,78 +719,6 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package=
         return selection.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=os.getcwd() if project is None else project,
                              snapshot=snapshot, catalog=catalog)
-
-    @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
-        parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
-        groups: dict[str, Any] = {}
-        hints = get_type_hints(cls)
-        for declared in fields(cls):
-            metadata = declared.metadata
-            group = metadata["group"]
-            owner = parser
-            if group is not None:
-                if group not in groups:
-                    groups[group] = parser.add_mutually_exclusive_group(required=True)
-                owner = groups[group]
-            options = dict(metadata["parser_options"])
-            annotation = hints[declared.name]
-            scalar = (
-                get_args(annotation)[0] if get_origin(annotation) is types.UnionType else annotation
-            )
-            if scalar is bool:
-                options.setdefault("action", "store_true")
-            elif scalar in (int, float):
-                options.setdefault("type", scalar)
-            elif isinstance(scalar, type) and issubclass(scalar, Enum):
-                options["choices"] = [kind.value for kind in scalar]
-            elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
-                options.setdefault("choices", scalar.names())
-            elif (
-                get_origin(scalar) is type and get_args(scalar)
-                and issubclass(get_args(scalar)[0], DeclaredFamily)
-            ):
-                options.setdefault("choices", get_args(scalar)[0].names())
-            if metadata["parser_default"] is not MISSING:
-                options["default"] = metadata["parser_default"]
-            elif metadata["parser_default_factory"] is not MISSING:
-                options["default"] = metadata["parser_default_factory"]()
-            elif declared.default is not MISSING:
-                options["default"] = declared.default
-            elif declared.default_factory is not MISSING:
-                options["default"] = declared.default_factory()
-            else:
-                options["required"] = True
-            if isinstance(options.get("default"), DeclaredFamily):
-                options["default"] = options["default"].declared_name
-            elif (
-                isinstance(options.get("default"), type)
-                and issubclass(options["default"], DeclaredFamily)
-            ):
-                options["default"] = options["default"].declared_name
-            if any(flag.startswith("-") for flag in metadata["flags"]):
-                options["dest"] = metadata.get("wire_name", declared.name)
-            else:
-                options.pop("required", None)
-            owner.add_argument(*metadata["flags"], **options)
-
-    @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> Self:
-        member = cls.decode(args.command)
-        payload = {"kind": member.declared_name}
-        hints = get_type_hints(member)
-        for declared in fields(member):
-            key = declared.metadata.get("wire_name", declared.name)
-            value = getattr(args, key)
-            normalize = declared.metadata["normalize"]
-            if normalize is not None:
-                value = normalize(value)
-            elif isinstance(hints[declared.name], type) and issubclass(
-                hints[declared.name], DeclaredFamily
-            ):
-                value = {"kind": value}
-            payload[key] = value
-        return member.from_payload(payload)
 
 
 @dataclass(frozen=True, kw_only=True)
