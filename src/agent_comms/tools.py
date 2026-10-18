@@ -45,7 +45,7 @@ from .goal_actions import (
 from .goal_history import RecordedGoalRevision
 from .goal_presentation import ThreadGoalExecution
 from .goal_states import ActiveGoal
-from .goals import Goal
+from .goals import Goal, OrderCheck
 from .message_reference import MessageReference
 from .messages import Message
 from .owner_lifecycle import OwnerStartResult
@@ -55,7 +55,7 @@ from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as e
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
-from .todos import DeliverTodo, InstallTodo, OrderDelivery, Todo, TodoOperation
+from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, Todo, TodoOperation
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -795,6 +795,24 @@ class CommsOrderDoneTool(ThreadToolRequest):
             operation=DeliverTodo(todo.revision, comms.registry.require(caller.name).incarnation, self.delivery),
             progress="The problem's own delivery check passed."))
         return GoalRead(goal)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderCheckTool(ThreadToolRequest):
+    label = "Correct order check"
+    description = ("Replace the check of an open order, recording the old check, the new one and "
+                   "why; only its commander may invoke this tool, and the order keeps its deadline "
+                   "and strikes.")
+    problem: str = tool_field("Problem ID")
+    check: OrderCheck = tool_field("The corrected check: directory, command and expected result")
+    why: str = tool_field("Why the recorded check was wrong")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        todo = comms.goals.todos.get(self.problem)
+        actor = comms.registry.require(caller.name).incarnation
+        changed = comms.goals.change_problem(self.problem, CorrectCheckTodo(
+            todo.revision, actor, todo.order.check, self.check, self.why), caller.name)
+        return TodoChanged(changed, changed.strike_count)
 
 
 @dataclass(frozen=True, kw_only=True)

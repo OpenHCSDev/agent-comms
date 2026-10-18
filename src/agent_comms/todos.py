@@ -271,6 +271,8 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     at: EventTime
     first_call_deadline: EventTime
     first_call: FirstCall = field(default_factory=AwaitingFirstCall)
+    check_corrections: tuple[CorrectCheckTodo, ...] = field(
+        default=(), metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -300,6 +302,12 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         delivery.at.require_delivery()
         return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
+    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
+        if correction.previous != self.check:
+            raise ValueError("The order's check changed since it was read; read it again.")
+        return replace(self, check=correction.check,
+                       check_corrections=(*self.check_corrections, correction))
+
     def installed(self, works, artifact):
         raise ValueError("Check the delivered order before recording installation.")
 
@@ -321,6 +329,9 @@ class DeliveredProblemOrder(ProblemOrder):
         if delivery != self.delivery:
             raise ValueError("The order already records a different delivery.")
         return self
+
+    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
+        raise ValueError("A delivered order keeps the check its delivery passed.")
 
     def installed(self, works, artifact):
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
@@ -537,6 +548,24 @@ class StrikeTodo(TodoOperation):
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class CorrectCheckTodo(TodoOperation):
+    """The commander replaces a wrong check of an open order.
+
+    The order keeps its id, holder, deadline and strikes; a correction is not a resend."""
+    actor: ThreadIncarnation
+    previous: OrderCheck
+    check: OrderCheck
+    reason: str
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        _text(self.reason, "Check correction reason", 2000)
+        return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,8 @@ DOCUMENTED = [
      {"unit": "worker", "why": "late", "caught": "lead at install", "fork": None}),
     ("order", "strike worker --why late", {"unit": "worker", "why": "late", "caught": "lead at review"}),
     ("order", "done P1 --sha abc123", {"pid": "P1", "sha": "abc123"}),
+    ("order", "check P1 --check 'repo :: cat n -> 1' --why 'counted the wrong file'",
+     {"pid": "P1", "check": "repo :: cat n -> 1", "why": "counted the wrong file"}),
     ("order", "say worker,#comms note.txt", {"units": "worker,#comms", "body_file": "note.txt"}),
     ("order", "problem 'the text' --to worker --due 23:59 --order order.txt",
      {"text": "the text", "to": "worker", "due": "23:59", "order": "order.txt"}),
