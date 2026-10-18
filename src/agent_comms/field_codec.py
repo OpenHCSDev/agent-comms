@@ -6,7 +6,8 @@ import math
 import json
 import types
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -33,6 +34,25 @@ from .declared_family import DeclaredFamily
 from .sealed import Sealed
 
 T = TypeVar("T")
+
+
+class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
+    """Data that does not satisfy its declaration.
+
+    Every data refusal at the JSON and record boundary raises this. A broken
+    declaration stays a TypeError and is never caught at a data boundary.
+    """
+
+    @classmethod
+    @contextmanager
+    def refusing(cls, subject: str) -> Iterator[None]:
+        """A declaration-owned check that refuses data with ValueError refuses a malformed record."""
+        try:
+            yield
+        except cls:
+            raise
+        except ValueError as error:
+            raise cls(f"{subject}: {error}") from error
 
 
 @dataclass(frozen=True)
@@ -75,7 +95,7 @@ class FieldPlan:
             return {}
         value = data[self.key]
         if self.choices is not None and value not in self.choices():
-            raise ValueError(f"Field {self.key} must be one of: {', '.join(self.choices())}")
+            raise MalformedRecord(f"Field {self.key} must be one of: {', '.join(self.choices())}")
         return {self.name: self.value.decode(value)}
 
 
@@ -206,7 +226,7 @@ class JsonShapeFamily(WireValue):
             if type(data) is shape:
                 owners.append((member, annotation))
         if len(owners) != 1:
-            raise ValueError(f"Expected one {cls.__name__} owner for {type(data).__name__}")
+            raise MalformedRecord(f"Expected one {cls.__name__} owner for {type(data).__name__}")
         member, annotation = owners[0]
         result = member.from_json_value(FieldCodec.decode(annotation, data))
         if not isinstance(result, cls):
@@ -222,7 +242,8 @@ class TextRepresentation(FieldRepresentation):
 
     @classmethod
     def decode(cls, value: object) -> object:
-        return cls.from_text(FieldCodec.decode(str, value))
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
+            return cls.from_text(FieldCodec.decode(str, value))
 
     @classmethod
     @abstractmethod
@@ -237,7 +258,7 @@ class PathText(TextRepresentation):
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, Path):
-            raise TypeError("Expected a filesystem path")
+            raise MalformedRecord("Expected a filesystem path")
         return str(value)
 
     @classmethod
@@ -249,7 +270,7 @@ class TimestampText(TextRepresentation):
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, datetime):
-            raise TypeError("Expected a datetime")
+            raise MalformedRecord("Expected a datetime")
         return value.isoformat()
 
     @classmethod
@@ -416,7 +437,7 @@ class FieldCodec(Sealed):
         if get_origin(declared) is not dict:
             return cast(T, decoder.decode(data))
         if not isinstance(data, dict):
-            raise ValueError("Expected a JSON object.")
+            raise MalformedRecord("Expected a JSON object.")
         return cast(T, {key: decoder.decode(item) for key, item in data.items()})
 
     @classmethod
@@ -455,6 +476,21 @@ class FieldCodec(Sealed):
     @classmethod
     def decode(cls, target: type[T], data: object) -> T:
         return cast(T, compile_decoder(target).decode(data))
+
+    @staticmethod
+    def parse(text: str | bytes) -> object:
+        """External JSON text is data: strict UTF-8, syntax and duplicate keys refuse it."""
+        with MalformedRecord.refusing("Invalid JSON"):
+            return json.loads(
+                text.decode("utf-8") if isinstance(text, bytes) else text,
+                object_pairs_hook=_unique_object,
+            )
+
+    @staticmethod
+    def construct(target: Callable[..., T], values: dict[str, object]) -> T:
+        """A record built from decoded data refuses its values as a malformed record."""
+        with MalformedRecord.refusing(f"Invalid {target.__name__}"):
+            return target(**values)
 
     @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
@@ -678,7 +714,7 @@ class _ScalarDecoder(ValueDecoder[Any]):
             return data
         if target is float and type(data) in (int, float) and math.isfinite(data):
             return data
-        raise ValueError(f"Expected {target}, received {type(data).__name__}")
+        raise MalformedRecord(f"Expected {target}, received {type(data).__name__}")
 
     def encode_editor(self, value):
         return value if self.target is str else super(_ScalarDecoder, self).encode_editor(value)
@@ -700,12 +736,13 @@ class _RepresentedDecoder(ValueDecoder[Any]):
         representation = self.representation
         if data is None and not representation.accepts_null:
             return self.structural.decode(data)
-        if representation.external_json_shape:
-            # Decode through the representation capability, independently
-            # of the family's public name decoder. Children validate once;
-            # WireValue's pre-validation would traverse each subtree again.
-            return representation.from_wire(data)
-        return representation.decode(data)
+        with MalformedRecord.refusing(f"Invalid {representation.__name__}"):
+            if representation.external_json_shape:
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
 
 @dataclass(frozen=True, slots=True)
 class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
@@ -724,10 +761,8 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
 
     @classmethod
     def decode(cls, data):
-        try:
+        with MalformedRecord.refusing("Expected a JSON value with string keys and finite numbers"):
             return cls.validator().validate_python(data, strict=True)
-        except ValueError as error:
-            raise TypeError("Expected a JSON value with string keys and finite numbers") from error
 
     @classmethod
     def encode(cls, value):
@@ -736,6 +771,11 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
     @classmethod
     def schema(cls):
         return {}
+
+def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFamily]:
+    """A wire name the family does not declare is malformed data."""
+    with MalformedRecord.refusing(f"Invalid {family.__name__} name"):
+        return family.decode(name)
 
 @dataclass(frozen=True, slots=True)
 class _FamilyNameDecoder(ValueDecoder[Any]):
@@ -751,8 +791,8 @@ class _FamilyNameDecoder(ValueDecoder[Any]):
 
     def decode(self, data):
         if type(data) is not str:
-            raise ValueError("Expected a declared family name.")
-        return self.family.decode(data)
+            raise MalformedRecord("Expected a declared family name.")
+        return _declared_member(self.family, data)
 
 @dataclass(frozen=True, slots=True)
 class _LiteralDecoder(ValueDecoder[Any]):
@@ -770,7 +810,7 @@ class _LiteralDecoder(ValueDecoder[Any]):
     def decode(self, data):
         if any(type(data) is type(value) and data == value for value in self.values):
             return data
-        raise ValueError(f"Value does not match {self.target}")
+        raise MalformedRecord(f"Value does not match {self.target}")
 
 @dataclass(frozen=True, slots=True)
 class UnionDecoder[T](ValueDecoder[T]):
@@ -792,11 +832,11 @@ class UnionDecoder[T](ValueDecoder[T]):
             for alternative in self.alternatives:
                 try:
                     return alternative.decode(data)
-                except (TypeError, ValueError) as error:
+                except MalformedRecord as error:
                     if first_error is None:
                         first_error = error
             # Keep the original declaration-owned reason on total failure.
-            raise ValueError(
+            raise MalformedRecord(
                 f"Value does not match {self.target}: {first_error}"
             ) from first_error
         finally:
@@ -815,7 +855,7 @@ class _ArrayDecoder(ValueDecoder[Any]):
 
     def decode(self, data):
         if not isinstance(data, list):
-            raise ValueError("Expected a JSON array.")
+            raise MalformedRecord("Expected a JSON array.")
         return self.container(self.decode_items(data))
 
     def decode_items(self, data):
@@ -845,8 +885,28 @@ class _VariadicTupleDecoder(_TupleDecoder):
 class _FixedTupleDecoder(_TupleDecoder):
     def decode_items(self, data):
         if len(data) != len(self.items):
-            raise ValueError("Tuple length does not match declaration.")
+            raise MalformedRecord("Tuple length does not match declaration.")
         return (item.decode(value) for item, value in zip(self.items, data, strict=True))
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result = dict(pairs)
+    if len(result) != len(pairs):
+        raise MalformedRecord("Duplicate JSON field")
+    return result
+
+
+def _object_entries(data):
+    if not isinstance(data, dict):
+        raise MalformedRecord("Expected a JSON object.")
+    return data.items()
+
+def _object_or_pair_entries(data):
+    """Keys that are not strings travel as an array of [key, value] pairs."""
+    if isinstance(data, dict):
+        return data.items()
+    if not isinstance(data, list) or any(not isinstance(pair, list) or len(pair) != 2 for pair in data):
+        raise MalformedRecord("Expected a JSON object or an array of key-value pairs.")
+    return data
 
 @dataclass(frozen=True, slots=True)
 class _DictDecoder(ValueDecoder[Any]):
@@ -857,7 +917,7 @@ class _DictDecoder(ValueDecoder[Any]):
 
     @classmethod
     def from_annotation(cls, target, args):
-        entries = dict.items if args[0] is str else lambda data: data.items() if isinstance(data, dict) else data
+        entries = _object_entries if args[0] is str else _object_or_pair_entries
         return cls(compile_decoder(args[0]), compile_decoder(args[1]), entries)
 
     def decode(self, data):
@@ -889,12 +949,12 @@ class _FamilyRecordDecoder(ValueDecoder[Any]):
 
     def decode(self, data):
         if not isinstance(data, dict):
-            raise ValueError("Expected a family object.")
+            raise MalformedRecord("Expected a family object.")
         tag = self.family.family_discriminator
         name = data.get(tag)
         if not isinstance(name, str):
-            raise ValueError(f"Expected a string family {tag}.")
-        member = self.family.decode(name)
+            raise MalformedRecord(f"Expected a string family {tag}.")
+        member = _declared_member(self.family, name)
         return _member_decoder(member).decode(
             {key: value for key, value in data.items() if key != tag}
         )
@@ -910,27 +970,24 @@ class _RecordDecoder(ValueDecoder[Any]):
         target = self.record
         plan = FieldCodec._record_plan(target)
         if not isinstance(data, dict):
-            raise ValueError("Expected a record object.")
-        missing = [key for key in plan.required_keys if key not in data]
+            raise MalformedRecord("Expected a record object.")
+        missing = dict.fromkeys(
+            key for key in (*plan.required_keys, *plan.init_required_keys) if key not in data
+        )
         if missing:
-            raise ValueError(
+            raise MalformedRecord(
                 f"Missing required fields for {target.__name__}: {', '.join(missing)}"
-            )
-        init_missing = [key for key in plan.init_required_keys if key not in data]
-        if init_missing:
-            raise TypeError(
-                f"Missing required fields for {target.__name__}: {', '.join(init_missing)}"
             )
         unknown = data.keys() - plan.accepted_keys
         if unknown:
-            raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            raise MalformedRecord(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
         null = plan.reject_null_keys & data.keys()
         if any(data[key] is None for key in null):
-            raise ValueError(f"Null field for {target.__name__}")
+            raise MalformedRecord(f"Null field for {target.__name__}")
         values = {}
         for entry in plan.bindings:
             values.update(entry.decoded(data))
-        return target(**values)
+        return FieldCodec.construct(target, values)
 
 @dataclass(frozen=True, slots=True)
 class _EnumDecoder(ValueDecoder[Any]):
@@ -940,7 +997,8 @@ class _EnumDecoder(ValueDecoder[Any]):
         return tuple((str(member.value), member.value) for member in self.target)
 
     def decode(self, data):
-        return self.target(data)
+        with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
+            return self.target(data)
 
 @overload
 def compile_decoder[T](annotation: type[T]) -> ValueDecoder[T]: ...

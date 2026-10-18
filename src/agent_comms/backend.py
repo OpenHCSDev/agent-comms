@@ -46,6 +46,7 @@ from .native_child import PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
+from .field_codec import MalformedRecord
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import SelectedToolDenied
 from .prompt_state import UnwrittenPrompt
@@ -350,7 +351,7 @@ class TurnSession:
                         break
                     try:
                         abort_payload = PiRpcChannel.decode_record(response)
-                    except (ValueError, TypeError, UnicodeError):
+                    except (json.JSONDecodeError, UnicodeDecodeError, MalformedRecord):
                         continue
                     abort_payload.observe_abort(self)
                     if (
@@ -498,7 +499,7 @@ class TurnSession:
         except json.JSONDecodeError:
             self.skip = True
             return
-        except (ValueError, TypeError) as error:
+        except MalformedRecord as error:
             if self.awaiting_native_attestation:
                 self.output.record_failure(
                     failures.InputIdUnavailable(

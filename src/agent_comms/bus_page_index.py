@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
+from .field_codec import MalformedRecord
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import DisplaySnapshot
 from .coordination_database import CoordinationStore
@@ -302,7 +303,7 @@ class BusPageIndex:
                      parameters=tuple(params), order_by=("seq",), descending=descending)) as rows:
             try:
                 yield from rows
-            except (ValueError, TypeError) as error:
+            except MalformedRecord as error:
                 raise StaleBusPageIndexError("Indexed row has invalid fields") from error
 
     def display_snapshot(self, scopes: tuple[ChannelDisplayScope, ...], before_offset: int) -> DisplaySnapshot:

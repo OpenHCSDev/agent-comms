@@ -29,7 +29,7 @@ from .child_process import ProcessIdentity
 from .comms import Comms
 from .coordinated_runtime import SelectedExecution
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .native_pi import _private_session_dir, _trusted_package
 from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
@@ -195,7 +195,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         )
         return 0
-    except (OSError, RuntimeError, ValueError, TypeError) as error:
+    except (OSError, RuntimeError, RelationViolationError, MalformedRecord) as error:
         # Never include provider stderr, prompt text, or private root contents.
         return _error(f"Foreground N/K failed closed: {type(error).__name__}")
 

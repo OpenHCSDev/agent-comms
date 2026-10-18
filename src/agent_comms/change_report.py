@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
-from .field_codec import WireValue
+from .field_codec import MalformedRecord, WireValue
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +46,7 @@ class FileLine(WireValue):
     @classmethod
     def from_wire(cls, data: Any) -> FileLine:
         if not isinstance(data, str):
-            raise TypeError("Expected a 'file.py:line' string.")
+            raise MalformedRecord("Expected a 'file.py:line' string.")
         file, separator, line = data.rpartition(":")
         if not separator or not file or not line.isdigit():
             raise ValueError(f"Expected a 'file.py:line' reference, received {data!r}")

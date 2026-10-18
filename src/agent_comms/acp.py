@@ -56,7 +56,7 @@ from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .coordination_cohort import next_sealed_assignment
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .cursor_publication import CursorPublication
 from .input_drain import InputDrain
 from .queued_input import DeliveredInput
@@ -187,7 +187,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         try:
             request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
-        except (ValueError, TypeError) as error:
+        except MalformedRecord as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
         # Literal /compact is the external ACP text command; ours uses a record.
         text = self._prompt_text(prompt).strip()

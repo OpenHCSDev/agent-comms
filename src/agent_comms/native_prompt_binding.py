@@ -27,7 +27,7 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .private_send_rules import NativeIdentityCheck
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeInputRecord, NativeInputIdText, NativeInputExecution
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .native_pi import read_tracked_input_digest
 from .native_entries import NativeEvidenceRead
 from .native_runtime_input import NativeRuntimeInput
@@ -76,7 +76,7 @@ class PromptBinding(RootFile, NativeInputRecord, TypedTable, PrivateRuntimeSchem
     def execution(self) -> NativeInputExecution:
         try:
             return self.stage.from_columns(self.execution_id, self.attempt_ordinal)
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise IdentityConflict("Prompt binding execution columns conflict with their stage") from error
 
     without_rowid = True

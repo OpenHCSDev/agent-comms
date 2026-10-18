@@ -15,6 +15,7 @@ from agent_comms.coordination_tables.participants import OwnerGenerations, Parti
 from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
+from .field_codec import MalformedRecord
 from .typed_table import (
     Column,
     ForeignKey,
@@ -569,7 +570,7 @@ def assert_cohort_schema(db: sqlite3.Connection) -> None:
     schema = _schema(CohortTable)
     try:
         meta = CohortSchemaMeta.one(db, singleton=1)
-    except (sqlite3.Error, ValueError, TypeError) as error:
+    except (sqlite3.Error, MalformedRecord) as error:
         raise SchemaVersionError("private cohort schema is not installed") from error
     if meta != CohortSchemaMeta(
         singleton=1, version=COHORT_SCHEMA_VERSION, ddl_digest=_digest(schema)
@@ -621,7 +622,7 @@ def install_private_cohort_schema(store: Coordination) -> None:
         db.execute("SAVEPOINT optional_awareness_install")
         try:
             _install_optional_awareness_schema(db)
-        except (sqlite3.Error, SchemaVersionError, ValueError, TypeError) as error:
+        except (sqlite3.Error, SchemaVersionError, MalformedRecord) as error:
             db.execute("ROLLBACK TO optional_awareness_install")
             _LOG.warning("Optional awareness schema unavailable: %r", error, exc_info=error)
         finally:

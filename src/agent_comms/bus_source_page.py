@@ -24,10 +24,7 @@ class SourcePage:
 
     @classmethod
     def capture(cls, **values) -> Self:
-        try:
-            return FieldCodec.decode(cls, values)
-        except TypeError as error:
-            raise ValueError("Source page requires its exact declared fields") from error
+        return FieldCodec.decode(cls, values)
 
 
 @dataclass(frozen=True, kw_only=True)

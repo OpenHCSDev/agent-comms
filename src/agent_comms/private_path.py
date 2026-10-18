@@ -18,6 +18,7 @@ from typing import BinaryIO, ClassVar
 from collections.abc import Iterator
 
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
 
 
 def fsync_directory(path: Path) -> None:
@@ -144,7 +145,7 @@ class FilesystemRole(DeclaredFamily, affix="Role"):
     def require(cls, observed: os.stat_result) -> None:
         failed = cls.violation(observed)
         if failed is not None:
-            raise ValueError(f"{cls.declared_name}: {failed.declared_name}")
+            raise RelationViolationError(f"{cls.declared_name}: {failed.declared_name}")
 
 
 class PrivateRole(FilesystemRole):

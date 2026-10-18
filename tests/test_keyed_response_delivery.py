@@ -249,8 +249,8 @@ def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path)
 def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path):
     import json
 
-    from agent_comms.bus_publication import DuplicateWireKeyError
     from agent_comms.errors import StoredHistoryUnreadable
+    from agent_comms.field_codec import MalformedRecord
 
     case = _ready(tmp_path, direct=True)
     try:
@@ -265,7 +265,8 @@ def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path)
         before = case.bus.log.path.read_bytes()
         with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as raised:
             list(case.bus.full_history_page().messages)
-        assert isinstance(raised.value.__cause__, DuplicateWireKeyError)
+        assert type(raised.value.__cause__) is MalformedRecord
+        assert 'Duplicate JSON field' in str(raised.value.__cause__)
         assert case.bus.log.path.read_bytes() == before
     finally:
         case.close()

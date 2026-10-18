@@ -22,6 +22,7 @@ from .following_inputs import FollowingInputs
 from .backend import TurnSession
 from .turn_watchdog import ModelWait, TurnWait
 from .errors import RelationViolationError
+from .field_codec import MalformedRecord
 from .maintenance_barrier import MaintenanceIngress, UncoordinatedIngress
 from .mro_dispatch import MroDispatch, handles
 from .native_attestation import AttestationError, ObservedAttestation
@@ -373,7 +374,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 if not self.rejected_commands:
                     break  # Otherwise the read was only woken to report a refused input.
             event = PiRpcChannel.decode_record(raw, strict=True) if raw else None
-        except (UnicodeError, ValueError, TypeError) as error:
+        except MalformedRecord as error:
             raise NativePiUnavailable(
                 f"Native Pi RPC record is invalid or incomplete; {type(error).__name__}: {error}"
             ) from error

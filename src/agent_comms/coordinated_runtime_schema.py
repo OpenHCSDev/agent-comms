@@ -9,6 +9,7 @@ import sqlite3
 from agent_comms.coordination_errors import PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
 
+from .field_codec import MalformedRecord
 from .native_runtime_input import NativeRuntimeSchemaMeta, NativeRuntimeTable
 from .typed_table import SQLiteForeignKeys, SQLiteSchemaObject, TypedTable
 
@@ -37,7 +38,7 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
                 "AND (name LIKE 'native_runtime_%' OR name LIKE 'current_native_cursor%')"
             )
         )
-    except (sqlite3.Error, ValueError, TypeError) as error:
+    except (sqlite3.Error, MalformedRecord) as error:
         raise PublicationActivationBlocked("native runtime schema is not installed") from error
     if meta != NativeRuntimeSchemaMeta(singleton=1, ddl_digest=_digest(schema)):
         raise PublicationActivationBlocked("native runtime schema version differs")

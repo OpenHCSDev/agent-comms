@@ -11,6 +11,7 @@ from typing import Any, ClassVar, Literal
 
 from .pi_vocabulary import ThinkingLevel
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, MalformedRecord
 from .pi_payloads import PiMessage, PiPayload
 from .routing import TurnRouting
 from .transcript_events import NoticeTranscript, TranscriptEvent
@@ -111,7 +112,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
             message = raw["message"]
             # Opaque display roles must not hide a tracked ID from proof readers.
             if message.get("inputId") is not None and not entry.message.user:
-                raise ValueError("Tracked native input must belong to a user")
+                raise MalformedRecord("Tracked native input must belong to a user")
             if entry.message.user and isinstance(entry.message.content, tuple):
                 # A digest/context reader may corroborate extended native content,
                 # but continued STARTED text matching must never lose extra fields.
@@ -159,9 +160,9 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
                 if user is None:
                     continue
                 if user.input_id in tracked:
-                    raise ValueError("duplicate tracked input")
+                    raise MalformedRecord("duplicate tracked input")
                 tracked[user.input_id] = user
-        except (ValueError, TypeError) as error:
+        except MalformedRecord as error:
             raise NativePiUnavailable(
                 "Native Pi session has ambiguous tracked user input"
             ) from error
@@ -174,7 +175,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     def require_tracked_user(self) -> MessageEntry:
         tracked = self.tracked_user
         if tracked is None:
-            raise ValueError("Native publication requires an original tracked input")
+            raise MalformedRecord("Native publication requires an original tracked input")
         return tracked
 
     @property
@@ -291,7 +292,7 @@ class NativeEvidenceRead:
             appended = tuple(self.decode_rows(self.source.rows()))
             entries = self.entries + appended
             if not entries or not isinstance(entries[0], SessionEntry):
-                raise ValueError("Native Pi session header is invalid")
+                raise MalformedRecord("Native Pi session header is invalid")
             entries[0].require_header()
             _private_session_dir(self.source.path.parent)
         except NativeEvidencePrefixChanged:
@@ -305,7 +306,7 @@ class NativeEvidenceRead:
         except NativePiUnavailable:
             self.close()
             raise
-        except (ValueError, TypeError, KeyError) as error:
+        except MalformedRecord as error:
             self.close()
             raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
         self.entries = entries
@@ -394,16 +395,16 @@ class SessionEntry(NativeEntry):
 
     def require_header(self) -> None:
         if not self.id:
-            raise ValueError("Native Pi session header is invalid")
+            raise MalformedRecord("Native Pi session header is invalid")
 
 
 @dataclass(frozen=True, kw_only=True)
 class MessageEntry(NativeEntry):
     @classmethod
     def input_evidence(cls, raw: dict) -> NativeEntry | None:
-        message = raw["message"]
+        message = raw.get("message")
         if not isinstance(message, dict):
-            raise ValueError("Native message evidence requires an object")
+            raise MalformedRecord("Native message evidence requires an object")
         if message.get("inputId") is not None:
             # Same strict original user/content/digest decoding, including the
             # rejection of tracked IDs hidden in another message role.
@@ -443,7 +444,7 @@ class MessageEntry(NativeEntry):
             or not _DIGEST.fullmatch(self.message.input_digest)
             or not self.id
         ):
-            raise ValueError("Native Pi session has ambiguous tracked user input")
+            raise MalformedRecord("Native Pi session has ambiguous tracked user input")
         return self
 
     def require_failed_terminal(self, parent_id: str) -> None:
@@ -491,8 +492,6 @@ class ImportedMetadataEntry(CustomEntry):
         return self.data.historical_instructions
 
     def wire_discriminator(self):
-        from .field_codec import FieldCodec
-
         return FieldCodec.encode(CustomEntry)
 
 

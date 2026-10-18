@@ -11,7 +11,7 @@ from typing import ClassVar
 
 from .child_process import BoundedRun, ChildResult
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .launch_runtime import RestartEnvironment
 
 
@@ -108,6 +108,6 @@ class PiHelper(DeclaredFamily, affix="Helper"):
                 f"{cls.declared_name} wrote {len(outcome.stdout)} bytes; bound is {cls.output_bound}"
             )
         try:
-            return FieldCodec.decode(cls.result, json.loads(outcome.stdout))
-        except (TypeError, ValueError, UnicodeError) as error:
+            return FieldCodec.decode(cls.result, FieldCodec.parse(outcome.stdout))
+        except MalformedRecord as error:
             raise PiHelperError(f"{cls.declared_name} returned invalid evidence") from error

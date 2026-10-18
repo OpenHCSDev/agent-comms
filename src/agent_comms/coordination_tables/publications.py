@@ -14,6 +14,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.typed_table import (
@@ -167,13 +168,13 @@ END"""
     def validate_sql(cls, *values: object) -> int:
         """SQLite positional input follows the declared columns; decode and validate once."""
         try:
-            cls(**{
+            FieldCodec.construct(cls, {
                 item.name: item.decode(value)
                 for item, value in zip(
                     (item for item in cls._fields() if item.init), values, strict=True
                 )
             })
-        except (TypeError, ValueError, CoordinationError):
+        except (MalformedRecord, CoordinationError):
             return 0  # The trigger refuses an invalid envelope; other errors are defects.
         return 1
 

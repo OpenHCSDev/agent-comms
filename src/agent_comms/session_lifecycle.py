@@ -24,6 +24,7 @@ from acp.schema import (
     TerminalAuthMethod,
 )
 
+from .field_codec import MalformedRecord
 from . import agent_events as events
 from .acp_extension import (
     CoordinationChangedUpdate,
@@ -274,7 +275,7 @@ class SessionLifecycle:
                     **await self.metadata(thread.name, session_id=session_id),
                     **error.owner.failure_metadata(), **ExistingSessionLoadPlan(binding).metadata(),
                 })
-            except (OSError, RuntimeError, TypeError, ValueError) as error:
+            except (OSError, RuntimeError, RelationViolationError, MalformedRecord) as error:
                 raise RequestError.invalid_params(
                     {"reason": (
                         f"Unable to attach to {thread.name!r} owner {thread.process_identity}: {error}"
@@ -433,7 +434,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
         try:
             plan = SessionLoadPlan.at_ingress(kwargs.get("agentCommsLoad"))
             owner = await plan.resolve(self, thread)
-        except (OSError, RuntimeError, TypeError, ValueError) as error:
+        except (OSError, RuntimeError, RelationViolationError, MalformedRecord) as error:
             raise RequestError.invalid_params(
                 {"reason": f"Session load not authorized for {thread.name!r}: {error}"}
             ) from error
