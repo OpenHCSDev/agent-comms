@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from conftest import publish_initial
 import json
 import fcntl
@@ -51,7 +52,7 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
         monkeypatch.delenv(name, raising=False)
     routed = wire()
     assert routed.root == root
-    pinned = PrivateNkLaunch(root, root_id, declared_native_package)
+    pinned = PrivateNkLaunch(root, root_id, VerifiedNativePackage.acquire(declared_native_package))
     assert routed.owners.launch_authority == pinned
     assert PrivateNkLaunch.derive() == pinned
     legacy = tmp_path / "explicit-legacy"
@@ -60,13 +61,13 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     assert PrivateNkLaunch.derive() is None
 
 
-def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, monkeypatch):
+def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, monkeypatch, native_runtime_package):
     """No route and no handoff: the marker owns the root ID, the installation owns the package."""
     from agent_comms.native_package import NativePackageError
     from agent_comms.native_pi import NativePiUnavailable
 
     root, root_id, _, _, _ = _root(tmp_path)
-    package = tmp_path / "installed-package"
+    package = native_runtime_package.path
     monkeypatch.setattr(active_route, "active_route_path", lambda: tmp_path / "absent" / "active-route.json")
     monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: package)
     for name in ("AGENT_COMMS_ROOT",):
@@ -74,7 +75,7 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
     assert wire(tmp_path / "public").owners.launch_authority is None
 
     comms = wire(root)
-    assert comms.owners.launch_authority == PrivateNkLaunch(root, root_id, package)
+    assert comms.owners.launch_authority == PrivateNkLaunch(root, root_id, VerifiedNativePackage.acquire(package))
     saved = tmp_path / "saved-session.jsonl"
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
@@ -85,9 +86,10 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
     def rejected(_package):
         raise NativePiUnavailable("Pinned native Pi package differs from reviewed fork")
 
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", rejected)
-    with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
-        wire(root).owners.start("headless")
+    with monkeypatch.context() as package_patch:
+        package_patch.setattr(VerifiedNativePackage, "acquire", classmethod(lambda cls, path: rejected(path)))
+        with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
+            wire(root).owners.start("headless")
 
     def missing():
         raise NativePackageError("Pinned native package directory is missing")
@@ -114,7 +116,7 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
         assert result.pid == launched[0].pid
         assert captured[0]["AGENT_COMMS_ROOT"] == str(root)
         # The child derives from its root exactly what the parent derived.
-        assert PrivateNkLaunch.derive(Path(captured[0]["AGENT_COMMS_ROOT"])) == PrivateNkLaunch(root, root_id, package)
+        assert PrivateNkLaunch.derive(Path(captured[0]["AGENT_COMMS_ROOT"])) == PrivateNkLaunch(root, root_id, VerifiedNativePackage.acquire(package))
     finally:
         for child in launched:
             child.stop_sync()
@@ -391,8 +393,12 @@ async def test_private_relative_root_pinned_across_cwd_change_before_wire(
     monkeypatch.setattr(sys, "argv", ["agent_comms.acp"])
     seen = []
 
-    def trust_and_switch(_package):
+    acquire = VerifiedNativePackage.acquire
+
+    def trust_and_switch(path):
+        package = acquire(path)
         monkeypatch.chdir(other)
+        return package
 
     class StopBeforeOwnerAttachmentError(Exception):
         pass
@@ -405,7 +411,7 @@ async def test_private_relative_root_pinned_across_cwd_change_before_wire(
     def stop(*_args, **_kwargs):
         raise StopBeforeOwnerAttachmentError
 
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", trust_and_switch)
+    monkeypatch.setattr(VerifiedNativePackage, "acquire", classmethod(lambda cls, path: trust_and_switch(path)))
     selected = acp if entrypoint == "acp" else worker
     monkeypatch.setattr(selected, "wire", capture_wire)
     if entrypoint == "acp":

@@ -18,6 +18,12 @@ from test_coordinated_runtime import _fake_model
 
 
 async def main(base: Path) -> None:
+    from importlib.metadata import distribution
+    from agent_comms import native_package
+
+    manifest = Path(distribution("agent-comms").locate_file("agent_comms/_native/pi-native.sha256")).resolve(strict=True)
+    assert manifest.read_bytes() == native_package.MANIFEST.read_bytes()
+    native_package.MANIFEST = manifest
     ready = base / "registered"
     for _ in range(600):
         if ready.exists():

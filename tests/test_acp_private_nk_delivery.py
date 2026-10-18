@@ -859,8 +859,8 @@ async def test_acp_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
     # Preflight must run before any SQL acceptance, not only before reservation.
     monkeypatch.setattr(
-        native_pi.NativePiRpcLaunch,
-        "acquire_tracked",
+        VerifiedNativePackage,
+        "acquire",
         classmethod(
             lambda _cls, _package: (_ for _ in ()).throw(
                 PublicationActivationBlocked("unreviewed Pi")

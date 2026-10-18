@@ -1,5 +1,6 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 import asyncio
 import os
 import sys
@@ -29,30 +30,38 @@ def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, c
     assert not root.exists()
 
 
-def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
+def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch, *, native_runtime_package):
     import agent_comms.native_pi as native_pi
     import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 
-    package = tmp_path / "package"
+    from agent_comms import native_package
+
+    package = native_runtime_package
     verified = []
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda value: verified.append(value))
+    digest = native_package.package_tree_digest
+
+    def counted(path):
+        verified.append(path)
+        return digest(path)
+
+    monkeypatch.setattr(native_package, "package_tree_digest", counted)
     forged = tmp_path / "pi-comms-native"
     forged.write_text("#!/bin/sh\necho not-native\n")
     forged.chmod(0o755)
     with pytest.raises(NativePiUnavailable, match="validated native"):
-        NativePiRpcLaunch.managed(str(forged), (), root=tmp_path, worktree=tmp_path)
+        NativePiRpcLaunch.managed(str(forged), (), root=tmp_path, worktree=tmp_path, package=native_runtime_package)
     assert verified == []
     launch = NativePiRpcLaunch.managed(
         "pi",
         ("--provider", "local", "--model", "fixture"),
         root=tmp_path, worktree=tmp_path,
         environment={"NODE_OPTIONS": "--import=/untrusted.js", "PI_WORKTREE": "/wrong"},
-    )
-    assert verified == [package]
+     package=native_runtime_package)
+    assert verified == []  # Managed construction consumes the already-acquired package.
     assert launch.package == package
     assert "NODE_OPTIONS" not in launch.env
     assert launch.env["PI_WORKTREE"] == str(tmp_path)
-    assert str(package / "dist/cli.js") in launch.argv
+    assert str(package.cli) in launch.argv
     assert "--provider" in launch.argv and "fixture" in launch.argv
     for arguments in (
         ("--mode", "text"),
@@ -64,7 +73,7 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
         ("--version",),
     ):
         with pytest.raises(NativePiUnavailable):
-            NativePiRpcLaunch.managed("pi", arguments, root=tmp_path, worktree=tmp_path)
+            NativePiRpcLaunch.managed("pi", arguments, root=tmp_path, worktree=tmp_path, package=native_runtime_package)
 
 
 async def test_unvalidated_configuration_refuses_before_child(tmp_path, monkeypatch):
@@ -95,7 +104,7 @@ async def test_native_early_exit_retains_failure_without_raw_stdout(tmp_path):
     assert not any(isinstance(item, events.Chunk) for item in result)
 
 
-async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, monkeypatch):
+async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, monkeypatch, *, native_runtime_package):
     import agent_comms.private_nk_entrypoint as private_nk_entrypoint
     from agent_comms.pi_commands import GetState
     from agent_comms.pi_events import Response
@@ -104,7 +113,7 @@ async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, mo
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
         pytest.skip("Prepared package is required; never build or contact a provider")
-    route = PrivateNkLaunch(tmp_path, "a" * 32, Path(package))
+    route = PrivateNkLaunch(tmp_path, "a" * 32, VerifiedNativePackage.acquire(Path(package)))
     monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda _cls: route))
     launch = NativePiRpcLaunch.managed(
         "pi",
@@ -117,7 +126,7 @@ async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, mo
         ),
         root=tmp_path, worktree=tmp_path,
         environment={"PI_CODING_AGENT_DIR": str(tmp_path / "agent-config")},
-    )
+     package=native_runtime_package)
     async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=12) as child:
         channel = PiRpcChannel(child.stdout)
         child.stdin.write(channel.encode(GetState(id="preflight")))

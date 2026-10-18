@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from conftest import publish_initial
 import asyncio
 import json
@@ -51,7 +52,7 @@ def unknown_owner(directory, authorized, output, exit_allowed):
     try:
         asyncio.run(
             runtime.SelectedExecution(
-                root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+                root=root, wire_root_id=root_id, owner_name="beta", native_package=VerifiedNativePackage.acquire(pinned_native_package())
             ).run()
         )
     except NativePiUnavailable:
@@ -103,9 +104,7 @@ def input_evidence(store):
 
 
 @pytest.mark.asyncio
-async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
-    released_unknown, monkeypatch
-):
+async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(released_unknown, monkeypatch, *, native_runtime_package):
     process, exit_allowed, root, root_id, execution_id, input_id = released_unknown
     leave(process, exit_allowed)
     before_bus = (root / "bus.jsonl").read_bytes()
@@ -142,7 +141,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
     fake, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
     ).run()
     assert result.disposition is CompletedAssignment
     assert len(calls) == 1 and calls[0][0] != input_id
@@ -271,7 +270,7 @@ def test_missing_claim_cannot_borrow_a_live_successor_release(released_unknown):
 
 
 @pytest.mark.asyncio
-async def test_real_local_rpc_failure_reaps_child_and_releases_slot(tmp_path, monkeypatch):  # noqa: F811
+async def test_real_local_rpc_failure_reaps_child_and_releases_slot(tmp_path, monkeypatch, *, native_runtime_package):  # noqa: F811
     import agent_comms.native_pi as native_pi
     from agent_comms.durable_turn import DurableTurn
 
@@ -318,7 +317,7 @@ print(json.dumps({"type":"response", "id":request["id"],
     monkeypatch.setattr(DurableTurn, "fail_unknown", after_reap)
     with pytest.raises(NativePiInputNotSent, match="capability preflight failed") as failure:
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
         ).run()
     assert failure.value.diagnostic_evidence["input_disposition"] == "not_sent"
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -341,14 +340,14 @@ print(json.dumps({"type":"response", "id":request["id"],
     fake, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
     ).run()
     assert result.disposition is CompletedAssignment
     assert len(calls) == 1 and calls[0][0] != old_id
 
 
 @pytest.mark.asyncio
-async def test_revoked_live_failure_keeps_slot_for_recovery(tmp_path, monkeypatch):  # noqa: F811
+async def test_revoked_live_failure_keeps_slot_for_recovery(tmp_path, monkeypatch, *, native_runtime_package):  # noqa: F811
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
 
     async def revoke_then_fail(*_args, **_kwargs):
@@ -358,7 +357,7 @@ async def test_revoked_live_failure_keeps_slot_for_recovery(tmp_path, monkeypatc
     monkeypatch.setattr(TrackedTurnSession, "execute", revoke_then_fail)
     with pytest.raises(NativePiUnavailable, match="original uncertain failure"):
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package
         ).run()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(

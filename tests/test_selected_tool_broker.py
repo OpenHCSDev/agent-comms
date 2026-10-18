@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 import asyncio
 import json
 import os
@@ -112,13 +113,11 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
-def test_default_off_and_packaged_extension_selection(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selected_model
-) -> None:
+def test_default_off_and_packaged_extension_selection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selected_model, *, native_runtime_package) -> None:
     tmp_path.chmod(0o700)
     sessions = tmp_path / "sessions"
     default = native_pi.NativePiRpcLaunch.tracked(
-        tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions), model=selected_model
+        native_runtime_package, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions), model=selected_model
     )
     assert "--no-tools" in default.argv and "--no-builtin-tools" not in default.argv
     assert "-e" not in default.argv
@@ -127,7 +126,7 @@ def test_default_off_and_packaged_extension_selection(
     packaged = tmp_path / "dist/selected_claimed_write.mjs"
     packaged.write_bytes(Path(broker.__file__).with_name("selected_claimed_write.mjs").read_bytes())
     selected = native_pi.NativePiRpcLaunch.tracked(
-        tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
+        native_runtime_package, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
         model=selected_model, selected_tool_mode=mode
     )
     assert "--no-tools" not in selected.argv
@@ -139,12 +138,12 @@ def test_default_off_and_packaged_extension_selection(
     extension.write_text("evil changed extension", encoding="utf-8")
     with pytest.raises(SelectedToolDenied, match="reviewed"):
         native_pi.NativePiRpcLaunch.tracked(
-            tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
+            native_runtime_package, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
             model=selected_model, selected_tool_mode=mode
         )
     with pytest.raises(AttributeError, match="launch_arguments"):
         native_pi.NativePiRpcLaunch.tracked(
-            tmp_path,
+            native_runtime_package,
             root=tmp_path, worktree=tmp_path,
             session=SelectedSession(sessions),
             model=selected_model,

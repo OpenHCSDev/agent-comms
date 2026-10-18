@@ -1,5 +1,6 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -194,9 +195,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     assert list(comms.bus.full_history_page().messages)[-1] == message
 
 
-async def test_original_target_handling_revokes_open_sender_read_without_new_message(
-    tmp_path, monkeypatch,
-):  # noqa: F811
+async def test_original_target_handling_revokes_open_sender_read_without_new_message(tmp_path, monkeypatch, *, native_runtime_package):  # noqa: F811
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.native_runtime_input import NativeRuntimeInput
     from test_coordinated_runtime import _fake_model
@@ -243,7 +242,7 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
     runner, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
     outcome = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path,
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package,
     ).run()
     assert outcome is not None and outcome.disposition is IgnoredAssignment
     assert len(calls) == 1

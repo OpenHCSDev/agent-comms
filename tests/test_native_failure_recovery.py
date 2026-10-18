@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 import asyncio
 import json
 import multiprocessing
@@ -66,7 +67,7 @@ def failed_owner(directory, output, exit_allowed):
     try:
         asyncio.run(
             runtime.SelectedExecution(
-                root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+                root=root, wire_root_id=root_id, owner_name="beta", native_package=VerifiedNativePackage.acquire(pinned_native_package())
             ).run()
         )
     except NativePiUnavailable:

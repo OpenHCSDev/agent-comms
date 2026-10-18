@@ -62,7 +62,7 @@ def native_runtime_package():
     from importlib.metadata import distribution
     from agent_comms import native_package
 
-    manifest = Path(distribution("agent-comms").locate_file("agent_comms/_native/pi-native.sha256"))
+    manifest = Path(distribution("agent-comms").locate_file("agent_comms/_native/pi-native.sha256")).resolve(strict=True)
     assert manifest.read_bytes() == native_package.MANIFEST.read_bytes()
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(native_package, "MANIFEST", manifest)
@@ -111,20 +111,7 @@ def private_directory():
 
 
 @pytest.fixture
-def declared_native_package(tmp_path_factory, monkeypatch) -> Path:
-    """This test's own pin and the package directory it names; nothing is prepared."""
-    import agent_comms.native_package as native_package
-
-    manifest = tmp_path_factory.mktemp("declared-stack") / native_package.MANIFEST.name
-    manifest.write_text("# a test-owned pin\n")
-    monkeypatch.setattr(native_package, "MANIFEST", manifest)
-    package = native_package.pinned_location()
-    package.mkdir(parents=True)
-    return package
-
-
-@pytest.fixture
-def native_package_artifact(tmp_path, monkeypatch):
+def declared_native_package(tmp_path, monkeypatch):
     """A construction-only artifact with real layout, ancestry and tree verification."""
     from agent_comms import native_package
 
@@ -136,14 +123,16 @@ def native_package_artifact(tmp_path, monkeypatch):
     manifest = tmp_path / "pin"
     manifest.write_text(native_package.TREE_PREFIX + native_package.package_tree_digest(package) + "\n")
     monkeypatch.setattr(native_package, "MANIFEST", manifest)
-    return package
+    pinned = native_package.pinned_location()
+    deployment.rename(pinned.parents[2])
+    return pinned
 
 
 @pytest.fixture
-def verified_native_package(native_package_artifact):
+def verified_native_package(declared_native_package):
     from agent_comms.native_package import VerifiedNativePackage
 
-    return VerifiedNativePackage.acquire(native_package_artifact)
+    return VerifiedNativePackage.acquire(declared_native_package)
 
 
 @pytest.fixture
