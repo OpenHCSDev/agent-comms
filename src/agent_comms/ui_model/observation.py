@@ -581,6 +581,13 @@ class SidebarReading(Observation[ObserveSidebar]):
             if self.stage is stage:
                 return
 
+    def publish(self, result: SidebarResult, key: SidebarSent) -> Iterator[SidebarResult]:
+        self.sent = key
+        result.advance(self)
+        if self.published is None or not result.same_observation(self.published):
+            self.published = result
+            yield result
+
 
 @dataclass(frozen=True)
 class SidebarSent:
@@ -808,11 +815,7 @@ class SidebarResult(Observed):
         return replace(self, revision=previous.revision) == previous
 
     def finish_read(self, reading: SidebarReading, key: SidebarSent) -> Iterator[SidebarResult]:
-        reading.sent = key
-        self.advance(reading)
-        if reading.published is None or not self.same_observation(reading.published):
-            reading.published = self
-            yield self
+        return reading.publish(self, key)
 
     def advance(self, reading: SidebarReading) -> None:
         """Keep this stage until its source revision changes."""
