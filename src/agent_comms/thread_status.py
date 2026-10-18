@@ -12,6 +12,7 @@ from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
+    from .registry_document import RosterVisibility
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,7 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     visible: ClassVar[bool] = False
 
     @abstractmethod
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
+    def in_view(self, visibility: RosterVisibility) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
 
     def require_visible(self) -> None:
@@ -81,7 +82,7 @@ class ActiveThreadPresence:
     def require_active(self) -> None:
         pass
 
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
+    def in_view(self, visibility: RosterVisibility) -> bool:
         return True
 
     def for_deletion(self) -> ThreadStatus:
@@ -115,8 +116,8 @@ class StoppedThreadStatus(ThreadStatus):
         pass
     visible = True
 
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
-        return show_stopped
+    def in_view(self, visibility: RosterVisibility) -> bool:
+        return visibility.stopped
 
 
 class CliInboxPresence:
@@ -142,7 +143,7 @@ class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
     It has no launched process to stop or restart, so it stays in every view.
     """
 
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
+    def in_view(self, visibility: RosterVisibility) -> bool:
         return True
 
     def require_self_rename(self) -> None:
@@ -153,8 +154,8 @@ class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
 
 
 class ArchivedThreadStatus(ThreadStatus):
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
-        return show_archived
+    def in_view(self, visibility: RosterVisibility) -> bool:
+        return visibility.archived
 
     def restored(self) -> ThreadStatus:
         return self
@@ -164,7 +165,7 @@ class ArchivedThreadStatus(ThreadStatus):
 
 
 class DeletingThreadStatus(ThreadStatus):
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
+    def in_view(self, visibility: RosterVisibility) -> bool:
         return False
 
     def require_mutable(self, name: str) -> None:

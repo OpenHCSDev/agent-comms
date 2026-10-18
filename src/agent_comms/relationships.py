@@ -36,7 +36,7 @@ from .peer_relevance import (
 from .wire_record import WireRecord
 from .messages import Message
 from .private_path import FileRevision
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
 from .store_files import _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -910,7 +910,7 @@ class ThreadRelationships:
             delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
         people = {
             view.thread.name: view
-            for view in self.views.thread_views(show_stopped=True, show_archived=True)
+            for view in self.views.thread_views(RosterVisibility(archived=True))
         }
         messages, limited = self._recent_messages()
 
