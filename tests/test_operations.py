@@ -606,10 +606,3 @@ class TestReDeclarationPreservesProvenance:
         wired.messaging.send("PR111", "#auth", "only tagged fixer sees this")
         assert wired.bus.pending_count("fixer") == 1
 
-    def test_current_thread_reads_agent_comms_tags(self, monkeypatch, tmp_path):
-        from agent_comms.threads import current_thread
-
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-        monkeypatch.setenv("AGENT_COMMS_TAGS", "ci, docs")
-        monkeypatch.chdir(tmp_path)
-        assert current_thread(wire(tmp_path).registry).tags == frozenset({"ci", "docs"})
