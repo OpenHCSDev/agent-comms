@@ -844,4 +844,31 @@ class ForkContextReference(MetadataRecord):
         return (HistoryNotice(f'Context inherited from session {self.parentSessionId} is not imported.'),)
 
 
+class CustomTitle(MetadataRecord):
+    """The name a person gave the session."""
+    wire_tag = 'custom-title'
+    customTitle: str
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return (SessionFacts(title=self.customTitle),)
+
+
+class AgentName(MetadataRecord):
+    """The name the session runs under as an agent."""
+    wire_tag = 'agent-name'
+    agentName: str
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return (SessionFacts(title=self.agentName),)
+
+
+class ContinuedIn(MetadataRecord):
+    """The conversation went on in another session."""
+    wire_tag = 'continued-in'
+    continuedInSessionId: str
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return (HistoryNotice(f'The conversation continued in session {self.continuedInSessionId}.'),)
+
+
 CLAUDE_RECORD = TypeAdapter(ClaudeRecord.declared_union())
