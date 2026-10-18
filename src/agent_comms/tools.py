@@ -39,14 +39,14 @@ from .goal_actions import (
     GoalPrecondition,
     ModelInvocable,
     OrderGoalAction,
-    SetGoalAction,
+    SetGoalAction, TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
 from .goal_waits import StandbyReview, StandbyReviewSummary
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
-from .goals import Goal, OrderCheck
+from .goals import Goal, GoalDeclaration, OrderCheck
 from .standing_rules import StandingRule
 from .plan_phases import OrderPhase
 from .message_reference import MessageReference
@@ -132,7 +132,7 @@ class ProjectSet(ToolResult):
 
 @dataclass(frozen=True)
 class GoalSet(ToolResult):
-    goal: Goal | None
+    goal: GoalDeclaration
     instruction: str
 
 
@@ -143,7 +143,7 @@ class GoalProgress(ToolResult, GoalSnapshot):
 
 @dataclass(frozen=True)
 class GoalRead(ToolResult):
-    goal: Goal | None
+    goal: GoalDeclaration
 
 
 @dataclass(frozen=True)
@@ -645,32 +645,24 @@ class CommsGoalTool(ThreadToolRequest):
         "your decision to wait for a later reply without replaying uncertain inputs."
     )
     goal_id: str = tool_field("Goal identity provided in the turn context")
-    status: type[GoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
+    status: type[TransitionGoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
     progress: str = tool_field("Progress summary; blocked requires a nonempty explicit reason")
-    wait_for: list[str] | None = tool_field(
+    wait_for: tuple[str, ...] | None = tool_field(
         "Explicit thread names or @names; required for standby", default=None
     )
-    reviewed_inputs: list[str] | None = tool_field(
+    reviewed_inputs: tuple[str, ...] | None = tool_field(
         "Exact unresolved inputId keys inspected and handled for this goal; standby only",
         default=None,
     )
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalProgress:
         name = caller.name
-        command = self.status(
-            progress=self.progress,
-            **{
-                key: value
-                for key, value in (
-                    ("wait_for", self.wait_for),
-                    ("reviewed_inputs", self.reviewed_inputs),
-                )
-                if value
-            },
-        )
         command = replace(
-            command,
+            self.status(progress=self.progress),
             expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
+            **{key: value for key, value in (
+                ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
+            ) if value},
         )
         comms.goals.update_goal(name, command, actor=ModelInvocable)
         return GoalProgress.from_snapshot(comms.goals.goal_snapshot(name))
@@ -689,9 +681,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal_for(goal_id)
-        if current is None:
-            raise ValueError("This goal cannot be resumed; refresh its state.")
+        current = comms.registry.require(name).goal.require().require_id(goal_id)
         current.state.require_model_resume()
         progress = self.progress
         goal = comms.goals.update_goal(
@@ -704,7 +694,8 @@ class CommsResumeGoalTool(ThreadToolRequest):
                 progress=progress,
             ),
         )
-        if goal is None or not goal.state.active or goal.progress != progress:
+        goal = goal.require()
+        if not goal.state.active or goal.progress != progress:
             raise ValueError("Goal changed during resume; refresh its state.")
         return GoalRead(goal)
 
@@ -722,7 +713,7 @@ class CommsEditGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).require_goal(goal_id)
+        current = comms.registry.require(name).goal.require().require_id(goal_id)
         goal = comms.goals.update_goal(
             name,
             EditGoalAction(

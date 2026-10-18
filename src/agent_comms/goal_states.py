@@ -54,9 +54,6 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def after_failed_turn(self, diagnostic: str) -> GoalState:
         return self
 
-    def after_unverified_completion(self, diagnostic: str) -> GoalState:
-        return self
-
     def require_model_resume(self) -> None:
         raise ValueError("This goal cannot be resumed; refresh its state.")
 
@@ -274,9 +271,6 @@ class UnrecordedBlockGoal(BlockedState):
 @dataclass(frozen=True)
 class CompletedGoal(BlockingOnFailure, GoalState, FromOpenGoal):
     terminal = True
-
-    def after_unverified_completion(self, diagnostic: str) -> GoalState:
-        return self.after_failed_turn(diagnostic)
 
     @property
     def toggle(self) -> None:

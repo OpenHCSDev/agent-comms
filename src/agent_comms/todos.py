@@ -13,23 +13,21 @@ import subprocess
 import sqlite3
 import time
 import asyncio
-from collections.abc import Iterator
-from contextlib import contextmanager
+from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from abc import abstractmethod
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Final, Self
 
-from .field_codec import FieldCodec, GitCommitText, MalformedRecord, WireValue
+from .change_report import FileLine
+from .child_process import BoundedRun, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue
+from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from .recorded_time import EventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, TypedStore, TypedTable
-from .recorded_time import EventTime, UnrecordedEventTime
-from .change_report import FileLine
-from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from .child_process import BoundedRun, ExitedOutcome
+from .typed_table import Column, JsonStorage, TypedStore, TypedTable
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
@@ -770,13 +768,27 @@ class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
         super().__init__(f"Todo {current.id} changed (revision {current.revision}, owner {owner}).")
 
 
-@dataclass(frozen=True, slots=True)
-class GoalRef:
+class GoalReference(SubclassUnion):
+    def require_reference(self) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class NoGoalReference(NullMember, GoalReference):
+    pass
+
+
+@dataclass(frozen=True)
+class GoalRef(RecordMember, GoalReference):
+
     owner: str
     owner_created: float
     goal_id: str
 
     def __post_init__(self) -> None:
+        self.require_reference()
+
+    def require_reference(self) -> None:
         _text(self.owner, "Thread name", 128)
         try:
             self.incarnation.require_recorded()
@@ -1168,7 +1180,7 @@ class Todo(TypedTable):
     creator_created: float
     state: type[TodoState]
     revision: int = field(metadata={"sql": Column(check="revision>0")})
-    goal: GoalRef | None
+    goal: GoalReference = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
     assignment: Assignment | None
     order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
@@ -1390,8 +1402,7 @@ class TodoStore(TypedStore):
         repo_id = _repo(repo)
         identity, assignee = _participant(creator), _thread(owner)
         deadline.require_deadline()
-        if type(goal) is not GoalRef:
-            raise TodoError("Goal reference must be a typed GoalRef.")
+        goal.require_reference()
         proposed = Todo(
             id=todo_id,
             repo=repo_id,

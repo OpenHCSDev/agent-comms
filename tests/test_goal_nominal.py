@@ -69,8 +69,8 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
 
     @dataclass(frozen=True, kw_only=True)
     class CheckpointGoalAction(TransitionGoalAction, ModelInvocable):
-        def next_state(self, ctx: GoalActionContext):
-            return ctx.require_goal().state
+        def next_state(self, goal: Goal, ctx: GoalActionContext):
+            return ctx.thread.goal.require().state
 
     try:
         tool = next(
