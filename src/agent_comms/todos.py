@@ -16,9 +16,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
-from typing import ClassVar, Final
+from typing import ClassVar, Final, Self
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord, WireValue
 from .command import Command
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -160,7 +160,7 @@ class NotifiedFirstCallEvent(FirstCallEvent):
         return current.notify()
 
 
-class OrderWords(str):
+class OrderWords(WireValue, str):
     """Text the commander writes; quoted, backticked, indented and path-like spans are someone else's words."""
 
     CITED: ClassVar[re.Pattern] = re.compile(
@@ -173,6 +173,20 @@ class OrderWords(str):
         if refused := cls.refused(text):
             raise ValueError(refused)
         return super().__new__(cls, text)
+
+    def to_wire(self) -> str:
+        return str(self)
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        if not isinstance(data, str):
+            raise MalformedRecord(f"Expected {cls.__name__}, received {type(data).__name__}")
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
+            return cls(data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(str)
 
     @classmethod
     def refused(cls, text: str) -> str | None:
