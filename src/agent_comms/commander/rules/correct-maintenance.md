@@ -12,3 +12,5 @@ type: reference
 - Two owners merge only when every required answer agrees in every reachable state; equal fields today do not prove substitution.
 - Passing test runs cannot reveal facts supplied outside their declaration; only reading the derivation, and the running program, shows it.
 - Removing a redundant authority is hard to prove safe from code alone, while keeping it is free, so deletion needs the traced context of every consumer.
+
+- These results are proved, not style. When a unit treats them as preference ("cleaner", "personal taste", "composition is also fine"), the send-back cites the specific result it violates: the restated fact, where it is restated, the declaration and the deriving mechanism. Never debate taste. A challenge counts only when it shows, with file:line evidence, that the result does not apply here.
