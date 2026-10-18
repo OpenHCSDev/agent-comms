@@ -55,10 +55,7 @@ def pinned_location() -> Path:
 
 def pinned_native_package() -> Path:
     if not (package := pinned_location()).is_dir():
-        raise NativePackageError(
-            f"Pinned native package directory is missing: {package};"
-            " run stack/bin/prepare-pi-native"
-        )
+        raise NativePackageError(f"Pinned native package directory is missing: {package}")
     return package
 
 
