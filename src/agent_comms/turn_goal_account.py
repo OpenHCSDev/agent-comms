@@ -23,7 +23,7 @@ from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .goals import Goal
+    from .goals import GoalDeclaration, NoGoal, Goal
     from .pi_payloads import PiUsage
     from .thread_identity import TurnId
     from .threads import Thread
@@ -126,7 +126,7 @@ class TurnGoalAccount:
 
     def provider_usage(self, event: events.ProviderUsage) -> None:
         goal = self.comms.registry.require(self.thread_name).goal
-        goal_id = goal.id if goal is not None else None
+        goal_id = goal.id if goal else None
         permit = self.originated.get(goal_id)
         if (
             permit is None
@@ -149,7 +149,7 @@ class TurnGoalAccount:
         with _store_lock(self.comms._wire_lock_path):
             owner = self.comms.registry.snapshot().require(self.owner.name)
             goal = owner.goal
-            if goal is None or goal.id in self.originated:
+            if not goal or goal.id in self.originated:
                 return
             store = self.comms.goals.open_goal_store()
             self.originated[goal.id] = None
@@ -176,7 +176,7 @@ class TurnGoalAccount:
             diagnostic=diagnostic,
         )
 
-    def current_active_goal(self) -> Goal | None:
+    def current_active_goal(self) -> GoalDeclaration:
         if self.permit is None:
             return None
         owner = self.comms.registry.require(self.thread_name)
@@ -199,9 +199,9 @@ class TurnGoalAccount:
         if terminal is None and self.current_active_goal() is not None:
             self.block_current("Backend turn ended without a result; inspect local diagnostics.")
         store = self.comms.goals.open_goal_store()
-        current = self.comms.registry.require(self.thread_name).goal_for(self.owner.goal.id)
+        current = self.comms.registry.require(self.thread_name).goal.matching(self.owner.goal.id)
         if terminal is not None and terminal.ok:
-            if current is not None:
+            if current:
                 result = VerifiedGoalSettlement(store, self.permit, current, self.turn)
                 result.dispatch_sync(current.state)
         if self.permit.has_verified_progress(store):
@@ -226,17 +226,17 @@ class TurnGoalAccount:
                 "Goal turn ended without verified terminal progress.",
                 observation=observation,
             )
-        if current is not None:
+        if current:
             self.block_current("Goal turn ended without verified terminal progress.")
 
     def finish(self, terminal: events.Done | None) -> None:
         """Settle all original grants once from the actual producer terminal event."""
         self.settle_original(terminal)
         for goal_id, permit in self.originated.items():
-            current = self.comms.registry.require(self.thread_name).goal_for(goal_id)
+            current = self.comms.registry.require(self.thread_name).goal.matching(goal_id)
             store = self.comms.goals.open_goal_store()
             if terminal is not None and terminal.ok:
-                if current is not None:
+                if current:
                     result = OriginGoalSettlement(store, permit, current, self.turn)
                     result.dispatch_sync(current.state)
             if permit is None or not permit.has_verified_progress(store):
@@ -247,13 +247,13 @@ class TurnGoalAccount:
                         )
                 else:
                     generation = store.snapshot(goal_id)
-                    if generation is not None and generation.lifecycle.allows_resume(True):
+                    if generation and generation.lifecycle.allows_resume(True):
                         store.retire_goal(
                             goal_id,
                             expected_generation=generation.number,
                             attempt_id=generation.attempt_id,
                         )
-                if current is not None:
+                if current:
                     FailedGoalOrigin(self.comms, self.thread_name, current).dispatch_sync(
                         current.state
                     )

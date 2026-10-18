@@ -723,8 +723,8 @@ class ThreadRelationships:
             for thread in registry.threads.values()
             for executor in thread.role.executor(thread)
         ):
-            goal = owner.active_goal
-            if goal is None:
+            goal = owner.goal.active()
+            if not goal:
                 continue
             source = goal.mention_source
             # Missing historical evidence grants no contact or current-name binding.

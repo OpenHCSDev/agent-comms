@@ -114,14 +114,14 @@ class OwnedTurn:
         )
         self.thread_name = self.thread.name
         wait = self.runner.comms.goals.goal_wait(self.thread_name)
-        active_goal = self.thread.active_goal
+        active_goal = self.thread.goal.active()
         if self.dependency_wait_id is not None:
             if not wait.matches_id(self.dependency_wait_id):
                 return
         elif not wait.allows_routed_input() and not self.original_owner_input:
             return
         if self.original_owner_input and self.original_goal_id != (
-            active_goal.id if active_goal is not None else None
+            active_goal.id if active_goal else None
         ):
             raise RequestError.invalid_params({"reason": "input_authority_changed"})
         self.goal_permit: LaunchPermit | None = None
@@ -140,10 +140,10 @@ class OwnedTurn:
             self.lease_cleanup, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
-        active_goal = self.thread.active_goal
-        if self.autonomous_goal and active_goal is None:
+        active_goal = self.thread.goal.active()
+        if self.autonomous_goal and not active_goal:
             return False
-        if active_goal is not None and not self.original_owner_input:
+        if active_goal and not self.original_owner_input:
             self.goal_permit = TurnGoalAccount.reserve(
                 owner=self.thread,
                 comms=self.runner.comms,
@@ -234,7 +234,7 @@ class OwnedTurn:
         """Acquire the original durable input before opening loop capabilities."""
         if self.original_owner_input:
             permission = OwnerGoalPermission(self.thread.goal)
-        elif active_goal := self.thread.active_goal:
+        elif active_goal := self.thread.goal.active():
             permission = ContinuationGoalPermission(active_goal)
         else:
             permission = InactiveGoalPermission()

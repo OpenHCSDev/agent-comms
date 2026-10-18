@@ -34,7 +34,7 @@ class PartnerGoalChange:
             return None
         entry = history[-1]
         goal = entry.after
-        if goal is None:
+        if not goal:
             return cls(peer, entry.observed_at, None, None, "")
         return cls(peer, entry.observed_at, goal.checkpoint, type(goal.state), goal.progress)
 

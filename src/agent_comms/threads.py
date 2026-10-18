@@ -17,6 +17,7 @@ from .pi_vocabulary import (
     SERVICE_TIER_ENVIRONMENT, NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField,
 )
 from .goals import (
+    GoalDeclaration, NoGoal,
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious, InheritThinkingLevel
@@ -33,14 +34,11 @@ from .turn_lease import NoTurn, TurnDeclaration, TurnFence, TurnLeaseFence, Turn
 if TYPE_CHECKING:
     from .launch_runtime import ThreadLaunch
 
-
 class _GeneratedCreationTime(float):
     """Transient marker for default timestamps; never persisted as claim authority."""
 
-
 def _thread_creation_time() -> float:
     return _GeneratedCreationTime(time.time())
-
 
 @dataclass(frozen=True, slots=True)
 class Thread(ThreadProvenance):
@@ -63,7 +61,7 @@ class Thread(ThreadProvenance):
         default=ServiceTier.PRIORITY, kw_only=True,
         metadata={"registration_inheritance": InheritPrevious},
     )
-    goal: Goal | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
+    goal: GoalDeclaration = field(default_factory=NoGoal, metadata={"registration_inheritance": InheritEmpty})
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
                               metadata={"wire_required": True})
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
@@ -126,7 +124,7 @@ class Thread(ThreadProvenance):
     @property
     def owes_project_resume(self) -> bool:
         """Idle with the resume still due; a turn for the active goal is that turn."""
-        return self.project_resume_due and not self.active_turn.executing and self.active_goal is None
+        return self.project_resume_due and not self.active_turn.executing and not self.goal.active()
 
     @property
     def turn_state(self) -> TurnState:
@@ -243,33 +241,23 @@ class Thread(ThreadProvenance):
         )
         return self.process_identity.require(f"Thread {self.name!r} has no owner process")
 
-
     def require_goal_checkpoint(self, checkpoint: GoalRevision) -> Goal:
-        if self.goal_checkpoint != PresentGoalCheckpoint(checkpoint):
-            raise ValueError("The goal changed before this action; the action was not applied.")
-        assert self.goal is not None
-        return self.goal
-
-    @property
-    def active_goal(self) -> Goal | None:
-        """Project the original goal's declaration; retain no activity copy."""
-        goal = self.goal
-        return goal if goal is not None and goal.state.active else None
+        return self.goal.require_checkpoint(checkpoint)
 
     @property
     def task_scope(self):
         from .task_sources import GoalTaskScope, TurnTaskScope
 
-        goal = self.active_goal
+        goal = self.goal.active()
         return (GoalTaskScope(project=self.worktree, goal=goal.checkpoint)
-                if goal is not None else TurnTaskScope(project=self.worktree))
+                if goal else TurnTaskScope(project=self.worktree))
 
     def context_goal_segments(self, goals):
         """Project this declaration's active goal without a second goal state."""
         from .turn_context import GoalSegment
 
-        goal = self.active_goal
-        return (GoalSegment.capture(self, goal, goals),) if goal is not None else ()
+        goal = self.goal.active()
+        return (GoalSegment.capture(self, goal, goals),) if goal else ()
 
     def wake_context(self) -> dict[str, object]:
         """This captured thread owns its selected-wake work and goal projection."""
@@ -277,7 +265,7 @@ class Thread(ThreadProvenance):
         return {
             "name": self.name, "title": self.title, "tags": sorted(self.tags),
             "original_assignment": self.task,
-            "current_goal": (None if goal is None else {
+            "current_goal": (None if not goal else {
                 "text": goal.text, "status": goal.state.declared_name,
                 "progress": goal.progress,
             }),
@@ -286,49 +274,24 @@ class Thread(ThreadProvenance):
     def retained_task_facts(self):
         from .retained_task_facts import GoalTaskFact
 
-        return (GoalTaskFact(self.goal),) if self.goal is not None else ()
+        return (GoalTaskFact(self.goal),) if self.goal else ()
 
-    def continuation_goal(self, original: Thread) -> Goal | None:
+    def continuation_goal(self, original: Thread) -> GoalDeclaration:
         """The current active goal still belongs to this captured project/goal."""
         if self.worktree != original.worktree:
-            return None
-        goal, captured = self.active_goal, original.active_goal
-        if goal is None or captured is None:
-            return None
-        return goal if goal.id == captured.id else None
-
-    def goal_for(self, goal_id: str) -> Goal | None:
-        """Select the current record of this goal, including later state/revisions."""
-        goal = self.goal
-        return goal if goal is not None and goal.id == goal_id else None
+            return NoGoal()
+        goal, captured = self.goal.active(), original.goal.active()
+        if not goal or not captured:
+            return NoGoal()
+        return goal.matching(captured.require().id)
 
     def require_goal_replacement(self, goals) -> None:
-        if self.goal is not None:
+        if self.goal:
             self.goal.require_replacement(goals, self.incarnation)
 
     def require_order_slot(self, goal_id: str, problem: str) -> None:
-        if self.goal is not None:
+        if self.goal:
             self.goal.order.require_slot(self.goal, goal_id, problem)
-
-    def require_goal(self, goal_id: str | None = None) -> Goal:
-        if goal_id is None:
-            if self.goal is None:
-                raise ValueError("No goal is set for this thread.")
-            return self.goal
-        goal = self.goal_for(goal_id)
-        if goal is None:
-            raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
-        return goal
-
-    def require_active_goal(self, goal_id: str) -> Goal:
-        goal = self.require_goal(goal_id)
-        goal.state.require_active()
-        return goal
-
-    @property
-    def goal_checkpoint(self) -> GoalCheckpoint:
-        return (PresentGoalCheckpoint(self.goal.checkpoint)
-                if self.goal is not None else AbsentGoalCheckpoint())
 
     def same_launch(self, other: Thread) -> bool:
         """Whether both records describe one process serving one saved session with one model setting.
@@ -429,7 +392,7 @@ class Thread(ThreadProvenance):
         return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
 
     def has_goal_revision(self, goal_id: str, minimum_revision: int) -> bool:
-        return self.goal is not None and self.goal.accepts_observation(goal_id, minimum_revision)
+        return bool(self.goal) and self.goal.accepts_observation(goal_id, minimum_revision)
 
     @property
     def is_fork(self) -> bool:
@@ -442,7 +405,6 @@ class Thread(ThreadProvenance):
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
-
 
 def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""

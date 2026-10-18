@@ -14,7 +14,8 @@ from .child_process import ExitedOutcome
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, WireValue
+from .errors import RelationViolationError
 from .goal_states import ActiveGoal, GoalState
 
 
@@ -261,6 +262,25 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_completion(self) -> None:
         pass
 
+    def __bool__(self) -> bool:
+        return True
+
+    def require(self) -> Goal:
+        return self
+
+    def matching(self, goal_id: str) -> GoalDeclaration:
+        return self if self.id == goal_id else NoGoal()
+
+    def active(self) -> GoalDeclaration:
+        return self if self.state.active else NoGoal()
+
+    def reports_turn(self, turn_id: str) -> bool:
+        return self.reported_turn == turn_id
+
+    @property
+    def captured(self) -> GoalCheckpoint:
+        return PresentGoalCheckpoint(self.checkpoint)
+
     def instructions(self, todos) -> str:
         return ""
 
@@ -305,9 +325,69 @@ class ProblemGoalOrder(GoalOrder):
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
 
+class GoalDeclaration(WireValue):
+    """The recorded goal state, including a thread with no goal."""
+
+    accepts_null = True
+
+    @classmethod
+    def from_wire(cls, data):
+        return NoGoal() if data is None else FieldCodec.decode_record(Goal, data)
+
+    @classmethod
+    def schema(cls):
+        return {"anyOf": [{"type": "null"}, FieldCodec.record_schema(Goal)]}
+
+    def __bool__(self) -> bool:
+        return False
+
+    def require(self) -> Goal:
+        raise RelationViolationError("No goal is set for this thread.")
+
+    def require_id(self, goal_id: str) -> Goal:
+        selected = self.matching(goal_id)
+        if not selected:
+            raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
+        return selected.require()
+
+    def require_active(self) -> Goal:
+        goal = self.require()
+        goal.state.require_active()
+        return goal
+
+    def require_checkpoint(self, checkpoint: GoalRevision) -> Goal:
+        if self.captured != PresentGoalCheckpoint(checkpoint):
+            raise ValueError("The goal changed before this action; the action was not applied.")
+        return self.require()
+
+    def matching(self, goal_id: str) -> GoalDeclaration:
+        return self
+
+    def active(self) -> GoalDeclaration:
+        return self
+
+    def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
+        return False
+
+    def reports_turn(self, turn_id: str) -> bool:
+        return False
+
+    @property
+    def captured(self) -> GoalCheckpoint:
+        return AbsentGoalCheckpoint()
+
+
 @dataclass(frozen=True)
-class Goal:
+class NoGoal(GoalDeclaration):
+    def to_wire(self):
+        return None
+
+
+@dataclass(frozen=True)
+class Goal(GoalDeclaration):
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
+
+    accepts_null = False
 
     text: str
     id: str
@@ -318,6 +398,25 @@ class Goal:
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
+
+    def __bool__(self) -> bool:
+        return True
+
+    def require(self) -> Goal:
+        return self
+
+    def matching(self, goal_id: str) -> GoalDeclaration:
+        return self if self.id == goal_id else NoGoal()
+
+    def active(self) -> GoalDeclaration:
+        return self if self.state.active else NoGoal()
+
+    def reports_turn(self, turn_id: str) -> bool:
+        return self.reported_turn == turn_id
+
+    @property
+    def captured(self) -> GoalCheckpoint:
+        return PresentGoalCheckpoint(self.checkpoint)
 
     def instructions(self, todos) -> str:
         return self.render_instructions(self.order.instructions(todos))
@@ -346,7 +445,7 @@ class Goal:
         return replace(self, state=state, progress=progress, revision=self.revision + 1)
 
     def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self)
+        return FieldCodec.encode_record(self)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:

@@ -47,7 +47,7 @@ from .goal_waits import StandbyReview, StandbyReviewSummary
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
-from .goals import Goal, OrderCheck
+from .goals import GoalDeclaration, NoGoal, Goal, OrderCheck
 from .message_reference import MessageReference
 from .messages import Message
 from .owner_lifecycle import OwnerStartResult
@@ -127,7 +127,7 @@ class ProjectSet(ToolResult):
 
 @dataclass(frozen=True)
 class GoalSet(ToolResult):
-    goal: Goal | None
+    goal: GoalDeclaration
     instruction: str
 
 
@@ -138,7 +138,7 @@ class GoalProgress(ToolResult, GoalSnapshot):
 
 @dataclass(frozen=True)
 class GoalRead(ToolResult):
-    goal: Goal | None
+    goal: GoalDeclaration
 
 
 @dataclass(frozen=True)
@@ -670,8 +670,8 @@ class CommsResumeGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal_for(goal_id)
-        if current is None:
+        current = comms.registry.require(name).goal.matching(goal_id)
+        if not current:
             raise ValueError("This goal cannot be resumed; refresh its state.")
         current.state.require_model_resume()
         progress = self.progress
@@ -685,7 +685,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
                 progress=progress,
             ),
         )
-        if goal is None or not goal.state.active or goal.progress != progress:
+        if not goal or not goal.state.active or goal.progress != progress:
             raise ValueError("Goal changed during resume; refresh its state.")
         return GoalRead(goal)
 
@@ -703,7 +703,7 @@ class CommsEditGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).require_goal(goal_id)
+        current = comms.registry.require(name).goal.require_id(goal_id)
         goal = comms.goals.update_goal(
             name,
             EditGoalAction(

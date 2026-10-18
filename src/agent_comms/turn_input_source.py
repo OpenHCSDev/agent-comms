@@ -16,7 +16,7 @@ from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 if TYPE_CHECKING:
     from .comms import Comms
     from .goal_waits import GoalWait
-    from .goals import Goal
+    from .goals import GoalDeclaration, NoGoal, Goal
     from .input_disposition import InputDispositions
     from .thread_identity import RecordedThreadIncarnation, TurnId
     from .threads import Thread
@@ -43,7 +43,7 @@ class TurnInputSource(StartedInput, ABC):
                     owner: RecordedThreadIncarnation) -> bool: ...
 
     @abstractmethod
-    def allows_goal_input(self, goal: Goal | None) -> bool: ...
+    def allows_goal_input(self, goal: GoalDeclaration) -> bool: ...
 
     @abstractmethod
     def display(self, dispositions: InputDispositions, text: str) -> str | None: ...
@@ -149,7 +149,7 @@ class DirectInput(TurnInputSource):
                     owner: RecordedThreadIncarnation) -> bool:
         return True
 
-    def allows_goal_input(self, goal: Goal | None) -> bool:
+    def allows_goal_input(self, goal: GoalDeclaration) -> bool:
         return True
 
 
@@ -168,7 +168,7 @@ class RoutedInput(TurnInputSource):
                     owner: RecordedThreadIncarnation) -> bool:
         return wait.allows_routed_input()
 
-    def allows_goal_input(self, goal: Goal | None) -> bool:
+    def allows_goal_input(self, goal: GoalDeclaration) -> bool:
         return not self.keys or InactiveGoalPermission().allows(goal)
 
 

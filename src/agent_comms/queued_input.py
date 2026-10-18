@@ -17,7 +17,7 @@ from acp import RequestError
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
-from .goals import Goal
+from .goals import GoalDeclaration, NoGoal, Goal
 from .image_inputs import ImageInput
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .coordination_cohort import pending_sealed_assignments
@@ -55,7 +55,7 @@ class InputHandoffRefused(RelationViolationError):
 @dataclass(frozen=True, slots=True)
 class QueuedInputContext:
     claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
-    goal: Goal | None = None
+    goal: GoalDeclaration = field(default_factory=NoGoal)
 
     @classmethod
     def capture(cls, owner: Thread, claim_scope: ClaimedIdentity):
@@ -76,7 +76,7 @@ class QueuedInputContext:
 
     @property
     def active_goal_id(self) -> str | None:
-        return self.goal.id if self.goal is not None and self.goal.state.active else None
+        return self.goal.id if self.goal and self.goal.state.active else None
 
 
 @dataclass(frozen=True, slots=True)

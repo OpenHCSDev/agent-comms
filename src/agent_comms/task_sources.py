@@ -60,8 +60,8 @@ class GoalTaskScope(TaskScope):
     goal: GoalRevision
 
     def require_context(self, owner: Thread) -> None:
-        owner.require_active_goal(self.goal.id)
-        owner.require_goal_checkpoint(self.goal)
+        owner.goal.require_id(self.goal.id).require_active()
+        owner.goal.require_checkpoint(self.goal)
 
     def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
         return owner.task_scope == self

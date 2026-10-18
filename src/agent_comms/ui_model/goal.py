@@ -12,7 +12,7 @@ from typing import ClassVar
 from agent_comms.acp_extension import AgentCommsUpdate, decode_updates
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goals import Goal
+from agent_comms.goals import GoalDeclaration, NoGoal, Goal
 from agent_comms.goal_presentation import ThreadGoalExecution, GoalSnapshot
 
 
@@ -27,7 +27,7 @@ class OwnerGoalSnapshot(GoalSnapshot):
         """Decode the owner's ``goal_snapshot`` reply once, at the socket boundary."""
         raw_goal, raw_execution = result["goal"], result["goalExecution"]
         return cls(
-            FieldCodec.decode(Goal, raw_goal) if raw_goal is not None else None,
+            FieldCodec.decode(GoalDeclaration, raw_goal),
             FieldCodec.decode(ThreadGoalExecution, raw_execution),
             decode_updates(result["_meta"]),
         )
@@ -38,7 +38,7 @@ class GoalDisplay(DeclaredFamily):
 
     @property
     @abstractmethod
-    def snapshot(self) -> Goal | None: ...
+    def snapshot(self) -> GoalDeclaration: ...
 
     @property
     def visible(self) -> bool:
@@ -57,8 +57,8 @@ class GoalDisplay(DeclaredFamily):
         return str(error)
 
     @staticmethod
-    def current(goal: Goal | None) -> "GoalDisplay":
-        return NoGoal() if goal is None else ShowingGoal(goal)
+    def current(goal: GoalDeclaration) -> "GoalDisplay":
+        return NoGoal() if not goal else ShowingGoal(goal)
 
 
 @dataclass(frozen=True)
@@ -103,7 +103,7 @@ class GoalUnavailable(GoalDisplay):
     can_control: ClassVar[bool] = False
 
     @property
-    def snapshot(self) -> Goal | None:
+    def snapshot(self) -> GoalDeclaration:
         return self.last_confirmed
 
     @property

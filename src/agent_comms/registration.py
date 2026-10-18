@@ -146,7 +146,7 @@ class Registration:
             intent = history.begin(change.thread.created_at, before, change.thread.goal)
         change.apply(edit.document)
         edit.commit()
-        if history is not None and intent is not None:
+        if history is not None and intent:
             history.commit(intent)
         return change
 

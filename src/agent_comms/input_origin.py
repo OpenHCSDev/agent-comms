@@ -116,7 +116,7 @@ class HumanInputOrigin(InputOrigin):
             root_id = WireRootIdText.decode(root_id)
             user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
             return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
-                       claim_scope, owner.worktree, owner.goal_checkpoint)
+                       claim_scope, owner.worktree, owner.goal.captured)
 
     @property
     def reply_target(self) -> str:
@@ -133,7 +133,7 @@ class HumanInputOrigin(InputOrigin):
             raise RelationViolationError("User input origin attachment changed")
         self.author.require_registered(snapshot)
         owner = snapshot.require_active(claim_scope.incarnation.name)
-        if (self.project, self.goal) != (owner.worktree, owner.goal_checkpoint):
+        if (self.project, self.goal) != (owner.worktree, owner.goal.captured):
             raise RelationViolationError("User input scope changed before reservation")
 
     def retained_fact(self, source):
@@ -146,7 +146,7 @@ class HumanInputOrigin(InputOrigin):
 
     def applies(self, owner: Thread, snapshot: RegistrySnapshot) -> bool:
         return (self.claim_scope.incarnation.resolved(snapshot) == owner.incarnation
-                and (self.project, self.goal) == (owner.worktree, owner.goal_checkpoint))
+                and (self.project, self.goal) == (owner.worktree, owner.goal.captured))
 
     def matches_owner(self, recorded_name, incarnation):
         """The captured original birth survives a rename, unlike a neutral name."""

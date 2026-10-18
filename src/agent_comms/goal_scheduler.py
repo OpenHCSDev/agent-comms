@@ -29,7 +29,7 @@ from .goal_attempts import (
     UnresolvedAttemptError,
 )
 from .goal_presentation import GoalSnapshot
-from .goals import Goal, GoalRevision
+from .goals import GoalDeclaration, NoGoal, Goal, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
@@ -88,8 +88,8 @@ class GoalScheduler:
                     thread.active_turn.require_idle()
                 except RelationViolationError:
                     return
-                goal = thread.active_goal
-                if goal is None:
+                goal = thread.goal.active()
+                if not goal:
                     return
                 if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
                     return
@@ -133,7 +133,7 @@ class GoalScheduler:
             SetGoalAction(text=text, expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()))),
             actor=OwnerInvocable,
         ))
-        assert goal is not None
+        assert goal
         await self.schedule_goal(session_id)
         return goal
 
@@ -143,7 +143,7 @@ class GoalScheduler:
         """Edit the current objective without replacing its identity or execution state."""
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        goal = thread.require_goal_checkpoint(GoalRevision(goal_id, expected_revision))
+        goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
         # update_goal owns the wire lock and atomically rechecks both this
         # snapshot and the executing owner. Do not acquire its lock twice.
         edited = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
@@ -164,13 +164,13 @@ class GoalScheduler:
 
     async def update_goal(
         self, session_id: str, action: type[GoalAction], goal_id: str, expected_revision: int
-    ) -> Goal | None:
+    ) -> GoalDeclaration:
         """Apply an explicit UI pause, resume, or clear through the current owner."""
         if not issubclass(action, OwnerControlInvocable):
             raise ValueError("Goal updates support only active, paused, or clear.")
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        goal = thread.require_goal_checkpoint(GoalRevision(goal_id, expected_revision))
+        goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
         try:
             updated = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
                 name,
@@ -195,7 +195,7 @@ class GoalScheduler:
         """Record an explicit UI retry in the executing owner's private ledger."""
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        goal = thread.require_goal_checkpoint(GoalRevision(goal_id, expected_revision))
+        goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
         if self.pending_goal_origins.get(name) == goal_id:
             raise ValueError("Wait for the goal origin turn to finish.")
         resumed = await Coordination.run_worker(lambda: self.comms.goals.update_goal(

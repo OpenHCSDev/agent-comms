@@ -47,7 +47,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
         )
     assert comms.registry.require("worker").goal == replacement
     comms.goals.update_goal("worker", ClearGoalAction())
-    assert wire(tmp_path).registry.require("worker").goal is None
+    assert not wire(tmp_path).registry.require("worker").goal
     with pytest.raises(ValueError, match="No goal"):
         comms.goals.update_goal("worker", ActiveGoalAction())
     with pytest.raises(ValueError, match="requires"):
