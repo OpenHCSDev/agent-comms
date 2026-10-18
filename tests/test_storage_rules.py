@@ -104,7 +104,7 @@ def test_allocation_floor_is_checked_before_usage_walk(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('command', ['git clone remote target', 'python -m venv env', 'uv sync',
-                                     'git -C ~/wt/other--P3 reset --hard'])
+                                     'git -C ~/wt/other--P3 reset --hard', 'touch ~/wt/x-check/file'])
 def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
     rule = StorageRule()
     thread = Thread('worker', frozenset(), str(tmp_path), storage_roots=rule.initial_roots('worker'))

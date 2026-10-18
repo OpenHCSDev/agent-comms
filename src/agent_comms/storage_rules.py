@@ -109,9 +109,8 @@ class StorageRule:
         base = self.checkout_base.resolve()
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
-            if not (checkout.name == thread.name or checkout.name.endswith('-check')
-                    or self.owns_checkout(thread, checkout)):
-                self.deny(f'{checkout} is not {thread.name}\'s checkout nor a shared <repo>-check')
+            if not (checkout.name == thread.name or self.owns_checkout(thread, checkout)):
+                self.deny(f'{checkout} is not a checkout of {thread.name}')
 
     def render(self, roots):
         return (f'StorageRule: scratch {roots.scratch}; {self.unit_cap_gib:g} GiB combined cap; '

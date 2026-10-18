@@ -17,7 +17,8 @@ MAX_WORKTREES = 2
 RULE = (f'Storage (enforced, automatic strike): your checkouts are {WT}/<you>--P<n>, at most {MAX_WORKTREES} besides your home checkout {WT}/<you>, removed '
         f'with git worktree remove in the same order that created them; your only scratch dir is {SCRATCH}/<you>/, '
         f'capped at {UNIT_CAP_GB} GB together with your checkouts. Run tests with PYTHONPATH=src on the shared '
-        f'{WT}/<repo>-check/.venv; never create a venv, never uv sync, never write .artifacts, never git clone. '
+        f'{" or ".join(f"{repo.checkout}/.venv/bin/python" for repo in CONFIG.repos)}; '
+        'never create a venv, never uv sync, never write .artifacts, never git clone. '
         f'Below {FLOOR_GB} GB free on {CONFIG.disk}, no worktree, venv, build, install or recording.')
 
 
