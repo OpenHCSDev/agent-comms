@@ -26,7 +26,7 @@ class ResponsePolicy(DeclaredFamily, affix="Policy"):
         return cls()
 
     def validate_recipients(self, recipients: tuple[str, ...]) -> None:
-        """Channel policies admit the recipients their declaration selects."""
+        """Channel policies allow the recipients their declaration selects."""
 
     def recipients(
         self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None

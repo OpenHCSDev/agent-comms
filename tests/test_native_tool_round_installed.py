@@ -64,10 +64,10 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
             asyncio.get_running_loop().call_soon(release.set)
         return await handle_request(socket, raw)
 
-    admit = CodingToolOwner.admit
+    allow = CodingToolOwner.allow
 
     async def observed_claim(owner, round_number, call):
-        await admit(owner, round_number, call)
+        await allow(owner, round_number, call)
         claims.append((round_number, call.call_id))
 
     result = TrackedTurnSession.result
@@ -83,7 +83,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
     monkeypatch.setattr(provider, "response_chunks", response_chunks)
     monkeypatch.setattr(TrackedTurnSession, "message_end", delayed_declaration)
     monkeypatch.setattr(CodingToolSocket, "handle_request", observed_request)
-    monkeypatch.setattr(CodingToolOwner, "admit", observed_claim)
+    monkeypatch.setattr(CodingToolOwner, "allow", observed_claim)
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
         comms = owner._comms
         comms.threads.claim_thread("verifier", tags=frozenset(), worktree=str(native.project))

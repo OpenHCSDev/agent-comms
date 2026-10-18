@@ -35,7 +35,7 @@ class InputBatch(ABC):
 
     @property
     @abstractmethod
-    def admits_multiple(self) -> bool: ...
+    def allows_multiple(self) -> bool: ...
 
     @staticmethod
     def capture(
@@ -64,12 +64,12 @@ class InputBatch(ABC):
 
 class SingleInputBatch(InputBatch):
     @property
-    def admits_multiple(self) -> bool:
+    def allows_multiple(self) -> bool:
         return False
 
 
 @dataclass(frozen=True)
 class ChannelInputBatch(InputBatch):
     @property
-    def admits_multiple(self) -> bool:
+    def allows_multiple(self) -> bool:
         return True

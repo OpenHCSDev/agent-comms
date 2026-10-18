@@ -1,4 +1,4 @@
-// Pi owns the normal coding tools. The existing owner socket admits each call.
+// Pi owns the normal coding tools. The existing owner socket allows each call.
 import { requestOwnerTool } from "./owner_tool_socket.mjs";
 
 export default function channelCodingTools(pi) {

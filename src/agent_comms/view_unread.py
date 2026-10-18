@@ -389,7 +389,7 @@ class TranscriptReadState(ThreadOwnedState):
                 if revision is not None and not indexes[source].covers(revision)
             }
             yield database, indexes
-        # Admit only after releasing the read snapshot. Spawn receives data and
+        # Start only after releasing the read snapshot. Spawn receives data and
         # cancellation, never this connection, the observer pipe or the owner's locks.
         if needed and self._preparation is None and self._cleanup.alive:
             names = tuple(needed)

@@ -442,7 +442,7 @@ class DeliveredInput(QueuedInput):
                 if row.key not in live_keys
             }
             if not rows:
-                return 0  # No work admits no SQLite connection, let alone a writer.
+                return 0  # Without work, no SQLite connection is needed, let alone a writer.
             path = str(comms.root / "coordination.sqlite3")
             with Coordination(path, session_type=ReadNativeCoordinationSession) as store:
                 assignments = store.assignments.recoverable_unbound_deliveries(
