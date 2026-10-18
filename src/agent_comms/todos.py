@@ -1141,6 +1141,19 @@ class WordingCorrection(TodoOperation):
 
 
 @dataclass(frozen=True)
+class OrderMessage(TodoOperation):
+    """The bus message the commander sent this order in; a verdict citing it lands here."""
+    actor: ThreadIncarnation
+    message_id: str
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        _text(self.message_id, "Order message ID", 200)
+        return replace(current, messages=(*current.messages, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class ServeTodo(TodoOperation):
     """The commander names the plan phase an open order serves; it keeps its id and holder."""
     actor: ThreadIncarnation
@@ -1271,6 +1284,7 @@ class Todo(TypedTable):
     released: tuple[ReleaseTodo, ...] = ()
     verdicts: tuple[OrderVerdict, ...] = ()
     corrections: tuple[WordingCorrection, ...] = ()
+    messages: tuple[OrderMessage, ...] = ()
 
     @property
     def pending(self):
@@ -1352,6 +1366,10 @@ class Todo(TypedTable):
     def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
         if self.assignment is not None and self.assignment.owned_by(owner, goal_id):
             raise TodoConflict(self)
+
+    def sent_in(self, message_id: str) -> bool:
+        """Whether the commander sent this order in that bus message."""
+        return any(message.message_id == message_id for message in self.messages)
 
     def require_commander(self, actor: ThreadIncarnation) -> None:
         if self.creator_identity != actor:
