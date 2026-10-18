@@ -309,11 +309,10 @@ class ToolStartTranscript(ToolTranscript):
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         """A call recorded before ``since`` is not work since then; an undated one is its turn's."""
         if not self.before(since):
+            digest = tool_declaration.ToolDeclaration.call_digest(
+                self.tool_name, self.tool, self.raw_input)
             calls[self.tool_call_id] = OrderCall(
-                self.tool_call_id, self.tool_name,
-                tool_declaration.ToolDeclaration.call_digest(
-                    self.tool_name, self.tool, self.raw_input),
-                RunningCallState)
+                self.tool_call_id, self.tool_name, digest, RunningCallState)
 
     def imported(self) -> ImportedMessage:
         return ImportedInput(f"[Historical tool call: {self.tool_name}]\n"
