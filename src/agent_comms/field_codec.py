@@ -408,11 +408,16 @@ class SpelledText(TextRepresentation):
     spelling: ClassVar[re.Pattern[str]]
 
     @classmethod
-    def encode(cls, value: object) -> object:
+    def encode(cls, value: object) -> str:
         return cls.decode(value)
 
     @classmethod
-    def from_text(cls, value: str) -> object:
+    def decode(cls, value: object) -> str:
+        """A spelled text decodes to the text itself."""
+        return cast(str, super().decode(value))
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
         if cls.spelling.fullmatch(value) is None:
             raise MalformedRecord(f"{cls.__name__} is spelled {cls.spelling.pattern}")
         return value
