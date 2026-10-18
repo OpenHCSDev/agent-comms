@@ -450,14 +450,13 @@ class HistoryViews:
 
     def mark_thread_user_read(self, target: str, *, worktree: str) -> None:
         viewer = self.messaging.user_identity(worktree).name
-        with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(target)
-            checkpoint = self.transcripts.transcript_checkpoint(thread.name)
-            thread.execution.prepare_conversation(ThreadViewRead(
-                self, thread, self.registry.require(viewer), checkpoint,
-            ))
-            messages = self.bus.inbox(viewer, thread.name)
-            self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
+        thread = self.registry.require(target)
+        checkpoint = self.transcripts.transcript_checkpoint(thread.name)
+        thread.execution.prepare_conversation(ThreadViewRead(
+            self, thread, self.registry.require(viewer), checkpoint,
+        ))
+        messages = self.bus.inbox(viewer, thread.name)
+        self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 
     def revision_paths(self) -> dict[str, tuple[Path, ...]]:
         """The revision owner's declarations supply both stat and watch paths."""
