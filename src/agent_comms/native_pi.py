@@ -381,7 +381,6 @@ class NativeTurnResult:
 
     text: str
     context: NativeContextProof
-    selected_tool_call_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

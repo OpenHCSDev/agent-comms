@@ -312,7 +312,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     self.native = await self.acquire_native(transport, reuse=True)
                     ownership.push_async_callback(self.retain_or_close)
                     await ownership.enter_async_context(self.native.failures())
-                    self.tool_socket.expected_pid = self.native.proc.pid
+                    self.tool_socket.bind_process(self.native.proc.pid)
                     self.watchdog.reading()
                     try:
                         try:
@@ -579,5 +579,4 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             return NativeTurnResult(
                 response.strip(),
                 proof,
-                self.tool_socket.selected_call_id,
             )

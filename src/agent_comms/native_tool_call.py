@@ -252,9 +252,8 @@ class ToolTransport(ABC):
     @abstractmethod
     def active_tools(self) -> set[str]: ...
 
-    @property
-    def selected_call_id(self) -> str | None:
-        return None
+    def bind_process(self, pid: int) -> None:
+        """Transports without a socket need no peer identity."""
 
     @abstractmethod
     def accept_round(self, turn, content) -> bool: ...
@@ -274,14 +273,6 @@ class NoToolSocket(ToolTransport):
     @property
     def retainable(self) -> bool:
         return True
-
-    @property
-    def expected_pid(self):
-        raise SelectedToolDenied("A turn without tools has no tool process")
-
-    @expected_pid.setter
-    def expected_pid(self, pid: int) -> None:
-        pass
 
     @property
     def active_tools(self) -> set[str]:

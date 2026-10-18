@@ -163,7 +163,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
         result = await fake(*args, **kwargs)
         mode = kwargs["selected_tool_mode"]
         mode.action(SelectedToolRequest("call_1", SelectedWriteArguments("notes.txt", "after")))
-        return replace(result, selected_tool_call_id="call_1")
+        return result
 
     monkeypatch.setattr(TrackedTurnSession, "execute", selected_model)
     result = await runtime.SelectedExecution(

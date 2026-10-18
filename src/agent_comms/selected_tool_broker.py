@@ -473,12 +473,6 @@ class NativeToolCallTable(Generic[Call]):
     def values(self) -> ValuesView[Call]:
         return self._calls.values()
 
-    @property
-    def first_call_id(self) -> str | None:
-        """The selected call, or None when a selected-mode turn used no tool."""
-        if not self.rounds:
-            return None
-        return self.rounds[0].declared[0].call_id
 
 
 class OwnerToolSocket(ToolTransport, Generic[Call]):
@@ -498,6 +492,9 @@ class OwnerToolSocket(ToolTransport, Generic[Call]):
         turn.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(transport.address)
         turn.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = transport.token
         return transport
+
+    def bind_process(self, pid: int) -> None:
+        self.expected_pid = pid
 
     def accept_round(self, turn, content) -> bool:
         self.announce(content)
@@ -690,7 +687,3 @@ class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
 
     async def allow(self, round_number: int, call: SelectedToolRequest) -> None:
         await Coordination.run_worker(partial(self.action, call))
-
-    @property
-    def selected_call_id(self) -> str | None:
-        return self.calls.first_call_id
