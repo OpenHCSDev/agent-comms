@@ -12,8 +12,9 @@ and ``tools`` on the path. Three rules make a step safe to run on any bus at any
   reuse of a deleted step's name.
 
 A step that can no longer run against the current source is deleted. Its code
-stays in Git: a bus whose ledger lacks it runs it from the last revision that
-held it (``tools/upgrade_bus.py``). So deleting a step never strands a bus.
+stays in Git: a bus whose ledger lacks it runs it from the revision that added it,
+against the source it was written for (``tools/upgrade_bus.py``). So deleting a
+step never strands a bus.
 
 Each bus records the steps applied to it in ``carries.json``. Only this family
 reads or writes that file; nothing in ``src/`` depends on it.
@@ -293,12 +294,12 @@ class CarryChain:
 
     @staticmethod
     def deleted(repo: Path, revision: str, name: str) -> Step | None:
-        """A step no longer in the tree, at the last revision that held it; None if
-        that revision held a plain script rather than a step."""
+        """A step no longer in the tree, at the revision that added it: a step is never
+        edited, so that is the source it was written against. None if that revision
+        held a plain script rather than a step."""
         path = f"{STEPS}/{name}.py"
-        deletion = git(repo, "log", "--no-renames", "-1", "--format=%H", "--diff-filter=D", revision, "--", path).decode().strip()
-        holder = git(repo, "rev-parse", f"{deletion}^").decode().strip()
-        return Step.declared(name, git(repo, "show", f"{holder}:{path}"), holder)
+        added = git(repo, "log", "--no-renames", "-1", "--format=%H", "--diff-filter=A", revision, "--", path).decode().strip()
+        return Step.declared(name, git(repo, "show", f"{added}:{path}"), added)
 
     def require_next(self, name: str, applied: tuple[str, ...]) -> None:
         """A step applies to a bus that already records it or whose next pending step it is.

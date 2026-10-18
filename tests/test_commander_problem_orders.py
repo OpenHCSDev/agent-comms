@@ -1,18 +1,23 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
 import importlib
+import json
 import os
 import shutil
 import sqlite3
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 from contextlib import closing
 from dataclasses import replace
 
-from cutover.carry_problem_goals import ProblemGoals
+from cutover.carry import CarryChain
+from cutover.carry_todo_verdicts import TodoVerdicts
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
@@ -712,46 +717,34 @@ def test_a_refused_send_leaves_the_todo_row_byte_identical(commander):
     assert comms.registry.require('worker').goal == goal
 
 
-def test_column_carry_then_goal_carry_reads_todos(commander):
-    """The chain adds the verdicts column before the goal carry reads todos as declared; read
-    before it, the missing column fails as missing rather than as a quoted literal name."""
-    import sqlite3
-    from contextlib import closing
-    from pathlib import Path
-    from cutover.carry import CarryChain
-    from agent_comms.coordination_database import CoordinationStore
-    from cutover.carry_todo_verdicts import TodoVerdicts
-    from agent_comms.todos import Todo, TodoStore
+def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
+    """The deleted goal carry runs before the verdicts column carry, from the revision that added
+    it, whose Todo reads a pre-verdicts store; the current Todo reports that column missing."""
     comms, _ = commander
     completed_with_pending(commander)
     path = TodoStore.path_in(comms.root)
     with closing(sqlite3.connect(path)) as db:
         db.execute('ALTER TABLE todo DROP COLUMN verdicts')
         db.commit()
-    with pytest.raises(sqlite3.OperationalError, match='no such column: "verdicts"'):
-        ProblemGoals.carry(comms.root, apply=False)
-    names = [step.name for step in CarryChain.at(Path(__file__).parents[1], 'HEAD').steps]
-    assert names.index('carry_todo_verdicts') < names.index('carry_problem_goals')
+    with (closing(CoordinationStore.read_snapshot(path)) as db,
+          pytest.raises(sqlite3.OperationalError, match='no such column: "verdicts"')):
+        list(Todo.stream(db))
+    repo = Path(__file__).parents[1]
+    steps = {step.name: step for step in CarryChain.at(repo, 'HEAD').steps}
+    assert list(steps).index('carry_todo_verdicts') > list(steps).index('carry_problem_goals')
+    held = tmp_path / 'held'
+    held.mkdir()
+    archive = subprocess.run(['git', '-C', str(repo), 'archive', steps['carry_problem_goals'].revision,
+                              'src', 'tools'], capture_output=True, check=True).stdout
+    subprocess.run(['tar', '-x', '-C', str(held)], input=archive, check=True)
+    ran = subprocess.run([sys.executable, '-m', 'cutover.carry_problem_goals', str(comms.root)],
+                         capture_output=True, text=True, cwd=held,
+                         env={**os.environ, 'PYTHONPATH': f'{held / "src"}:{held / "tools"}'})
+    assert ran.returncode == 0, ran.stderr
+    assert json.loads(ran.stdout.splitlines()[-1])['changed'] == 2
     assert TodoVerdicts.carry(comms.root, apply=True).changed == 3
-    assert ProblemGoals.carry(comms.root, apply=True).changed == 2
     with closing(CoordinationStore.read_snapshot(path)) as db:
         assert {todo.id for todo in Todo.stream(db)} == {'P1', 'P2', 'P3'}
-
-
-def test_problem_goals_carry_reattaches_pending_problems_and_reopens_their_goal(commander):
-    comms, caller = commander
-    goal = completed_with_pending(commander)
-    assert ProblemGoals.carry(comms.root, apply=False).changed == 2
-    carried = ProblemGoals.carry(comms.root, apply=True)
-    assert (carried.changed, carried.detail) == (2, {'reattached': 1, 'reopened': 1})
-    assert ProblemGoals.carry(comms.root, apply=True).changed == 0
-    reopened = comms.registry.require('worker').goal
-    assert (reopened.id, reopened.revision, reopened.state.active) == (goal.id, goal.revision + 1, True)
-    assert {comms.goals.todos.get(p).assignment.generation for p in ('P2', 'P3')} == {goal.id}
-    CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P3', order=order(comms.root, 'revised'),
-        request='request', deadline=RecordedEventTime(3000), commander='lead',
-        expected_revision=comms.goals.todos.get('P3').revision)).apply(comms, caller)
-    assert comms.goals.todos.get('P3').order.id == 'revised'
 
 
 def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
