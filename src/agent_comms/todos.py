@@ -521,24 +521,44 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
     @abstractmethod
     def instructions(self) -> tuple[str, ...]: ...
 
+    @abstractmethod
+    def require_closing(self, works: str) -> None:
+        """Refuse closing evidence that does not show this run happened."""
+
 
 @dataclass(frozen=True)
 class MechanicalOrderRun(OrderRun):
     def instructions(self) -> tuple[str, ...]:
         return ()
 
+    def require_closing(self, works: str) -> None:
+        """The order's check alone closes it."""
+
 
 @dataclass(frozen=True)
 class ApplicationOrderRun(OrderRun):
     text: str
+    least_words: ClassVar[int] = 8  # the run, and the evidence that it happened
+    quoted_words: ClassVar[int] = 4
 
     def __post_init__(self) -> None:
-        if len(self.text.split()) < 8:
-            raise ValueError(f'Add "{self.label} <the user-visible closing run, 8+ words>"; '
-                             'a grep never closes a problem.')
+        if len(self.text.split()) < self.least_words:
+            raise ValueError(f'Add "{self.label} <the user-visible closing run, '
+                             f'{self.least_words}+ words>"; a grep never closes a problem.')
 
     def instructions(self) -> tuple[str, ...]:
         return (f"{self.label} {self.text}",)
+
+    def require_closing(self, works: str) -> None:
+        if len(works.split()) < self.least_words or not self.phrases(self.text) & self.phrases(works):
+            raise ValueError(f"Describe what worked in {self.least_words}+ words, quoting "
+                             f"{self.quoted_words}+ consecutive words of: {self.label} {self.text}")
+
+    @classmethod
+    def phrases(cls, text: str) -> set[tuple[str, ...]]:
+        words = [word.strip(".,;:!?\"'`()").lower() for word in text.split()]
+        return {tuple(words[at:at + cls.quoted_words])
+                for at in range(len(words) - cls.quoted_words + 1)}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -641,6 +661,7 @@ class DeliveredProblemOrder(ProblemOrder):
         raise ValueError("A delivered order keeps the check its delivery passed.")
 
     def installed(self, works, artifact):
+        self.run.require_closing(works)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
 
@@ -651,8 +672,8 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 
     def __post_init__(self):
         super().__post_init__()
-        if len(self.works.split()) < 8 or not self.artifact.strip():
-            raise ValueError("Describe what worked (8+ words) and name its artifact file.")
+        if not self.works.strip() or not self.artifact.strip():
+            raise ValueError("Describe what worked and name its artifact file.")
 
     def installed(self, works, artifact):
         if (works, artifact) != (self.works, self.artifact):
