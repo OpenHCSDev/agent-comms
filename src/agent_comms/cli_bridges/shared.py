@@ -48,6 +48,7 @@ from agent_comms.typed_table import Column, TypedTable
 
 if TYPE_CHECKING:
     from agent_comms.importing import ImportBuffer
+    from .history import OnlineHistory
     from .claude_protocol import ClaudeReaderPhase
 
 
@@ -333,13 +334,14 @@ class FinishedItem(TranscriptUpdate):
 class HiddenItem(TranscriptUpdate):
     """Conversation the live view does not show, because the thread shows it another way
     (a bus delivery) or because only the person's own prompts are shown; history keeps it."""
-    events: tuple[TranscriptEvent, ...]
+    historical_events: tuple[TranscriptEvent, ...]
+    events: ClassVar[tuple[TranscriptEvent, ...]] = ()
 
     def publish(self, output: ThreadOutput) -> None:
         pass
 
     def add_to(self, history: ImportBuffer) -> None:
-        history.add(self.events)
+        history.add(self.historical_events)
 
 
 @dataclass(frozen=True)
@@ -366,6 +368,15 @@ class SessionFacts(TranscriptUpdate):
 
     def add_to(self, history: ImportBuffer) -> None:
         history.describe(self)
+
+
+@dataclass(frozen=True)
+class AttachedHistory(TranscriptUpdate):
+    source: OnlineHistory
+
+    def publish(self, output: ThreadOutput) -> None:
+        from .history import HistoryCursors
+        HistoryCursors(output.transcript.root).attach(output.transcript.lookup, self.source)
 
 
 @dataclass(frozen=True)
