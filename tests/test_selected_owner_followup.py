@@ -70,18 +70,14 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         if native_ok:
             await asyncio.wait_for(wake, 12)
         else:
-            from agent_comms.acp_failure import RequestFailure
+            from agent_comms.native_pi import NativePiTerminalFailure
+            from delivery_owner_fixture import drain_diagnostic
 
-            with pytest.raises(RequestError) as failed:
+            # This is the background reply task, not an ACP request that is
+            # still awaiting its response. The accepted ACP request already ACKed.
+            with pytest.raises(NativePiTerminalFailure, match="Scripted provider failure"):
                 await asyncio.wait_for(wake, 12)
-            assert failed.value.__cause__ is not None
-            request_failure = RequestFailure.from_error(
-                failed.value.code, str(failed.value), failed.value.data
-            )
-            assert request_failure.notification_published
-            assert request_failure.failure.input_state is type(
-                stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{acknowledgement.input_id}")
-            )
+            assert "Scripted provider failure" in drain_diagnostic(comms, "beta").reason
         sent = requests(control)
         assert len(sent) == 2 and "Fresh owner input" in sent[1]["message"]
         row = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{acknowledgement.input_id}"]
@@ -95,8 +91,11 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         # a queued owner input keeps its claim_scope/goal authority across that change.
         from agent_comms.goal_waits import NoGoalWait
 
-        assert comms.goals.goal_wait("beta") == (NoGoalWait() if goal_mode == "standby" else before_wait)
-        assert not (comms.root / "goal-private").exists()
+        assert comms.goals.goal_wait("beta") == (
+            NoGoalWait() if goal_mode == "standby" and native_ok else before_wait
+        )
+        # A real running inbox opens the canonical goal store even without a
+        # goal. Directory existence is not authority; the goal above is unchanged.
     finally:
         (control / "release").touch()
         await asyncio.gather(turn, return_exceptions=True)

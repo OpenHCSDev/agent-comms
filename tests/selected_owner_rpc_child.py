@@ -1,5 +1,4 @@
 """Recorded Pi RPC child. Only the external model/process edge is controlled."""
-import hashlib
 import json
 import os
 import sys
@@ -8,6 +7,7 @@ from pathlib import Path
 
 from native_proof_cases import read_proof_rows, write_proof_rows
 from pi_stub_protocol import read_request, request_response, send
+from agent_comms.private_sidecar import native_request_digest
 
 control = Path(sys.argv[1])
 args = sys.argv[2:]
@@ -44,12 +44,9 @@ while True:
                     raise TimeoutError('Parent did not release the scripted selected input')
                 time.sleep(.005)
         native_id = request['inputId']
-        envelope = {'kind': 'prompt', 'text': request['message'],
-                    'images': request.get('images'),
-                    'streamingBehavior': request.get('streamingBehavior'),
-                    'expandPromptTemplates': True, 'source': 'rpc'}
-        digest = hashlib.sha256(('pi-input-request-v1\n' + json.dumps(
-            envelope, ensure_ascii=False, separators=(',', ':'))).encode()).hexdigest()
+        digest = native_request_digest(
+            request['message'], streaming_behavior=request.get('streamingBehavior'),
+        )
         entry = {'type': 'message', 'id': native_id, 'message': {
             'role': 'user', 'inputId': native_id, 'inputDigest': digest,
             'content': request['message']}}
