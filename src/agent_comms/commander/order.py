@@ -29,6 +29,7 @@ from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CountCheckResult, OrderCheck
 from ..native_tool_call import SelectedToolDenied
+from ..plan_phases import PlanPhase
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
@@ -222,6 +223,11 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         run = MechanicalOrderRun() if mechanical else ApplicationOrderRun(works[1] if works else '')
     except ValueError as refused:
         problems.append(str(refused))
+    serves = re.search(r'(?m)^Serves:\s*(\S+)\s*$', body)
+    try:
+        phase = PlanPhase.decode(serves[1]) if serves else None
+    except ValueError as refused:
+        problems.append(f'{refused}; Serves: names one of {", ".join(PlanPhase.names())}')
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
     if not edits:
         problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
@@ -296,7 +302,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         order = PendingProblemOrder(
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
             check=check, edits=edits, banned=banned,
-            report=report[1], run=run,
+            report=report[1], run=run, serves=phase,
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
