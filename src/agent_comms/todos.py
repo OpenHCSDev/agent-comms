@@ -54,21 +54,53 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommitDelivery(OrderDelivery):
+class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
+    """A delivery recorded before checked and delivered commits were told apart.
+
+    Its one commit is both facts; Core refuses new deliveries of this kind."""
     commit: str
 
-    def __post_init__(self):
-        if not 7 <= len(self.commit) <= 40 or self.commit.strip("0123456789abcdef"):
-            raise ValueError("Delivery requires a commit hash.")
+    def __post_init__(self) -> None:
+        if any(not isinstance(sha, str) or not 7 <= len(sha) <= 40
+               or sha.strip("0123456789abcdef") for sha in (self.commit, self.delivered)):
+            raise ValueError("Delivery requires a checked and a delivered commit hash.")
 
-    async def require_source(self, check):
-        head = (await self.run(check, "git", "rev-parse", "HEAD", f"{self.commit}^{{commit}}")).split()
+    @property
+    def delivered(self) -> str:
+        return self.commit
+
+    async def require_source(self, check: OrderCheck) -> None:
+        raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
+
+    async def delivery_time(self, check: OrderCheck) -> EventTime:
+        return EventTime.capture(float(
+            await self.run(check, "git", "show", "-s", "--format=%ct", self.delivered)))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
+    """The check runs on ``commit``; ``delivered_commit`` is the unit's pushed ancestor of it."""
+    delivered_commit: str
+
+    @property
+    def delivered(self) -> str:
+        return self.delivered_commit
+
+    async def require_source(self, check: OrderCheck) -> None:
+        head = (await self.run(check, "git", "rev-parse", "HEAD", f"{self.commit}^{{commit}}",
+                               f"{self.delivered}^{{commit}}")).split()
         dirty = await self.run(check, "git", "status", "--porcelain", "--untracked-files=no")
-        if len(head) != 2 or head[0] != head[1] or dirty.strip():
-            raise ValueError("Run the order check on its clean delivered commit.")
-
-    async def delivery_time(self, check):
-        return EventTime.capture(float(await self.run(check, "git", "show", "-s", "--format=%ct", self.commit)))
+        if len(head) != 3 or head[0] != head[1] or dirty.strip():
+            raise ValueError("Run the order check on its clean checked commit.")
+        base = await self.run(check, "git", "merge-base", self.delivered, self.commit)
+        if base.strip() != head[2]:
+            raise ValueError(
+                f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
+        pushed = await self.run(check, "git", "branch", "--remotes", "--contains", self.delivered,
+                                "--list", "origin/*")
+        if not pushed.strip():
+            raise ValueError(
+                f"Delivered commit {self.delivered} is on no origin branch; push it first.")
 
 
 @dataclass(frozen=True, kw_only=True)
