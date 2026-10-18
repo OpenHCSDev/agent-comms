@@ -81,10 +81,7 @@ class TextFormat(SelectableWireExportFormat):
             f"type={message.type.declared_name}",
             f"role={message.sender_role.value}",
         ]
-        if message.notice:
-            attributes.append("notice=true")
-        if message.membership is not None:
-            attributes.append(f"membership={message.membership.value}")
+        attributes.extend(message.role.export_attributes())
         if message.mentions:
             attributes.append("mentions=" + ",".join(f"@{m.thread}" for m in message.mentions))
         body = "\n".join(f"  | {line}" for line in message.body.split("\n"))

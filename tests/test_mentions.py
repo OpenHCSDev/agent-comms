@@ -1,3 +1,4 @@
+from agent_comms.messages import NoticeRole
 import pytest
 from agent_comms.tool_caller import NoThreadCaller
 
@@ -57,13 +58,13 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
         "#team", "@unknown can anyone answer?", worktree=str(tmp_path)
     )
     assert not collective.mentions
-    assert collective.response_policy is CollectivePolicy.instance()
+    assert collective.role.response_policy(collective) is CollectivePolicy.instance()
     assert collective.response_eligibility(("alpha", "beta")).recipients == (
         "alpha",
         "beta",
     )
-    assert collective.starts_turn_for("alpha")
-    assert collective.starts_turn_for("beta")
+    assert collective.role.response_policy(collective).starts_turn_for(collective, "alpha")
+    assert collective.role.response_policy(collective).starts_turn_for(collective, "beta")
     collective_prompt = ScheduledTurn.incoming(collective).prompt
     assert "Response policy: collective; channel members may respond" in collective_prompt
     assert "delivery and history remain #team" in collective_prompt
@@ -72,25 +73,25 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
     eligibility = mentioned.response_eligibility(("alpha", "beta"))
     assert eligibility.policy is MentionedOnlyPolicy.instance()
     assert eligibility.recipients == ("beta",)
-    assert not mentioned.starts_turn_for("alpha")
-    assert mentioned.starts_turn_for("beta")
+    assert not mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "alpha")
+    assert mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "beta")
     assert mentioned.target == "#team"
     mentioned_prompt = ScheduledTurn.incoming(mentioned).prompt
     assert "only resolved mentioned identities may respond: @beta" in mentioned_prompt
     assert "unmentioned observers dismiss quietly" in mentioned_prompt
 
     agent_chatter = comms.messaging.send_message("alpha", "#team", "status only")
-    assert agent_chatter.response_policy is InformationalPolicy.instance()
+    assert agent_chatter.role.response_policy(agent_chatter) is InformationalPolicy.instance()
     assert not agent_chatter.response_eligibility(("beta",)).recipients
-    assert not agent_chatter.starts_turn_for("beta")
+    assert not agent_chatter.role.response_policy(agent_chatter).starts_turn_for(agent_chatter, "beta")
     agent_prompt = ScheduledTurn.incoming(agent_chatter).prompt
     assert "Response policy: informational; observe and dismiss without replying" in agent_prompt
     assert "delivery and history remain #team" in agent_prompt
 
-    informational = comms.messaging.send_message("alpha", "#team", "notice only", notice=True)
-    assert informational.response_policy is InformationalPolicy.instance()
+    informational = comms.messaging.send_message("alpha", "#team", "notice only", role=NoticeRole())
+    assert informational.role.response_policy(informational) is InformationalPolicy.instance()
     assert not informational.response_eligibility(("alpha", "beta")).recipients
-    assert not informational.starts_turn_for("beta")
+    assert not informational.role.response_policy(informational).starts_turn_for(informational, "beta")
     assert "Response policy: informational; observe and dismiss without replying" in (
         ScheduledTurn.incoming(informational).prompt
     )
@@ -111,9 +112,9 @@ def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentio
         InfoKind,
         sender_role=sender_role,
     )
-    assert unmentioned.response_policy is unmentioned_policy
-    assert unmentioned.starts_turn is (unmentioned_policy is CollectivePolicy.instance())
-    assert unmentioned.starts_turn_for("alpha") is (
+    assert unmentioned.role.response_policy(unmentioned) is unmentioned_policy
+    assert unmentioned.role.response_policy(unmentioned).starts_turn is (unmentioned_policy is CollectivePolicy.instance())
+    assert unmentioned.role.response_policy(unmentioned).starts_turn_for(unmentioned, "alpha") is (
         unmentioned_policy is CollectivePolicy.instance()
     )
     assert unmentioned.target == "#team"
@@ -126,10 +127,10 @@ def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentio
         sender_role=sender_role,
         mentions=(ThreadMention("beta", 0, 5),),
     )
-    assert mentioned.response_policy is MentionedOnlyPolicy.instance()
-    assert not mentioned.starts_turn
-    assert not mentioned.starts_turn_for("alpha")
-    assert mentioned.starts_turn_for("beta")
+    assert mentioned.role.response_policy(mentioned) is MentionedOnlyPolicy.instance()
+    assert not mentioned.role.response_policy(mentioned).starts_turn
+    assert not mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "alpha")
+    assert mentioned.role.response_policy(mentioned).starts_turn_for(mentioned, "beta")
     assert mentioned.target == "#team"
 
     notice = Message(
@@ -138,10 +139,10 @@ def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentio
         "delivery failed",
         AlertKind,
         sender_role=sender_role,
-        notice=True,
+        role=NoticeRole(),
     )
-    assert notice.response_policy is InformationalPolicy.instance()
-    assert not notice.starts_turn_for("alpha")
+    assert notice.role.response_policy(notice) is InformationalPolicy.instance()
+    assert not notice.role.response_policy(notice).starts_turn_for(notice, "alpha")
 
 
 def test_completion_uses_the_model_syntax_at_the_cursor():
@@ -162,9 +163,9 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     for name in ("sender", "owner"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
-    comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, notice=True)
+    comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, role=NoticeRole())
     notice = list(comms.views.channel_history_page("#team").messages)[-1]
-    assert notice.notice is True and not notice.starts_turn
+    assert isinstance(notice.role, NoticeRole) and not notice.role.response_policy(notice).starts_turn
     with comms.bus.opened_activity() as clocks:
         assert "sender" not in comms.views.last_sent_timestamps(clocks.sent, registry=comms.registry.snapshot())
     assert Message.from_wire(notice.to_wire()) == notice
@@ -244,8 +245,8 @@ def test_committed_channel_mention_follows_recipient_renames_without_expanding_a
     comms.registry.rename("renamed", "final")
     aliases = comms.registry.snapshot().aliases
     assert message in comms.bus.incoming_page("final", after=0).messages
-    assert message.starts_turn_for("final", aliases=aliases)
-    assert not message.starts_turn_for("observer", aliases=aliases)
+    assert message.role.response_policy(message).starts_turn_for(message, "final", aliases=aliases)
+    assert not message.role.response_policy(message).starts_turn_for(message, "observer", aliases=aliases)
     assert message.response_eligibility(("final", "observer"), aliases=aliases).recipients == (
         "final",
     )

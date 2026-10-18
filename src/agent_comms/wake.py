@@ -13,7 +13,7 @@ from enum import StrEnum
 from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from .channel_targets import CommandTarget, NamedTarget
 from .messages import Message
-from .wake_policy import NoWakeDecision, PassiveWake, RecipientDecision
+from .wake_policy import NoWakeDecision, RecipientDecision
 
 
 class ControlClassification(StrEnum):
@@ -76,10 +76,7 @@ def _member_decision(
 ) -> RecipientDecision:
     if not message.type.conversation_message:
         return NoWakeDecision(recipient.recipient_lookup)
-    if message.notice or message.membership is not None or control.passive:
-        mode = PassiveWake()
-    else:
-        mode = target.wake_policy(recipient, effective_mentions)
+    mode = message.role.wake_mode(target, recipient, effective_mentions, control)
     return mode.recipient_decision(recipient.recipient_lookup, target.wake_audience(effective_mentions))
 
 

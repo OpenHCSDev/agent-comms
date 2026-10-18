@@ -7,8 +7,8 @@ def completed_counts(state, viewer, sources):
         if not result.pending:
             return result
         preparation = state.preparation
-        assert preparation is not None, "Native counts are pending without authorized preparation"
-        preparation.result(timeout=10)
+        assert preparation is not state._idle, "Native counts are pending without authorized preparation"
+        preparation.future.result(timeout=10)
     raise AssertionError("Native preparation did not cover the fixture")
 
 
@@ -18,6 +18,6 @@ def completed_snapshot(comms, worktree, **options):
         if not snapshot.unread_pending:
             return snapshot
         preparation = comms.views.transcript_reads.preparation
-        assert preparation is not None, "Snapshot is pending without native preparation"
-        preparation.result(timeout=10)
+        assert preparation is not comms.views.transcript_reads._idle, "Snapshot is pending without native preparation"
+        preparation.future.result(timeout=10)
     raise AssertionError("Native preparation did not cover the fixture")

@@ -40,7 +40,8 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     assert thread.pid == os.getpid() and thread.model == "test/model"
     assert thread.goal == goal and thread.created_at == 123
     assert thread.session_file == str(old / "session.jsonl")
-    assert thread.storage_roots.checkouts == (old, new)
+    assert thread.storage_roots == comms.registry.storage_rule.initial_roots('worker')
+    assert thread.earlier_projects == (old,)
     assert not comms.threads.set_project("worker", str(new)).changed
     for path in ("", str(tmp_path / "missing")):
         with pytest.raises(ValueError):
@@ -54,7 +55,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
         comms.registry.require("worker"), str(old / "session.jsonl")
     )
     restored = wire(comms.root).registry.require("worker")
-    assert restored.worktree == str(new) and restored.storage_roots.checkouts == (old, new)
+    assert restored.worktree == str(new) and restored.earlier_projects == (old,)
     assert len(comms.registry.all_threads()) == 1
 
 

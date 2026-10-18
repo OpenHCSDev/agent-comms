@@ -378,7 +378,7 @@ class ThreadRole(StrEnum):
 
     def initial_delivery(self, message, target):
         if not self.executable:
-            return replace(message, notice=True), []
+            return replace(message, role=message.role.as_notice()), []
         return message, [target]
 
     def require_executable(self) -> None:

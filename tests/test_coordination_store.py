@@ -1256,7 +1256,6 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
             body="reply",
             type=InfoKind,
             timestamp=1.0,
-            notice=False,
         )
         intent = PublicationIntents(
             "exec",

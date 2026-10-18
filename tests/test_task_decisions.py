@@ -1,5 +1,6 @@
 """One original decision/correction journey through declared tools and wire ownership."""
 
+from agent_comms.messages import NoticeRole
 import os
 import json
 from dataclasses import replace
@@ -58,7 +59,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     assert owner.turn_lease is None
     pin = comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree)
     assert isinstance(pin.task, HumanConstraintPin)
-    assert pin.notice and not pin.starts_turn and pin.task.subject == subject.reference
+    assert isinstance(pin.role, NoticeRole) and not pin.role.response_policy(pin).starts_turn and pin.task.subject == subject.reference
     assert exact not in pin.body and "source_turn" not in FieldCodec.encode(pin.task)
 
     def captured(name):
@@ -215,7 +216,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert original.reference == FieldCodec.decode(type(original.reference), first["reference"])
     assert original.task.author == alpha.incarnation
     assert original.task.source_turn == alpha.turn_identity
-    assert original.notice and not original.starts_turn
+    assert isinstance(original.role, NoticeRole) and not original.role.response_policy(original).starts_turn
     assert Message.from_committed_wire(original.to_wire()) == original
     correction = invoke_tool(comms, "comms_decision", {
         **request, "chosen": "Keep /artifacts/certified-root", "change": {"kind": "correction", "original": first["reference"]},

@@ -43,6 +43,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.presentation import WireRevision
+from agent_comms.view_unread import IdleReplyPreparation
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -560,16 +561,13 @@ class SidebarReading(Observation[ObserveSidebar]):
         self.stage: SidebarReadStage = RosterSidebarRead()
         self.sent: SidebarSent | None = None
         self.published: SidebarResult | None = None
-        self.preparation: Future[ReplyIndexBatch] | None = None
+        self.reply_completion: Future[ReplyIndexBatch] = IdleReplyPreparation.future
 
     def after_read(self, service: ObservationService) -> None:
         preparation = service.comms.views.transcript_reads.preparation
-        if preparation is None or preparation is self.preparation:
-            return
-        self.preparation = preparation
         loop = asyncio.get_running_loop()
-        preparation.add_done_callback(
-            lambda _: loop.call_soon_threadsafe(self.prepared, service)
+        self.reply_completion = preparation.watch(
+            self.reply_completion, lambda _: loop.call_soon_threadsafe(self.prepared, service)
         )
 
     def prepared(self, service: ObservationService) -> None:
