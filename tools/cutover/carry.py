@@ -120,9 +120,9 @@ class Carry(ABC):
         with _store_lock(args.root / "wire"):
             if args.apply and not args.before_stop:
                 applied = CarryLedger(args.root).applied() or ()
-                checkout = cls.module().parents[2]
+                checkout = git(cls.module().parent, "rev-parse", "--show-toplevel").decode().strip()
                 try:
-                    CarryChain.at(checkout, "HEAD").require_before(cls.name(), applied)
+                    CarryChain.at(Path(checkout), "HEAD").require_next(cls.name(), applied)
                 except ValueError as error:
                     raise SystemExit(f"{cls.name()}: {error}") from None
             if args.before_stop:
@@ -239,16 +239,16 @@ class CarryChain:
         holder = git(repo, "rev-parse", f"{deletion}^").decode().strip()
         return Step.declared(name, git(repo, "show", f"{holder}:{path}"), holder)
 
-    def require_before(self, name: str, applied: tuple[str, ...]) -> None:
-        """A step applies only to a bus whose ledger records every step ordered before it;
-        a bus without them, including one from before the ledger, runs ``tools/upgrade_bus.py``."""
-        names = [step.name for step in self.steps]
-        if name not in names:
-            raise ValueError("this history declares no such step")
-        missing = [earlier for earlier in names[:names.index(name)] if earlier not in applied]
-        if missing:
-            raise ValueError(f"the bus ledger lacks the earlier steps {missing}; "
-                             "run tools/upgrade_bus.py")
+    def require_next(self, name: str, applied: tuple[str, ...]) -> None:
+        """A step applies to a bus that already records it or whose next pending step it is.
+        Otherwise the bus first runs the pending steps through this one, as
+        ``tools/upgrade_bus.py`` does; a ledger that pending() refuses stays refused."""
+        if name in applied:
+            return
+        pending = [step.name for step in self.pending(applied)]
+        if pending[:1] != [name]:
+            ahead = pending[: pending.index(name) + 1] if name in pending else pending
+            raise ValueError(f"the bus must first run {ahead}; run tools/upgrade_bus.py")
 
     def pending(self, applied: tuple[str, ...]) -> tuple[Step, ...]:
         """The steps a bus still needs. A bus recording a later step but not an

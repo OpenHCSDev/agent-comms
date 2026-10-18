@@ -98,13 +98,14 @@ def test_a_step_applies_only_after_every_earlier_step_and_a_ledgerless_bus_upgra
     skipped = tmp_path / "skipped"
     skipped.mkdir()
     CarryLedger(skipped).record("carry_b")
-    refused = apply("carry_c", skipped)
-    assert refused.returncode and "lacks the earlier steps ['carry_a']" in refused.stderr
+    for name in ("carry_a", "carry_c"):
+        refused = apply(name, skipped)
+        assert refused.returncode and "Bus ledger skips a step" in refused.stderr
     assert CarryLedger(skipped).applied() == ("carry_b",)
 
     ledgerless = tmp_path / "ledgerless"
     ledgerless.mkdir()
-    assert "lacks the earlier steps ['carry_a']" in apply("carry_b", ledgerless).stderr
+    assert "must first run ['carry_a', 'carry_b']" in apply("carry_b", ledgerless).stderr
     assert CarryLedger(ledgerless).applied() is None
     chain = CarryChain.at(repo.path, "HEAD")
     for step in chain.pending(CarryLedger(ledgerless).applied() or ()):
