@@ -11,7 +11,7 @@ import sys
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, BinaryIO, ClassVar
+from typing import TYPE_CHECKING, cast, BinaryIO, ClassVar
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec, MalformedRecord, WireValue
@@ -56,7 +56,7 @@ class WireRecord(ABC):
         from .messages import Message
 
         if "observation" in value:
-            return DeferredObservationWireRecord.from_wire(value)
+            return DeferredObservationWireRecord.decode(value)
         message = Message.from_committed_wire(value)
         if has_private_wire_fields(value):
             return CommittedDelivery.attest(message, value, root_id)
@@ -67,7 +67,7 @@ class WireRecord(ABC):
         """Display decoding preserves public messages and validates silent rows."""
         from .messages import Message
         if "observation" in value:
-            return DeferredObservationWireRecord.from_wire(value)
+            return DeferredObservationWireRecord.decode(value)
         return PublicWireRecord(Message.from_wire(value))
 
     @classmethod
@@ -82,9 +82,6 @@ class WireRecord(ABC):
         return cls.public_from_wire(value).messages()
 
     def messages(self) -> tuple[Message, ...]:
-        return ()
-
-    def context_manifests(self):
         return ()
 
     def context_entries(self):
@@ -138,14 +135,13 @@ class WireObservation(DeclaredFamily, affix="WireObservation"):
 
     @classmethod
     @abstractmethod
-    def checkpoint_from_wire(cls, data: dict, offset: int, length: int, previous_sequence: int): ...
+    def checkpoint_from_wire(
+        cls, data: dict, offset: int, length: int, previous_sequence: int
+    ) -> tuple: ...
 
     @classmethod
     def row_label(cls, data: dict) -> str:
         return cls.declared_name
-
-    @abstractmethod
-    def context_manifests(self): ...
 
     def context_entries(self):
         return ()
@@ -169,14 +165,12 @@ class ContextEntryManifestWireObservation(WireObservation):
         rows = []
         for entry in entries:
             manifest = FieldCodec.field_plan(ContextEntryManifest, "manifest").raw(entry)
-            sources = ContextSources(FieldCodec.field_plan(SegmentManifest, "provenance").read(manifest))
+            provenance = FieldCodec.field_plan(SegmentManifest, "provenance").read(manifest)
+            sources = ContextSources(provenance)
             rows.append(ContextEntrySources.for_reference(
                 ContextEntryReference.from_sources(sources), offset=offset, length=length
             ))
         return tuple(rows)
-
-    def context_manifests(self):
-        return ()
 
     def context_entries(self):
         return self.entries
@@ -205,9 +199,6 @@ class RecordedContextManifestWireObservation(WireObservation):
     def __post_init__(self):
         self.manifest.turn.require_recorded()
 
-    def context_manifests(self):
-        return ()
-
     def recorded_context_manifests(self):
         return (self.manifest,)
 
@@ -217,9 +208,6 @@ class ObservationWireRecord(WireRecord):
 
     @abstractmethod
     def read(self) -> WireObservation: ...
-
-    def context_manifests(self):
-        return self.read().context_manifests()
 
     def context_entries(self):
         return self.read().context_entries()
@@ -242,13 +230,13 @@ class AuthoredObservationWireRecord(ObservationWireRecord):
     def read(self) -> WireObservation:
         return self.observation
 
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
-        return DeferredObservationWireRecord.from_wire(self.to_wire()).checkpoint_rows(
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int) -> tuple:
+        return DeferredObservationWireRecord.decode(self.to_wire()).checkpoint_rows(
             offset, length, previous_sequence
         )
 
-    def to_wire(self):
-        return FieldCodec.encode(self)
+    def to_wire(self) -> dict:
+        return cast(dict, FieldCodec.encode(self))
 
 
 @dataclass(frozen=True)
@@ -258,19 +246,17 @@ class DeferredObservationWireRecord(ObservationWireRecord, WireValue):
     data: dict
 
     @classmethod
-    def from_wire(cls, value: object, root_id: str | None = None) -> DeferredObservationWireRecord:
+    def decode(cls, value: object) -> DeferredObservationWireRecord:
         record = cls(FieldCodec.record_data(AuthoredObservationWireRecord, value))
-        record.member
+        _owner, _data = record.member
         return record
 
     @property
-    def member(self):
-        return FieldCodec.record_member(
-            WireObservation,
-            FieldCodec.field_plan(AuthoredObservationWireRecord, "observation").raw(self.data),
-        )
+    def member(self) -> tuple[type[WireObservation], dict]:
+        plan = FieldCodec.field_plan(AuthoredObservationWireRecord, "observation")
+        return FieldCodec.record_member(plan.annotation, plan.raw(self.data))
 
-    def to_wire(self):
+    def to_wire(self) -> dict:
         return self.data
 
     def read(self) -> WireObservation:
@@ -280,7 +266,7 @@ class DeferredObservationWireRecord(ObservationWireRecord, WireValue):
         except MalformedRecord as error:
             raise StoredHistoryUnreadable(f"Unreadable {owner.row_label(data)}: {error}") from error
 
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int) -> tuple:
         owner, data = self.member
         return owner.checkpoint_from_wire(data, offset, length, previous_sequence)
 

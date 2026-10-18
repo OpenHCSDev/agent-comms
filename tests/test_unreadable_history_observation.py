@@ -18,6 +18,8 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.field_codec import FieldCodec
+from agent_comms.errors import StoredHistoryUnreadable
+from agent_comms.private_bus_checkpoint import RecordedContextManifestSources
 from agent_comms.threads import Thread
 from agent_comms.presentation import WireRevision
 from agent_comms.ui_model.observation import (
@@ -35,6 +37,7 @@ from agent_comms.ui_model.observation import (
     ReadRequest,
     ReadTranscript,
     SidebarUnreadable,
+    SidebarObserved,
     SidebarDeferred,
     SidebarReading,
     SidebarReadStage,
@@ -52,6 +55,14 @@ from agent_comms.wire_record import (
 )
 from test_observer_death import readable
 from test_turn_context_wire import manifest
+
+
+@dataclass(frozen=True)
+class ReadRecordedContext(ReadRequest):
+    thread: str
+
+    def read(self, comms):
+        return RecordedContextManifestSources.for_owner(comms.bus.log, self.thread, comms.registry)
 
 
 def saved_row(comms):
@@ -83,14 +94,15 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
     row = saved_row(comms)
     row["observation"]["manifest"]["segments"][0]["manifest"]["kind"] = "unavailable_future_segment"
     comms.bus.log.path.write_text(json.dumps(row) + "\n")
-    answer = ReadTranscript(str(comms.root), "saved", request_id=7).answer(comms)
+    answer = ReadRecordedContext(str(comms.root), "saved", request_id=7).answer(comms)
     assert isinstance(answer, ReadRefused)
-    assert isinstance(answer.error, UnreadableHistory)
+    assert isinstance(answer.error, StoredHistoryUnreadable)
     assert "unavailable_future_segment" in str(answer.error)
     round_trip = pickle.loads(pickle.dumps(answer))
     assert str(round_trip.error) == str(answer.error)
-    assert UnreadableHistory.capture(answer.error) is answer.error
-    observed = ThreadsObserved(WireRevision.empty(), {"saved": ThreadUnavailable(answer.error)}, frozenset({"saved"}), {})
+    failure = UnreadableHistory.capture(answer.error)
+    assert UnreadableHistory.capture(failure) is failure
+    observed = ThreadsObserved(WireRevision.empty(), {"saved": ThreadUnavailable(failure)}, frozenset({"saved"}), {})
     status = OpenThreadStatus(lambda callback: callback())
     status.observed(observed)
     assert status.rows.rows["saved"].status.details == (str(answer.error),)
@@ -228,14 +240,11 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
             while True:
                 await readable(process)
                 results = process.results()
-                failed = next(
-                    (result for result in results if isinstance(result, SidebarUnreadable)), None
+                sidebar = next(
+                    (result for result in results if isinstance(result, SidebarObserved)), None
                 )
-                if failed is not None:
+                if sidebar is not None:
                     break
-        assert "unavailable_future_segment" in str(failed.error)
-        assert str(comms.bus.log.path) in str(failed.error)
-        assert "byte offset 0" in str(failed.error)
         assert process.process.is_alive() and process.died is None
         process.request(ObserveThreads(frozenset({"saved"})))
         async with asyncio.timeout(30):
@@ -247,8 +256,18 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
                 )
                 if threads is not None:
                     break
-        assert isinstance(threads.results["saved"].error, UnreadableHistory)
-        assert "unavailable_future_segment" in str(threads.results["saved"].error)
+        assert not isinstance(threads.results["saved"], ThreadUnavailable)
+        # Only the request needing the damaged payload is refused, over the
+        # same actual child/pipe that served the sidebar and thread reads.
+        damaged = asyncio.create_task(process.read(ReadRecordedContext(str(comms.root), "saved")))
+        await asyncio.sleep(0)
+        async with asyncio.timeout(30):
+            while not damaged.done():
+                await readable(process)
+                process.results()
+                await asyncio.sleep(0)
+        with pytest.raises(StoredHistoryUnreadable, match="context sequence.*unavailable_future_segment"):
+            await damaged
         # Serve a separate, readable request using the same actual pipe/child.
         waiting = asyncio.create_task(process.read(ReadNotifications(str(comms.root), ())))
         await asyncio.sleep(0)

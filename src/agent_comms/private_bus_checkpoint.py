@@ -493,8 +493,8 @@ class CertifiedSourceRead:
     def context_records(self, manifest, previous=None):
         """Choose new entry rows and one turn row from this certified index."""
         from .wire_record import (
-            ContextEntryManifestWireObservation,
             AuthoredObservationWireRecord,
+            ContextEntryManifestWireObservation,
             RecordedContextManifestWireObservation,
         )
 
