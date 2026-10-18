@@ -602,9 +602,22 @@ def test_unit_wording_gets_a_correction_not_a_strike(commander):
     assert comms.goals.todos.get('P1') == held and held.strike_count == 0
 
 
+def test_published_unit_jargon_is_corrected_on_its_open_order(commander):
+    """No watch runs: publishing the message is what records the correction on the order."""
+    comms, _ = commander
+    create(commander, 'P1')
+    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed')
+    comms.messaging.send('worker', 'lead', 'The tests pass now.')
+    comms.messaging.send('lead', 'worker', 'Your lifecycle report is late.')
+    corrected = comms.goals.todos.get('P1')
+    assert [(c.message_id, c.words) for c in corrected.corrections] == [(vague, ('canonical', 'ownership'))]
+    assert corrected.strike_count == 0
+
+
 @pytest.mark.parametrize('step, name, column', [
     ('carry_todo_voids', 'TodoVoids', 'voided'), ('carry_todo_releases', 'TodoReleases', 'released'),
-    ('carry_todo_verdicts', 'TodoVerdicts', 'verdicts')])
+    ('carry_todo_verdicts', 'TodoVerdicts', 'verdicts'),
+    ('carry_todo_corrections', 'TodoCorrections', 'corrections')])
 def test_todo_record_carries_keep_every_stored_strike(commander, step, name, column):
     """A store from before the column gains it empty once; its rows, strikes and schema then read as declared."""
     import sqlite3

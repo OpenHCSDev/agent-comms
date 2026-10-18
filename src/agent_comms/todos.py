@@ -1086,6 +1086,17 @@ class CorrectCheckTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class WordingCorrection(TodoOperation):
+    """Core's answer to a published unit message whose words hide what happened; no strike."""
+    message_id: str
+    words: tuple[str, ...]
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        return replace(current, corrections=(*current.corrections, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class ServeTodo(TodoOperation):
     """The commander names the plan phase an open order serves; it keeps its id and holder."""
     actor: ThreadIncarnation
@@ -1213,6 +1224,7 @@ class Todo(TypedTable):
     voided: tuple[VoidStrikeTodo, ...] = ()
     released: tuple[ReleaseTodo, ...] = ()
     verdicts: tuple[OrderVerdict, ...] = ()
+    corrections: tuple[WordingCorrection, ...] = ()
 
     @property
     def pending(self):
@@ -1456,6 +1468,18 @@ class TodoStore(TypedStore):
                 return current
             result.upsert(db)
             return self._current(db, todo_id)
+
+    def correct(self, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
+        """Record a correction on every open order the unit holds when its published text uses jargon."""
+        if not (words := tuple(PlainText.found(text))) or not self.path.exists():
+            return ()
+        with self.writing() as db:
+            held = (todo for todo in self._rows(db, "json_extract(assignment,'$.owner')=?", (unit,))
+                    if todo.state.open)
+            corrected = tuple(WordingCorrection(todo.revision, message_id, words).apply(todo) for todo in held)
+            for todo in corrected:
+                todo.upsert(db)
+            return corrected
 
     def fire(self, unit: str, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
         """Release every open problem the unit holds from this commander in one write; each
