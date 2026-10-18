@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import re
 import logging
 import sqlite3
 
@@ -12,7 +13,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
@@ -70,18 +71,20 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
 
 
 @pytest.mark.parametrize(
-    "token_fields",
+    ("token_fields", "refusal"),
     [
-        {},
-        {"controllerToken": None},
-        {"controllerToken": 42},
-        {"controllerToken": ""},
-        {"controllerToken": "a" * 63},
-        {"controllerToken": "a" * 65},
+        ({}, "Missing required fields for OwnerReady: controllerToken"),
+        ({"controllerToken": None}, "Expected <class 'str'>, received NoneType"),
+        ({"controllerToken": 42}, "Expected <class 'str'>, received int"),
+        ({"controllerToken": ""}, "ready requires a valid controllerToken"),
+        ({"controllerToken": "a" * 63}, "ready requires a valid controllerToken"),
+        ({"controllerToken": "a" * 65}, "ready requires a valid controllerToken"),
     ],
     ids=["missing", "null", "number", "empty", "short", "long"],
 )
-async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, token_fields):
+async def test_subscription_rejects_invalid_ready_and_closes_socket(
+    tmp_path, token_fields, refusal
+):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
         comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -94,8 +97,9 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, to
         try:
             request = json.loads(await reader.readline())
             assert request["action"] == "subscribe" and request["thread"] == "owner"
-            writer.write((json.dumps(FieldCodec.encode(OwnerAnnouncement())) + "\n").encode())
-            writer.write((json.dumps({"ready": {}, **token_fields}) + "\n").encode())
+            writer.write(OwnerAnnouncement().wire())
+            ready = {"kind": "owner_ready", "ready": {}, "configOptions": [], **token_fields}
+            writer.write((json.dumps(ready) + "\n").encode())
             await writer.drain()
             # Rejection must close the attachment without sending a prompt or
             # accepting a permission-controller downgrade.
@@ -113,7 +117,7 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, to
     proxy = RuntimeProxy(client, "owner", path)
     try:
         async with asyncio.timeout(3):
-            with pytest.raises(ValueError, match="ready requires a valid controllerToken"):
+            with pytest.raises(MalformedRecord, match=re.escape(refusal)):
                 await proxy.subscribe()
             await finished
         assert proxy._controller_token is None
@@ -145,5 +149,5 @@ async def test_owner_announces_its_protocol_before_any_update(tmp_path):
     ctx = SimpleNamespace(server=SimpleNamespace(agent=None), send=send)
     with pytest.raises(Stop):
         await SubscribeRuntimeRequest(thread="owner").apply(ctx)
-    assert sent == [FieldCodec.encode(OwnerAnnouncement())]
-    OwnerAnnouncement().require_same_core("owner", sent[0])
+    assert sent == [OwnerAnnouncement()]
+    sent[0].announced("owner")

@@ -247,7 +247,7 @@ def test_client_cleanup_explicit_published_root_and_cross_thread_retirement(tmp_
     route_file = tmp_path / "route-state" / "active-route.json"
     route_file.parent.mkdir(mode=0o700)
     route = active_route.ActiveRoute(root, root_id)
-    route_file.write_text(json.dumps(active_route.FieldCodec.encode(route)))
+    route_file.write_text(json.dumps(route.to_record()))
     route_file.chmod(0o600)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     client = active_route.resolve_comms_route(root)
@@ -487,3 +487,33 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
         comms.owners.start("late-owner", agent_bin="pi")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert accept_delivery_cohort(comms.bus, root_id, message.seq, store).value.member_count == 1
+
+
+def test_an_old_version_route_is_refused_by_its_version_and_replaced_only_by_the_owner(
+        tmp_path, monkeypatch, declared_native_package):
+    """The reader names the version it found, the file and the command; publication still refuses;
+    replace-route keeps the old file beside the new one and never replaces a readable route."""
+    from agent_comms.cli_commands import ReplaceRouteCliCommand
+    root, root_id, _, _, _ = _root(tmp_path)
+    directory = tmp_path / "route-state"
+    directory.mkdir(mode=0o700)
+    route_file = directory / "active-route.json"
+    monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
+    old = json.dumps({"version": 1, "root": str(root), "wire_root_id": root_id,
+                      "native_package": str(tmp_path)}).encode()
+    route_file.write_bytes(old)
+    route_file.chmod(0o600)
+    refusal = (f"active comms route {route_file} is version 1; this installation reads version 2. "
+               "Replace it with the bus it should select: agent-comms --root ROOT replace-route")
+    with pytest.raises(ValueError) as refused:
+        active_route.read_active_route()
+    assert str(refused.value) == refusal
+    with pytest.raises(ValueError, match="is version 1"):
+        active_route.publish_active_route(active_route.ActiveRoute(root, root_id))
+    replaced = ReplaceRouteCliCommand().apply(Comms(root))
+    assert Path(replaced.backup).read_bytes() == old and Path(replaced.backup).parent == directory
+    assert active_route.read_active_route() == active_route.ActiveRoute(root, root_id)
+    assert json.loads(route_file.read_text())["version"] == active_route.ActiveRoute.version
+    with pytest.raises(ValueError, match="is readable"):
+        ReplaceRouteCliCommand().apply(Comms(root))
