@@ -60,6 +60,17 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
     def covers(self, revision: FileRevision) -> bool:
         return self.complete and self.revision == revision
 
+    def counts(self, revision: FileRevision) -> bool:
+        """The complete indexed prefix still belongs to this growing source."""
+        return (self.complete and self.revision is not None
+                and self.revision.holds_cut(revision, self.through))
+
+    def counted_seen(self, seen: int, revision: FileRevision) -> int:
+        if seen > self.revision.size:
+            # A read past this prefix covers it unless the current file shrank.
+            return self.through if seen <= revision.size else 0
+        return seen
+
     def continues(self, revision: FileRevision) -> bool:
         return (
             self.revision is not None and self.through <= self.revision.size
@@ -581,16 +592,14 @@ class TranscriptReadState(ThreadOwnedState):
                 index = indexes[source]
                 if revision is None:
                     per_file[source] = Counted(0)
-                elif not index.covers(revision):
+                elif not index.counts(revision):
                     per_file[source] = Indexing()
                 else:
                     completed[source] = index
                     seen = self.reads.transcript_seen(
                         viewer, source, revision.identity.inode, document=document
                     )
-                    if seen > revision.size:
-                        seen = 0  # Only truncation invalidates a cursor beyond the indexed prefix.
-                    ends[source] = seen
+                    ends[source] = index.counted_seen(seen, revision)
             replies = TranscriptReply.preceding(database, ends)
             for source, index in completed.items():
                 last = replies.get(source)

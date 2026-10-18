@@ -11,6 +11,27 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.presentation import ReadThrough
+from agent_comms.private_path import FileRevision
+from agent_comms.view_unread import ReplyIndex
+
+
+def test_complete_reply_prefix_counts_during_growth_but_not_after_truncation(tmp_path):
+    source = tmp_path / "native.jsonl"
+    source.write_bytes(b"first reply\n")
+    indexed = FileRevision.capture(source)
+    index = ReplyIndex(indexed, indexed.size, 1, str(source), True)
+
+    with source.open("ab") as stream:
+        stream.write(b"another reply\n")
+    growing = FileRevision.capture(source)
+    assert index.covers(indexed)
+    assert not index.covers(growing)  # Preparation still indexes the new records.
+    assert index.counts(growing)      # Readers can show the held prefix now.
+    assert index.counted_seen(growing.size, growing) == index.through
+    assert index.counted_seen(indexed.size + 1, indexed) == 0
+
+    source.write_bytes(b"")
+    assert not index.counts(FileRevision.capture(source))
 
 
 def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
