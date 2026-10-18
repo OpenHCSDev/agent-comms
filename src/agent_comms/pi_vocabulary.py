@@ -221,7 +221,7 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
 
 
 class NoThinkingOverride(ThinkingLevel):
-    declared_name = None
+    declared_name = ThinkingLevel.declared_name
 
     @classmethod
     def native_arguments(cls) -> tuple[ThinkingArgument, ...]:
@@ -240,17 +240,17 @@ class ThinkingLevelValue(FieldRepresentation):
     accepts_null = True
 
     @classmethod
-    def decode(cls, value):
+    def decode(cls, value: object) -> type[ThinkingLevel]:
         if value is None:
             return NoThinkingOverride
         return ThinkingLevel.decode(FieldCodec.decode(str, value))
 
     @classmethod
-    def encode(cls, value):
+    def encode(cls, value: object) -> object:
         return FieldCodec.encode(value)
 
     @classmethod
-    def schema(cls):
+    def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(type[ThinkingLevel] | None)
 
 

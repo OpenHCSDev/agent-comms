@@ -3,21 +3,23 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import ThinkingLevel
 
 
-class RegistrationInheritance(ABC):
+class RegistrationInheritance[T](ABC):
+    @classmethod
+    def choose(cls, incoming: T, previous: T) -> T:
+        return cls.apply(incoming, previous)
+
     @classmethod
     @abstractmethod
-    def choose[T](cls, incoming: T, previous: T) -> T: ...
+    def apply(cls, incoming: T, previous: T) -> T: ...
 
 
-class PredicateInheritance(RegistrationInheritance):
+class PredicateInheritance[T](RegistrationInheritance[T]):
     @classmethod
-    def choose[T](cls, incoming: T, previous: T) -> T:
+    def apply(cls, incoming: T, previous: T) -> T:
         return previous if cls.inherits(incoming) else incoming
 
     @classmethod
@@ -25,27 +27,27 @@ class PredicateInheritance(RegistrationInheritance):
     def inherits(cls, incoming: object) -> bool: ...
 
 
-class InheritMissing(PredicateInheritance):
+class InheritMissing[T](PredicateInheritance[T]):
     @classmethod
     def inherits(cls, incoming: object) -> bool:
         return incoming is None
 
 
-class InheritEmpty(PredicateInheritance):
+class InheritEmpty[T](PredicateInheritance[T]):
     @classmethod
     def inherits(cls, incoming: object) -> bool:
         return not incoming
 
 
-class InheritPrevious(PredicateInheritance):
+class InheritPrevious[T](PredicateInheritance[T]):
     @classmethod
     def inherits(cls, incoming: object) -> bool:
         return True
 
 
-class InheritThinkingLevel(RegistrationInheritance):
+class InheritThinkingLevel(RegistrationInheritance[type[ThinkingLevel]]):
     @classmethod
-    def choose(
+    def apply(
         cls, incoming: type[ThinkingLevel], previous: type[ThinkingLevel],
     ) -> type[ThinkingLevel]:
         return incoming.applied(previous)

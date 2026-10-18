@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from .native_arguments import SelectedModel
-
 import asyncio
 import re
 from abc import ABC, abstractmethod
@@ -12,19 +10,21 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, TypeVar
 from types import MappingProxyType
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent, InputRefused
-from .following_inputs import FollowingInputs
 from .backend import TurnSession
-from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait
+from .coordinator import Coordination
 from .errors import RelationViolationError
+from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import MroDispatch, handles
+from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
+from .native_entries import NativeEntry
 from .native_pi import (
     NativeContextProof,
     NativePiPromptRejected,
@@ -33,23 +33,21 @@ from .native_pi import (
     _verify_context,
 )
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
-from .native_entries import NativeEntry
 from .native_startup import NativeStartup
-from .coordinator import Coordination
-from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from .native_tool_call import NativeToolMode, NoNativeTools, SelectedToolDenied, ToolTransport
 from .pi_payloads import TextDelta
-from .pi_vocabulary import NoThinkingOverride, ThinkingLevel
 from .pi_rpc import PiRpcChannel
+from .pi_vocabulary import NoThinkingOverride, ThinkingLevel
+from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from .selected_session import SelectedSession
 from .turn_context import InputContributionCoordinates
-
+from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait
 
 if TYPE_CHECKING:
-    from .pi_native_backend import PersistentPiSession
     from .agent_backend import TurnInbox
     from .coordinated_runtime import NativeExecution
     from .owned_send import OwnedSend
+    from .pi_native_backend import PersistentPiSession
 
 
 NativeObserver = Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]]
@@ -61,6 +59,8 @@ class NoObserver:
 
 
 NO_NATIVE_OBSERVER = NoObserver()
+NO_NATIVE_TOOLS = NoNativeTools()
+NO_FOLLOWING_INPUTS = FollowingInputs()
 
 T = TypeVar("T")
 
@@ -252,11 +252,11 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         prompt_send_boundary: PromptBoundary = UNGUARDED_PROMPT,
         ingress: MaintenanceIngress = UNCOORDINATED_INGRESS,
         startup: NativeStartup,
-        selected_tool_mode: NativeToolMode = NoNativeTools(),
+        selected_tool_mode: NativeToolMode = NO_NATIVE_TOOLS,
         observe_event: NativeObserver = NO_NATIVE_OBSERVER,
         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
         execution: NativeExecution,
-        following: FollowingInputs = FollowingInputs(),
+        following: FollowingInputs = NO_FOLLOWING_INPUTS,
     ) -> NativeTurnResult:
         if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
             raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
@@ -422,7 +422,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     break
                 async for _ in event.consume(self):
                     pass
-        state = observed.state
         if observed.identity is None:
             raise NativePiUnavailable("Native Pi omitted its private session identity")
         self.active_session_file = self.launch.session.attest(observed.identity)

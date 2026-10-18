@@ -24,13 +24,13 @@ def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, m
     original = comms.registry.require("worker")
     queried = []
 
-    async def discover_models(self, binary, arguments):
+    async def discover_models(self, binary, arguments, root):
         return ModelsData(models=(
             ReportedModel(provider="fixture", id="reasoning"),
             ReportedModel(provider="fixture", id="plain"),
         ))
 
-    async def discover_levels(self, binary, arguments):
+    async def discover_levels(self, binary, arguments, root):
         queried.append(NativeArguments.parse(arguments).model)
         return ThinkingLevelsData(levels=(OffThinkingLevel,))
 
@@ -61,10 +61,10 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/reasoning'))
     comms.registry.unregister("worker")
 
-    async def discover_models(self, binary, arguments):
+    async def discover_models(self, binary, arguments, root):
         return ModelsData(models=(ReportedModel(provider="fixture", id="reasoning"),))
 
-    async def discover_levels(self, binary, arguments):
+    async def discover_levels(self, binary, arguments, root):
         return ThinkingLevelsData(levels=(OffThinkingLevel, HighThinkingLevel))
 
     monkeypatch.setattr(GetAvailableModels, "discover", discover_models)
@@ -106,7 +106,7 @@ async def test_session_description_and_change_share_refusal(tmp_path, monkeypatc
     thread = thread_registration.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/plain', thinking_level=HighThinkingLevel)
     option = ThinkingLevelConfigOption("unused", NativeArguments.parse([]), RestartEnvironment.inherit(os.environ))
 
-    async def discover(self, binary, arguments):
+    async def discover(self, binary, arguments, root):
         return ThinkingLevelsData(levels=(OffThinkingLevel,))
 
     monkeypatch.setattr(GetAvailableThinkingLevels, "discover", discover)
