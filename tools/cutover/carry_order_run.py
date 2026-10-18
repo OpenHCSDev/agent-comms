@@ -11,16 +11,25 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 
-from cutover.carry import Carried, Carry
+from cutover.carry import Carried, TodoRows
 
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
-from agent_comms.todos import ApplicationOrderRun, MechanicalOrderRun, OrderRun, Todo, TodoStore
+from agent_comms.todos import ApplicationOrderRun, MechanicalOrderRun, OrderRun, ProblemOrder, Todo
+from agent_comms.typed_table import TypedRow
 
 DECLARED = re.compile(rf"(?m)^\s*{re.escape(OrderRun.label)}\s*(.+?)\s*$")
+
+
+@dataclass(frozen=True)
+class SavedOrder(TypedRow):
+    """A todo's body and its order as stored, read before the order can decode."""
+
+    id: str
+    text: str
+    order: str
 
 
 def declared_run(body: str) -> OrderRun:
@@ -28,50 +37,28 @@ def declared_run(body: str) -> OrderRun:
     return MechanicalOrderRun() if found is None else ApplicationOrderRun(found.group(1))
 
 
-def carry(root: Path, *, apply: bool) -> Counter[str]:
-    path = TodoStore.path_in(root)
-    counts: Counter[str] = Counter()
-    if not path.exists():
-        return counts
-    with closing(CoordinationStore.writer(path)) as db:
-        db.execute("BEGIN IMMEDIATE")
-        try:
-            table = Todo.declared_name
-            rows = db.execute(
-                f'SELECT "id", "text", "order" FROM "{table}" '
-                """WHERE json_type("order", '$.run') IS NULL"""
-            ).fetchall()
-            for todo_id, body, saved in rows:
-                order = json.loads(saved)
-                run = declared_run(body)
-                run.tally(counts)
-                db.execute(
-                    f'UPDATE "{table}" SET "order" = ? WHERE "id" = ?',
-                    (json.dumps({**order, "run": FieldCodec.encode(run)}), todo_id),
-                )
-            for _row in Todo.stream(db):
-                pass
-            if apply:
-                db.commit()
-            else:
-                db.rollback()
-            return counts
-        except BaseException:
-            db.rollback()
-            raise
-
-
-class OrderRuns(Carry):
+class OrderRuns(TodoRows):
     """Saved problem orders gain their declared closing run; no other stored field changes."""
 
     after = "carry_todo_voids"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
-        counts = carry(root, apply=apply)
-        changed = sum(counts.values())
-        rewritten = tuple(path.name for path in root.glob(f"{TodoStore.path_in(root).name}*"))
-        return Carried(changed, dict(counts), rewritten if changed and apply else ())
+        counts: Counter[str] = Counter()
+        with cls.todo_rows(root, apply=apply) as db:
+            if db is not None:
+                lacking = """json_type("{order}", '$.run') IS NULL"""
+                for row in Todo.select(db, where=lacking, row_type=SavedOrder):
+                    run = declared_run(row.text)
+                    run.tally(counts)
+                    order = {**json.loads(row.order), "run": FieldCodec.encode(run)}
+                    Todo.update(
+                        db,
+                        where="{id} = ?",
+                        parameters=(row.id,),
+                        order=FieldCodec.decode(ProblemOrder, order),
+                    )
+        return cls.carried(root, sum(counts.values()), dict(counts), apply=apply)
 
 
 if __name__ == "__main__":

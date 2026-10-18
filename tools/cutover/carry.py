@@ -28,10 +28,15 @@ import subprocess
 import sys
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+import sqlite3
+from collections.abc import Iterator, Mapping
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar
+
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.todos import Todo, TodoStore
 
 STEPS = Path("tools/cutover")
 
@@ -122,6 +127,38 @@ class Carry(ABC):
                     result = replace(result, rewritten=(*result.rewritten, CarryLedger.name))
         print(json.dumps({"carry": cls.name(), "changed": result.changed, "applied": args.apply,
                           "rewritten": result.rewritten, **result.detail}))
+
+
+
+class TodoRows(Carry):
+    """A carry over the saved todo rows: one write transaction on the todo store that
+    re-reads every row as declared, then commits on apply and rolls back otherwise."""
+
+    @classmethod
+    @contextmanager
+    def todo_rows(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
+        """None when this bus has no todo store."""
+        if not TodoStore.path_in(root).exists():
+            yield None
+            return
+        with closing(CoordinationStore.writer(TodoStore.path_in(root))) as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                yield db
+                for _row in Todo.stream(db):
+                    pass
+                if apply:
+                    db.commit()
+                else:
+                    db.rollback()
+            except BaseException:
+                db.rollback()
+                raise
+
+    @classmethod
+    def carried(cls, root: Path, changed: int, detail: Mapping[str, int], *, apply: bool) -> Carried:
+        rewritten = tuple(path.name for path in root.glob(f"{TodoStore.path_in(root).name}*"))
+        return Carried(changed, detail, rewritten if changed and apply else ())
 
 
 @dataclass(frozen=True)
