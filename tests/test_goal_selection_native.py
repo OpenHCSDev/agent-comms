@@ -7,7 +7,6 @@ import pytest
 from agent_comms.coordinator import Coordination
 from agent_comms.goal_actions import ActiveGoalAction, GoalPrecondition, OwnerInvocable, SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration
-from test_backend_native_lifecycle import native_backend
 
 
 @pytest.mark.parametrize("replace_goal", [False, True])

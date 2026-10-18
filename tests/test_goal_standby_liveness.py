@@ -26,7 +26,6 @@ from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
 from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import activate_empty_source, canonical_goal_wire
-from test_backend_native_lifecycle import native_backend as native_backend
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.goal_waits import RecordedGoalWait
 

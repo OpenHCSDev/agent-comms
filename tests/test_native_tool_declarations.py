@@ -14,7 +14,6 @@ from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, R
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
 from delivery_owner_fixture import canonical_agent
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 async def test_new_tool_declaration_drives_presentation_without_coding_permission(acp_tools):

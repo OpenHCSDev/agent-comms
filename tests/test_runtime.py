@@ -23,7 +23,6 @@ from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
-from test_backend_native_lifecycle import native_backend
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
 

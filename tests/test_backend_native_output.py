@@ -9,7 +9,6 @@ from agent_comms.image_inputs import ImageInput
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.turn_failure import TerminalFailure
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 class MissingAuditEvidence(TerminalFailure):

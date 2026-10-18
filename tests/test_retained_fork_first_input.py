@@ -20,7 +20,6 @@ from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 async def test_current_installed_retained_fork_first_input(native_backend, monkeypatch):

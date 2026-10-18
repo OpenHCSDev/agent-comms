@@ -86,4 +86,3 @@ async def test_real_saved_native_failure_then_distinct_fresh_input(native_backen
         comms.agents.activity_of(session_id).readiness.require_available()
 
 
-from test_backend_native_lifecycle import native_backend as native_backend

@@ -24,7 +24,6 @@ from agent_comms.owned_turn import OwnedTurn
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
-from test_backend_native_lifecycle import native_backend as native_backend
 from stored_inputs import stored_inputs
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.goal_waits import RecordedGoalWait

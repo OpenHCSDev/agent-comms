@@ -25,7 +25,6 @@ from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
 from agent_comms.wire_watch import DirectoryWatchSource, WatchSource, open_wire_watcher
 from explicit_private_owner_installed_journey import Subscriber
-from test_backend_native_lifecycle import native_backend as native_backend
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux watcher")

@@ -20,7 +20,6 @@ from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, monkeypatch):

@@ -7,7 +7,6 @@ from pathlib import Path
 from agent_comms.channel_coding_tools import CodingToolOwner
 from agent_comms.wire_record import WireRecord
 from delivery_owner_fixture import reply_turn_finished
-from test_backend_native_lifecycle import native_backend
 
 
 async def test_native_send_and_bash_share_checked_execution(native_backend, monkeypatch):
