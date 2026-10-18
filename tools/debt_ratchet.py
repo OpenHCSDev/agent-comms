@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import copy
 import io
 import json
 import os
@@ -418,8 +419,38 @@ class BroadExceptDefault(PerFileOccurrenceMeasure):
                    and any(cls.returns_default(statement) for statement in node.body))
 
 
-class FamilyFlattened(PerFileOccurrenceMeasure):
-    """The original audit collector, enforced independently for each file."""
+class FamilyFlattened(PerFileOccurrenceMeasure, ast.NodeTransformer):
+    """Keep audit behavior checks, excluding owned identity and exposing codec detours."""
+
+    def __init__(self) -> None:
+        self.owners: list[str] = []
+        self.round_trips = 0
+
+    def visit_ClassDef(self, node: ast.ClassDef):
+        self.owners.append(node.name)
+        try:
+            return self.generic_visit(node)
+        finally:
+            self.owners.pop()
+
+    def visit_Attribute(self, node: ast.Attribute):
+        if (node.attr == "declared_name" and isinstance(node.value, ast.Name)
+                and node.value.id in {"cls", "self", *self.owners[-1:]}):
+            return ast.copy_location(ast.Constant(value=None), node)
+        return self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call):
+        match node:
+            case ast.Call(
+                func=ast.Attribute(value=ast.Name(id="FieldCodec"), attr="decode"),
+                args=[ast.Name(id="str"), ast.Call(
+                    func=ast.Attribute(value=ast.Name(id="FieldCodec"), attr="encode"),
+                    args=[_], keywords=[],
+                )], keywords=[],
+            ):
+                self.round_trips += 1
+                return ast.copy_location(ast.Constant(value=None), node)
+        return self.generic_visit(node)
 
     # GitMeasure supplies complete repository-relative paths. Only those exact
     # original modules own codec/schema behavior; nested package tails do not.
@@ -430,9 +461,13 @@ class FamilyFlattened(PerFileOccurrenceMeasure):
         ("toad", "agent_schema.py"), ("toad", "db.py"),
     })
 
-    @staticmethod
-    def occurrences(node: ast.AST) -> int:
-        return AuditFamilyFlattened.count(node)
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        if not isinstance(node, ast.Module):
+            return 0
+        projection = cls()
+        tree = projection.visit(copy.deepcopy(node))
+        return AuditFamilyFlattened.count(tree) + projection.round_trips
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:

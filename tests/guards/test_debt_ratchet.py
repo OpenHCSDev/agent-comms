@@ -229,6 +229,27 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(tm
 
 
 
+@pytest.mark.parametrize(("source", "expected"), [
+    ("class Owner:\n def name(self):\n  return self.declared_name\n", 0),
+    ("class Owner:\n @classmethod\n def name(cls):\n  return cls.declared_name\n", 0),
+    ("class Owner:\n @classmethod\n def name(cls):\n  return Owner.declared_name\n", 0),
+    ("class Owner:\n def name(self):\n  return Other.declared_name\n", 1),
+    ("def name(value):\n return value.declared_name\n", 1),
+    ("def name(value):\n return FieldCodec.decode(str, FieldCodec.encode(value))\n", 1),
+    ("class Owner:\n @classmethod\n def name(cls):\n  return FieldCodec.decode(str, FieldCodec.encode(cls))\n", 1),
+    ("def name(value):\n return FieldCodec.decode(str, FieldCodec.encode(value.declared_name))\n", 1),
+    ("def name(value):\n return FieldCodec.decode(str, value)\n", 0),
+    ("class Owner:\n def name(self, other):\n  return (self.declared_name, other.declared_name)\n", 1),
+])
+def test_family_name_owner_reads_and_codec_detours(source: str, expected: int):
+    from tools.debt_ratchet import FamilyFlattened
+
+    tree = ast.parse(source)
+    before = ast.dump(tree)
+    assert FamilyFlattened.occurrences(tree) == expected
+    assert ast.dump(tree) == before
+
+
 def test_small_owners_stay_within_the_class_threshold(repo: Repository) -> None:
     base = repo.commit({"owners.py": owner("Small", 2)})
     head = repo.commit({"owners.py": owner("Small", 500) + owner("New", 500)})
