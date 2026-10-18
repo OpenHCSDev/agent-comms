@@ -16,9 +16,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
-from typing import ClassVar
+from typing import ClassVar, Final, Self
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, GitCommitText, MalformedRecord, WireValue
 from .command import Command
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -61,9 +61,8 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     commit: str
 
     def __post_init__(self) -> None:
-        if any(not isinstance(sha, str) or not 7 <= len(sha) <= 40
-               or sha.strip("0123456789abcdef") for sha in (self.commit, self.delivered)):
-            raise ValueError("Delivery requires a checked and a delivered commit hash.")
+        GitCommitText.decode(self.commit)
+        GitCommitText.decode(self.delivered)
 
     @property
     def delivered(self) -> str:
@@ -160,7 +159,8 @@ class NotifiedFirstCallEvent(FirstCallEvent):
         return current.notify()
 
 
-class OrderWords(str):
+@dataclass(frozen=True)
+class OrderWords(WireValue):
     """Text the commander writes; quoted, backticked, indented and path-like spans are someone else's words."""
 
     CITED: ClassVar[re.Pattern] = re.compile(
@@ -168,11 +168,25 @@ class OrderWords(str):
     REFUSED: ClassVar[re.Pattern]
     refusal: ClassVar[str]
     least_words: ClassVar[int] = 1
+    text: str
 
-    def __new__(cls, text: str):
-        if refused := cls.refused(text):
+    def __post_init__(self) -> None:
+        if refused := self.refused(self.text):
             raise ValueError(refused)
-        return super().__new__(cls, text)
+
+    def to_wire(self) -> str:
+        return self.text
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        if not isinstance(data, str):
+            raise MalformedRecord(f"Expected {cls.__name__}, received {type(data).__name__}")
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
+            return cls(data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(str)
 
     @classmethod
     def refused(cls, text: str) -> str | None:
@@ -202,6 +216,9 @@ class StrikeReason(PlainText):
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
+
+
+StrikeLimit: Final = 2  # live strikes one unit may take on one problem
 
 
 class OrderText(OrderWords):
@@ -487,6 +504,9 @@ class Assignment:
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation:
             raise TodoConflict(current)
+        return self.handed_to(proposed)
+
+    def handed_to(self, proposed: Assignment) -> Assignment:
         previous = self.previous_owners
         if self.owner_identity != proposed.owner_identity:
             previous = (*previous, self.owner_identity)
@@ -617,6 +637,22 @@ class VoidStrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class ReleaseTodo(TodoOperation):
+    """The commander takes an open problem off its unit; the order and its strikes stay."""
+    actor: ThreadIncarnation
+    previous: Assignment
+    reason: StrikeReason
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        current.require_assignment(self.previous)
+        return replace(current, assignment=None, released=(*current.released, self),
+                       revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class CorrectCheckTodo(TodoOperation):
     """The commander replaces a wrong check of an open order.
 
@@ -722,6 +758,7 @@ class Todo(TypedTable):
     strikes: tuple[StrikeTodo, ...] = ()
     hunts: tuple[Hunt, ...] = ()
     voided: tuple[VoidStrikeTodo, ...] = ()
+    released: tuple[ReleaseTodo, ...] = ()
 
     @property
     def pending(self):
@@ -732,6 +769,11 @@ class Todo(TypedTable):
         return RecordedThreadIncarnation(self.creator, self.creator_created)
 
     @property
+    def holder(self) -> str | None:
+        """The unit holding this problem; None once it is closed or released."""
+        return None if self.assignment is None else self.assignment.owner
+
+    @property
     def strike_count(self) -> int:
         return 0 if self.assignment is None else len(self.live_strikes(self.assignment.owner))
 
@@ -740,6 +782,10 @@ class Todo(TypedTable):
         taken_back = tuple(void.strike for void in self.voided)
         return tuple(recorded for recorded in self.strikes
                      if unit in (None, recorded.previous.owner) and recorded not in taken_back)
+
+    def struck_out(self, unit: str) -> bool:
+        """The unit has taken StrikeLimit live strikes here; only mechanical orders reach it."""
+        return len(self.live_strikes(unit)) >= StrikeLimit
 
     def require_result(self, result: Todo) -> None:
         if self != result:
@@ -760,6 +806,8 @@ class Todo(TypedTable):
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         if self.assignment is not None:
             return replace(proposed, previous_owners=self.assignment.previous_owners)
+        if self.released:  # the released owner joins the next owner's history
+            return self.released[-1].previous.handed_to(proposed)
         return proposed
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:

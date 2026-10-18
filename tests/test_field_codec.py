@@ -556,3 +556,23 @@ def test_declaration_bug_passes_through_a_data_boundary_as_type_error():
 
     with pytest.raises(TypeError, match="one representation"):
         TwoRepresentations.capture(saved="/saved")
+
+
+def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path):
+    from agent_comms.bus_source_page import AddressedPage
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.field_codec import Id128Text
+    from agent_comms.private_registry_guard import PrivateRegistryGuard
+    from agent_comms.text_digest import TextDigest
+
+    minted = Id128Text.mint()
+    # A declared field decodes through FieldCodec; the guard calls the representation itself.
+    assert AddressedPage.capture(lookup=minted).lookup == minted
+    assert PrivateRegistryGuard(tmp_path / "registry.json", minted).root_id.hex() == minted
+    for invalid in (minted.upper(), minted[:31], int(minted, 16)):
+        with pytest.raises(MalformedRecord):
+            AddressedPage.capture(lookup=invalid)
+        with pytest.raises(RelationViolationError):
+            PrivateRegistryGuard(tmp_path / "registry.json", invalid)
+    with pytest.raises(MalformedRecord):
+        TextDigest("a" * 63)

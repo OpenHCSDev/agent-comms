@@ -25,8 +25,8 @@ from .native_session_files import NativeSessionFiles
 from .native_package import MANIFEST, OWNER_INSTRUCTIONS, pinned_native_package
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord
-from .native_input_record import NativeInputCommit, NativeInputIdText
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
+from .native_input_record import NativeInputCommit
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .native_tool_call import NativeToolMode, NoNativeTools
@@ -39,7 +39,6 @@ if TYPE_CHECKING:
     from .turn_failure import TurnFailure
 
 CAPABILITY = "pi-native-input-v1-live-only"
-_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
 
 class NativeRequestFailure(RuntimeError):  # noqa: N818 - nominal request outcome
@@ -190,9 +189,8 @@ class NativeContextRecord:
         return NativeInputCommit(self.input_id, self.session_id, self.session_entry_id)
 
     def __post_init__(self):
-        NativeInputIdText.decode(self.input_id)
-        if _DIGEST.fullmatch(self.llm_context_digest) is None:
-            raise ValueError("Native context has invalid input or digest identity")
+        Id128Text.decode(self.input_id)
+        Sha256Text.decode(self.llm_context_digest)
         if not self.session_id or not self.session_entry_id:
             raise ValueError("Native context lacks committed session identity")
         if not 0 < self.request_generation <= 2**53 - 1:
@@ -349,7 +347,7 @@ class NativeContextProof(NativeContextRecord):
         evidence: NativeEvidenceRead | None = None,
     ) -> NativeContextProof:
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
-        NativeInputIdText.decode(input_id)
+        Id128Text.decode(input_id)
         session_file = Path(session_file).absolute()
         from .native_entries import NativeEntry, NativeInputEvidenceRead
 
@@ -1057,7 +1055,7 @@ def read_tracked_input_digest(
     ``None`` means the journal holds no durable commit of this input. An
     unreadable or malformed journal is not absence and raises.
     """
-    NativeInputIdText.decode(input_id)
+    Id128Text.decode(input_id)
     session_file = Path(session_file).absolute()
     from .native_entries import NativeEntry, NativeInputEvidenceRead
 
