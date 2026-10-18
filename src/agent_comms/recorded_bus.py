@@ -1,7 +1,6 @@
 """The bus identity recorded by read evidence, using its existing wire shape."""
 
 from abc import abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
 
 from .field_codec import FieldCodec, MalformedRecord, NullMember, SubclassUnion
@@ -20,7 +19,6 @@ class RecordedBusIdentity(SubclassUnion, ObservedPath):
     def matches(self, source: ObservedPath) -> bool: ...
 
 
-@dataclass(frozen=True, slots=True)
 class RecordedBus(PresentPath, RecordedBusIdentity):
     def matches(self, source: ObservedPath) -> bool:
         return source.same_file(self.identity)
@@ -40,7 +38,6 @@ class RecordedBus(PresentPath, RecordedBusIdentity):
         return FieldCodec.value_schema(list[int])
 
 
-@dataclass(frozen=True, slots=True)
 class NoRecordedBus(NullMember, AbsentPath, RecordedBusIdentity):
     def matches(self, source: ObservedPath) -> bool:
         return False

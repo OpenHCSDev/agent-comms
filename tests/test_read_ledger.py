@@ -299,7 +299,7 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     unrecorded = FieldCodec.decode(ReadDocument, {**old, "bus_identity": None})
     assert unrecorded.bus_identity == NoRecordedBus()
     assert not unrecorded.cursor(viewer, comms.registry.snapshot(), ObservedPath.at(comms.bus.log.path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 0
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread.get("alice", 0) == 0
 
     replacement = tmp_path / "restored-bus.jsonl"
     replacement.write_bytes(comms.bus.log.path.read_bytes())
@@ -315,7 +315,7 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     fresh = reopened.views.dm_display_page("alice", worktree=str(tmp_path))
     reopened.views.mark_dm_view_read("alice", worktree=str(tmp_path), through=message.seq,
         expected_display_basis=fresh.display_basis)
-    assert reopened.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 0
+    assert reopened.views.viewer_snapshot(str(tmp_path)).unread.get("alice", 0) == 0
 
 
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
