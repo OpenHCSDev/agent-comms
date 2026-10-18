@@ -358,7 +358,8 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference):
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         record = super().bound_to(registry_path, identity)
-        return self if (self.registry_path, self.identity) == (record.registry_path, record.identity) else record
+        return (self if (self.registry_path, self.identity) ==
+                (record.registry_path, record.identity) else record)
 
     def empty(self) -> ActiveTurn:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
