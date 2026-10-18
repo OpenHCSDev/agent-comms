@@ -47,17 +47,6 @@ class ReadDocument:
     transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
     notice: str | None = None
 
-    @classmethod
-    def decode_conversation(cls, data, owners, conversations):
-        data = FieldCodec.record_data(cls, data)
-        messages = FieldCodec.field_plan(cls, "messages")
-        identity = FieldCodec.field_plan(cls, "bus_identity")
-        return FieldCodec.construct(cls, {
-            **messages.decoded_using(data, lambda value: messages.value.decode_selected(
-                value, owners, lambda cursor: ReadCursor.decode_conversation(cursor, conversations))),
-            **identity.decoded(data),
-        })
-
     def cursors(self, viewer: str, snapshot: RegistryProvenance,
                 source: ObservedPath | OpenedWireSource) -> Iterator[ReadCursor]:
         recorded = FileIdentity(*self.bus_identity) if self.bus_identity is not None else None
@@ -97,7 +86,9 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         owners = tuple(snapshot.threads[snapshot.canonical_name(viewer)].incarnation.recorded_names(snapshot))
         conversations = tuple(conversation.recorded_keys(snapshot))
         with self.locked(mode=SharedLock()):
-            return self._read_using(lambda data: ReadDocument.decode_conversation(data, owners, conversations))
+            return self._read_using(lambda data: FieldCodec.decode_selected(ReadDocument, data,
+                {(ReadDocument, "messages"): owners, (ReadCursor, "conversations"): conversations},
+                fields=("messages", "bus_identity")))
 
     @staticmethod
     def bus_identity(path: Path) -> tuple[int, int] | None:

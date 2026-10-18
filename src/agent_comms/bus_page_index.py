@@ -229,19 +229,15 @@ class BusPageIndex:
         lower: int | None,
         upper: int | None,
         descending: bool,
-        targets: frozenset[str] | None,
+        predicate: tuple[str, tuple],
         before_offset: int | None = None, after_offset: int | None = None,
     ) -> Generator[BusPageRow]:
-        clauses: list[str] = []
-        params: list[object] = []
+        condition, bindings = predicate
+        clauses: list[str] = [f"({condition})"]
+        params: list[object] = list(bindings)
         if after_offset is not None:
             clauses.append("offset >= ?")
             params.append(after_offset)
-        if targets is not None:
-            if not targets:
-                return
-            clauses.append("target IN (" + ",".join("?" for _ in targets) + ")")
-            params.extend(sorted(targets))
         yield from self._offsets(clauses, params, lower=lower, upper=upper,
                                  descending=descending, before_offset=before_offset)
 
@@ -252,21 +248,6 @@ class BusPageIndex:
         yield from self._offsets(["seq IN (" + ",".join("?" for _ in sequences) + ")"],
                                  [*sorted(sequences)], lower=None, upper=None,
                                  descending=False, before_offset=before_offset)
-
-    def conversation_offsets(
-        self, first: frozenset[str], second: frozenset[str], *,
-        lower: int | None, upper: int | None, descending: bool,
-        before_offset: int | None = None,
-    ) -> Generator[BusPageRow]:
-        """Only the captured pair's rows, in the requested sequence order."""
-        if not first or not second:
-            return
-        a, b = sorted(first), sorted(second)
-        qa, qb = ",".join("?" for _ in a), ",".join("?" for _ in b)
-        clauses = [f"((sender IN ({qa}) AND target IN ({qb})) OR "
-                   f"(sender IN ({qb}) AND target IN ({qa})))"]
-        yield from self._offsets(clauses, [*a, *b, *b, *a], lower=lower, upper=upper,
-                                 descending=descending, before_offset=before_offset)
 
     def _offsets(
         self, clauses: list[str], params: list[object], *, lower: int | None,
@@ -329,13 +310,11 @@ class BusPageIndex:
             bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
             predicate, parameters = scope.index_predicate
             counts[scope.channel] = self.connection.execute(
-                f'WITH {ReadCursor.sql("?")} SELECT count(*) FROM '
-                f'(SELECT * FROM "{BusPageRow.declared_name}" WHERE seq > ? AND offset < ? AND ({predicate}) '
-                'AND sender NOT IN (SELECT value FROM json_each(?))) AS row '
-                'LEFT JOIN read_cursors AS read ON read.target=row.target '
-                "AND (read.sender='' OR read.sender=row.sender) "
-                'WHERE row.seq > coalesce(read.high_water,0) '
-                "AND row.seq NOT IN (SELECT value FROM json_each(coalesce(read.exceptions,'[]')))",
+                f'WITH {ReadCursor.sql("?")}, requests AS ('
+                f'SELECT \'viewer\' AS actor,* FROM "{BusPageRow.declared_name}" '
+                'WHERE seq > ? AND offset < ? '
+                f'AND ({predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
+                f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
                 (*bindings.values(), seen.lower_bound(scope, snapshot), before_offset, *parameters,
                  json.dumps(tuple(viewer_names))),
             ).fetchone()[0]

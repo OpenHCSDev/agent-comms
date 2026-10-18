@@ -563,12 +563,8 @@ class OpenedRouteCounts(BusRouteCounts):
 
     def _read_counts(self, seen: Mapping[str, ReadCursor]) -> list[RouteUnread]:
         return RouteUnread.read(self.connection.execute(
-                f'''WITH {self._requests}, {ReadCursor.sql(":read_cursors")}, cursors AS MATERIALIZED (
-                    SELECT request.*,coalesce(read.high_water,0) AS high_water,
-                        coalesce(read.exceptions,'[]') AS exceptions FROM requests AS request
-                    LEFT JOIN read_cursors AS read ON read.actor=request.actor AND read.target=request.target
-                        AND (read.sender='' OR read.sender=request.sender)
-                ), painted AS (
+                f'''WITH {self._requests}, {ReadCursor.sql(":read_cursors")},
+                {ReadCursor.joined_sql}, painted AS (
                     SELECT request.actor,request.root,count(*) AS count
                     FROM cursors AS request,json_each(request.exceptions) AS seen
                     JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=seen.value
@@ -591,20 +587,14 @@ class OpenedRouteCounts(BusRouteCounts):
 
     def _read_deliveries(self, actor: str, seen: ReadCursor, after: int) -> list[UnseenDelivery]:
         return UnseenDelivery.read(self.connection.execute(
-                f'''WITH {self._requests}, {ReadCursor.sql(":read_cursors")}, cursors AS MATERIALIZED (
-                    SELECT request.*,coalesce(read.high_water,0) AS high_water,
-                        coalesce(read.exceptions,'[]') AS exceptions FROM requests AS request
-                    LEFT JOIN read_cursors AS read ON read.actor=request.actor AND read.target=request.target
-                        AND (read.sender='' OR read.sender=request.sender)
-                ) SELECT row.seq,row.target
+                f'''WITH {self._requests}, {ReadCursor.sql(":read_cursors")},
+                {ReadCursor.joined_sql} SELECT row.seq,row.target
                 FROM cursors AS request JOIN "{RouteEntryRow.declared_name}" AS row
                     ON row.target=request.target AND row.sender=request.sender
                     AND row.sender_lookup=request.sender_lookup
                 WHERE request.actor=:actor AND row.timestamp>=request.since
-                    AND row.seq>max(request.high_water,:after)
-                    AND row.seq<=:through AND row.seq NOT IN (
-                        SELECT value FROM json_each(request.exceptions)
-                    ) ORDER BY row.seq''',
+                    AND row.seq>:after AND row.seq<=:through
+                    AND {ReadCursor.unread_sql} ORDER BY row.seq''',
                 self._request_bindings((actor,)) | {"actor":actor,"after":after}
                 | ReadCursor.sql_bindings(self.registry,
                     {actor: seen.counted(self.deliveries[actor], self.registry)})))

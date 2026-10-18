@@ -123,6 +123,9 @@ class FieldPlan:
     def decoded(self, data: object) -> dict[str, object]:
         return self.decoded_using(data, self.value.decode)
 
+    def decoded_selected(self, data, keys, selections):
+        return self.decoded_using(data, lambda value: self.value.decode_keys(value, keys, selections))
+
     def decoded_using(self, data: object, decode: Callable[[object], object]) -> dict[str, object]:
         captured = self.captured(data)
         if self.name not in captured:
@@ -645,18 +648,9 @@ class FieldCodec(Sealed):
         return cast(T, _RecordDecoder(target).decode(data))
 
     @classmethod
-    def record_member[Member: DeclaredFamily](
-        cls, family: type[Member], data: object
-    ) -> tuple[type[Member], dict]:
-        return _FamilyRecordDecoder(family).member(data)
-
-    @classmethod
-    def record_data(cls, record: type, data: object) -> dict:
-        return _RecordDecoder(record).checked(data)
-
-    @classmethod
-    def field_plan(cls, record: type, name: str) -> FieldPlan:
-        return next(item for item in cls._record_plan(record).bindings if item.name == name)
+    def decode_selected(cls, target: type[T], data: object, selections, *, fields=None) -> T:
+        """Decode selected mapping keys by their declaring record and field, not wire shape."""
+        return cast(T, _RecordDecoder(target).decode_selected(data, selections, fields=fields))
 
     @classmethod
     def decode(cls, target: type[T], data: object) -> T:
@@ -901,6 +895,12 @@ class ValueDecoder[T](ABC):
 
     @abstractmethod
     def decode(self, data: object) -> T: ...
+
+    def decode_selected(self, data, selections):
+        return self.decode(data)
+
+    def decode_keys(self, data, keys, selections):
+        raise TypeError("Selected keys require a mapping field")
 
     editor_annotation = str
 
@@ -1208,9 +1208,9 @@ class _DictDecoder(ValueDecoder[Any]):
     def decode(self, data):
         return {self.key.decode(key): self.value.decode(value) for key, value in self.entries(data)}
 
-    def decode_selected(self, data, keys, decode_value):
+    def decode_keys(self, data, keys, selections):
         encoded = tuple(FieldCodec.encode(key) for key in keys)
-        return {self.key.decode(key): decode_value(value)
+        return {self.key.decode(key): self.value.decode_selected(value, selections)
                 for key, value in self.entries(data) if key in encoded}
 
 @dataclass(frozen=True, slots=True)
@@ -1287,11 +1287,18 @@ class _RecordDecoder(ValueDecoder[Any]):
         return data
 
     def decode(self, data):
+        return self.decode_selected(data, {})
+
+    def decode_selected(self, data, selections, *, fields=None):
         data = self.checked(data)
         target = self.record
         values = {}
         for entry in FieldCodec._record_plan(target).bindings:
-            values.update(entry.decoded(data))
+            if fields is not None and entry.name not in fields:
+                continue
+            key = (target, entry.name)
+            values.update(entry.decoded_selected(data, selections[key], selections)
+                          if key in selections else entry.decoded(data))
         return FieldCodec.construct(target, values)
 
 @dataclass(frozen=True, slots=True)

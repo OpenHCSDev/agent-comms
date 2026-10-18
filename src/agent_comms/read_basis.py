@@ -269,13 +269,6 @@ class ReadCursor:
 
     conversations: dict[Conversation, ConversationCursor] = field(default_factory=dict)
 
-    @classmethod
-    def decode_conversation(cls, data, conversations):
-        data = FieldCodec.record_data(cls, data)
-        entry = FieldCodec.field_plan(cls, "conversations")
-        return FieldCodec.construct(cls, entry.decoded_using(data, lambda value:
-            entry.value.decode_selected(value, conversations, entry.value.value.decode)))
-
     def lower_bound(self, scope: ChannelDisplayScope, snapshot: RegistryProvenance) -> int:
         targets = scope.index_targets
         if targets is None:
@@ -292,6 +285,15 @@ class ReadCursor:
                json_extract(value,'$[3]') AS high_water,
                json_extract(value,'$[4]') AS exceptions
         FROM json_each({parameter}))"""
+
+    unread_sql = "seq > high_water AND seq NOT IN (SELECT value FROM json_each(exceptions))"
+
+    joined_sql = """cursors AS MATERIALIZED (
+        SELECT row.*,coalesce(read.high_water,0) AS high_water,
+            coalesce(read.exceptions,'[]') AS exceptions FROM requests AS row
+        LEFT JOIN read_cursors AS read ON read.actor=row.actor AND read.target=row.target
+            AND (read.sender='' OR read.sender=row.sender)
+    )"""
 
     def counted(self, scope: MessageDisplayScope, snapshot: RegistryProvenance
                 ) -> Iterable[tuple[Conversation, ConversationCursor]]:
@@ -696,7 +698,14 @@ class MessageDisplayScope(ABC):
 
     def offsets(self, index, *, lower, upper, descending, before_offset):
         return index.offsets(lower=lower, upper=upper, descending=descending,
-                             targets=self.index_targets, before_offset=before_offset)
+                             predicate=self.index_predicate, before_offset=before_offset)
+
+    @property
+    def index_predicate(self) -> tuple[str, tuple]:
+        targets = self.index_targets
+        if targets is None:
+            return "1", ()
+        return "target IN (" + ",".join("?" for _ in targets) + ")", tuple(targets)
 
     @property
     @abstractmethod
@@ -736,12 +745,6 @@ class DMDisplayScope(MessageDisplayScope):
         return (f"((sender IN ({a}) AND target IN ({b})) OR "
                 f"(sender IN ({b}) AND target IN ({a})))", (*first, *second, *second, *first))
 
-    def offsets(self, index, *, lower, upper, descending, before_offset):
-        return index.conversation_offsets(
-            self.first_names, self.second_names, lower=lower, upper=upper,
-            descending=descending, before_offset=before_offset,
-        )
-
     @property
     def index_targets(self) -> frozenset[str]:
         return self.first_names | self.second_names
@@ -763,6 +766,10 @@ class ListedDeliveries(MessageDisplayScope):
     @property
     def index_targets(self) -> frozenset[str]:
         return self.targets
+
+    @property
+    def index_predicate(self) -> tuple[str, tuple]:
+        return "seq IN (" + ",".join("?" for _ in self.sequences) + ")", tuple(self.sequences)
 
     def includes(self, message: Message) -> bool:
         return message.seq in self.sequences and self.scope.includes(message)
