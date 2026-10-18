@@ -454,5 +454,5 @@ class AgentCommsInspectContextSegment(NativeQuery):
 
     @classmethod
     def for_manifest(cls, expected: SegmentManifest):
-        return cls(identity=expected.native_identity(), entries=expected.journal_entries(),
+        return cls(identity=expected.sources.native_identity(), entries=expected.sources.journal_entries(),
                    expected=expected, parts=expected.requested_parts())

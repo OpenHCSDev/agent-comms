@@ -69,7 +69,7 @@ class NativeContextData(PiResponseData, DeclaredReply):
         return ContextSourceText(selected.public_description(), selected.public_text(comms))
 
     def recorded_public_text(self, expected: SegmentManifest) -> str:
-        self.identity.require_same_session(expected.native_identity())
+        self.identity.require_same_session(expected.sources.native_identity())
         originals = {}
         for original in expected.original_values():
             originals.setdefault(original.sha256, []).append(original)
