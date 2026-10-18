@@ -1,6 +1,5 @@
 """Native Pi + streaming localhost provider: Send now interrupts, never replays."""
 
-from agent_comms.queued_input import InitialInput
 import asyncio
 import json
 import os
@@ -12,17 +11,36 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
+from acp.exceptions import RequestError
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
-from agent_comms.pi_native_backend import PersistentPiSession, PiNativeBackend
+from agent_comms.acp_extension import QueuePromptRequest, SendNowRequest, encode_request
+from agent_comms.agent_backend import (
+    InputContent,
+    InputId,
+    InputRequest,
+    SendNow,
+    TurnInbox,
+    WhenBusy,
+)
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.pi_native_backend import PersistentPiSession, PiNativeBackend
+from agent_comms.queued_input import InitialInput
 from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInbox, WhenBusy
 from stored_inputs import stored_inputs
 
 
 @pytest.mark.asyncio
+def urgent_started(row):
+    """Whether this ACP session update reports that URGENT_INPUT started."""
+    updates = row.get("_meta", {}).get("agentComms", {}).get("updates", ())
+    return any(
+        update.get("kind") == "input_started" and update.get("text") == "URGENT_INPUT"
+        for update in updates
+    )
+
+
 @pytest.mark.parametrize(
     "surface",
     [
@@ -138,7 +156,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     emit("", "stop")
                     self.wfile.write(b"data: [DONE]\n\n")
                     self.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
+                except BrokenPipeError, ConnectionResetError:
                     cancelled.set()
 
             def log_message(self, *_args):
@@ -291,7 +309,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 wire(root / "wire"),
                 agent_bin=native_bin,
                 agent_args=native_args,
-                runtime_enabled=False,
+                # Pi's child connects to the owner's runtime socket for project checks.
+                runtime_enabled=True,
                 auto_wake=False,
             )
 
@@ -305,13 +324,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                         first_chunk.set()
                     if terminal and row.get("sessionUpdate") == "tool_call":
                         first_chunk.set()
-                    if (
-                        row.get("_meta", {})
-                        .get("agentComms", {})
-                        .get("inputStarted", {})
-                        .get("text")
-                        == "URGENT_INPUT"
-                    ):
+                    if urgent_started(row):
                         started.set()
 
             owner.on_connect(Client())
@@ -345,7 +358,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 steering_queue=queue,
                 native_start=lambda *_: True,
                 interrupt_boundary=lambda *_: nullcontext(
-                    AuthorityChangedSend() if surface == "revoked" else GrantedSend()),
+                    AuthorityChangedSend() if surface == "revoked" else GrantedSend()
+                ),
                 persistent_session=pi_session,
             ):
                 events.append(event)
@@ -365,24 +379,24 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                         await asyncio.sleep(0.01)
             command = InputRequest(
                 input_id=InputId("urgent"),
-                content=InputContent(
-                    text="URGENT_INPUT"
-                ),
+                content=InputContent(text="URGENT_INPUT"),
                 when_busy=WhenBusy.STEER,
             )
             if owner is None:
                 if surface == "priority":
-                    await queue.put(InputRequest(
-                        input_id=InputId("normal"),
-                        content=InputContent(text="NORMAL_INPUT"),
-                        when_busy=WhenBusy.STEER,
-                    ))
+                    await queue.put(
+                        InputRequest(
+                            input_id=InputId("normal"),
+                            content=InputContent(text="NORMAL_INPUT"),
+                            when_busy=WhenBusy.STEER,
+                        )
+                    )
                 await queue.put(command)
             else:
                 await owner.prompt(
                     "project",
                     [{"type": "text", "text": "URGENT_INPUT"}],
-                    agentComms={"deferDisplay": True},
+                    **encode_request(QueuePromptRequest(defer_display=True)),
                 )
             await asyncio.sleep(0.2)
             assert len(requests) == 1 and not started.is_set(), (
@@ -407,10 +421,12 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     await queue.put(SendNow((InputId("urgent"),)))
             else:
                 await owner.prompt(
-                    "project", [{"type": "text", "text": " "}], agentComms={"sendNow": True}
+                    "project", [{"type": "text", "text": " "}], **encode_request(SendNowRequest())
                 )
             if surface == "acp_stopped":
-                await asyncio.wait_for(task, 10)
+                # The owner's input authority ended; the original prompt fails, not replays.
+                with pytest.raises(RequestError):
+                    await asyncio.wait_for(task, 10)
                 assert len(requests) == 1 and not started.is_set()
                 assert any(
                     row.unresolved
@@ -441,29 +457,19 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                         e.get("sessionUpdate") == "tool_call_update" and e.get("status") == "failed"
                         for e in events
                     )
-                    assert (
-                        sum(
-                            e.get("_meta", {})
-                            .get("agentComms", {})
-                            .get("inputStarted", {})
-                            .get("text")
-                            == "URGENT_INPUT"
-                            for e in events
-                        )
-                        == 1
-                    )
+                    assert sum(map(urgent_started, events)) == 1
                 if surface == "acp_terminal_goal":
                     assert (
                         owner._comms.registry.require("project").goal.state.declared_name
                         == "active"
                     )
             else:
-                assert await asyncio.to_thread(cancelled.wait, 2), (
-                    "Original request was not cancelled"
-                )
-            assert len(requests) == (3 if surface == "priority" else 2), (
-                "No retry or duplicate prompt after explicit interruption"
-            )
+                assert await asyncio.to_thread(
+                    cancelled.wait, 2
+                ), "Original request was not cancelled"
+            assert len(requests) == (
+                3 if surface == "priority" else 2
+            ), "No retry or duplicate prompt after explicit interruption"
             if surface == "priority":
                 assert [e.id for e in events if isinstance(e, ae.InputStarted)] == [
                     None,
@@ -483,7 +489,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     for row in stored_inputs(owner.inputs.dispositions.root).rows.values()
                 )
                 assert not any(
-                    isinstance(row.get("content"), dict) and "[agent error]" in row["content"].get("text", "")
+                    isinstance(row.get("content"), dict)
+                    and "[agent error]" in row["content"].get("text", "")
                     for row in events
                 )
         finally:
