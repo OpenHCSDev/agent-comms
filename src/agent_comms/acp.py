@@ -321,11 +321,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
     @property
-    def private_nk_native_package(self) -> Path | None:
-        launch = self._comms.owners.launch_authority
-        return None if launch is None else launch.native_package
-
-    @property
     def configured_root_id(self) -> str:
         """The bus root ID the launch pinned; the bus reader checks it against the marker."""
         return self._comms.owners.require_private_launch().wire_root_id
