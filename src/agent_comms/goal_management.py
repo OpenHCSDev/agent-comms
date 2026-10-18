@@ -49,7 +49,7 @@ class Goals:
         self.goal_store: GoalAttemptStore | None = None
 
     @cached_property
-    def todos(self):
+    def todos(self) -> TodoStore:
         return TodoStore(self.root)
 
     def change_problem(self, problem, operation, commander):

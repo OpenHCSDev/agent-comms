@@ -1261,7 +1261,8 @@ class TodoStore(TypedStore):
         with self.writing() as db:
             held = tuple((todo, assignment) for todo in self._rows(
                 db, "json_extract(assignment,'$.owner')=? AND creator=? AND creator_created=?",
-                (unit, actor.name, actor.wire_birth)) if todo.state.open and (assignment := todo.assignment))
+                (unit, actor.name, actor.wire_birth))
+                if todo.state.open and (assignment := todo.assignment))
             if not held:
                 raise TodoError(f"{unit} holds no open problem.")
             released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).apply(todo)
