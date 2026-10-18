@@ -202,8 +202,9 @@ class ChoiceTargetField(TargetField):
         return tuple((choice.name, choice.value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
-        options = (SessionConfigSelectOption(name=label, value=compile_decoder(self.annotation).encode_editor(value))
-                   for label, value in compile_decoder(self.annotation).editor_choices())
+        decoder = compile_decoder(self.annotation)
+        options = (SessionConfigSelectOption(name=label, value=decoder.encode_editor(decoder.decode(value)))
+                   for label, value in decoder.editor_choices())
         return replace(self, options=tuple(options))
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
@@ -221,8 +222,9 @@ class CatalogTargetField(ChoiceTargetField):
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
         options = await catalogs.catalog_for(self.catalog).choices(selection)
+        decoder = compile_decoder(self.annotation)
         return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
-            value=compile_decoder(self.annotation).encode_editor(item.value)) for item in options))
+            value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
 
     def value_schema(self) -> dict[str, object]:
         return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
