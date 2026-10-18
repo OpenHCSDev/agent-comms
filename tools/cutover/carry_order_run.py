@@ -55,7 +55,7 @@ class OrderRuns(carry.TodoRows):
                 )
                 for row in saved:
                     run = declared_run(row.text)
-                    run.tally(counts)
+                    counts[run.declared_name] += 1
                     order = {**json.loads(row.order), "run": FieldCodec.encode(run)}
                     Todo.update(
                         db,
