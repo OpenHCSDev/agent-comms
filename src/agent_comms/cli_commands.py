@@ -60,7 +60,7 @@ from .exporting import (
 from .field_codec import FieldCodec, PathText, compile_decoder
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
-from .message_page import MessagePage, PageBounds
+from .message_page import PageBounds
 from .message_reference import MessageReference
 from .page_traversal import OlderTraversal, PageCursor
 from .messages import InfoKind, Message, MessageKind
@@ -1286,21 +1286,15 @@ class HistoryCliCommand(CliCommand):
         traversal = self.before.older() if self.before is not None else OlderTraversal()
         bounds = PageBounds(traversal, self.limit)
         if self.with_thread:
-            read: Callable[[PageBounds], MessagePage] = partial(ctx.views.dm_history_page, ToolCaller.from_actor(self.me).subject(""), self.with_thread)
+            page = ctx.views.dm_history_page(ToolCaller.from_actor(self.me).subject(""), self.with_thread, bounds)
             result: Callable[[tuple[Message, ...], bool], HistoryPageResult] = DmHistoryPageResult
         elif self.channel:
-            read = partial(ctx.views.channel_history_page, self.channel)
+            page = ctx.views.channel_history_page(self.channel, bounds)
             result = partial(ChannelHistoryPageResult, channel=self.channel)
         else:
-            read = ctx.views.full_history_page
+            page = ctx.views.full_history_page(bounds)
             result = EverythingHistoryPageResult
-        page = read(bounds)
-        messages = list(reversed(page.messages))
-        while (page.has_older and len(messages) < self.limit
-               and (cursor := page.oldest_cursor) is not None):
-            page = read(replace(bounds, traversal=cursor.older(), limit=self.limit - len(messages)))
-            messages.extend(reversed(page.messages))
-        return result(tuple(messages), page.has_older)
+        return result(tuple(reversed(page.messages)), page.has_older)
 
 
 @dataclass(frozen=True, kw_only=True)

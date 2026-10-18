@@ -89,10 +89,6 @@ class ConversationHistoryView:
         return page.selection == earlier.selection
 
     @classmethod
-    def has_display_evidence(cls, page: MessagePage) -> bool:
-        return page.selection.has_evidence
-
-    @classmethod
     def revision(cls, views: HistoryViews, target: str, *, worktree: str) -> ConversationRevision:
         worktree = str(Path(worktree).resolve())
         viewer = views.messaging.user_identity(worktree).name
@@ -512,6 +508,24 @@ class HistoryArchive(RootFile):
         return MessagePage((), False, False)
 
     def integrated_page(
+        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
+    ) -> MessagePage:
+        from collections import deque
+
+        page = self._source_page(view, presentation, bounds)
+        pages = deque((page,))
+        while (following := bounds.after(page)) is not None:
+            part = self._source_page(view, presentation, following)
+            if part.history_revision != page.history_revision:
+                raise HistoricalSourceChanged("Historical sources changed; reload history")
+            if not bounds.admits(len(page.messages) + len(part.messages),
+                                 page.bytes_read + part.bytes_read):
+                break
+            bounds.traversal.append(pages, part)
+            page = MessagePage.combine(tuple(pages))
+        return page
+
+    def _source_page(
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
     ) -> MessagePage:
         historical = bounds.traversal.historical
