@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Build or reuse the test environment of this checkout's native pin, shared by pin
+# digest, and print the interpreter line to gate with. Never reads the live install.
+set -euo pipefail
+umask 077
+usage='Usage: pi-native-test-env [--python PATH] [--cache DIR] [--from BUILT_STACK_DIR]'
+stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+repo_root=$(cd -- "$stack_root/.." && pwd)
+python=$(command -v python3)
+cache=()
+built=$stack_root
+while [[ $# -gt 0 ]]; do
+    [[ $# -ge 2 ]] || { printf '%s\n' "$usage" >&2; exit 1; }
+    case "$1" in
+        --python) python=$2 ;;
+        --cache) mkdir -p -- "$2"; cache=("$(cd -- "$2" && pwd)") ;;
+        --from) built=$(cd -- "$2" && pwd) ;;
+        *) printf '%s\n' "$usage" >&2; exit 1 ;;
+    esac
+    shift 2
+done
+# The checkout's own agent_comms reads the checkout's own pin.
+export PYTHONPATH="$repo_root/src"
+manifest="$stack_root/pi-native.sha256"
+build_id=$(sha256sum "$manifest" | cut -c1-16)
+environment=$("$python" -m agent_comms.native_package --environment "${cache[@]}")
+package=.pi-native-$build_id/node_modules/@earendil-works/pi-coding-agent
+
+verify() (
+    cd -- "$1/$package"
+    sha256sum --check --status "$manifest" && "$python" -m agent_comms.native_package "$PWD"
+)
+
+if [[ ! -e "$environment" ]]; then
+    if [[ ! -e "$built/.pi-native-$build_id" ]]; then
+        "$stack_root/bin/prepare-pi-native" --python "$python" >&2
+        built=$stack_root
+    fi
+    mkdir -p -- "$(dirname -- "$environment")"
+    stage=$(mktemp -d "$environment.stage.XXXXXXXX")
+    trap 'rm -rf -- "$stage"' EXIT
+    cp -- "$manifest" "$stage/pi-native.sha256"
+    cp -a --reflink=auto -- "$built/.pi-native-$build_id" "$stage/.pi-native-$build_id"
+    verify "$stage"
+    mv -- "$stage" "$environment"
+    trap - EXIT
+fi
+verify "$environment"
+printf 'PYTHONPATH=src %s -m pytest --native-cache %s\n' "$python" "$(dirname -- "$environment")"
