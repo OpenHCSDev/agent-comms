@@ -270,7 +270,7 @@ class OpenedWireSnapshot(WireSnapshot):
                 or os.fstat(self.stream.fileno()).st_dev != source.witness.device
                 or self.boundary != source.witness.offset):
             raise RelationViolationError("Opened read differs from its certified source cut")
-        return ScannedWireSnapshot(self.metadata, self.through, self.stream, self.revision)
+        return OpenedWireSnapshot(self.metadata, self.through, self.stream, self.revision)
 
     def records(self) -> Iterator[WireRecord]:
         scan = WireScan(self.metadata)
@@ -380,18 +380,6 @@ class OpenedWireSnapshot(WireSnapshot):
             self.stream, boundary=boundary, label="wire snapshot"
         ):
             yield from self.public_page_records(record, raw_size, self.metadata)
-
-class ScannedWireSnapshot(OpenedWireSnapshot):
-    """Public projection of a cut authorized by the acquired complete WireScan.
-
-    Only original locked acquisition can select this implementation. Later
-    appends stay outside the cut; the closed SQLite reader grants no authority.
-    """
-
-    @staticmethod
-    def messages(record: Mapping) -> tuple[Message, ...]:
-        return WireRecord.certified_public_messages(record)
-
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ConversationSourceWindowRequest:

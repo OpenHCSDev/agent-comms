@@ -105,7 +105,7 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
     observed = ThreadsObserved(WireRevision.empty(), {"saved": ThreadUnavailable(failure)}, frozenset({"saved"}), {})
     status = OpenThreadStatus(lambda callback: callback())
     status.observed(observed)
-    assert status.rows.rows["saved"].status.details == (str(answer.error),)
+    assert status.rows.rows["saved"].status.details == (str(failure),)
     assert "unavailable_future_segment" in status.rows.rows["saved"].lines[0]
 
 

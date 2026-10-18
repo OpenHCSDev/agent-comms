@@ -97,28 +97,28 @@ class FieldPlan:
             schema["default"] = FieldCodec.encode(declared.default, annotation)
         return {self.key: schema}
 
-    def default(self) -> Any:
+    def default(self) -> object:
         declared = self.declared
         return declared.default if declared.default is not MISSING else (
             declared.default_factory() if declared.default_factory is not MISSING else MISSING
         )
 
-    def omitted(self, value: Any) -> bool:
+    def omitted(self, value: object) -> bool:
         metadata = self.declared.metadata
         return bool(metadata.get("wire_omit_default") and value == self.default())
 
-    def captured(self, data: object) -> dict[str, Any]:
+    def captured(self, data: object) -> dict[str, object]:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object.")
         return {self.name: data[self.key]} if self.key in data else {}
 
-    def raw(self, data: object) -> Any:
+    def raw(self, data: object) -> object:
         values = self.captured(data)
         if self.name not in values:
             raise MalformedRecord(f"Missing required field {self.key}")
         return values[self.name]
 
-    def decoded(self, data):
+    def decoded(self, data: object) -> dict[str, object]:
         captured = self.captured(data)
         if self.name not in captured:
             return {}
@@ -129,7 +129,7 @@ class FieldPlan:
             raise MalformedRecord(f"Field {self.key} must be one of: {', '.join(self.choices())}")
         return {self.name: self.value.decode(value)}
 
-    def read(self, data: object) -> Any:
+    def read(self, data: object) -> object:
         values = self.decoded(data)
         if self.name in values:
             return values[self.name]
@@ -161,7 +161,7 @@ class InlineFieldPlan(FieldPlan):
     def encoded(self, value, *, key=None):
         return value
 
-    def captured(self, data: object) -> dict[str, Any]:
+    def captured(self, data: object) -> dict[str, object]:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object.")
         return {self.name: {key: data[key] for key in self.wire_keys() if key in data}}

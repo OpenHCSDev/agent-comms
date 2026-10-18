@@ -583,7 +583,6 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
 
 
 def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_path):
-    from agent_comms.wire_log import ScannedWireSnapshot
     from test_private_bus_checkpoint import _root
     from test_turn_context_wire import manifest
 
@@ -591,7 +590,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     first = publish_initial(comms, 'sender', '#team', '@Alice first')
     comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
     with comms.views.presentation.snapshot(viewer=NamedViewer('Alice')) as (_, source):
-        assert isinstance(source, ScannedWireSnapshot)
+        assert isinstance(source, OpenedWireSnapshot)
         # Original lock has ended. A genuine later publication cannot broaden
         # this descriptor's cut or make the captured observation visible.
         second = publish_initial(comms, 'sender', '#team', '@Alice next')
@@ -642,7 +641,6 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, t
 
 
 def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
-    from agent_comms.wire_log import ScannedWireSnapshot
     from test_private_bus_checkpoint import _root
 
     comms, _ = _root(tmp_path)
@@ -654,7 +652,7 @@ def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
         marker.last_seq += 1
         comms.bus.log.write_metadata_unlocked(marker)
     with comms.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-        assert isinstance(source, ScannedWireSnapshot)
+        assert isinstance(source, OpenedWireSnapshot)
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
     with comms.bus.snapshot(viewer=NamedViewer('Alice')) as (basis, source):
         assert source.through == first.seq < source.metadata.last_seq

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, cast, BinaryIO, ClassVar
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec, MalformedRecord, WireValue
+from .thread_identity import ThreadIncarnation
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
@@ -69,17 +70,6 @@ class WireRecord(ABC):
         if "observation" in value:
             return DeferredObservationWireRecord.decode(value)
         return PublicWireRecord(Message.from_wire(value))
-
-    @classmethod
-    def certified_public_messages(cls, value: Mapping) -> tuple[Message, ...]:
-        """Public output of a row already authorized by the complete WireScan.
-
-        Silent observations have no public messages. Certification validates
-        their envelopes and index coordinates; context readers decode payloads.
-        """
-        if "observation" in value:
-            return ()
-        return cls.public_from_wire(value).messages()
 
     def messages(self) -> tuple[Message, ...]:
         return ()
@@ -166,7 +156,7 @@ class ContextEntryManifestWireObservation(WireObservation):
         for entry in entries:
             manifest = FieldCodec.field_plan(ContextEntryManifest, "manifest").raw(entry)
             provenance = FieldCodec.field_plan(SegmentManifest, "provenance").read(manifest)
-            sources = ContextSources(provenance)
+            sources = ContextSources(cast(tuple, provenance))
             rows.append(ContextEntrySources.for_reference(
                 ContextEntryReference.from_sources(sources), offset=offset, length=length
             ))
@@ -188,7 +178,8 @@ class RecordedContextManifestWireObservation(WireObservation):
 
         manifest = FieldCodec.field_plan(cls, "manifest").raw(data)
         thread = FieldCodec.field_plan(RecordedContextManifest, "thread").read(manifest)
-        return (RecordedContextManifestSources(thread, offset=offset, length=length),)
+        return (RecordedContextManifestSources(
+            cast(ThreadIncarnation, thread), offset=offset, length=length),)
 
     @classmethod
     def row_label(cls, data: dict) -> str:
