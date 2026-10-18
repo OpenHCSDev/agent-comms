@@ -90,7 +90,7 @@ def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monk
     assert "Blocked · Need the exact ACP error text" in execution.presentation("worker").summary
     assert GoalExecution.from_wire(result["goal_execution"]) == execution
     assert (
-        FieldCodec.decode(Goal, comms.views.thread_detail("worker").to_wire()["goal"]).state.reason == reason
+        FieldCodec.decode(Goal, comms.views.thread_detail("worker").encoded()["goal"]).state.reason == reason
     )
 
 

@@ -565,18 +565,21 @@ class AssignTodo(TodoOperation):
     proposed: Assignment
     deadline: EventTime
     order: PendingProblemOrder
+    goal: GoalRef
     traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
 
-    def apply(self, current):
+    def apply(self, current: Todo) -> Todo:
         self.deadline.require_deadline()
         proposed = current.proposed_assignment(self.proposed)
-        if (current.assignment, current.deadline, current.order) == (proposed, self.deadline, self.order):
+        if (current.assignment, current.deadline, current.order, current.goal) == (
+                proposed, self.deadline, self.order, self.goal):
             return current
         current.require_revision(self.expected_revision)
         current.require_commander(proposed.parent_identity)
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
-        return replace(assigned, deadline=self.deadline, order=self.order, revision=current.revision + 1)
+        return replace(assigned, deadline=self.deadline, order=self.order, goal=self.goal,
+                       revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -873,6 +876,12 @@ class TodoStore(TypedStore):
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
+    def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
+        """The orders serving one request: a Goal on the commander's thread."""
+        return self._select(
+            "json_extract(goal,'$.owner')=? AND json_extract(goal,'$.owner_created')=? "
+            "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
+
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.created_at))
 
@@ -887,14 +896,14 @@ class TodoStore(TypedStore):
         generation: str,
         deadline: EventTime,
         order: PendingProblemOrder,
-        goal: GoalRef | None = None,
+        goal: GoalRef,
     ) -> Todo:
         _text(todo_id, "Todo ID", 128)
         _text(text, "Todo text", 2000)
         repo_id = _repo(repo)
         identity, assignee = _participant(creator), _thread(owner)
         deadline.require_deadline()
-        if goal is not None and type(goal) is not GoalRef:
+        if type(goal) is not GoalRef:
             raise TodoError("Goal reference must be a typed GoalRef.")
         proposed = Todo(
             id=todo_id,
@@ -934,6 +943,7 @@ class TodoStore(TypedStore):
         owner: Thread,
         parent: Thread,
         generation: str,
+        goal: GoalRef,
         deadline: EventTime,
         order: PendingProblemOrder,
         traced: FileLine | None = None,
@@ -946,4 +956,4 @@ class TodoStore(TypedStore):
             parent_identity.created_at,
             generation,
         )
-        return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline, order, traced))
+        return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline, order, goal, traced))

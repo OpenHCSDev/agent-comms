@@ -9,7 +9,7 @@ from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.turn_context import ContextManifest, RecordedContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
 from agent_comms.image_inputs import ImageInput
-from agent_comms.wire_record import WireRecord, ObservationWireRecord, RecordedContextManifestWireObservation
+from agent_comms.wire_record import WireRecord, AuthoredObservationWireRecord, RecordedContextManifestWireObservation
 from agent_comms.cli_commands import TurnContextCliCommand, DiffContextCliCommand
 from agent_comms.comms import Comms
 from test_private_bus_checkpoint import _root, _page
@@ -96,7 +96,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
 def test_observation_family_rejects_message_fields_and_preview(tmp_path):
     comms,root_id=_root(tmp_path)
     recorded, _entries = RecordedContextManifest.capture(manifest(comms.registry.require('Alice')))
-    row=ObservationWireRecord(RecordedContextManifestWireObservation(recorded))
+    row=AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded))
     assert WireRecord.from_wire(row.to_wire(),root_id).messages()==()
     assert row.sequence_after(39)==39
     with pytest.raises(ValueError):

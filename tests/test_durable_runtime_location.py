@@ -40,7 +40,7 @@ def test_location_methods_and_missing_history(tmp_path):
     assert isinstance(location, RuntimeLocation)
     assert location.arguments() == {'session_file': location.path}
     assert location.read_keys() == (location.path,)
-    assert location.presentation() == {'resumable': True}
+    assert location.resumable is True
     assert location.model_choice is None
     assert location.select_session(tmp_path, None).location == location
     with pytest.raises(ValueError, match='forking'):

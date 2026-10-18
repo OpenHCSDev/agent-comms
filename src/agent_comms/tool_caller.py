@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING, NoReturn
 
 from pydantic import JsonValue
 
+from .cli_result import CliResult
 from .launch_runtime import CallingThreadUnavailable
+from .pi_vocabulary import ServiceTier
 from .presentation import MessageNotification
 from .tool_result import ToolResult
 
@@ -20,6 +22,16 @@ if TYPE_CHECKING:
 class ThreadListing(ToolResult):
     threads: tuple[dict[str, JsonValue], ...]
     sent_notifications: tuple[MessageNotification, ...]
+
+
+@dataclass(frozen=True)
+class ToolCatalogResult(CliResult):
+    tools: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True)
+class ThreadToolCatalogResult(ToolCatalogResult):
+    service_tier: ServiceTier
 
 
 class ToolCaller(ABC):
@@ -35,6 +47,9 @@ class ToolCaller(ABC):
     def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing: ...
 
     @abstractmethod
+    def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult: ...
+
+    @abstractmethod
     def subject(self, named: str) -> str: ...
 
     @abstractmethod
@@ -48,6 +63,9 @@ class NoThreadCaller(ToolCaller):
 
     def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing:
         return ThreadListing(threads, ())
+
+    def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
+        return ToolCatalogResult(tools)
 
     def refuse_thread(self) -> NoReturn:
         raise CallingThreadUnavailable("This tool requires a thread caller.")
@@ -71,6 +89,9 @@ class ThreadCaller(ToolCaller):
     def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing:
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
         return ThreadListing(threads, presentation.sent_notifications)
+
+    def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
+        return ThreadToolCatalogResult(tools, comms.registry.require(self.name).service_tier)
 
     def subject(self, named: str) -> str:
         return named or self.name

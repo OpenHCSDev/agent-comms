@@ -18,6 +18,7 @@ from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import aclosing
 from dataclasses import MISSING, Field, dataclass, field, fields, replace
 from itertools import dropwhile, takewhile
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_type_hints
 
@@ -320,6 +321,9 @@ class TargetOutcome:
     def reconnect_targets(self) -> tuple[str, ...]:
         return ()
 
+    def open_targets(self) -> tuple[str, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class TargetCompleted(TargetOutcome):
@@ -330,6 +334,9 @@ class TargetCompleted(TargetOutcome):
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return self.result.reconnect_targets()
+
+    def open_targets(self) -> tuple[str, ...]:
+        return self.result.open_targets()
 
 
 @dataclass(frozen=True)
@@ -351,6 +358,10 @@ class TargetBatchResult(CliResult):
         return tuple(dict.fromkeys(name for outcome in self.outcomes
                                    for name in outcome.reconnect_targets()))
 
+    def open_targets(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(name for outcome in self.outcomes
+                                   for name in outcome.open_targets()))
+
     def exit_code(self) -> int:
         return int(not self.successful)
 
@@ -363,7 +374,7 @@ class TargetSelection(ABC):
     @abstractmethod
     def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object],
             *, confirmed: bool, channel: str | dict[str, tuple[str, ...]] | None, project: str,
-            snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> object:
+            snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         """Bind, authorize and apply the declaration on this selection."""
 
 
@@ -470,6 +481,9 @@ class ThreadCreatedResult(CliResult, ToolResult):
     created: str
     process_identity: ProcessState
 
+    def open_targets(self) -> tuple[str, ...]:
+        return (self.created,)
+
 
 @dataclass(frozen=True)
 class ThreadTagsResult(CliResult):
@@ -574,13 +588,33 @@ class ActiveStatusResult(CliResult):
 
 @dataclass(frozen=True)
 class HistoryPageResult(CliResult):
+    messages_key: ClassVar[str] = "messages"
     messages: tuple[Message, ...]
-    before: PageCursor | None
     has_older: bool
 
-    def encoded(self) -> object:
-        return {"messages": [{**m.to_wire(), **m.display_metadata} for m in self.messages],
+    @property
+    def before(self) -> PageCursor | None:
+        return self.messages[-1].view_cursor if self.messages else None
+
+    def encoded(self) -> dict[str, object]:
+        return {self.messages_key: [{**m.to_wire(), **m.display_metadata} for m in self.messages],
                 "before": FieldCodec.encode(self.before), "has_older": self.has_older}
+
+
+class DmHistoryPageResult(HistoryPageResult):
+    messages_key = "dm"
+
+
+class EverythingHistoryPageResult(HistoryPageResult):
+    messages_key = "everything"
+
+
+@dataclass(frozen=True)
+class ChannelHistoryPageResult(HistoryPageResult):
+    channel: str
+
+    def encoded(self) -> dict[str, object]:
+        return {**super().encoded(), "channel": self.channel}
 
 
 @dataclass(frozen=True)
@@ -867,10 +901,6 @@ class CliCommand(
         return result.encoded()
 
     @classmethod
-    def open_targets(cls, result) -> tuple[str, ...]:
-        return ()
-
-    @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
         hints = get_type_hints(cls)
         declared = {key: item for item, key in FieldCodec.record_fields(cls)}
@@ -909,7 +939,7 @@ class CliCommand(
     def execute_target(cls, comms: Comms, target: CommandTarget | str | tuple[CommandTarget | str, ...], arguments: dict[str, object],
                        *, confirmed: bool = False,
                        channel: str | dict[str, tuple[str, ...]] | None = None,
-                       project: str | None = None) -> object:
+                       project: str | None = None) -> CliResult:
         selection = cls.selected_targets(target)
         snapshot = comms.registry.snapshot()
         catalog = (comms.channels.catalog.read()
@@ -1267,11 +1297,14 @@ class HistoryCliCommand(CliCommand):
         bounds = PageBounds(traversal, self.limit)
         if self.with_thread:
             page = ctx.views.dm_history_page(ToolCaller.from_actor(self.me).subject(""), self.with_thread, bounds)
+            result: Callable[[tuple[Message, ...], bool], HistoryPageResult] = DmHistoryPageResult
         elif self.channel:
             page = ctx.views.channel_history_page(self.channel, bounds)
+            result = partial(ChannelHistoryPageResult, channel=self.channel)
         else:
             page = ctx.views.full_history_page(bounds)
-        return HistoryPageResult(tuple(reversed(page.messages)), page.oldest_cursor, page.has_older)
+            result = EverythingHistoryPageResult
+        return result(tuple(reversed(page.messages)), page.has_older)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1655,10 +1688,6 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         defaults = NativeThreadDefaults()
         return (cls(name='', project=project, model=defaults.model,
                     thinking_level=defaults.thinking_level),)
-
-    @classmethod
-    def open_targets(cls, result: ThreadCreatedResult) -> tuple[str, ...]:
-        return (result.created,)
 
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
         asyncio.run(ConfigOptions.configured().validate(self))

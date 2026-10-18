@@ -89,7 +89,7 @@ from .thread_execution import (
 )
 from .thread_management import RenameThreadResult
 from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, Todo, TodoOperation
-from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller
+from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller, ToolCatalogResult
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
     materialize_oversized_output,
@@ -770,7 +770,7 @@ class CommsTodoListTool(ThreadToolRequest):
 class CommsOrderTool(ThreadToolRequest):
     label = "Assign problem order"
     description = "Reserve a Todo assignment and publish its Goal with a deadline; does not replay input."
-    order: OrderGoalAction = tool_field("Problem, goal_id, expected_revision, deadline and required commander")
+    order: OrderGoalAction = tool_field("Problem, request, expected_revision, deadline, commander")
     owner: str = tool_field("Assignee thread")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
@@ -1189,17 +1189,14 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
         return ArchiveCliCommand(name=self.name).apply(comms)
 
 
-@dataclass(frozen=True)
-class ToolCatalogResult(CliResult):
-    tools: tuple[dict[str, object], ...]
-
-
 @dataclass(frozen=True, kw_only=True)
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
+    name: str | None = option("--name", default=None, help="Calling thread")
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
-        return ToolCatalogResult(tuple(tool_catalog()))
+        caller = ToolCaller.from_actor(self.name)
+        return caller.catalog(ctx, tuple(tool_catalog()))
 
 
 @dataclass(frozen=True, kw_only=True)

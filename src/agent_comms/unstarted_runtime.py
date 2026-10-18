@@ -12,6 +12,7 @@ from .selected_session import SelectedSession
 @dataclass(frozen=True)
 class UnstartedRuntime(RuntimeLocation):
     owner: type[AgentBackend]
+    resumable = False
 
     @property
     def backend(self):
@@ -35,9 +36,6 @@ class UnstartedRuntime(RuntimeLocation):
 
     def read_keys(self):
         return ()
-
-    def presentation(self):
-        return {"resumable": False}
 
     def history_locations(self, thread, registry, visited):
         yield from thread.inherited_history(registry, visited)
