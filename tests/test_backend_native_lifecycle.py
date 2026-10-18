@@ -25,7 +25,7 @@ from native_backend_fixture import native_backend_fixture, wait_for
 
 
 @pytest.fixture
-async def native_backend(tmp_path_factory, monkeypatch):
+async def native_backend(tmp_path_factory, monkeypatch, native_launch_settings):
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     # Native originals belong to the persistent run, even when a consuming
     # module supplies a separate auto-deleting sealed-bus tmp_path fixture.

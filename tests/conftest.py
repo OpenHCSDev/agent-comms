@@ -135,6 +135,22 @@ def wired(comms: Comms) -> Comms:
 
 
 @pytest.fixture
+def native_launch_settings(monkeypatch):
+    """Select the real owner launcher and this fixture's declared native model."""
+    import shlex
+
+    from agent_comms.native_arguments import NativeArguments
+    from native_backend_fixture import NativeBackendFixture
+
+    settings = NativeArguments.parse(NativeBackendFixture.native_arguments())
+    monkeypatch.setenv(
+        NativeArguments.binary_key, NativeArguments.owner_launcher(LaunchRuntime.running())
+    )
+    monkeypatch.setenv(NativeArguments.arguments_key, shlex.join(settings.argv))
+    return settings
+
+
+@pytest.fixture
 def native_rpc_fixture(monkeypatch):
     """Explicit executable trust for local recorded-protocol fixtures only.
 
