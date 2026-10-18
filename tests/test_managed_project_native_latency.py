@@ -1,4 +1,5 @@
 """Installed owner IPC/native over original retained history; provider only is controlled."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -100,9 +101,6 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
     owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False,
         agent_args=["--offline", "--no-extensions", "--extension", str(extension),
                     "--no-skills", "--no-context-files", "--no-prompt-templates", "--tools", "read"])
-    comms.owners.pin_private_nk_launch(
-        comms.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], package
-    )
     attachment = CommsClient(comms, agent_bin="pi", auto_wake=False,
         )
     attachment.on_connect(Observer())
@@ -124,7 +122,7 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
                 original.backup(target)
         Path(str(saved) + ".input-proof").chmod(0o600)
         comms.registry.register(replace(thread, session_file=str(saved),
-                                       model="response-local/fixture", thinking_level="off"))
+                                       model="response-local/fixture", thinking_level=OffThinkingLevel))
         await attachment.load_session(str(fixture.project), session)
         fixture.provider.text = "LATENCY_GREETING_OK"
         begin = time.perf_counter_ns()

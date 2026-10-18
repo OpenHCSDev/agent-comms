@@ -82,7 +82,7 @@ def test_attached_foreign_session_with_identical_message_never_infers_local_from
     local = viewer.messaging.send_message("peer", "owner", "the same routine message")
     assert local.message_id != foreign.message_id
     assert ScheduledTurn.incoming(local).prompt == ScheduledTurn.incoming(foreign).prompt
-    viewer.threads.attach_session("owner", str(source_session))
+    viewer.threads.attach_session((attachment_owner := viewer.registry.require("owner")), str(source_session), process=attachment_owner.process_identity)
     page = viewer.transcripts.thread_transcript_page("owner")
     assert len(page.events) == 1
     assert page.events[0].routing is None
@@ -112,7 +112,7 @@ def test_imported_and_inherited_sessions_never_gain_legacy_route(tmp_path):
     imported = comms.root / "imported_sessions" / "historical.jsonl"
     imported.parent.mkdir(exist_ok=True)
     _session(imported, _entry(message))
-    comms.threads.attach_session("owner", str(imported))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("owner")), str(imported), process=attachment_owner.process_identity)
     assert comms.transcripts.thread_transcript_page("owner").events[0].routing is None
 
 

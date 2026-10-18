@@ -46,10 +46,13 @@ MANIFEST = _resource_root() / "pi-native.sha256"
 OWNER_INSTRUCTIONS = _resource_root() / "APPEND_SYSTEM.md"
 
 
-def pinned_native_package() -> Path:
+def pinned_location() -> Path:
     build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
-    package = MANIFEST.parent / f".pi-native-{build}" / "node_modules/@earendil-works/pi-coding-agent"
-    if not package.is_dir():
+    return MANIFEST.parent / f".pi-native-{build}" / "node_modules/@earendil-works/pi-coding-agent"
+
+
+def pinned_native_package() -> Path:
+    if not (package := pinned_location()).is_dir():
         raise NativePackageError(f"Pinned native package directory is missing: {package}")
     return package
 

@@ -51,7 +51,7 @@ class CheckpointState(ABC):
 @dataclass(frozen=True)
 class NoCheckpoint(CheckpointState):
     def require_source(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
-        raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
+        raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
 
     def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint:
         raise ProjectionUnavailableError("candidate projection is stale or unrelated")
@@ -197,8 +197,6 @@ class ResumeIndex(IndexStart):
         return checkpoint.require_source(source, root_id)
 
     def prior_bytes(self, index: WakeCandidateIndex, hint: CommittedAppendHint) -> int:
-        if not index.path.exists():
-            raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
         return index._verified_checkpoint(hint.root_id).byte_offset
 
 
@@ -235,8 +233,8 @@ class WakeCandidateIndex(TypedStore):
     rows = tuple(TypedTable.members_with(CandidateTable))
 
     def __init__(self, log: WireLog):
-        if type(log) is not WireLog or log.path.name != "bus.jsonl":
-            raise TypeError("candidate index requires the canonical wire log")
+        if log.path.name != "bus.jsonl":
+            raise ValueError("candidate index requires the canonical wire log")
         self.log = log
 
     @property
@@ -339,7 +337,7 @@ class WakeCandidateIndex(TypedStore):
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
         try:
-            with self.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+            with self.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
                 root_id = source.metadata.root_id
                 with self.writing() as db:
                     # TypedStore installs schema atomically. Capture the stored
@@ -394,7 +392,7 @@ class WakeCandidateIndex(TypedStore):
     def _verified_checkpoint(self, root_id: str) -> CandidateCheckpoint:
         """Check one WAL checkpoint row against its bounded source prefix-tail witness."""
         try:
-            with self.log._opened_wire_snapshot(opening=SavedPrefixOpening()) as source:
+            with self.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as source:
                 if source.metadata.root_id != root_id:
                     raise ProjectionRebuildRequiredError("candidate private root changed")
                 with self.snapshot() as db:
@@ -421,11 +419,9 @@ class WakeCandidateIndex(TypedStore):
         the index catches up. This
         contains no seal, owner, claim or native proof and never retries work.
         """
-        if type(hint) is not CommittedAppendHint:
-            raise ValueError("candidate catch-up requires the original append hint")
         hint = hint.validated()
         self._validate_limits(max_rows, max_bytes)
-        if self.log._private_marker_unlocked().root_id != hint.root_id:
+        if self.log.private_marker_unlocked().root_id != hint.root_id:
             raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
         prior_bytes = start.prior_bytes(self, hint)
         if prior_bytes >= hint.through_bytes:
@@ -471,7 +467,7 @@ class WakeCandidateIndex(TypedStore):
                      after_seq=after_seq, required_through_seq=required_through_seq,
                      limit=limit, delivery_only=delivery_only)
         try:
-            with self.log._opened_wire_snapshot(opening=SavedPrefixOpening()) as source, self.snapshot() as db:
+            with self.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as source, self.snapshot() as db:
                 checkpoint = CandidateCheckpoint.current(db).require_fresh(request)
                 checkpoint.require_source(source, request.root_id)
                 data = Candidate.read(

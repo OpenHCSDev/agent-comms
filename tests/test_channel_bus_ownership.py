@@ -1,5 +1,4 @@
 """Channel membership and notifications have one canonical bus authority."""
-from agent_comms.native_package import pinned_native_package
 
 from dataclasses import replace
 from contextlib import AsyncExitStack
@@ -66,7 +65,7 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     assert not (root / "acp_passive_channel_awareness.json").exists()
     assert comms.bus.awareness_segments(replace(observer, created_at=observer.created_at + 1), ()) == ()
     with comms.bus.log.locked():
-        marker = comms.bus.log._private_marker_unlocked()
+        marker = comms.bus.log.private_marker_unlocked()
         marker.claimed_after_seq = marker.last_seq
         comms.bus.log.write_metadata_unlocked(marker)
     assert comms.bus.awareness_segments(observer, ()) == ()
@@ -90,9 +89,7 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
     from agent_comms.acp import CommsAgent
     from agent_comms.owned_turn import OwnedTurn
 
-    package = str(pinned_native_package())
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
     agent = CommsAgent(
         comms,
         agent_bin="pi",

@@ -6,6 +6,7 @@ Run with the intended package/interpreter; the acknowledgement identifies the im
 """
 from __future__ import annotations
 
+from conftest import publish_initial
 import json
 import os
 import sys
@@ -30,7 +31,7 @@ def main(root: Path) -> None:
     for name, birth in births.items():
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), created_at=birth, process_identity=ProcessIdentity.capture(os.getpid())))
     root_id = comms.messaging.initialize_private_initial_protocol()
-    message = comms.messaging.send_initial_cohort("sender", "Alice", "physical row " * 1024)
+    message = publish_initial(comms, "sender", "Alice", "physical row " * 1024)
     # Record the completed effect before any subsequent check can fail.
     (root / "effect.json").write_text(json.dumps({
         "root_id": root_id, "message_id": message.message_id, "seq": message.seq,

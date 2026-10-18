@@ -335,8 +335,6 @@ def perform_selected_write(
     request: SelectedToolRequest,
 ) -> None:
     """Only the owner calls the existing selected claim and writer boundaries."""
-    if type(request) is not SelectedToolRequest or type(claim_scope) is not WakeClaim:
-        raise SelectedToolDenied("Selected tool has no typed owner claim_scope")
     consume_selected_slot(session_dir, input_id, request.call_id)
     # Any exception from here leaves the slot consumed. The caller reports
     # UNKNOWN and never automatically reissues the claim or mutation.

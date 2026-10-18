@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms.bus_publication import HumanOrigin
+from agent_comms.bus_publication import HumanOrigin, AgentOrigin
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
@@ -96,7 +96,7 @@ def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(t
 def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("alice", "bob", "member DM")
-    original = comms.bus.log._opened_wire_snapshot
+    original = comms.bus.log.opened_wire_snapshot
     started, finished = Event(), Event()
 
     def toggle():
@@ -119,7 +119,7 @@ def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=toggle_after_boundary):
+    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=toggle_after_boundary):
         first = comms.views.viewer_snapshot(str(tmp_path))
     old = first.channels["#api"]
     assert not old.channel.any_mode
@@ -227,7 +227,7 @@ def test_fixed_opened_boundary_excludes_later_append(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("alice", "bob", "within boundary")
     comms.channels.set_channel_any_mode("#api", True)
-    original = comms.bus.log._opened_wire_snapshot
+    original = comms.bus.log.opened_wire_snapshot
     started, finished = Event(), Event()
 
     def append():
@@ -247,7 +247,7 @@ def test_fixed_opened_boundary_excludes_later_append(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=with_append):
+    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=with_append):
         assert bodies(comms.views.channel_display_page("#api")) == ["within boundary"]
     assert bodies(comms.views.channel_display_page("#api")) == [
         "within boundary",
@@ -275,7 +275,7 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
     comms = populated(tmp_path)
     comms.channels.set_channel_any_mode("#api", True)
     comms.messaging.send("alice", "bob", "before retag")
-    original = comms.bus.log._opened_wire_snapshot
+    original = comms.bus.log.opened_wire_snapshot
     started, finished = Event(), Event()
 
     def retag_and_send():
@@ -296,7 +296,7 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=concurrent_public_change):
+    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=concurrent_public_change):
         assert bodies(comms.views.channel_display_page("#api")) == ["before retag"]
     later = comms.views.channel_display_page("#api")
     assert "late nonmember" not in bodies(later)
@@ -307,7 +307,7 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
 def test_direct_retag_before_open_is_captured_with_its_source(tmp_path):
     comms = populated(tmp_path)
     comms.channels.set_channel_any_mode("#api", True)
-    original = comms.bus.log._opened_wire_snapshot
+    original = comms.bus.log.opened_wire_snapshot
     changed = False
 
     @contextmanager
@@ -318,12 +318,12 @@ def test_direct_retag_before_open_is_captured_with_its_source(tmp_path):
             alice = comms.registry.require("alice")
             comms.registry.register(replace(alice, tags=frozenset({"ui"})))
             comms.bus.publisher.publish_ordinary(
-                Message("alice", "bob", "late direct", InfoKind)
+                Message("alice", "bob", "late direct", InfoKind), origin=AgentOrigin()
             )
         with original(**options) as snapshot:
             yield snapshot
 
-    with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=mutate_before_open):
+    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=mutate_before_open):
         assert bodies(comms.views.channel_display_page("#api")) == []
     assert changed
     assert bodies(comms.views.channel_display_page("#api")) == []
@@ -334,7 +334,7 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
     comms = populated(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("bob", "#api", "outside unread")
-    original = comms.bus.log._opened_wire_snapshot
+    original = comms.bus.log.opened_wire_snapshot
     changed = False
 
     @contextmanager
@@ -346,12 +346,12 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
             human = comms.registry.require("human")
             comms.bus.publisher.publish_ordinary(
                 Message("human", "#api", "owned unread", InfoKind),
-                _human_origin=HumanOrigin(human.name, human.created_at, human.worktree),
+                origin=HumanOrigin(human.name, human.created_at, human.worktree),
             )
         with original(**options) as snapshot:
             yield snapshot
 
-    with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=rename_and_send_before_open):
+    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=rename_and_send_before_open):
         raced = comms.views.viewer_snapshot(str(tmp_path))
     assert changed
     assert raced.channel_unread["#api"] == 1
@@ -361,7 +361,7 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
 def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("bob", "#api", "row1")
-    original = comms.bus.log._opened_wire_snapshot
+    original = comms.bus.log.opened_wire_snapshot
     started, finished = Event(), Event()
 
     def mark_then_append():
@@ -385,7 +385,7 @@ def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
                 writer.join(timeout=3)
                 assert finished.is_set()
 
-    with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=concurrent_public_mark):
+    with patch.object(comms.bus.log, "opened_wire_snapshot", side_effect=concurrent_public_mark):
         assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
 

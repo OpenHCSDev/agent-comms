@@ -35,7 +35,7 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
         kwargs['status'] = StoppedThreadStatus()
         advances_owner = True
     elif transition == 'new-turn':
-        updated = replace(leased, active_turn=ActiveTurn('imported', leased.pid))
+        updated = replace(leased, active_turn=ActiveTurn('imported', leased.require_process().pid))
         preserves_lease = False
     registry.register(updated, **kwargs)
     after = registry.snapshot()

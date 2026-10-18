@@ -46,7 +46,7 @@ def test_location_methods_and_missing_history(tmp_path):
     with source.reading() as reader:
         assert reader.cut().offset == 0
         assert tuple(reader.reverse(0)) == ()
-        assert reader.current_draft() is None
+        assert reader.current_draft().external_row() is None
     assert source.turns(5) == ()
     assert not Path(location.path).exists()
     files, = location.storage_files()

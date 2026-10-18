@@ -1,5 +1,3 @@
-"""Declaration-owned inheritance of omitted registration metadata."""
-
 from abc import ABC, abstractmethod
 from typing import TypeVar
 
@@ -12,25 +10,41 @@ class RegistrationInheritance(ABC):
     def choose(cls, incoming: T, previous: T) -> T: ...
 
 
-class InheritMissing(RegistrationInheritance):
+class PredicateInheritance(RegistrationInheritance):
     @classmethod
     def choose(cls, incoming: T, previous: T) -> T:
-        return previous if incoming is None else incoming
+        return previous if cls.inherits(incoming) else incoming
 
-
-class InheritEmpty(RegistrationInheritance):
     @classmethod
-    def choose(cls, incoming: T, previous: T) -> T:
-        return previous if not incoming else incoming
+    @abstractmethod
+    def inherits(cls, incoming: object) -> bool: ...
 
 
-class InheritPrevious(RegistrationInheritance):
+class InheritMissing(PredicateInheritance):
     @classmethod
-    def choose(cls, incoming: T, previous: T) -> T:
-        return previous
+    def inherits(cls, incoming: object) -> bool:
+        return incoming is None
+
+
+class InheritEmpty(PredicateInheritance):
+    @classmethod
+    def inherits(cls, incoming: object) -> bool:
+        return not incoming
+
+
+class InheritPrevious(PredicateInheritance):
+    @classmethod
+    def inherits(cls, incoming: object) -> bool:
+        return True
 
 
 class InheritGoal(RegistrationInheritance):
     @classmethod
-    def choose(cls, incoming: T, previous: T) -> T:
+    def choose(cls, incoming, previous):
         return incoming.registration_value(previous)
+
+
+class InheritThinkingLevel(RegistrationInheritance):
+    @classmethod
+    def choose(cls, incoming, previous):
+        return incoming.applied(previous)

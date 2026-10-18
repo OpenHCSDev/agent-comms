@@ -30,7 +30,7 @@ from .audience_manifest import FrozenRecipient
 from .errors import RelationViolationError
 from .routing import TurnRouting
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
@@ -115,7 +115,7 @@ class AgentActivity:
         """Declare a thread's current activity (thinking/working/idle)."""
         if state.retires_thread:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             self._emit_activity(Activity.create(thread, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:
@@ -176,7 +176,7 @@ class AgentActivity:
         *, source_error: BaseException | None = None,
     ) -> bool:
         """Persist one transition, fenced to the observer's exact owner incarnation."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             snapshot = self.registry.snapshot()
             if snapshot.owner_identity(thread) != owner:
                 return False
@@ -215,7 +215,7 @@ class AgentActivity:
         return await Coordination.run_worker(partial(self._recover_drain, thread, owner, expected))
 
     def _recover_drain(self, thread: str, owner: OwnerIdentity, expected: DrainDiagnostic) -> bool:
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             snapshot = self.registry.snapshot()
             if snapshot.owner_identity(thread) != owner:
                 return False
@@ -265,13 +265,13 @@ class AgentActivity:
             self._emit_activity(phase.activity_event(name))
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             effects = self.registry.transition_turn(lease, phase)
             self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
             return effects
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             effects = self.registry.observe_native_phase(lease, phase)
             self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
             return effects
@@ -287,7 +287,7 @@ class AgentActivity:
 
     def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:
         """Serialize the original observation with thread rename/retirement."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             canonical = self.registry.require(thread).name
             self.runtime_info.observe(canonical, time.time(), observation)
 

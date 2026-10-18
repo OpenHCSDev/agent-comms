@@ -1,4 +1,5 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
+from conftest import publish_initial
 from agent_comms.read_basis import NamedViewer
 from agent_comms.presentation import ReadThrough
 import argparse
@@ -20,8 +21,7 @@ sys.path.insert(0, str(args.toad_tests))
 from runtime_fixture import ToadApp, wait_channel_roster
 from agent_comms.comms import Comms
 from agent_comms.presentation import MessageNotification
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
-from agent_comms.launch_runtime import ROOT_ID_ENV, PACKAGE_ENV
+from agent_comms.registry_document import RosterVisibility
 from agent_comms.threads import Thread
 from toad.widgets.comms_sidebar import ChannelGroup
 
@@ -36,12 +36,8 @@ async def main():
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.environ.update(XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
                       XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_ROOT=str(root / 'wire'))
-    comms = Comms(root / 'wire', private_initial_writes=True)
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    launch = PrivateNkLaunch.from_environment(comms.root, {
-        ROOT_ID_ENV: root_id, PACKAGE_ENV: os.environ['AC_NATIVE_COPIED_PACKAGE']})
-    assert launch is not None
-    launch.apply_environment(os.environ)
+    comms = Comms(root / 'wire')
+    comms.messaging.initialize_private_initial_protocol()
     owner = root.name
     for name in (owner, 'stopped', 'archived'):
         source = root / (name + '.jsonl')
@@ -50,7 +46,7 @@ async def main():
     comms.owners.stop('stopped')
     comms.owners.stop('archived')
     comms.threads.archive('archived')
-    message = comms.messaging.send_initial_cohort(owner, '#team', 'Original metadata acknowledgement')
+    message = publish_initial(comms, owner, '#team', 'Original metadata acknowledgement')
     original_wire = comms.bus.log.path.read_bytes()
     human = comms.views.viewer_snapshot(str(root))
     assert set(human.threads) == {owner, 'stopped'}
@@ -86,8 +82,8 @@ async def main():
             await group.reveal_members()
             await pilot.pause()
             assert set(group._members) == expected
-            snapshot = comms.views.viewer_snapshot(str(root), show_stopped=show_stopped,
-                                                  show_archived=show_archived)
+            snapshot = comms.views.viewer_snapshot(
+                str(root), RosterVisibility(show_stopped, show_archived))
             assert set(group._members) == set(snapshot.threads)
         checks.append('real sidebar filtered cohorts agree with original registry status')
     await asyncio.get_running_loop().shutdown_default_executor()

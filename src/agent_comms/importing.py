@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from .cli_result import CliResult
 from .field_codec import FieldCodec
 from .transcript_events import TRUNCATED, ImportedInput, ImportedMessage, ImportedRequest
 from .harness_install import Harness
@@ -195,7 +196,7 @@ class ImportBuffer:
 
 
 @dataclass(frozen=True, slots=True)
-class ImportReceipt:
+class ThreadImported(CliResult):
     thread: str
     session_file: str
     harness: type[Harness]

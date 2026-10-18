@@ -58,13 +58,13 @@ class OwnerCutover(ABC):
         raise RelationViolationError('This operation has not certified original-unchanged recovery')
 
     def failed(self, failure: StoppedOwnerFailure) -> NoReturn:
-        """Pass responsibility for held resources to the caller, or release them here.
+        """The operation releases its held resources before the failure leaves it.
 
-        A one-shot process member must make its disposition before it exits.
-        Recovery of unchanged owners is distinct from retrying installation or
-        input; the original exception remains the result in either case.
+        A member that can certify unchanged owners calls restore_unchanged
+        instead. Recovery is distinct from retrying installation or input; the
+        original exception remains the result in either case.
         """
-        raise failure
+        self.leave_stopped(failure)
 
     def leave_stopped(self, failure: StoppedOwnerFailure) -> NoReturn:
         """A one-shot operation explicitly releases its failed-launch resources."""
@@ -110,20 +110,11 @@ class StoppedOwnerInstallation(OwnerCutover):
 
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         self.after_stopped(stopped.lifecycle)
-        self.bind_target_launch(stopped.lifecycle)
         return stopped.launch(self.launch_runtime(stopped))
 
     def launch_runtime(self, stopped: StoppedOwnerBatch) -> LaunchRuntime:
         """An installation selects the runtime after publishing its pointer."""
         return LaunchRuntime.current()
-
-    def bind_target_launch(self, lifecycle: OwnerLifecycle) -> None:
-        """Bind installed launch authority after conversion, before any launch.
-
-        Nested installations only run after_stopped; the outer operation owns
-        the final target binding. Preserving members need no new binding.
-        """
-        pass
 
     @abstractmethod
     def after_stopped(self, lifecycle: OwnerLifecycle) -> None:

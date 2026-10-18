@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import os
 import tempfile
 from pathlib import Path
@@ -58,8 +59,8 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
                 committed=True,
             )
     for number in range(101):
-        comms.messaging.send_initial_cohort("sender", "member000", f"unrelated-{number}")
-    selected = comms.messaging.send_initial_cohort(
+        publish_initial(comms, "sender", "member000", f"unrelated-{number}")
+    selected = publish_initial(comms, 
         "sender", "#team", "@alpha answer this exact source"
     )
     frozen = comms.bus.log.read_delivery_cohort(root_id, selected.seq)
@@ -112,7 +113,7 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
             RecordedThreadIncarnation("fixture", other.created_at).lookup, "other", "other", committed=True
         )
     for number in range(101):
-        message = comms.messaging.send_initial_cohort("sender", "#team", f"@other note-{number}")
+        message = publish_initial(comms, "sender", "#team", f"@other note-{number}")
         with Coordination(str(root / "coordination.sqlite3")) as store:
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
     # The dedicated cursor scan cannot cross the second bounded page. The
@@ -141,8 +142,8 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
         comms.registry.new_thread('other', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     for number in range(101):
-        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
-    later = comms.messaging.send_initial_cohort("sender", "alpha", "new exact selected work")
+        publish_initial(comms, "sender", "other", f"unrelated-{number}")
+    later = publish_initial(comms, "sender", "alpha", "new exact selected work")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, later.seq, store)
     good, calls = _fake_model(decision="IGNORE")
@@ -179,7 +180,7 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
     comms.registry.rename("alpha", "alpha-new")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, "alpha-new", expected_generation=1)
-    second_message = comms.messaging.send_initial_cohort("sender", "alpha-new", "new selected")
+    second_message = publish_initial(comms, "sender", "alpha-new", "new selected")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second_message.seq, store)
     second = await runtime.SelectedExecution(

@@ -5,6 +5,7 @@ controlled. Registry claim_scope, release acknowledgement, process identity, coo
 native input/proof journal and recovery monitor use their production owners.
 """
 
+from agent_comms.pi_vocabulary import OffThinkingLevel
 import asyncio
 import hashlib
 import json
@@ -41,7 +42,7 @@ def released_native_owner(directory, package, output, exit_allowed):
             replace(
                 comms.registry.require("beta"),
                 model="selected-offline/fixture",
-                thinking_level="off",
+                thinking_level=OffThinkingLevel,
             )
         )
         owned = SelectedNativeJourney(root, root_id, comms, Path(package), True)
@@ -115,7 +116,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
         exit_allowed.set()
         await asyncio.to_thread(process.join, 5)
         assert process.exitcode == 0
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms(root)
         source = next(
             row
             for row in SelectedNativeJourney(root, root_id, comms, Path(package), True).records()

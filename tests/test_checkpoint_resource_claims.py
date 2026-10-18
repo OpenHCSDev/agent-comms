@@ -33,11 +33,12 @@ def authorized(comms, claim_scope, paths):
     with _store_lock(comms._wire_lock_path), comms.bus.log.locked() as lock:
         snapshot = comms.registry.snapshot()
         owner = snapshot.threads['owner']
-        return comms.bus.publisher.publish_claim_envelope(
+        return comms.bus.publisher._publish_claim_envelope_unlocked(
+            lock, snapshot,
             Message('owner', 'peer', 'authorized claim', InfoKind),
             worktree=Path(owner.worktree), incarnation=str(owner.created_at),
             claims=tuple(ExistingFileClaim(path) for path in paths),
-            _locked_registry_snapshot=snapshot, _bus_lock=lock, _claim=claim_scope,
+            claim=claim_scope,
         )
 
 

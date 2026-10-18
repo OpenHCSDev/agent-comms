@@ -190,7 +190,8 @@ class NotificationSource(DeclaredFamily, affix="NotificationSource"):
     """Original frozen delivery or handling acknowledgement, never an execution authority."""
 
     @abstractmethod
-    def project(self, observation: RecipientActivity) -> MessageNotification: ...
+    def project(self, observation: RecipientActivity,
+                sender_lookup: str) -> MessageNotification: ...
 
 
 @dataclass(frozen=True)
@@ -198,8 +199,9 @@ class UnrecordedNotificationSource(NotificationSource):
     recipient: FrozenRecipient
     decision: RecipientDecision
 
-    def project(self, observation: RecipientActivity):
-        return self.decision.initial_notification(self.recipient, observation=observation)
+    def project(self, observation: RecipientActivity, sender_lookup: str):
+        return self.decision.initial_notification(
+            self.recipient, sender_lookup, observation=observation)
 
 
 @dataclass(frozen=True)
@@ -367,9 +369,10 @@ class NotificationAssignment(NotificationSource):
     def recipient(self) -> FrozenRecipient:
         return FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)
 
-    def project(self, observation: RecipientActivity) -> MessageNotification:
+    def project(self, observation: RecipientActivity, sender_lookup: str) -> MessageNotification:
         return self.assignment.lifecycle.notification(
             self.recipient,
+            sender_lookup,
             observation=observation,
             activity=self.activity,
             updated_at_ms=self.assignment.updated_at_ms,

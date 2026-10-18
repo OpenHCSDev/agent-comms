@@ -30,8 +30,8 @@ def install_event_host(
     resolve = NativePiRpcLaunch.package_for_command
     managed = NativePiRpcLaunch.managed
 
-    def package_for_command(command, runtime):
-        return package if command == launcher else resolve(command, runtime)
+    def package_for_command(command, runtime, root):
+        return package if command == launcher else resolve(command, runtime, root)
 
     def fixture_launch(command, arguments, **kwargs):
         launch = managed(command, arguments, **kwargs)

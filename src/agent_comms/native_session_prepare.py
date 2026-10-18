@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from . import agent_events as events
 from . import backend
 from .native_pi import NativePiUnavailable
+from .native_startup import NativeStartup
 from .coordinator import Coordination
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence
@@ -89,9 +90,10 @@ class NativeSessionPreparation(backend.TurnSession):
         launch = await Coordination.run_worker(partial(
             persistent.child_state.managed_launch,
             agent_bin, tuple(agent_args), worktree=Path(worktree),
+            root=persistent.comms.root,
             environment=environment, session_file=session_file,
         ))
-        preparation = cls(launch, "", persistent_session=persistent)
+        preparation = cls(launch, "", persistent_session=persistent, startup=NativeStartup.for_launch(launch))
         async with session_writer_fence(launch.session.session_file):
             try:
                 async with aclosing(preparation.run()) as stream:

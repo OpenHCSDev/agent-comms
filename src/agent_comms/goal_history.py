@@ -14,7 +14,7 @@ import stat
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -27,6 +27,16 @@ from .typed_table import Column, Index, JsonStorage, SQLiteSchemaObject, TypedTa
 
 class GoalHistoryError(RuntimeError):
     """Goal history could not be durably written or reconciled."""
+
+
+@dataclass(frozen=True)
+class RecordedGoalRevision:
+    """A history entry's public fields; its owner key and journal state stay in the store."""
+    sequence: int | None
+    kind: Literal["transition", "baseline", "observed_gap"]
+    observed_at: float
+    before: Goal | None
+    after: Goal | None
 
 
 @dataclass(frozen=True)
@@ -49,13 +59,12 @@ class GoalHistoryEntry(TypedTable):
         """A committed goal revision records its original model reporting turn."""
         return self.after.reports_turn(turn_id)
 
+    def recorded(self) -> RecordedGoalRevision:
+        return RecordedGoalRevision(
+            self.sequence, self.kind, self.observed_at, self.before, self.after)
+
     def to_wire(self) -> dict[str, object]:
-        # Preserve nested Goal family tags while projecting only public entry fields.
-        return {
-            item.name: FieldCodec.encode(getattr(self, item.name))
-            for item in fields(self)
-            if not item.metadata.get("history_exclude")
-        }
+        return FieldCodec.encode_record(self.recorded())
 
 
 class GoalHistoryStore:

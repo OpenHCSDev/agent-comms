@@ -1,5 +1,6 @@
 """A late native settlement cannot terminate a started dependency reply."""
 
+from pathlib import Path
 import asyncio
 import sys
 
@@ -85,7 +86,7 @@ for line in sys.stdin:
             [],
             "first",
             str(tmp_path),
-            session_file=str(session),
+            root=Path(str(tmp_path)), session_file=str(session),
             steering_queue=queue,
             finish_event=finish_event,
             persistent_session=persistent,

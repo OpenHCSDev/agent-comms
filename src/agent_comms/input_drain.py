@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from abc import ABC, abstractmethod
 from dataclasses import field, dataclass, replace
 from contextlib import aclosing
@@ -281,7 +280,6 @@ class InputObservation:
             self.sessions.bindings.get(session_id),
             self.auto_wake,
             self.sessions.runtime_enabled,
-            self.effects.private_nk_native_package,
         ))
 
     def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
@@ -382,7 +380,7 @@ class InputObservation:
                 state = await step.apply(self, session_id, watcher)
 
     def _bus_marker(self):
-        return self.comms.bus.log._private_marker_unlocked()
+        return self.comms.bus.log.private_marker_unlocked()
 
     async def _shared_changes_concern_other_owners(
         self, session_id: str, settled: SettledTick, revision: TickRevision,
@@ -451,7 +449,6 @@ class InputObservation:
             observation = ExecutionWaitingObservation
         return observation(wire, entry, (
             root_id,
-            self.effects.private_nk_native_package,
             self.auto_wake,
             self.sessions.runtime_enabled,
             self.sessions.bindings.get(session_id),
@@ -589,7 +586,7 @@ class InputDrain(InputObservation):
         return LiveQueueScope(
             session_id,
             ClaimedIdentity(owner.incarnation, claim_scope),
-            owner.pid,
+            owner.require_process().pid,
         )
 
     def next_revision(self, session_id: str) -> int:
@@ -637,7 +634,7 @@ class InputDrain(InputObservation):
         """Derive delivery notices from existing owner queues; never create new authority."""
         entry = (await self._own_entry(session_id)).entry
         owner = entry.thread
-        if owner.pid != os.getpid() or not entry.status.running:
+        if not owner.process_identity.runs_here() or not entry.status.running:
             return None
         keys = set(self.input_keys(session_id))
         keys.update(

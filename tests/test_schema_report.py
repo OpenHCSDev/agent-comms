@@ -5,6 +5,7 @@ import sqlite3
 
 from agent_comms.cli import main
 from agent_comms.cli_commands import SchemaReportCliCommand
+from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import Todo
 from agent_comms.typed_table import SQLiteSchemaObject, SQLiteSchemaDifference
 from test_private_bus_checkpoint import _root
@@ -21,8 +22,8 @@ def _old_todo(path):
     assert original != target
     with closing(sqlite3.connect(path)) as db:
         db.execute(original)
-        db.execute("INSERT INTO todo (id,repo,text,creator,creator_created,state,revision) "
-                   "VALUES ('one','team/repo','unfinished','Alice',17002,'open',1)")
+        db.execute("INSERT INTO todo (id,repo,text,creator,creator_created,state,revision,\"order\",deadline,strikes,hunts) "
+                   "VALUES ('one','team/repo','unfinished','Alice',17002,'open',1,'{}','{}','[]','[]')")
         db.commit()
 
 
@@ -36,15 +37,11 @@ def test_comparison_names_changed_missing_and_extra_objects():
 
 
 def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, monkeypatch):
-    # A disposable bus is not this agent's private owner-launch root.
-    from agent_comms.launch_runtime import ROOT_ID_ENV, PACKAGE_ENV
-    monkeypatch.delenv(ROOT_ID_ENV, raising=False)
-    monkeypatch.delenv(PACKAGE_ENV, raising=False)
     comms, _ = _root(tmp_path)
     path = comms.root / "todos.sqlite3"
     _old_todo(path)
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    result = SchemaReportCliCommand().apply(comms)
+    result = FieldCodec.encode(SchemaReportCliCommand().apply(comms).reports)
     todo = next(row for row in result if row["path"] == str(path))
     assert [change["name"] for change in todo["differences"]] == [Todo.declared_name]
     assert main(["--root", str(comms.root), "schema-report"]) == 0
@@ -57,6 +54,6 @@ def test_unknown_and_unavailable_stores_do_not_look_clean(tmp_path):
     with closing(sqlite3.connect(comms.root / "unknown.sqlite3")) as db:
         db.execute("CREATE TABLE unowned (x)")
     (comms.root / "broken.sqlite3").write_bytes(b"not a database")
-    reports = SchemaReportCliCommand().apply(comms)
+    reports = FieldCodec.encode(SchemaReportCliCommand().apply(comms).reports)
     assert next(row for row in reports if row["path"].endswith("unknown.sqlite3"))["undeclared_tables"] == ["unowned"]
     assert next(row for row in reports if row["path"].endswith("broken.sqlite3"))["error"]

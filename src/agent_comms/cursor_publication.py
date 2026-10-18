@@ -7,7 +7,6 @@ the durable cursor. Every observation reads NativeSourceCursor's original proof.
 from __future__ import annotations
 
 import asyncio
-import os
 import sqlite3
 from dataclasses import dataclass, field
 from functools import partial
@@ -30,6 +29,7 @@ from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
+from .publisher import ResponseWrites
 from .native_entries import NativeEvidenceScope
 from .native_source_cursor import NativeSourceCursor
 from .runtime import RuntimeServer
@@ -95,13 +95,13 @@ class CursorPublication:
             owner, generation = self.comms.registry.live_owner_with_claim(thread_name)
         except RelationViolationError:
             return NoCursorScope()  # This process has no live owner input grant.
-        if owner.pid != os.getpid():
+        if not owner.process_identity.runs_here():
             return NoCursorScope()
         return LiveCursorScope(
             session_id,
             root_id,
             ClaimedIdentity(owner.incarnation, generation),
-            owner.pid,
+            owner.require_process().pid,
         )
 
     async def observe(
@@ -126,10 +126,7 @@ class CursorPublication:
         if not scope.matches_session(session_id):
             return unavailable
         try:
-            bus = MessageBus(
-                self.comms.root / "bus.jsonl", self.comms.registry,
-                private_response_writes=True,
-            )
+            bus = MessageBus(self.comms.root / "bus.jsonl", self.comms.registry, ResponseWrites)
             read_cursor = (
                 NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
             )

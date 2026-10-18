@@ -1,5 +1,6 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
+from conftest import publish_initial
 from dataclasses import replace
 from pathlib import Path
 import sqlite3
@@ -20,6 +21,8 @@ from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
 from agent_comms.wake_policy import FullWake
 
+SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
+
 
 @pytest.fixture
 def archived_notification(tmp_path, *, thread_registration):
@@ -30,9 +33,9 @@ def archived_notification(tmp_path, *, thread_registration):
         comms.registry.declare(thread_registration.new_thread('agent', frozenset(), str(tmp_path), created_at=12.0 if comms is old else 212.0))
     root_id = old.messaging.initialize_private_initial_protocol()
     messages = (
-        old.messaging.send_initial_cohort("sender", "agent", "authored pending delivery"),
-        old.messaging.send_initial_cohort("sender", "reader", "painted historical delivery"),
-        old.messaging.send_initial_cohort("sender", "reader", "unpainted historical delivery"),
+        publish_initial(old, "sender", "agent", "authored pending delivery"),
+        publish_initial(old, "sender", "reader", "painted historical delivery"),
+        publish_initial(old, "sender", "reader", "unpainted historical delivery"),
     )
     source = live.views.attach_history(old.root)
     return old, live, source, messages, root_id
@@ -145,10 +148,11 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     )
     with pytest.raises(TypeError, match="activity"):
         assignment.notification(
-            recipient, observation=RecordedRecipientActivity(), updated_at_ms=1
+            recipient, SENDER, observation=RecordedRecipientActivity(), updated_at_ms=1
         )
     recorded = assignment.notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=activity,
         updated_at_ms=1,
@@ -157,6 +161,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     assert recorded.state.detail == ""
     live = assignment.notification(
         recipient,
+        SENDER,
         observation=UnavailableRecipientActivity(),
         activity=activity,
         updated_at_ms=1,
@@ -186,6 +191,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     engagement = EngagedAssignment.build(FullWake(), "durable-execution", "sender")
     sent = engagement.notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=sent_activity,
         updated_at_ms=1_000,
@@ -193,6 +199,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     queued_activity = replace(sent_activity, progress=QueuedProgress(1_000))
     queued = FullWake().initial_state().build_preengagement(FullWake()).notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=queued_activity,
         updated_at_ms=1_000,
@@ -200,6 +207,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     read_activity = replace(sent_activity, progress=ShownToModelProgress(2_000))
     read = engagement.notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=read_activity,
         updated_at_ms=1_000,
@@ -212,6 +220,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         FullWake(), "durable-execution", "sender"
     ).notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=answered_activity,
         updated_at_ms=3_000,
@@ -219,12 +228,14 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
 
     delivered = DeliveredAssignment.build(FullWake(), None, None).notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=sent_activity,
         updated_at_ms=2_000,
     )
     delivered_answer = DeliveredAssignment.build(FullWake(), None, None).notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=replace(
             sent_activity,
@@ -334,7 +345,7 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
         old.registry.register(
             replace(old.registry.require(name), tags=frozenset({"team"}))
         )
-    original = old.messaging.send_initial_cohort(
+    original = publish_initial(old, 
         "sender", "#team", "collective mixed response states"
     )
     with Coordination(str(old.root / "coordination.sqlite3")) as store:

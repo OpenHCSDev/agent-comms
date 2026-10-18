@@ -13,7 +13,6 @@ from pathlib import Path
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
-from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.threads import Thread
 from agent_comms.wire_record import WireRecord
 
@@ -31,12 +30,10 @@ async def main(output, package, launcher, provider, model, thinking):
     project = output / 'project'
     project.mkdir(mode=0o700)
     comms = Comms(output / 'wire')
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_initial_protocol()
     os.environ.update({
-        'AGENT_COMMS_ROOT': str(comms.root), ROOT_ID_ENV: root_id,
-        PACKAGE_ENV: str(package),
+        'AGENT_COMMS_ROOT': str(comms.root),
     })
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     agent = CommsAgent(
         comms, runtime_enabled=True, auto_wake=False,
 

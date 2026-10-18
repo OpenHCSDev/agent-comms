@@ -184,11 +184,11 @@ class SelectedWritePlans:
             raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
         with _store_lock(self.comms._wire_lock_path):
             with self.comms.bus.log.locked():
-                marker = self.comms.bus.log._private_marker_unlocked()
+                marker = self.comms.bus.log.private_marker_unlocked()
             if marker.root_id != self.root_id or not marker.claims:
                 raise IdentityConflict("Selected write requires matching private claim root")
             owner, claimed_generation = self.comms.registry.live_owner_with_claim(owner_name)
-            if owner.pid != os.getpid() or owner.active_turn is not None:
+            if not owner.process_identity.runs_here() or owner.active_turn is not None:
                 raise IdentityConflict("Selected write owner is not idle in this process")
             initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
             if initial.message.message_id != source_message_id:

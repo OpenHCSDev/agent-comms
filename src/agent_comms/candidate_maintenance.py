@@ -35,7 +35,7 @@ class CandidateMaintenanceFailed(RuntimeError):  # noqa: N818 - named worker fai
 
 def schedule_candidate_catchup(log: WireLog, through_bytes: int) -> None:
     """Prepare writer indexes, then signal their existing maintenance worker."""
-    if type(log) is not WireLog or type(through_bytes) is not int or through_bytes <= 0:
+    if through_bytes <= 0:
         raise ValueError("candidate notification needs an actual committed byte position")
     BusRouteCounts(log.path).prepare()
     root = log.path.parent
@@ -84,7 +84,7 @@ def _drain_candidate(root: Path) -> None:
                 result = index.catch_up_committed_append(
                     hint, start=FirstBuild()
                 )
-                with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as snapshot:
+                with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as snapshot:
                     route_result = routes.sync(
                         snapshot,
                         lambda record: DeliveryMessage.from_wire(record, root_id=snapshot.metadata.root_id),

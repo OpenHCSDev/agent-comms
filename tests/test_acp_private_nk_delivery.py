@@ -5,9 +5,10 @@ activate private processing for existing public sessions.
 """
 
 from __future__ import annotations
+
+from conftest import responder
 from agent_comms.tool_caller import NoThreadCaller
 
-from dataclasses import replace
 import asyncio
 import json
 import os
@@ -26,11 +27,10 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.message_bus import MessageBus
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.pi_payloads import PublishedMessageToolDetails
@@ -61,7 +61,7 @@ def _session(tmp_path, *, package=True):
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
     if package:
-        comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
+        pass
     agent = CommsAgent(comms, runtime_enabled=True)
     agent.sessions.bindings["beta"] = "beta"
     agent.sessions.titles["beta"] = "beta"
@@ -90,8 +90,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
@@ -166,7 +165,7 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old-before-rename"}, caller=NoThreadCaller())
     if seal_old:
-        bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+        bus = responder(comms.root, comms.registry)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             await _accept_visible_deliveries(bus, root_id, store.session.path, lookup, 0, owner_name="beta")
     comms.threads._rename_thread("beta", "gamma")
@@ -211,6 +210,18 @@ def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tm
     assert comms.registry.require("beta").name == "beta"
     assert "gamma" not in comms.registry
     assert comms.bus.log.latest_sequence() == 0
+
+
+def test_private_rename_of_unregistered_participant_takes_the_plain_path(tmp_path):
+    comms, _, _ = _session(tmp_path)
+    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("sender").created_at).lookup
+    renamed = comms.threads._rename_thread("sender", "courier")
+    assert (renamed.previous, renamed.current) == ("sender", "courier")
+    assert comms.registry.require("sender").name == "courier"
+    assert not (comms.root / ".private-owner-rename.pending").exists()
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        with pytest.raises(ParticipantNotRegistered):
+            store.participants.get(lookup)
 
 
 @pytest.mark.asyncio
@@ -263,7 +274,7 @@ async def test_private_rename_compensates_registry_failure_with_new_old_owner_ge
     assert (comms.root / ".private-owner-rename.pending").is_file()
     with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
         comms.messaging.send_message("sender", "beta", "not published after uncertain rename")
-    bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+    bus = responder(comms.root, comms.registry)
     with (
         Coordination(str(comms.root / "coordination.sqlite3")) as store,
         pytest.raises(RelationViolationError, match="Private owner rename is pending"),
@@ -647,13 +658,13 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
 
 async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, monkeypatch):
     """An unpinned private root derives this installation's package; none prepared refuses."""
-    from agent_comms import owner_lifecycle
+    from agent_comms import private_nk_entrypoint as derivation
     from agent_comms.native_package import NativePackageError
 
     def missing():
         raise NativePackageError("Pinned native package directory is missing")
 
-    monkeypatch.setattr(owner_lifecycle, "pinned_native_package", missing)
+    monkeypatch.setattr(derivation, "pinned_native_package", missing)
     comms, agent, root_id = _session(tmp_path, package=False)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
@@ -740,7 +751,6 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
 
 async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
     comms, first, root_id = _session(tmp_path)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
     second = CommsAgent(
         comms,
         runtime_enabled=True,
@@ -870,16 +880,10 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
     assert comms.registry.require("beta").goal == original
 
 
-async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
+async def test_acp_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
-    owners = agent._comms.owners
-    pinned = owners.launch_authority
-    owners._private_nk_launch = replace(pinned, wire_root_id="f" * 32)
-    with pytest.raises(IdentityConflict, match="original root changed"):
-        await agent.inputs.drain_inbox("beta")
-    owners._private_nk_launch = pinned
     # Preflight must run before any SQL acceptance, not only before reservation.
     monkeypatch.setattr(
         native_pi.NativePiRpcLaunch,

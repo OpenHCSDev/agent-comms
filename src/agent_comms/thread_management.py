@@ -3,24 +3,26 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import re
 import stat
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
-from agent_comms.coordination_errors import CoordinationError, IdentityConflict
+from agent_comms.coordination_errors import CoordinationError, ParticipantNotRegistered
 
-from .child_process import ProcessIdentity
+from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
+from .cli_result import CliResult
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
+from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .cli_bridges.history import History
@@ -29,15 +31,18 @@ from .agent_activity import AgentActivity
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .importing import ImportLimits, ImportReceipt, ImportSnapshot
+from .importing import ImportLimits, ThreadImported, ImportSnapshot
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
-from .pi_vocabulary import ServiceTier, ThinkingLevel
-from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
+from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel
+from .private_registry_guard import (
+    PRIVATE_OWNER_RENAME_PENDING, PrivateOwnerRenameIntent, PrivateRegistryGuard, PublicRegistry,
+    RegistryPrivacy, _require_no_private_owner_rename,
+)
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
@@ -107,14 +112,14 @@ class ForkSpec(NewThreadSpec):
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadDeleted:
+class ThreadDeleted(CliResult):
     deleted: str
     session_bytes_freed: int
     detached_children: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
-class RenameThreadResult:
+class RenameThreadResult(ToolResult):
     previous: str
     current: str
     changed: bool
@@ -157,7 +162,7 @@ class ThreadManagement:
         model: str | None = None,
         tags: frozenset[str] = frozenset(),
         limits: ImportLimits | None = None,
-    ) -> ImportReceipt:
+    ) -> ThreadImported:
         """Import a stopped, resumable snapshot of any harness session, without adopting its executor."""
         snapshot = ImportSnapshot.read(history, limits or ImportLimits())
         directory = worktree or snapshot.project
@@ -197,7 +202,7 @@ class ThreadManagement:
                     self.registry.remove(name)
                 session_path.unlink(missing_ok=True)
                 raise
-        return ImportReceipt(
+        return ThreadImported(
             name,
             str(session_path),
             snapshot.harness,
@@ -212,30 +217,20 @@ class ThreadManagement:
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         """Restore historical declarations and their private delivery identities.
 
-        Registry restoration owns collision checks and strips execution authority.
-        On a private bus, stopped subscribers still belong to frozen audiences;
-        their coordinator identities must exist before any cohort can be accepted.
+        Registry restoration owns collision checks and strips execution authority;
+        the registry's privacy registers what restored threads need beyond it.
         Repeating this operation repairs an interrupted coordinator registration
         without replacing existing owners or importing historical delivery state.
         """
-        from .coordinator import Coordination
-
         selected = tuple(dict.fromkeys(names))
         with _store_lock(self._wire_lock_path):
             restored = self.registry.restore_stopped(source, selected)
-            with _store_lock(self.registry.store.path):
-                private = self.registry.store.private_guard_unlocked() is not None
-            if private:
-                with Coordination(str(self.root / "coordination.sqlite3")) as store:
-                    for name in selected:
-                        thread = self.registry.require(name)
-                        store.participants.register(
-                            thread.incarnation.lookup,
-                            thread.name,
-                            thread.name,
-                            committed=True,
-                        )
+            self._privacy().register_restored(self.registry.require(name) for name in selected)
             return restored
+
+    def _privacy(self) -> RegistryPrivacy:
+        with _store_lock(self.registry.store.path):
+            return self.registry.store.private_guard_unlocked()
 
     def claim_thread(
         self,
@@ -243,9 +238,9 @@ class ThreadManagement:
         *,
         tags: frozenset[str],
         worktree: str,
-        pid: int = 0,
+        process: ProcessState = NO_PROCESS,
         model: str | None = None,
-        thinking_level: str | None = None,
+        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
         auto_title_pending: bool = False,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
@@ -254,7 +249,7 @@ class ThreadManagement:
                 name=base_name,
                 tags=tags,
                 worktree=worktree,
-                process_identity=ProcessIdentity.capture(pid) if pid > 0 else None,
+                process_identity=process,
                 model=model,
                 thinking_level=thinking_level,
                 auto_title_pending=auto_title_pending,
@@ -328,132 +323,7 @@ class ThreadManagement:
     def _rename_thread_unlocked(
         self, name: str, new_name: str, *, title: str | None = None
     ) -> RenameThreadResult:
-        from .coordinator import Coordination
-
-        before = self.registry.require(name)
-        private_meta = self.root / "bus_meta.json"
-        if private_meta.is_symlink():
-            raise RelationViolationError("Bus metadata cannot be a symlink.")
-        private = False
-        if private_meta.exists():
-            with self.bus.log.locked():
-                metadata = self.bus.log.read_metadata_unlocked(required=True)
-                if metadata.private:
-                    self.bus.log._private_marker_unlocked()
-                    private = True
-        if private:
-            _require_no_private_owner_rename(self.root)
-        coordinator = self.root / "coordination.sqlite3"
-        intent = self.root / PRIVATE_OWNER_RENAME_PENDING
-        intent_created = False
-        if not private or not coordinator.exists() or before.name == new_name:
-            previous, current = self.registry.rename(name, new_name)
-        else:
-            # Validate every deterministic registry/SQL name refusal *before*
-            # advancing a committed private owner's generation. The wire lock
-            # excludes cooperating sends until both authorities agree.
-            self.registry.status(before.name).require_self_rename()
-            if (
-                self.registry.name_reserved(new_name)
-                and self.registry.canonical_name(new_name) != before.name
-            ):
-                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
-            replace(before, name=new_name)
-            if len(new_name) > MAX_IDENTIFIER_CHARS:
-                raise ValueError("Private coordinator owner name exceeds its bound.")
-            with Coordination(str(coordinator)) as store:
-                try:
-                    person = store.participants.get(before.incarnation.lookup)
-                except IdentityConflict as error:
-                    if str(error) != "participant aggregate is not registered":
-                        raise
-                    previous, current = self.registry.rename(name, new_name)
-                else:
-                    if not person.committed or person.owner_thread != before.name:
-                        raise RelationViolationError(
-                            "Private coordinator owner differs from the registered owner."
-                        )
-                    # Persist a fail-closed cross-store intent before SQL or
-                    # registry changes. A crash leaves private publication and
-                    # selected execution unavailable until manual inspection;
-                    # it cannot silently turn an old attempt into a new send.
-                    _atomic_write_text(
-                        intent,
-                        json.dumps(
-                            {
-                                "version": 1,
-                                "lookup": person.lookup,
-                                "old": before.name,
-                                "new": new_name,
-                                "generation": person.participant_generation,
-                                "wireRootId": metadata.root_id,
-                            },
-                            sort_keys=True,
-                        ),
-                        fsync_parent=True,
-                    )
-                    intent_created = True
-                    store.participants.advance_generation(
-                        person.lookup, new_name, expected_generation=person.participant_generation
-                    )
-                    # An old selected attempt stays fenced in its old generation;
-                    # never retry or reassign it after this ownership change.
-                    try:
-                        previous, current = self.registry.rename(name, new_name)
-                    except BaseException as error:
-                        # Registry persistence can fail after the SQL CAS. If
-                        # its atomic snapshot still names the old owner, make
-                        # a NEW generation for that owner instead of leaving
-                        # a committed coordinator pointing at the new name.
-                        # Neither generation may inherit an old native input.
-                        uncertain = RelationViolationError(
-                            "Private owner rename is uncertain; inspect both authorities."
-                        )
-                        try:
-                            actual = self.registry.require(before.name).name
-                            if actual == before.name:
-                                store.participants.advance_generation(
-                                    person.lookup,
-                                    before.name,
-                                    expected_generation=person.participant_generation + 1,
-                                )
-                        except BaseException as compensation:
-                            # Ambiguous dual-store failure: the inspection
-                            # needs both failures, not only the first.
-                            uncertain.add_note(
-                                f"Compensating generation advance failed: {compensation!r}"
-                            )
-                        raise uncertain from error
-        thread = self.registry.require(current)
-        if thread.auto_title_pending or title is not None:
-            self.registry.register(
-                replace(thread, auto_title_pending=False, title=title or thread.title),
-                self.registry.status(current),
-            )
-        if previous == current:
-            return RenameThreadResult(previous, current, False)
-        self.agents.activity.rename_thread(previous, current)
-        self.agents.runtime_info.rename_thread(previous, current)
-        self.ledger.rename_thread(previous, current)
-        with self.catalog.editing() as document:
-            document.rename_thread(previous, current)
-        if intent_created:
-            # Persist completion only after both authorities and ancillary
-            # stores agree. If the subsequent unlink/fsync is uncertain, the
-            # previous durable record already proves a finished transition;
-            # an extant file still blocks all new private sends.
-            completed_intent = json.loads(intent.read_text())
-            completed_intent["completed"] = True
-            _atomic_write_text(
-                intent, json.dumps(completed_intent, sort_keys=True), fsync_parent=True
-            )
-            intent.unlink()
-            directory_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-        return RenameThreadResult(previous, current, True)
+        return ThreadRename.chosen(self, self.registry.require(name), new_name).applied(title)
 
     def heartbeat(self, name: str) -> None:
         with _store_lock(self._wire_lock_path):
@@ -461,7 +331,7 @@ class ThreadManagement:
 
     def set_thread_configuration(
         self, original: Thread, *, model: str | None = None,
-        thinking_level: str | None = None, service_tier: ServiceTier | None = None,
+        thinking_level: type[ThinkingLevel] = NoThinkingOverride, service_tier: ServiceTier | None = None,
     ) -> Thread:
         """Publish next-turn settings together against their acquired declaration.
 
@@ -481,7 +351,7 @@ class ThreadManagement:
             return updated
 
     def initialize_native_configuration(
-        self, name: str, *, model: str | None, thinking_level: str | None,
+        self, name: str, *, model: str | None, thinking_level: type[ThinkingLevel],
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
         with _store_lock(self._wire_lock_path):
@@ -501,7 +371,9 @@ class ThreadManagement:
         info = self.agents.agent_info_of(thread.name)
         return info.model_or(default)
 
-    def attach_session(self, original: Thread, source_path: str, *, pid: int | None = None) -> Thread:
+    def attach_session(
+        self, original: Thread, source_path: str, *, process: ProcessState,
+    ) -> Thread:
         """Attach Pi state and retain its model once, outside the wire lock."""
         path = Path(source_path).expanduser().resolve()
         location = original.backend.location_type(str(path))
@@ -514,14 +386,10 @@ class ThreadManagement:
             if current != original:
                 raise RelationViolationError("Original thread changed before native source publication")
             attached = replace(
-                current.initialized_native_configuration(model=saved_model, thinking_level=None),
-                process_identity=(
-                    current.process_identity
-                    if pid is None
-                    else ProcessIdentity.capture(pid)
-                    if pid > 0
-                    else None
+                current.initialized_native_configuration(
+                    model=saved_model, thinking_level=NoThinkingOverride,
                 ),
+                process_identity=process,
                 session_file=location.read_key,
             )
             self.registry.register(attached)
@@ -614,3 +482,121 @@ class ThreadManagement:
         """Declare and register the current process's thread from env."""
         thread = current_thread(self.registry)
         return self.registry.declare(thread)
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadRename(ABC):
+    """One rename, its kind derived from the registry's privacy."""
+
+    privacy: ClassVar[type[RegistryPrivacy]]
+    threads: ThreadManagement
+    before: Thread
+    new_name: str
+    registry_privacy: RegistryPrivacy
+
+    @classmethod
+    def chosen(cls, threads: ThreadManagement, before: Thread, new_name: str) -> Self:
+        privacy = threads._privacy()
+        kind, = (k for k in cls.__subclasses__() if isinstance(privacy, k.privacy))
+        return kind(threads, before, new_name, privacy)
+
+    @abstractmethod
+    def renamed(self) -> tuple[str, str]:
+        """Move the registry name, after whatever this kind's owner stores need first."""
+
+    def registry_renamed(self) -> tuple[str, str]:
+        return self.threads.registry.rename(self.before.name, self.new_name)
+
+    def applied(self, title: str | None) -> RenameThreadResult:
+        previous, current = self.renamed()
+        threads = self.threads
+        thread = threads.registry.require(current)
+        if thread.auto_title_pending or title is not None:
+            threads.registry.register(
+                replace(thread, auto_title_pending=False, title=title or thread.title),
+                threads.registry.status(current),
+            )
+        if previous == current:
+            return RenameThreadResult(previous, current, False)
+        threads.agents.activity.rename_thread(previous, current)
+        threads.agents.runtime_info.rename_thread(previous, current)
+        threads.ledger.rename_thread(previous, current)
+        with threads.catalog.editing() as document:
+            document.rename_thread(previous, current)
+        return RenameThreadResult(previous, current, True)
+
+
+class PlainRename(ThreadRename):
+    privacy = PublicRegistry
+
+    def renamed(self) -> tuple[str, str]:
+        return self.registry_renamed()
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateOwnerRename(ThreadRename):
+    """Moves a committed coordinator owner under a durable intent, so a crash between the two
+    stores fails closed instead of turning an old attempt into a new send."""
+
+    privacy = PrivateRegistryGuard
+    registry_privacy: PrivateRegistryGuard
+
+    def renamed(self) -> tuple[str, str]:
+        from .coordinator import Coordination
+
+        root, registry = self.threads.root, self.threads.registry
+        before, new_name = self.before, self.new_name
+        _require_no_private_owner_rename(root)
+        coordinator = root / "coordination.sqlite3"
+        if not coordinator.exists() or before.name == new_name:
+            return self.registry_renamed()
+        # Validate every deterministic registry/SQL name refusal *before* advancing a committed
+        # private owner's generation. The wire lock excludes cooperating sends until both agree.
+        registry.status(before.name).require_self_rename()
+        if registry.name_reserved(new_name) and registry.canonical_name(new_name) != before.name:
+            raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+        Thread.require_name(new_name)
+        if len(new_name) > MAX_IDENTIFIER_CHARS:
+            raise ValueError("Private coordinator owner name exceeds its bound.")
+        with Coordination(str(coordinator)) as store:
+            try:
+                person = store.participants.get(before.incarnation.require_recorded().lookup)
+            except ParticipantNotRegistered:
+                return self.registry_renamed()
+            if not person.committed or person.owner_thread != before.name:
+                raise RelationViolationError(
+                    "Private coordinator owner differs from the registered owner.")
+            generation = person.participant_generation
+            PrivateOwnerRenameIntent(lookup=person.lookup, old=before.name, new=new_name,
+                                     generation=generation,
+                                     wire_root_id=self.registry_privacy.root_id.hex(),
+                                     ).write(root)
+            # An old selected attempt stays fenced in its old generation; never retry or
+            # reassign it after this ownership change.
+            store.participants.advance_generation(
+                person.lookup, new_name, expected_generation=generation)
+            try:
+                return self.registry_renamed()
+            except BaseException as error:
+                # Registry persistence can fail after the SQL CAS. If its atomic snapshot still
+                # names the old owner, make a NEW generation for that owner instead of leaving a
+                # committed coordinator pointing at the new name. Neither generation may inherit
+                # an old native input.
+                uncertain = RelationViolationError(
+                    "Private owner rename is uncertain; inspect both authorities.")
+                try:
+                    if registry.require(before.name).name == before.name:
+                        store.participants.advance_generation(
+                            person.lookup, before.name, expected_generation=generation + 1)
+                except BaseException as compensation:
+                    # Ambiguous dual-store failure: the inspection needs both failures.
+                    uncertain.add_note(f"Compensating generation advance failed: {compensation!r}")
+                raise uncertain from error
+
+    def applied(self, title: str | None) -> RenameThreadResult:
+        result = ThreadRename.applied(self, title)
+        # The wire lock and the check in renamed() make a present intent this rename's own;
+        # it completes only after both authorities and the ancillary stores agree.
+        if (self.threads.root / PRIVATE_OWNER_RENAME_PENDING).exists():
+            PrivateOwnerRenameIntent.complete(self.threads.root)
+        return result

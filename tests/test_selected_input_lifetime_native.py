@@ -4,6 +4,7 @@ Only HTTP provider responses and process termination are controlled. The native
 package, claim_scope writer, proof journal, bus and SQLite lifetime are real.
 """
 
+from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import asyncio
 import json
@@ -14,6 +15,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from agent_comms.pi_vocabulary import OffThinkingLevel
 
 from agent_comms.assignment_states import CompletedAssignment, FailedAssignment
 from agent_comms.child_process import AttachedChild
@@ -70,7 +72,7 @@ class SelectedNativeJourney:
         )
 
     def send(self, text):
-        message = self.comms.messaging.send_initial_cohort(
+        message = publish_initial(self.comms, 
             "sender", "beta" if self.direct else "#team", text
         )
         with Coordination(str(self.root / "coordination.sqlite3")) as store:
@@ -160,7 +162,7 @@ async def journey(tmp_path, monkeypatch, direct):
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=direct)
     comms.registry.register(
         replace(
-            comms.registry.require("beta"), model="selected-offline/fixture", thinking_level="off"
+            comms.registry.require("beta"), model="selected-offline/fixture", thinking_level=OffThinkingLevel
         )
     )
     owned = SelectedNativeJourney(root, root_id, comms, Path(package), direct)

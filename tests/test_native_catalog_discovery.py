@@ -7,6 +7,8 @@ import json
 from dataclasses import replace
 
 import pytest
+from agent_comms.native_startup import NativeStartup
+from agent_comms.pi_vocabulary import OffThinkingLevel
 
 from agent_comms import backend
 from agent_comms.child_process import AttachedChild, BoundedRun
@@ -55,7 +57,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     session = SavedSelectedSession(created.path.parent,
         identity=NativeSessionIdentity(created.session_id, created.session_file))
     execution = SelectedExecution(root=native.root,
-        wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+        wire_root_id=Comms(native.root).owners.require_private_launch().wire_root_id,
         owner_name="launch-ownership", native_package=package)
     verifications = []
     verify = native_pi._trusted_package
@@ -75,7 +77,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
             }))
         launch = await Coordination.run_worker(partial(execution.tracked_launch,
             package, worktree=native.project, session=session,
-            model=SelectedModel("response-local", "fixture"), thinking_level="off"))
+            model=SelectedModel("response-local", "fixture"), thinking_level=OffThinkingLevel))
         authentication = launch.configuration.auth_revision()
         launches.append((launch, authentication))
         child = await PiSessionChild.start((launch, authentication), session.attestation())
@@ -303,7 +305,7 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
         worktree=native_backend.project,
     )
     # The command result owner needs a session; this probe never opens its child.
-    session = backend.TurnSession(launch, "", native_session=PersistentPiSession())
+    session = backend.TurnSession(launch, "", native_session=PersistentPiSession(), startup=NativeStartup(native_backend.project))
     observed = []
     async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=10) as child:
         channel = PiRpcChannel(child.stdout)

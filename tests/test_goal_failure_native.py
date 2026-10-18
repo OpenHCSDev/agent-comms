@@ -93,7 +93,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             drain.cancel()
             await asyncio.gather(drain, return_exceptions=True)
             comms.registry.register(replace(comms.registry.require(sid), auto_title_pending=False))
-            comms.threads.attach_session(comms.registry.require(sid), str(native.session))
+            comms.threads.attach_session((attachment_owner := comms.registry.require(sid)), str(native.session), process=attachment_owner.process_identity)
             await route(
                 "session/load",
                 {"cwd": str(native.project), "sessionId": sid, "mcpServers": []},
@@ -185,7 +185,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             created = await route("session/new", {"cwd": str(native.project), "mcpServers": []}, False)
             sid = created.session_id
             comms.registry.register(replace(comms.registry.require(sid), auto_title_pending=False))
-            comms.threads.attach_session(comms.registry.require(sid), str(native.session))
+            comms.threads.attach_session((attachment_owner := comms.registry.require(sid)), str(native.session), process=attachment_owner.process_identity)
             await route("session/load", {"cwd": str(native.project), "sessionId": sid, "mcpServers": []}, False)
             response = await route("session/prompt", {
                 "sessionId": sid,

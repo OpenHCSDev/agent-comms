@@ -8,6 +8,7 @@ No model/provider is started by this test.
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -49,7 +50,7 @@ def test_selected_wake_and_file_claims_have_no_common_claim_receipt() -> None:
                 coordinator.participants.register(
                     RecordedThreadIncarnation("fixture", people[name]).lookup, name, name, committed=True
                 )
-            message = comms.messaging.send_initial_cohort(
+            message = publish_initial(comms, 
                 "sender", "#team", "Please investigate @Alice"
             )
             acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator).value

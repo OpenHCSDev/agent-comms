@@ -32,8 +32,6 @@ class NativeSourceCursor:
     """Own current cursor observation and monotonic publication for one private bus."""
 
     def __init__(self, bus: MessageBus, store: Coordination, *, wire_root_id: str) -> None:
-        if type(bus) is not MessageBus or type(store) is not Coordination:
-            raise ValueError("current native cursor needs actual private stores")
         self.bus, self.store, self.wire_root_id = bus, store, wire_root_id
 
     @classmethod
@@ -221,7 +219,7 @@ class NativeSourceCursor:
         with self.store.session.boundary(self.bus, blocking=False) as boundary:
             registry = boundary.registry
             reason = "current native cursor has no matching live owner"
-            if self.bus.log._private_marker_unlocked().root_id != self.wire_root_id:
+            if self.bus.log.private_marker_unlocked().root_id != self.wire_root_id:
                 raise StaleFence(reason)
             captured = RegistryOwner.capture(registry, owner_name, reason)
             with self.store.session.read():

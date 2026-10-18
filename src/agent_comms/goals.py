@@ -270,9 +270,14 @@ class CountCheckResult(CheckResult):
         if self.expected < 0:
             raise ValueError("An expected count must be nonnegative.")
 
+    @staticmethod
+    def printed(stdout: bytes) -> int | None:
+        """The count a check printed (its last integer), or None when it printed no integer."""
+        counts = re.findall(r"\d+", stdout.decode(errors="replace"))
+        return int(counts[-1]) if counts else None
+
     def require(self, result):
-        counts = re.findall(r"\d+", result.stdout.decode(errors="replace"))
-        if not isinstance(result.outcome, ExitedOutcome) or not counts or int(counts[-1]) != self.expected:
+        if not isinstance(result.outcome, ExitedOutcome) or self.printed(result.stdout) != self.expected:
             raise ValueError(f"The order check did not print its expected last integer {self.expected}.")
 
 
@@ -289,6 +294,14 @@ class OrderCheck:
     def require_directory(self):
         if not Path(self.directory).is_dir():
             raise ValueError("The order check directory does not exist.")
+
+    LINE: ClassVar[re.Pattern] = re.compile(r"(\S+)\s*::\s*(.+?)\s*->\s*(\d+)")
+
+    @classmethod
+    def parse(cls, line: str) -> OrderCheck | None:
+        """The one reading of a check line, `<repo> :: <shell command> -> <integer>`; else None."""
+        found = cls.LINE.fullmatch(line.strip())
+        return found and cls(found[1], found[2], CountCheckResult(int(found[3])))
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_slot(self, goal, goal_id, problem):

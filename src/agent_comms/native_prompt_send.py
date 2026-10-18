@@ -9,6 +9,7 @@ no acceptance and are never retried. The reserved input remains unreplayable.
 from __future__ import annotations
 
 import asyncio
+from abc import ABC, abstractmethod
 import os
 import select
 import sqlite3
@@ -20,6 +21,16 @@ from .diagnostics import PublicationMeasurements
 from .coordination_errors import CoordinationError
 
 _MAX_SEND_SECONDS = 5.0
+
+
+class PromptBoundary(ABC):
+    @abstractmethod
+    async def send_prompt(self, turn) -> None: ...
+
+
+class UnguardedPrompt(PromptBoundary):
+    async def send_prompt(self, turn) -> None:
+        await turn.send(turn.command)
 
 
 class PromptSendFailure(RuntimeError):  # noqa: N818 - original writer failure

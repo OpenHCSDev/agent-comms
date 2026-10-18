@@ -350,7 +350,7 @@ class TestHandlers:
             ),
         ]
         path.write_text("".join(json.dumps(record) + "\n" for record in records))
-        agent._comms.threads.attach_session(agent._comms.registry.require("proj"), str(path))
+        agent._comms.threads.attach_session((attachment_owner := agent._comms.registry.require("proj")), str(path), process=attachment_owner.process_identity)
         sent = []
 
         class Client:
@@ -435,7 +435,7 @@ class TestHandlers:
             )
         )
         first._comms.threads.attach_session(
-            first._comms.registry.require("proj"), str(session_file), pid=os.getpid()
+            first._comms.registry.require("proj"), str(session_file), process=ProcessIdentity.capture(os.getpid())
         )
         await first.shutdown()
         assert first._comms.registry.status("proj").declared_name == "stopped"
@@ -1385,14 +1385,12 @@ class TestWireProtocol:
         (tmp_path / "proj").mkdir()
         root = tmp_path / "wire"
         comms = wire(root)
-        root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.messaging.initialize_private_initial_protocol()
         env = dict(
             __import__("os").environ,
             AGENT_COMMS_ROOT=str(root),
             PYTHONPATH=str(Path(ae.__file__).parent.parent),
             AGENT_COMMS_AGENT_BIN="pi",
-            AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
-            AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=os.environ["AC_NATIVE_COPIED_PACKAGE"],
             AGENT_COMMS_AGENT_ARGS="",
         )
         requests = [

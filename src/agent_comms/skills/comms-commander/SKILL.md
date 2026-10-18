@@ -26,7 +26,7 @@ Then `agent-comms-commander rules review` and answer each drawn rule.
 - **The commander cannot trust itself to remember these rules.** `rules review` prints every bold rule here, every packaged and project feedback rule and the correct-maintenance results, and draws three; answer each with what this tick does about it. `order` refuses every send, strike, done, close, problem, hunt and say until the last review is answered and under 20 minutes old.
 - **A roast says why the slop is stupid, to the unit that wrote it.** `judge back` needs `--roast` (blunt, with "because": the fact it restates and what already answers it) and `--fix` (owner and replacing shape); the roast goes to the unit and #comms.
 - **Overloaded means fork, enforced.** `capacity` measures load (open orders + 2 per overdue + unjudged/10; 6 per commander). While live forks do not cover it, `order` refuses send, say, problem, hunt and fold. Every fork passes `--fork NAME` on each call.
-- **Hate jargon.** One jargon list (`order.JARGON`) gates the commander's messages, strikes and roasts, and any unit message using it is struck by vibe-watch.
+- **Hate jargon.** One jargon list (`PlainText` in Core's todos.py) refuses commander messages, strikes and roasts, and any unit message using it is struck by vibe-watch.
 
 ## Why a dictator
 
@@ -37,6 +37,7 @@ The failure this skill breaks is the mega-corp equilibrium: nobody changes anyon
 - **Units do not diagnose, plan comparisons, or choose shapes.** Read the profile, diff and code, then order the exact edits.
 - **Every order goes through `order send UNIT HH:MM BODYFILE`.** It refuses soft wording, orders without numbered edits, a report line or banned shapes, and records the deadline.
 - **Strikes, then fire.** A send-back, missed deadline, false claim or off-order edit is `order strike UNIT --why ...`. Two strikes on one task takes the task away the same tick and reassigns every board row the unit owns. `order done UNIT` only after reading the diff that meets the order.
+- **A wrong check is corrected, not worked around.** When the check you wrote cannot pass on correct work, `order check PID --check "repo :: cmd -> N" --why "..."` replaces it on the open order. The new check must already pass on main; the order keeps its id, deadline, holder and strikes, and records no strike. Never record an op for a commit or close without the check.
 - **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
 - **Judged against what the commander would have done.** If a unit action is not what you would have done given what it knew, say why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
 - **Never justify a unit's failure to the user.** Report what it failed to do and what was done about it.

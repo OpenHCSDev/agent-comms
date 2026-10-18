@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from dataclasses import replace
 from abc import abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -48,7 +49,7 @@ class CatalogSelection(Protocol):
     def model(self) -> str | None: ...
 
     @property
-    def thinking_level(self) -> type[ThinkingLevel] | None: ...
+    def thinking_level(self) -> type[ThinkingLevel]: ...
 
 
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
@@ -169,7 +170,9 @@ class ModelConfigOption(CatalogConfigOption):
         if not values:
             from .pi_commands import GetAvailableModels
 
-            data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+            data = await GetAvailableModels().discover(
+                self.agent_bin, self.agent_args.argv, self.configuration.root
+            )
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
             SessionConfigSelectOption(value=value, name=value) for value in dict.fromkeys(values)
@@ -192,13 +195,13 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     category = "thought_level"
 
     def current_value(self, thread: CatalogSelection) -> str | None:
-        return ThinkingLevel.optional_name(thread.thinking_level)
+        return FieldCodec.encode(thread.thinking_level)
 
     async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin, self.agent_args.with_model(thread.model).argv
+            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root
         )
         levels = [member.declared_name for member in data.levels]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
@@ -265,7 +268,11 @@ class SessionConfigOptions(ConfigOptions):
         sessions: SessionLifecycle,
         effects: SessionEffects,
     ):
-        super().__init__(agent_bin, agent_args, RestartEnvironment.inherit(os.environ))
+        super().__init__(
+            agent_bin,
+            agent_args,
+            replace(RestartEnvironment.inherit(os.environ), root=str(comms.root)),
+        )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
         self.publications: dict[str, ConfigOptionUpdate] = {}
@@ -331,24 +338,24 @@ class SessionConfigOptions(ConfigOptions):
     ) -> None:
         """Store the model and thinking level Pi itself reports for this change."""
         arguments = self.agent_args.with_model(thread.model).with_thinking(
-            ThinkingLevel.optional_name(thread.thinking_level)
+            thread.thinking_level
         )
         state = await command.configure(
-            self.agent_bin, arguments.argv, worktree=Path(thread.worktree),
+            self.agent_bin, arguments.argv, worktree=Path(thread.worktree), root=self.comms.root,
         )
         model = state.model.display_name
-        level = ThinkingLevel.optional_name(state.thinking_level)
+        level = FieldCodec.encode(state.thinking_level)
         if model is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")
         state.model.require_selection(model)
         await Coordination.run_worker(partial(
             self.comms.threads.set_thread_configuration,
-            thread, model=model, thinking_level=level,
+            thread, model=model, thinking_level=state.thinking_level,
         ))
 
     @staticmethod
     def stored_settings(thread: Thread) -> UseSettings:
-        return UseSettings(thread.model, ThinkingLevel.optional_name(thread.thinking_level))
+        return UseSettings(thread.model, FieldCodec.encode(thread.thinking_level))
 
     def turn_started(self, session_id: str, thread: Thread) -> None:
         self.settings_in_use.setdefault(session_id, self.stored_settings(thread))

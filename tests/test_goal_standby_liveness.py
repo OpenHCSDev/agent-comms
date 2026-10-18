@@ -62,7 +62,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
         drain.cancel()
         await asyncio.gather(drain, return_exceptions=True)
         comms.registry.register(replace(comms.registry.require(child), auto_title_pending=False))
-        comms.threads.attach_session(comms.registry.require(child), str(native.session))
+        comms.threads.attach_session((attachment_owner := comms.registry.require(child)), str(native.session), process=attachment_owner.process_identity)
         yield native, comms, agent, child
     finally:
         await agent.shutdown()
@@ -492,9 +492,6 @@ async def test_acp_reply_read_failure_after_settled_reaches_terminal_caller(
 
 async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path, monkeypatch):
     comms = canonical_goal_wire(tmp_path / "wire")
-    with comms.bus.log.certified_read() as source:
-        root_id = source.marker.root_id
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
     agent = CommsAgent(
         comms,
         agent_bin="pi",

@@ -1,4 +1,5 @@
 """Real installed Toad/ACP/native waits with only the localhost provider controlled."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
 import asyncio
 from importlib.resources import files
@@ -95,11 +96,9 @@ async def run(arguments):
     (config / "auth.json").write_text(json.dumps({"wait-local": {"type": "api_key", "key": "local-only"}}))
     (config / "settings.json").write_text(json.dumps({"compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
-    service = Comms(stage / "wire", private_initial_writes=True)
-    root_id = service.messaging.initialize_private_initial_protocol()
-    service.owners.pin_private_nk_launch(service.root, root_id, package)
+    service = Comms(stage / "wire")
+    service.messaging.initialize_private_initial_protocol()
     environment = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
-        AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id, AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
         AGENT_COMMS_AGENT_MODELS="wait-local/fixture", AGENT_COMMS_AGENT_BIN="pi",
         AGENT_COMMS_AGENT_ARGS="--provider wait-local --model fixture --no-extensions --no-skills --no-context-files",
@@ -111,7 +110,7 @@ async def run(arguments):
     for name in ("PYTHONPATH", "PI_PROMPT", "PI_TASK", "PI_PARENT_ID", "AGENT_COMMS_STARTUP_INPUT_KEY"):
         environment.pop(name, None)
     os.environ.clear(); os.environ.update(environment)
-    service.registry.declare(service.registry.new_thread('wait-native', frozenset(), str(project), model='wait-local/fixture', thinking_level='off'))
+    service.registry.declare(service.registry.new_thread('wait-native', frozenset(), str(project), model='wait-local/fixture', thinking_level=OffThinkingLevel))
     definition = AgentDefinition.decode({"name": "Native request wait", "identity": "wait",
         "short_name": "wait", "protocol": "acp",
         "run_command": {"*": shlex.join([sys.executable, "-m", "agent_comms.acp"])}})

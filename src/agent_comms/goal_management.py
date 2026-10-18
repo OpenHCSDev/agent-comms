@@ -28,7 +28,7 @@ from .goal_presentation import ThreadGoalExecution, GoalWaitTarget
 from .goals import GoalDeclaration
 from .goals import Goal
 from .message_bus import MessageBus
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .threads import Thread
 from .input_attempt import ReservedInput
 from .input_disposition import InputDispositions
@@ -99,7 +99,7 @@ class Goals:
 
     def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             rows = (
                 InputDispositions(self.root)
                 .unresolved(aliases := self.registry.entry(name).entry.names)
@@ -115,7 +115,7 @@ class Goals:
         awaiting_keys: frozenset[str] | None = None,
     ) -> dict[str, Any]:
         """Project durable notices using current owner queue facts when available."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             aliases = self.registry.entry(name).entry.names
             return (
                 InputDispositions(self.root)
@@ -137,7 +137,7 @@ class Goals:
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
         """Project exact review eligibility for one current goal and dependency set."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             return self._goal_input_review(self.registry.require(name), goal_id, wait_for).public()
 
     def _goal_input_review(
@@ -207,7 +207,7 @@ class Goals:
         self, name: str, *, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read durable revisions for one thread incarnation and optional goal ID."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             return self.registry.goal_history(name, goal_id=goal_id)
 
     def goal_wait(self, name: str) -> GoalWait:
@@ -238,7 +238,7 @@ class Goals:
         `settled` event. A later turn (even already finished) invalidates the
         old fence; a rename or unrelated metadata edit does not.
         """
-        if type(fence) is not FinishedTurnFence:
+        if fence is None:
             return ()
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
@@ -293,7 +293,7 @@ class Goals:
 
     def goal_snapshot(self, name: str) -> tuple[GoalDeclaration, ThreadGoalExecution]:
         """Read current goal and its scheduling projection as one owner snapshot."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             return self._goal_snapshot(name)
 
     def _goal_snapshot(self, name: str) -> tuple[GoalDeclaration, ThreadGoalExecution]:

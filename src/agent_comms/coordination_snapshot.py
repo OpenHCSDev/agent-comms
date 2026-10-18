@@ -342,7 +342,7 @@ class RecoverySnapshot:
 
         bus, bus_lock, registry = boundary.bus, boundary.bus_lock, boundary.registry
         attempt = self.require_attempt()
-        metadata = bus.log._private_marker_unlocked()
+        metadata = bus.log.private_marker_unlocked()
         with bus_lock.current_source(bus.log, metadata) as source:
             current = source.claim_projection()
         owned = tuple(
@@ -370,13 +370,13 @@ class RecoverySnapshot:
             for offset in range(0, len(recorded), ClaimTransition.max_resources):
                 released = recorded[offset:offset + ClaimTransition.max_resources]
                 names = ", ".join(display_resource(claim) for claim in released)
-                bus.publisher.publish_claim_envelope(
+                bus.publisher._publish_claim_envelope_unlocked(
+                    bus_lock, registry,
                     Message(owner.name, owner.name,
                             f"{outcome.release_wording}: {names}", ClaimNoticeKind),
                     worktree=worktree, incarnation=incarnation,
                     releases=tuple(ClaimRelease(claim.resource, claim.generation)
                                    for claim in released),
-                    _locked_registry_snapshot=registry, _bus_lock=bus_lock,
                 )
 
     def require_nonpublication_response(self) -> None:

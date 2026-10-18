@@ -235,7 +235,7 @@ async def test_mounted_goal_continues_without_progress_tool(
                 )
                 view = app.screen.conversation
                 if compact_tools:
-                    comms.threads.attach_session("project", str(session))
+                    comms.threads.attach_session((attachment_owner := comms.registry.require("project")), str(session), process=attachment_owner.process_identity)
                 view.prompt.text = "/goal List one useful testing practice each turn until I pause."
                 view.prompt.focus()
                 await pilot.press("enter")
