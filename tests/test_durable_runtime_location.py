@@ -8,6 +8,7 @@ import pytest
 
 from agent_comms.agent_backend import AgentBackend, BackendDeclarationError, RuntimeLocation
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_child import PiChild
 from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
 from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.threads import Thread
@@ -81,8 +82,17 @@ try {
 """
 
 
-def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration):
+def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration, monkeypatch):
     location = DurableDatabase(str(tmp_path / 'history.sqlite3'))
+    start = PiChild.start_command.__func__
+    history_starts = []
+
+    async def counted_start(cls, *args, **kwargs):
+        if cls is PiChild:
+            history_starts.append(args)
+        return await start(cls, *args, **kwargs)
+
+    monkeypatch.setattr(PiChild, 'start_command', classmethod(counted_start))
     subprocess.run(['node', '--input-type=module', '-e', SEED, location.path],
                    cwd=Path(__file__).parents[1] / 'src/agent_comms', check=True,
                    capture_output=True, timeout=20)
@@ -107,7 +117,11 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_
                 turns = source.turns(1)
                 assert len(turns) == 1
                 assert [event.text for event in turns[0].events] == ['entry 258', 'entry 259']
+                assert location.history_source(tmp_path, thread.incarnation) is source
+                with source.reading() as again:
+                    assert len(tuple(again.reverse(again.cut().offset))) == 260
             await asyncio.to_thread(read)
+            assert len(history_starts) == 1
             assert await host.request(Inspect()) == interrupted
         finally:
             await host.shutdown()

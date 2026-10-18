@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-from collections.abc import Callable, Iterator
+import threading
+import weakref
+from abc import abstractmethod
+from collections.abc import Iterator
 from contextlib import AsyncExitStack, ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from typing import Any, ClassVar
 from uuid import uuid4
@@ -76,8 +79,14 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
     def require_forkable(self) -> None:
         raise ValueError('Durable database forking is not implemented')
 
-    def history_source(self, root: Path, incarnation: Any) -> DurableTranscript:
-        return DurableTranscript(self)
+    def history_source(self, root: Path, incarnation: Any) -> DurableHistory:
+        if not self.session.is_file():
+            return NotStartedDurableHistory(self.path)
+        return self.transcript
+
+    @cached_property
+    def transcript(self) -> DurableTranscript:
+        return DurableTranscript(self.path)
 
     @property
     def session(self) -> Path:
@@ -130,39 +139,102 @@ class HistoryData(PiResponseData):
     cursor: dict[str, JsonValue] | None = None
 
 
-def _history_request(source: DurableTranscript, command: Entries) -> HistoryData:
-    with source.reading() as reader:
-        return reader.execute(reader, command)
+class DurableHistoryWorker:
+    """One child and event loop for the lifetime of its transcript source."""
+
+    def __init__(self, path: str):
+        self.path = path
+        self.lock = threading.Lock()
+        self.ready = threading.Event()
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self.thread: threading.Thread | None = None
+        self.child: PiChild | None = None
+        self.failure: BaseException | None = None
+        self.closed = False
+
+    def _run(self) -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self.loop = loop
+        self.ready.set()
+        try:
+            loop.run_forever()
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        finally:
+            loop.close()
+            asyncio.set_event_loop(None)
+
+    async def _request(self, command: Entries) -> HistoryData:
+        if self.failure is not None:
+            raise self.failure
+        try:
+            if self.child is None:
+                child = await PiChild.start_command(
+                    ('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+                    cwd=str(Path(self.path).parent), event_type=DurablePiEvent,
+                )
+                try:
+                    await child.request(OpenHistory(self.path))
+                except BaseException:
+                    await child.shutdown()
+                    raise
+                self.child = child
+            return await self.child.request(command)
+        except BaseException as error:
+            self.failure = error
+            raise
+
+    def request(self, command: Entries) -> HistoryData:
+        with self.lock:
+            if self.closed:
+                raise RuntimeError('Durable history source is closed')
+            if self.thread is None:
+                self.thread = threading.Thread(
+                    target=self._run, name='durable-history', daemon=True,
+                )
+                self.thread.start()
+                self.ready.wait()
+            assert self.loop is not None
+            future = asyncio.run_coroutine_threadsafe(self._request(command), self.loop)
+            return future.result()
+
+    def close(self) -> None:
+        with self.lock:
+            if self.closed:
+                return
+            self.closed = True
+            loop, thread = self.loop, self.thread
+            if loop is None or thread is None:
+                return
+            try:
+                if self.child is not None:
+                    asyncio.run_coroutine_threadsafe(self.child.shutdown(), loop).result()
+            finally:
+                loop.call_soon_threadsafe(loop.stop)
+                if threading.current_thread() is not thread:
+                    thread.join()
 
 
 @dataclass(frozen=True)
-class DurableTranscript(TranscriptSource):
-    location: DurableDatabase
-    execute: Callable[[DurableTranscript, Entries], HistoryData] = field(default=_history_request, repr=False, compare=False)
+class DurableHistory(TranscriptSource):
+    path: str
 
     @contextmanager
-    def reading(self) -> Iterator[DurableTranscript]:
-        if not Path(self.location.path).is_file():
-            yield replace(self, execute=lambda source, command: HistoryData(()))
-            return
-        with asyncio.Runner() as loop:
-            child = loop.run(PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
-                cwd=str(Path(self.location.path).parent), event_type=DurablePiEvent))
-            try:
-                loop.run(child.request(OpenHistory(self.location.path)))
-                yield replace(self, execute=lambda source, command: loop.run(child.request(command)))
-            finally:
-                loop.run(child.shutdown())
+    def reading(self) -> Iterator[DurableHistory]:
+        yield self
+
+    @abstractmethod
+    def execute(self, command: Entries) -> HistoryData: ...
 
     def cut(self) -> ExternalCut:
-        return ExternalCut(max((entry.id for entry in self.execute(self, Entries(1)).items), default=0))
+        return ExternalCut(max((entry.id for entry in self.execute(Entries(1)).items), default=0))
 
     def records(self, minimum: int, maximum: int, order: str) -> Iterator[StoredRecord]:
         if maximum < minimum:
             return
         cursor = None
         while True:
-            page = self.execute(self, Entries(128, cursor, minimum, maximum, order))
+            page = self.execute(Entries(128, cursor, minimum, maximum, order))
             for entry in page.items:
                 yield StoredRecord(entry.id - 1, entry.id, entry, True)
             cursor = page.cursor
@@ -174,6 +246,25 @@ class DurableTranscript(TranscriptSource):
 
     def reverse(self, before: int) -> Iterator[StoredRecord]:
         return self.records(1, before, 'descending')
+
+
+@dataclass(frozen=True)
+class DurableTranscript(DurableHistory):
+    _worker: DurableHistoryWorker = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        worker = DurableHistoryWorker(self.path)
+        object.__setattr__(self, '_worker', worker)
+        weakref.finalize(self, worker.close)
+
+    def execute(self, command: Entries) -> HistoryData:
+        return self._worker.request(command)
+
+
+@dataclass(frozen=True)
+class NotStartedDurableHistory(DurableHistory):
+    def execute(self, command: Entries) -> HistoryData:
+        return HistoryData(())
 
 
 @dataclass(frozen=True)
@@ -457,7 +548,10 @@ class PiDurableBackend(PiCapabilities, AgentBackend, Steers):
                         resources=resources.pop_all(), location=location)
                 async with child.failures():
                     model = SetModel.from_name(thread.model)
-                    await child.request(Open(str(path), thread.worktree, *model.open_arguments(), thread.thinking_level, str(RestartEnvironment.inherit(environment).native_config / 'auth.json')))
+                    await child.request(Open(
+                        str(path), thread.worktree, *model.open_arguments(), thread.thinking_level,
+                        str(RestartEnvironment.inherit(environment).native_config / 'auth.json'),
+                    ))
                     await child.request(Resume())
                 self.child = child
             return self.child
