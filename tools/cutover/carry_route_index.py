@@ -69,8 +69,8 @@ class RouteIndexV6(Carry):
                             destination.rollback()
                             raise
                     os.replace(temporary, index.path)
-        rewritten = tuple(path.name for path in root.glob(f"{index.path.name}*"))
-        rewritten += tuple(path.name for path in root.glob(f"{old.name}-*"))
+        rewritten = (index.path.name, *(f"{path.name}{suffix}" for path in (index.path, old)
+                                         for suffix in ("-wal", "-shm")))
         return Carried(1, {**counts, "source_rows": len(recorded)}, rewritten if apply else ())
 
 

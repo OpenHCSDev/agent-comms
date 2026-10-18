@@ -68,7 +68,7 @@ class WakePolicyUnmentioned(Carry):
                     db.rollback()
                     raise
         detail = {owner.declared_name: len(values) for owner, values in rows.items()}
-        rewritten = tuple(path.name for path in root.glob(f"{index.path.name}*")) if apply else ()
+        rewritten = tuple(f"{index.path.name}{suffix}" for suffix in ("", "-wal", "-shm")) if apply else ()
         return Carried(1, detail, rewritten)
 
 
