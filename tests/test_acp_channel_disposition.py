@@ -263,7 +263,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             with comms.registry.store.editing() as edit:
                 current = edit.document.threads["beta"]
                 identity = current.process_identity
-                assert identity is not None and current.active_turn is not None
+                assert identity is not None and current.active_turn.executing
                 edit.document.threads["beta"] = replace(
                     current, process_identity=replace(identity, start_time=identity.start_time + 1)
                 )

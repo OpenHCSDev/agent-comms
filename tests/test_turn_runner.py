@@ -59,7 +59,7 @@ async def test_mounted_cancel_does_not_cancel_other_session(prepared_owner):
             native.provider.response_gate.set()
             assert (await two).stop_reason == "end_turn"
         assert not owner.turns.turn_tasks
-        assert not any(owner.turns.turn_state(sid).busy for sid in (first, second))
+        assert not any(owner.turns.turn_state(sid).active.phase.busy for sid in (first, second))
         assert not any(state.inbox for state in owner.inputs.drained.values())
         assert all(not lock.locked() for lock in owner.turns.turn_locks.values())
         assert native.session.read_bytes().startswith(original)
@@ -83,7 +83,7 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
     async def stream(*args, **kwargs):
         # This boundary fails before a native write. Preparation and the lease
         # have already been acquired by the real saved-session owner.
-        assert owner.turns.turn_state(session).busy
+        assert owner.turns.turn_state(session).active.phase.busy
         assert owner.turns.persistent_backends[session].available
         raise failure from source
         yield
@@ -94,7 +94,7 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
     assert caught.value.__cause__ is failure and failure.__cause__ is source
     request_failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
     assert request_failure.notification_published and request_failure.failure.input_state.public_status == "not_sent"
-    assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy
+    assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
     assert not owner.turns.turn_locks[session].locked()
     assert native.session.read_bytes() == original and native.provider.posts == 0
@@ -110,7 +110,7 @@ async def test_shutdown_joins_running_turn_before_releasing_session(prepared_own
             while native.provider.posts != 1:
                 assert not turn.done()
                 await asyncio.sleep(0.01)
-            assert owner.turns.turn_state(session).busy
+            assert owner.turns.turn_state(session).active.phase.busy
             await owner.shutdown()
             assert (await turn).stop_reason == "cancelled"
         assert not child.alive() and not child.platform.group_members(child.identity)
@@ -180,8 +180,8 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
         assert "Open diagnostic" in errors[-1].failure.detail
     assert native.session.read_bytes() == original
     assert native.provider.posts == 0  # Preparation/fault must not send or replay input.
-    assert owner._comms.registry.require(session).active_turn is None
-    assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy
+    assert not owner._comms.registry.require(session).active_turn.executing
+    assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
 
 
@@ -219,8 +219,8 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
     assert tuple(tracked) == (original.native_id,)
     assert tracked[original.native_id].message.text == original.sent_text
     assert original.sent_text.endswith("Actual failed input")
-    assert owner._comms.registry.require(session).active_turn is None
-    assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy
+    assert not owner._comms.registry.require(session).active_turn.executing
+    assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
 
 
@@ -248,4 +248,5 @@ def test_acp_has_no_superseded_component_accessors_or_dispatch():
         "config",
     }
     assert not removed.intersection(vars(CommsAgent))
-    assert not any(isinstance(value, property) for value in vars(CommsAgent).values())
+    assert {name for name, value in vars(CommsAgent).items()
+            if isinstance(value, property)} == {"configured_root_id"}

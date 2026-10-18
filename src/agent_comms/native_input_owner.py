@@ -49,7 +49,7 @@ class RegistryOwner:
         thread = snapshot.require_active(name)
         thread.require_local_process(ProcessIdentity.capture(os.getpid()))
         claim_scope = snapshot.claimed_generations[thread.name]
-        thread.require_current_turn(claim_scope)
+        thread.active_turn.require_current(claim_scope, thread.turn_generation)
         return cls(thread=thread, claimed_generation=claim_scope)
 
     def require_exact(
@@ -73,15 +73,13 @@ class RegistryOwner:
             ).require_valid()
         except ReservationViolationError as error:
             raise RelationViolationError(f"live owner changed before turn claim: {error}") from error
-        self.thread.require_idle()
+        self.thread.active_turn.require_idle()
 
     def require_active_turn(self):
         """Return the captured executable turn if its process and input generation still match."""
-        turn = self.thread.active_turn
-        if turn is None:
-            raise StaleFence("registry owner has no active turn")
         self.thread.role.require_executable(StaleFence("registry owner is not executable"))
         try:
+            turn = self.thread.active_turn.require_active()
             self.thread.execution.require_native()
         except RelationViolationError as error:
             raise StaleFence("registry owner is not executable") from error

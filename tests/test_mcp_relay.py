@@ -60,7 +60,7 @@ async def test_live_projection_requires_owning_acp_turn_and_session(saved_owner)
         assert decode_updates(updates[0]["update"].field_meta) == (
             McpClientAcknowledgementUpdate(original_id, acknowledgement),
         )
-    assert not owner.turns.turn_state(session_id).busy
+    assert not owner.turns.turn_state(session_id).active.phase.busy
     await owner._emit_event(session_id, event, observer, turn_id=original_id)
     async with native.original_input(owner, session_id, "Distinct successor operation") as successor:
         assert successor.turn_id != original_id

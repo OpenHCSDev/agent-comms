@@ -66,7 +66,7 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     with Coordination(comms.root / 'coordination.sqlite3') as store:
         pending = next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name)
         assert pending.wire_seq == post.seq
-    assert beta.active_turn is None
+    assert not beta.active_turn.executing
 
     # The local queue follows the same typed gate; its origin is retained.
     agent.inputs.state('beta').pending_turns = [queued]
@@ -116,7 +116,7 @@ async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monke
     beta = comms.registry.require('beta')
     with Coordination(comms.root / 'coordination.sqlite3') as store:
         assert next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
-    assert beta.active_turn is None
+    assert not beta.active_turn.executing
     if abort:
         assert gate.clear(hold).phase is ReadyPhase
     else:
@@ -343,7 +343,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
         with status.phase.send_new(None, None, "native", "original") as outcome:
             assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
-    assert comms.registry.require("owner").active_turn is None
+    assert not comms.registry.require("owner").active_turn.executing
 
 
 @pytest.mark.parametrize("fault_at", ["before-state", "after-state"])
@@ -410,7 +410,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     current = comms.registry.require("owner")
     # A claim linearized before the pause is visible for explicit drain; a
     # claim after pause is denied. Neither is silently retried or erased.
-    assert (current.active_turn is not None) == (result == "claimed")
+    assert current.active_turn.executing == (result == "claimed")
     assert comms.owners.maintenance.read() == hold
     with pytest.raises(RelationViolationError):
         comms.registry.lease_local_turn("owner", "never-after-pause")

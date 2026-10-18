@@ -43,7 +43,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
         assert not owner.process_alive
         await ready(receipts[0].pid)
         assert comms.registry.require("worker").session_file == str(session)
-        assert comms.registry.require("worker").active_turn is None
+        assert not comms.registry.require("worker").active_turn.executing
         assert comms.agents.runtime_info.path.read_bytes() == metadata
         assert comms.ledger.path.read_bytes() == collaboration
         reopened = wire(comms.root)

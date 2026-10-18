@@ -84,7 +84,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
             observation = SessionNotification(session_id=session_id, update=update)
             if any(
                 isinstance(fact, TurnChangedUpdate)
-                and not fact.state.busy and fact.state.finished_turn_id is not None
+                and not fact.state.active.phase.busy and fact.state.finished_turn_id is not None
                 for fact in decode_updates(observation.update.field_meta)
             ):
                 settled.set()
@@ -101,7 +101,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         await first.shutdown()
         turn.cancel()
         await asyncio.gather(turn, return_exceptions=True)
-        assert comms.registry.require(name).process_alive and comms.registry.require(name).executing
+        assert comms.registry.require(name).process_alive and comms.registry.require(name).active_turn.executing
         attachments = await asyncio.gather(
             second.load_session(str(project), name), third.load_session(str(project), name)
         )
@@ -116,7 +116,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         release.set()
         await asyncio.wait_for(settled.wait(), 15)
         assert provider.posts == 1
-        assert not comms.registry.require(name).executing
+        assert not comms.registry.require(name).active_turn.executing
         await second.shutdown()
         await third.shutdown()
         assert comms.registry.require(name).process_alive

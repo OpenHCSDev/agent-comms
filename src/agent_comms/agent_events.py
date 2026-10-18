@@ -30,8 +30,7 @@ if TYPE_CHECKING:
     from .pi_commands import PiCommand
     from .native_turn_context import NativeContextManifestData
     from .comms import Comms
-    from .goal_presentation import ThreadGoalExecution
-    from .goals import Goal
+    from .goal_presentation import GoalSnapshot
     from .pi_events import RetryAttemptEvent
     from .turn_phase import TurnPhase
     from .input_disposition import InputDocument
@@ -56,12 +55,7 @@ class GoalChanged(AgentEvent):
     authoritative snapshot supplies this event, never a tool's spelling.
     """
 
-    goal: Goal | None
-    execution: ThreadGoalExecution
-
-    @property
-    def signature(self) -> tuple[Goal | None, ThreadGoalExecution]:
-        return self.goal, self.execution
+    snapshot: GoalSnapshot
 
 
 @dataclass(frozen=True)
