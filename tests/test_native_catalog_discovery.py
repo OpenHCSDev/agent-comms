@@ -229,8 +229,7 @@ async def test_actual_catalog_auth_refresh_preserves_selection_and_reaps_childre
     auth.write_text(json.dumps({"response-local": {"type": "api_key", "key": "local-only"}}))
     refreshed = await model_catalog.choices(thread)
     assert {model.value for model in refreshed if model.value.startswith("response-local/")} == {
-        "response-local/fixture",
-        "response-local/second",
+        f"response-local/{model['id']}" for model in document["providers"]["response-local"]["models"]
     }
     assert "medium" in {
         choice.value
