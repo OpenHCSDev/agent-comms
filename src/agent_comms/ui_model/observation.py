@@ -529,7 +529,8 @@ class ReadNotifications(ReadRequest):
         return comms.views.message_notifications_for_references(self.references)
 
     def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
-        return revision.notifications_changed_since(previous)
+        return (revision.notifications_changed_since(previous)
+                or revision.activity != previous.activity)
 
 
 @dataclass(frozen=True)
@@ -764,9 +765,12 @@ class ThreadReading(Observation[ObserveThreads]):
         def located() -> dict[str, Callable[[], ThreadPresentation | None]]:
             nonlocal activity, names
             snapshot = comms.registry.snapshot()
+            readable, _ = previous.revision_inputs()
+            watched = names | frozenset(actor for view in readable.values()
+                                        for actor in view.notification_activity_names())
             captured = comms.agents.all_activity(snapshot.visible_threads(
-                DEFAULT_ROSTER, names=names), snapshot=snapshot)
-            activity = {name: captured[canonical] for name in names
+                DEFAULT_ROSTER, names=watched), snapshot=snapshot)
+            activity = {name: captured[canonical] for name in watched
                         if (canonical := snapshot.canonical_name(name)) in captured}
             names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
             if not names:
@@ -988,6 +992,13 @@ class ThreadsObserved(Observed):
     results: Mapping[str, ThreadReadResult]
     changed: frozenset[str]
     activity: Mapping[str, ObservedActivity]
+
+    def revision_inputs(self) -> tuple[dict[str, ThreadPresentation], set[str]]:
+        readable: dict[str, ThreadPresentation] = {}
+        retry: set[str] = set()
+        for name, result in self.results.items():
+            result.collect_revision_inputs(name, readable, retry)
+        return readable, retry
 
     def changed_since(self, previous: ThreadsObserved) -> frozenset[str]:
         """Read-state transitions and source-owned changes, independent of store churn."""

@@ -16,7 +16,6 @@ from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
 from .message_page import (
     NEWEST_PAGE, MessagePage, MessagePageRequest, PageBounds,
-    UnreadBeforeRequest,
 )
 from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
@@ -28,7 +27,7 @@ from .read_basis import (
     DMDisplayScope,
     ListedDeliveries,
     DisplayBasis,
-    WatchAcknowledgment, ReadCursor,
+    WatchAcknowledgment,
 )
 from .routing import DeliveryScope
 from .store_files import SharedLock, _store_lock
@@ -301,12 +300,6 @@ class MessageBus[Writes: Publisher]:
         channel = self._channels.read().resolve(target.name)
         scope = ChannelDisplayScope(channel.name, channel.history_targets)
         return MessagePageRequest(scope, bounds).read(self.log)
-
-    def conversation_older_unread(
-        self, scope: DMDisplayScope, *, before: int, seen: ReadCursor
-    ) -> bool:
-        """Ask the scoped offset reader, newest first, stopping at the first unread."""
-        return UnreadBeforeRequest(scope, before, seen).read(self.log)
 
     def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded combined view of explicit channel and direct wire messages."""

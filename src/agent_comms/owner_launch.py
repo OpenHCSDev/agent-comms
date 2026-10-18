@@ -44,8 +44,8 @@ class RetainedOwnerLaunch:
         values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
         platform.require(process)
-        route = environment.get(launch_runtime.RestartEnvironment.owner_key)
-        if not route or not environment.get(NativeArguments.binary_key):
+        route = launch_runtime.ThreadLaunch.current(environment).name
+        if not environment.get(NativeArguments.binary_key):
             raise RelationViolationError("Owner launch configuration cannot be verified")
         # A worker's launch name may have been renamed since exec. The original
         # snapshot owns that relation; a PID or spelling match cannot grant it.
