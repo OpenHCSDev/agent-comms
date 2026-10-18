@@ -56,7 +56,18 @@ class FieldPlan:
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
-    def schema_fields(self, schema):
+    def schema_fields(self, annotation, declared):
+        metadata = declared.metadata
+        if metadata.get("wire_nonnull") and get_origin(annotation) in (Union, types.UnionType):
+            members = tuple(item for item in get_args(annotation) if item is not type(None))
+            annotation = members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - runtime tuple
+        schema = FieldCodec.value_schema(annotation)
+        if "description" in metadata:
+            schema["description"] = metadata["description"]
+        if "wire_choices" in metadata:
+            schema["enum"] = list(metadata["wire_choices"]())
+        if declared.default is not MISSING and declared.default is not None:
+            schema["default"] = FieldCodec.encode(declared.default, annotation)
         return {self.key: schema}
 
     def decoded(self, data):
@@ -70,18 +81,22 @@ class FieldPlan:
 
 class InlineFieldPlan(FieldPlan):
     @cached_property
+    def record(self):
+        return FieldCodec._record_plan(self.value.representation.wire_record())
+
+    @cached_property
     def keys(self):
-        return tuple(self.value.representation.schema()["properties"])
+        return tuple(key for entry in self.record.fields for key in entry.keys)
 
     @cached_property
     def required_wire_keys(self):
-        return tuple(self.value.representation.schema().get("required", ()))
+        return self.record.init_required_keys
 
     def encoded(self, value, *, key=None):
         return value
 
-    def schema_fields(self, schema):
-        return schema["properties"]
+    def schema_fields(self, annotation, declared):
+        return self.record.schema_fields({}, [])
 
     def decoded(self, data):
         return {self.name: self.value.decode({key: data[key] for key in self.keys if key in data})}
@@ -140,6 +155,14 @@ class InlineRecord(WireValue):
 
     field_plan = InlineFieldPlan
     external_json_shape = True
+
+    @classmethod
+    def wire_record(cls):
+        return cls
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.record_schema(cls.wire_record())
 
 
 class JsonShapeMember:
@@ -432,27 +455,7 @@ class FieldCodec(Sealed):
         cls, target: type, properties: dict[str, Any], required: list[str]
     ) -> dict[str, Any]:
         """Build fields once, including an internally supplied family selector."""
-        hints = cls._types(target)
-        for declared, key in cls.record_fields(target):
-            annotation = hints[declared.name]
-            metadata = declared.metadata
-            if metadata.get("wire_nonnull") and get_origin(annotation) in (Union, types.UnionType):
-                members = tuple(item for item in get_args(annotation) if item is not type(None))
-                annotation = members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - runtime tuple
-            schema = cls.value_schema(annotation)
-            if "description" in metadata:
-                schema["description"] = metadata["description"]
-            if "wire_choices" in metadata:
-                schema["enum"] = list(metadata["wire_choices"]())
-            if declared.default is MISSING and declared.default_factory is MISSING:
-                required.append(key)
-            elif declared.default is not MISSING and declared.default is not None:
-                schema["default"] = cls.encode(declared.default, annotation)
-            entry = next(item for item in cls._record_plan(target).fields if item.name == declared.name)
-            properties.update(entry.schema_fields(schema))
-            if key in required and key not in entry.keys:
-                required.remove(key)
-                required.extend(schema.get("required", ()))
+        cls._record_plan(target).schema_fields(properties, required)
         return {
             "type": "object",
             "properties": properties,
@@ -537,11 +540,19 @@ class FieldCodec(Sealed):
     class _RecordPlan:
         """A record's whole decode plan, derived once from its declaration."""
 
+        record: type
         fields: tuple[FieldPlan, ...]
         required_keys: tuple[str, ...]
         init_required_keys: tuple[str, ...]
         reject_null_keys: frozenset[str]
         accepted_keys: frozenset[str]
+
+        def schema_fields(self, properties, required):
+            hints = FieldCodec._types(self.record)
+            for entry, (declared, _) in zip(self.fields, FieldCodec.record_fields(self.record), strict=True):
+                properties.update(entry.schema_fields(hints[declared.name], declared))
+            required.extend(self.init_required_keys)
+            return properties
 
     @classmethod
     @lru_cache(maxsize=_declaration_cache_capacity)
@@ -567,6 +578,7 @@ class FieldCodec(Sealed):
         ):
             raise TypeError("Conflicting wire field names.")
         return cls._RecordPlan(
+            record=record,
             fields=entries,
             required_keys=tuple(key for entry in entries if entry.required for key in entry.required_wire_keys),
             init_required_keys=tuple(

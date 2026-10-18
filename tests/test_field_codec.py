@@ -7,7 +7,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, InlineRecord, PathText, TimestampText, TextRepresentation, WireValue
 from agent_comms.messages import (
     ConversationRole, InfoKind, MembershipChange, MembershipConversationRole,
-    MembershipNoticeRole, Message, NoticeRole,
+    MembershipNoticeRole, Message, MessageRole, NoticeRole,
 )
 
 
@@ -403,10 +403,6 @@ class InlinePair(InlineRecord):
     def from_wire(cls, data):
         return FieldCodec.decode_record(cls, data)
 
-    @classmethod
-    def schema(cls):
-        return FieldCodec.record_schema(cls)
-
 
 @dataclass(frozen=True)
 class InlineContainer:
@@ -432,6 +428,13 @@ def test_inline_representation_owns_keys_for_encode_decode_schema_and_projection
 
     with pytest.raises(TypeError, match="Conflicting"):
         FieldCodec.encode(Collision(value.pair, 8))
+
+
+@pytest.mark.parametrize("notice", [False, True])
+def test_missing_and_null_membership_decode_to_the_same_role(notice):
+    expected = NoticeRole() if notice else ConversationRole()
+    assert MessageRole.from_wire({"notice": notice}) == expected
+    assert MessageRole.from_wire({"notice": notice, "membership": None}) == expected
 
 
 @pytest.mark.parametrize("role,external", [
