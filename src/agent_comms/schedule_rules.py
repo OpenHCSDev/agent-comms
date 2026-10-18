@@ -1,20 +1,20 @@
 """Independent owner-local scheduling barriers, using the shared rule family."""
 
 import asyncio
+from dataclasses import dataclass
 from functools import partial
-from .coordinator import Coordination
+from typing import TYPE_CHECKING
 
 from acp import RequestError
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
+from .coordinator import Coordination
 from .drain_failures import drain_failures
+from .errors import RelationViolationError
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
-from .errors import RelationViolationError
 
 if TYPE_CHECKING:
+    from .goals import Goal
     from .coordinated_runtime import SelectedExecution
     from .input_drain import InputDrain
     from .thread_identity import OwnerIdentity
@@ -92,9 +92,8 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     continue
                 state = inputs.state(session_id)
                 pending, state.pending_turns = state.pending_turns, []
-                goal = owner.active_goal
-                if goal is not None:
-                    pending = [turn for turn in pending if turn.goal_id == goal.id]
+                goal = owner.goal.active()
+                goal.project(lambda current: self._retain_goal_turns(pending, current), lambda: None)
                 if not pending:
                     continue
                 pending, remaining = ScheduledTurn.take_batch(pending)
@@ -111,12 +110,14 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         dependency_wait_id=pending[0].goal_wait_id,
                     )
                 except RequestError as error:
-                    if goal is None:
-                        raise
+                    try:
+                        started_goal = goal.require()
+                    except RelationViolationError as missing:
+                        raise error from missing
                     pending[0].require_dependency_wake(error)
                     await Coordination.run_worker(partial(inputs.comms.goals.block_goal_after_failed_turn,
                         owner.name,
-                        started_goal=goal,
+                        started_goal=started_goal,
                         expected_worktree=owner.worktree,
                         diagnostic=(
                             "Standby wake launch authority unavailable; inspect the UNKNOWN "
@@ -126,6 +127,10 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                 finally:
                     inputs.effects.turns.turn_tasks.pop(session_id, None)
+
+    @staticmethod
+    def _retain_goal_turns(pending: list[ScheduledTurn], goal: "Goal") -> None:
+        pending[:] = [turn for turn in pending if turn.goal_id == goal.id]
 
 
 @dataclass(frozen=True, kw_only=True)

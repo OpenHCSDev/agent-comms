@@ -1,0 +1,21 @@
+# P520: goal answers and launch claims
+
+Base: `2bfdd00ed` (P398). Neither rejected P520 nor the later P398 typing edits are included.
+
+`GoalDeclaration.project` selects the actual goal once. The overlapping perform, collect and test methods are deleted. Callbacks receive `Goal`, not a declaration that callers must check and cast. Empty work collections and false operation results do not return a nullable goal. Projections require both constructors; instructions are zero or one actual instruction strings, never a dummy empty string. Settlement accepts the settlement class. Action declarations carry their result type, so creation/edit callers receive `Goal` and clear callers receive `NoGoal` without another cast.
+
+`GoalTurnPermit` distinguishes `NoLaunchPermit` from a claimed `LaunchPermit`. The permit controls settlement, blocking, charges and goal context. No nullable permit is carried between the turn, ordinary send and settlement code. The unused unverified-completion operation and its unused state hooks are removed.
+
+Before evidence: `/home/ts/.cache/agent-scratch/core-runtime-location/p520/before-complete.json`: 356 parsed production files, 3,106 classes, 4,140 goal-related declaration/write/import/decision/call sites, zero parse omissions. The original size-filtered evidence file is superseded. The corrected collector uses NRA parsing/indexing, includes long nodes, records parser failures and hashes every covered file. Dynamic callback targets require semantic reading; this is not a behavioral proof.
+
+After evidence: `p520/after-complete.json`: 356 files, 3,107 classes, 4,139 goal-related sites, zero parse omissions. No size cutoffs.
+
+All goal `is_set` calls are removed. Six unrelated Event calls remain unchanged. The seven new projection/cleared-mid-turn cases and existing block/extension checks pass: 25 tests. The six turn cases cover original and in-turn-created goals with successful, failed and missing terminal events, using real registry, lease and SQLite grants. The first broader batch exposed obsolete public-root/native-package fixtures and old relationship mapping assertions; that broader batch is not passing. Shared borrowed dependencies were retired by the runtime update; the check driver now reuses existing cached wheels without creating a venv or installing packages.
+
+Takeover result at `b1eac4af7`: current main `f3a016b2f` was integrated, and PR1557 now targets main. Relative to that integrated main, source is +1,060/-906, net +154. The +60 limit is unchanged. Ratchet exits 1 solely because SourceLines is 94 over budget; no other positive debt delta or introduced finding remains. It must not merge yet.
+
+`perform` is gone from permits; `check_grant` owns validation. Cross-type settlement/blocking calls are public, and request creation still prints its explicit missing-request message. The three requested import headers now retain main's layout, with semantic import additions kept. Constant display answers are ClassVar declarations on the actual concrete types. GoalDeclaration and GoalTurnPermit retain their abstract contracts; the attempted move of null defaults onto their bases was rejected and discarded.
+
+The added typing errors are removed: empty wait projections now return typed empty tuples, model reports declare their existing TransitionGoalAction capability and use the record codec, and rendered contributions have their actual declared type. Focused goal-answer/nominal checks: 20 passed. Goal tool/block/resume checks: 30 passed after migrating the two old assertions to NoGoal and the replaced-goal error. The broader turn-account batch still fails because its old fixtures try native launch on a public bus; it is not a passing batch.
+
+Local evidence: `/home/ts/.cache/agent-scratch/core-goal-retry/p520/` contains before/after NRA source inventories, checker output, `debt-checkpoint.json`, and test results. The before inventory covers 357 production files, 3,150 classes and 4,151 goal-related sites with zero parse omissions. Dynamic callback bindings still need semantic reading. No affected P520 application run has happened. Earlier P398 set/pause/clear/restart screenshots under `/home/ts/.cache/agent-scratch/core-goal-retry/p398c/ui-clean-environment/terminal/` predate this source and do not verify it.
