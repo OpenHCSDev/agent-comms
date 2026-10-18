@@ -122,11 +122,10 @@ class CatalogConfigOption(ConfigOption):
     async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect:
         choices = await self.display_choices(thread)
         configured = self.current_value(thread)
-        if configured is not None:
-            try:
-                self.require_value(configured, choices)
-            except InvalidConfigChoice as error:
-                raise NativePiUnavailable(str(error)) from error
+        try:
+            self.require_value(configured, choices)
+        except InvalidConfigChoice as error:
+            raise NativePiUnavailable(str(error)) from error
         return SessionConfigOptionSelect(
             id=FieldCodec.encode(type(self)),
             name=self.title,
@@ -152,7 +151,7 @@ class CatalogConfigOption(ConfigOption):
             raise RequestError.invalid_params({"reason": str(error)}) from error
         await self.apply(owner, thread, value)
 
-    def require_value(self, value: str, choices: list[CatalogChoice]) -> None:
+    def require_value(self, value: str | None, choices: list[CatalogChoice]) -> None:
         if value not in {choice.value for choice in choices}:
             valid = ", ".join(choice.acp_value for choice in choices)
             raise InvalidConfigChoice(
