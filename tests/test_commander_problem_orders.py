@@ -1,18 +1,23 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
 import importlib
+import json
 import os
 import shutil
 import sqlite3
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 from contextlib import closing
 from dataclasses import replace
 
-from cutover.carry_problem_goals import ProblemGoals
+from cutover.carry import CarryChain
+from cutover.carry_todo_verdicts import TodoVerdicts
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
@@ -20,10 +25,10 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
-    CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
-from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
-    RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
+from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
+    CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
+from agent_comms.todos import (AwaitingFirstCall, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+    ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, RecordHuntTodo, ReleaseTodo, SendBackVerdict, StrikeReason,
@@ -45,6 +50,36 @@ def create(commander, problem, command='printf 1', expected=1, deadline=1000, ow
         repo='OpenHCSDev/agent-comms', text='Fix ' + problem,
     )).apply(comms, caller)
     return comms.goals.todos.get(problem)
+
+
+def test_order_work_reads_the_assignees_calls_since_its_order_newest_first(commander, tmp_path):
+    comms, caller = commander
+    session = tmp_path / 'unit.jsonl'
+
+    def turn(n, at, *calls):
+        stamp = f'1970-01-01T00:{at // 60:02d}:{at % 60:02d}+00:00'
+        yield dict(type='message', id=f'u{n}', timestamp=stamp, message=dict(role='user', content='go'))
+        yield dict(type='message', id=f'a{n}', timestamp=stamp, message=dict(role='assistant', content=[
+            dict(type='toolCall', id=call, name='read', arguments=dict(path=f'{call}.py')) for call in calls],
+            stopReason='toolUse'))
+        for call in calls[:-1]:
+            yield dict(type='message', id=f'r{call}', timestamp=stamp, message=dict(
+                role='toolResult', toolCallId=call, toolName='read', isError=call == 'late',
+                content=[dict(type='text', text='contents')]))
+
+    rows = [dict(type='session', id='source', version=3), *turn(1, 50, 'before'),
+            *turn(2, 150, 'early', 'late', 'running')]
+    session.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    session.chmod(0o600)
+    comms.registry.declare(comms.registry.new_thread(
+        'unit', frozenset(), str(tmp_path), session_file=str(session), created_at=3.0))
+    comms.goals.update_goal('unit', SetGoalAction(text='Unit brief', goal_id='unit-goal'))
+    create(commander, 'P1', owner='unit')
+    work = CommsOrderWorkTool(problem='P1').apply(comms, caller)
+    assert work.thread.name == 'unit' and work.since == 100
+    assert [(call.tool_call_id, call.digest, call.state.declared_name) for call in work.calls] == [
+        ('running', 'read running.py', 'running'), ('late', 'read late.py', 'failed'),
+        ('early', 'read early.py', 'succeeded')]
 
 
 def test_two_orders_keep_one_original_goal_and_independent_facts(commander):
@@ -711,20 +746,34 @@ def test_a_refused_send_leaves_the_todo_row_byte_identical(commander):
     assert comms.registry.require('worker').goal == goal
 
 
-def test_problem_goals_carry_reattaches_pending_problems_and_reopens_their_goal(commander):
-    comms, caller = commander
-    goal = completed_with_pending(commander)
-    assert ProblemGoals.carry(comms.root, apply=False).changed == 2
-    carried = ProblemGoals.carry(comms.root, apply=True)
-    assert (carried.changed, carried.detail) == (2, {'reattached': 1, 'reopened': 1})
-    assert ProblemGoals.carry(comms.root, apply=True).changed == 0
-    reopened = comms.registry.require('worker').goal
-    assert (reopened.id, reopened.revision, reopened.state.active) == (goal.id, goal.revision + 1, True)
-    assert {comms.goals.todos.get(p).assignment.generation for p in ('P2', 'P3')} == {goal.id}
-    CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P3', order=order(comms.root, 'revised'),
-        request='request', deadline=RecordedEventTime(3000), commander='lead',
-        expected_revision=comms.goals.todos.get('P3').revision)).apply(comms, caller)
-    assert comms.goals.todos.get('P3').order.id == 'revised'
+def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
+    """The deleted goal carry runs before the verdicts column carry, from the revision that added
+    it, whose Todo reads a pre-verdicts store; the current Todo reports that column missing."""
+    comms, _ = commander
+    completed_with_pending(commander)
+    path = TodoStore.path_in(comms.root)
+    with closing(sqlite3.connect(path)) as db:
+        db.execute('ALTER TABLE todo DROP COLUMN verdicts')
+        db.commit()
+    with (closing(CoordinationStore.read_snapshot(path)) as db,
+          pytest.raises(sqlite3.OperationalError, match='no such column: "verdicts"')):
+        list(Todo.stream(db))
+    repo = Path(__file__).parents[1]
+    steps = {step.name: step for step in CarryChain.at(repo, 'HEAD').steps}
+    assert list(steps).index('carry_todo_verdicts') > list(steps).index('carry_problem_goals')
+    held = tmp_path / 'held'
+    held.mkdir()
+    archive = subprocess.run(['git', '-C', str(repo), 'archive', steps['carry_problem_goals'].revision,
+                              'src', 'tools'], capture_output=True, check=True).stdout
+    subprocess.run(['tar', '-x', '-C', str(held)], input=archive, check=True)
+    ran = subprocess.run([sys.executable, '-m', 'cutover.carry_problem_goals', str(comms.root)],
+                         capture_output=True, text=True, cwd=held,
+                         env={**os.environ, 'PYTHONPATH': f'{held / "src"}:{held / "tools"}'})
+    assert ran.returncode == 0, ran.stderr
+    assert json.loads(ran.stdout.splitlines()[-1])['changed'] == 2
+    assert TodoVerdicts.carry(comms.root, apply=True).changed == 3
+    with closing(CoordinationStore.read_snapshot(path)) as db:
+        assert {todo.id for todo in Todo.stream(db)} == {'P1', 'P2', 'P3'}
 
 
 def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
@@ -801,3 +850,53 @@ def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(com
     assert judged.strikes[0].reason == why
     revised = comms.registry.require('worker').goal
     assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, f'Sent back on P1: {why}')
+
+
+def test_close_quotes_the_works_line(commander):
+    """Closing evidence must quote four consecutive words of the order's Works when run."""
+    comms, caller = commander
+    run = ApplicationOrderRun('The board shows the problem closed after the commander reopens the session')
+    CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+        problem='P1', order=replace(order(comms.root, 'order-P1'), run=run), request='request',
+        deadline=RecordedEventTime(1000), commander='lead', repo='OpenHCSDev/agent-comms', text='Fix P1',
+    )).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    artifact = comms.root / 'installed-evidence'
+    artifact.write_text('Verified installed path')
+    delivered = comms.goals.todos.get('P1')
+    with pytest.raises(ValueError, match='consecutive words of: Works when:'):
+        CommsProblemCloseTool(problem='P1', artifact=str(artifact),
+            works='The installed application kept both queued orders through tab returns.').apply(comms, caller)
+    assert comms.goals.todos.get('P1') == delivered
+    CommsProblemCloseTool(problem='P1', artifact=str(artifact),
+        works='In the installed app the board shows the problem closed, read after a restart.').apply(comms, caller)
+    assert comms.goals.todos.get('P1').state.declared_name == 'done'
+
+
+def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
+    comms, caller = commander
+    copied = tmp_path / 'copied'
+    copied.mkdir()
+    (copied / 'flag.py').write_text('def is_set(value):\n    return value is not None\n')
+    callers = copied / 'callers.py'
+    callers.write_text('from flag import is_set\n\ndef read(v):\n    return 1 if is_set(v) else 0\n')
+    family = ("grep -rhoE 'is_set\\(|except ValueError' --include=*.py . | wc -l")
+    deletes = OrderDeletion.parse(f'is_set absence decision at {copied / "flag.py"}:1 :: {copied} :: {family}')
+    CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+        problem='P520', order=replace(order(comms.root, 'order-P520'), deletes=deletes),
+        request='request', deadline=RecordedEventTime(1000), commander='lead',
+        repo='OpenHCSDev/agent-comms', text='Delete the is_set decision',
+    )).apply(comms, caller)
+    pending = comms.goals.todos.get('P520')
+    assert 'Deletes: is_set absence decision at' in pending.order.instructions(pending)
+    assert FieldCodec.decode(Todo, FieldCodec.encode(pending)) == pending
+    (copied / 'flag.py').write_text('def checked(value):\n    if value is None:\n        raise ValueError\n')
+    callers.write_text('from flag import checked\n\ndef read(v):\n    try:\n        checked(v)\n'
+                       '    except ValueError:\n        return 0\n    return 1\n')
+    with pytest.raises(ValueError, match='expected last integer 0'):
+        CommsOrderDoneTool(problem='P520', delivery=OperationDelivery()).apply(comms, caller)
+    assert comms.goals.todos.get('P520') == pending
+    (copied / 'flag.py').unlink()
+    callers.write_text('def read(v):\n    return int(v is not None)\n')
+    CommsOrderDoneTool(problem='P520', delivery=OperationDelivery()).apply(comms, caller)
+    assert not comms.goals.todos.get('P520').pending

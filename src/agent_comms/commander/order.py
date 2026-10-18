@@ -5,6 +5,8 @@
   Owner: <path>:<line>                              (the existing owner the fix goes on; must exist)
   Check: <repo> :: <shell command> -> <integer>    (done runs it; the last integer printed must match)
   Works when: <user-visible closing run, 8+ words> (unless mechanical; close requires the file)
+  Deletes: <decision family> at PATH:LINE :: <repo> :: <family-wide count>
+    (optional; done refuses unless the count is 0)
   1. <edit> ...  Banned: <shape>; <shape>  Report: <what the unit sends back>
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
@@ -38,7 +40,7 @@ from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
+                     OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, OrderProgress, Todo)
 from . import capacity, rules
 from .config import CommanderConfig, Repo
@@ -315,6 +317,8 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
             check=check, edits=edits, banned=banned,
             report=report[1], run=run, serves=phase,
+            deletes=OrderDeletion.parse(deletes[1] if (deletes := re.search(
+                rf'(?m)^{re.escape(OrderDeletion.label)}\s*(.+)$', body)) else None),
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
@@ -594,11 +598,13 @@ def next_hunt():
     return min(candidates, key=lambda f: hunted.get(f, 0)) if candidates else None
 
 
-def replied(unit, since):
-    """The unit's latest message to me after the order, so an overdue alarm is read against what it said."""
+def reply(unit: str, since: float) -> dict | None:
+    """The unit's latest message to me after ``since``, or None."""
+    if not os.path.exists(f'{B}/bus.jsonl'):
+        return None
     with open(f'{B}/bus.jsonl', 'rb') as f:
-        f.seek(max(0, os.path.getsize(f.name) - 3_000_000))
-        lines = f.read().splitlines()[1:]
+        f.seek(start := max(0, os.path.getsize(f.name) - 3_000_000))
+        lines = f.read().splitlines()[bool(start):]
     latest = None
     for line in lines:
         try:
@@ -608,34 +614,46 @@ def replied(unit, since):
         to = str(m.get('to'))
         if m.get('from') == unit and float(m.get('ts', 0)) > since and (ME in to or '#comms' in to):
             latest = m
+    return latest
+
+
+def replied(latest: dict | None) -> str:
+    """The reply an overdue alarm is read against."""
     if latest is None:
         return '; no reply since the order'
     at = time.strftime('%H:%M', time.localtime(float(latest['ts'])))
     return f'; REPLIED {at} [{latest["id"]}]: {" ".join(str(latest.get("text")).split())[:160]} -- read it before pushing'
 
 
-def deadline_lines(held: list[Todo]) -> list[str]:
-    """Late units under OVERDUE with their progress; progress drawing no strike prints its own line.
-
-    An open order whose work stopped moving prints STALL with its progress line, whatever is due."""
+def deadline_lines(held: list[Todo], since: float = 0.0) -> list[str]:
+    """Each order that entered lateness (OVERDUE or DUE PASSED), changed it by a reply or push, or
+    entered STALL after the previous poll at ``since``; a tick where nothing changed is silent."""
     now = time.time()
     pending = [t for t in held if t.pending]
-    past = [t for t in pending if t.deadline.recorded_at('An order deadline') < now]
     read = progress() if pending else {}
-    late = [f'{t.holder} (due {hhmm(t.deadline)}, order {t.order.id}, {read[t.id].line}'
-            f'{replied(t.holder, t.order.at.recorded_at("An order"))})'
-            for t in past if read[t.id].strikes]
-    stalled = [f'STALL {t.id} {t.holder}: {read[t.id].line} -> push it now or reassign'
-               for t in pending if read[t.id].stalled(t.order.at.recorded_at('An order'), now)]
-    passed = [f'DUE PASSED {t.id} {t.holder} (due {hhmm(t.deadline)}): {read[t.id].line}'
-              for t in past if not read[t.id].strikes]
+    late, stalled, passed = [], [], []
+    for t in pending:
+        ordered, work = t.order.at.recorded_at('An order'), read[t.id]
+        if (entered := work.stalled_since(ordered)) is not None and since < entered < now:
+            stalled.append(f'STALL {t.id} {t.holder}: {work.line} -> push it now or reassign')
+        if (crossed := t.late_since(now)) is None:
+            continue
+        answer = reply(t.holder, ordered) if work.strikes else None
+        if since < max(crossed, work.moved or 0, float(answer.get('ts', 0)) if answer else 0):
+            if work.strikes:
+                due = f'due {hhmm(t.deadline)}, order {t.order.id}'
+                late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
+            else:
+                passed.append(f'DUE PASSED {t.id} {t.holder} (due {hhmm(t.deadline)}): {work.line}')
     alarm = (f'OVERDUE: {", ".join(late)} -> read the diff now; '
              'missed = order strike, 2 strikes = fire')
     return [alarm] * bool(late) + stalled + passed
 
 
 def overdue():
+    since = 0.0  # the previous poll: a line prints once, when its state is entered after it
     while True:
+        now = time.time()
         if missing := first_calls():
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
                   flush=True)
@@ -644,7 +662,7 @@ def overdue():
                  if (seen := last_activity(t.assignment.owner)) and seen < time.strftime('%H:%M:%S', time.localtime(time.time() - 1200))]
         if stale:
             print(f'IDLE OWNER 20+ min: {", ".join(stale)} -> push or reassign', flush=True)
-        for line in deadline_lines(held):
+        for line in deadline_lines(held, since):
             print(line, flush=True)
         # Units leave finished PRs open and wander off. An open PR naming an ordered problem that
         # nobody has touched for 5 minutes is a stall, whatever the unit says it is doing.
@@ -661,8 +679,9 @@ def overdue():
                         idle_prs.append(f'{ordered[pid][0]} {repo.split("/")[1]}#{pr["number"]} ({pid})')
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
-        for _ in HuntDue.violations(COMMS, ME):
+        for _ in HuntDue.broken(COMMS, ME, since):
             print(HuntVerb.due(next_hunt()), flush=True)
+        since = now
         time.sleep(60)
 
 

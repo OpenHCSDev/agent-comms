@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
-from .field_codec import FieldCodec, NullMember, SubclassUnion
+from .field_codec import FieldCodec, NullMember, SubclassUnion, RecordMember
 from .errors import RelationViolationError
 from .sealed import Sealed
 
@@ -62,9 +62,6 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
 
 class ProcessState(SubclassUnion):
     """An exact recorded process or a worker which has never started."""
-
-    def to_wire(self) -> object:
-        return FieldCodec.encode_record(self)
 
     @abstractmethod
     def allows_owner_start(self) -> bool: ...
@@ -187,7 +184,7 @@ class NoProcess(NullMember, ProcessState):
 
 
 @dataclass(frozen=True)
-class ProcessIdentity(ProcessState):
+class ProcessIdentity(RecordMember, ProcessState):
     pid: int
     start_time: int
 
@@ -202,14 +199,6 @@ class ProcessIdentity(ProcessState):
     @classmethod
     def capture(cls, pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
-
-    @classmethod
-    def from_wire(cls, data: object) -> ProcessIdentity:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.record_schema(cls)
 
     def allows_owner_start(self) -> bool:
         return False

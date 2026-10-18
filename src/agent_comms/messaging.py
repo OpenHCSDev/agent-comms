@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from .bus_publication import AgentOrigin, HumanOrigin
 from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
+from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole, NoticeRole
 from .publisher import InitialWrites, OwnerPublisher
@@ -69,6 +70,8 @@ class Messaging:
         """Return one committed envelope, including optional guarded claims."""
         type.require_sendable()
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+            # A sender outside any watch is not paused by the drain; the barrier refuses it here.
+            MaintenanceBarrier(self.root / "registry.json").assert_open_unlocked()
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)

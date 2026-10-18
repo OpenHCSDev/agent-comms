@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
-from .goals import Goal
+from .goals import GoalDeclaration, NoGoal
 from .thread_status import ThreadStatus
 from .threads import Thread
 
@@ -28,7 +28,7 @@ class RegistrationChange(ABC):
 
     @property
     @abstractmethod
-    def prior_goal(self) -> Goal | None: ...
+    def prior_goal(self) -> GoalDeclaration: ...
 
     @property
     @abstractmethod
@@ -57,7 +57,7 @@ class RegistrationChange(ABC):
 
 
 class InitialRegistration(RegistrationChange):
-    prior_goal = None
+    prior_goal = NoGoal()
     changes_owner = True
 
     @property
@@ -95,7 +95,7 @@ class UpdatedRegistration(RegistrationChange):
         )
 
     @property
-    def prior_goal(self) -> Goal | None:
+    def prior_goal(self) -> GoalDeclaration:
         return self.previous.goal
 
     @property

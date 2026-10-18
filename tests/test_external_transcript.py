@@ -9,6 +9,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcripts import TranscriptReadIdentity
+from agent_comms.turn_digests import LastTurns
 
 
 def test_finished_cli_items_append_once_and_page(tmp_path):
@@ -94,7 +95,7 @@ def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
         assert read.start == 0 and read.cut().offset == 0
         assert not read.has_older(0) and not read.request_earlier(0)
         assert list(read.reverse(0)) == list(read.forward(0, 0)) == []
-        assert read.turns(2) == read.frames() == ()
+        assert read.turns(LastTurns(2)) == read.frames() == ()
         assert read.current_draft().external_row() is None
     transcript.end_turn()
     assert not transcript.path.exists()

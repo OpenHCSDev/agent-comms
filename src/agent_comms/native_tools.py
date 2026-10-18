@@ -97,10 +97,6 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
     @abstractmethod
     def _parse_resource(self) -> FileClaimPath | None: ...
 
-    def digest(self) -> str:
-        """What the call does in one line, enough to judge it."""
-        return f'{self.declared_name} {one_line(self.reads(), 260)}'
-
     def replacements(self) -> tuple[ReplacementEdit, ...]:
         return ()
 
