@@ -38,14 +38,9 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[StandingRule, ...]:
-        """Every member's violations for one commander that began after ``after``: a rule that
-        stays broken is said once, when it breaks."""
-        return tuple(
-            found
-            for rule in cls.members_with(cls)
-            for found in rule.violations(comms, commander)
-            if (began := found.began()) is None or began >= after
-        )
+        """Every member's violations for one commander that began after ``after``."""
+        found = (v for rule in cls.members_with(cls) for v in rule.violations(comms, commander))
+        return tuple(rule for rule in found if (began := rule.began()) is None or began >= after)
 
 
 @dataclass(frozen=True)
@@ -66,11 +61,8 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(
-            cls(why, cls.broken_at(comms, commander))
-            for why in (cls.reason(comms, commander),)
-            if why
-        )
+        why = cls.reason(comms, commander)
+        return (cls(why, cls.broken_at(comms, commander)),) if why else ()
 
     def began(self) -> float | None:
         return self.since

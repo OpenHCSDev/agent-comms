@@ -598,7 +598,7 @@ def next_hunt():
     return min(candidates, key=lambda f: hunted.get(f, 0)) if candidates else None
 
 
-def reply(unit, since):
+def reply(unit: str, since: float) -> dict | None:
     """The unit's latest message to me after ``since``, or None."""
     if not os.path.exists(f'{B}/bus.jsonl'):
         return None
@@ -617,7 +617,7 @@ def reply(unit, since):
     return latest
 
 
-def replied(latest):
+def replied(latest: dict | None) -> str:
     """The reply an overdue alarm is read against."""
     if latest is None:
         return '; no reply since the order'
@@ -626,11 +626,8 @@ def replied(latest):
 
 
 def deadline_lines(held: list[Todo], since: float = 0.0) -> list[str]:
-    """Each order that entered a state after the previous poll at ``since``; a still tick is silent.
-
-    An order enters lateness when it crosses its deadline (Core's late_since), and a late order's
-    state changes with its unit's reply or push: OVERDUE when its progress strikes, DUE PASSED
-    when it does not. STALL is entered when its work stopped moving."""
+    """Each order that entered lateness (OVERDUE or DUE PASSED), changed it by a reply or push, or
+    entered STALL after the previous poll at ``since``; a tick where nothing changed is silent."""
     now = time.time()
     pending = [t for t in held if t.pending]
     read = progress() if pending else {}

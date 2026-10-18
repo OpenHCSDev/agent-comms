@@ -150,8 +150,8 @@ def test_a_stalled_order_prints_stall_with_its_progress(commander, commander_scr
 def test_overdue_is_announced_once_per_crossing(commander, commander_script):
     comms, _ = commander
     script, _ = commander_script
-    create(commander, 'P1', deadline=1)
-    polls, since = [], 0.0
+    create(commander, 'P1')  # ordered at 100 and due at 1000; it stalled at 700, before the watch
+    polls, since = [], 800.0
     for _ in range(3):
         polls, since = polls + script.deadline_lines(script.open_todos(), since), time.time()
     assert len(polls) == 1 and polls[0].startswith('OVERDUE: worker (due ')
