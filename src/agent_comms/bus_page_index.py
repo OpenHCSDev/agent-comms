@@ -213,6 +213,7 @@ class BusPageIndex:
                                        message.timestamp, ReadLedger.human(message.sender_role),
                                        tuple(mention.thread for mention in message.mentions)))
                 last_sequence = message.seq
+        through = opened.position
         source = BusPageSource(replace(revision, size=through), opened.fingerprint(through))
         return saved, source, offset, tuple(rows)
 
@@ -308,8 +309,8 @@ class EmptyBusPageIndex(BusPageIndex):
     def __init__(self):
         pass
 
-    def offsets(self, *args, **kwargs):
-        return iter(())
+    def _offsets(self, *args, **kwargs):
+        yield from ()
 
     def display_metrics(self, semantics, boundary):
         return semantics.empty_metrics

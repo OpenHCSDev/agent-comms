@@ -372,6 +372,7 @@ class BusRouteCounts:
         rows = []
         for record, _, through in source.rows(offset, min(size, offset + self.rebuild_bytes)):
             rows.extend(decode(record))
+        through = source.position
 
         try:
             with (

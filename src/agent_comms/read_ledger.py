@@ -144,8 +144,7 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
     ) -> ReadCursor:
         document = self.read() if document is None else document
         from .wire_log import WireLog
-        with WireLog(self.path.with_name("bus.jsonl"))._opened_wire_snapshot(need_sequence=False) as source:
-            return document.cursor(viewer, snapshot, source)
+        return document.cursor(viewer, snapshot, WireLog(self.path.with_name("bus.jsonl")))
 
     def displayed_recipient(
         self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None

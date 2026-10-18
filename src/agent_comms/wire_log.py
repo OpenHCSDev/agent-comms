@@ -78,6 +78,10 @@ class WireSnapshot(ABC):
     @abstractmethod
     def boundary(self) -> int: ...
 
+    @property
+    @abstractmethod
+    def position(self) -> int: ...
+
     @abstractmethod
     def same_file(self, identity: FileIdentity) -> bool: ...
 
@@ -177,7 +181,7 @@ class WireSnapshot(ABC):
 class AbsentWireSnapshot(WireSnapshot):
     """No descriptor existed at acquisition; later appends stay outside this cut."""
 
-    complete_boundary = boundary = 0
+    complete_boundary = boundary = position = 0
 
     def same_file(self, identity: FileIdentity) -> bool:
         return False
@@ -234,6 +238,10 @@ class OpenedWireSnapshot(WireSnapshot):
 
     stream: BinaryIO
     revision: FileRevision
+
+    @property
+    def position(self) -> int:
+        return self.stream.tell()
 
     def same_file(self, identity: FileIdentity) -> bool:
         return self.revision.identity == identity
@@ -475,6 +483,14 @@ class WireLog:
         # Construction is read-only and needs no registry or publication settings.
         self.path = Path(path)
         self._append_indexes: list[BusAppendIndex] = []
+
+    def same_file(self, identity: FileIdentity) -> bool:
+        """Compare the current path, without opening a history read inside a writer."""
+        try:
+            observed = self.path.stat()
+        except FileNotFoundError:
+            return False
+        return FileIdentity.from_stat(observed) == identity
 
     def register_append_index(self, index: BusAppendIndex[Checkpoint]) -> BusAppendIndex[Checkpoint]:
         """Register one index owner for automatic capture with every opened cut."""
