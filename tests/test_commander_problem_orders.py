@@ -20,7 +20,7 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
+from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
 from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
@@ -583,6 +583,22 @@ def test_one_fire_call_releases_both_open_orders_with_its_reason(commander):
     assert fired == tuple(map(comms.goals.todos.get, ('P1', 'P2')))
     assert [(t.assignment, t.revision, t.released[0].previous, t.released[0].reason.text) for t in fired] == [
         (None, before.revision + 1, before.assignment, FIRED) for before in held]
+
+
+def test_unit_wording_gets_a_correction_not_a_strike(commander):
+    comms, caller = commander
+    held = create(commander, 'P1')
+    with pytest.raises(ValueError, match="unit's wording; send it a correction"):
+        StrikeTodo(held.revision, comms.registry.require('lead').incarnation, held.assignment,
+                   'The unit wrote "canonical" and "ownership" in its report to the commander again.'
+                   ).apply(held)
+    with pytest.raises(ValueError, match='nothing to correct'):
+        CommsCorrectWordingTool(unit='worker', message_id='m0', text='The tests pass now.').apply(comms, caller)
+    CommsCorrectWordingTool(unit='worker', message_id='m1',
+                            text='The canonical ownership changed').apply(comms, caller)
+    assert comms.bus.inbox('worker')[-1].body.startswith(
+        'Correction, no strike, on P1: message m1 used canonical, ownership.')
+    assert comms.goals.todos.get('P1') == held and held.strike_count == 0
 
 
 @pytest.mark.parametrize('step, name, column', [
