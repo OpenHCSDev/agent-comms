@@ -55,6 +55,7 @@ from agent_comms.native_pi import (
     NativeTurnResult,
 )
 from agent_comms.native_source_cursor import NativeSourceCursor
+from agent_comms.private_sidecar import native_request_digest
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.context_segments.optional_awareness import OmittedAwareness
@@ -188,23 +189,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
                 "message": {
                     "role": "user",
                     "inputId": input_id,
-                    "inputDigest": hashlib.sha256(
-                        (
-                            "pi-input-request-v1\n"
-                            + json.dumps(
-                                {
-                                    "kind": "prompt",
-                                    "text": prompt,
-                                    "images": None,
-                                    "streamingBehavior": None,
-                                    "expandPromptTemplates": True,
-                                    "source": "rpc",
-                                },
-                                ensure_ascii=False,
-                                separators=(",", ":"),
-                            )
-                        ).encode()
-                    ).hexdigest(),
+                    "inputDigest": native_request_digest(prompt),
                 },
             }
         )
