@@ -67,7 +67,7 @@ def carry(root: Path, *, apply: bool) -> int:
 class TodoReleases(Carry):
     """Todo rows gain the empty released record; every stored assignment stays as it was."""
 
-    after = "carry_turn_records"
+    after = "carry_order_run"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
