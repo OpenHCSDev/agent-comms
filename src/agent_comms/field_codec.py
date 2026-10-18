@@ -911,7 +911,7 @@ def _object_entries(data: object) -> Iterable[tuple[object, object]]:
     return data.items()
 
 
-def _object_or_pair_entries(data: object) -> Iterable[Any]:
+def _object_or_pair_entries(data: object) -> Iterable[tuple[object, object]]:
     """Keys that are not strings travel as an array of [key, value] pairs."""
     if isinstance(data, dict):
         return data.items()
