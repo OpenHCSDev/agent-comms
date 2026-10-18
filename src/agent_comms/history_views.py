@@ -240,12 +240,11 @@ class HistoryViews:
 
     def last_sent_timestamps(
         self, sent: Mapping[str, float], *, registry: RegistrySnapshot,
-        names: Iterable[str] | None = None,
+        names: Iterable[str],
     ) -> Mapping[str, float]:
         """Map captured sender clocks through the selected registry names."""
-        selected = (sent.items() if names is None else
-                    ((alias, sent[alias]) for name in names
-                     for alias in registry.names_for(name) if alias in sent))
+        selected = ((alias, sent[alias]) for name in names
+                    for alias in registry.names_for(name) if alias in sent)
         canonical: dict[str, float] = {}
         for sender, timestamp in selected:
             name = registry.canonical_name(sender)
@@ -298,7 +297,7 @@ class HistoryViews:
                 self.agents.all_activity(
                     snapshot.visible_threads(visibility), snapshot=snapshot,
                 ),
-                self.last_sent_timestamps(clocks.sent, registry=snapshot),
+                self.last_sent_timestamps(clocks.sent, registry=snapshot, names=snapshot.threads),
                 ChannelActivity.for_views(channels, clocks.channels),
                 visibility,
             )
@@ -370,7 +369,8 @@ class HistoryViews:
             clocks = self.bus.activity_index.snapshot(source)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
-                self.last_sent_timestamps(clocks.sent, registry=basis.registry), display_activity,
+                self.last_sent_timestamps(clocks.sent, registry=basis.registry,
+                                          names=basis.registry.threads), display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
                 visibility=visibility, read_marker_notice=basis.document.notice,
             )

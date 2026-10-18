@@ -89,7 +89,9 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
                 pass
     with comms.views.presentation.snapshot(viewer=NamedViewer(viewer.name)) as (basis, source):
         before = {"#team": 1}
-        sent = comms.views.last_sent_timestamps(comms.bus.activity_index.snapshot(source).sent, registry=basis.registry)
+        sent = comms.views.last_sent_timestamps(
+            comms.bus.activity_index.snapshot(source).sent, registry=basis.registry,
+            names=basis.registry.threads)
         if indexed:
             assert comms.bus.pending_counts_opened(source, basis) == before
         else:
@@ -107,7 +109,9 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
             index_path.rmdir()
         # Repair the derived resource, not the captured source or read ledger.
         assert comms.bus.pending_counts_opened(source, basis) == before
-        assert comms.views.last_sent_timestamps(comms.bus.activity_index.snapshot(source).sent, registry=basis.registry) == sent
+        assert comms.views.last_sent_timestamps(
+            comms.bus.activity_index.snapshot(source).sent, registry=basis.registry,
+            names=basis.registry.threads) == sent
         assert "bob" in sent and "renamed-bob" not in sent
     latest = comms.views.viewer_snapshot(str(tmp_path))
     assert latest.unread == {"renamed-bob": 1}
