@@ -42,6 +42,8 @@ from pathlib import Path
 
 from cutover.carry import CarryChain, CarryLedger, Step
 
+from agent_comms.coordination_database import CoordinationStore
+
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
@@ -61,10 +63,16 @@ def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) 
 
 
 def bus_files(root: Path) -> dict[str, str]:
-    """Every regular file under the bus but its lock files, by content hash."""
-    return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(root.rglob("*"))
-            if path.is_file() and not path.is_symlink() and not path.name.endswith(".lock")}
+    """Every regular file under the bus but its lock files, by content hash. A SQLite store
+    counts once, under its database's name, by the rows SQLite reads from it, so companion
+    files that appear or vanish change nothing."""
+    paths = [path for path in sorted(root.rglob("*"))
+             if path.is_file() and not path.is_symlink() and not path.name.endswith(".lock")]
+    stores = {path for path in paths if CoordinationStore.is_database(path)}
+    companions = {companion for store in stores for companion in CoordinationStore.files(store)[1:]}
+    return {str(path.relative_to(root)): CoordinationStore.digest(path) if path in stores
+            else hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in paths if path not in companions}
 
 
 def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, int]:

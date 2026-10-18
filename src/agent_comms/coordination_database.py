@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 import stat
@@ -119,6 +120,28 @@ class CoordinationStore:
     """Own SQLite read snapshots and the shared writer busy policy."""
 
     writer_timeout = 5.0
+    header = b"SQLite format 3\0"
+
+    @staticmethod
+    def files(path: Path) -> tuple[Path, ...]:
+        """The database and the companion files SQLite keeps beside it: together, one store."""
+        companions = ("-wal", "-shm", "-journal")
+        return (path, *(path.with_name(path.name + suffix) for suffix in companions))
+
+    @classmethod
+    def is_database(cls, path: Path) -> bool:
+        with path.open("rb") as stream:
+            return stream.read(len(cls.header)) == cls.header
+
+    @classmethod
+    def digest(cls, path: Path) -> str:
+        """The store's version, schema and rows as SQLite reads them, whichever of its
+        files hold them."""
+        with closing(cls.read_snapshot(path)) as db:
+            content = hashlib.sha256(str(db.execute("PRAGMA user_version").fetchone()[0]).encode())
+            for statement in db.iterdump():
+                content.update(statement.encode())
+            return content.hexdigest()
 
     @staticmethod
     def writer(
@@ -206,7 +229,7 @@ class CoordinationStore:
             return MissingStore()
         except OSError as error:
             return InvalidStore(str(error))
-        if len(header) < 100 or header[:16] != b"SQLite format 3\0":
+        if len(header) < 100 or not header.startswith(CoordinationStore.header):
             return InvalidStore("Coordinator has an invalid SQLite header")
         if header[18:20] != b"\x01\x01":
             return InvalidStore("Coordinator is not in rollback-journal mode")
