@@ -17,15 +17,15 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
-from agent_comms.todos import (AwaitingFirstCall, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
-    RecordedCommitDelivery,
+from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+    RecordedCommitDelivery, MechanicalOrderRun,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     DoneTodoState, RecordHuntTodo, StrikeTodo, Todo, TodoConflict, VoidStrikeTodo)
 
 
 def order(root, identity, command='printf 1', expected=1):
-    return PendingProblemOrder(id=identity, owner=FileLine(__file__, 1),
+    return PendingProblemOrder(id=identity, owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
         check=OrderCheck(str(root), command, CountCheckResult(expected)),
         edits=('Repair the existing owner',), banned=('No second store',), report='Report the result',
         at=RecordedEventTime(100), first_call_deadline=RecordedEventTime(220))
@@ -35,7 +35,7 @@ def create(commander, problem, command='printf 1', expected=1, deadline=1000):
     comms, caller = commander
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
         problem=problem, order=order(comms.root, 'order-' + problem, command, expected),
-        goal_id='ongoing', deadline=RecordedEventTime(deadline), commander='lead',
+        request='request', deadline=RecordedEventTime(deadline), commander='lead',
         repo='OpenHCSDev/agent-comms', text='Fix ' + problem,
     )).apply(comms, caller)
     return comms.goals.todos.get(problem)
@@ -69,7 +69,7 @@ def test_existing_goal_reads_changed_todo_without_a_text_mirror(commander):
     goal = comms.registry.require('worker').goal
     replacement = order(comms.root, 'replacement', 'printf 7', 7)
     CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P1', order=replacement,
-        goal_id=goal.id, deadline=RecordedEventTime(3000), commander='lead',
+        request='request', deadline=RecordedEventTime(3000), commander='lead',
         expected_revision=todo.revision)).apply(comms, caller)
     assert comms.registry.require('worker').goal.text == 'Original commander brief'
     rows = comms.goals.todos.for_goal(comms.registry.require('worker').incarnation, goal.id)
@@ -234,15 +234,16 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base')
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     due = '23:59'
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', due, str(body))
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', due, str(body), 'request')
     created = comms.goals.todos.get('P1')
     assert (created.assignment.owner, created.order.edits, created.order.banned) == (
         'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
 
-    script.send('worker', due, str(body))  # the same holder again without --clean is a send-back
+    script.send('worker', due, str(body), 'request')  # the same holder again without --clean is a send-back
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
@@ -278,9 +279,10 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: grep -c two count.txt -> 1\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
     script.strike('worker', 'P1 was sent back once before its check was corrected')
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
@@ -316,10 +318,11 @@ def test_commander_refuses_jargon_before_core_records_the_problem(commander_scri
     (repo / 'count.txt').write_text('0\n')
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
-        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
+        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
     assert script.open_todos() == [] and 'Problem: NEW' in body.read_text()
 
 
@@ -328,10 +331,11 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
     script, repo = commander_script
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: git grep -c no-such-text -> 0\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='the check printed no integer'):
-        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
+        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
     assert script.open_todos() == []
 
 
@@ -397,3 +401,28 @@ def test_todo_voids_carry_keeps_every_stored_strike(commander):
     assert TodoVoids.carry(comms.root, apply=True).changed == 1
     assert TodoVoids.carry(comms.root, apply=False).changed == 0
     assert comms.goals.todos.get('P1') == struck
+
+
+def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_none_is_open(
+        commander, commander_script):
+    """The owner request is the commander's Goal: rotation names it while no open order serves it,
+    each order stores a GoalRef to it, and it cannot be marked done or replaced while one is open."""
+    import importlib
+    from agent_comms.commander import request
+    comms, caller = commander
+    request = importlib.reload(request)
+    assert request.stalled() == [
+        'REQUEST STALLED: request Owner request -> order its next step or mark it done']
+    todo = create(commander, 'P1')
+    lead = comms.registry.require('lead').incarnation
+    assert todo.goal == GoalRef('lead', lead.created_at, 'request')
+    assert request.stalled() == []
+    with pytest.raises(ValueError, match='still has open orders'):
+        request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
+    with pytest.raises(ValueError, match='still open'):
+        request.RequestAddVerb(text='A second owner request while the first is open').run()
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    assert request.stalled() == [
+        'REQUEST STALLED: request Owner request -> order its next step or mark it done']
+    request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
+    assert request.stalled() == []

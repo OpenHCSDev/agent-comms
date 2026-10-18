@@ -25,19 +25,8 @@ class LaunchRuntime:
     interpreter: Annotated[Path, PathText]
 
     @classmethod
-    def current(cls) -> LaunchRuntime:
-        # Resolve the directory, not Python's symlink into the shared interpreter.
-        selected = cls(cls.current_pointer().resolve(strict=True) / "bin/python")
-        selected.require_available()
-        return selected
-
-    @staticmethod
-    def current_pointer() -> Path:
-        return Path.home() / ".local/share/agent-comms/current"
-
-    @classmethod
     def running(cls) -> LaunchRuntime:
-        """Identify the decoder already running, for watcher checks and restoration."""
+        """Keep ordinary launches on the calling process's installation."""
         return cls(Path(sys.executable))
 
     @property

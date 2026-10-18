@@ -47,9 +47,10 @@ class TestToolCatalog:
             invoke_tool(comms, "comms_collaborations", {}, caller=NoThreadCaller())
         with pytest.raises(
             ValueError,
-            match=re.escape(
-                "Invalid comms_collaboration arguments: Unknown RelationshipEdit name: 'start'"
-            ),
+            match=r"\A" + re.escape(
+                "Invalid comms_collaboration arguments: Invalid RelationshipEdit name: "
+                "Unknown RelationshipEdit name: 'start'"
+            ) + r"\Z",
         ):
             invoke_tool(comms, "comms_collaboration", {"action": "start", "peer": "b"}, caller=NoThreadCaller())
         with pytest.raises(ValueError, match="Unknown fields"):
@@ -135,7 +136,13 @@ class TestToolCatalog:
                 row["state"],
             )
             for row in result["sent_notifications"]
-        ] == [(sent.seq, "track me", "recipient", "Sent")]
+        ] == [(
+            sent.seq, "track me", "recipient", {
+                "kind": "contextual_progress",
+                "details": [],
+                "proof": {"kind": "unrecorded_progress", "details": []},
+            },
+        )]
 
     def test_inbox_ack_can_target_one_conversation(self, comms):
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))

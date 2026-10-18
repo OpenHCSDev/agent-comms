@@ -61,7 +61,7 @@ class LastMessageThreadSort(ThreadSort, declared_name="last_message_sent"):
     @staticmethod
     def sent_timestamps(views: HistoryViews, *, registry: RegistrySnapshot) -> dict[str, float]:
         with views.bus.opened_activity() as clocks:
-            return views.last_sent_timestamps(clocks.sent, registry=registry)
+            return views.last_sent_timestamps(clocks.sent.items(), registry=registry)
 
 
 class CreatedThreadSort(ThreadSort, declared_name="created_at"):

@@ -28,8 +28,15 @@ class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
     @abstractmethod
     def model_or(self, default: str) -> str: ...
 
-    @abstractmethod
-    def wire_fields(self) -> dict[str, object]: ...
+    session_name: str | None
+    context_used: int | None
+    context_size: int | None
+
+    @property
+    def context_percent(self) -> float | None:
+        if self.context_used is None or not self.context_size:
+            return None
+        return self.context_used / self.context_size * 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,11 +46,10 @@ class UnobservedRuntimeInfo(RuntimeInfo):
     def context_reading(self) -> ContextReading:
         return UnmeasuredContext()
 
+    session_name = context_used = context_size = None
+
     def model_or(self, default: str) -> str:
         return default
-
-    def wire_fields(self) -> dict[str, object]:
-        return dict(session_name=None, context_used=None, context_size=None, context_percent=None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,12 +72,6 @@ class AgentRuntimeInfo(RuntimeInfo):
         if self.context_size is not None and self.context_size < 0:
             raise ValueError("Context size cannot be negative.")
 
-    @property
-    def context_percent(self) -> float | None:
-        if self.context_used is None or not self.context_size:
-            return None
-        return self.context_used / self.context_size * 100
-
     def context_reading(self) -> ContextReading:
         if self.context_used is None or not self.context_size:
             return UnmeasuredContext()
@@ -79,10 +79,6 @@ class AgentRuntimeInfo(RuntimeInfo):
 
     def model_or(self, default: str) -> str:
         return self.model or default
-
-    def wire_fields(self) -> dict[str, object]:
-        return dict(session_name=self.session_name, context_used=self.context_used,
-                    context_size=self.context_size, context_percent=self.context_percent)
 
 
 @dataclass(frozen=True, slots=True)

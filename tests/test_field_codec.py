@@ -437,29 +437,57 @@ class InlinePair(InlineRecord):
 
 
 @dataclass(frozen=True)
+class Pair:
+    number: int
+    text: str
+
+
+@dataclass(frozen=True)
 class InlineContainer:
     pair: InlinePair
 
 
-def test_inline_representation_owns_keys_for_encode_decode_schema_and_projection():
-    value = InlineContainer(InlinePair(7, "seven"))
-    wire = {"number": 7, "text": "seven"}
+@dataclass(frozen=True)
+class FieldInlineContainer:
+    pair: Pair = field(metadata={"wire_inline": True})
+
+
+@pytest.mark.parametrize("value", [InlineContainer(InlinePair(7, "seven")),
+                                   FieldInlineContainer(Pair(7, "seven"))])
+def test_inline_record_owns_keys_for_encode_decode_schema_and_projection(value):
+    container, wire = type(value), {"number": 7, "text": "seven"}
     assert FieldCodec.encode(value) == wire
-    assert FieldCodec.decode(InlineContainer, wire) == value
+    assert FieldCodec.decode(container, wire) == value
     assert FieldCodec.project(value, "report") == wire
-    assert set(FieldCodec.record_schema(InlineContainer)["required"]) == wire.keys()
-    with pytest.raises(MalformedRecord, match="Missing required fields for InlineContainer: number"):
-        FieldCodec.decode(InlineContainer, {"text": "seven"})
+    assert set(FieldCodec.record_schema(container)["required"]) == wire.keys()
+    with pytest.raises(MalformedRecord, match=f"Missing required fields for {container.__name__}: number"):
+        FieldCodec.decode(container, {"text": "seven"})
     with pytest.raises(ValueError):
-        FieldCodec.decode(InlineContainer, {**wire, "other": 1})
+        FieldCodec.decode(container, {**wire, "other": 1})
 
-    @dataclass(frozen=True)
-    class Collision:
-        pair: InlinePair
-        number: int
 
+@dataclass(frozen=True)
+class TypeInlineClash:
+    pair: InlinePair
+    number: int
+
+
+@dataclass(frozen=True)
+class FieldInlineClash:
+    text: str
+    pair: Pair = field(metadata={"wire_inline": True})
+
+
+@dataclass(frozen=True)
+class FamilyInlineClash:
+    choice: Choice = field(metadata={"wire_inline": True})
+    kind: str
+
+
+@pytest.mark.parametrize("declaration", [TypeInlineClash, FieldInlineClash, FamilyInlineClash])
+def test_inlined_key_clash_refuses_the_declaration(declaration):
     with pytest.raises(TypeError, match="Conflicting"):
-        FieldCodec.encode(Collision(value.pair, 8))
+        FieldCodec.record_schema(declaration)
 
 
 @pytest.mark.parametrize("wire,expected", [
