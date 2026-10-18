@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .agent_events import GoalChanged
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
-from .goal_presentation import GoalExecution, GoalWaitTarget
+from .goal_presentation import GoalExecution, GoalWaitTarget, IdleGoalExecution
 from .goals import Goal
 from .message_bus import MessageBus
 from .store_files import _store_lock
@@ -318,11 +318,11 @@ class Goals:
                 released.append(owner.name)
             return tuple(released)
 
-    def goal_execution(self, name: str) -> GoalExecution | None:
+    def goal_execution(self, name: str) -> GoalExecution | IdleGoalExecution:
         return self._goal_snapshot(name)[1]
 
     def goal_changed(
-        self, name: str, previous: tuple[Goal | None, GoalExecution | None] | None
+        self, name: str, previous: tuple[Goal | None, GoalExecution | IdleGoalExecution] | None
     ) -> GoalChanged | None:
         """Announce a durable change through S1's event vocabulary.
 
@@ -334,12 +334,12 @@ class Goals:
         current = self.goal_snapshot(name)
         return GoalChanged(*current) if current != previous else None
 
-    def goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:
+    def goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | IdleGoalExecution]:
         """Read current goal and its scheduling projection as one owner snapshot."""
         with _store_lock(self._wire_lock_path, shared=True):
             return self._goal_snapshot(name)
 
-    def _goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | None]:
+    def _goal_snapshot(self, name: str) -> tuple[Goal | None, GoalExecution | IdleGoalExecution]:
         snapshot = self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
         goal = snapshot.threads[canonical].goal

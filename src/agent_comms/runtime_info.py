@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
@@ -29,17 +29,22 @@ class RuntimeInfo(ABC):
     @abstractmethod
     def model_or(self, default: str) -> str: ...
 
+    @abstractmethod
+    def wire_fields(self) -> dict[str, object]: ...
 
+
+@dataclass(frozen=True, slots=True)
 class UnobservedRuntimeInfo(RuntimeInfo):
     """No observation exists; do not invent a model or observation timestamp."""
-
-    __slots__ = ()
 
     def context_reading(self) -> ContextReading:
         return UnmeasuredContext()
 
     def model_or(self, default: str) -> str:
         return default
+
+    def wire_fields(self) -> dict[str, object]:
+        return dict(session_name=None, context_used=None, context_size=None, context_percent=None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +81,10 @@ class AgentRuntimeInfo(RuntimeInfo):
     def model_or(self, default: str) -> str:
         return self.model or default
 
+    def wire_fields(self) -> dict[str, object]:
+        return dict(session_name=self.session_name, context_used=self.context_used,
+                    context_size=self.context_size, context_percent=self.context_percent)
+
 
 @dataclass(frozen=True, slots=True)
 class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]]):
@@ -93,7 +102,17 @@ class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[dict[str, AgentRu
         return {}
 
     def for_thread(self, thread: str) -> RuntimeInfo:
-        return self.read().get(thread, UnobservedRuntimeInfo())
+        return self.for_threads((thread,))[thread]
+
+    def for_threads(self, names: Iterable[str]) -> dict[str, RuntimeInfo]:
+        values = self.read()
+        resolved = {}
+        for name in names:
+            try:
+                resolved[name] = values[name]
+            except KeyError:
+                resolved[name] = UnobservedRuntimeInfo()
+        return resolved
 
     def observe(self, thread: str, timestamp: float, observation: RuntimeInfoObservation) -> None:
         """Apply only this observation's fields in the original store transaction."""

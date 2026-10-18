@@ -20,7 +20,7 @@ from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import CommandTarget
 from .channels import Channel
 from .display_order import ChannelSort, NameChannelSort
-from .goal_presentation import GoalExecution
+from .goal_presentation import GoalExecution, IdleGoalExecution
 from .goal_waits import GoalWaits
 from .external_transcript import ExternalTranscript
 from .notification_assignment import NotificationAssignment
@@ -33,7 +33,7 @@ from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, ReadCursor
 from .read_ledger import ReadLedger
-from .runtime_info import AgentRuntimeInfo
+from .runtime_info import RuntimeInfo
 from .store_files import _store_lock
 from .wire_log import OpenedWireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
@@ -586,9 +586,9 @@ class ThreadView:
     thread: Thread
     status: ThreadStatus
     activity: ObservedActivity
-    runtime: AgentRuntimeInfo | None
+    runtime: RuntimeInfo
     last_seen: float
-    goal_execution: GoalExecution | None = None
+    goal_execution: GoalExecution | IdleGoalExecution = IdleGoalExecution()
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
 
     @classmethod
@@ -602,10 +602,11 @@ class ThreadView:
         ))
         if not threads:
             return ()
-        runtime, waits = agents.runtime_info.read(), goal_waits.read()
+        runtime = agents.runtime_info.for_threads(thread.name for thread in threads)
+        waits = goal_waits.read()
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
-            thread, snapshot.statuses[thread.name], activities[thread.name], runtime.get(thread.name),
+            thread, snapshot.statuses[thread.name], activities[thread.name], runtime[thread.name],
             snapshot.seen_at(thread.name), GoalWaits.execution(thread.goal, waits, snapshot, agents),
             snapshot.owner_binding(thread.name),
         ) for thread in threads)
@@ -628,9 +629,7 @@ class ThreadView:
     def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         if self.thread.executing:
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
-        if self.goal_execution is not None and self.goal_execution.state.view.waiting:
-            return self.goal_execution.presentation(ordinary.title)
-        return ordinary
+        return self.goal_execution.waiting_presentation(ordinary)
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -642,11 +641,8 @@ class ThreadView:
             "last_activity": self.activity.timestamp,
             "activity": self.activity.state.value,
             "activity_detail": self.activity.detail,
-            "goal_execution": self.goal_execution.to_wire() if self.goal_execution else None,
-            "session_name": self.runtime.session_name if self.runtime else None,
-            "context_used": self.runtime.context_used if self.runtime else None,
-            "context_size": self.runtime.context_size if self.runtime else None,
-            "context_percent": self.runtime.context_percent if self.runtime else None,
+            "goal_execution": self.goal_execution.to_wire(),
+            **self.runtime.wire_fields(),
         }
 
 

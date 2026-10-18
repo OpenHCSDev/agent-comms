@@ -34,6 +34,9 @@ class ExecutionPresentation(ABC):
     def represents(self, state: GoalState) -> bool:
         return False
 
+    def waiting_presentation(self, execution: GoalExecution, ordinary: ThreadPresentation) -> ThreadPresentation:
+        return ordinary
+
 
 @dataclass(frozen=True)
 class StateExecutionPresentation(ExecutionPresentation):
@@ -50,6 +53,9 @@ class StateExecutionPresentation(ExecutionPresentation):
 
 class StandbyExecutionPresentation(ExecutionPresentation):
     waiting = True
+
+    def waiting_presentation(self, execution: GoalExecution, ordinary: ThreadPresentation) -> ThreadPresentation:
+        return execution.presentation(ordinary.title)
 
     def render(self, execution: GoalExecution) -> tuple[str, str]:
         names = ", ".join(f"@{target.incarnation.name}" for target in execution.wait_for)
@@ -115,6 +121,19 @@ class GoalExecution:
         glyph, summary = self.state.view.render(self)
         return ThreadPresentation(title, glyph, summary)
 
+    def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        return self.state.view.waiting_presentation(self, ordinary)
+
+    def standby(self) -> bool:
+        return self.state.view.waiting
+
+    def waiting_for(self, goal: Goal) -> bool:
+        return goal.state.active and self.goal_id == goal.id and self.standby()
+
+    def validate_goal(self, goal: Goal | None) -> None:
+        if goal is None or self.goal_id != goal.id:
+            raise ValueError("Goal execution identity does not match its declaration")
+
     def to_wire(self) -> dict:
         """Use the one field codec; target births keep their original wire keys."""
         return FieldCodec.encode(self)
@@ -122,6 +141,36 @@ class GoalExecution:
     @classmethod
     def from_wire(cls, data: Mapping) -> GoalExecution:
         return FieldCodec.decode(cls, data)
+
+
+@dataclass(frozen=True, slots=True)
+class IdleGoalExecution(WireValue):
+    """No goal execution has been projected."""
+
+    def to_wire(self) -> None:
+        return None
+
+    @classmethod
+    def from_wire(cls, data) -> IdleGoalExecution:
+        if data is not None:
+            raise ValueError("An idle goal execution is null on the wire")
+        return cls()
+
+    @classmethod
+    def schema(cls) -> dict:
+        return {"type": "null"}
+
+    def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        return ordinary
+
+    def standby(self) -> bool:
+        return False
+
+    def waiting_for(self, goal: Goal) -> bool:
+        return False
+
+    def validate_goal(self, goal: Goal | None) -> None:
+        pass
 
 
 @dataclass(frozen=True)
@@ -132,10 +181,7 @@ class GoalSnapshot:
     """
 
     goal: Goal | None
-    execution: GoalExecution | None
+    execution: GoalExecution | IdleGoalExecution
 
     def __post_init__(self) -> None:
-        if self.execution is not None and (
-            self.goal is None or self.execution.goal_id != self.goal.id
-        ):
-            raise ValueError("Goal execution identity does not match its declaration")
+        self.execution.validate_goal(self.goal)
