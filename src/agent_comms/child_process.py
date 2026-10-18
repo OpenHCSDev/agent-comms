@@ -68,7 +68,7 @@ class ProcessIdentity:
     def in_group(cls, pid: int, start_time: int, pgid: int) -> ProcessIdentity:
         return GroupLeader(pid, start_time) if pgid == pid else GroupMember(pid, start_time)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, ProcessIdentity):
             return NotImplemented
         return (self.pid, self.start_time) == (other.pid, other.start_time)
@@ -226,14 +226,11 @@ class Platform(DeclaredFamily, affix="Platform"):
             return False
 
     def require(self, identity: ProcessIdentity) -> ProcessIdentity:
-        changed = IdentityMismatchError(f"Process incarnation changed: {identity.pid}")
-        try:
+        with suppress(ProcessLookupError):
             current = self.identity(identity.pid)
-        except ProcessLookupError:
-            raise changed from None
-        if current != identity:
-            raise changed
-        return current
+            if current == identity:
+                return current
+        raise IdentityMismatchError(f"Process incarnation changed: {identity.pid}")
 
     @abstractmethod
     def send(self, identity: ProcessIdentity, signum: int) -> None: ...
