@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -117,11 +116,6 @@ class SessionLifecycle:
         # remains with shutdown, rather than treating tab close as owner stop.
         raise RequestError.method_not_found("session/close")
 
-    @staticmethod
-    def thread_name_for(cwd: str) -> str:
-        leaf = re.sub(r"[^A-Za-z0-9_-]+", "-", Path(cwd).name or "session").strip("-")
-        return leaf or "session"
-
     def require(self, session_id: str) -> str:
         name = self.bindings.get(session_id)
         if name is None:
@@ -153,7 +147,7 @@ class SessionLifecycle:
     def declare_thread(self, cwd: str) -> Thread:
         """Register the participant before choosing which process executes it."""
         thread = self.comms.threads.claim_thread(
-            self.thread_name_for(cwd),
+            Path(cwd).name,
             tags=frozenset({"acp"}),
             worktree=cwd,
             model=self.agent_args.model,

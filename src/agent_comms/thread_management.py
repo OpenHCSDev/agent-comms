@@ -44,6 +44,7 @@ from .private_registry_guard import (
     RegistryPrivacy, _require_no_private_owner_rename,
 )
 from .registry_document import RegistrySnapshot
+from .registry_provenance import RegistryNames
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
@@ -234,7 +235,7 @@ class ThreadManagement:
 
     def claim_thread(
         self,
-        base_name: str,
+        wanted: str,
         *,
         tags: frozenset[str],
         worktree: str,
@@ -246,7 +247,7 @@ class ThreadManagement:
         """Atomically register a unique thread; its inbox starts at its creation."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.new_thread(
-                name=base_name,
+                name=RegistryNames.thread_slug(wanted),
                 tags=tags,
                 worktree=worktree,
                 process_identity=process,
@@ -301,15 +302,7 @@ class ThreadManagement:
                 raise RelationViolationError(
                     f"Process {owner_pid} does not own thread {thread.name!r}."
                 )
-            base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", display_name).strip("-_") or "session"
-
-            new_name = base_name
-            suffix = 2
-            while self.registry.name_reserved(new_name):
-                if self.registry.canonical_name(new_name) == thread.name:
-                    return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
-                new_name = f"{base_name}-{suffix}"
-                suffix += 1
+            new_name = self.registry.snapshot().claim_name(display_name, owner=thread.name)
             return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
 
     def _rename_thread(

@@ -321,7 +321,7 @@ class Registration:
     def name_reserved(self, name: str) -> bool:
         """Return whether a canonical name or permanent alias occupies text."""
         with self.store.reading() as document:
-            return name in document.threads or name in document.aliases
+            return document.reserves(name)
 
     def last_seen(self, name: str) -> float:
         with self.store.reading() as document:
