@@ -27,8 +27,8 @@ class UnstartedRuntime(RuntimeLocation):
     async def compact(self, operation):
         return FailedCompaction("This thread has no saved session to compact.")
 
-    def new_location(self, root, worktree):
-        return self.owner.new_location(root, worktree)
+    def registered_location(self, root, worktree):
+        return self.owner.registered_location(root, worktree)
 
     def arguments(self):
         return {}

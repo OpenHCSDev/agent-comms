@@ -20,11 +20,12 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
+from .native_tool_call import NativeToolMode, NoNativeTools
 from .declared_family import DeclaredFamily
 from .pi_vocabulary import ThinkingLevelField
 from .send_outcome import SendBoundary
@@ -59,7 +60,7 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     async def compact(self, operation):
         return await operation()
 
-    def new_location(self, root, worktree):
+    def registered_location(self, root, worktree):
         return self
 
     def arguments(self):
@@ -245,9 +246,6 @@ class ContextUsage:
 class CompactionOutcome(DeclaredFamily, DeclaredReply, affix="Compaction"):
     """The result of one requested compaction."""
 
-    def display_summary(self):
-        return None
-
 
 @dataclass(frozen=True)
 class PlacedCompaction(CompactionOutcome):
@@ -256,11 +254,6 @@ class PlacedCompaction(CompactionOutcome):
     summary: str
     first_kept: str | None
     tokens_before: int | None
-
-    def display_summary(self):
-        from .backend import compaction_summary
-
-        return compaction_summary(self.summary)
 
 
 @dataclass(frozen=True)
@@ -306,6 +299,7 @@ class TurnDelivery:
     input_started: Callable[..., bool]
     request_progress: Callable[..., None]
     ui_request: Callable[..., Awaitable[Any]]
+    selected_tool_mode: NativeToolMode = field(default_factory=NoNativeTools)
 
 
 class RunsTurns(ABC):
@@ -424,11 +418,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     @classmethod
     @abstractmethod
-    def new_location(cls, root, worktree) -> RuntimeLocation: ...
-
-    @classmethod
-    def registered_location(cls, root, worktree):
-        return cls.unstarted_type(cls)
+    def registered_location(cls, root, worktree) -> RuntimeLocation: ...
 
     @classmethod
     def for_new_threads(cls) -> type[AgentBackend]:

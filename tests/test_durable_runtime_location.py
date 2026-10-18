@@ -1,5 +1,6 @@
 """P117 location behavior over a real, paused durable store; no provider inputs."""
 import asyncio
+import os
 import subprocess
 from pathlib import Path
 
@@ -55,7 +56,7 @@ def test_location_methods_and_missing_history(tmp_path):
     assert tuple(path.name for path in files.members) == (
         'missing.sqlite3', 'missing.sqlite3-wal', 'missing.sqlite3-shm',
         'missing.sqlite3-journal', 'missing.sqlite3.lock')
-    assert isinstance(UnstartedRuntime(PiDurableBackend).new_location(tmp_path, tmp_path), DurableDatabase)
+    assert isinstance(UnstartedRuntime(PiDurableBackend).registered_location(tmp_path, tmp_path), DurableDatabase)
 
 
 SEED = """
@@ -89,7 +90,7 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_
         backend = PiDurableBackend(tmp_path)
         thread = thread_registration.new_thread('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
                         session_file=location.path)
-        host = await backend.open(thread)
+        host = await backend.open(thread, environment=dict(os.environ))
         try:
             interrupted = await host.request(Inspect())
             def read():

@@ -485,9 +485,14 @@ class OwnerToolSocket(ToolTransport, Generic[Call]):
         transport = cls(turn.tool_directory, os.urandom(32).hex(), policy)
         ownership.push_async_callback(transport.close)
         await transport.start()
-        turn.tool_environment["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(transport.address)
-        turn.tool_environment["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = transport.token
         return transport
+
+    def host_bindings(self) -> tuple[dict[str, str], ...]:
+        return ({"path": str(self.address), "token": self.token},)
+
+    def native_environment(self) -> dict[str, str]:
+        return {"AGENT_COMMS_SELECTED_TOOL_SOCKET": str(self.address),
+                "AGENT_COMMS_SELECTED_TOOL_TOKEN": self.token}
 
     def bind_process(self, pid: int) -> None:
         self.expected_pid = pid
@@ -525,6 +530,8 @@ class OwnerToolSocket(ToolTransport, Generic[Call]):
         """Apply policy-specific limits after full decode and before any state transition."""
 
     def announce(self, content: tuple[PiContent, ...]) -> None:
+        if not any(part.tool_calls() for part in content):
+            return
         round = self.calls.decode_round(content, self.decode_call)
         self.validate_round(round)
         self.calls.announce(round)

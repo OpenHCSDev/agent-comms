@@ -354,7 +354,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     "PI_OFFLINE": "1",
                     "NODE_OPTIONS": f"--require={preload}",
                 },
-                session_file=PiNativeBackend.new_location(root, root).path,
+                session_file=PiNativeBackend.registered_location(root, root).path,
                 steering_queue=queue,
                 native_start=lambda *_: True,
                 interrupt_boundary=lambda *_: nullcontext(

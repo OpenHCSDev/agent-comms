@@ -35,7 +35,6 @@ from .agent_backend import (
     TurnDelivery,
 )
 from .unstarted_runtime import UnstartedRuntime
-from .field_codec import FieldCodec
 from .native_pi import NativePiRpcLaunch
 from .native_transcript import NativeTranscript
 from .native_session_files import NativeSessionFiles
@@ -172,53 +171,13 @@ class PersistentPiSession:
             await self.close()
 
 
-class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
-    """Interpret Pi queries; each backend owns how commands reach its host."""
-
-    async def context_usage(self, thread):
-        from .pi_commands import GetSessionStats
-
-        usage = (await self.request(thread, GetSessionStats())).context_usage
-        return (ContextUsage(None, None) if usage is None else
-                ContextUsage(usage.tokens, usage.context_window))
-
-    async def compact(self, thread, instructions):
-        from .native_pi import NativePiUnavailable
-        from .pi_commands import Compact
-
-        try:
-            return (await self.request(thread, Compact(custom_instructions=instructions))).outcome
-        except (NativePiUnavailable, ValueError, RuntimeError) as error:
-            return FailedCompaction(str(error))
-
-    async def models(self, thread):
-        from .pi_commands import GetAvailableModels
-
-        data = await self.model_catalog(thread, GetAvailableModels())
-        return tuple(dict.fromkeys(
-            model.display_name for model in data.models if model.provider and model.id
-        ))
-
-    async def configure(self, thread, model, thinking):
-        from .pi_commands import SetModel, SetThinkingLevel
-
-        commands = []
-        if model is not None:
-            commands.append(SetModel.from_name(model))
-        if thinking is not None:
-            commands.append(SetThinkingLevel(level=thinking))
-        if not commands:
-            raise ValueError('A configuration change names a model or a thinking level')
-        state = await self.apply_configuration(thread, commands)
-        reported = state.model.require_selection(model if model is not None else state.model.display_name)
-        return reported.display_name, state.thinking_level.wire_value()
-
-
 class PiNativeBackend(
     PersistentPiSession,
     Interrupts,
-    PiCapabilities,
+    Compacts,
+    ReportsContext,
     Forks,
+    ConfiguresModel,
     AgentBackend,
 ):
     """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
@@ -252,7 +211,7 @@ class PiNativeBackend(
         )
 
     @classmethod
-    def new_location(cls, root, worktree) -> PiSessionFile:
+    def registered_location(cls, root, worktree) -> PiSessionFile:
         return PiSessionFile(str(create_fresh_private_session(root / "sessions", worktree=worktree).path))
 
     def arguments(self, thread: Thread) -> tuple[str, ...]:
@@ -317,7 +276,7 @@ class PiNativeBackend(
             observe=partial(self.observe, thread),
         )
 
-    async def request(self, thread: Thread, request):
+    async def inspect(self, thread: Thread, request):
         """Answer one Pi query on the idle child, preparing it first when needed."""
         return await self.child_state.inspect(self, partial(self.prepare, thread), request)
 
@@ -355,6 +314,36 @@ class PiNativeBackend(
 
         await backend.terminate_task_process(owner)
 
+    # -- ReportsContext ---------------------------------------------------
+
+    async def context_usage(self, thread: Thread) -> ContextUsage:
+        from .pi_commands import GetSessionStats
+
+        stats = await self.inspect(thread, GetSessionStats())
+        usage = stats.context_usage
+        if usage is None:
+            return ContextUsage(tokens=None, window=None)
+        return ContextUsage(tokens=usage.tokens, window=usage.context_window)
+
+    # -- Compacts ---------------------------------------------------------
+
+    async def compact(self, thread: Thread, instructions: str | None) -> CompactionOutcome:
+        """Ask Pi's own engine to compact through its ``compact`` RPC."""
+        from .native_pi import NativePiUnavailable
+        from .pi_commands import Compact
+
+        try:
+            data = await self.inspect(thread, Compact(custom_instructions=instructions))
+        except (NativePiUnavailable, ValueError) as error:
+            return FailedCompaction(str(error))
+        if data.summary is None:
+            return NothingToCompaction()
+        return PlacedCompaction(
+            summary=data.summary,
+            first_kept=data.first_kept_entry_id,
+            tokens_before=data.tokens_before,
+        )
+
     # -- Forks ------------------------------------------------------------
 
     @classmethod
@@ -372,14 +361,34 @@ class PiNativeBackend(
         )
         return PiSessionFile(identity.session_file)
 
-    async def model_catalog(self, thread: Thread, command):
-        return await command.discover(self.agent_bin, self.agent_args.argv)
+    # -- ConfiguresModel --------------------------------------------------
 
-    async def apply_configuration(self, thread: Thread, commands):
+    async def models(self, thread: Thread) -> tuple[str, ...]:
+        from .pi_commands import GetAvailableModels
+
+        data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+        return tuple(dict.fromkeys(
+            model.display_name for model in data.models if model.provider and model.id
+        ))
+
+    async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
+        from .native_pi import NativePiUnavailable
+        from .pi_commands import SetModel, SetThinkingLevel
+
+        commands = []
+        if model is not None:
+            commands.append(SetModel.from_name(model))
+        if thinking is not None:
+            commands.append(SetThinkingLevel(level=thinking))
+        if not commands:
+            raise ValueError("A configuration change names a model or a thinking level")
         arguments = self.arguments(thread)
         for command in commands:
             state = await command.configure(self.agent_bin, arguments, worktree=Path(thread.worktree))
             arguments = self.agent_args.with_model(state.model.display_name).with_thinking(
                 state.thinking_level
             ).argv
-        return state
+        selected, level = state.model.display_name, state.thinking_level.wire_value()
+        if selected is None or level is None:
+            raise NativePiUnavailable("Native configuration did not report model and thinking level")
+        return selected, level

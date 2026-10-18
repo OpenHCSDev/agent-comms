@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-import os
 from functools import partial
 from contextlib import AsyncExitStack, ExitStack, contextmanager
 from collections.abc import Callable
@@ -13,18 +12,17 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import AgentBackend, InputContent, InputId, RuntimeLocation, Steers, TurnDelivery, TurnInbox, TurnInboxItem, WhenBusy
+from .agent_backend import Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, AgentBackend, InputContent, InputId, RuntimeLocation, Steers, TurnDelivery, TurnInbox, TurnInboxItem, WhenBusy
 from .agent_events import AgentInfo, Error, Done, OriginalInputStarted, FollowingInputStarted, FollowingInputRefused
 from .turn_inputs import TurnInboxReceiver
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
-from .pi_native_backend import PiCapabilities
 from .native_child import PiChild
 from .external_transcript import ExternalCut
 from .native_entries import StoredEntry
 from .native_session_files import SessionFiles
 from .native_transcript import StoredRecord
-from .pi_commands import Abort, GetState, PiCommand, SetModel, SetThinkingLevel
+from .pi_commands import Abort, Compact, GetAvailableModels, GetSessionStats, GetState, PiCommand, SetModel, SetThinkingLevel
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd, ModelRequestProgress
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField
@@ -40,7 +38,6 @@ from .send_outcome import GrantedSend
 from .diagnostics import record_request_progress
 from .field_codec import FieldCodec
 from .native_tool_call import ToolTransport
-from .native_tools import NativeExecutableTool
 
 
 @dataclass(frozen=True)
@@ -195,7 +192,7 @@ class OpenHistory(HostQuery):
 @dataclass(frozen=True)
 class ConfigureTools(HostQuery):
     tools: tuple[str, ...]
-    environment: dict[str, str]
+    brokers: tuple[dict[str, str], ...]
 
 
 class DurableRequestProgress(ModelRequestProgress, DurablePiEvent):
@@ -401,13 +398,26 @@ class DurableTurn(TurnInboxReceiver):
             text=item.content.text, images=item.content.images, when_busy=item.when_busy))
 
 
-class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
+@dataclass(frozen=True)
+class OutcomeData(PiResponseData):
+    outcome: CompactionOutcome
+
+
+class CompactDurable(Compact):
+    strict_response = True
+    response_payload = OutcomeData
+
+
+class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel, Steers):
     location_type = DurableDatabase
     unstarted_type = UnstartedRuntime
     event_kinds = frozenset(kind for member in DurablePiEvent.members_with(DurablePiEvent) for kind in member.known_kinds())
 
     def __init__(self, root):
-        self.child: PiChild | None = None
+        from .comms import Comms
+
+        self.comms = Comms(root=root)
+        self.child: DurableChild | None = None
         self.lock = asyncio.Lock()
         self.owner = None
         self.barrier = MaintenanceBarrier(root / 'registry.json')
@@ -418,13 +428,9 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
 
     @classmethod
     def registered_location(cls, root, worktree):
-        return cls.new_location(root, worktree)
-
-    @classmethod
-    def new_location(cls, root, worktree):
         return DurableDatabase(str(Path(root).absolute() / 'durable-sessions' / f'{uuid4().hex}.sqlite3'))
 
-    async def open(self, thread, *, environment=None):
+    async def open(self, thread, *, environment):
         async with self.lock:
             if self.child is None:
                 location = thread.runtime
@@ -438,7 +444,7 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
                         resources=resources.pop_all(), location=location)
                 async with child.failures():
                     model = SetModel.from_name(thread.model)
-                    await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(RestartEnvironment.inherit(environment or os.environ).native_config / 'auth.json')))
+                    await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(RestartEnvironment.inherit(environment).native_config / 'auth.json')))
                     await child.request(Resume())
                 self.child = child
             return self.child
@@ -450,15 +456,31 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
                 self.child = None
 
     async def request(self, thread, command):
-        return await (await self.open(thread)).request(command)
+        session = thread.runtime.select_session(self.comms.root / 'native-sessions' / thread.name, None)
+        environment, _ = session.launch_environment(session.directory,
+            {**thread.launch().encode(), 'AGENT_COMMS_ROOT': str(self.comms.root)})
+        return await (await self.open(thread, environment=environment)).request(command)
 
-    async def model_catalog(self, thread, command):
-        return await self.request(thread, command)
+    async def compact(self, thread, instructions):
+        return (await self.request(thread, CompactDurable(custom_instructions=instructions))).outcome
 
-    async def apply_configuration(self, thread, commands):
-        for command in commands:
-            await self.request(thread, command)
-        return await self.request(thread, GetState())
+    async def context_usage(self, thread):
+        usage = (await self.request(thread, GetSessionStats())).context_usage
+        if usage is None:
+            raise ValueError('Durable session has no context observation')
+        return ContextUsage(usage.tokens, usage.context_window)
+
+    async def models(self, thread):
+        return tuple(model.display_name for model in (await self.request(thread, GetAvailableModels())).models)
+
+    async def configure(self, thread, model, thinking):
+        if model is not None:
+            await self.request(thread, SetModel.from_name(model))
+        if thinking is not None:
+            await self.request(thread, SetThinkingLevel(level=thinking))
+        state = await self.request(thread, GetState())
+        reported = state.model.require_selection(model if model is not None else state.model.display_name)
+        return reported.display_name, state.thinking_level.wire_value()
 
     @classmethod
     async def run_selected(cls, claim, execution, *, model, selected_tool_mode,
@@ -466,7 +488,8 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
         backend = execution.pi_session
         thread = replace(claim.owner.thread, session_file=str(claim.session.path), model=model.qualified)
         registry = await Coordination.run_worker(claim.bus._registry.snapshot)
-        environment = thread.native_environment(claim.bus.log.path.parent, registry, thread.worktree)
+        environment, _ = claim.session.launch_environment(claim.session.directory,
+            thread.native_environment(claim.bus.log.path.parent, registry, thread.worktree))
         child = await backend.open(thread, environment=environment)
 
         @contextmanager
@@ -489,7 +512,7 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
                                ToolTransport(), claim.session.directory)
             turn.tool_socket = await selected_tool_mode.open_transport(turn, resources)
             turn.tool_socket.bind_process(child.proc.pid)
-            await child.request(ConfigureTools(selected_tool_mode.tool_names, turn.tool_environment))
+            await child.request(ConfigureTools(selected_tool_mode.tool_names, turn.tool_socket.host_bindings()))
             identity = await child.request(GetIdentity())
             await Coordination.run_worker(partial(claim._start_once,
                 NativeSessionIdentity(identity.session_id, str(child.location.session))))
@@ -501,13 +524,19 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
         return result.require()
 
     async def run_turn(self, thread, content, delivery):
-        child = await self.open(thread, environment=delivery.environment)
-        await child.request(ConfigureTools(tuple(tool.declared_name for tool in
-            NativeExecutableTool.members_with(NativeExecutableTool)), delivery.environment))
-        turn = DurableTurn(child, delivery, self.barrier, uuid4().hex,
-                           ToolTransport(), child.location.session.parent)
-        async for event in self._stream_turn(thread, content, turn):
-            yield event
+        session = thread.runtime.select_session(self.comms.root / 'native-sessions' / thread.name, None)
+        environment, _ = session.launch_environment(session.directory, delivery.environment)
+        child = await self.open(thread, environment=environment)
+        async with AsyncExitStack() as resources:
+            turn = DurableTurn(child, delivery, self.barrier, uuid4().hex,
+                               ToolTransport(), child.location.session.parent)
+            mode = delivery.selected_tool_mode
+            turn.tool_socket = await mode.open_transport(turn, resources)
+            turn.tool_socket.bind_process(child.proc.pid)
+            await child.request(ConfigureTools(mode.tool_names, turn.tool_socket.host_bindings()))
+            async for event in self._stream_turn(thread, content, turn):
+                yield event
+            turn.tool_socket.assert_complete()
 
     async def _stream_turn(self, thread, content, turn):
         child = turn.child

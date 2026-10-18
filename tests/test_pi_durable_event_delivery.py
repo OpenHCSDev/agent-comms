@@ -1,5 +1,6 @@
 """Turn-owned delivery over the real durable host; no provider requests."""
 import asyncio
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -20,7 +21,7 @@ async def open_host(tmp_path):
     backend = PiDurableBackend(tmp_path)
     thread = SimpleNamespace(worktree=str(tmp_path), model=None, thinking_level=NoThinkingOverride,
                              runtime=DurableDatabase(str(tmp_path / 'durable.sqlite')))
-    return await backend.open(thread)
+    return await backend.open(thread, environment=dict(os.environ))
 
 
 def test_real_host_events_belong_to_open_turn(tmp_path):

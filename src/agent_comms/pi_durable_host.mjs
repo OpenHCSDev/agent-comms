@@ -18,12 +18,11 @@ const { estimateContext } = await import(new URL('./harness/compaction.js', impo
 const Recovery = defineDoc({ kind: 'core.recovery', version: 1, scope: 'session', initial: () => ({ decisions: {} }) });
 let harness, root, turn, models, registry;
 const comms = args => JSON.parse(execFileSync('agent-comms', args, { encoding: 'utf8', timeout: 30000 }));
-function ownerGuard(tool) {
+function ownerGuard(tool, broker) {
   return wrapTool(tool.name, original => ({ ...original,
     async execute(args, api, context) {
-      const path = process.env.AGENT_COMMS_SELECTED_TOOL_SOCKET;
-      const token = process.env.AGENT_COMMS_SELECTED_TOOL_TOKEN;
-      if (path) {
+      const { path, token } = broker;
+      {
         const request = Buffer.from(JSON.stringify({ token,
           call_id: api.callId, name: tool.name, arguments: args }) + '\n');
         if (request.length > 1024 * 1024) throw new Error('Core tool request exceeds the record bound');
@@ -225,9 +224,6 @@ const handlers = {
   },
   async configure_tools(request) {
     requireOpen();
-    delete process.env.AGENT_COMMS_SELECTED_TOOL_SOCKET;
-    delete process.env.AGENT_COMMS_SELECTED_TOOL_TOKEN;
-    Object.assign(process.env, request.environment);
     const declarations = comms(['tools']).tools;
     const commands = defineExtension({ name: 'core-commands', tools: declarations.map(tool => defineTool({
       name: tool.name, description: tool.description, parameters: tool.parameters,
@@ -238,10 +234,17 @@ const handlers = {
       },
     })) });
     registry.install(commands);
-    const owner = defineExtension({ name: 'core-tools',
-      wraps: [...CodingTools.tools, ...commands.tools].map(ownerGuard) });
-    registry.install(owner);
-    await root.configure({ extensions: { add: [commands, owner] }, tools: request.tools }, context);
+    const extensions = [CodingTools, CoreContext, commands];
+    for (const broker of request.brokers) {
+      if (!broker.path || !/^[0-9a-f]{64}$/.test(broker.token)) {
+        throw new Error('Brokered Durable tools require an authenticated owner endpoint');
+      }
+      const owner = defineExtension({ name: 'core-tools', wraps:
+        [...CodingTools.tools, ...commands.tools].map(tool => ownerGuard(tool, broker)) });
+      registry.install(owner);
+      extensions.push(owner);
+    }
+    await root.configure({ extensions, tools: request.tools }, context);
     const actual = new Set((await root.agent(context)).callable.map(tool => tool.name));
     for (const name of request.tools) if (!actual.has(name)) throw new Error(`Durable tool is unavailable: ${name}`);
     return ack;
@@ -263,19 +266,16 @@ const handlers = {
     await root.configure({ thinkingLevel: request.level }, context);
     return ack;
   },
-  async compact(request) {
+  async compact_durable(request) {
     requireResumed();
     const task = await harness.waitForTask(await root.compact(request.customInstructions, context), context);
     const outcome = task.state.outcome;
-    if (outcome.status !== 'completed') throw new Error(JSON.stringify(outcome));
-    if (!outcome.result.submissionId) return {};
+    if (outcome.status !== 'completed') return { outcome: { kind: 'failed', message: JSON.stringify(outcome) } };
+    if (!outcome.result.submissionId) return { outcome: { kind: 'nothing_to' } };
     const placed = await (await harness.submission(outcome.result.submissionId, context)).wait(context);
-    if (placed.status !== 'done') {
-      if (placed.reason === 'stale') return { stale: true };
-      throw new Error(JSON.stringify(placed));
-    }
+    if (placed.status !== 'done') return { outcome: placed.reason === 'stale' ? { kind: 'stale' } : { kind: 'failed', message: JSON.stringify(placed) } };
     const entry = await root.commit(tx => tx.entry(placed.entry), context);
-    return { summary: text(entry), firstKeptEntryId: String(entry.head), tokensBefore: null };
+    return { outcome: { kind: 'placed', summary: text(entry), first_kept: String(entry.head), tokens_before: null } };
   },
   async close() {
     if (turn) await turn.stop();

@@ -681,8 +681,7 @@ class MessageEnd(NativePiEvent, DurablePiEvent):
     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
 
     async def during_turn(self, turn):
-        if self.message.tool_calls:
-            turn.tool_socket.announce(self.message.parts)
+        turn.tool_socket.announce(self.message.parts)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         for event in await self.message.apply_end(session):

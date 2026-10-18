@@ -256,6 +256,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.prompt_send_boundary = prompt_send_boundary
         self.ingress = ingress
         self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
+        self.tool_directory = launch.session.directory
+        self.tool_environment = launch.env
         self.tool_socket: ToolTransport
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
         self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
@@ -377,16 +379,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             return
         await self.native_session.close()
 
-    @property
-    def tool_directory(self):
-        return self.launch.session.directory
-
-    @property
-    def tool_environment(self):
-        return self.launch.env
-
     async def open_transport(self, ownership: AsyncExitStack) -> None:
         self.tool_socket = await self.selected_tool_mode.open_transport(self, ownership)
+        self.tool_environment.update(self.tool_socket.native_environment())
 
     @property
     def active_tools(self):

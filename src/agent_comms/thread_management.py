@@ -73,7 +73,7 @@ class NewThreadSpec:
         project = Path(self.project).expanduser().resolve(strict=True)
         thread = self.declaration(str(project), threads.registry)
         threads.registry.require_declaration_available(thread)
-        location = thread.runtime.new_location(threads.root, project)
+        location = thread.runtime.registered_location(threads.root, project)
         with _store_lock(threads._wire_lock_path):
             yield replace(thread, session_file=location.read_key)
 

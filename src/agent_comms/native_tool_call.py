@@ -261,6 +261,16 @@ class NativeToolCall(ABC):
 
 
 class ToolTransport:
+    def host_bindings(self) -> tuple[dict[str, str], ...]:
+        return ()
+
+    def native_environment(self) -> dict[str, str]:
+        return {}
+
+    def announce(self, content):
+        if any(part.tool_calls() for part in content):
+            raise SelectedToolDenied("Tools have no owner policy")
+
     @property
     def retainable(self) -> bool:
         return True
@@ -298,10 +308,8 @@ class NativeToolMode(ABC):
 
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
         """Both hosts consume the same declaration-owned tool selection."""
-        names = self.tool_names
-        return (("--tools", ",".join(names),
-                 *(argument for extension in self.extensions(package) for argument in ("-e", str(extension))))
-                if names else ("--no-tools",))
+        return ("--tools", ",".join(self.tool_names),
+                *(argument for extension in self.extensions(package) for argument in ("-e", str(extension))))
 
     @abstractmethod
     async def open_transport(self, turn, ownership) -> ToolTransport:
@@ -312,6 +320,9 @@ class NativeToolMode(ABC):
 
 
 class NoNativeTools(NativeToolMode):
+    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+        return ("--no-tools",)
+
     async def open_transport(self, turn, ownership) -> ToolTransport:
         return ToolTransport()
 
