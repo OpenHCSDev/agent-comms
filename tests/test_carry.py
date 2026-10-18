@@ -223,3 +223,32 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     assert reads.transcripts == {("user", "/sessions/a.jsonl", 6860966): 4881511}
     assert json.loads(route.read_text()) == {"version": 2, "root": str(root), "wire_root_id": root_id}
     assert route.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("stored, carried_count", [(None, 1), ({"turn_id": "t"}, None)])
+def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, monkeypatch, stored, carried_count):
+    """Before P482 a thread stored active_turn; an idle one carries to NoTurnRecord once."""
+    tmp_path.chmod(0o700)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    root = tmp_path / "bus"
+    comms = Comms(root)
+    comms.messaging.initialize_private_initial_protocol()
+    comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
+    registry = json.loads((root / "registry.json").read_text())
+    registry["threads"]["worker"].pop("turn_record", None)
+    registry["threads"]["worker"]["active_turn"] = stored
+    store = RegistryStore(root / "registry.json")
+    with store.locked():
+        store._write_unlocked(json.dumps(registry, indent=2))
+    if carried_count is None:
+        with pytest.raises(subprocess.CalledProcessError):
+            run_step("carry_turn_records", root, "--apply")
+        assert json.loads((root / "registry.json").read_text()) == registry
+        return
+    before = bus_files(root)
+    applied = run_step("carry_turn_records", root, "--apply")
+    carried(root, before, [applied])
+    assert applied["changed"] == carried_count
+    assert run_step("carry_turn_records", root)["changed"] == 0
+    (thread,) = Comms(root).registry.snapshot().threads.values()
+    assert not thread.executing
