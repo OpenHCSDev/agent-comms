@@ -37,10 +37,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
     async def _read(self):
         try:
             while (event := await self.receive(strict=True)) is not None:
-                if isinstance(event, Response):
-                    if self.correlate(event) is None:
-                        raise ValueError('Unsolicited Pi response')
-                else:
+                if not isinstance(event, Response) or self.correlate(event) is None:
                     await self.deliver_event(event)
         finally:
             self._events.shutdown()

@@ -795,7 +795,7 @@ class Response(NativePiEvent, DurablePiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         owner = session.native.reader.correlate(self)
         if owner is None:
-            raise ValueError('Unsolicited Pi response')
+            return
         async for event in owner.on_response(self, session):
             yield event
 
