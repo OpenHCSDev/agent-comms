@@ -63,11 +63,8 @@ async def run(stage, package):
     )
     assert Path(fork.session_file).is_relative_to(stage)
     root_id = service.messaging.initialize_private_initial_protocol()
-    service.owners.pin_private_nk_launch(service.root, root_id, package)
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
-        AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
-        AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
         AGENT_COMMS_AGENT_BIN=str(binary),
         AGENT_COMMS_RUNTIME_ROOT=str(binary.parent),
         PATH=str(binary.parent) + os.pathsep + environment.get('PATH', ''),

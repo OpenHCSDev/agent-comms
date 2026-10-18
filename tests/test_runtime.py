@@ -122,9 +122,8 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
 async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, monkeypatch, native_backend):
     comms = Comms(tmp_path / ("long-wire-" * 16))
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_initial_protocol()
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
     owner = canonical_agent(comms, agent_bin="pi", agent_args=native_backend.native_arguments(), runtime_enabled=True)
     client = canonical_agent(comms)
     updates = []

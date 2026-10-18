@@ -483,9 +483,6 @@ async def test_acp_reply_read_failure_after_settled_reaches_terminal_caller(
 
 async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path, monkeypatch):
     comms = canonical_goal_wire(tmp_path / "wire")
-    with comms.bus.log.certified_read() as source:
-        root_id = source.marker.root_id
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
     agent = CommsAgent(
         comms,
         agent_bin="pi",

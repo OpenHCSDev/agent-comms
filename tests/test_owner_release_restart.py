@@ -48,9 +48,6 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
     name = names.pop()
     async with native_backend_fixture(tmp_path) as native, AsyncExitStack() as resources:
         comms = Comms(native.root)
-        comms.owners.pin_private_nk_launch(native.root,
-            os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'],
-            pinned_native_package())
 
         async def retire_owned_worker():
             selected = comms.registry.snapshot().threads.get(name)
@@ -75,9 +72,6 @@ from agent_comms.goal_actions import SetGoalAction, BlockedGoalAction
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import RestartEnvironment
 service = Comms(Path(os.environ['AGENT_COMMS_ROOT']))
-with service.bus.log.locked(): root_id = service.bus.log._private_marker_unlocked().root_id
-service.owners.pin_private_nk_launch(service.root, root_id,
-    Path(sys.argv[4]))
 name, project, session = sys.argv[1:4]
 service.registry.declare(service.registry.new_thread(name, frozenset(), project, session_file=session,
     model='response-local/fixture'))
@@ -322,7 +316,7 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
     from agent_comms.acp import CommsAgent
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
-    from agent_comms import owner_lifecycle
+    from agent_comms import private_nk_entrypoint
     from agent_comms.coordination_errors import PublicationActivationBlocked
     from agent_comms.native_package import NativePackageError
     from agent_comms.threads import Thread
@@ -338,7 +332,7 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
         raise NativePackageError("Pinned native package directory is missing")
 
     # A private wire whose installation has no prepared native package.
-    monkeypatch.setattr(owner_lifecycle, "pinned_native_package", unprepared)
+    monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", unprepared)
     with pytest.raises(PublicationActivationBlocked, match="prepared native package"):
         await agent.sessions.start_owner(str(tmp_path), "worker")
     await agent.shutdown()

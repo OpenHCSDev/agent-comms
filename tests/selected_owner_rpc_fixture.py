@@ -12,7 +12,6 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.native_package import pinned_native_package
 
 
 @pytest.fixture
@@ -36,19 +35,17 @@ async def scripted_owner(tmp_path, selected_model, monkeypatch):
     # Pi package. Do not claim package/import-fence verification from this test.
     for name in ('agent-comms-import-fence.mjs', 'agent-comms-project-bootstrap.mjs'):
         (control / name).write_text('')
-    package = pinned_native_package().resolve(strict=True)
     comms = Comms(tmp_path / 'wire')
     for name in ('sender', 'beta'):
         comms.registry.declare(comms.registry.new_thread(
             name, frozenset({'team'}), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()), model='test/model',
         ))
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(comms.root / 'coordination.sqlite3')) as store:
         owner = comms.registry.require('beta')
         store.participants.register(RecordedThreadIncarnation('fixture', owner.created_at).lookup,
                                     'beta', 'beta', committed=True)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     agent = CommsAgent(comms, runtime_enabled=True,
                        private_nk_verified_cli=cli)
     agent.sessions.bindings['beta'] = 'beta'

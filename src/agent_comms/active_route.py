@@ -12,7 +12,7 @@ import os
 import stat
 import sys
 import uuid
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
@@ -51,20 +51,12 @@ class CommsRoute(ABC):
         else:
             yield
 
-    @abstractmethod
-    def launch(self) -> PrivateNkLaunch | None:
-        """The launch pin this selection carries, decoded before any store exists.
-
-        None leaves the owner lifecycle to derive a private root's launch itself.
-        """
 
 
 @dataclass(frozen=True, slots=True)
 class LocalRoute(CommsRoute):
     """Explicit/environment roots and the unconfigured historical default."""
 
-    def launch(self) -> PrivateNkLaunch | None:
-        return PrivateNkLaunch.from_environment(self.root, os.environ)
 
 
 class AbsoluteRoutePathText(PathText):
@@ -115,8 +107,6 @@ class ActiveRoute(CommsRoute):
             raise RelationViolationError("private route root ID changed")
         return super(ActiveRoute, self).observe_root()
 
-    def launch(self) -> PrivateNkLaunch:
-        return PrivateNkLaunch(self.root, self.wire_root_id, self.native_package)
 
 
 def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRoute:
