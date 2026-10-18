@@ -14,7 +14,7 @@ def test_plan_idle_names_a_ready_phase_until_an_order_serving_it_is_open(command
 
     def idle():
         todos = comms.goals.todos.for_commander(comms.registry.require('lead').incarnation)
-        return [rule.phase for rule in StandingRule.broken(todos) if isinstance(rule, PlanIdle)]
+        return [rule.phase for rule in StandingRule.broken(todos, comms.registry) if isinstance(rule, PlanIdle)]
 
     assert RecordPlanePhase in idle() and ReviewQueuePhase not in idle()
     assert PlanIdle(RecordPlanePhase).line() == (

@@ -93,12 +93,18 @@ class StorageRule:
     def free_gib(self):
         return shutil.disk_usage(self.volume).free / 2**30
 
+    def below_floor(self, free_gib: float) -> bool:
+        return free_gib < self.floor_gib
+
+    def cleanup_due(self, free_gib: float) -> bool:
+        return free_gib < self.cleanup_gib
+
     def require_quota(self, thread: Thread, *proposed: Path):
         if UnitStorage.read(self, thread, *proposed).over_checkouts:
             self.deny(f'at most {self.max_checkouts} checkouts besides the home checkout')
 
     def require_allocation(self, thread: Thread, *proposed: Path):
-        if self.free_gib() < self.floor_gib:
+        if self.below_floor(self.free_gib()):
             self.deny(f'allocation requires {self.floor_gib:g} GiB free on {self.volume}')
         self.require_quota(thread, *proposed)
 
@@ -131,29 +137,19 @@ class StorageRule:
 
 @dataclass(frozen=True)
 class UnitStorage:
-    """One unit's checkouts and its volume's free space, derived on read; its StorageRule judges both."""
+    """One unit's checkouts, derived on read from its registered worktrees; its StorageRule judges them."""
 
     rule: StorageRule
     unit: str
     checkouts: tuple[Path, ...]
-    free_gib: float
 
     @classmethod
     def read(cls, rule: StorageRule, thread: Thread, *proposed: Path) -> UnitStorage:
-        checkouts = tuple(dict.fromkeys((*rule.checkouts_of(thread), *proposed)))
-        return cls(rule, thread.name, checkouts, rule.free_gib())
+        return cls(rule, thread.name, tuple(dict.fromkeys((*rule.checkouts_of(thread), *proposed))))
 
     @property
     def over_checkouts(self) -> bool:
         return len(self.checkouts) > self.rule.max_checkouts + 1
-
-    @property
-    def cleanup_due(self) -> bool:
-        return self.free_gib < self.rule.cleanup_gib
-
-    @property
-    def below_floor(self) -> bool:
-        return self.free_gib < self.rule.floor_gib
 
 
 class ShellProgram:
