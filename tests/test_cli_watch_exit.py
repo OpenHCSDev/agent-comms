@@ -193,8 +193,8 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
             maintenance = MaintenanceBarrier(comms.registry.store.path)
             held = maintenance.begin(MaintenanceOperator('upgrade-bus'))
             assert await asyncio.wait_for(children[0].wait(), 20) is not None
+            (tmp_path / 'checkout/src').mkdir(parents=True)
             repo = Repository(tmp_path / 'checkout')
-            (repo.path / 'src').mkdir()
             head = repo.commit({'carry': (REPO / STEPS / 'carry.py').read_text(), 'carry_probe': PROBE})
             revisions = Revisions(repo.path, tmp_path / 'trees')
             try:
