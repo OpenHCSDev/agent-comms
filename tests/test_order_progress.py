@@ -79,13 +79,17 @@ def test_an_open_pr_naming_the_order_shows_its_number_and_head(checkout):
     assert progress.line == 'PR #7 open at aaaaaaaaa'
 
 
+def test_an_open_pr_untouched_since_the_order_belongs_to_an_earlier_one(checkout):
+    assert read(checkout, Listed(open=(PullRequest(5, 'P1: old', 'e' * 40, updated_at=99.0),))) == NoCommitProgress()
+
+
 def test_a_pr_merged_before_the_order_is_not_its_merge(checkout):
-    pulls = Listed(merged=(PullRequest(3, 'P1: earlier order', 'b' * 40, 'c' * 40, 99.0),))
+    pulls = Listed(merged=(PullRequest(3, 'P1: earlier order', 'b' * 40, 'c' * 40, 99.0, 600.0),))
     assert read(checkout, pulls) == NoCommitProgress()
 
 
 def test_a_merged_order_records_done_and_draws_no_strike(checkout):
-    progress = read(checkout, Listed(merged=(PullRequest(8, 'P1: fix', 'b' * 40, 'd' * 40, 500.0),)))
+    progress = read(checkout, Listed(merged=(PullRequest(8, 'P1: fix', 'b' * 40, 'd' * 40, 500.0, 500.0),)))
     assert progress == MergedProgress('d' * 9) and not progress.strikes
     assert progress.line == 'merged as ddddddddd, record done'
 
@@ -100,7 +104,7 @@ def test_unread_github_is_said_and_still_draws_a_strike(checkout):
 def test_board_and_overdue_print_a_merged_order_as_done_not_late(commander, commander_script, monkeypatch, tmp_path):
     script, _ = commander_script
     create(commander, 'P1', deadline=1)
-    merged = (PullRequest(8, 'P1: fix', 'b' * 40, 'd' * 40, 500.0),)
+    merged = (PullRequest(8, 'P1: fix', 'b' * 40, 'd' * 40, 500.0, 500.0),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state: merged if state == 'merged' else ())
     assert script.deadline_lines(script.open_todos()) == [
         f'DUE PASSED P1 worker (due {script.hhmm(script.COMMS.goals.todos.get("P1").deadline)}): '

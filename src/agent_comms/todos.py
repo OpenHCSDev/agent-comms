@@ -175,7 +175,9 @@ class ProgressSource:
         return self.todo.order.at.recorded_at("An order")
 
     def requests(self, state: str) -> list[PullRequest]:
-        return [pr for pr in self.pulls.listed(self.todo.repo, state) if pr.names(self.todo.id)]
+        """PRs naming the problem touched since the order; an older one served an earlier order."""
+        return [pr for pr in self.pulls.listed(self.todo.repo, state)
+                if pr.names(self.todo.id) and pr.updated_at >= self.since]
 
     def commit(self, *excluded: str) -> tuple[str, float] | None:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
