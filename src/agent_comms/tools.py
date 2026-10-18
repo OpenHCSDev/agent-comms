@@ -311,7 +311,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     @classmethod
     def invoke(
         cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller
-    ) -> JsonValue:
+    ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         if cls.family_discriminator in arguments:
             raise ValueError("Unknown tool argument: tool")
@@ -1195,7 +1195,7 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
         parser_default="{}", normalize=_json_object)
 
-    def apply(self, ctx: Comms) -> JsonValue:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return invoke_tool(ctx, self.tool, self.arguments,
                            caller=ToolCaller.from_actor(self.caller))
 
@@ -1220,7 +1220,7 @@ def context_tool_catalog(context: str) -> list[dict[str, object]]:
 
 def invoke_tool(
     comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller
-) -> JsonValue:
+) -> dict[str, JsonValue]:
     return ToolRequest.decode(name).invoke(comms, arguments, caller=caller)
 
 
@@ -1231,7 +1231,7 @@ def invoke_context_tool(
     subject: str,
     actor: str | None,
     arguments: Mapping[str, object] | None = None,
-) -> JsonValue:
+) -> dict[str, JsonValue]:
     tool = ToolRequest.decode(name)
     if tool.context is None:
         raise ValueError(f"Tool {name!r} is not a context action.")

@@ -175,6 +175,13 @@ class NotADirectReplyFromDeclaredDependenciesExclusion(InputExclusion):
 class ExcludedInput(UnresolvedInput):
     reason: type[InputExclusion] = field(kw_only=True)
 
+    @classmethod
+    def excluded(cls, row: StoredInput, reason: type[InputExclusion]) -> ExcludedInput:
+        return ExcludedInput(
+            sequence=row.sequence, target=row.target, text=row.source_text,
+            input_id=row.public_id, status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)), reason=reason)
+
 
 @dataclass(frozen=True)
 class StandbyReview:
@@ -237,13 +244,13 @@ class GoalInputReview:
         excluded: list[ExcludedInput] = []
         for row in self.unknown:
             if row.key not in self.eligible_keys:
-                excluded.append(row.shown_as(ExcludedInput, reason=(
+                excluded.append(ExcludedInput.excluded(row, reason=(
                     OwnerInputWithoutBusSequenceExclusion if row.sequence is None
                     else NotADirectReplyFromDeclaredDependenciesExclusion)))
             elif row.reviewed_for_goal(self.goal_id):
-                reviewed.append(row.shown())
+                reviewed.append(UnresolvedInput.of(row))
             else:
-                eligible.append(row.shown())
+                eligible.append(UnresolvedInput.of(row))
         return StandbyReview(
             self.goal_id, tuple(target.incarnation.name for target in self.targets),
             tuple(item.input_id for item in eligible), tuple(eligible), tuple(reviewed),

@@ -18,6 +18,7 @@ from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
+from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
     from .input_attempt import StoredInput
@@ -198,7 +199,7 @@ class UnattributedProvenance(Provenance):
 
 
 @dataclass(frozen=True)
-class ContextSourceText:
+class ContextSourceText(DeclaredReply):
     """A public source-read result, not another context or input record."""
 
     description: str
@@ -1060,7 +1061,7 @@ class RecordedContextManifest:
 
 
 @dataclass(frozen=True)
-class TurnContext:
+class TurnContext(DeclaredReply):
     thread: ThreadIncarnation
     turn: ContextTurn
     segments: tuple[ContextSegment, ...]

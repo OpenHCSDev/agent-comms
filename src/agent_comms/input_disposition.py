@@ -162,9 +162,9 @@ class InputDocument:
                 historical_count += int(not row.notice_dismissed)
                 if include_history:
                     historical.append(
-                        row.shown_as(HistoricalInput, notice_dismissed=row.notice_dismissed))
+                        HistoricalInput.notice(row, row.notice_dismissed))
             else:
-                current.append(row.shown())
+                current.append(UnresolvedInput.of(row))
         return DeliveryOverview(tuple(current), historical_count, dismissed, tuple(historical),
                                 "owner_queue" if awaiting_keys is not None else "unobserved")
 

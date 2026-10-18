@@ -147,12 +147,26 @@ class UnresolvedInput:
     reviewed_for_goals: tuple[str, ...] = field(
         default=(), metadata={"wire_name": "reviewedForGoals", "wire_omit_default": True})
 
+    @classmethod
+    def of(cls, row: StoredInput) -> UnresolvedInput:
+        return UnresolvedInput(
+            sequence=row.sequence, target=row.target, text=row.source_text,
+            input_id=row.public_id, status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)))
+
 
 @dataclass(frozen=True)
 class HistoricalInput(UnresolvedInput):
     """An earlier notice of an unresolved input, shown with whether the owner dismissed it."""
 
     notice_dismissed: bool = field(kw_only=True, metadata={"wire_name": "noticeDismissed"})
+
+    @classmethod
+    def notice(cls, row: StoredInput, notice_dismissed: bool) -> HistoricalInput:
+        return HistoricalInput(
+            sequence=row.sequence, target=row.target, text=row.source_text,
+            input_id=row.public_id, status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)), notice_dismissed=notice_dismissed)
 
 
 @dataclass(frozen=True)
@@ -239,14 +253,6 @@ class StoredInput(InputAttempt):
     @property
     def public_id(self) -> str:
         return self.key.removeprefix("acp:")
-
-    def shown(self) -> UnresolvedInput:
-        return self.shown_as(UnresolvedInput)
-
-    def shown_as[Shown: UnresolvedInput](self, kind: type[Shown], **facts: object) -> Shown:
-        """This input as a reply record of ``kind``; ``facts`` are the fields that kind adds."""
-        return kind(self.sequence, self.target, self.source_text, self.public_id,
-                    self.public_status, tuple(sorted(self.goal_reviews)), **facts)
 
 
 class RecoverableUnboundInput(StoredInput):

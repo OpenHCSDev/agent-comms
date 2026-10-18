@@ -17,6 +17,7 @@ from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
+from agent_comms.input_attempt import UnresolvedInput
 from agent_comms.input_disposition import InputDispositions
 from stored_inputs import insert_inputs, stored_inputs
 
@@ -219,7 +220,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
                 "messages": [],
                 "acknowledged": 0,
                 "unresolved_inputs": [
-                    FieldCodec.encode(row.shown()) for row in stored_inputs(agent.inputs.dispositions.root).rows.values()
+                    FieldCodec.encode(UnresolvedInput.of(row)) for row in stored_inputs(agent.inputs.dispositions.root).rows.values()
                 ],
             }
             assert 900_000 < len(json.dumps(full_result, indent=2).encode()) < 1_100_000

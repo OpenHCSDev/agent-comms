@@ -94,7 +94,7 @@ class Goals:
                 .unresolved(aliases := self.registry.entry(name).entry.names)
                 .unknown(aliases)
             )
-            return tuple(row.shown() for row in rows)
+            return tuple(UnresolvedInput.of(row) for row in rows)
 
     def input_delivery(
         self,

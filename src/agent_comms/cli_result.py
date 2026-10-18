@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from .field_codec import FieldCodec
+from .tool_result import DeclaredReply
 
 
-class CliResult:
+class CliResult(DeclaredReply):
     """Every result a command returns; a result kind overrides what it decides."""
 
     __slots__ = ()
