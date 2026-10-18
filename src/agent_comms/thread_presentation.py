@@ -173,6 +173,10 @@ class ThreadPresentation:
     incoming_references: tuple[MessageReference, ...] = ()
     sent_references: tuple[MessageReference, ...] = ()
 
+    def notification_activity_names(self) -> frozenset[str]:
+        return frozenset(name for item in (*self.notifications, *self.sent_notifications)
+                         for name in item.activity_names())
+
     def same_status(self, other: ThreadPresentation | None) -> bool:
         """Status changes do not require reacquiring an unchanged source window."""
         return other is not None and (self.title, self.marker, self.summary, self.status, self.binding) == (

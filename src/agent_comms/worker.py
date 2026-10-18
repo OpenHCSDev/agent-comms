@@ -11,7 +11,7 @@ from contextlib import suppress
 from .acp import CommsAgent
 from .comms import wire
 from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .launch_runtime import LaunchRuntime, ThreadLaunch
 
 
 async def run() -> None:
@@ -21,7 +21,7 @@ async def run() -> None:
     # Fail before attach; the check verifies the native package once.
     launch = comms.owners.launch_authority
     verified_cli = launch.validate() if launch is not None else None
-    name = RestartEnvironment.calling_thread()
+    name = ThreadLaunch.current().name
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(
         comms,
@@ -36,7 +36,7 @@ async def run() -> None:
     initial: asyncio.Task | None = None
     try:
         await agent.sessions.start_owner(thread.worktree, name)
-        if key := os.environ.pop(RestartEnvironment.initial_input_key, None):
+        if key := ThreadLaunch.take_startup_input():
             initial = asyncio.create_task(run_startup_input(agent, name, key))
         await stopped.wait()
     finally:
@@ -94,11 +94,11 @@ def main() -> int:
     argparse.ArgumentParser(
         prog="agent-comms-agent", description=__doc__,
         epilog=(
-            f"Select an existing owner with {RestartEnvironment.owner_key}. "
+            f"Select an existing owner with {ThreadLaunch.variable('name')}. "
             "Use agent-comms for commands."
         ),
     ).parse_args()
-    name = RestartEnvironment.calling_thread()
+    name = ThreadLaunch.current().name
 
     comms = wire()
     comms.owners.require_private_launch()  # Headless execution needs a private bus root.
