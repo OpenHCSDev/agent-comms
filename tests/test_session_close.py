@@ -61,7 +61,7 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
             selected[name] = next(socket for socket in owner._runtime.clients[name]
                                   if socket.token == proxy.controller_token)
             permissions.append(asyncio.create_task(owner._runtime.request_permission(
-                name, selected[name], {"toolCall": {}, "options": []})))
+                name, selected[name], {"toolCallId": "call"}, [])))
         async with asyncio.timeout(5):
             await asyncio.gather(*(event.wait() for event in callbacks.entered.values()))
         router = build_agent_router(client, use_unstable_protocol=client.use_unstable_protocol)

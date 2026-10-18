@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from .locked_store import RootFile
 from .channel_targets import ChannelTarget
+from .coordination_errors import HistoricalSourceChanged
 from .channels import Channel
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
@@ -19,12 +20,10 @@ from .message_page import (
     ConversationMessagePageRequest,
     MessagePage,
     NEWEST_PAGE,
-    HistoryCursor,
     MessagePageRequest,
-    NewerTraversal,
-    OlderTraversal,
     PageBounds,
 )
+from .page_traversal import HistoryCursor, NewerTraversal, OlderTraversal
 from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
@@ -250,7 +249,7 @@ class HistorySource:
     def require(cls, sources: tuple[HistorySource, ...], key: str) -> HistorySource:
         source = next((item for item in sources if item.key == key), None)
         if source is None:
-            raise ValueError("Historical source detached; refresh history")
+            raise HistoricalSourceChanged("Historical source detached; refresh history")
         source.validate()
         return source
 
@@ -261,7 +260,7 @@ class HistorySource:
         from .presentation import MessageNotification
 
         if self.require(sources, self.key) != self:
-            raise ValueError("Historical source changed; refresh history")
+            raise HistoricalSourceChanged("Historical source changed; refresh history")
         root = Path(self.root)
         result = MessageNotification.read_references(
             WireLog(root / "bus.jsonl"), references,
@@ -361,7 +360,7 @@ class HistoryArchive(RootFile):
         except FileNotFoundError:
             yield ()
             if self.path.exists():
-                raise ValueError("Historical source catalogue changed; refresh history")
+                raise HistoricalSourceChanged("Historical catalogue changed; refresh history")
             return
         with stream:
             revision = FileRevision.from_file(stream)
@@ -372,7 +371,7 @@ class HistoryArchive(RootFile):
 
     def _require_revision(self, revision: FileRevision) -> None:
         if FileRevision.capture(self.path) != revision:
-            raise ValueError("Historical source catalogue changed; refresh history")
+            raise HistoricalSourceChanged("Historical catalogue changed; refresh history")
 
     def attach(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Snapshot a preserved source, then publish it for ordinary display.
@@ -489,7 +488,7 @@ class HistoryArchive(RootFile):
             -1 if traversal.historical else len(sources) - 1,
         )
         if traversal.historical and start < 0:
-            raise ValueError("Historical source detached; reload history")
+            raise HistoricalSourceChanged("Historical source detached; reload history")
         for index in traversal.source_indexes(start, len(sources)):
             source = sources[index]
             source.validate()

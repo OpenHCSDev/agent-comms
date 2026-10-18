@@ -84,7 +84,7 @@ class WakeDecision(RecipientDecision):
 
     def to_wire(self) -> dict[str, str]:
         return {"recipient_lookup": self.recipient, "audience": self.audience.value,
-                "wake_mode": self.wake_mode.require_name()}
+                "wake_mode": self.wake_mode.declared_name}
 
 
 @dataclass(frozen=True)

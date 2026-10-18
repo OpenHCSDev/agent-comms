@@ -14,7 +14,7 @@ from .child_process import ExitedOutcome
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .goal_states import ActiveGoal, GoalState
 
 if TYPE_CHECKING:
@@ -174,7 +174,7 @@ class GoalRevision:
             raise ValueError("Goal revision requires identity")
         try:
             revision = FieldCodec.decode(int, self.revision)
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise ValueError(
                 "Goal revision must be an exact nonnegative 63-bit integer."
             ) from error

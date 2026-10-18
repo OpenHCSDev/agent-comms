@@ -29,7 +29,7 @@ from .channels import Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
@@ -260,7 +260,7 @@ def tool_field(
     binding: type[ContextBinding] | None = None,
     choices=None,
 ):
-    metadata = {"description": description, "wire_nonnull": True}
+    metadata = {"description": description, "wire_nonnull": default is not None}
     if wire_name is not None:
         metadata["wire_name"] = wire_name
     if binding is not None:
@@ -274,7 +274,6 @@ def tool_field(
 class ToolRequest[Caller: ToolCaller = ToolCaller](
     ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool
 ):
-    family_discriminator = "tool"
     description: ClassVar[str]
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
@@ -313,11 +312,11 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         if cls.family_discriminator in arguments:
-            raise ValueError("Unknown tool argument: tool")
+            raise ValueError(f"Unknown tool argument: {cls.family_discriminator}")
         try:
             request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
-        except (TypeError, ValueError) as error:
-            raise ValueError(f"Invalid {cls.declared_name} arguments: {error}") from error
+        except MalformedRecord as error:
+            raise MalformedRecord(f"Invalid {cls.declared_name} arguments: {error}") from error
         return FieldCodec.encode(caller.invoke(request, comms))
 
     @abstractmethod
@@ -406,12 +405,8 @@ class CommsPinThreadTool(ToolRequest):
     pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ChannelView:
-        channel = self.channel
-        PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
-        canonical = ChannelTarget.normalize_name(channel)
-        return next(
-            view for view in comms.views.channel_views() if view.channel.name == canonical
-        )
+        PinThreadCliCommand(channel=self.channel, name=self.name, pinned=self.pinned).apply(comms)
+        return comms.views.channel_view(ChannelTarget.normalize_name(self.channel))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -418,8 +418,38 @@ class BroadExceptDefault(PerFileOccurrenceMeasure):
                    and any(cls.returns_default(statement) for statement in node.body))
 
 
-class FamilyFlattened(PerFileOccurrenceMeasure):
-    """The original audit collector, enforced independently for each file."""
+class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
+    """Keep audit behavior checks, excluding owned identity and exposing codec detours."""
+
+    def __init__(self) -> None:
+        self.owners: list[str] = []
+        self.round_trips = 0
+
+    def visit_ClassDef(self, node: ast.ClassDef):
+        self.owners.append(node.name)
+        try:
+            return self.generic_visit(node)
+        finally:
+            self.owners.pop()
+
+    def visit_Attribute(self, node: ast.Attribute):
+        if (node.attr == "declared_name" and isinstance(node.value, ast.Name)
+                and node.value.id in {"cls", "self", *self.owners[-1:]}):
+            return ast.copy_location(ast.Constant(value=None), node)
+        return self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call):
+        match node:
+            case ast.Call(
+                func=ast.Attribute(value=ast.Name(id="FieldCodec"), attr="decode"),
+                args=[ast.Name(id="str"), ast.Call(
+                    func=ast.Attribute(value=ast.Name(id="FieldCodec"), attr="encode"),
+                    args=[_], keywords=[],
+                )], keywords=[],
+            ):
+                self.round_trips += 1
+                return ast.copy_location(ast.Constant(value=None), node)
+        return self.generic_visit(node)
 
     # GitMeasure supplies complete repository-relative paths. Only those exact
     # original modules own codec/schema behavior; nested package tails do not.
@@ -430,15 +460,13 @@ class FamilyFlattened(PerFileOccurrenceMeasure):
         ("toad", "agent_schema.py"), ("toad", "db.py"),
     })
 
-    @staticmethod
-    def occurrences(node: ast.AST) -> int:
-        return AuditFamilyFlattened.count(node)
-
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
         if Path(filename) in cls.mechanism_modules:
             return 0
-        return super().count(source, filename)
+        projection = cls()
+        tree = projection.visit(ast.parse(source, filename))
+        return AuditFamilyFlattened.count(tree) + projection.round_trips
 
 
 class DispatchCases(MroDispatch):
@@ -566,16 +594,14 @@ class TypeSwitchArms(DispatchArms, TypeSwitch):
     pass
 
 
-class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileOccurrenceMeasure):
+class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileMeasure):
     """Share the audit collector; per-file counts prevent moving primitive debt."""
 
     @classmethod
-    def occurrences(cls, node: ast.AST) -> int:
-        return cls.count_module(node) if isinstance(node, ast.Module) else 0
-
-    @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        return super().count(source, filename) if cls.admits(filename) else 0
+        if not cls.admits(filename):
+            return 0
+        return cls.count_module(ast.parse(source, filename))
 
 
 class GodClassExcess(GitMeasure):
@@ -1012,6 +1038,48 @@ class EditedCarry(Measure):
             elif status == "A":
                 edited += bool(git(repo, "log", "-1", "--format=%H", "--diff-filter=D", base, "--", path).strip())
         return {cls.__name__: 0}, {cls.__name__: edited}
+
+class UncarriedRecordFormat(Measure):
+    """A stored record's fields changed without its version, or its version without a carry.
+
+    A record read back from a file declares ``version: ClassVar[int]``. Files in the
+    old format stay on disk, so a field change bumps that version, and a bumped
+    version arrives with a new carry step that rewrites the old files.
+    """
+
+    @staticmethod
+    def formats(source: bytes) -> dict[str, tuple[object, str]]:
+        """Each versioned record class: its declared version and its stored fields."""
+        found = {}
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            declared = [item for item in node.body
+                        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)]
+            version = [item.value for item in declared if item.target.id == "version"
+                       and "ClassVar" in ast.unparse(item.annotation)]
+            if version and isinstance(version[0], ast.Constant):
+                stored = [f"{item.target.id}: {ast.unparse(item.annotation)}" for item in declared
+                          if "ClassVar" not in ast.unparse(item.annotation)]
+                found[node.name] = (version[0].value, "; ".join(stored))
+        return found
+
+    @classmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        added = git(repo, "diff", "--name-only", "-z", "--diff-filter=A", base, head, "--", str(STEPS))
+        carried = any(Path(path).stem.startswith("carry_") and path.endswith(".py")
+                      for path in added.decode().split("\0"))
+        uncarried = 0
+        for path in sorted(changed):
+            try:
+                before = cls.formats(git(repo, "show", f"{base}:{path}"))
+                after = cls.formats(git(repo, "show", f"{head}:{path}"))
+            except subprocess.CalledProcessError:
+                continue
+            for name, (version, stored) in after.items():
+                if name in before and before[name] != (version, stored):
+                    uncarried += before[name][0] == version or not carried
+        return {cls.__name__: 0}, {cls.__name__: uncarried}
 
 def git(repo: Path, *args: str, input: bytes = b"") -> bytes:
     return subprocess.check_output(["git", "-C", str(repo), *args], input=input, timeout=20)

@@ -14,13 +14,12 @@ from pathlib import Path
 from inspect import isabstract
 from typing import Any, ClassVar, Generic, TypeVar
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .store_files import ExclusiveLock, LockMode, SharedLock, StoreLock, _store_lock
 
 T = TypeVar("T")
 
 
-@dataclass(frozen=True, slots=True)
 class JsonDocument(ABC, Generic[T]):
     """Declared JSON codec and atomic file I/O; LockedStore owns transactions."""
 
@@ -40,11 +39,10 @@ class JsonDocument(ABC, Generic[T]):
 
     def _read_unlocked(self) -> T:
         try:
-            text = self.path.read_text(encoding="utf-8")
-            return self._decode(json.loads(text))
+            return self._decode(FieldCodec.parse(self.path.read_bytes()))
         except FileNotFoundError:
             return self.empty()
-        except (OSError, ValueError, TypeError) as error:
+        except (OSError, MalformedRecord) as error:
             return self._unreadable(error)
 
     def _unreadable(self, error: Exception) -> T:
@@ -154,6 +152,7 @@ class RootFile:
 class LockedStore(JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
+    path: Path
     lock_rank: ClassVar[int]
 
     def __init_subclass__(cls, **kwargs):

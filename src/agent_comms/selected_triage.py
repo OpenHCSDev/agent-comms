@@ -12,9 +12,14 @@ from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendin
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, TextRepresentation
+from .field_codec import (
+    FieldCodec,
+    JsonShapeFamily,
+    JsonShapeMember,
+    MalformedRecord,
+    TextRepresentation,
+)
 from .typed_table import TextStorage
-from .jsonl_stream import unique_fields
 
 
 class InvalidTriageDecision(ValueError):
@@ -34,8 +39,8 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
         if not 0 < len(text.encode("utf-8")) <= 256:
             raise InvalidTriageDecision("triage response is not bounded")
         try:
-            return FieldCodec.decode(cls, json.loads(text, object_pairs_hook=unique_fields))
-        except (ValueError, TypeError) as error:
+            return FieldCodec.decode(cls, FieldCodec.parse(text))
+        except MalformedRecord as error:
             raise InvalidTriageDecision("triage response is not an unambiguous decision") from error
 
     @classmethod
@@ -215,5 +220,5 @@ class RecordedTriageText(TextRepresentation):
 
     @classmethod
     def sql_constraint(cls, column: str) -> str:
-        names = tuple(member.require_name().lower() for member in SelectedTriage.members_with(SelectedTriage))
+        names = tuple(member.declared_name.lower() for member in SelectedTriage.members_with(SelectedTriage))
         return TextStorage.constraints(column, Literal[names])[0]

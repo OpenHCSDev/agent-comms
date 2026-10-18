@@ -27,6 +27,7 @@ from typing import Literal, TypeVar
 from uuid import uuid4
 
 from .coordination_database import CoordinationStore
+from .field_codec import MalformedRecord
 from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
@@ -111,7 +112,7 @@ class Generation(GoalLedgerTable, TypedTable):
     def read_in(cls, conn: sqlite3.Connection, goal_id: str) -> Generation | None:
         try:
             return cls.one(conn, goal_id=goal_id)
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise StorageUncertainError("Invalid persisted goal generation.") from error
 
     def advance(
@@ -257,7 +258,7 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
     def read_in(cls, conn: sqlite3.Connection, attempt_id: str) -> AttemptRecord | None:
         try:
             return cls.one(conn, attempt_id=attempt_id)
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise StorageUncertainError("Invalid persisted goal attempt.") from error
 
     def advance(
@@ -458,8 +459,8 @@ class LaunchPermit:
             raise ValueError("Provider cost total must be a nonnegative number.")
         try:
             raw = json.dumps(usage, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        except (TypeError, ValueError) as error:
-            raise ValueError("Provider usage must be JSON serializable.") from error
+        except ValueError as error:  # json.dumps refuses a non-finite number
+            raise MalformedRecord("Provider usage must be JSON serializable.") from error
         reservation = self.reservation
 
         def write(conn: sqlite3.Connection) -> str:
@@ -541,7 +542,7 @@ class GoalAttemptStore:
         with closing(self._connect()) as conn:
             try:
                 assert_goal_attempt_schema(conn)
-            except (sqlite3.Error, ValueError, TypeError) as error:
+            except (sqlite3.Error, MalformedRecord) as error:
                 raise StorageUncertainError("Incomplete goal attempt schema.") from error
 
     @classmethod
@@ -690,7 +691,7 @@ class GoalAttemptStore:
         with closing(self._connect()) as conn:
             try:
                 row = Generation.one(conn, goal_id=goal_id, number=generation)
-            except (sqlite3.Error, ValueError, TypeError) as error:
+            except (sqlite3.Error, MalformedRecord) as error:
                 raise StorageUncertainError("Cannot read ready authority state.") from error
         return row.ready_digest if row is not None and row.lifecycle.ready else None
 
