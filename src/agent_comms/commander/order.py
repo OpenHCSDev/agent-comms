@@ -82,6 +82,16 @@ def todos():
     return COMMS.goals.todos.for_commander(COMMS.registry.require(ME).incarnation)
 
 
+def held_orders() -> tuple[Todo, ...]:
+    """This commander's open orders that a unit holds."""
+    return COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+
+
+def held_by(unit: str) -> tuple[Todo, ...]:
+    """This commander's open orders held by one unit."""
+    return COMMS.goals.todos.held_by(COMMS.registry.require(ME).incarnation, unit)
+
+
 def progress() -> dict[str, OrderProgress]:
     """Each held order's progress, derived by Core's Todo list from the unit's checkout and PRs."""
     listed: TodoList = call(CommsTodoListTool())
@@ -532,7 +542,7 @@ def first_calls():
     lines = open(ACTIVITY).read().splitlines()[-4000:]
     watched = {line[9:].split(' ', 1)[0] for line in lines}
     missing = []
-    for todo in COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation):
+    for todo in held_orders():
         unit, order = todo.assignment.owner, todo.order
         if not todo.pending or unit not in watched:
             continue  # tool_watch cannot see this unit's harness; its clock is the commit deadline
@@ -559,12 +569,12 @@ def hunt(where, why, sent=None):
     if len(why.split()) < 10:
         sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
     if sent:
-        held = COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+        held = held_orders()
         todo = next((t for t in held if t.order.id == sent), None) or sys.exit(
             f'Refused: {sent} is not an open tracked order; send it first. {HuntVerb.usage()}')
     else:
         named = set(re.findall(r'\bP\d+\b', why))
-        held = COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+        held = held_orders()
         todo = next((t for t in held if t.id in named), None) or sys.exit(
             'Refused: a clean hunt is recorded on its open problem; name the P-number in --why. '
             + HuntVerb.usage())
@@ -657,7 +667,7 @@ def overdue():
         if missing := first_calls():
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
                   flush=True)
-        held = COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+        held = held_orders()
         stale = [f'{t.id} {t.assignment.owner} (last {seen})' for t in held
                  if (seen := last_activity(t.assignment.owner)) and seen < time.strftime('%H:%M:%S', time.localtime(time.time() - 1200))]
         if stale:
