@@ -235,7 +235,7 @@ class PiNativeBackend(
         return await open_native(
             self,
             self.agent_bin,
-            self.arguments(thread),
+            thread.native_launch_arguments(self.arguments(thread)),
             worktree=thread.worktree,
             root=self.comms.root,
             environment=environment,
@@ -257,7 +257,7 @@ class PiNativeBackend(
         images = {"images": content.images} if content.images else {}
         async for event in backend.stream_agent_events(
             self.agent_bin,
-            self.arguments(thread),
+            thread.native_launch_arguments(self.arguments(thread)),
             content.text,
             delivery.worktree,
             delivery.environment,

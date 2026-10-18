@@ -29,7 +29,6 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
     @classmethod
     def for_name(cls, name: str) -> type[ToolDeclaration] | UndeclaredTool:
-        cls._member_declarations()
         try:
             return cls.decode(name.lower())
         except ValueError:

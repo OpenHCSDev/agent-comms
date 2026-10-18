@@ -319,6 +319,8 @@ class RequestGoalOrder(GoalOrder):
 class ProblemGoalOrder(GoalOrder):
     """A unit's one Goal groups its canonical Todo assignments, not copied orders."""
 
+    StrikeLimit: ClassVar[int] = 2  # live strikes the commanded unit may take on one problem
+
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         raise ValueError("Complete each problem with its checked delivered commit.")
 
@@ -327,7 +329,7 @@ class ProblemGoalOrder(GoalOrder):
             raise ValueError("The problem Goal has no assigned Todos.")
 
     def require_replacement(self, goal, goals, owner):
-        if any(todo.pending for todo in goals.todos.for_goal(owner, goal.id)):
+        if goals.todos.holds_pending(owner):
             raise ValueError("Finish or release the assigned problems before replacing this Goal.")
 
     def todos(self, goals, owner, goal_id):

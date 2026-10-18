@@ -19,7 +19,7 @@ from agent_comms.connector import (
     RevokeVerb,
 )
 from agent_comms.tool_caller import NoThreadCaller
-from agent_comms.tools import invoke_tool
+from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
@@ -90,12 +90,21 @@ async def test_registration_accepts_only_the_claude_callback(client):
     assert refused.status == 400
 
 
-async def test_an_approved_client_lists_exactly_the_readable_tools(client, store):
+async def test_connector_lists_every_tool(client, store, comms):
     token = await approved_token(client, store)
-    listed = await (
-        await client.post("/mcp", json=LIST, headers={"Authorization": f"Bearer {token}"})
-    ).json()
-    assert [tool["name"] for tool in listed["result"]["tools"]] == ["comms_threads"]
+    headers = {"Authorization": f"Bearer {token}"}
+    listed = (await (await client.post("/mcp", json=LIST, headers=headers)).json())["result"]["tools"]
+    family = ToolRequest.members_with(ToolRequest)
+    assert [tool["name"] for tool in listed] == [tool.declared_name for tool in family]
+    assert [tool["annotations"]["readOnlyHint"] for tool in listed] == [
+        issubclass(tool, ReadTool) for tool in family]
+    comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), "/tmp", created_at=2.0))
+    send = {"name": "comms_send", "arguments": {"from": "claude-ai", "to": "worker", "body": "Owner said go"}}
+    sent = await (await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": send})).json()
+    assert sent["result"]["isError"] is False
+    assert [(message.sender, message.body) for message in comms.bus.inbox("worker")] == [
+        ("claude-ai", "Owner said go")]
 
 
 async def test_a_call_returns_what_the_tool_returns_in_process(client, store, root):
