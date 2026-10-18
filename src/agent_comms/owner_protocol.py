@@ -8,7 +8,7 @@ from acp import RequestError
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
-from ._native.core_stamp import STAMP
+from .package_stamp import STAMP
 
 CORE_COMMIT = STAMP.commit()
 
