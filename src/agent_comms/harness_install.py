@@ -18,6 +18,7 @@ from typing import ClassVar
 
 from .comms import Comms
 from .declared_family import DeclaredFamily
+from .thread_execution import ExternalThreadExecution
 
 
 def replace_link(link: Path, target: Path) -> None:
@@ -67,7 +68,7 @@ class Harness(DeclaredFamily, affix="Harness"):
         return {self.home / self.skills_dir / skill.name: skill for skill in skills.iterdir() if skill.is_dir()}
 
     def bus_threads(self, commander: str) -> tuple[str, ...]:
-        """Threads install registers for this harness; a harness that registers itself has none."""
+        """External threads install registers for this harness; a harness that registers itself has none."""
         return ()
 
     @abstractmethod
@@ -79,7 +80,8 @@ class Harness(DeclaredFamily, affix="Harness"):
             replace_link(link, target)
         registered = [name for name in self.bus_threads(commander) if not comms.registry.name_reserved(name)]
         for name in registered:
-            comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(project)))
+            comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(project),
+                                                                execution=ExternalThreadExecution))
         return {'links': sorted(map(str, self.links())), 'config': sorted(map(str, self.configure())),
                 'registered': registered}
 

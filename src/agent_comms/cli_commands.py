@@ -19,7 +19,7 @@ from contextlib import aclosing
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
 
 from acp.schema import SessionConfigSelectOption
 
@@ -31,7 +31,7 @@ from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
 from .cli_protocol import ArrivedMessage
-from .field_codec import FieldCodec, compile_decoder
+from .field_codec import FieldCodec, PathText, compile_decoder
 from .comms import Comms
 from .config_options import (
     CatalogConfigOption, CatalogSelection, ConfigOptions,
@@ -1169,9 +1169,8 @@ class RegisterCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class InstallCliCommand(CliCommand):
     help = "Set up every coding harness on this machine to use this bus, with the commander skill and tools"
-    project: Path = option("--project", default_factory=Path.cwd, parser_default=".", normalize=Path)
-    repos: tuple[Path, ...] = option("--repos", default=(), parser_default="",
-                                     normalize=lambda value: tuple(Path(repo) for repo in _tags(value)))
+    project: Annotated[Path, PathText] = option("--project", default_factory=Path.cwd, parser_default=".")
+    repos: tuple[Annotated[Path, PathText], ...] = option("--repos", default=(), parser_default="", normalize=_tags)
     commander: str = option("--commander", default="claude-code")
 
     def apply(self, ctx: Comms) -> Any:
