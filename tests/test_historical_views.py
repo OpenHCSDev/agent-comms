@@ -69,16 +69,17 @@ def migrated(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "method,args",
+    "method,args,reader",
     [
-        ("channel_display_page", ("#team",)),
-        ("dm_display_page", ("alice",)),
-        ("channel_display_page", ("#any",)),
+        ("channel_display_page", ("#team",), lambda live: dict(viewer=live.views.display_viewer(str(live.root)))),
+        ("dm_display_page", ("alice",), lambda live: dict(worktree=str(live.root))),
+        ("channel_display_page", ("#any",), lambda live: dict(viewer=live.views.display_viewer(str(live.root)))),
     ],
 )
-def test_all_history_backward_and_forward(migrated, method, args):
+def test_all_history_backward_and_forward(migrated, method, args, reader):
     old, prior, live, source = migrated
-    rows = collect(live, method, *args, worktree=str(live.root))
+    scope = reader(live)
+    rows = collect(live, method, *args, **scope)
     expected = 18 if args == ("#any",) else 9
     assert len(rows) == expected
     assert len({row.view_key for row in rows}) == expected
@@ -87,7 +88,7 @@ def test_all_history_backward_and_forward(migrated, method, args):
     forward = []
     cursor = HistoryCursor(source.key, 0)
     for _ in range(40):
-        page = getattr(live.views, method)(*args, after=cursor, limit=2, worktree=str(live.root))
+        page = getattr(live.views, method)(*args, after=cursor, limit=2, **scope)
         forward.extend(page.messages)
         if not page.has_newer:
             break
@@ -97,7 +98,7 @@ def test_all_history_backward_and_forward(migrated, method, args):
 
 def test_original_identity_and_no_delivery_authority(migrated):
     old, prior, live, source = migrated
-    rows = collect(live, "channel_display_page", "#team", worktree=str(live.root))
+    rows = collect(live, "channel_display_page", "#team", viewer=live.views.display_viewer(str(live.root)))
     historical = [m for m in rows if isinstance(m, HistoricalMessage) and m.source == source]
     original = list(old.views.channel_history_page("#team").messages)
     assert [m.to_wire() for m in historical] == [m.to_wire() for m in original]

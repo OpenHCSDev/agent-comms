@@ -30,7 +30,7 @@ class DisplayViewer(ABC):
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
 
     @abstractmethod
-    def display_evidence(self, page, presentation): ...
+    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay | None: ...
 
     @abstractmethod
     def cursor(self, reads, snapshot, document) -> ReadCursor: ...
@@ -50,7 +50,7 @@ class AnonymousViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
 
-    def display_evidence(self, page, presentation):
+    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> None:
         return None
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
@@ -73,7 +73,7 @@ class NamedViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
 
-    def display_evidence(self, page, presentation):
+    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay:
         from .historical_views import HistoricalDisplay
 
         source = page.messages[0].source
@@ -197,6 +197,8 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 
 if TYPE_CHECKING:
+    from .historical_views import HistoricalDisplay
+    from .presentation import BusPresentation
     from .bus_page_index import BusPageRow
     from .channels import Channel
     from .message_bus import MessageBus
