@@ -11,7 +11,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from bisect import bisect_left
 from collections.abc import Callable, Collection, Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import InitVar, dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
@@ -22,6 +22,72 @@ from .errors import UnregisteredThreadError
 from .private_path import FileRevision
 from .store_files import _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+
+class DisplayViewer(ABC):
+    """The reader owns read evidence, aliases and cursor selection."""
+
+    @property
+    @abstractmethod
+    def history_name(self) -> str | None: ...
+
+    @abstractmethod
+    def cursor(self, reads, snapshot, document) -> ReadCursor: ...
+
+    @abstractmethod
+    def names(self, snapshot) -> frozenset[str]: ...
+
+    @abstractmethod
+    def require_name(self, snapshot) -> str: ...
+
+    @abstractmethod
+    def displayed_scope(self, scope, page, basis, presentation): ...
+
+
+@dataclass(frozen=True, slots=True)
+class AnonymousViewer(DisplayViewer):
+    @property
+    def history_name(self) -> None:
+        return None
+
+    def cursor(self, reads, snapshot, document) -> ReadCursor:
+        return ReadCursor()
+
+    def names(self, snapshot) -> frozenset[str]:
+        return frozenset()
+
+    def require_name(self, snapshot) -> str:
+        raise ValueError("Viewer metrics require a named viewer")
+
+    def displayed_scope(self, scope, page, basis, presentation):
+        return scope
+
+
+@dataclass(frozen=True, slots=True)
+class NamedViewer(DisplayViewer):
+    name: str
+    namespace: InitVar[RegistryProvenance]
+
+    def __post_init__(self, namespace) -> None:
+        object.__setattr__(self, "name", namespace.canonical_name(self.name))
+
+    @property
+    def history_name(self) -> str:
+        return self.name
+
+    def cursor(self, reads, snapshot, document) -> ReadCursor:
+        return reads.cursor(self.name, snapshot, document=document)
+
+    def names(self, snapshot) -> frozenset[str]:
+        return snapshot.names_for(self.name)
+
+    def require_name(self, snapshot) -> str:
+        return snapshot.canonical_name(self.name)
+
+    def displayed_scope(self, scope, page, basis, presentation):
+        return replace(scope, displayed=presentation.bus.reads.capture(
+            self.name, page.messages, basis.registry, presentation.bus.log.path,
+        ))
+
 
 class DisplaySelection(ABC):
     """The conversation selected by an original page or store observation."""

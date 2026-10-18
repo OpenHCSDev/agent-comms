@@ -1,4 +1,6 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
+from agent_comms.read_basis import NamedViewer
+from agent_comms.presentation import ReadThrough
 import argparse
 import asyncio
 from importlib.resources import files
@@ -59,9 +61,9 @@ async def main():
     assert original[message.seq, message.message_id]
     assert comms.views.message_notifications_for_references(
         (message.reference,) * (MessageNotification.window_limit + 1)) == original
-    page = comms.views.channel_display_page('#team', worktree=str(root))
-    comms.views.mark_channel_view_read('#team', worktree=str(root), through=page.newest_seq,
-                                      expected_scope=page.display_scope)
+    page = comms.views.channel_display_page('#team', viewer=NamedViewer(comms.messaging.user_identity(str(root)).name, comms.registry.snapshot()))
+    comms.views.mark_channel_view_read('#team', worktree=str(root),
+                                      mark=ReadThrough(page.newest_seq, page.display_scope))
     assert comms.views.viewer_snapshot(str(root)).channel_unread['#team'] == 0
     assert comms.bus.pending_count('stopped', '#team') == 1
     checks = ['full original snapshot value equality', 'original bounded reference notification windows',
