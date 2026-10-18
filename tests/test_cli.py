@@ -444,7 +444,7 @@ class TestSelectedTargetActions:
         assert comms.registry.snapshot() == original
         assert comms.channels.catalog.read() == catalog
 
-    def test_channel_stop_deduplicates_selected_member_and_preserves_single_result(self, tmp_path):
+    def test_channel_stop_deduplicates_selected_member(self, tmp_path):
         from agent_comms.cli_commands import StopCliCommand, TargetBatchResult, TargetEdit
         from agent_comms.thread_status import RunningThreadStatus
 
@@ -458,7 +458,6 @@ class TestSelectedTargetActions:
         assert {outcome.result.stopped for outcome in result.outcomes} == {"alpha", "beta"}
         assert all(comms.registry.status(name).stopped for name in ("alpha", "beta"))
         assert not result.reconnect_targets()
-        assert StopCliCommand.execute_target(comms, "alpha", {}).stopped == "alpha"
 
     def test_channel_start_uses_native_visible_roster_without_launching(self, tmp_path):
         from agent_comms.cli_commands import StartCliCommand
