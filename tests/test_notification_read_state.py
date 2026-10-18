@@ -21,6 +21,8 @@ def test_first_revision_requires_reads_even_for_unchanged_empty_stores():
     known = WireRevision.empty()
     assert unseen.stores_changed_since(known)
     assert unseen.registrations_changed_since(known)
+    assert known.registrations_changed_since(unseen)
+    assert unseen.registrations_changed_since(unseen)
     assert unseen.sidebar_changed_since(known)
     assert not known.stores_changed_since(known)
     assert not known.registrations_changed_since(known)
