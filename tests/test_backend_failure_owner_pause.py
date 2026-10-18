@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms.goal_actions import (
+    ActiveGoalAction,
     GoalPrecondition,
     ModelInvocable,
     OwnerInvocable,
@@ -103,10 +104,21 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         await agent.shutdown()
 
 
-@pytest.mark.parametrize("attribution", ["model", "runtime"])
+@pytest.mark.parametrize("attribution", ["model", "runtime", "stale_owner"])
 def test_nonowner_pause_does_not_bypass_failure_block(wired, tmp_path, attribution):
     wired.registry.declare(wired.registry.new_thread(name='project', tags=frozenset(), worktree=str(tmp_path)))
     initial = wired.goals.update_goal("project", SetGoalAction(text="Work"))
+    if attribution == "stale_owner":
+        wired.goals.update_goal(
+            "project",
+            PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
+            actor=OwnerInvocable,
+        )
+        wired.goals.update_goal(
+            "project",
+            ActiveGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
+            actor=OwnerInvocable,
+        )
     if attribution == "model":
         # Current goal declarations deny a model pause before any state change.
         with pytest.raises(ValueError, match="cannot take goal action 'paused'"):
