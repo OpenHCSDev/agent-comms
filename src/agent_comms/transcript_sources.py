@@ -318,26 +318,25 @@ class TranscriptSource:
 
     def turns(self, bound: TurnBound):
         """Read input-bounded turns under one original record-source cut."""
-        turns, pending = [], []
         with self.reading() as reader:
             cut = reader.cut()
             if cut.offset == 0:
                 return ()
             with closing(reader.reverse(cut.offset)) as records:
-                for record in records:
-                    pending.append(record)
-                    if record.project(lambda original: original.entry.input_boundary):
-                        turn = TurnDigest(record.entry.require_entry_id(), tuple(
-                            event for original in reversed(pending) for event in original.events))
-                        pending.clear()
-                        if not bound.includes(turn):
-                            break
-                        turns.append(turn)
-                        if bound.full(len(turns)):
-                            break
+                turns = bound.take(self._newest_turns(records))
             if not cut.holds(reader.cut(), cut.offset):
                 raise StaleRevision('Turn source changed during its read')
-        return tuple(turns)
+        return turns
+
+    @staticmethod
+    def _newest_turns(records):
+        pending = []
+        for record in records:
+            pending.append(record)
+            if record.project(lambda original: original.entry.input_boundary):
+                yield TurnDigest(record.entry.require_entry_id(), tuple(
+                    event for original in reversed(pending) for event in original.events))
+                pending.clear()
 
     def current_draft(self) -> TranscriptDraft:
         return NoDraft()

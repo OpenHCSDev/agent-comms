@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -33,6 +34,17 @@ class TurnBound(ABC):
     @abstractmethod
     def full(self, taken: int) -> bool:
         """Whether ``taken`` turns end the read."""
+
+    def take(self, turns: Iterable[TurnDigest]) -> tuple[TurnDigest, ...]:
+        """The bounded turns of a newest-first stream, reading no further than the bound needs."""
+        taken: list[TurnDigest] = []
+        for turn in turns:
+            if not self.includes(turn):
+                break
+            taken.append(turn)
+            if self.full(len(taken)):
+                break
+        return tuple(taken)
 
 
 @dataclass(frozen=True)

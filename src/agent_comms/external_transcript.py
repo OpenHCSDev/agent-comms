@@ -275,21 +275,15 @@ class StoreRead(TranscriptSource):
                 yield ExternalRecord(row.seq, row.events)
 
     def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
-        turns: list[TurnDigest] = []
         with closing(ExternalItemRow.recent_turn_ids(self.connection, self.transcript.lookup)) as ids:
-            for turn_id in ids:
-                turn = TurnDigest(turn_id, tuple(
+            return bound.take(
+                TurnDigest(turn_id, tuple(
                     event
                     for row in ExternalItemRow.select(
                         self.connection, thread=self.transcript.lookup, turn_id=turn_id,
                         order_by=("seq",))
                     for event in row.events))
-                if not bound.includes(turn):
-                    break
-                turns.append(turn)
-                if bound.full(len(turns)):
-                    break
-        return tuple(turns)
+                for turn_id in ids)
 
 @dataclass(frozen=True, slots=True)
 class ExternalTranscript(TranscriptSource, TypedStore):
