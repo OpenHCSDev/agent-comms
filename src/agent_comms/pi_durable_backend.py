@@ -250,15 +250,14 @@ class DurableHistory(TranscriptSource):
 
 @dataclass(frozen=True)
 class DurableTranscript(DurableHistory):
-    _worker: DurableHistoryWorker = field(init=False, repr=False, compare=False)
-
-    def __post_init__(self) -> None:
+    @cached_property
+    def worker(self) -> DurableHistoryWorker:
         worker = DurableHistoryWorker(self.path)
-        object.__setattr__(self, '_worker', worker)
         weakref.finalize(self, worker.close)
+        return worker
 
     def execute(self, command: Entries) -> HistoryData:
-        return self._worker.request(command)
+        return self.worker.request(command)
 
 
 @dataclass(frozen=True)
