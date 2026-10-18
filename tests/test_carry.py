@@ -82,6 +82,36 @@ def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
         ("carry_a", held), ("carry_b", "HEAD"), ("carry_c", repo.git("rev-parse", f"{tail}^"))]
 
 
+def test_a_step_applies_only_after_every_earlier_step_and_a_ledgerless_bus_upgrades_in_order(tmp_path):
+    (tmp_path / "repo").mkdir()
+    repo = Repository(tmp_path / "repo")
+    runnable = "\nif __name__ == '__main__':\n    Step.main()\n"
+    repo.commit({"carry_a": step_source(None) + runnable, "carry_b": step_source("carry_a") + runnable,
+                 "carry_c": step_source("carry_b") + runnable})
+    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
+        [str(REPO / "src"), str(REPO / "tools"), str(repo.path / "tools")])}
+
+    def apply(name: str, root: Path) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(repo.path / STEPS / f"{name}.py"), str(root), "--apply"],
+                              env=environment, cwd=repo.path, capture_output=True, text=True, timeout=60)
+
+    skipped = tmp_path / "skipped"
+    skipped.mkdir()
+    CarryLedger(skipped).record("carry_b")
+    refused = apply("carry_c", skipped)
+    assert refused.returncode and "lacks the earlier steps ['carry_a']" in refused.stderr
+    assert CarryLedger(skipped).applied() == ("carry_b",)
+
+    ledgerless = tmp_path / "ledgerless"
+    ledgerless.mkdir()
+    assert "lacks the earlier steps ['carry_a']" in apply("carry_b", ledgerless).stderr
+    assert CarryLedger(ledgerless).applied() is None
+    chain = CarryChain.at(repo.path, "HEAD")
+    for step in chain.pending(CarryLedger(ledgerless).applied() or ()):
+        assert apply(step.name, ledgerless).returncode == 0
+    assert CarryLedger(ledgerless).applied() == ("carry_a", "carry_b", "carry_c")
+
+
 @pytest.mark.parametrize("steps", [
     {"carry_a": step_source(None), "carry_b": step_source(None)},
     {"carry_a": step_source(None), "carry_b": step_source("carry_a"), "carry_c": step_source("carry_a")},

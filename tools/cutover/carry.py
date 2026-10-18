@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import inspect
 import json
 import os
 import subprocess
@@ -89,8 +90,12 @@ class Carry(ABC):
     after: ClassVar[str | None]
 
     @classmethod
+    def module(cls) -> Path:
+        return Path(inspect.getfile(cls)).resolve()
+
+    @classmethod
     def name(cls) -> str:
-        return Path(sys.modules[cls.__module__].__file__).stem
+        return cls.module().stem
 
     @classmethod
     @abstractmethod
@@ -113,6 +118,13 @@ class Carry(ABC):
         parser.add_argument("--before-stop", action="store_true")
         args = parser.parse_args()
         with _store_lock(args.root / "wire"):
+            if args.apply and not args.before_stop:
+                applied = CarryLedger(args.root).applied() or ()
+                checkout = cls.module().parents[2]
+                try:
+                    CarryChain.at(checkout, "HEAD").require_before(cls.name(), applied)
+                except ValueError as error:
+                    raise SystemExit(f"{cls.name()}: {error}") from None
             if args.before_stop:
                 result = cls.before_stop(args.root, apply=args.apply)
             else:
@@ -226,6 +238,17 @@ class CarryChain:
         deletion = git(repo, "log", "--no-renames", "-1", "--format=%H", "--diff-filter=D", revision, "--", path).decode().strip()
         holder = git(repo, "rev-parse", f"{deletion}^").decode().strip()
         return Step.declared(name, git(repo, "show", f"{holder}:{path}"), holder)
+
+    def require_before(self, name: str, applied: tuple[str, ...]) -> None:
+        """A step applies only to a bus whose ledger records every step ordered before it;
+        a bus without them, including one from before the ledger, runs ``tools/upgrade_bus.py``."""
+        names = [step.name for step in self.steps]
+        if name not in names:
+            raise ValueError("this history declares no such step")
+        missing = [earlier for earlier in names[:names.index(name)] if earlier not in applied]
+        if missing:
+            raise ValueError(f"the bus ledger lacks the earlier steps {missing}; "
+                             "run tools/upgrade_bus.py")
 
     def pending(self, applied: tuple[str, ...]) -> tuple[Step, ...]:
         """The steps a bus still needs. A bus recording a later step but not an
