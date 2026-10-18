@@ -47,6 +47,7 @@ from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
 from .goals import Goal, OrderCheck
+from .plan_phases import OrderPhase
 from .message_reference import MessageReference
 from .messages import Message
 from .owner_lifecycle import OwnerStartResult
@@ -56,7 +57,8 @@ from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as e
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
-from .todos import (CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, OrderProgress,
+from .todos import (CorrectCheckTodo,
+                    ServeTodo, DeliverTodo, InstallTodo, OrderDelivery, OrderProgress,
                     PullRequests, StrikeReason, Todo, TodoOperation)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
@@ -824,6 +826,22 @@ class CommsOrderCheckTool(ThreadToolRequest):
         actor = comms.registry.require(caller.name).incarnation
         changed = comms.goals.change_problem(self.problem, CorrectCheckTodo(
             todo.revision, actor, todo.order.check, self.check, self.why), caller.name)
+        return TodoChanged(changed, changed.strike_count)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderServeTool(ThreadToolRequest):
+    label = "Name order phase"
+    description = ("Name the plan phase an open order serves; only its commander may invoke this "
+                   "tool, and the order keeps its id, deadline and strikes.")
+    problem: str = tool_field("Problem ID")
+    serves: type[OrderPhase] = tool_field("The plan phase the order serves")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        todo = comms.goals.todos.get(self.problem)
+        actor = comms.registry.require(caller.name).incarnation
+        changed = comms.goals.change_problem(
+            self.problem, ServeTodo(todo.revision, actor, self.serves), caller.name)
         return TodoChanged(changed, changed.strike_count)
 
 
