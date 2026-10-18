@@ -8,6 +8,7 @@ import time
 from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
@@ -80,6 +81,7 @@ class AnsweredRuleReviewEntry(RuleReviewEntry):
 
 @dataclass(frozen=True)
 class RuleReviews(ThreadOwnedState, TypedStore):
+    root: Path
     filename = "rule_reviews.sqlite3"
     rows = (DrawnRule,)
 
