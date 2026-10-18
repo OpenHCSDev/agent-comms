@@ -20,8 +20,6 @@ sys.path.insert(0, str(args.toad_tests))
 from runtime_fixture import ToadApp, wait_channel_roster
 from agent_comms.comms import Comms
 from agent_comms.presentation import MessageNotification
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
-from agent_comms.launch_runtime import ROOT_ID_ENV, PACKAGE_ENV
 from agent_comms.threads import Thread
 from toad.widgets.comms_sidebar import ChannelGroup
 
@@ -37,11 +35,7 @@ async def main():
     os.environ.update(XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
                       XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_ROOT=str(root / 'wire'))
     comms = Comms(root / 'wire', private_initial_writes=True)
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    launch = PrivateNkLaunch.from_environment(comms.root, {
-        ROOT_ID_ENV: root_id, PACKAGE_ENV: os.environ['AC_NATIVE_COPIED_PACKAGE']})
-    assert launch is not None
-    launch.apply_environment(os.environ)
+    comms.messaging.initialize_private_initial_protocol()
     owner = root.name
     for name in (owner, 'stopped', 'archived'):
         source = root / (name + '.jsonl')

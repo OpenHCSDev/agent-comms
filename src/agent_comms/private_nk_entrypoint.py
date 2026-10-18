@@ -1,23 +1,19 @@
 """Pinned private N/K owner launch configuration.
 
 The public ACP attachment never becomes a model executor. An owner runs only
-with an exact root ID and a reviewed native package. The owner lifecycle
-derives both for a private root; a parent hands its pin to each child through
-the environment. This module installs no marker, participant, schema or input.
+with an exact root ID and a reviewed native package, both derived from their
+owners for each process. This module installs no marker, participant, schema or input.
 """
 
 from __future__ import annotations
 
-import os
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
-from . import launch_runtime
+from .native_package import NativePackageError, pinned_native_package
 from .native_pi import _private_session_dir, _trusted_package
 from .wire_log import WireLog
-from .wire_metadata import WireRootIdText
 
 @dataclass(frozen=True, slots=True)
 class PrivateNkLaunch:
@@ -26,47 +22,30 @@ class PrivateNkLaunch:
     native_package: Path
 
     @classmethod
-    def from_environment(cls, root: Path, environment: Mapping[str, str]) -> PrivateNkLaunch | None:
-        """Decode a parent's handoff without permitting work to start.
+    def derive(cls, root: Path | str | None = None) -> PrivateNkLaunch | None:
+        """This root's launch from the owners of its facts, or None for an ordinary root.
 
-        Observing a thread or publishing activity does not launch a native owner.
-        Actual worker/ACP entrypoints and process handoffs call validate before
-        starting work; retaining these settings cannot grant permission to run.
+        Without a root, the process's selected route names it. The marker owns
+        the root ID. A published route for this root owns its package; otherwise
+        this installation's pin does. A parent and its child read the same
+        marker, route and pin, so they derive the same launch.
         """
-        root_id = environment.get(launch_runtime.ROOT_ID_ENV)
-        package = environment.get(launch_runtime.PACKAGE_ENV)
-        if root_id is None and package is None:
+        from .active_route import read_active_route, resolve_comms_route
+
+        root = resolve_comms_route(root).root
+        metadata = WireLog(root / "bus.jsonl").read_metadata_unlocked()
+        if not metadata.private:
             return None
-        from .active_route import AbsoluteRoutePathText
-
+        route = read_active_route()
+        if route is not None and route.root == root:
+            return cls(root, route.wire_root_id, route.native_package)
         try:
-            root_id = WireRootIdText.decode(root_id)
-            native_package = AbsoluteRoutePathText.decode(package)
-        except (TypeError, ValueError) as error:
+            package = pinned_native_package()
+        except NativePackageError as error:
             raise PublicationActivationBlocked(
-                "private N/K owner requires exact root ID and absolute reviewed package"
+                "private owner launch needs this installation's prepared native package"
             ) from error
-        if environment.get("PI_PROMPT"):
-            raise PublicationActivationBlocked(
-                "private N/K owner cannot start with an unbound prompt"
-            )
-        validated_root = Path(root).expanduser().absolute()  # capture cwd once
-        return cls(validated_root, root_id, native_package)
-
-    @classmethod
-    def current(cls) -> PrivateNkLaunch | None:
-        """Decode the parent's handoff or the owner-installed route."""
-        environment = dict(os.environ)
-        if "AGENT_COMMS_ROOT" not in environment:
-            from .active_route import read_active_route
-
-            active_route = read_active_route()
-            if active_route is not None:
-                environment["AGENT_COMMS_ROOT"] = str(active_route.root)
-                environment.setdefault(launch_runtime.ROOT_ID_ENV, active_route.wire_root_id)
-                environment.setdefault(launch_runtime.PACKAGE_ENV, str(active_route.native_package))
-        root = Path(environment.get("AGENT_COMMS_ROOT", "~/.agent-comms")).expanduser().absolute()
-        return cls.from_environment(root, environment)
+        return cls(root, metadata.wire_root_id, package)
 
     def validate(self) -> Path:
         """Recheck this authority before a new owner process can be reserved.
@@ -81,11 +60,3 @@ class PrivateNkLaunch:
         if marker.root_id != self.wire_root_id:
             raise IdentityConflict("private initial wire root changed")
         return cli
-
-    def apply_environment(self, environment: dict[str, str]) -> None:
-        """Derive the child handoff solely from this retained launch authority."""
-        environment.update({
-            "AGENT_COMMS_ROOT": str(self.validated_root),
-            launch_runtime.ROOT_ID_ENV: self.wire_root_id,
-            launch_runtime.PACKAGE_ENV: str(self.native_package),
-        })
