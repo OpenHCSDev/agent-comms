@@ -85,7 +85,7 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
     assert reopened.bus.pending_count("executor", "peer") == 1
     assert reopened.bus.pending_count("executor", "#all") == 1
     # No global marker is created by this human DM read transition.
-    seen = reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot())
+    seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
     assert painted in seen and painted + 1 not in seen
     assert not (tmp_path / "read_markers.json").exists()
 

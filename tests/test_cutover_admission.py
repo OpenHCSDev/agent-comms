@@ -13,6 +13,8 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
+from agent_comms.wire_metadata import WireMetadata
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from test_private_human_ingress import _root
@@ -80,7 +82,7 @@ def test_persisted_marker_cannot_omit_claim_authority(tmp_path):
     store.close()
     path = comms.bus.log.metadata_path
     data = json.loads(path.read_text())
-    del data["claimed_after_seq"]
+    del data[FieldCodec.record_key(WireMetadata, "claimed_after_seq")]
     path.write_text(json.dumps(data))
     with pytest.raises(RelationViolationError, match="required fields"), comms.bus.log.locked():
         comms.bus.log._private_marker_unlocked()

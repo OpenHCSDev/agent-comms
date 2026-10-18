@@ -26,7 +26,7 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.context_segments.selected import SelectedTriageSegment
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
@@ -484,7 +484,8 @@ async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monk
             is None
         )
         retained = store.session._connection.execute(
-            "SELECT owner_claimed_generation,input_id FROM current_native_cursor"
+            f"SELECT {CurrentNativeCursor.column_projection()['owner_claimed_generation']},input_id "
+            f"FROM {CurrentNativeCursor.declared_name}"
         ).fetchone()
         assert tuple(retained) == (old.owner_claimed_generation, turn.input_id)
     assert len(calls) == 1

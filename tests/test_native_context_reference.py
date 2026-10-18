@@ -48,7 +48,7 @@ def test_original_sql_null_check_cannot_mint_incomplete_reference():
 
 
 @pytest.mark.parametrize("changes", [
-    {"input_id": None}, {"assignment_id": None}, {"stage": None},
+    {"input_id": None}, {"stage": None},
     {"session_id": None}, {"request_generation": None},
     {"request_generation": 0}, {"request_generation": True},
 ])
@@ -120,10 +120,10 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
                               (original.input_id,)).fetchone() == (decision.declared_name.lower(),)
             actual = NativeRuntimeInput.one(db, input_id=original.input_id)
             proof_source = {**source, "input_id": original.input_id,
-                            "assignment_id": original.assignment_id,
                             "context": replace(source["context"], input_id=original.input_id)}
             proof = actual.execution.historical_proof(actual, lifecycle=TriagePendingAssignment(), **proof_source)
             assert isinstance(proof, TriageHistoricalNativeInput)
+            assert proof.assignment_id == source["assignment_id"]
             assert proof.decision is decision
             assert proof.proves_triage_source((proof,)) == (decision is IgnoreSelectedTriage)
             with pytest.raises(sqlite3.IntegrityError, match="frozen"):
