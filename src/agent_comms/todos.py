@@ -31,6 +31,7 @@ from .change_report import FileLine
 from .goals import OrderCheck
 from .child_process import BoundedRun, ExitedOutcome
 from .storage_rules import StorageRule
+from .plan_phases import PlanPhase
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -535,6 +536,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
     run: OrderRun
+    serves: type[PlanPhase] | None = field(default=None, metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.edits or not self.banned:
