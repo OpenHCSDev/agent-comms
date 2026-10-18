@@ -1,10 +1,9 @@
 """The caller bound at tool entry owns caller-relative tool behavior."""
 from __future__ import annotations
 
-import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, NoReturn
+from typing import TYPE_CHECKING, NoReturn
 
 from pydantic import JsonValue
 
@@ -28,11 +27,6 @@ class ThreadListing(ToolResult):
 @dataclass(frozen=True)
 class ToolCatalogResult(CliResult):
     tools: tuple[dict[str, object], ...]
-    launch_variable: ClassVar[str] = "AGENT_COMMS_TOOL_CATALOG"
-
-    def native_environment(self) -> dict[str, str]:
-        """Carry this launch's declared catalog, using its existing wire encoding."""
-        return {self.launch_variable: json.dumps(self.encoded(), separators=(",", ":"))}
 
 
 @dataclass(frozen=True)

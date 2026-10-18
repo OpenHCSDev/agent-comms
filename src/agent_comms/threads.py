@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from dataclasses import dataclass, field, fields, replace
@@ -12,6 +13,9 @@ from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .launch_runtime import RestartEnvironment
+from .native_tools import NativeRequestTools
+from .store_files import _atomic_write_text
 from .goals import (
     AbsentGoalCheckpoint,
     Goal,
@@ -154,16 +158,24 @@ class Thread(ThreadProvenance):
     def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
         """Project this captured owner through the original native binding."""
         from .runtime_requests import ProjectRuntimeRequest
-        from .tool_caller import ThreadToolCatalogResult
-        from .tools import tool_catalog
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
         return {
             **replace(self.launch(), worktree=worktree, managed=True).encode(),
             "AGENT_COMMS_ROOT": str(root),
             **project.environment(root),
-            **ThreadToolCatalogResult(tuple(tool_catalog()), self.service_tier).native_environment(),
         }
+
+    def native_launch_arguments(self, arguments: tuple[str, ...]) -> tuple[str, ...]:
+        """Write this native launch's catalog in its config directory, not a CLI cache."""
+        from .tool_caller import ThreadToolCatalogResult
+
+        directory = RestartEnvironment.inherit(os.environ).native_config
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path = directory / f"comms-catalog-{self.incarnation.require_recorded().lookup}.json"
+        catalog = ThreadToolCatalogResult(tuple(NativeRequestTools.catalog()), self.service_tier)
+        _atomic_write_text(path, json.dumps(catalog.encoded(), separators=(",", ":")))
+        return (*arguments, "--comms-catalog", str(path))
 
     def launch(self) -> ThreadLaunch:
         """The launch environment this thread's owner process carries."""

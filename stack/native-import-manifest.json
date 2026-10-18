@@ -15,9 +15,9 @@
       "sources": [
         {
           "path": "/home/ts/.pi/agent/extensions/agent-comms/index.ts",
-          "sha256": "ab2e53555716fc48788f2f84cf930cd34d36e0f8d68625b6fc4601e739f7db81",
+          "sha256": "ebfae811ff8e1068ff7191c1fa612a08dfd0da8ff716f0d903ce005ae4afd355",
           "snapshot": "extensions/pi-agent-comms/index.ts",
-          "bytes": 6408
+          "bytes": 6570
         }
       ]
     },

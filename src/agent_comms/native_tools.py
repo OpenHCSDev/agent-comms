@@ -40,6 +40,10 @@ class NativeRequestTools:
     """Core's existing CLI decodes and executes its declared request fields."""
 
     @classmethod
+    def catalog(cls) -> list[dict[str, object]]:
+        return [tool.schema() for tool in ToolDeclaration.members_with(cls)]
+
+    @classmethod
     def create_call(cls, call_id: str, arguments: dict[str, object]):
         from .channel_coding_tools import CoordinationCall
 

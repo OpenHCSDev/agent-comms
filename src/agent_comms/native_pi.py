@@ -114,12 +114,7 @@ def main() -> int:
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = launch.validate()
-    from .comms import wire
-    from .tools import ToolsCliCommand
-
     environment = dict(os.environ)
-    caller = ThreadLaunch.inherited(environment).get(ThreadLaunch.variable("name"))
-    environment.update(ToolsCliCommand(name=caller).apply(wire()).native_environment())
     argv, environment = NativePiRpcLaunch.bootstrap(
         cli, tuple(sys.argv[1:]), Path.cwd(), environment,
         RestartEnvironment.inherit(environment),

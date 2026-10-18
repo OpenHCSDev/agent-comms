@@ -1177,7 +1177,7 @@ class ToolsCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
         caller = ToolCaller.from_actor(self.name)
-        return caller.catalog(ctx, tuple(tool_catalog()))
+        return caller.catalog(ctx, tuple(NativeRequestTools.catalog()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1200,10 +1200,6 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         json.dump(self.apply(ctx), output, indent=2)
         output.write("\n")
         return 0
-
-
-def tool_catalog() -> list[dict[str, object]]:
-    return [tool.schema() for tool in ToolRequest.members_with(ToolRequest)]
 
 
 def context_tool_catalog(context: str) -> list[dict[str, object]]:
