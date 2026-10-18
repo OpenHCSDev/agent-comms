@@ -128,7 +128,8 @@ def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_pat
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
-    from agent_comms.tools import CommsStartTool, OwnerLifecycleControl, ToolRequest
+    from agent_comms.tools import CommsStartTool, ToolRequest
+    from agent_comms.thread_execution import OwnerLifecycleControl
 
     archived = ArchivedThreadStatus()
     assert archived.restored() == archived
