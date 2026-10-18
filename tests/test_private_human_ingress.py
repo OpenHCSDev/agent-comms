@@ -286,7 +286,7 @@ def test_separate_processes_serialize_one_private_user_identity(tmp_path: Path) 
     seqs = sorted(int(stdout.split()[0]) for stdout, _ in receipts)
     assert seqs == [1, 2]
     members = comms.registry.all_threads().values()
-    humans = [thread for thread in members if thread.role.human_reads(True)]
+    humans = [human for thread in members for human in thread.role.human(thread)]
     assert len(humans) == 1
     assert [comms.bus.log.read_delivery_cohort(root_id, seq).message.seq for seq in seqs] == seqs
 

@@ -718,9 +718,13 @@ class ThreadRelationships:
         """Resolve only saved incarnations from active goals in ONE registry snapshot."""
         contacts: list[GoalDerivedContact] = []
         diagnostics: list[GoalMentionDiagnostic] = []
-        for owner in registry.threads.values():
+        for owner in (
+            executor
+            for thread in registry.threads.values()
+            for executor in thread.role.executor(thread)
+        ):
             goal = owner.active_goal
-            if goal is None or not owner.role.executes(True):
+            if goal is None:
                 continue
             source = goal.mention_source
             # Missing historical evidence grants no contact or current-name binding.

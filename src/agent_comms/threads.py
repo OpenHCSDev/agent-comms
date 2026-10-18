@@ -159,6 +159,7 @@ class Thread(ThreadProvenance):
             object.__setattr__(self, "created_at", float(self.created_at))
         super(Thread, self).__post_init__()
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
+        self.process_identity.require_held_by(self.role)
         if self.active_turn is not None:
             if not self.process_identity.owns_turn(self.active_turn):
                 raise RelationViolationError("A turn must belong to the registered executor.")
@@ -232,7 +233,7 @@ class Thread(ThreadProvenance):
             raise ValueError("live owner requires an exact thread declaration")
 
     def same_local_process(self, process: ProcessIdentity) -> bool:
-        return self.role.executes(self.process_identity == process)
+        return self.process_identity == process
 
     def require_local_process(self, process: ProcessIdentity) -> None:
         self.role.require_executable(RelationViolationError("A human thread owns no local process"))

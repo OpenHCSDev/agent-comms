@@ -216,7 +216,7 @@ class BusPageIndex:
                 if last_sequence is not None and message.seq <= last_sequence:
                     raise RelationViolationError("Wire sequences are not increasing.")
                 rows.append(BusPageRow(message.seq, row_offset, message.sender, message.target,
-                                       message.timestamp, message.sender_role.human_reads(True),
+                                       message.timestamp, message.sender_role.page_human_sender(),
                                        tuple(mention.thread for mention in message.mentions)))
                 last_sequence = message.seq
         through = opened.position

@@ -178,7 +178,8 @@ class ChannelManagement:
         updated = self.registry.require(thread.name)
         with self.catalog.editing() as document:
             document.remember_tags(add, time.time())
-        if thread.role.executes(thread.tags != updated.tags):
+        announcers = thread.role.executor(thread) if thread.tags != updated.tags else ()
+        for announcer in announcers:
             channels = {
                 **previous_channels,
                 **self.catalog.read().views(self.registry.all_threads()),
@@ -187,9 +188,9 @@ class ChannelManagement:
                 for change in channel.membership_changes(thread.tags, updated.tags):
                     self.bus.publisher.publish_ordinary(
                         Message(
-                            thread.name,
+                            announcer.name,
                             channel.name,
-                            f"{thread.name} {change.value} {channel.name}",
+                            f"{announcer.name} {change.value} {channel.name}",
                             InfoKind,
                             role=MembershipConversationRole(change),
                         ),
@@ -251,9 +252,12 @@ class ChannelManagement:
             snapshot = self.registry.snapshot()
             with self.catalog.editing() as document:
                 view = document.require_channel(channel, snapshot.threads)
+                if pinned:
+                    thread.role.require_executable(ValueError(
+                        f"Thread {thread.name!r} is not a member of {view.name}."
+                    ))
                 if pinned and (
-                    not view.matches(thread.tags)
-                    or not thread.role.executes(snapshot.statuses[thread.name].visible)
+                    not view.matches(thread.tags) or not snapshot.statuses[thread.name].visible
                 ):
                     raise ValueError(
                         f"Thread {thread.name!r} is not a member of {view.name}."

@@ -128,8 +128,8 @@ class Messaging:
 
     def _user_identities(self):
         """Derive existing humans from the original registered declarations."""
-        return (thread for thread in self.registry.all_threads().values()
-                if thread.role.human_reads(True))
+        return (human for thread in self.registry.all_threads().values()
+                for human in thread.role.human(thread))
 
     def user_identity(self, worktree: str) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""

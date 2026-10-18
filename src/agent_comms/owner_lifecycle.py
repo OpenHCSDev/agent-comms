@@ -260,8 +260,10 @@ class OwnerLifecycle:
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
-            if not thread.role.executes(self.registry.status(thread.name).active):
-                raise RelationViolationError("Explicit start is required for a stopped agent.")
+            refusal = RelationViolationError("Explicit start is required for a stopped agent.")
+            thread.role.require_executable(refusal)
+            if not self.registry.status(thread.name).active:
+                raise refusal
             return (
                 thread
                 if thread.process_alive
@@ -277,8 +279,10 @@ class OwnerLifecycle:
             thread = self.registry.require(name)
             thread.execution.require_native()
             status = self.registry.status(thread.name)
-            if not thread.role.executes(status.visible):
-                raise RelationViolationError("Only visible agent threads can be started.")
+            refusal = RelationViolationError("Only visible agent threads can be started.")
+            thread.role.require_executable(refusal)
+            if not status.visible:
+                raise refusal
             if thread.process_alive:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")

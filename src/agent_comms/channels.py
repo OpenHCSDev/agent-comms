@@ -32,11 +32,10 @@ class ChannelMemberIndex(dict[str, tuple[Thread, ...]]):
     def __init__(self, threads: Iterable[Thread]):
         by_tag: dict[str, list[Thread]] = defaultdict(list)
         executable = []
-        for thread in threads:
-            if thread.role.executes(True):
-                executable.append(thread)
-                for tag in thread.tags:
-                    by_tag[tag].append(thread)
+        for executor in (member for thread in threads for member in thread.role.executor(thread)):
+            executable.append(executor)
+            for tag in executor.tags:
+                by_tag[tag].append(executor)
         self.threads = tuple(executable)
         super().__init__((tag, tuple(members)) for tag, members in by_tag.items())
 

@@ -507,7 +507,7 @@ class DMDisplayBasis:
         """
         try:
             selected = next(
-                thread for thread in snapshot.threads.values() if thread.role.human_reads(True)
+                human for thread in snapshot.threads.values() for human in thread.role.human(thread)
             )
             viewer = snapshot.threads[self.viewer]
             target = snapshot.participant(self.requested_peer)

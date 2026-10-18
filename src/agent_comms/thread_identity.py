@@ -24,8 +24,10 @@ from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePoli
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
+    from .maintenance_barrier import MaintenanceBarrier
     from .messages import Message
     from .participant_store import ParticipantStore
+    from .read_ledger import ReadDocument, ReadLedger
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
 
@@ -400,13 +402,31 @@ class ThreadRole(DeclaredFamily, affix="ThreadRole"):
 
     @classmethod
     @abstractmethod
-    def executes(cls, fact: bool) -> bool:
-        """An execution-side fact holds for an agent as stated and never for a user."""
+    def executor[T](cls, item: T) -> tuple[T, ...]:
+        """The item when its thread executes turns, else nothing."""
 
     @classmethod
     @abstractmethod
-    def human_reads(cls, fact: bool) -> bool:
-        """A human-reader fact holds for a user as stated and never for an agent."""
+    def human[T](cls, item: T) -> tuple[T, ...]:
+        """The item when its thread is a human reader, else nothing."""
+
+    @classmethod
+    @abstractmethod
+    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
+        """An owner claim waits for open maintenance; a human claims no owner."""
+
+    @classmethod
+    @abstractmethod
+    def displayed_recipient_effect(
+        cls, reads: ReadLedger, message: Message, thread: Thread,
+        snapshot: RegistryProvenance, document: ReadDocument | None,
+    ) -> object:
+        """Only a human recipient's display records a read."""
+
+    @classmethod
+    @abstractmethod
+    def page_human_sender(cls) -> bool:
+        """The bus page row's stored human-sender column."""
 
     @classmethod
     @abstractmethod
@@ -446,11 +466,27 @@ class AgentThreadRole(ThreadRole):
         raise refusal
 
     @classmethod
-    def executes(cls, fact: bool) -> bool:
-        return fact
+    def executor[T](cls, item: T) -> tuple[T, ...]:
+        return (item,)
 
     @classmethod
-    def human_reads(cls, fact: bool) -> bool:
+    def human[T](cls, item: T) -> tuple[T, ...]:
+        return ()
+
+    @classmethod
+    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
+        if claims_owner:
+            barrier.assert_open_unlocked()
+
+    @classmethod
+    def displayed_recipient_effect(
+        cls, reads: ReadLedger, message: Message, thread: Thread,
+        snapshot: RegistryProvenance, document: ReadDocument | None,
+    ) -> object:
+        return ()
+
+    @classmethod
+    def page_human_sender(cls) -> bool:
         return False
 
     @classmethod
@@ -490,12 +526,27 @@ class UserThreadRole(ThreadRole):
         """A user is the original human sender."""
 
     @classmethod
-    def executes(cls, fact: bool) -> bool:
-        return False
+    def executor[T](cls, item: T) -> tuple[T, ...]:
+        return ()
 
     @classmethod
-    def human_reads(cls, fact: bool) -> bool:
-        return fact
+    def human[T](cls, item: T) -> tuple[T, ...]:
+        return (item,)
+
+    @classmethod
+    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
+        """A human claims no owner, so maintenance never gates its registration."""
+
+    @classmethod
+    def displayed_recipient_effect(
+        cls, reads: ReadLedger, message: Message, thread: Thread,
+        snapshot: RegistryProvenance, document: ReadDocument | None,
+    ) -> object:
+        return reads._displayed_recipient(message, thread, snapshot, document=document)
+
+    @classmethod
+    def page_human_sender(cls) -> bool:
+        return True
 
     @classmethod
     def channel_policy(cls) -> ResponsePolicy:

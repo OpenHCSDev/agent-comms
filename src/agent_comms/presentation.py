@@ -284,22 +284,22 @@ class MessageNotification:
         message = source.message
         if source.audience.recipients or not viewer.sees_direct_read(source):
             return None
-        target = CommandTarget.named(message.target).direct_peer(snapshot)
-        if target is None or not target.role.human_reads(True):
-            return None
-        recipient = FrozenRecipient(target.incarnation.lookup, target.name)
-        displayed_to = reads.displayed_recipient(
-            source, recipient, snapshot, document=document
-        )
-        if not displayed_to:
-            return None
-        return cls(
-            recipient,
-            source.audience.sender_lookup,
-            HumanReadProgress(),
-            displayed_to=displayed_to,
-            changed=True,
-        )
+        peer = CommandTarget.named(message.target).direct_peer(snapshot)
+        for target in () if peer is None else peer.role.human(peer):
+            recipient = FrozenRecipient(target.incarnation.lookup, target.name)
+            displayed_to = reads.displayed_recipient(
+                source, recipient, snapshot, document=document
+            )
+            if not displayed_to:
+                return None
+            return cls(
+                recipient,
+                source.audience.sender_lookup,
+                HumanReadProgress(),
+                displayed_to=displayed_to,
+                changed=True,
+            )
+        return None
 
     @classmethod
     def sent_sources(

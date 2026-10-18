@@ -106,9 +106,9 @@ class Publisher:
         def resolve_mention(name: str) -> str | None:
             canonical = snapshot.canonical_name(name)
             thread = snapshot.threads.get(canonical)
-            if thread is not None and thread.role.executes(snapshot.statuses[canonical].visible):
-                return canonical
-            return None
+            if thread is None or not snapshot.statuses[canonical].visible:
+                return None
+            return next(iter(thread.role.executor(canonical)), None)
 
         return replace(
             message,
