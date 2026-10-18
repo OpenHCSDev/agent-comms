@@ -641,7 +641,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         async with asyncio.timeout(30):
             while (
                 native.provider.posts != 1
-                or agent.turns.turn_state(session).busy
+                or agent.turns.turn_state(session).active.phase.busy
                 or agent.inputs.backend_inboxes  # the reply turn retires its inbox after it stops being busy
             ):
                 await asyncio.sleep(0.01)
@@ -653,7 +653,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
             assert original.stage is FullNativeExecution
             assert original.require_context_proof().input_id == original.input_id
         assert comms.bus.log.messages_for_references((sent.reference,)) == (sent,)
-        assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes
+        assert not agent.turns.turn_state(session).active.phase.busy and not agent.inputs.backend_inboxes
 
 
 async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, monkeypatch):

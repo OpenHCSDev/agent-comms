@@ -202,7 +202,7 @@ class TestRegistration:
             registry.lease_live_turn_with_generation(
                 expected, "new-turn", expected_owner_generation=claimed_generation
             )
-        assert registry.require("a").active_turn is None
+        assert not registry.require("a").active_turn.executing
 
     def test_owner_claim_survives_session_metadata_and_rotates_on_restart(
         self, tmp_path: Path
@@ -248,7 +248,7 @@ class TestRegistration:
         assert reopened.require("pr17").name == "agent-comms-ux"
         assert reopened.require("agent-comms-ux").created_at == original.created_at
         assert reopened.require("agent-comms-ux").goal == original.goal
-        assert reopened.require("agent-comms-ux").active_turn is not None
+        assert reopened.require("agent-comms-ux").active_turn.executing
         assert reopened.require("agent-comms-ux").active_turn.id == "goal-turn"
         assert reopened.require("child").parent == "agent-comms-ux"
         assert snapshot.claimed_generations["agent-comms-ux"] == claim_scope
@@ -274,7 +274,7 @@ class TestRegistration:
         turn, _ = registry.lease_live_turn_with_generation(
             owner, "mine", expected_owner_generation=claimed_generation
         )
-        assert turn.active_turn is not None and turn.active_turn.id == "mine"
+        assert turn.active_turn.executing and turn.active_turn.id == "mine"
         assert registry.release_turn(turn.turn_lease)[0]
         assert not registry.release_turn(turn.turn_lease)[0]
         assert "owner_epoch" not in owner.to_wire()
@@ -317,7 +317,7 @@ class TestRegistration:
         with pytest.raises(RelationViolationError, match="stopped or unavailable"):
             comms.agents.begin_turn("a", "revived")
         assert comms.registry.status("a") == StoppedThreadStatus()
-        assert comms.registry.require("a").active_turn is None
+        assert not comms.registry.require("a").active_turn.executing
 
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -533,9 +533,9 @@ class TestRegistration:
         )
         registry.rename("b", "c")
         assert not registry.release_turn(replace(leased.turn_lease, turn_id="other"))[0]
-        assert registry.require("c").active_turn is not None
+        assert registry.require("c").active_turn.executing
         assert registry.release_turn(leased.turn_lease)[0]
-        assert registry.require("c").active_turn is None
+        assert not registry.require("c").active_turn.executing
 
 
     def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):

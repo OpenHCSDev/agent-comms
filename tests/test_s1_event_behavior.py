@@ -302,7 +302,7 @@ async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeyp
 
     async def disconnected(session, event, **kwargs):
         await original(session, event, **kwargs)
-        if isinstance(event, TurnTranscriptUpdate) and not event.state.busy:
+        if isinstance(event, TurnTranscriptUpdate) and not event.state.active.phase.busy:
             raise ConnectionError("client disconnected after receiving terminal event")
 
     released = []
@@ -375,7 +375,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
         else:
             with pytest.raises(RequestError):
                 await execution.run()
-        assert comms.registry.require(name).active_turn is None
+        assert not comms.registry.require(name).active_turn.executing
         assert session.session_id not in owner.inputs.backend_inboxes
         if provider_status == 200:
             assert native.provider.posts == (2 if committed_progress else 1)
@@ -435,7 +435,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
     async def observe(session_id, event, **kwargs):
         await emit(session_id, event, **kwargs)
         observed.append(event)
-        if isinstance(event, TurnTranscriptUpdate) and event.state.busy and "waiting" not in comms.registry:
+        if isinstance(event, TurnTranscriptUpdate) and event.state.active.phase.busy and "waiting" not in comms.registry:
             comms.registry.declare(
                 comms.registry.new_thread('waiting', frozenset(), str(native.project), process_identity=ProcessIdentity.capture(os.getpid()))
             )
@@ -455,11 +455,11 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
         assert native.provider.posts > 3  # Pi asked the provider for the summary.
         rows = [json.loads(line) for line in native.session.read_text().splitlines()]
         assert len([row for row in rows if row.get("type") == "compaction"]) == 1
-        assert comms.registry.require(name).active_turn is None
+        assert not comms.registry.require(name).active_turn.executing
         assert isinstance(comms.goals.goal_wait("waiting"), NoGoalWait)
         assert comms.registry.require("waiting").goal.state.active
         terminal = next(i for i, event in enumerate(observed)
-            if isinstance(event, TurnTranscriptUpdate) and not event.state.busy)
+            if isinstance(event, TurnTranscriptUpdate) and not event.state.active.phase.busy)
         compaction_end = next(i for i, event in enumerate(observed)
             if isinstance(event, ae.CompactionEnd) and event.reason is ManualCompactionReason)
         assert compaction_end < terminal

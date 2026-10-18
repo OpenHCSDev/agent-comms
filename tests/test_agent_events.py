@@ -226,10 +226,10 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
     effects = []
 
     async def emit(session, event):
-        assert comms.registry.require("bot").active_turn is None
+        assert not comms.registry.require("bot").active_turn.executing
         assert "session" not in owner.turns.turn_tasks
         assert isinstance(event, TurnTranscriptUpdate)
-        assert not event.state.busy
+        assert not event.state.active.phase.busy
         assert event.state.finished_turn_id == "turn"
         effects.append("publish")
         if publication_fails:
@@ -330,7 +330,7 @@ async def test_cancelled_worker_keeps_original_lease_and_waiter_cleanup(
         deliver.set()
     with pytest.raises(asyncio.CancelledError):
         await pending
-    assert comms.registry.require("bot").active_turn is None
+    assert not comms.registry.require("bot").active_turn.executing
     assert comms.registry.require("bot").last_finished_turn_id == "turn"
     assert len(fences) == 1 and fences[0].turn_id == "turn"
     assert len(publications) == int(acquiring)

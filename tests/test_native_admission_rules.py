@@ -6,6 +6,8 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.turn_lease import NoTurn
+
 from agent_comms import private_send_rules as rules
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import TriageNativeExecution
@@ -87,7 +89,7 @@ async def test_durable_private_claim_names_each_changed_authority(
             rules.RegistryModelRule: replace(registry, actual=replace(current, model="fixture/changed")),
             rules.RegistryThinkingRule: replace(registry, actual=replace(current, thinking_level=next(level for level in ThinkingLevel.members_with(ThinkingLevel) if level is not current.thinking_level))),
             rules.RegistrySessionRule: replace(registry, actual=replace(current, session_file=str(tmp_path / "changed.jsonl"))),
-            rules.RegistryTurnRule: replace(registry, actual=replace(current, active_turn=None)),
+            rules.RegistryTurnRule: replace(registry, actual=replace(current, active_turn=NoTurn())),
             rules.RegistryGoalRule: replace(
                 registry, actual=replace(current, goal=Goal("changed", "changed", published_seq=0))
             ),

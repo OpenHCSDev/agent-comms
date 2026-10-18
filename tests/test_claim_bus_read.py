@@ -232,7 +232,7 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
                 patch.setattr(WireLog, "verified_records_unlocked", whole_bus)
                 await agent.inputs.drain_inbox(session)
                 async with asyncio.timeout(60):
-                    while native.provider.posts < 2 or agent.turns.turn_state(session).busy:
+                    while native.provider.posts < 2 or agent.turns.turn_state(session).active.phase.busy:
                         await asyncio.sleep(0.01)
             assert target.read_text() == "value = 2\n"
             assert [

@@ -23,7 +23,7 @@ from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.errors import RelationViolationError
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
-from agent_comms.turn_lease import ActiveTurn
+from agent_comms.turn_lease import ActiveTurn, NoTurn
 
 
 def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monkeypatch) -> None:
@@ -122,7 +122,7 @@ def test_restart_preflights_all_owners_before_signalling(tmp_path: Path) -> None
         comms = Comms(tmp_path)
         for index, child in enumerate(children):
             comms.registry.declare(
-                comms.registry.new_thread(f'worker-{index}', frozenset(), str(tmp_path), process_identity=child.identity, active_turn=ActiveTurn('busy', child.pid) if index else None)
+                comms.registry.new_thread(f'worker-{index}', frozenset(), str(tmp_path), process_identity=child.identity, active_turn=ActiveTurn('busy', child.pid) if index else NoTurn())
             )
         with pytest.raises(RelationViolationError, match="idle before restart"):
             comms.owners.restart_owners(["worker-0", "worker-1"])

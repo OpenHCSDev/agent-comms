@@ -502,13 +502,13 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                                 # cannot attest that the live view received it.
                                 receipt_seen.set()
                             if isinstance(fact, TurnChangedUpdate):
-                                if fact.state.busy:
+                                if fact.state.active.phase.busy:
                                     if attachment_turn is None:
                                         attachment_turn = fact.state
                                     else:
-                                        assert fact.state.matches(attachment_turn.managed_id)
+                                        assert fact.state.matches(attachment_turn.active.id)
                                 elif attachment_turn is not None:
-                                    assert fact.state.matches(attachment_turn.managed_id)
+                                    assert fact.state.matches(attachment_turn.active.id)
                                     attachment_settled.set()
 
                     async def request_permission(self, **kwargs):
@@ -551,7 +551,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     await asyncio.wait_for(entered.wait(), TIMEOUT)
                     assert (await Coordination.run_worker(partial(
                         owner.turns.turn_state, session_id
-                    ))).busy
+                    ))).active.phase.busy
                     if case == "revoke_midturn":
                         await asyncio.to_thread(
                             _deny_via_simulated_user_pty,
@@ -564,7 +564,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         )
                         assert (await Coordination.run_worker(partial(
                             owner.turns.turn_state, session_id
-                        ))).busy  # Genuine mid-turn denial.
+                        ))).active.phase.busy  # Genuine mid-turn denial.
                     elif case == "disconnect":
                         if observer:
                             # Receipt of the RPC is not proof that the user saw
@@ -579,7 +579,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         current = await Coordination.run_worker(partial(
                             owner.turns.turn_state, session_id
                         ))
-                        assert current.busy
+                        assert current.active.phase.busy
                         # The final model response is still held at localhost:
                         # connection retirement cannot be Pi turn shutdown.
                         for pid in map(int, starts.read_text().splitlines()):
@@ -588,7 +588,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                         (tmp_path / "midturn-retired.json").write_text(
                             json.dumps(
                                 {
-                                    "turnId": current.managed_id,
+                                    "turnId": current.active.id,
                                     "finalModelResponseHeld": True,
                                     "mcpPidsAbsent": True,
                                 }
@@ -613,13 +613,13 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     assert row["sessionId"] == session_id
                     for fact in decode_updates(row["update"].get("_meta")):
                         if isinstance(fact, TurnChangedUpdate):
-                            if fact.state.busy:
+                            if fact.state.active.phase.busy:
                                 if active is None:
                                     active = fact.state
                                 else:
-                                    assert fact.state.matches(active.managed_id)
+                                    assert fact.state.matches(active.active.id)
                             elif active is not None:
-                                assert fact.state.matches(active.managed_id)
+                                assert fact.state.matches(active.active.id)
                                 settlements.append(fact.state)
                                 active = None
                         if isinstance(fact, McpClientAcknowledgementUpdate):

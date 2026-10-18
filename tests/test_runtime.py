@@ -115,7 +115,7 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
         finally:
             writer.close()
             await writer.wait_closed()
-        assert comms.registry.require(response.session_id).active_turn is None
+        assert not comms.registry.require(response.session_id).active_turn.executing
     finally:
         await proxy.close()
         await client.shutdown()
@@ -168,7 +168,7 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
         await until(
             lambda: any(
                 any(isinstance(f, TurnChangedUpdate)
-                    and not f.state.busy and f.state.finished_turn_id is not None
+                    and not f.state.active.phase.busy and f.state.finished_turn_id is not None
                     for f in decode_updates(u.get("_meta")))
                 for u in updates
             )

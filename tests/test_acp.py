@@ -236,7 +236,7 @@ class TestHandlers:
         await native.author_history()
         async with native.open_owner() as (agent, session):
             async with native.original_input(agent, session, "Compacting context") as turn:
-                started_at = agent.turns.turn_state(session).started_at
+                started_at = agent.turns.turn_state(session).active.started_at
                 await agent.turns.transition_turn(
                     session, turn.turn_lease, CompactionPhase(detail="Compacting context")
                 )
@@ -249,9 +249,9 @@ class TestHandlers:
 
                 await agent.turns.publish_turn_state(session, client=Client())
                 assert facts(updates[0].field_meta, TurnChangedUpdate) == (TurnChangedUpdate(state),)
-                assert state.started_at == started_at and state.managed_id == turn.turn_id
-                assert state.busy and state.activity == "Compacting context"
-            assert not agent.turns.turn_state(session).busy
+                assert state.active.started_at == started_at and state.active.id == turn.turn_id
+                assert state.active.phase.busy and state.active.phase.summary == "Compacting context"
+            assert not agent.turns.turn_state(session).active.phase.busy
         assert native.provider.posts == 0
 
     async def test_compaction_refuses_to_interrupt_an_active_turn(self, native_backend):
@@ -265,7 +265,7 @@ class TestHandlers:
                 assert isinstance(result, FailedCompaction)
                 assert "current response" in result.message
                 assert agent.turns.owns_turn(session, turn.turn_id)
-            assert not agent.turns.turn_state(session).busy
+            assert not agent.turns.turn_state(session).active.phase.busy
         assert native.session.read_bytes() == saved and native.provider.posts == 0
 
     @pytest.mark.parametrize("selected", [False, True])
@@ -321,7 +321,7 @@ class TestHandlers:
                     async with asyncio.timeout(10):
                         while agent.turns.turn_tasks.get(session) is not None:
                             await asyncio.sleep(0.01)
-            assert not agent.turns.turn_state(session).busy
+            assert not agent.turns.turn_state(session).active.phase.busy
             assert agent._comms.registry.require(session).model == "response-local/second"
             assert native.provider.requests[0]["model"] == "fixture"
             print(json.dumps({"selected_turn": selected, "configured_model": "response-local/second",
@@ -473,7 +473,7 @@ class TestHandlers:
             session_id="proj", prompt=[{"type": "text", "text": "!relay hello all"}]
         )
         assert response.stop_reason == "end_turn"
-        assert not agent.turns.turn_state("proj").busy
+        assert not agent.turns.turn_state("proj").active.phase.busy
         history = list(agent._comms.views.channel_history_page("#all").messages)
         assert [m.body for m in history] == ["hello all"]
 
@@ -623,7 +623,7 @@ class TestAgentTurn:
         assert goal is not None and goal.state.declared_name == "blocked"
         assert goal.progress == "Backend turn failed; inspect local diagnostics before resuming."
         assert message not in goal.progress
-        assert not wired.registry.require("proj").executing
+        assert not wired.registry.require("proj").active_turn.executing
 
     @pytest.mark.parametrize("completed_in_turn", [False, True])
     async def test_missing_terminal_blocks_goal_with_canonical_failure_progress(
@@ -1537,10 +1537,10 @@ class TestAgentTurnForwarding:
             assert facts(goal_updates[0].field_meta, GoalChangedUpdate) == (GoalChangedUpdate(None, None),)
             assert "title" not in goal_updates[0].model_fields_set
             states = [fact.state for fact in metadata if isinstance(fact, TurnChangedUpdate)]
-            busy = [state for state in states if state.busy]
-            assert busy and len({state.managed_id for state in busy}) == 1
+            busy = [state for state in states if state.active.phase.busy]
+            assert busy and len({state.active.id for state in busy}) == 1
             assert states[-1] == agent.turns.turn_state(session)
-            assert not states[-1].busy and states[-1].finished_turn_id == busy[0].managed_id
+            assert not states[-1].active.phase.busy and states[-1].finished_turn_id == busy[0].active.id
             assert any(isinstance(fact, TranscriptChangedUpdate) for fact in metadata)
             assert [update.content.text for update in sent
                     if type(update).__name__ == "AgentThoughtChunk"] == ["Inspecting files"]
@@ -1554,7 +1554,7 @@ class TestAgentTurnForwarding:
             assert any(update.status == "in_progress" for update in tools[1:])
             assert tools[-1].status == "completed"
             assert str(native.project) in tools[-1].content[0].content.text
-            assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes
+            assert not agent.turns.turn_state(session).active.phase.busy and not agent.inputs.backend_inboxes
         assert native.provider.posts == 2 and len(native.saved_inputs()) == 2
 
     async def test_turn_sets_wire_activity(self, native_backend):
@@ -1574,9 +1574,9 @@ class TestAgentTurnForwarding:
             assert agent._comms.agents.activity_of(session, snapshot=agent._comms.registry.snapshot()).state is ActivityState.IDLE
             states = [fact.state for update in updates for fact in decode_updates(update.field_meta)
                       if isinstance(fact, TurnChangedUpdate)]
-            assert any(isinstance(state.phase, ToolRunningPhase) and state.busy for state in states)
+            assert any(isinstance(state.active.phase, ToolRunningPhase) and state.active.phase.busy for state in states)
             assert states[-1] == agent._comms.registry.require(session).turn_state
-            assert not states[-1].busy
+            assert not states[-1].active.phase.busy
         assert native.provider.posts == 2
 
 

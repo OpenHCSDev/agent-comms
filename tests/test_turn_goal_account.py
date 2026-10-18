@@ -135,7 +135,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
         with pytest.raises(RuntimeError, match="injected acquired resource failure"):
             await execution.run()
         assert store.snapshot(goal.id).lifecycle == expected_state
-        assert comms.registry.require(name).active_turn is None
+        assert not comms.registry.require(name).active_turn.executing
         assert session.session_id not in owner.inputs.backend_inboxes
         assert session.session_id not in owner.inputs.first_sources
         assert not owner.inputs.input_keys(session.session_id)

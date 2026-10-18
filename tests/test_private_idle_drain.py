@@ -192,7 +192,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
             assert "[Open diagnostic]" in rows[-1].body
             assert comms.registry.require("beta").turn_lease == execution.turn_lease
-    assert comms.registry.require("beta").active_turn is None
+    assert not comms.registry.require("beta").active_turn.executing
 
 
 def _covered_session(tmp_path):

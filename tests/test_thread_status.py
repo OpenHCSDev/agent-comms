@@ -111,7 +111,7 @@ def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path
     assert after.threads["owner"].incarnation == before.threads["owner"].incarnation
     assert after.owner_generations["owner"] > before.owner_generations["owner"]
     assert after.claimed_generations["owner"] > before.claimed_generations["owner"]
-    assert after.threads["owner"].active_turn is None
+    assert not after.threads["owner"].active_turn.executing
 
 
 def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_path):

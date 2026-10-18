@@ -113,7 +113,7 @@ async def test_captured_originals_reach_context_reservation_and_unbound_retireme
             )
             assert all(isinstance(row, NotSentInput) and not row.has_native_binding
                        for row in originals)
-            assert comms.registry.require(agent.sessions.require(session_id)).active_turn is None
+            assert not comms.registry.require(agent.sessions.require(session_id)).active_turn.executing
             assert not agent.inputs.first_sources and not agent.inputs.backend_inboxes
         assert native.session.read_bytes() == saved
         assert native.provider.posts == 0 and native.starts == []

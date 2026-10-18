@@ -153,7 +153,7 @@ async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_
                         selected.transition(PromptAcceptancePhase()), delivery,
                     ), 5)
                     timer.cancel()
-                    assert type(comms.registry.require("beta").turn_state.phase) is PromptAcceptancePhase
+                    assert type(comms.registry.require("beta").active_turn.phase) is PromptAcceptancePhase
                     (placed,) = agent.inputs.queued_inputs["beta"].values()
                     assert placed.message == following and inbox.qsize() == 1
                 finally:

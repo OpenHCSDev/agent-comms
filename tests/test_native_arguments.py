@@ -203,7 +203,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
             assert native.session.read_bytes().startswith(history)
             assert all(row in read_proof_rows(native.session) for row in proof)
             assert len(native.saved_inputs()) == 2 and native.provider.posts == 2
-            assert owner._comms.registry.require(sid).active_turn is None
+            assert not owner._comms.registry.require(sid).active_turn.executing
     finally:
         await owner.shutdown()
     assert not owner.turns.persistent_backends

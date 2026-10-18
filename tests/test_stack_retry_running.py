@@ -86,7 +86,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             assert FieldCodec.decode(Goal, paused["goal"]).state.declared_name == "paused"
             finish_goal.set()
             await owner.inputs.wake_tasks[session]
-            assert not owner.turns.turn_state(session).busy
+            assert not owner.turns.turn_state(session).active.phase.busy
             assert not owner.inputs.backend_inboxes
             assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
             assert stored_inputs(owner.inputs.dispositions.root).lookup(original.key) == original
