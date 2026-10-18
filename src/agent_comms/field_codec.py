@@ -254,14 +254,18 @@ class SubclassUnion(WireValue):
     accepts_null = True
     external_json_shape = True
     _decoder: ClassVar[UnionDecoder[Self]]
+    _members: ClassVar[dict[str, type[Self]]]
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         if SubclassUnion in cls.__bases__:
+            cls._members = {}
             return
         for base in cls.__bases__:
             if SubclassUnion in base.__bases__:
-                base._decoder = ValueDecoder.for_members(tuple(base.__subclasses__()))
+                # Slots rebuilds keep the member's name, including for nested classes.
+                base._members[cls.__name__] = cls
+                base._decoder = ValueDecoder.for_members(tuple(base._members.values()))
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
