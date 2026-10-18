@@ -1229,6 +1229,8 @@ class _DictDecoder(ValueDecoder[Any]):
 class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
     """The encoded object carries its member's name under the family tag."""
 
+    target: type[Member]
+
     @staticmethod
     def document_member(declared: object) -> type[DeclaredFamily] | None:
         """The leaf member a document declares directly or as its mapping's values."""
@@ -1244,29 +1246,27 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
         return declared
 
     def editor_choices(self):
-        family = cast(type[Member], self.target)
-        return tuple((member.label, {family.family_discriminator: member.declared_name})
-                     for member in family.members_with(family))
+        return tuple((member.label, {self.target.family_discriminator: member.declared_name})
+                     for member in self.target.members_with(self.target))
 
     def argument_options(self) -> dict[str, object]:
         """Every member is a command-line choice, labelled or not."""
-        return {"choices": list(cast(type[Member], self.target).names())}
+        return {"choices": list(self.target.names())}
 
     def argument_text(self, encoded: object) -> object:
-        return cast(Mapping[str, object], encoded)[cast(type[Member], self.target).family_discriminator]
+        return cast(Mapping[str, object], encoded)[self.target.family_discriminator]
 
     def argument_payload(self, text: object) -> object:
-        return {cast(type[Member], self.target).family_discriminator: text}
+        return {self.target.family_discriminator: text}
 
     def member(self, data: object) -> tuple[type[Member], dict]:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a family object.")
-        family = cast(type[Member], self.target)
-        tag = family.family_discriminator
+        tag = self.target.family_discriminator
         name = data.get(tag)
         if not isinstance(name, str):
             raise MalformedRecord(f"Expected a string family {tag}.")
-        return _declared_member(family, name), {
+        return _declared_member(self.target, name), {
             key: value for key, value in data.items() if key != tag
         }
 
@@ -1279,8 +1279,10 @@ class _RecordDecoder(ValueDecoder[Any]):
     """A dataclass record. Its plan is looked up at decode time, so a
     record that contains itself compiles without recursion."""
 
+    target: type
+
     def checked(self, data: object) -> dict:
-        target = cast(type, self.target)
+        target = self.target
         plan = FieldCodec._record_plan(target)
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object.")
@@ -1298,7 +1300,7 @@ class _RecordDecoder(ValueDecoder[Any]):
 
     def decode(self, data):
         data = self.checked(data)
-        target = cast(type, self.target)
+        target = self.target
         values = {}
         for entry in FieldCodec._record_plan(target).bindings:
             values.update(entry.decoded(data))
@@ -1306,6 +1308,8 @@ class _RecordDecoder(ValueDecoder[Any]):
 
 @dataclass(frozen=True, slots=True)
 class _EnumDecoder(_ChoiceDecoder[Any]):
+    target: type[Enum]
+
     def editor_choices(self):
         return tuple((str(member.value), member.value) for member in self.target)
 
