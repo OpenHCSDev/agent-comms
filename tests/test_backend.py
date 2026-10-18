@@ -3180,17 +3180,18 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
             tmp_path,
             f"#!{sys.executable}\n"
             + f"""
-import json, sys, time
+import json, sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import answer_state, next_prompt
+from pi_stub_protocol import answer_state, next_prompt, read_request, request_response, send
 answer_state({{"nativeInputProofCapability": {CAPABILITY!r}}})
 prompt = next_prompt()
 with open({str(calls)!r}, "a") as handle:
     handle.write("one\\n")
     handle.flush()
-print(json.dumps({{"type": "response", "command": "prompt",
-                  "id": prompt["id"], "success": True}}), flush=True)
-time.sleep(30)
+send(request_response(prompt, {{}}))
+abort = read_request()
+assert abort["type"] == "abort"
+send(request_response(abort, {{}}))
 """,
         )
         finish = asyncio.Event() if managed_finish else None
