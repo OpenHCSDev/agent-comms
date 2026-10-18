@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
@@ -69,6 +69,12 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def allows_owner_start(self, *, process: ProcessState) -> bool:
         return self.allows_owner_control()
 
+    def native_presentation(self, process: ProcessState, ordinary, binding):
+        return ordinary
+
+    def external_presentation(self, process: ProcessState, ordinary):
+        return ordinary
+
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
         return ThreadPresentation(title, "○", self.declared_name.title())
 
@@ -90,6 +96,14 @@ class ActiveThreadPresence:
 
     def allows_owner_start(self, *, process: ProcessState) -> bool:
         return process.allows_owner_start()
+
+    def native_presentation(self, process: ProcessState, ordinary, binding):
+        return process.native_presentation(ordinary, binding)
+
+    def external_presentation(self, process: ProcessState, ordinary):
+        if process.offline():
+            return replace(ordinary, marker="○", summary="CLI offline", status=ordinary.status.without_work())
+        return ordinary
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
         return activity.ordinary_presentation(title)

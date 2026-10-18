@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from abc import ABC, abstractmethod
 import os
 from typing import TYPE_CHECKING
@@ -112,7 +111,7 @@ class NativeThreadExecution(ThreadExecution):
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        return binding.native_presentation(ordinary)
+        return status.native_presentation(thread.process_identity, ordinary, binding)
 
     @classmethod
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):
@@ -140,10 +139,7 @@ class ExternalThreadExecution(ThreadExecution):
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        if status.active and not thread.process_alive:
-            return replace(ordinary, marker="○", summary="CLI offline",
-                           status=ordinary.status.without_work())
-        return ordinary
+        return status.external_presentation(thread.process_identity, ordinary)
 
     @classmethod
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):

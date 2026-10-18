@@ -158,7 +158,7 @@ class Thread(ThreadProvenance):
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None:
-            if self.active_turn.owner_pid != self.pid:
+            if not self.process_identity.matches_pid(self.active_turn.owner_pid):
                 raise RelationViolationError("A turn must belong to the registered executor.")
             if self.active_turn.turn_generation is not None and (
                 type(self.active_turn.turn_generation) is not int
@@ -223,11 +223,6 @@ class Thread(ThreadProvenance):
                 self.thinking_level if self.thinking_level is not None else thinking_level
             ),
         )
-
-    @property
-    def pid(self) -> int:
-        """Numeric OS projection of the sole stored process authority."""
-        return self.require_process().pid
 
     @property
     def process_alive(self) -> bool:

@@ -28,7 +28,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     unbound = comms.threads.attach_session(attached, str(session), process=NoProcess())
     assert unbound.process_identity == NoProcess()
     with pytest.raises(RelationViolationError, match="no owner process"):
-        _ = unbound.pid
+        unbound.require_process()
     rebound = comms.threads.attach_session(unbound, str(session), process=identity)
     assert rebound.process_identity == identity
     restored = RegistryDocument()
@@ -49,7 +49,7 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     after = comms.registry.snapshot()
     assert after.owner_generations[owner.name] > before.owner_generations[owner.name]
     assert after.claimed_generations[owner.name] > before.claimed_generations[owner.name]
-    assert comms.registry.require(owner.name).pid == os.getpid()
+    assert comms.registry.require(owner.name).process_identity.matches_pid(os.getpid())
     with pytest.raises(RelationViolationError, match="live owner"):
         comms.registry.live_owner_with_claim(owner.name)
     with pytest.raises(RelationViolationError, match="live owner"):

@@ -95,13 +95,13 @@ class CursorPublication:
             owner, generation = self.comms.registry.live_owner_with_claim(thread_name)
         except RelationViolationError:
             return NoCursorScope()  # This process has no live owner input grant.
-        if owner.pid != os.getpid():
+        if not owner.process_identity.matches_pid(os.getpid()):
             return NoCursorScope()
         return LiveCursorScope(
             session_id,
             root_id,
             ClaimedIdentity(owner.incarnation, generation),
-            owner.pid,
+            owner.require_process().pid,
         )
 
     async def observe(

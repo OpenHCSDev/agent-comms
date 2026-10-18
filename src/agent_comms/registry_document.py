@@ -453,7 +453,7 @@ class RegistryDocument(RegistryPresence):
             project_resume_due=False,
             active_turn=ActiveTurn(
                 turn_id,
-                current.pid,
+                current.require_process().pid,
                 routing=routing,
                 claimed_generation=self.claims.generations[current.name],
                 turn_generation=current.turn_generation + 1,

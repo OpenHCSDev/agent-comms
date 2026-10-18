@@ -301,7 +301,7 @@ class OwnerRead(AwaitedRead):
         owner = comms.registry.require(self.owner.name)
         if owner.incarnation != self.owner:
             raise ValueError("The owner incarnation changed while preparing the request.")
-        return OwnerReplyConnection(comms, owner.name, socket_path(comms.root, owner.pid))
+        return OwnerReplyConnection(comms, owner.name, socket_path(comms.root, owner.require_process().pid))
 
     async def ask(self, comms: Comms) -> object:
         connection = await asyncio.to_thread(self.connect, comms)

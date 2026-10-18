@@ -1479,7 +1479,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         spec = self.spec_type.from_task(**{item.name: getattr(self, item.name)
                                            for item in fields(self.spec_type)})
         child = ctx.threads.create(spec)
-        return ThreadCreatedResult(child.name, child.pid)
+        return ThreadCreatedResult(child.name, child.require_process().pid)
 
 
 @dataclass(frozen=True, kw_only=True)

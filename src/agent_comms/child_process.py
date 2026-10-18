@@ -23,6 +23,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
+from functools import singledispatchmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
@@ -84,11 +85,14 @@ class ProcessState(WireValue):
     def conflicts_with(self, previous: ProcessState) -> bool:
         return self != previous
 
-    def registration_change(self, change, requested):
-        return requested.process_identity.restarted_registration(change, requested.incarnation)
+    @abstractmethod
+    def registration_change(self, previous, change, incarnation): ...
 
-    def restarted_registration(self, change, incarnation):
-        return change.restarted() if incarnation != change.previous.incarnation else change
+    def offline(self) -> bool:
+        return not self.alive()
+
+    def native_presentation(self, ordinary, binding):
+        return binding.native_presentation(ordinary)
 
     def project_activity(self, turn_state, activity):
         return turn_state.project_activity(activity)
@@ -99,21 +103,20 @@ class ProcessState(WireValue):
     @abstractmethod
     def require(self, message: str = "No worker process has started") -> ProcessIdentity: ...
 
-    def alive(self) -> bool:
-        return Platform.current().matches(self.require())
+    @abstractmethod
+    def alive(self) -> bool: ...
 
-    def matches_pid(self, pid: int) -> bool:
-        return self.require().pid == pid
+    @abstractmethod
+    def matches_pid(self, pid: int) -> bool: ...
 
-    def signal(self, signum: int) -> None:
-        Platform.current().send(self.require(), signum)
+    @abstractmethod
+    def signal(self, signum: int) -> None: ...
 
-    def require_release_by(self, process: ProcessIdentity) -> None:
-        if self.require() != process:
-            raise RelationViolationError("Only the registered owner may release itself.")
+    @abstractmethod
+    def require_release_by(self, process: ProcessIdentity) -> None: ...
 
-    def pid_fields(self) -> dict[str, int]:
-        return {"pid": self.require().pid}
+    @abstractmethod
+    def pid_fields(self) -> dict[str, int]: ...
 
 
 @dataclass(frozen=True)
@@ -145,11 +148,14 @@ class NoProcess(ProcessState):
     def conflicts_with(self, previous):
         return False
 
-    def registration_change(self, change, requested):
+    def registration_change(self, previous, change, incarnation):
         return change
 
-    def restarted_registration(self, change, incarnation):
-        return change
+    def offline(self):
+        return False
+
+    def native_presentation(self, ordinary, binding):
+        return ordinary
 
     def project_activity(self, turn_state, activity):
         return activity
@@ -204,6 +210,30 @@ class ProcessIdentity(ProcessState):
 
     def require(self, message="No worker process has started"):
         return self
+
+    def alive(self) -> bool:
+        return Platform.current().matches(self)
+
+    def matches_pid(self, pid: int) -> bool:
+        return self.pid == pid
+
+    def signal(self, signum: int) -> None:
+        Platform.current().send(self, signum)
+
+    def require_release_by(self, process: ProcessIdentity) -> None:
+        if self != process:
+            raise RelationViolationError("Only the registered owner may release itself.")
+
+    def pid_fields(self) -> dict[str, int]:
+        return {"pid": self.pid}
+
+    @singledispatchmethod
+    def registration_change(self, previous: ProcessState, change, incarnation):
+        return change.restarted() if incarnation != change.previous.incarnation else change
+
+    @registration_change.register
+    def _(self, previous: NoProcess, change, incarnation):
+        return change
 
 
 class ProcessGroups(ABC):

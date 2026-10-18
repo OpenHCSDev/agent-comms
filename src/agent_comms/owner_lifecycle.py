@@ -302,12 +302,12 @@ class OwnerLifecycle:
             if thread.process_alive:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")
-                return OwnerStartResult(thread.name, thread.pid, False)
+                return OwnerStartResult(thread.name, thread.require_process().pid, False)
             owner = self._launch_owner_unlocked(
                 thread, NativeArguments.configured_binary(agent_bin), agent_args,
                 launch_runtime=LaunchRuntime.current(),
             )
-            return OwnerStartResult(owner.name, owner.pid, True)
+            return OwnerStartResult(owner.name, owner.require_process().pid, True)
 
     @property
     def launch_authority(self) -> PrivateNkLaunch | None:

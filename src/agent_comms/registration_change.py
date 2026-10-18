@@ -94,7 +94,9 @@ class UpdatedRegistration(RegistrationChange):
                     last_finished_turn_id=self.previous.last_finished_turn_id,
                 ),
             )
-        return self.previous.process_identity.registration_change(self, requested)
+        return requested.process_identity.registration_change(
+            self.previous.process_identity, self, requested.incarnation
+        )
 
     @property
     def prior_goal(self) -> Goal | None:
