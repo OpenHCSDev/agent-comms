@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
-from typing import ClassVar, Final, Self
+from typing import ClassVar, Self
 
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, WireValue
 from .command import Command
@@ -26,7 +26,7 @@ from .threads import Thread
 from .typed_table import Column, TypedStore, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
 from .change_report import FileLine
-from .goals import OrderCheck
+from .goals import OrderCheck, ProblemGoalOrder
 from .child_process import BoundedRun, ExitedOutcome
 
 
@@ -216,9 +216,6 @@ class StrikeReason(PlainText):
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
-
-
-StrikeLimit: Final = 2  # live strikes one unit may take on one problem
 
 
 class OrderText(OrderWords):
@@ -834,8 +831,8 @@ class Todo(TypedTable):
                      if unit in (None, recorded.previous.owner) and recorded not in taken_back)
 
     def struck_out(self, unit: str) -> bool:
-        """The unit has taken StrikeLimit live strikes here; only mechanical orders reach it."""
-        return len(self.live_strikes(unit)) >= StrikeLimit
+        """The unit has taken its goal's StrikeLimit live strikes here; only mechanical orders reach it."""
+        return len(self.live_strikes(unit)) >= ProblemGoalOrder.StrikeLimit
 
     def require_result(self, result: Todo) -> None:
         if self != result:

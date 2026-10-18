@@ -27,7 +27,7 @@ from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
 from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
-from ..goals import CountCheckResult, OrderCheck
+from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
@@ -283,7 +283,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     refuse('\n'.join((message, *taken.values())), *OUTGOING)  # before Core: refused records nothing
     fired = [pid for pid in group if pid in listed and listed[pid].struck_out(unit)]
     if not mechanical and fired:
-        sys.exit(f'Refused: {unit} has 2 strikes on {fired}. Reassign them; only --mechanical orders on them reach {unit}.')
+        sys.exit(f'Refused: {unit} has {ProblemGoalOrder.StrikeLimit} strikes on {fired}. Reassign them; only --mechanical orders on them reach {unit}.')
     at = time.time()
     try:
         order = PendingProblemOrder(
