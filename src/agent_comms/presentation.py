@@ -539,7 +539,7 @@ class BusPresentation:
         """
         snapshot = self.display_index(basis.require_viewer()).snapshot(source, basis.scopes)
         unread = source.query_page_index(lambda page: page.display_unread(
-            basis.scopes, basis.viewer_names, basis.seen, source.complete_prefix.boundary))
+            basis.scopes, basis.viewer_names, basis.seen, source.complete_prefix.boundary, basis.registry))
         return snapshot.activity, unread
 
 

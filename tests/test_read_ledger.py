@@ -10,7 +10,8 @@ from agent_comms.comms import Comms, wire
 from agent_comms.message_page import MessagePageRequest, OlderTraversal, PageBounds
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.read_basis import NamedViewer, ReadCursor
+from agent_comms.read_basis import Conversation, ConversationCursor, NamedViewer, ReadCursor
+from agent_comms.read_ledger import ReadLedger
 from agent_comms.presentation import ReadThrough
 
 
@@ -19,6 +20,12 @@ def prepared(root):
     for name, tags in (("alice", {"team"}), ("bob", set())):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(root)))
     return comms
+
+
+def read_message(comms, viewer, message):
+    snapshot = comms.registry.snapshot()
+    key = ReadLedger.conversation(message, snapshot)
+    return message.seq in comms.bus.reads.cursor(viewer, snapshot).for_conversation(key)
 
 
 def test_read_request_requires_both_fields_and_page_reader_owns_evidence(tmp_path):
@@ -31,7 +38,7 @@ def test_read_request_requires_both_fields_and_page_reader_owns_evidence(tmp_pat
     named = comms.views.presentation.channel_page("#team", viewer=NamedViewer(viewer))
     assert named.display_scope.require_displayed().viewer == viewer
     assert named.selection.has_evidence
-    assert message.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
+    assert not read_message(comms, viewer, message)
     with pytest.raises(TypeError, match="expected_scope"):
         ReadThrough(message.seq)
     with pytest.raises(TypeError, match="through"):
@@ -39,7 +46,7 @@ def test_read_request_requires_both_fields_and_page_reader_owns_evidence(tmp_pat
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path), mark=ReadThrough(message.seq, named.display_scope),
     )
-    assert message.seq in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
+    assert read_message(comms, viewer, message)
 
 
 def test_typed_read_keys_round_trip_through_the_store_codec():
@@ -49,7 +56,7 @@ def test_typed_read_keys_round_trip_through_the_store_codec():
 
     owner = RecordedThreadIncarnation("viewer", 1.0)
     conversation = Conversation(participants=(owner,))
-    document = ReadDocument(messages={owner: {conversation: ReadCursor(2)}})
+    document = ReadDocument(messages={owner: ReadCursor({conversation: ConversationCursor(2)})})
     encoded = FieldCodec.encode(document)
     assert encoded["messages"][0][0] == {"name": "viewer", "created_at": 1.0}
     assert FieldCodec.decode(ReadDocument, encoded) == document
@@ -108,7 +115,8 @@ def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp
     reopened = wire(tmp_path)
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
     seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
-    assert hidden.seq not in seen and shown.seq in seen
+    key = ReadLedger.conversation(hidden, reopened.registry.snapshot())
+    assert hidden.seq not in seen.for_conversation(key) and shown.seq in seen.for_conversation(key)
     assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
 
 
@@ -197,7 +205,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     comms.registry.remove("alice")
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     fresh = comms.messaging.send_message("alice", viewer, "new incarnation unseen")
-    assert old.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
+    assert not read_message(comms, viewer, old)
     assert comms.bus.pending_count(viewer, "alice") == 1
     assert [row.seq for row in comms.bus.inbox(viewer, "alice")] == [fresh.seq]
 
@@ -208,8 +216,8 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     shown = set()
-    for i in range(12):
-        comms.messaging.send("alice", rng.choice(["bob", "#team"]), f"row {i}")
+    messages = [comms.messaging.send_message("alice", rng.choice(["bob", "#team"]), f"row {i}")
+                for i in range(12)]
     for _ in range(18):
         comms.channels.set_channel_any_mode("#team", rng.choice([True, False]))
         page = comms.views.channel_display_page(
@@ -232,7 +240,9 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
             )
         comms = wire(tmp_path)
         seen = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
-        assert seen == ReadCursor().add(tuple(shown))
+        for message in messages:
+            key = ReadLedger.conversation(message, comms.registry.snapshot())
+            assert (message.seq in seen.for_conversation(key)) == (message.seq in shown)
 
 
 def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
@@ -253,7 +263,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     )
     comms.bus.reads.mark_displayed(viewer, basis)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
-    assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor(exceptions=(2, 4, 6))
+    assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor({Conversation(target="#team"): ConversationCursor(exceptions=(2, 4, 6))})
 
 
 def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
@@ -269,7 +279,7 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     replacement.chmod(0o600)
     replacement.replace(comms.bus.log.path)
     comms.views.viewer_snapshot(str(tmp_path))
-    assert not comms.bus.reads.cursor(viewer, comms.registry.snapshot())
+    assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor()
 
 
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
@@ -292,7 +302,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
         comms.registry.register(comms.registry.new_thread('unrelated', frozenset(), str(tmp_path)))
     reopened = wire(tmp_path)
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
-    assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor(exceptions=(messages[2].seq, messages[4].seq))
+    assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor({Conversation(target="#team"): ConversationCursor(exceptions=(messages[2].seq, messages[4].seq))})
     assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
 
 
@@ -318,16 +328,17 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
             for sequence in item.sequences
         }
 
-    def current_sequences(facts):
+    def current_cursor(facts):
         threads = comms.registry.snapshot().threads
-        return {
-            sequence
-            for sequence, participants in facts
-            if all(
-                name in threads and threads[name].created_at == creation
-                for name, creation in participants
-            )
-        }
+        conversations = {}
+        for sequence, participants in facts:
+            if all(name in threads and threads[name].created_at == birth
+                   for name, birth in participants):
+                key = (Conversation(participants=tuple(RecordedThreadIncarnation(name, birth)
+                                                       for name, birth in participants))
+                       if participants else Conversation(target="#team"))
+                conversations[key] = conversations.get(key, ConversationCursor()).add((sequence,))
+        return ReadCursor(conversations)
 
     # Every run includes each operation, in shuffled order, rather than relying
     # on a random draw to happen to exercise a restart or identity replacement.
@@ -404,5 +415,5 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
             assert child.returncode == 9, child.stderr.decode()
             comms = wire(tmp_path)
         seen = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
-        assert ReadCursor.union((seen, ReadCursor().add(tuple(current_sequences(painted))))) == ReadCursor().add(tuple(current_sequences(painted))), (seed, index, operation)
-        assert seen == ReadCursor().add(tuple(current_sequences(acknowledged))), (seed, index, operation)
+        assert ReadCursor.union((seen, current_cursor(painted))) == current_cursor(painted), (seed, index, operation)
+        assert seen == current_cursor(acknowledged), (seed, index, operation)

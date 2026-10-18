@@ -19,6 +19,7 @@ from .bus_activity_index import ChannelActivity
 from .bus_display_index import DisplaySnapshot
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, ReadCursor
@@ -27,6 +28,7 @@ from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
 from .wire_record import WireRecord
 
 if TYPE_CHECKING:
+    from .registry_provenance import RegistryProvenance
     from .wire_log import WireSnapshot
 
 
@@ -316,16 +318,27 @@ class BusPageIndex:
         return snapshot
 
     def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
-                       seen: ReadCursor, before_offset: int) -> dict[str, int]:
+                       seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
         counts = {}
-        for scope in scopes:
-            predicate, parameters = scope.index_predicate
-            counts[scope.channel] = BusPageRow.count(self.connection,
-                where=f"seq > ? AND offset < ? AND ({predicate}) "
-                      "AND sender NOT IN (SELECT value FROM json_each(?)) "
-                      "AND seq NOT IN (SELECT value FROM json_each(?))",
-                parameters=(seen.high_water, before_offset, *parameters,
-                            json.dumps(tuple(viewer_names)), json.dumps(seen.exceptions)))
+        try:
+            for scope in scopes:
+                self.connection.create_function(
+                    "read_cursor", 2,
+                    lambda sender, target: json.dumps(FieldCodec.encode(
+                        seen.for_conversation(scope.read_key(sender, target, snapshot)),
+                    )), deterministic=True,
+                )
+                predicate, parameters = scope.index_predicate
+                counts[scope.channel] = BusPageRow.count(self.connection,
+                    where=f"seq > ? AND offset < ? AND ({predicate}) "
+                          "AND sender NOT IN (SELECT value FROM json_each(?)) "
+                          "AND seq > json_extract(read_cursor(sender,target),'$.high_water') "
+                          "AND seq NOT IN (SELECT value FROM "
+                          "json_each(json_extract(read_cursor(sender,target),'$.exceptions')))",
+                    parameters=(seen.lower_bound(scope, snapshot), before_offset, *parameters,
+                                json.dumps(tuple(viewer_names))))
+        finally:
+            self.connection.create_function("read_cursor", 2, None)
         return counts
 
 
@@ -342,5 +355,5 @@ class EmptyBusPageIndex(BusPageIndex):
         return DisplaySnapshot.empty(scopes)
 
     def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
-                       seen: ReadCursor, before_offset: int) -> dict[str, int]:
+                       seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
         return dict.fromkeys((scope.channel for scope in scopes), 0)

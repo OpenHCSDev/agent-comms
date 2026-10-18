@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field, replace
 from functools import partial
+from heapq import merge
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
@@ -233,30 +234,67 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class ReadCursor:
+class ConversationCursor:
+    """One conversation's proved prefix and ordered out-of-order reads."""
+
     high_water: int = 0
     exceptions: tuple[int, ...] = ()
 
     @classmethod
-    def union(cls, cursors: Iterable[ReadCursor]) -> ReadCursor:
+    def union(cls, cursors: Iterable[ConversationCursor]) -> ConversationCursor:
         cursors = tuple(cursors)
         through = max((cursor.high_water for cursor in cursors), default=0)
-        exceptions = sorted({seq for cursor in cursors for seq in cursor.exceptions if seq > through})
-        consumed = 0
-        while consumed < len(exceptions) and exceptions[consumed] == through + 1:
-            through += 1
-            consumed += 1
-        return cls(through, tuple(exceptions[consumed:]))
+        values = []
+        for sequence in merge(*(cursor.exceptions for cursor in cursors)):
+            if sequence > through and (not values or values[-1] != sequence):
+                values.append(sequence)
+        return cls(through, tuple(values))
 
-    def add(self, sequences: tuple[int, ...]) -> ReadCursor:
-        return self.union((self, type(self)(exceptions=sequences)))
+    def add(self, sequences: tuple[int, ...]) -> ConversationCursor:
+        values = list(self.exceptions)
+        for sequence in sequences:
+            if sequence <= self.high_water:
+                continue
+            index = bisect_left(values, sequence)
+            if index == len(values) or values[index] != sequence:
+                values.insert(index, sequence)
+        return type(self)(self.high_water, tuple(values))
 
-    def __len__(self) -> int:
-        return self.high_water + len(self.exceptions)
+    def through(self, sequence: int) -> ConversationCursor:
+        sequence = max(sequence, self.high_water)
+        return type(self)(sequence, self.exceptions[bisect_right(self.exceptions, sequence):])
 
     def __contains__(self, sequence: int) -> bool:
         index = bisect_left(self.exceptions, sequence)
         return 0 < sequence <= self.high_water or (index < len(self.exceptions) and self.exceptions[index] == sequence)
+
+
+@dataclass(frozen=True, slots=True)
+class ReadCursor:
+    """Read evidence stays keyed by conversation even when viewer aliases join."""
+
+    conversations: dict[Conversation, ConversationCursor] = field(default_factory=dict)
+
+    @classmethod
+    def union(cls, cursors: Iterable[ReadCursor]) -> ReadCursor:
+        grouped: dict[Conversation, list[ConversationCursor]] = {}
+        for cursor in cursors:
+            for conversation, value in cursor.conversations.items():
+                grouped.setdefault(conversation, []).append(value)
+        return cls({key: ConversationCursor.union(values) for key, values in grouped.items()})
+
+    def for_conversation(self, conversation: Conversation) -> ConversationCursor:
+        return self.conversations.get(conversation, ConversationCursor())
+
+    def add(self, displayed: Iterable[DisplayedConversation]) -> ReadCursor:
+        conversations = dict(self.conversations)
+        for item in displayed:
+            previous = conversations.get(item.conversation, ConversationCursor())
+            conversations[item.conversation] = previous.add(item.sequences)
+        return type(self)(conversations)
+
+    def current(self, snapshot: RegistryProvenance) -> ReadCursor:
+        return type(self)({key: value for key, value in self.conversations.items() if key.current(snapshot)})
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,6 +304,12 @@ class Conversation:
 
     def current(self, snapshot: RegistryProvenance) -> bool:
         return all(participant.current(snapshot) for participant in self.participants)
+
+    def scope(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
+        if self.target:
+            return ChannelDisplayScope(self.target, frozenset((self.target,)))
+        first, second = self.participants
+        return DMDisplayScope.capture(first.name, second.name, snapshot)
 
 
 @dataclass(frozen=True, slots=True)
@@ -538,6 +582,13 @@ class EmptyDMDisplayBasis(DMDisplayBasis):
 class MessageDisplayScope(ABC):
     """Captured inclusion and its sound candidate reduction for the page index."""
 
+    def read_key(self, sender: str, target: str, snapshot: RegistryProvenance) -> Conversation:
+        return CommandTarget.named(target).conversation_key(sender, snapshot, Conversation)
+
+    def has_read(self, seen: ReadCursor, message: Message | BusPageRow,
+                 snapshot: RegistryProvenance) -> bool:
+        return message.seq in seen.for_conversation(self.read_key(message.sender, message.target, snapshot))
+
     def offsets(self, index, *, lower, upper, descending, before_offset):
         return index.offsets(lower=lower, upper=upper, descending=descending,
                              targets=self.index_targets, before_offset=before_offset)
@@ -572,6 +623,13 @@ class DMDisplayScope(MessageDisplayScope):
         if first.incarnation == second.incarnation:
             raise ValueError("DM display identity changed; refresh the page.")
         return cls.capture(first.name, second.name, snapshot)
+
+    @property
+    def index_predicate(self) -> tuple[str, tuple]:
+        first, second = tuple(self.first_names), tuple(self.second_names)
+        a, b = ",".join("?" for _ in first), ",".join("?" for _ in second)
+        return (f"((sender IN ({a}) AND target IN ({b})) OR "
+                f"(sender IN ({b}) AND target IN ({a})))", (*first, *second, *second, *first))
 
     def offsets(self, index, *, lower, upper, descending, before_offset):
         return index.conversation_offsets(

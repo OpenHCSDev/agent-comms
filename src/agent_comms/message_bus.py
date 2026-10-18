@@ -216,7 +216,8 @@ class MessageBus[Writes: Publisher]:
         seen = self.reads.cursor(delivery.actor, snapshot)
         messages = self.log.messages_for_references(references)
         return self.reads.capture(
-            name, tuple(message for message in messages if delivery.includes(message) and message.seq not in seen),
+            name, tuple(message for message in messages if delivery.includes(message) and message.seq not in
+                        seen.for_conversation(delivery.read_key(message.sender, message.target, snapshot))),
             snapshot, self.log.path,
         )
 

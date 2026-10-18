@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
-    messages: dict[RecordedThreadIncarnation, dict[Conversation, ReadCursor]] = field(default_factory=dict)
+    messages: dict[RecordedThreadIncarnation, ReadCursor] = field(default_factory=dict)
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
     notice: str | None = None
@@ -46,9 +46,8 @@ class ReadDocument:
         if recorded is None or not source.same_file(recorded):
             return ReadCursor()
         return ReadCursor.union(
-            cursor for owner in thread.incarnation.recorded_names(snapshot)
-            for conversation, cursor in self.messages.get(owner, {}).items()
-            if conversation.current(snapshot)
+            self.messages.get(owner, ReadCursor()).current(snapshot)
+            for owner in thread.incarnation.recorded_names(snapshot)
         )
 
 
@@ -109,10 +108,9 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
             messages = (
                 dict(document.messages) if document.bus_identity == displayed.bus_identity else {}
             )
-            conversations = dict(messages.get(displayed.viewer_identity, {}))
-            for item in displayed.conversations:
-                conversations[item.conversation] = conversations.get(item.conversation, ReadCursor()).add(item.sequences)
-            messages[displayed.viewer_identity] = conversations
+            messages[displayed.viewer_identity] = messages.get(
+                displayed.viewer_identity, ReadCursor(),
+            ).add(displayed.conversations)
             return (
                 replace(document, messages=messages, bus_identity=displayed.bus_identity)
                 if messages != document.messages or document.bus_identity != displayed.bus_identity
@@ -170,7 +168,8 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         )
 
     def _displayed_recipient(self, message, thread, snapshot, *, document):
-        if message.seq in self.cursor(thread.name, snapshot, document=document):
+        conversation = self.conversation(message, snapshot)
+        if message.seq in self.cursor(thread.name, snapshot, document=document).for_conversation(conversation):
             return (thread.incarnation,)
         return ()
 

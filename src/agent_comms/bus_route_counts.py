@@ -11,8 +11,8 @@ import os
 import sqlite3
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
-from contextlib import closing
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from pathlib import Path
@@ -580,42 +580,61 @@ class OpenedRouteCounts(BusRouteCounts):
             "through": self.source.through,
         }
 
+    @contextmanager
+    def reading_cursors(self, seen: Mapping[str, ReadCursor]) -> Iterator[None]:
+        """Borrow each route's conversation cursor for this SQL read only."""
+        self.connection.create_function(
+            "read_cursor", 3,
+            lambda actor, sender, target: json.dumps(FieldCodec.encode(
+                seen[actor].for_conversation(
+                    self.deliveries[actor].read_key(sender, target, self.registry),
+                ),
+            )), deterministic=True,
+        )
+        try:
+            yield
+        finally:
+            self.connection.create_function("read_cursor", 3, None)
+
     def _read_counts(self, seen: Mapping[str, ReadCursor]) -> list[RouteUnread]:
-        return RouteUnread.read(self.connection.execute(
-            f'''WITH {self._requests}, actors AS MATERIALIZED (
-                SELECT key AS actor, json_extract(value,'$.high_water') AS high_water,
-                    json_extract(value,'$.exceptions') AS exceptions FROM json_each(:seen)
-            ), painted AS (
-                SELECT request.actor,request.root,count(*) AS count
-                FROM actors AS owner,json_each(owner.exceptions) AS seen
-                JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=seen.value
-                JOIN requests AS request ON request.actor=owner.actor
-                    AND request.target=row.target AND request.sender=row.sender
-                    AND request.sender_lookup=row.sender_lookup AND row.timestamp>=request.since
-                WHERE row.seq<=:through GROUP BY request.actor,request.root
-            ) SELECT request.actor,request.target,request.sender,request.since,full.node AS full,
-                prefix.node AS prefix,coalesce(painted.count,0) AS painted
-            FROM requests AS request JOIN actors AS owner ON owner.actor=request.actor
-            JOIN "{RouteTimeRow.declared_name}" AS full ON full.id=request.root
-            LEFT JOIN "{RouteTimeRow.declared_name}" AS prefix ON prefix.id=(
-                SELECT time_root FROM "{RouteEntryRow.declared_name}"
-                WHERE target=request.target AND sender=request.sender AND sender_lookup=request.sender_lookup
-                    AND seq<=min(owner.high_water,:through) ORDER BY seq DESC LIMIT 1)
-            LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
-            self._request_bindings(self.deliveries) | {
-                "seen": json.dumps({actor: FieldCodec.encode(cursor) for actor,cursor in seen.items()})}))
+        with self.reading_cursors(seen):
+            return RouteUnread.read(self.connection.execute(
+                f'''WITH {self._requests}, cursors AS MATERIALIZED (
+                    SELECT request.*,read_cursor(actor,sender,target) AS cursor FROM requests AS request
+                ), painted AS (
+                    SELECT request.actor,request.root,count(*) AS count
+                    FROM cursors AS request,json_each(json_extract(request.cursor,'$.exceptions')) AS seen
+                    JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=seen.value
+                        AND request.target=row.target AND request.sender=row.sender
+                        AND request.sender_lookup=row.sender_lookup AND row.timestamp>=request.since
+                    WHERE row.seq<=:through GROUP BY request.actor,request.root
+                ) SELECT request.actor,request.target,request.sender,request.since,full.node AS full,
+                    prefix.node AS prefix,coalesce(painted.count,0) AS painted
+                FROM cursors AS request
+                JOIN "{RouteTimeRow.declared_name}" AS full ON full.id=request.root
+                LEFT JOIN "{RouteTimeRow.declared_name}" AS prefix ON prefix.id=(
+                    SELECT time_root FROM "{RouteEntryRow.declared_name}"
+                    WHERE target=request.target AND sender=request.sender AND sender_lookup=request.sender_lookup
+                        AND seq<=min(json_extract(request.cursor,'$.high_water'),:through)
+                    ORDER BY seq DESC LIMIT 1)
+                LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
+                self._request_bindings(self.deliveries)))
 
     def _read_deliveries(self, actor: str, seen: ReadCursor, after: int) -> list[UnseenDelivery]:
-        return UnseenDelivery.read(self.connection.execute(
-            f'''WITH {self._requests} SELECT row.seq,row.target
-            FROM requests AS request JOIN "{RouteEntryRow.declared_name}" AS row
-                ON row.target=request.target AND row.sender=request.sender
-                AND row.sender_lookup=request.sender_lookup
-            WHERE request.actor=:actor AND row.timestamp>=request.since
-                AND row.seq>max(:high_water,:after) AND row.seq<=:through
-                AND row.seq NOT IN (SELECT value FROM json_each(:exceptions)) ORDER BY row.seq''',
-            self._request_bindings((actor,)) | {"actor":actor,"high_water":seen.high_water,"after":after,
-                "exceptions":json.dumps(seen.exceptions)}))
+        with self.reading_cursors({actor: seen}):
+            return UnseenDelivery.read(self.connection.execute(
+                f'''WITH {self._requests}, cursors AS MATERIALIZED (
+                    SELECT request.*,read_cursor(actor,sender,target) AS cursor FROM requests AS request
+                ) SELECT row.seq,row.target
+                FROM cursors AS request JOIN "{RouteEntryRow.declared_name}" AS row
+                    ON row.target=request.target AND row.sender=request.sender
+                    AND row.sender_lookup=request.sender_lookup
+                WHERE request.actor=:actor AND row.timestamp>=request.since
+                    AND row.seq>max(json_extract(request.cursor,'$.high_water'),:after)
+                    AND row.seq<=:through AND row.seq NOT IN (
+                        SELECT value FROM json_each(json_extract(request.cursor,'$.exceptions'))
+                    ) ORDER BY row.seq''',
+                self._request_bindings((actor,)) | {"actor":actor,"after":after}))
 
 
 class CompletingRouteCounts(OpenedRouteCounts):

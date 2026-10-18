@@ -12,7 +12,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.read_basis import Conversation, ReadCursor
+from agent_comms.read_basis import Conversation, ConversationCursor, DisplayedConversation, ReadCursor
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnationRecord
 
@@ -20,17 +20,25 @@ from cutover.carry import Carried, Carry
 
 
 def carried(raw: dict) -> ReadDocument:
-    messages: dict[RecordedThreadIncarnation, dict[Conversation, ReadCursor]] = {}
+    if isinstance(raw["messages"], list):
+        previous = FieldCodec.decode(
+            dict[RecordedThreadIncarnation, dict[Conversation, ConversationCursor]], raw["messages"],
+        )
+        document = FieldCodec.decode(ReadDocument, {**raw, "messages": []})
+        return replace(document, messages={owner: ReadCursor(cursors) for owner, cursors in previous.items()})
+    messages: dict[RecordedThreadIncarnation, ReadCursor] = {}
     for key, sequences in raw["messages"].items():
         viewer, created_at, conversation = json.loads(key)
-        cursors = messages.setdefault(RecordedThreadIncarnation(viewer, created_at), {})
+        owner = RecordedThreadIncarnation(viewer, created_at)
         # Earlier keys spelled each participant as a [name, created_at] pair.
         pairs = FieldCodec.decode(tuple[tuple[str, float], ...], conversation.pop("participants"))
         conversation = replace(
             FieldCodec.decode(Conversation, conversation),
             participants=tuple(ThreadIncarnationRecord.decode(*pair) for pair in pairs),
         )
-        cursors[conversation] = cursors.get(conversation, ReadCursor()).add(tuple(sequences))
+        messages[owner] = messages.get(owner, ReadCursor()).add((
+            DisplayedConversation(conversation, tuple(sequences)),
+        ))
     transcripts = {}
     for key, through in raw["transcripts"].items():
         viewer, source, inode = json.loads(key)
