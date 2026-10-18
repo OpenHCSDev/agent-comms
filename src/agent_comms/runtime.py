@@ -18,6 +18,7 @@ import socket
 from collections.abc import Coroutine
 from contextlib import ExitStack, suppress
 from contextvars import ContextVar
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -139,7 +140,7 @@ class SocketClient:
         self.pending.clear()
 
     async def session_update(self, *, session_id: str, update: Any) -> None:
-        await self.send(OwnerUpdate.of(update.model_dump(by_alias=True, exclude_none=True)))
+        await self.send(OwnerUpdate.of(update))
 
 
 class OwnerIdentityChangedError(RuntimeError):
@@ -437,6 +438,19 @@ class OwnerReplyConnection(RuntimeConnection):
             return await super()._read_response(reader)
 
 
+@dataclass(frozen=True)
+class OwnerAttachment:
+    """A completed subscription: its stream, the owner's ready line and presented metadata."""
+
+    reader: asyncio.StreamReader
+    ready: OwnerReady
+    presented: dict[str, object]
+
+    def metadata(self) -> dict[str, object]:
+        """The ACP session metadata, with the owner's configuration options."""
+        return {**self.presented, "configOptions": self.ready.config_options}
+
+
 class RuntimeProxy(RuntimeConnection):
     def __init__(self, agent: Any, session_id: str, path: Path):
         super().__init__(agent._comms, session_id, path)
@@ -451,13 +465,11 @@ class RuntimeProxy(RuntimeConnection):
         return self._controller_token
 
     async def subscribe(self) -> dict[str, object]:
-        reader, _, metadata = await self._subscribe_once()
-        self.task = asyncio.create_task(self.forward(reader))
-        return metadata
+        attachment = await self._subscribe_once()
+        self.task = asyncio.create_task(self.forward(attachment.reader))
+        return attachment.metadata()
 
-    async def _subscribe_once(
-        self,
-    ) -> tuple[asyncio.StreamReader, OwnerReady, dict[str, object]]:
+    async def _subscribe_once(self) -> OwnerAttachment:
         reader, writer = await self._connect_current()
         self.writer = writer
         try:
@@ -491,7 +503,7 @@ class RuntimeProxy(RuntimeConnection):
                 if self._closed:
                     raise ConnectionError("Owner attachment closed during subscription")
                 self._controller_token = ready.controller_token
-                return reader, ready, {**presented, "configOptions": ready.config_options}
+                return OwnerAttachment(reader, ready, presented)
             raise RuntimeError("Thread owner disconnected during attachment")
         except BaseException:
             writer.close()
@@ -572,13 +584,14 @@ class RuntimeProxy(RuntimeConnection):
                 self.writer.close()
             while not self._closed:
                 try:
-                    reader, ready, _ = await self._subscribe_once()
+                    attachment = await self._subscribe_once()
+                    reader = attachment.reader
                     if self.agent.sessions.client is not None:
                         await self.agent.sessions.client.session_update(
                             session_id=self.session_id,
                             update={
                                 "sessionUpdate": "config_option_update",
-                                "configOptions": ready.config_options,
+                                "configOptions": attachment.ready.config_options,
                             },
                         )
                     break

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated, Self, cast
 
 from acp import RequestError
 from acp.schema import DeniedOutcome, RequestPermissionResponse
+from pydantic import BaseModel
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, TextRepresentation
@@ -25,15 +26,22 @@ CORE_COMMIT = STAMP.commit()
 
 
 @dataclass(frozen=True, kw_only=True)
-class OwnerLine(DeclaredFamily, affix=""):
-    """A line the owner writes to an attached client."""
+class SocketLine(DeclaredFamily, affix=""):
+    """One JSON line on an owner socket; each direction reads only its own members."""
 
     @classmethod
-    def read(cls, line: bytes) -> OwnerLine:
-        return FieldCodec.decode(OwnerLine, FieldCodec.parse(line))
+    def read(cls, line: bytes) -> Self:
+        return FieldCodec.decode(cls, FieldCodec.parse(line))
 
     def wire(self) -> bytes:
         return (json.dumps(FieldCodec.encode(self)) + "\n").encode()
+
+
+@dataclass(frozen=True, kw_only=True)
+class OwnerLine(SocketLine):
+    """A line the owner writes to an attached client."""
+
+    declared_name = None  # a direction, not a line
 
     def announced(self, thread: str) -> None:
         """The first subscription line; only this Core's announcement passes."""
@@ -100,8 +108,9 @@ class OwnerUpdate(OwnerLine):
     meta: dict[str, object] = field(default_factory=dict, metadata={"wire_name": "_meta"})
 
     @classmethod
-    def of(cls, update: dict[str, object]) -> Self:
-        return cls(update=update, meta=cast(dict[str, object], update.pop("_meta", {})))
+    def of(cls, update: BaseModel) -> Self:
+        body = update.model_dump(by_alias=True, exclude_none=True)
+        return cls(update=body, meta=cast(dict[str, object], body.pop("_meta", {})))
 
     async def deliver(self, proxy: RuntimeProxy) -> None:
         await proxy.present(self)
@@ -171,15 +180,10 @@ class OwnerFailure(OwnerLine):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClientLine(DeclaredFamily, affix=""):
+class ClientLine(SocketLine):
     """A line an attached client writes back to the owner."""
 
-    @classmethod
-    def read(cls, line: bytes) -> ClientLine:
-        return FieldCodec.decode(ClientLine, FieldCodec.parse(line))
-
-    def wire(self) -> bytes:
-        return (json.dumps(FieldCodec.encode(self)) + "\n").encode()
+    declared_name = None  # a direction, not a line
 
     def answer(self, client: SocketClient) -> None:
         raise MalformedRecord(f"The client sent {self.declared_name} to the owner.")
