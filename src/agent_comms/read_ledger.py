@@ -16,7 +16,7 @@ from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .locked_store import LockedStore, RootFile
 from .private_path import FileIdentity, FileRevision, ObservedPath
-from .read_basis import Conversation, DisplayBasis, DisplayedConversation, ReadCursor
+from .read_basis import ChannelConversation, Conversation, DMConversation, DisplayBasis, DisplayedConversation, ReadCursor
 from .wire_log import WireLog
 from .sealed import Sealed
 from .thread_identity import RecordedThreadIncarnation
@@ -73,7 +73,7 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
     @staticmethod
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
-        return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, Conversation)
+        return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, ChannelConversation, DMConversation)
 
     def capture(
         self,

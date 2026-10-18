@@ -343,17 +343,20 @@ class BusPageIndex:
     def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
                        seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
         counts = {}
+        bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen})
         for scope in scopes:
-            with ReadCursor.reading_sql(self.connection, snapshot, {scope.channel: (scope, seen)}):
-                predicate, parameters = scope.index_predicate
-                counts[scope.channel] = BusPageRow.count(self.connection,
-                    where=f"seq > ? AND offset < ? AND ({predicate}) "
-                          "AND sender NOT IN (SELECT value FROM json_each(?)) "
-                          "AND seq > json_extract(read_cursor(?,sender,target),'$.high_water') "
-                          "AND seq NOT IN (SELECT value FROM "
-                          "json_each(json_extract(read_cursor(?,sender,target),'$.exceptions')))",
-                    parameters=(seen.lower_bound(scope, snapshot), before_offset, *parameters,
-                                json.dumps(tuple(viewer_names)), scope.channel, scope.channel))
+            predicate, parameters = scope.index_predicate
+            counts[scope.channel] = self.connection.execute(
+                f'WITH {ReadCursor.sql("?")} SELECT count(*) FROM '
+                f'(SELECT * FROM "{BusPageRow.declared_name}" WHERE seq > ? AND offset < ? AND ({predicate}) '
+                'AND sender NOT IN (SELECT value FROM json_each(?))) AS row '
+                'LEFT JOIN read_cursors AS read ON read.target=row.target '
+                "AND (read.sender='' OR read.sender=row.sender) "
+                'WHERE row.seq > coalesce(read.high_water,0) '
+                "AND row.seq NOT IN (SELECT value FROM json_each(coalesce(read.exceptions,'[]')))",
+                (*bindings.values(), seen.lower_bound(scope, snapshot), before_offset, *parameters,
+                 json.dumps(tuple(viewer_names))),
+            ).fetchone()[0]
         return counts
 
 

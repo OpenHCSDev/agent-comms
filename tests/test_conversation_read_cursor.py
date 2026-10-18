@@ -1,12 +1,12 @@
 from dataclasses import replace
 
 from agent_comms.comms import wire
-from agent_comms.read_basis import Conversation, ConversationCursor, ReadCursor
+from agent_comms.read_basis import ChannelConversation, ConversationCursor, ReadCursor
 from agent_comms.read_ledger import ReadDocument
 
 
 def test_prefixes_and_alias_union_stay_in_their_conversation():
-    a, b = Conversation(target="#a"), Conversation(target="#b")
+    a, b = ChannelConversation(target="#a"), ChannelConversation(target="#b")
     first = ReadCursor({a: ConversationCursor(100)})
     second = ReadCursor({b: ConversationCursor(10, (50,))})
     joined = ReadCursor.union((first, second))
@@ -39,7 +39,7 @@ def seed_prefix(comms, viewer, through):
     owner = snapshot.threads[viewer].incarnation
     comms.bus.reads.replace(replace(
         comms.bus.reads.read(),
-        messages={owner: ReadCursor({Conversation(target="#a"): ConversationCursor(through)})},
+        messages={owner: ReadCursor({ChannelConversation(target="#a"): ConversationCursor(through)})},
         bus_identity=comms.bus.reads.bus_identity(comms.bus.log.path),
     ))
 
@@ -71,7 +71,7 @@ def test_durable_cursor_map_round_trip():
 
     owner = RecordedThreadIncarnation("reader", 1.0)
     doc = ReadDocument(messages={owner: ReadCursor({
-        Conversation(target="#a"): ConversationCursor(100),
-        Conversation(target="#b"): ConversationCursor(0, (50,)),
+        ChannelConversation(target="#a"): ConversationCursor(100),
+        ChannelConversation(target="#b"): ConversationCursor(0, (50,)),
     })})
     assert FieldCodec.decode(ReadDocument, FieldCodec.encode(doc)) == doc

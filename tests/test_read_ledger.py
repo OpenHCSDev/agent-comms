@@ -12,7 +12,7 @@ from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import OlderTraversal
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.read_basis import ChannelDisplayScope, Conversation, ConversationCursor, NamedViewer, ReadCursor
+from agent_comms.read_basis import ChannelConversation, ChannelDisplayScope, DMConversation, ConversationCursor, NamedViewer, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.presentation import ReadThrough
 
@@ -53,11 +53,11 @@ def test_read_request_requires_both_fields_and_page_reader_owns_evidence(tmp_pat
 
 def test_typed_read_keys_round_trip_through_the_store_codec():
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.read_basis import Conversation
+    from agent_comms.read_basis import DMConversation
     from agent_comms.read_ledger import ReadDocument
 
     owner = RecordedThreadIncarnation("viewer", 1.0)
-    conversation = Conversation(participants=(owner,))
+    conversation = DMConversation(participants=(owner,))
     document = ReadDocument(messages={owner: ReadCursor({conversation: ConversationCursor(2)})})
     encoded = FieldCodec.encode(document)
     assert encoded["messages"][0][0] == {"name": "viewer", "created_at": 1.0}
@@ -265,7 +265,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     )
     comms.bus.reads.mark_displayed(viewer, basis)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
-    assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor({Conversation(target="#team"): ConversationCursor(exceptions=(2, 4, 6))})
+    assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor({ChannelConversation(target="#team"): ConversationCursor(exceptions=(2, 4, 6))})
 
 
 def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
@@ -304,7 +304,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
         comms.registry.register(comms.registry.new_thread('unrelated', frozenset(), str(tmp_path)))
     reopened = wire(tmp_path)
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
-    assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor({Conversation(target="#team"): ConversationCursor(exceptions=(messages[2].seq, messages[4].seq))})
+    assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor({ChannelConversation(target="#team"): ConversationCursor(exceptions=(messages[2].seq, messages[4].seq))})
     assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
 
 
@@ -336,9 +336,9 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
         for sequence, participants in facts:
             if all(name in threads and threads[name].created_at == birth
                    for name, birth in participants):
-                key = (Conversation(participants=tuple(RecordedThreadIncarnation(name, birth)
+                key = (DMConversation(participants=tuple(RecordedThreadIncarnation(name, birth)
                                                        for name, birth in participants))
-                       if participants else Conversation(target="#team"))
+                       if participants else ChannelConversation(target="#team"))
                 conversations[key] = conversations.get(key, ConversationCursor()).add((sequence,))
         return ReadCursor(conversations)
 
@@ -393,7 +393,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
                 changed_projection = kind == "channel" and proof != ChannelDisplayScope.capture(
                     comms.views.presentation.catalog.read().require_channel(target, snapshot.threads), snapshot,
                 )
-                assert stale_participant or changed_projection or not proof.displayed.message_count, str(error)
+                assert stale_participant or changed_projection, str(error)
             else:
                 acknowledged.update(record(proof.displayed.through(through)))
         elif operation == "rebind":

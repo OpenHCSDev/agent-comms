@@ -12,7 +12,6 @@ import json
 from abc import ABC, abstractmethod
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Collection, Iterable, Mapping
-from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from heapq import merge
@@ -22,7 +21,6 @@ from typing import TYPE_CHECKING, TextIO
 from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
 from .errors import UnregisteredThreadError
 from .private_path import FileRevision
 from .store_files import SharedLock, _store_lock
@@ -282,20 +280,27 @@ class ReadCursor:
         targets = scope.index_targets
         if targets is None:
             return 0
-        return min((self.for_conversation(Conversation(target)).high_water
+        return min((self.for_conversation(ChannelConversation(target)).high_water
                     for target in targets), default=0)
 
     @staticmethod
-    @contextmanager
-    def reading_sql(connection, snapshot, bindings: Mapping[str, tuple[MessageDisplayScope, ReadCursor]]):
-        def encoded(label, sender, target):
-            scope, seen = bindings[label]
-            return json.dumps(FieldCodec.encode(seen.for_conversation(scope.read_key(sender, target, snapshot))))
-        connection.create_function("read_cursor", 3, encoded, deterministic=True)
-        try:
-            yield
-        finally:
-            connection.create_function("read_cursor", 3, None)
+    def sql(parameter: str) -> str:
+        return f"""read_cursors AS MATERIALIZED (
+        SELECT json_extract(value,'$[0]') AS actor,
+               json_extract(value,'$[1]') AS target,
+               json_extract(value,'$[2]') AS sender,
+               json_extract(value,'$[3]') AS high_water,
+               json_extract(value,'$[4]') AS exceptions
+        FROM json_each({parameter}))"""
+
+    @staticmethod
+    def sql_bindings(snapshot: RegistryProvenance, cursors: Mapping[str, ReadCursor]) -> dict[str, str]:
+        return {"read_cursors": json.dumps([
+            (actor, target, sender, cursor.high_water, cursor.exceptions)
+            for actor, seen in cursors.items()
+            for conversation, cursor in seen.conversations.items()
+            for target, sender in conversation.sql_keys(snapshot)
+        ])}
 
     @classmethod
     def union(cls, cursors: Iterable[ReadCursor]) -> ReadCursor:
@@ -320,25 +325,55 @@ class ReadCursor:
             for key, value in self.conversations.items() if key.current(snapshot))
 
 
-@dataclass(frozen=True, slots=True)
-class Conversation:
-    target: str = ""
+class Conversation(DeclaredFamily, ABC, affix="Conversation"):
     participants: tuple[ThreadIncarnation, ...] = ()
 
     def current(self, snapshot: RegistryProvenance) -> bool:
         return all(participant.current(snapshot) for participant in self.participants)
 
-    def resolved(self, snapshot: RegistryProvenance) -> Conversation:
-        return type(self)(self.target, tuple(sorted(
+    @abstractmethod
+    def resolved(self, snapshot: RegistryProvenance) -> Conversation: ...
+
+    @abstractmethod
+    def scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope | DMDisplayScope: ...
+
+    @abstractmethod
+    def sql_keys(self, snapshot: RegistryProvenance) -> Iterable[tuple[str, str]]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelConversation(Conversation):
+    target: str
+
+    def resolved(self, snapshot: RegistryProvenance) -> ChannelConversation:
+        return self
+
+    def scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
+        return ChannelDisplayScope(self.target, frozenset((self.target,)))
+
+    def sql_keys(self, snapshot: RegistryProvenance) -> Iterable[tuple[str, str]]:
+        return ((self.target, ""),)
+
+
+@dataclass(frozen=True, slots=True)
+class DMConversation(Conversation):
+    participants: tuple[ThreadIncarnation, ...] = ()
+
+    def resolved(self, snapshot: RegistryProvenance) -> DMConversation:
+        return type(self)(tuple(sorted(
             (participant.resolved(snapshot) for participant in self.participants),
             key=lambda participant: participant.name,
         )))
 
-    def scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope | DMDisplayScope:
-        if self.target:
-            return ChannelDisplayScope(self.target, frozenset((self.target,)))
+    def scope(self, snapshot: RegistryProvenance) -> DMDisplayScope:
         first, second = self.participants
         return DMDisplayScope.capture(first.name, second.name, snapshot)
+
+    def sql_keys(self, snapshot: RegistryProvenance) -> Iterable[tuple[str, str]]:
+        first, second = self.participants
+        a, b = snapshot.names_for(first.name), snapshot.names_for(second.name)
+        return tuple((target, sender) for senders, targets in ((a, b), (b, a))
+                     for sender in senders for target in targets)
 
 
 @dataclass(frozen=True, slots=True)
@@ -430,6 +465,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
     peer_names: frozenset[str]
     bus_identity: tuple[int, int] | None
     displayed: DisplayBasis
+    fetched_through: int
 
     @classmethod
     def fetch_page(
@@ -476,6 +512,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
                 peer_names=peer_names,
                 bus_identity=bus_identity,
                 displayed=displayed,
+                fetched_through=page.newest_seq or 0,
             )
             with registry.store.reading() as document:
                 basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))
@@ -595,10 +632,7 @@ class CoveredDMDisplayBasis(DMDisplayBasis):
     """Only fetched references become read; omitted older messages stay unread."""
 
     def validate_tail(self, through: int) -> None:
-        newest = max(
-            (sequence for item in self.displayed.conversations for sequence in item.sequences), default=0
-        )
-        if through > newest:
+        if through > self.fetched_through:
             raise DMPaintedBoundChanged()
 
     def mark(self, reads: ReadLedger, through: int) -> None:
@@ -619,7 +653,7 @@ class MessageDisplayScope(ABC):
     """Captured inclusion and its sound candidate reduction for the page index."""
 
     def read_key(self, sender: str, target: str, snapshot: RegistryProvenance) -> Conversation:
-        return CommandTarget.named(target).conversation_key(sender, snapshot, Conversation)
+        return CommandTarget.named(target).conversation_key(sender, snapshot, ChannelConversation, DMConversation)
 
     def has_read(self, seen: ReadCursor, message: Message | BusPageRow,
                  snapshot: RegistryProvenance) -> bool:
@@ -749,7 +783,7 @@ class ChannelDisplayScope(MessageDisplayScope):
             return reads.capture_indexed(viewer, index.scope_rows(self, source.boundary),
                                          snapshot, source, index)
         return DisplayBasis(viewer, snapshot.require(viewer).created_at,
-            tuple(DisplayedConversation(Conversation(target), (), row.seq)
+            tuple(DisplayedConversation(ChannelConversation(target), (), row.seq)
                   for target in self.targets
                   if (row := index.latest_target(target, source.boundary)) is not None),
             source.bus_identity)

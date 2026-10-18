@@ -202,9 +202,9 @@ class ThreadTarget(NamedTarget):
     def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
         return direct_scope.capture(viewer, snapshot.require(self.name).name, snapshot)
 
-    def conversation_key(self, sender, snapshot, constructor):
+    def conversation_key(self, sender, snapshot, channel, direct):
         names = sorted({snapshot.canonical_name(sender), self.canonical_name(snapshot.canonical_name)})
-        return constructor(participants=tuple(snapshot.participant(name).incarnation for name in names))
+        return direct(participants=tuple(snapshot.participant(name).incarnation for name in names))
 
     def changed_threads(self, names, snapshot, catalog):
         return (self.canonical_name(snapshot.canonical_name),)
@@ -279,8 +279,8 @@ class ChannelTarget(NamedTarget):
     def display_scope(self, viewer, snapshot, catalog, channel_scope, direct_scope):
         return channel_scope(self.name, catalog.resolve(self.name).history_targets)
 
-    def conversation_key(self, sender, snapshot, constructor):
-        return constructor(target=self.name)
+    def conversation_key(self, sender, snapshot, channel, direct):
+        return channel(target=self.name)
 
     def changed_threads(self, names, snapshot, catalog):
         channel = catalog.resolve(self.name)
