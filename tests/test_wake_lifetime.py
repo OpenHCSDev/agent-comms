@@ -54,4 +54,3 @@ async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private
         lock.release()
         inputs.runtime.controller.reset(token)
         await agent.shutdown()
-

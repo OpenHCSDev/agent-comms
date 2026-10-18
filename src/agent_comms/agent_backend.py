@@ -26,6 +26,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
 from .declared_family import DeclaredFamily
+from .pi_vocabulary import ThinkingLevelField
 from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
 
@@ -225,7 +226,7 @@ class UseSettings(TurnInboxItem):
     """
 
     model: str
-    thinking_level: str
+    thinking_level: ThinkingLevelField
 
     def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
         return receiver.use_settings(turn, self)

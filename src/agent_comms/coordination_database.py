@@ -82,7 +82,7 @@ class StoreFile(DeclaredFamily):
     @property
     def failure_reason(self) -> str:
         """Public reason spelling; an invalid file's diagnostic details stay private."""
-        return self.require_name()
+        return self.declared_name
 
     @contextmanager
     def observing(self, consumer, *arguments):

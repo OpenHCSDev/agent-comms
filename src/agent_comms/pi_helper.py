@@ -67,7 +67,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
     @classmethod
     def failure(cls, request, result: ChildResult) -> PiHelperFailed:
         """The error for an unsuccessful outcome; helpers add what it leaves behind."""
-        return PiHelperFailed(cls.require_name(), result)
+        return PiHelperFailed(cls.declared_name, result)
 
     @classmethod
     def launch(cls, request, environment: dict[str, str]):

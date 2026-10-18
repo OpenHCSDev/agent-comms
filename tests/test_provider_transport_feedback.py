@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from acp import RequestError
 
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates, encode_updates
 from agent_comms.acp_failure import ACPFailure, ProviderConnectionFailure, RequestACPFailure
@@ -32,7 +33,7 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     assert diagnostic.error.code == 1011
     assert diagnostic.details.request_bytes == 159312
     assert isinstance(diagnostic.details.phase, AfterMessageStreamStartStage)
-    failure = ACPFailure.from_error(
+    failure = ACPFailure.from_detail(
         -32603, event.message.error_message, diagnostics=event.message.diagnostics
     )
     assert isinstance(failure, ProviderConnectionFailure)
@@ -40,29 +41,29 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     assert "after the provider response stream started" in failure.description
     assert "configured transport: auto" in failure.description
     assert "provider events emitted: yes" in failure.description
-    assert failure.input_disposition == "Unconfirmed — input not retried"
+    assert failure.input_disposition == "Unconfirmed"
     assert decode_updates(encode_updates(RequestFailedUpdate(failure)))[0].failure == failure
 
 
 def test_structured_started_remains_started_and_no_text_changes_it():
     record = observed()["message"]
-    failure = ACPFailure.from_error(
+    failure = ACPFailure.from_error(RequestError(
         -32603,
         record["errorMessage"],
         {
             "inputStatus": "started",
             "diagnostics": record["diagnostics"],
         },
-    )
+    ))
     assert isinstance(failure, ProviderConnectionFailure)
     assert failure.input_state is StartedInput
-    assert failure.input_disposition == "Started — input not retried"
-    bare = ACPFailure.from_error(
+    assert failure.input_disposition == "Started"
+    bare = ACPFailure.from_error(RequestError(
         -32603, "WebSocket closed1011 after start; original remains unbound"
-    )
+    ))
     assert isinstance(bare, RequestACPFailure)
     assert bare.input_state is None
-    assert bare.input_disposition == "Unconfirmed — input not retried"
+    assert bare.input_disposition == "Unconfirmed"
 
 
 @pytest.mark.parametrize(
@@ -81,7 +82,7 @@ def test_unrecognized_phase_is_a_typed_observation_not_a_send_decision():
     event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
     (diagnostic,) = event.message.diagnostics
     assert isinstance(diagnostic.details.phase, UnrecognizedTransportStage)
-    failure = ACPFailure.from_error(
+    failure = ACPFailure.from_detail(
         -32603, event.message.error_message, diagnostics=event.message.diagnostics
     )
     assert "provider stage: future_native_stage" in failure.description
@@ -101,10 +102,9 @@ def test_native_1012_with_empty_thinking_reaches_provider_feedback():
     event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
     assert event.message.stop_reason is ErrorStopReason
     failure = ACPFailure.from_error(
-        -32603,
-        event.message.error_message,
-        {"inputStatus": "started"},
-        diagnostics=event.message.diagnostics,
+        RequestError(-32603, event.message.error_message, {
+            "inputStatus": "started", "diagnostics": message["diagnostics"],
+        }),
     )
     assert isinstance(failure, ProviderConnectionFailure)
     assert failure.input_state is StartedInput

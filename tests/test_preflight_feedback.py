@@ -52,7 +52,7 @@ def test_post_dispatch_failure_preserves_bound_uncertainty(tmp_path):
     after = store.settle_unbound(('acp:partial-write',))
     assert after.lookup('acp:partial-write') == before
     from dataclasses import replace
-    feedback = replace(ACPFailure.from_error(-32603, output.failure_text),
+    feedback = replace(ACPFailure.from_detail(-32603, output.failure_text),
                        input_state=after.shared_state(('acp:partial-write',)))
     assert feedback.input_state is BoundUnknownInput
     assert 'Unknown' in feedback.feedback
