@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import FieldCodec, TextRepresentation
 from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
 
 if TYPE_CHECKING:
@@ -195,3 +196,13 @@ class DeletingThreadStatus(ThreadStatus):
 
     def require_mutable(self, name: str) -> None:
         raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")
+
+
+class ThreadStatusName(TextRepresentation):
+    @classmethod
+    def encode(cls, value: object) -> object:
+        return FieldCodec.encode(type(value))
+
+    @classmethod
+    def from_text(cls, value: str) -> ThreadStatus:
+        return ThreadStatus.decode(value)()

@@ -10,11 +10,11 @@ from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from itertools import zip_longest
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .cli_result import CliResult
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, projected
 from .tool_result import ToolResult
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .audience_manifest import FrozenRecipient
@@ -49,7 +49,7 @@ from .thread_presentation import (
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
 )
-from .thread_status import ThreadStatus
+from .thread_status import ThreadStatus, ThreadStatusName
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -544,15 +544,15 @@ class BusPresentation:
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelView(WireValue, ToolResult):
+class ChannelView(ToolResult):
     """Wire form: the channel's own fields beside its roster; agent counts stay in process."""
-    channel: Channel
+    channel: Channel = field(metadata={"wire_inline": True})
     members: tuple[str, ...]
     last_activity: float = 0
     last_user_input: float = 0
     pinned_members: frozenset[str] = frozenset()
-    active_agents: int = 0
-    registered_agents: int = 0
+    active_agents: int = field(default=0, metadata={"wire_exclude": True})
+    registered_agents: int = field(default=0, metadata={"wire_exclude": True})
 
     @classmethod
     def roster(cls, snapshot: RegistrySnapshot, channels: Iterable[Channel],
@@ -589,35 +589,17 @@ class ChannelView(WireValue, ToolResult):
             sum(snapshot.statuses[thread.name].active for thread in registered), len(registered),
         )
 
-    def to_wire(self) -> dict[str, object]:
-        return {
-            **self.channel.to_wire(),
-            "members": list(self.members),
-            "last_activity": self.last_activity,
-            "last_user_input": self.last_user_input,
-            "pinned_members": sorted(self.pinned_members),
-        }
-
-    @classmethod
-    def from_wire(cls, data: dict[str, object]) -> ChannelView:
-        roster = ("members", "last_activity", "last_user_input", "pinned_members")
-        declared = {key: value for key, value in data.items() if key not in roster}
-        member = Channel.decode(FieldCodec.decode(str, declared[Channel.family_discriminator]))
-        channel = FieldCodec.decode(member, declared)
-        return cls(channel, FieldCodec.decode(tuple[str, ...], data["members"]),
-                   FieldCodec.decode(float, data["last_activity"]),
-                   FieldCodec.decode(float, data["last_user_input"]),
-                   FieldCodec.decode(frozenset[str], data["pinned_members"]))
 
 
 @dataclass(frozen=True, slots=True)
 class ThreadRecord(CliResult):
     """A thread's wire record; every reader of one thread writes these fields from here."""
-    thread: Thread
-    status: ThreadStatus
-    activity: ActivityData
+    thread: Thread = field(metadata={"wire_inline": True})
+    status: Annotated[ThreadStatus, ThreadStatusName]
+    activity: ActivityData = field(metadata={"presence_exclude": True})
     goal_execution: ThreadGoalExecution
-    pending: int | None = field(default=None, kw_only=True)  # None when the reader did not count it
+    pending: int | None = field(  # None when the reader did not count it
+        default=None, kw_only=True, metadata={"wire_omit_default": True})
 
     @classmethod
     def read(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
@@ -636,26 +618,28 @@ class ThreadRecord(CliResult):
         ) for thread in threads)
 
     def encoded(self) -> object:
-        return self.to_wire()
+        return FieldCodec.project(self, "presence")
 
-    def to_wire(self) -> dict[str, object]:
-        return {
-            **self.thread.to_wire(),
-            "status": self.status.declared_name,
-            "is_fork": self.thread.is_fork,
-            "activity": self.activity.state.value,
-            "activity_detail": self.activity.detail,
-            "goal_execution": self.goal_execution.to_wire(),
-            **({} if self.pending is None else {"pending": self.pending}),
-        }
+    @projected(view="presence")
+    def is_fork(self) -> bool:
+        return self.thread.is_fork
+
+    @projected(view="presence", name="activity")
+    def activity_state(self) -> ActivityState:
+        return self.activity.state
+
+    @projected(view="presence")
+    def activity_detail(self) -> str:
+        return self.activity.detail
 
 
 @dataclass(frozen=True, slots=True)
 class ThreadView(ThreadRecord):
-    activity: ObservedActivity
-    runtime: RuntimeInfo
+    activity: ObservedActivity = field(metadata={"presence_exclude": True})
+    runtime: RuntimeInfo = field(metadata={"presence_exclude": True})
     last_seen: float
-    binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
+    binding: ThreadOwnerBinding = field(
+        default=UnavailableThreadOwnerBinding(), metadata={"presence_exclude": True})
 
     @classmethod
     def roster(
@@ -695,14 +679,29 @@ class ThreadView(ThreadRecord):
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
         return self.goal_execution.waiting_presentation(ordinary)
 
-    def to_wire(self) -> dict[str, object]:
-        return {
-            **ThreadRecord.to_wire(self),
-            **self.thread.runtime.presentation(),
-            "last_seen": self.last_seen,
-            "last_activity": self.activity.timestamp,
-            **self.runtime.wire_fields(),
-        }
+    @projected(view="presence")
+    def resumable(self) -> bool:
+        return self.thread.runtime.resumable
+
+    @projected(view="presence")
+    def last_activity(self) -> float:
+        return self.activity.timestamp
+
+    @projected(view="presence")
+    def session_name(self) -> str | None:
+        return self.runtime.session_name
+
+    @projected(view="presence")
+    def context_used(self) -> int | None:
+        return self.runtime.context_used
+
+    @projected(view="presence")
+    def context_size(self) -> int | None:
+        return self.runtime.context_size
+
+    @projected(view="presence")
+    def context_percent(self) -> float | None:
+        return self.runtime.context_percent
 
 
 @dataclass(frozen=True, slots=True)
