@@ -360,7 +360,7 @@ class DeliveredOrderGoalAction(GoalAction, RuntimeInvocable):
     def change(self, ctx):
         ctx.goals.todos.apply(self.problem, self.operation)
         goal = ctx.require_goal()
-        pending = any(todo.pending for todo in ctx.goals.todos.for_goal(ctx.thread.incarnation, goal.id))
+        pending = ctx.goals.todos.holds_pending(ctx.thread.incarnation)
         return replace(goal, state=goal.state.after_order_delivery(pending),
                        progress=self.progress, revision=goal.revision + 1)
 
@@ -452,7 +452,8 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
 
     def change(self, ctx: GoalActionContext) -> Goal:
-        """The order joins the unit's live Goal or starts one; its Todo names the request served."""
+        """The order joins the unit's live Goal or starts one; its Todo names the request served.
+        Every refusal comes before the Todo is reserved, so a refused send writes nothing."""
         commander = ctx.goals.registry.require(self.commander)
         commander.require_active_goal(self.request).order.require_request()
         self.deadline.require_deadline()
@@ -461,11 +462,11 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
         request = GoalRef(commander.name, commander.created_at, self.request)
         current = ctx.thread.goal
         if current is not None and not current.state.terminal:
-            self.reserve(ctx, current.id, request)
-            return replace(current, order=ProblemGoalOrder(), revision=current.revision + 1)
-        fresh = SetGoalAction(text="Complete the assigned problems.", order=ProblemGoalOrder())
-        self.reserve(ctx, fresh.goal_id, request)
-        return fresh.change(ctx)
+            goal = replace(current, order=ProblemGoalOrder(), revision=current.revision + 1)
+        else:
+            goal = SetGoalAction(text="Complete the assigned problems.", order=ProblemGoalOrder()).change(ctx)
+        self.reserve(ctx, goal.id, request)
+        return goal
 
 
 @dataclass(frozen=True, kw_only=True)
