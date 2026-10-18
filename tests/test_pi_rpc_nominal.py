@@ -8,6 +8,7 @@ import asyncio
 import itertools
 import json
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -40,12 +41,8 @@ class AuditPauseEnd(pi.PiEvent):
 class AuditPausePhase(StallExempt, Excursion):
     stall_reason = "audit_pause_no_progress"
 
-    @classmethod
-    def starts(cls, event):
-        return isinstance(event, AuditPauseStart)
-
-    def ends(self, event):
-        return isinstance(event, AuditPauseEnd)
+    start_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (AuditPauseStart,)
+    end_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (AuditPauseEnd,)
 
 
 class AuditFailure(failures.TurnFailure):

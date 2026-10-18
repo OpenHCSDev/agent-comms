@@ -127,6 +127,10 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path, mo
 
     monkeypatch.setattr(DurableTurn, "handlers_for", observed_selection)
 
+    from agent_comms.comms import Comms
+
+    comms = Comms(tmp_path, private_initial_writes=True)
+    comms.messaging.initialize_private_initial_protocol()
     with Coordination(tmp_path / "coordination.sqlite3") as store:
         store.participants.register("owner", "owner", "owner", committed=True)
         created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
@@ -208,6 +212,9 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path, mo
 
 def test_new_response_state_roundtrips_real_store(tmp_path):
     from agent_comms.coordinator import Coordination
+    from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
+    from agent_comms.coordination_tables.responses import ResponseObligation
+    from agent_comms.execution_states import QueuedExecution
 
     class ReviewedResponse(ResponseState):
         @classmethod
@@ -218,33 +225,32 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
         with Coordination(tmp_path / "coordination.sqlite3") as store:
             store.participants.register("p", "owner", "owner", committed=True)
             with store.session.transaction() as db:
-                db.execute(
-                    "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
-                    "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
-                    "ms) VALUES ('e','wire',json_object('kind','queued'),'requester','owner','p',"
-                    "1,2,NULL,0,0)"
-                )
-                db.execute(
-                    "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
-                    "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
-                    "','reviewed'),NULL,0,0,1)"
-                )
-                db.execute(
-                    "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
-                    "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
-                    "updated_at_ms,revision) VALUES ('c','owner','p',1,'m',json_object('kind','en"
-                    "gaged','decision',json_object('kind','full','exact_target','requester','exec"
-                    "ution_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
-                )
-                db.execute("INSERT INTO execution_claims VALUES ('e','c',0)")
-            obligation = store.snapshots.get("e").obligation
+                ExecutionRecord(
+                    execution_id="e", origin=ExecutionOrigin.WIRE,
+                    lifecycle=QueuedExecution(), owner_thread="owner", owner_lookup="p",
+                    revision=1, max_attempts=2, reason_code=None,
+                    created_at_ms=0, updated_at_ms=0,
+                ).insert(db)
+                WakeAssignment(
+                    assignment_id="c", recipient="owner", recipient_lookup="p",
+                    wire_seq=1, message_id="m", audience=MessageAudience.DIRECT,
+                    lifecycle=EngagedAssignment.build(FullWake(), "e", "requester"),
+                    accepted_at_ms=0, updated_at_ms=0,
+                ).insert(db)
+                ResponseObligation(
+                    execution_id="e", exact_target="requester", lifecycle=ReviewedResponse(),
+                    reason_code=None, created_at_ms=0, updated_at_ms=0, revision=1,
+                ).insert(db)
+                ExecutionAssignmentLink("e", "c", 0).insert(db)
+            obligation, = store.snapshots.get("e").obligations
             assert isinstance(obligation.lifecycle, ReviewedResponse)
             assert FieldCodec.decode(type(obligation), FieldCodec.encode(obligation)) == obligation
-            store.session._connection.execute(
-                "UPDATE obligations SET lifecycle=json_object('kind','silent'),revision=2 WHE"
-                "RE execution_id='e'"
+            ResponseObligation.update(
+                store.session._connection, where="execution_id=?", parameters=("e",),
+                lifecycle=SilentResponse(), revision=2,
             )
-            assert isinstance(store.snapshots.get("e").obligation.lifecycle, SilentResponse)
+            settled, = store.snapshots.get("e").obligations
+            assert isinstance(settled.lifecycle, SilentResponse)
     finally:
         ResponseState.__registry__.pop("reviewed")
 

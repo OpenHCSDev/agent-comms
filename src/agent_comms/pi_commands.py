@@ -11,8 +11,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
 
-from .turn_phase import ShutdownPhase
-
 from .native_turn_context import NativeContextData
 from . import agent_events as events
 from .declared_family import DeclaredFamily
@@ -191,7 +189,7 @@ class Prompt(PiCommand):
             else:
                 error = session.output.error(str(response.error or "Prompt was rejected"))
                 yield session.watchdog.state(
-                    "failed", "prompt_rejected", 0, phase=ShutdownPhase()
+                    "failed", "prompt_rejected", 0, phase=phases.ShutdownPhase()
                 )
                 yield error
                 session.finished = True

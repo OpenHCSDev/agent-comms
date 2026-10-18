@@ -8,6 +8,9 @@ from pathlib import Path
 import pytest
 
 from agent_comms import Registration
+from agent_comms.agent_events import AgentInfo, ContextUsageObservation
+from agent_comms.field_codec import FieldCodec
+from agent_comms.registry_document import RegistryDocument
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
@@ -55,7 +58,8 @@ class TestAgentRuntimeInfo:
         )
         assert info.context_percent == 25
         store = RuntimeInfoStore(tmp_path / "runtime.json")
-        store.set(info)
+        store.observe("a", 1.0, AgentInfo(model="provider/model", context_size=100))
+        store.observe("a", 1.0, ContextUsageObservation(context_used=25))
         assert store.read()["a"] == info
 
     def test_unknown_context_stays_unknown(self):
@@ -337,7 +341,7 @@ class TestRegistration:
         registry_path = root / "registry.json"
         data = json.loads(registry_path.read_text())
         for field in ("owners", "claims"):
-            data.pop(field)
+            data.pop(FieldCodec.record_key(RegistryDocument, field))
         registry_path.write_text(json.dumps(data))
         with pytest.raises(RelationViolationError, match="guard does not match"):
             comms.agents.begin_turn("a", "must-not-claim")
@@ -504,8 +508,8 @@ class TestRegistration:
         else:
             path = root / "registry.json"
             data = json.loads(path.read_text())
-            data.pop("owners")
-            data.pop("claims")
+            for field in ("owners", "claims"):
+                data.pop(FieldCodec.record_key(RegistryDocument, field))
             path.write_text(json.dumps(data))  # simulated old writer ignores marker
         with pytest.raises(RelationViolationError, match="Private registry guard"):
             cold.require("a")
@@ -601,7 +605,7 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
     reopened = Comms(tmp_path)
     assert list(reopened.views.full_history_page().messages) == messages
     reopened.registry.rename("a", "renamed")
-    monkeypatch.setattr(reopened.bus.log, "full_history", lambda: pytest.fail("full scan"))
+    monkeypatch.setattr(reopened.bus.log, "full_history_snapshot", lambda: pytest.fail("full scan"))
     newest = reopened.bus.dm_history_page("renamed", "b", limit=1)
     assert [row.seq for row in newest.messages] == [2]
     older = reopened.bus.dm_history_page("renamed", "b", before=2, max_bytes=1)
