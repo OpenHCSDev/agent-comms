@@ -61,7 +61,7 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
                    for source in paths.watch_sources) for path in paths.maintenance)
     assert await agent.inputs.drain_inbox('beta') == 0
     assert await agent.inputs.drain_inbox('beta') == 0  # settled closed tick
-    assert starts == [] and not agent.inputs.wake_tasks
+    assert starts == [] and not any(state.wake_task for state in agent.inputs.drained.values())
     beta = comms.registry.require('beta')
     with Coordination(comms.root / 'coordination.sqlite3') as store:
         pending = next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name)
@@ -69,10 +69,10 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     assert beta.active_turn is None
 
     # The local queue follows the same typed gate; its origin is retained.
-    agent.inputs.pending_turns['beta'] = [queued]
+    agent.inputs.state('beta').pending_turns = [queued]
     assert await check.run() == hold
-    assert agent.inputs.pending_turns['beta'] == [queued] and starts == []
-    agent.inputs.pending_turns.pop('beta')
+    assert agent.inputs.state('beta').pending_turns == [queued] and starts == []
+    agent.inputs.state('beta').pending_turns = []
     for phase in (PausedPhase, InstallingPhase, ReadyPhase):
         hold = control.advance(hold, phase)
     assert comms.owners.maintenance.read().phase is ReadyPhase
@@ -90,10 +90,10 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
         assert next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
     for phase in (PausedPhase, InstallingPhase, ReadyPhase):
         another_drain = control.advance(another_drain, phase)
-    agent.inputs.pending_turns['beta'] = [queued]
+    agent.inputs.state('beta').pending_turns = [queued]
     await check.run()
     assert len(starts) == 1 and starts[0][1]['origins'] == (post,)
-    assert not agent.inputs.pending_turns.get('beta')
+    assert not agent.inputs.state('beta').pending_turns
 
 
 @pytest.mark.parametrize('abort', [False, True])
@@ -125,7 +125,7 @@ async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monke
     fake, calls = _fake_model(decision='FULL')
     monkeypatch.setattr(TrackedTurnSession, 'execute', fake)
     assert await agent.inputs.drain_inbox('beta') == 1
-    task = agent.inputs.wake_tasks.get('beta')
+    task = agent.inputs.state('beta').wake_task
     assert task is not None
     await task
     assert calls and 'while draining' in calls[0][1]

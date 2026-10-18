@@ -21,6 +21,7 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from agent_comms.turn_phase import CancellingPhase
 from agent_comms.schedule_rules import ProjectResumeCheck, WakeScheduleCheck
+from agent_comms.input_drain import DrainedSession
 from native_backend_fixture import native_backend_fixture
 
 
@@ -75,28 +76,33 @@ async def test_selected_wake_queues_resume_before_retiring_its_task(tmp_path):
             work.close()
             return current
 
+    drained = DrainedSession(wake_task=current)
+
     class Inputs:
         closing = False
         background_wakes_disabled = False
-        backend_inboxes = {}
-        pending_turns = {}
-        wake_tasks = {"owner": current}
         sessions = SimpleNamespace(require=lambda _session: "owner")
         runtime = Runtime()
 
         async def _own_entry(self, _session):
             return comms.registry.entry("owner")
 
+        def state(self, _session):
+            return drained
+
+        def register_wake(self, _session, task):
+            drained.wake_task = task
+
     inputs = Inputs()
     turns = SimpleNamespace(turn_tasks={})
     await ProjectResumeCheck(
         session_id="owner", inputs=inputs, turns=turns,
     ).schedule()
-    assert len(inputs.pending_turns["owner"]) == 1
-    assert str(new) in inputs.pending_turns["owner"][0].prompt
+    assert len(inputs.state("owner").pending_turns) == 1
+    assert str(new) in inputs.state("owner").pending_turns[0].prompt
     assert not launched  # The selected wake still owns this session.
 
-    inputs.wake_tasks.pop("owner")
+    drained.wake_task = None
     WakeScheduleCheck(session_id="owner", inputs=inputs).schedule()
     assert len(launched) == 1
 

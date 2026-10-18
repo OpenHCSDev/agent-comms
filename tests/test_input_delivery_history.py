@@ -120,7 +120,7 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
         detailed = await proxy.request("input_dispositions", include_history=True)
         assert len(detailed["historicalInputs"]) == 5
         assert comms.goals.unresolved_inputs(session) == before
-        assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
+        assert not any(state.pending_turns for state in owner.inputs.drained.values()) and not any(state.wake_task for state in owner.inputs.drained.values())
     finally:
         owner.sessions.client = None
         await proxy.close()

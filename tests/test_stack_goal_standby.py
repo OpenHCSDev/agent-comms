@@ -222,7 +222,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                         text=f"Uncertain owner input {index}",
                     )
             await agent.turns.goals.schedule_goal("parent")
-            await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
+            await asyncio.wait_for(agent.inputs.state("parent").wake_task, 40)
             assert not failures, failures
             assert comms.registry.require("parent").goal.state.active
             assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
@@ -230,7 +230,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             first_proc = agent.turns.persistent_backends["parent"].child_state.idle().child.proc
             assert first_proc is not None and first_proc.returncode is None
             await agent.turns.goals.schedule_goal("parent")
-            assert not agent.inputs.pending_turns.get("parent")
+            assert not agent.inputs.state("parent").pending_turns
             assert comms.goals.open_goal_store().snapshot(goal.id).number == 2
             if restart:
                 # Wait intent survives reopening. The new executing owner may
@@ -242,12 +242,12 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 await agent.load_session(str(project), "parent")
                 await agent.turns.goals.schedule_goal("parent")
                 assert comms.goals.goal_execution("parent").state is GoalExecutionState.STANDBY
-                assert not agent.inputs.pending_turns.get("parent") and len(requests) == 2 + offset
+                assert not agent.inputs.state("parent").pending_turns and len(requests) == 2 + offset
             message = comms.messaging.send_message(
                 "child", "parent", "CHILD_REPORT_EXACT_NATIVE_INPUT"
             )
             await agent.inputs.drain_inbox("parent")
-            await asyncio.wait_for(agent.inputs.wake_tasks["parent"], 40)
+            await asyncio.wait_for(agent.inputs.state("parent").wake_task, 40)
             assert not failures, failures
             assert len(requests) == 4 + offset
             if not restart:

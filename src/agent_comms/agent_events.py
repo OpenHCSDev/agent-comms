@@ -81,7 +81,7 @@ class OriginalInputStarted(InputStarted):
     id: ClassVar[None] = None
 
     def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
-        return inputs.first_sources[session_id]
+        return inputs.state(session_id).require_first_source()
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,7 @@ class FollowingInputStarted(InputStarted):
     id: str
 
     def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
-        return inputs.following_sources[session_id][self.id]
+        return inputs.state(session_id).following[self.id]
 
 
 class InputRefused(AgentEvent):

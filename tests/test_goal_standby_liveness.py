@@ -58,7 +58,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
     )
     try:
         child = (await agent.new_session(str(native.project))).session_id
-        drain = agent.inputs.drain_tasks.pop(child)
+        drain, agent.inputs.state(child).drain_task = agent.inputs.state(child).drain_task, None
         drain.cancel()
         await asyncio.gather(drain, return_exceptions=True)
         comms.registry.register(replace(comms.registry.require(child), auto_title_pending=False))
@@ -504,14 +504,14 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
         comms.goals.update_goal(
             owner, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
         )
-        assert not agent.inputs.pending_turns.get(owner)
+        assert not agent.inputs.state(owner).pending_turns
         fence = comms.agents.finish_turn(lease)
         assert comms.goals.release_waits_after_terminal_turn(fence) == (owner,)
         assert comms.registry.require(owner).goal.state.active
         assert isinstance(comms.goals.goal_wait(owner), NoGoalWait)
         await agent.turns.goals.schedule_goal(owner)
         assert wakes == [owner]
-        assert [turn.goal_id for turn in agent.inputs.pending_turns[owner]] == [goal.id]
+        assert [turn.goal_id for turn in agent.inputs.state(owner).pending_turns] == [goal.id]
     finally:
         await agent.shutdown()
 
@@ -597,7 +597,7 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
         await agent.turns.run_agent_turn(child, child, "Finish work", origins=origins)
     assert observed == ["started", "native-settled"]
     assert native.provider.posts == len(native.saved_inputs()) == 1
-    assert not agent.inputs.pending_turns.get("owner")
+    assert not agent.inputs.state("owner").pending_turns
     assert comms.registry.require(child).active_turn is None
     if reply:
         assert comms.registry.require("owner").goal.state.active

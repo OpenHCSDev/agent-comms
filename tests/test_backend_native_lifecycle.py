@@ -287,7 +287,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
                 wire.messaging.send_message, "sender", session, "P71_SELECTED_ORIGINAL",
             ))
             await wait_for(lambda: native.provider.posts == 1)
-            wake = agent.inputs.wake_tasks[session]
+            wake = agent.inputs.state(session).wake_task
             native_owner = agent.turns.persistent_backends[session]
             forwarding = next(turn.inputs for turn in backend.TurnSession.active.values()
                               if turn.native_session is native_owner)
@@ -310,7 +310,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
             bus_key = InputDispositions.bus_key(bus_message, owner)
             await wait_for(lambda: stored_inputs(agent.inputs.dispositions.root).lookup(bus_key).has_native_binding)
             bus = stored_inputs(agent.inputs.dispositions.root).lookup(bus_key)
-            bus_item = next(item for item in agent.inputs.queued_inputs[session].values()
+            bus_item = next(item for item in agent.inputs.state(session).queued.values()
                             if item.key == bus_key)
             await wait_for(lambda: bus_item.input_id in forwarding.accepted)
             assert set(forwarding.pending) == {user.native_id, bus.native_id}
@@ -323,7 +323,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
             assert user.native_id not in forwarding.pending
             assert accepted.input_id not in forwarding.accepted
             assert set(forwarding.pending) == {bus.native_id}
-            assert bus_item.input_id in agent.inputs.queued_inputs[session]
+            assert bus_item.input_id in agent.inputs.state(session).queued
             assert stored_inputs(agent.inputs.dispositions.root).lookup(bus_key) == bus
             assert native.provider.posts == 1
             gate.set()
@@ -334,7 +334,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
             assert stored_inputs(agent.inputs.dispositions.root).lookup(user_key) == cleared
             assert stored_inputs(agent.inputs.dispositions.root).lookup(bus_key).has_started
             assert not forwarding.pending and not forwarding.accepted
-            assert session not in agent.inputs.backend_inboxes
+            assert agent.inputs.state(session).inbox is None
             assert session not in agent.turns.turn_tasks
             assert not comms.registry.require(session).turn_state.busy
             assert native.session.read_bytes().startswith(saved)
