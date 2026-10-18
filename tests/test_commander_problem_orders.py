@@ -728,7 +728,7 @@ def test_column_carry_then_goal_carry_reads_todos(commander):
     with closing(sqlite3.connect(path)) as db:
         db.execute('ALTER TABLE todo DROP COLUMN verdicts')
         db.commit()
-    with pytest.raises(sqlite3.OperationalError, match='no such column: verdicts'):
+    with pytest.raises(sqlite3.OperationalError, match='no such column: "verdicts"'):
         ProblemGoals.carry(comms.root, apply=False)
     names = [step.name for step in CarryChain.at(Path(__file__).parents[1], 'HEAD').steps]
     assert names.index('carry_todo_verdicts') < names.index('carry_problem_goals')
