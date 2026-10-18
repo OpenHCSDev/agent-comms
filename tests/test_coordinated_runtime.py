@@ -33,6 +33,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_arguments import SelectedModel
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinated_runtime_schema import (
@@ -1606,7 +1607,7 @@ async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monk
     selections = []
 
     async def capture(package, **kwargs):
-        selections.append((kwargs["provider"], kwargs["model"], kwargs["thinking_level"]))
+        selections.append((kwargs["model"], kwargs["thinking_level"]))
         return await fake(package, **kwargs)
 
     monkeypatch.setattr(TrackedTurnSession, "execute", capture)
@@ -1614,7 +1615,7 @@ async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monk
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
     assert result.disposition is CompletedAssignment
-    assert selections == [("openai-codex", "gpt-6-sol", "high")] * 2
+    assert selections == [(SelectedModel("openai-codex", "gpt-6-sol"), "high")] * 2
     assert len(calls) == 2
 
 
@@ -1656,7 +1657,6 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
         raise NativePiTerminalFailure(
             "Codex error: The usage limit has been reached",
             result.context,
-            kwargs["provider"],
             kwargs["model"],
             ModelRequestFailed("Codex error: The usage limit has been reached"),
         )
@@ -1730,7 +1730,6 @@ async def test_transient_provider_failure_retries_two_attempts_then_completes(
             raise NativePiTerminalFailure(
                 detail,
                 result.context,
-                kwargs["provider"],
                 kwargs["model"],
                 (
                     ProviderRetryExhausted(detail)

@@ -6,6 +6,8 @@ from collections.abc import Mapping
 
 import pytest
 
+from agent_comms.native_arguments import SelectedModel
+
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_events import MessageEnd, Response, UnknownPiEvent
 from agent_comms.pi_payloads import (
@@ -189,11 +191,11 @@ def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
         "a" * 32, "session", "entry", 1, "b" * 64, 1_791_964_800_001, Path("original-session.jsonl")
     )
     with pytest.raises(NativePiTerminalFailure, match="original provider rejection") as failure:
-        output.raise_if_failed(proof, "configured", "model")
+        output.raise_if_failed(proof, SelectedModel("configured", "model"))
     assert failure.value.context is proof
     output.record_failure(IdentityUncertain("source identity changed"))
     with pytest.raises(NativePiUnavailable, match="source identity changed") as uncertain:
-        output.raise_if_failed(proof, "configured", "model")
+        output.raise_if_failed(proof, SelectedModel("configured", "model"))
     assert not isinstance(uncertain.value, NativePiTerminalFailure)
 
 

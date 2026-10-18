@@ -1,5 +1,7 @@
 import pytest
 
+from agent_comms.native_arguments import SelectedModel
+
 from agent_comms.agent_backend import WhenBusy
 from agent_comms.pi_events import NativeRetryEnd
 from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
@@ -53,7 +55,7 @@ async def test_exhausted_native_request_records_required_final_error(previous):
 
     assert turn.output.declared_failure == ModelRequestFailed("final refusal")
     with pytest.raises(NativePiTerminalFailure, match="final refusal") as caught:
-        turn.output.raise_if_failed(None, "configured", "model")
+        turn.output.raise_if_failed(None, SelectedModel("configured", "model"))
     assert not isinstance(caught.value.failure, RetryableProviderFailure)
     PiMessage.from_wire({
         "role": "assistant", "content": [], "stopReason": "error",
