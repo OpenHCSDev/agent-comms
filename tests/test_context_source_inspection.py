@@ -174,7 +174,7 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
 
     assert await selected.public_text(read_reference) == "Original instruction π"
     assert observed == [child]
-    assert child.journal_entries() == ("original-entry",)
+    assert child.sources.journal_entries() == ("original-entry",)
     with pytest.raises(ValueError, match="measured bytes"):
         # System contributors annotate sources; they cannot reconstruct an
         # enclosing system value whose original bytes are unavailable.
@@ -284,12 +284,12 @@ def test_authored_sdk_observation_retains_read_identity_without_minting_native_p
     native = identity(tmp_path)
     preview = PreviewProvenance(native, "a" * 64)
     original = system((preview, JournalProvenance(native.session_file, ("entry",)))).measured_manifest()
-    assert original.native_identity() == native
-    assert original.journal_entries() == ("entry",)
+    assert original.sources.native_identity() == native
+    assert original.sources.journal_entries() == ("entry",)
     assert not any(isinstance(source, NativeProvenance) for source in original.provenance)
     with pytest.raises(ValueError, match="unambiguous"):
         replace(original, provenance=(*original.provenance,
-            PreviewProvenance(replace(native, session_id="other"), "b" * 64))).native_identity()
+            PreviewProvenance(replace(native, session_id="other"), "b" * 64))).sources.native_identity()
 
 
 def test_cold_client_acquires_current_and_recorded_contributor_declarations():

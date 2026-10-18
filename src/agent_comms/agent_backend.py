@@ -68,6 +68,9 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def read_keys(self):
         return (self.read_key,)
 
+    def transcript_cursor(self, frontier, offset, *, source):
+        return frontier.cursor(source.read_key, offset)
+
     def history_locations(self, thread, registry, visited):
         yield self, False
         yield from thread.inherited_history(registry, visited)

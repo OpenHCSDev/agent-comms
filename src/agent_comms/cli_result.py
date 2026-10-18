@@ -14,6 +14,9 @@ class CliResult(DeclaredReply):
     def reconnect_targets(self) -> tuple[str, ...]:
         return ()
 
+    def open_targets(self) -> tuple[str, ...]:
+        return ()
+
     def exit_code(self) -> int:
         return 0
 

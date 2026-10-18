@@ -16,7 +16,7 @@ from agent_comms.read_ledger import ReadLedger
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
-from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat
+from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from tools.upgrade_bus import bus_files, carried
 
 REPO = Path(__file__).resolve().parents[1]
@@ -158,26 +158,37 @@ def test_a_deleted_step_name_is_never_reused(tmp_path):
 
 
 def record_source(version: int, fields: str) -> str:
-    return f"class Record:\n    version: ClassVar[int] = {version}\n{fields}"
+    return ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
+            "from agent_comms.wire_metadata import WireRootIdText\n\n"
+            "class RootId(WireRootIdText):\n    \"\"\"Another representation of the same spelling.\"\"\"\n\n"
+            f"@dataclass(frozen=True)\nclass Record:\n    version: ClassVar[int] = {version}\n{fields}")
+
+
+PLAIN = "    root: str\n"
+SPELLED = "    root: Annotated[str, WireRootIdText]\n"
 
 
 @pytest.mark.refactor_guard
-@pytest.mark.parametrize("version, fields, step, uncarried", [
-    (1, "    root: str\n    label: str\n", {}, 1),
-    (2, "    root: str\n    label: str\n", {}, 1),
-    (2, "    root: str\n    label: str\n", {"carry_record": step_source(None)}, 0),
-    (1, "    root: str\n    kind: ClassVar[str] = 'x'\n", {}, 0),
+@pytest.mark.parametrize("before, version, fields, step, uncarried", [
+    (PLAIN, 1, PLAIN + "    label: str\n", {}, 1),
+    (PLAIN, 2, PLAIN + "    label: str\n", {}, 1),
+    (PLAIN, 2, PLAIN + "    label: str\n", {"carry_record": step_source(None)}, 0),
+    (PLAIN, 1, PLAIN + "    kind: ClassVar[str] = 'x'\n", {}, 0),
+    (SPELLED, 1, "    root: Annotated[str, RootId]\n", {}, 0),
+    (PLAIN, 1, SPELLED, {}, 1),
 ])
 def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
-        tmp_path, version, fields, step, uncarried):
+        tmp_path, before, version, fields, step, uncarried):
     repo = Repository(tmp_path)
-    record = tmp_path / "src" / "record.py"
-    record.parent.mkdir()
-    record.write_text(record_source(1, "    root: str\n"))
+    package = git(REPO, "archive", "HEAD", "--", "src/agent_comms")
+    subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=package, check=True, timeout=60)
+    record = tmp_path / "src" / "agent_comms" / "record.py"
+    record.write_text(record_source(1, before))
     base = repo.commit({})
     record.write_text(record_source(version, fields))
     head = repo.commit(step)
-    assert UncarriedRecordFormat.compare(tmp_path, base, head, {"src/record.py"}, "src") == (
+    changed = {"src/agent_comms/record.py"}
+    assert UncarriedRecordFormat.compare(tmp_path, base, head, changed, "src/agent_comms") == (
         {"UncarriedRecordFormat": 0}, {"UncarriedRecordFormat": uncarried})
 
 
@@ -243,3 +254,32 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     assert reads.transcripts == {("user", "/sessions/a.jsonl", 6860966): 4881511}
     assert json.loads(route.read_text()) == {"version": 2, "root": str(root), "wire_root_id": root_id}
     assert route.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("stored, carried_count", [(None, 1), ({"turn_id": "t"}, None)])
+def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, monkeypatch, stored, carried_count):
+    """Before P482 a thread stored active_turn; an idle one carries to NoTurnRecord once."""
+    tmp_path.chmod(0o700)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    root = tmp_path / "bus"
+    comms = Comms(root)
+    comms.messaging.initialize_private_initial_protocol()
+    comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
+    registry = json.loads((root / "registry.json").read_text())
+    registry["threads"]["worker"].pop("turn_record", None)
+    registry["threads"]["worker"]["active_turn"] = stored
+    store = RegistryStore(root / "registry.json")
+    with store.locked():
+        store._write_unlocked(json.dumps(registry, indent=2))
+    if carried_count is None:
+        with pytest.raises(subprocess.CalledProcessError):
+            run_step("carry_turn_records", root, "--apply")
+        assert json.loads((root / "registry.json").read_text()) == registry
+        return
+    before = bus_files(root)
+    applied = run_step("carry_turn_records", root, "--apply")
+    carried(root, before, [applied])
+    assert applied["changed"] == carried_count
+    assert run_step("carry_turn_records", root)["changed"] == 0
+    (thread,) = Comms(root).registry.snapshot().threads.values()
+    assert not thread.executing

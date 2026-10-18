@@ -18,7 +18,7 @@ from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wire_metadata import ArchivedAccess, WritableAccess
 from agent_comms.wire_log import (CurrentSnapshotOpening, OpenedWireSnapshot, SavedPrefixOpening,
-                                  ScannedWireSnapshot, WireSnapshot)
+                                  WireSnapshot)
 
 
 def retained_source(root, count, *, access=ArchivedAccess()):
@@ -80,9 +80,8 @@ def test_page_queries_prepare_owned_offsets_and_leave_archives_unchanged(tmp_pat
     assert (path.read_bytes(), archive.log.path.read_bytes()) == original
 
 
-@pytest.mark.parametrize("opening,cut", [(SavedPrefixOpening(), OpenedWireSnapshot),
-                                         (CurrentSnapshotOpening(), ScannedWireSnapshot)])
-def test_references_decode_only_their_indexed_rows(tmp_path, monkeypatch, opening, cut):
+@pytest.mark.parametrize("opening", [SavedPrefixOpening(), CurrentSnapshotOpening()])
+def test_references_decode_only_their_indexed_rows(tmp_path, monkeypatch, opening):
     bus = retained_source(tmp_path / 'sparse', 200)
     with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
         wanted = [message for message, _ in opened.public_records() if message.seq in (7, 150)]
@@ -92,7 +91,7 @@ def test_references_decode_only_their_indexed_rows(tmp_path, monkeypatch, openin
         lambda cls, record, size, metadata: decoded.append(record['seq'])
         or page_records(cls, record, size, metadata)))
     with bus.log.opened_wire_snapshot(opening=opening) as opened:
-        assert type(opened) is cut
+        assert type(opened) is OpenedWireSnapshot
         references = tuple(message.reference for message in wanted)
         assert opened.messages_for_references(references) == tuple(wanted)
     assert decoded == [7, 150]
