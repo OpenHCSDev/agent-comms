@@ -617,8 +617,9 @@ class ChannelView(WireValue):
     @classmethod
     def from_wire(cls, data: dict[str, object]) -> ChannelView:
         roster = ("members", "last_activity", "last_user_input", "pinned_members")
-        channel = FieldCodec.decode(
-            Channel, {key: value for key, value in data.items() if key not in roster})
+        declared = {key: value for key, value in data.items() if key not in roster}
+        member = Channel.decode(FieldCodec.decode(str, declared[Channel.family_discriminator]))
+        channel = FieldCodec.decode(member, declared)
         return cls(channel, FieldCodec.decode(tuple[str, ...], data["members"]),
                    FieldCodec.decode(float, data["last_activity"]),
                    FieldCodec.decode(float, data["last_user_input"]),

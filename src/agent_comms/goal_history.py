@@ -63,7 +63,7 @@ class GoalHistoryEntry(TypedTable):
             self.sequence, self.kind, self.observed_at, self.before, self.after)
 
     def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self.recorded())
+        return FieldCodec.encode_record(self.recorded())
 
 
 class GoalHistoryStore:

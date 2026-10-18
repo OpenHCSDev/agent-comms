@@ -56,7 +56,7 @@ def test_two_orders_keep_one_original_goal_and_independent_facts(commander):
     assert 'Problem: P1' in rendered and 'Problem: P2' in rendered
     assert 'printf 1' in rendered and 'printf 2' in rendered
     assert 'P1' not in goal.text and 'P2' not in goal.text
-    assert len(CommsTodoListTool().apply(comms, caller)['todos']) == 2
+    assert len(CommsTodoListTool().apply(comms, caller).todos) == 2
     assert FieldCodec.decode(Todo, FieldCodec.encode(second)) == second
 
 

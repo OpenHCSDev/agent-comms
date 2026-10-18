@@ -164,6 +164,11 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
 
     monkeypatch.setattr(ToolDeclaration, "__registry__", dict(ToolDeclaration.__registry__))
 
+    @dataclass(frozen=True)
+    class InboxInspected:
+        count: int
+        bodies: tuple[str, ...]
+
     @dataclass(frozen=True, kw_only=True)
     class InspectInboxTool(ToolRequest):
         label = "Inspect an inbox"
@@ -173,12 +178,10 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
         viewer: str = tool_field("Viewing thread")
         include_body: bool = tool_field("Include message bodies", default=False)
 
-        def apply(self, comms, caller: ToolCaller):
+        def apply(self, comms, caller: ToolCaller) -> InboxInspected:
             messages = comms.bus.inbox(self.viewer, self.target)
-            return {
-                "count": len(messages),
-                "bodies": [row.body for row in messages] if self.include_body else [],
-            }
+            return InboxInspected(
+                len(messages), tuple(row.body for row in messages) if self.include_body else ())
 
     for name in ("a", "b"):
         comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree='/wt'))
