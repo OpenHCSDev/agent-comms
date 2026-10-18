@@ -10,14 +10,14 @@ class CoreBuildHook(BuildHookInterface):
     PLUGIN_NAME = "custom"
 
     def initialize(self, version, build_data):
+        if version == "editable":
+            return
         root = Path(self.root)
         relative = "src/agent_comms/package_stamp.py"
         source = root / relative
         # These definitions need no application dependencies in the build env.
         types = run_path(str(root / "src/agent_comms/core_stamp.py"))
         checkout = types["CheckoutStamp"](str(root.resolve()))
-        if version == "editable":
-            return
         # Never overwrite a source checkout's stamp while building its wheel.
         path = Path(self.directory) / ".core_stamp.py"
         if (root / ".git").exists():
