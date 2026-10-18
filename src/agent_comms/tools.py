@@ -751,7 +751,7 @@ class CommsTodoListTool(ThreadToolRequest):
 class CommsOrderTool(ThreadToolRequest):
     label = "Assign problem order"
     description = "Reserve a Todo assignment and publish its Goal with a deadline; does not replay input."
-    order: OrderGoalAction = tool_field("Problem, goal_id, expected_revision, deadline and required commander")
+    order: OrderGoalAction = tool_field("Problem, request, expected_revision, deadline, commander")
     owner: str = tool_field("Assignee thread")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:

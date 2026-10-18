@@ -7,7 +7,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, PausedGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import OperationDelivery, PendingProblemOrder, StrikeTodo
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
@@ -60,6 +60,7 @@ def scenario(comms: Comms, project, monkeypatch):
     comms.goals.update_goal("lead", PausedGoalAction(progress="Paused by its owner"))
     yield CommsResumeGoalTool, {"goal_id": goal.id, "progress": "Resumed"}, lead
     yield CommsGoalHistoryTool, {}, lead
+    comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
     order = PendingProblemOrder(
         id="order-P1", owner=FileLine(__file__, 1),
         check=OrderCheck(str(comms.root), "printf 1", CountCheckResult(1)),
@@ -68,7 +69,7 @@ def scenario(comms: Comms, project, monkeypatch):
         first_call_deadline=RecordedEventTime(220))
     yield CommsInboxTool, {"thread": "worker", "goal_id": "ongoing", "wait_for": ["lead"]}, worker
     yield CommsTodoCreateTool, {"owner": "worker", "order": FieldCodec.encode(CreateProblemGoalAction(
-        problem="P1", order=order, goal_id="ongoing", deadline=RecordedEventTime(1000),
+        problem="P1", order=order, request="request", deadline=RecordedEventTime(1000),
         commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P1"))}, lead
     yield CommsTodoListTool, {}, lead
     todo = comms.goals.todos.get("P1")
@@ -77,7 +78,7 @@ def scenario(comms: Comms, project, monkeypatch):
         todo.revision, actor, todo.assignment, "The assigned change broke the existing resource release path during review.",
         RecordedEventTime(500)))}, lead
     yield CommsOrderTool, {"owner": "worker", "order": FieldCodec.encode(OrderGoalAction(
-        problem="P1", order=order, goal_id="ongoing", deadline=RecordedEventTime(3000),
+        problem="P1", order=order, request="request", deadline=RecordedEventTime(3000),
         commander="lead", expected_revision=comms.goals.todos.get("P1").revision))}, lead
     yield CommsOrderCheckTool, {"problem": "P1", "check": FieldCodec.encode(
         OrderCheck(str(comms.root), "printf 1", CountCheckResult(1))),

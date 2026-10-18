@@ -306,10 +306,6 @@ class Thread(ThreadProvenance):
         if self.goal is not None:
             self.goal.require_replacement(goals, self.incarnation)
 
-    def require_order_slot(self, goal_id: str, problem: str) -> None:
-        if self.goal is not None:
-            self.goal.order.require_slot(self.goal, goal_id, problem)
-
     def require_goal(self, goal_id: str | None = None) -> Goal:
         if goal_id is None:
             if self.goal is None:

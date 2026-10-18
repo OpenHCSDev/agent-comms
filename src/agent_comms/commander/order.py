@@ -194,7 +194,7 @@ class Slop:
                 f'{self.by} owns it, and {self.derive} derives it from there, so the copy is deleted.')
 
 
-def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None):
+def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=None, new=None):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -276,8 +276,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
             report=report[1], at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
-    goal = COMMS.registry.require(unit).goal
-    common = dict(order=order, goal_id=goal.id if goal else uuid4().hex, deadline=deadline(due), commander=ME)
+    common = dict(order=order, request=request, deadline=deadline(due), commander=ME)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
             problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
@@ -335,7 +334,7 @@ def say(units, body_file):
     print(post(units.split(','), body.rstrip()))
 
 
-def problem(text, unit, due, order_file):
+def problem(text, unit, due, order_file, request):
     """A problem is born owned: Core records it with its order in one step, or not at all."""
     body = open(order_file).read()
     if 'Problem: NEW' not in body:
@@ -345,7 +344,7 @@ def problem(text, unit, due, order_file):
     pid = f'P{max([int(t.id[1:]) for t in todos() if t.id[1:].isdigit()] + [0]) + 1}'
     open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
     try:
-        send(unit, due, order_file, new=(pid, text))
+        send(unit, due, order_file, request, new=(pid, text))
     except SystemExit:
         open(order_file, 'w').write(body)
         raise
@@ -685,10 +684,11 @@ class SendVerb(OrderVerb, LoadedVerb):
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     mechanical: bool = option("--mechanical", default=False)
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
+    request: str = option("--request", help="the owner request this order serves")
 
     def run(self) -> None:
-        send(self.unit, self.due, self.body_file, clean=self.clean, mechanical=self.mechanical,
-             reassign=self.reassign)
+        send(self.unit, self.due, self.body_file, self.request, clean=self.clean,
+             mechanical=self.mechanical, reassign=self.reassign)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -754,9 +754,10 @@ class ProblemVerb(OrderVerb, LoadedVerb):
     to: str = option("--to")
     due: str = option("--due", help="HH:MM local time")
     order: str = option("--order", help="the order body file")
+    request: str = option("--request", help="the owner request this order serves")
 
     def run(self) -> None:
-        problem(self.text, self.to, self.due, self.order)
+        problem(self.text, self.to, self.due, self.order, self.request)
 
 
 @dataclass(frozen=True, kw_only=True)
