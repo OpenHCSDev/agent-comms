@@ -430,11 +430,14 @@ def test_inline_representation_owns_keys_for_encode_decode_schema_and_projection
         FieldCodec.encode(Collision(value.pair, 8))
 
 
-@pytest.mark.parametrize("notice", [False, True])
-def test_missing_and_null_membership_decode_to_the_same_role(notice):
-    expected = NoticeRole() if notice else ConversationRole()
-    assert MessageRole.from_wire({"notice": notice}) == expected
-    assert MessageRole.from_wire({"notice": notice, "membership": None}) == expected
+@pytest.mark.parametrize("wire,expected", [
+    ({"notice": False}, ConversationRole()),
+    ({"notice": False, "membership": None}, ConversationRole()),
+    ({"notice": True}, NoticeRole()),
+    ({"notice": True, "membership": None}, NoticeRole()),
+])
+def test_missing_and_null_membership_decode_to_the_same_role(wire, expected):
+    assert MessageRole.from_wire(wire) == expected
 
 
 @pytest.mark.parametrize("role,external", [

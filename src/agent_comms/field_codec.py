@@ -44,19 +44,18 @@ class FieldPlan:
     reject_null: bool
     choices: object
     value: ValueDecoder
+    annotation: object
+    declared: Field
 
-    @property
-    def keys(self):
+    def contribute(self, fields):
+        fields.append(self)
         return (self.key,)
-
-    @property
-    def required_wire_keys(self):
-        return self.keys
 
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
-    def schema_fields(self, annotation, declared):
+    def schema_fields(self):
+        annotation, declared = self.annotation, self.declared
         metadata = declared.metadata
         if metadata.get("wire_nonnull") and get_origin(annotation) in (Union, types.UnionType):
             members = tuple(item for item in get_args(annotation) if item is not type(None))
@@ -84,22 +83,15 @@ class InlineFieldPlan(FieldPlan):
     def record(self):
         return FieldCodec._record_plan(self.value.representation.wire_record())
 
-    @cached_property
-    def keys(self):
-        return tuple(key for entry in self.record.fields for key in entry.keys)
-
-    @cached_property
-    def required_wire_keys(self):
+    def contribute(self, fields):
+        fields.extend(self.record.fields)
         return self.record.init_required_keys
 
     def encoded(self, value, *, key=None):
         return value
 
-    def schema_fields(self, annotation, declared):
-        return self.record.schema_fields({}, [])
-
     def decoded(self, data):
-        return {self.name: self.value.decode({key: data[key] for key in self.keys if key in data})}
+        return {self.name: self.value.decode({entry.key: data[entry.key] for entry in self.record.fields if entry.key in data})}
 
 
 class FieldRepresentation(ABC):
@@ -411,7 +403,7 @@ class FieldCodec(Sealed):
             {value.family_discriminator: value.declared_name}
             if isinstance(value, DeclaredFamily) else {}
         )
-        plans = {entry.name: entry for entry in cls._record_plan(type(value)).fields}
+        plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
         for field, key in cls.record_fields(type(value)):
             current = getattr(value, field.name)
             default = field.default if field.default is not MISSING else (
@@ -519,7 +511,7 @@ class FieldCodec(Sealed):
         if is_dataclass(value) and not isinstance(value, type):
             hints = cls._types(type(value))
             result = {}
-            plans = {entry.name: entry for entry in cls._record_plan(type(value)).fields}
+            plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
             for field, key in cls.record_fields(type(value)):
                 if not field.metadata.get(f"{view}_exclude"):
                     encoded = cls.project(getattr(value, field.name), view, hints[field.name])
@@ -540,17 +532,16 @@ class FieldCodec(Sealed):
     class _RecordPlan:
         """A record's whole decode plan, derived once from its declaration."""
 
-        record: type
         fields: tuple[FieldPlan, ...]
+        bindings: tuple[FieldPlan, ...]
         required_keys: tuple[str, ...]
         init_required_keys: tuple[str, ...]
         reject_null_keys: frozenset[str]
         accepted_keys: frozenset[str]
 
         def schema_fields(self, properties, required):
-            hints = FieldCodec._types(self.record)
-            for entry, (declared, _) in zip(self.fields, FieldCodec.record_fields(self.record), strict=True):
-                properties.update(entry.schema_fields(hints[declared.name], declared))
+            for entry in self.fields:
+                properties.update(entry.schema_fields())
             required.extend(self.init_required_keys)
             return properties
 
@@ -569,25 +560,30 @@ class FieldCodec(Sealed):
                 reject_null=bool(field.metadata.get("wire_nonnull")),
                 choices=field.metadata.get("wire_choices"),
                 value=compile_decoder(hints[field.name]),
+                annotation=hints[field.name],
+                declared=field,
             )
             for field, key in declared
         )
-        wire_keys = [key for entry in entries for key in entry.keys]
+        wire_fields, required_keys, init_required_keys = [], [], []
+        for entry in entries:
+            keys = entry.contribute(wire_fields)
+            if entry.required:
+                required_keys.extend(keys)
+            if entry.declared.default is MISSING and entry.declared.default_factory is MISSING:
+                init_required_keys.extend(keys)
+        wire_keys = [entry.key for entry in wire_fields]
         if len(set(wire_keys)) != len(wire_keys) or (
             issubclass(record, DeclaredFamily) and record.family_discriminator in wire_keys
         ):
             raise TypeError("Conflicting wire field names.")
         return cls._RecordPlan(
-            record=record,
-            fields=entries,
-            required_keys=tuple(key for entry in entries if entry.required for key in entry.required_wire_keys),
-            init_required_keys=tuple(
-                key for entry, (field, _) in zip(entries, declared)
-                if field.default is MISSING and field.default_factory is MISSING
-                for key in entry.required_wire_keys
-            ),
+            fields=tuple(wire_fields),
+            bindings=entries,
+            required_keys=tuple(required_keys),
+            init_required_keys=tuple(init_required_keys),
             reject_null_keys=frozenset(entry.key for entry in entries if entry.reject_null),
-            accepted_keys=frozenset(key for entry in entries for key in entry.keys) | computed,
+            accepted_keys=frozenset(wire_keys) | computed,
         )
 
     @staticmethod
@@ -881,7 +877,7 @@ class _RecordDecoder(ValueDecoder):
         if any(data[key] is None for key in null):
             raise ValueError(f"Null field for {target.__name__}")
         values = {}
-        for entry in plan.fields:
+        for entry in plan.bindings:
             values.update(entry.decoded(data))
         return target(**values)
 
