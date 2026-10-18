@@ -35,7 +35,7 @@ from .read_basis import (
 )
 from .registration import Registration
 from .read_ledger import ReadLedger
-from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
+from .recorded_bus import RecordedBusIdentity
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
@@ -453,7 +453,7 @@ class HistoryArchive(RootFile):
                     str(stage.resolve()),
                     str(source_root),
                     marker.root_id,
-                    RecordedBus(FileIdentity.from_stat(bus_info)) if bus_info else NoRecordedBus(),
+                    RecordedBusIdentity.capture(source_root / "bus.jsonl"),
                     bus_info.st_size if bus_info else 0,
                     FileRevision.capture(stage / "bus.jsonl"),
                     FileRevision.capture(stage / "registry.json"),
