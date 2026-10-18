@@ -736,7 +736,9 @@ class DeclaredOptions(Command):
                 if default is MISSING:
                     options["required"] = True
                 else:
-                    options["default"] = decoder.argument_text(FieldCodec.encode(default, annotation))
+                    options["default"] = decoder.argument_text(
+                        FieldCodec.encode(default, annotation)
+                    )
             if any(flag.startswith("-") for flag in metadata["flags"]):
                 options["dest"] = FieldCodec.wire_key(declared)
             else:
