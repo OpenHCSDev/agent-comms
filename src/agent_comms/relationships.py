@@ -291,7 +291,7 @@ class RecentRelationshipGroup(RelationshipGroup):
     def supply(cls, context: RelationshipContext) -> tuple[RelationshipEntry, ...]:
         entries = {}
         for message in reversed(context.messages):
-            if message.notice or message.membership is not None:
+            if not message.role.counts_as_conversation():
                 continue
             for target in cls.targets(context, message):
                 entries.setdefault(target, context.entry(

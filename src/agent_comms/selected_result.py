@@ -10,7 +10,7 @@ from .coordination_errors import IdentityConflict, PublicationActivationBlocked,
 from .coordination_tables.publications import PublicationEvidence
 from .diagnostics import record_terminal_failure
 from .errors import RelationViolationError
-from .messages import AlertKind
+from .messages import AlertKind, NoticeRole
 from .native_source_cursor import NativeSourceCursor
 from .private_sidecar import SidecarCommitUnknown
 
@@ -82,5 +82,5 @@ def publish_native_failure(
         f"Message processing failed: {description} "
         f"No automatic retry. [Open diagnostic]({diagnostic.as_uri()})",
         AlertKind,
-        notice=True,
+        role=NoticeRole(),
     )

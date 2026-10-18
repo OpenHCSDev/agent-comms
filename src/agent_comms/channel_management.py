@@ -15,7 +15,7 @@ from .channel_targets import ChannelTarget, Tag
 from .channels import Channel, SavedView
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
-from .messages import InfoKind, Message
+from .messages import InfoKind, Message, MembershipRole
 from .registration import Registration
 from .store_files import _store_lock
 from .threads import Thread
@@ -189,7 +189,7 @@ class ChannelManagement:
                             channel.name,
                             f"{thread.name} {change.value} {channel.name}",
                             InfoKind,
-                            membership=change,
+                            role=MembershipRole(change),
                         )
                     )
         return updated

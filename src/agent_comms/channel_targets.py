@@ -134,18 +134,15 @@ class NamedTarget(CommandTarget):
         return frozenset()
 
     def require_frozen_recipients(self, message, audience):
-        size = len(audience.recipients)
-        if not self.direct_names or (message.notice and size == 0):
-            return
-        if size != len(self.direct_names):
-            raise ValueError("a direct message must have exactly one frozen eligible recipient.")
-        if tuple(member.canonical_thread for member in audience.recipients) != self.direct_names:
-            raise ValueError("direct frozen recipient must match the exact stored target.")
+        """Non-direct targets impose no exact-recipient requirement."""
 
 
 class ThreadTarget(NamedTarget):
     kind = "thread"
     incoming_scope = "direct message"
+
+    def require_frozen_recipients(self, message, audience):
+        message.role.require_recipients(self, audience)
 
     @property
     def direct_names(self):

@@ -16,7 +16,7 @@ from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, projected
+from .field_codec import FieldCodec, InlineRecord, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
@@ -118,6 +118,120 @@ class MembershipChange(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class MessageRoleWire:
+    """The unchanged external fields, decoded once into a message role."""
+
+    change: MembershipChange | None = field(default=None, metadata={"wire_name": "membership", "wire_omit_default": True})
+    notice: bool = field(default=False, metadata={"wire_omit_default": True})
+
+
+class MessageRole(InlineRecord):
+    @classmethod
+    def schema(cls):
+        return FieldCodec.record_schema(MessageRoleWire)
+
+    @classmethod
+    def from_wire(cls, data):
+        wire = FieldCodec.decode(MessageRoleWire, data)
+        delivery = NoticeRole() if wire.notice else ConversationRole()
+        return delivery if wire.change is None else MembershipRole(wire.change, delivery)
+
+    def to_wire(self):
+        return FieldCodec.encode_record(self.wire_fields())
+
+    def response_policy(self, message):
+        return InformationalPolicy.instance()
+
+    def counts_as_conversation(self):
+        return False
+
+    def notification_references(self, message):
+        return ()
+
+    def wake_mode(self, target, recipient, mentions, control):
+        from .wake_policy import PassiveWake
+        return PassiveWake()
+
+    def response_wake_mode(self):
+        from .wake_policy import BoundedTriageWake
+        return BoundedTriageWake()
+
+    def as_notice(self):
+        return NoticeRole()
+
+    def require_recipients(self, target, audience):
+        if len(audience.recipients) != len(target.direct_names):
+            raise ValueError("a direct message must have exactly one frozen eligible recipient.")
+        if tuple(member.canonical_thread for member in audience.recipients) != target.direct_names:
+            raise ValueError("direct frozen recipient must match the exact stored target.")
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationRole(MessageRole):
+    def wire_fields(self):
+        return MessageRoleWire()
+
+    def export_attributes(self):
+        return ()
+
+    def counts_as_conversation(self):
+        return True
+
+    def response_policy(self, message):
+        return (CommandTarget.named(message.target).response_policy(message)
+                if message.type.conversation_message else InformationalPolicy.instance())
+
+    def notification_references(self, message):
+        return (message.reference,) if message.type.conversation_message else ()
+
+    def wake_mode(self, target, recipient, mentions, control):
+        if control.passive:
+            return super(ConversationRole, self).wake_mode(target, recipient, mentions, control)
+        return target.wake_policy(recipient, mentions)
+
+
+@dataclass(frozen=True, slots=True)
+class NoticeRole(MessageRole):
+    def wire_fields(self):
+        return MessageRoleWire(notice=True)
+
+    def export_attributes(self):
+        return ("notice=true",)
+
+    def response_wake_mode(self):
+        from .wake_policy import PassiveWake
+        return PassiveWake()
+
+    def require_recipients(self, target, audience):
+        if audience.recipients:
+            super(NoticeRole, self).require_recipients(target, audience)
+
+
+@dataclass(frozen=True, slots=True)
+class MembershipRole(MessageRole):
+    change: MembershipChange
+    delivery: ConversationRole | NoticeRole = field(default_factory=ConversationRole)
+
+    def wire_fields(self):
+        return replace(self.delivery.wire_fields(), change=self.change)
+
+    def export_attributes(self):
+        return (*self.delivery.export_attributes(), f"membership={self.change.value}")
+
+    def notification_references(self, message):
+        return self.delivery.notification_references(message)
+
+    def response_wake_mode(self):
+        return self.delivery.response_wake_mode()
+
+    def as_notice(self):
+        return replace(self, delivery=NoticeRole())
+
+    def require_recipients(self, target, audience):
+        self.delivery.require_recipients(target, audience)
+
+
+@dataclass(frozen=True, slots=True)
 class Message:
     """Declares one inter-thread message.
 
@@ -136,10 +250,7 @@ class Message:
     sender_role: ThreadRole = field(
         default=ThreadRole.AGENT, metadata={"wire_order": 7, "publication_exclude": True}
     )
-    membership: MembershipChange | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_order": 8}
-    )
-    notice: bool = field(default=False, metadata={"wire_omit_default": True, "wire_order": 9})
+    role: MessageRole = field(default_factory=ConversationRole, metadata={"wire_order": 8})
     mentions: tuple[ThreadMention, ...] = field(
         default=(),
         metadata={"wire_omit_default": True, "wire_order": 10, "publication_exclude": True},
@@ -182,7 +293,7 @@ class Message:
 
     def notification_references(self) -> tuple[MessageReference, ...]:
         """Only an authorized delivery has recipient-handling outcomes to project."""
-        return (self.reference,) if self.type.conversation_message and not self.notice else ()
+        return self.role.notification_references(self)
 
     def require_decision(self) -> Decision:
         return self.task.require_decision()
@@ -311,9 +422,7 @@ class Message:
     @property
     def response_policy(self) -> ResponsePolicy:
         """Typed response semantics without changing the stored target."""
-        if self.type.conversation_message and not self.notice and self.membership is None:
-            return CommandTarget.named(self.target).response_policy(self)
-        return InformationalPolicy.instance()
+        return self.role.response_policy(self)
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
