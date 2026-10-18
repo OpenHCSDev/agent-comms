@@ -1,7 +1,5 @@
 """One original human-source workflow through the public CLI and file effects."""
 
-from contextlib import ExitStack
-
 import json
 
 from agent_comms.cli import main
@@ -115,30 +113,28 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     assert restored.text() == comms.bus.log.retained_context(owner.name, comms.registry).text()
 
 
-def original_input_consumer_journey(tmp_path, command):
+async def original_input_consumer_journey(tmp_path, command):
     """Reuse the original ACP reservation fixture; never dispatch its inputs."""
     from test_acp_queue_contract import _owner
     from test_current_input_origin import Client, capture
     from agent_comms.queued_input import QueuedInput
     from agent_comms.retained_task_facts import InputTaskFact
-    from agent_comms.store_files import _store_lock
 
     comms, agent, _, _ = _owner(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     origin = capture(comms)
     wording = "Never replay UNKNOWN.\nPreserve original λ /source/owned bytes."
     originals = []
-    with _store_lock(comms._wire_lock_path):
-        for _ in range(2):
-            with ExitStack() as ownership:
-                queued, _, _receipt = QueuedInput.capture(
-                    agent.inputs, "beta", text=wording, prompt=wording, echo=True,
-                    images=(), controller=Client(), origin=origin, ownership=ownership)
-                ownership.pop_all()
-            originals.append(stored_inputs(agent.inputs.dispositions.root).lookup(queued.key))
-        assert agent.inputs.dispositions.record(
-            "neutral-original", seq=None, owner="beta",
-            claim_scope=origin.claim_scope.claimed_generation, target="beta", text=wording)
+    for _ in range(2):
+        async with QueuedInput.reserve(
+            agent.inputs, "beta", "beta", text=wording, prompt=wording, echo=True,
+            images=(), controller=Client(), origin=origin,
+        ) as reservation:
+            originals.append(reservation.source)
+            reservation.release()
+    assert agent.inputs.dispositions.record(
+        "neutral-original", seq=None, owner="beta",
+        claim_scope=origin.claim_scope.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()
     other = comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), origin.project))
@@ -226,9 +222,9 @@ def original_input_consumer_journey(tmp_path, command):
             "provider_calls": 0, "public_changes": []}
 
 
-def test_original_input_pin_query_export_correction_and_drop(tmp_path, capsys):
+async def test_original_input_pin_query_export_correction_and_drop(tmp_path, capsys):
     def command(root, args):
         code = main(["--root", str(root), *args])
         return code, json.loads(capsys.readouterr().out)
 
-    original_input_consumer_journey(tmp_path, command)
+    await original_input_consumer_journey(tmp_path, command)
