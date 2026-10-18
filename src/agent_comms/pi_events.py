@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import JsonValue
 
 from . import agent_events as events
+from . import turn_phase as phases
+from .tool_declaration import ToolDeclaration
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
@@ -40,6 +42,16 @@ class PiEvent(PiPayload, DeclaredFamily):
 
     wire_tag = "type"
     opaque = False
+
+    def __init_subclass__(
+        cls, *, starts: type[phases.TurnPhase] | None = None,
+        ends: type[phases.TurnPhase] | None = None, **kwargs,
+    ) -> None:
+        super().__init_subclass__(**kwargs)
+        if starts is not None:
+            phases.TurnPhase._start_phases[cls] = starts
+        if ends is not None:
+            ends._end_events = ends._end_events | {cls}
 
     @staticmethod
     def unowned_event(event):
@@ -215,8 +227,6 @@ class AgentSettled(NativePiEvent):
         return not session.awaiting_native_attestation
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from . import turn_phase as phases
-
         if not self.settles(session):
             session.skip = True
             return
@@ -270,7 +280,7 @@ class RetryEnd(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AutoRetryEnd(RetryEnd, NativePiEvent):
+class AutoRetryEnd(RetryEnd, NativePiEvent, ends=phases.ProviderRetryPhase):
     outcome: ProviderRetryOutcome = field(metadata={"wire_name": "success"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -326,8 +336,6 @@ class RetryAttemptEvent(NativePiEvent):
         pass
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .turn_phase import ModelWaitPhase
-
         elapsed_ms = round(
             (session.watchdog.now - session.watchdog.last_model_progress) * 1000
         )
@@ -335,11 +343,11 @@ class RetryAttemptEvent(NativePiEvent):
         session.watchdog.progress()
         yield session.watchdog.state(
             "retrying", self.retry_reason_code, elapsed_ms,
-            phase=ModelWaitPhase(), attempt=self,
+            phase=phases.ModelWaitPhase(), attempt=self,
         )
 
 
-class AutoRetryStart(RetryAttemptEvent, DurablePiEvent):
+class AutoRetryStart(RetryAttemptEvent, DurablePiEvent, starts=phases.ProviderRetryPhase):
     retry_reason_code = "provider_auto_retry"
     recovery_on_progress = True
 
@@ -376,7 +384,7 @@ class ReasonedCompaction(NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionEnd(ReasonedCompaction):
+class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
     aborted: bool | None = field(default=None, metadata={"wire_name": "aborted"})
     reason: type[CompactionReason] = field(
         default=UnknownCompactionReason, metadata={"wire_name": "reason"}
@@ -385,8 +393,6 @@ class CompactionEnd(ReasonedCompaction):
     will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .turn_phase import ModelWaitPhase
-
         session.watchdog.progress()
         completed = self.aborted is False and self.result is not None
         if completed:
@@ -412,12 +418,12 @@ class CompactionEnd(ReasonedCompaction):
             session.watchdog.retry_recovery_pending = True
             session.watchdog.retry_recovery_reason = "overflow_retry_progress"
             yield session.watchdog.state(
-                "retrying", "overflow_compaction_retry", 0, phase=ModelWaitPhase()
+                "retrying", "overflow_compaction_retry", 0, phase=phases.ModelWaitPhase()
             )
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionStart(ReasonedCompaction):
+class CompactionStart(ReasonedCompaction, starts=phases.CompactionPhase):
     reason: type[CompactionReason] = field(
         default=UnknownCompactionReason, metadata={"wire_name": "reason"}
     )
@@ -817,31 +823,29 @@ class SteeringInterruptStarted(NativePiEvent):
             yield
 
 
-class SummarizationRetryAttemptStart(RetryAttemptEvent):
+class SummarizationRetryAttemptStart(RetryAttemptEvent, starts=phases.SummarizationRetryPhase):
     retry_reason_code = "summarization_retry"
 
 
 @dataclass(frozen=True, kw_only=True)
-class SummarizationRetryFinished(NativePiEvent):
+class SummarizationRetryFinished(NativePiEvent, ends=phases.SummarizationRetryPhase):
     result: CompactionData | None = field(default=None, metadata={"wire_name": "result"})
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .turn_phase import ModelWaitPhase
-
         session.watchdog.progress()
         if self.success or self.result:
             yield session.watchdog.state(
-                "recovered", "summarization_retry_succeeded", 0, phase=ModelWaitPhase()
+                "recovered", "summarization_retry_succeeded", 0, phase=phases.ModelWaitPhase()
             )
 
 
-class SummarizationRetryScheduled(RetryAttemptEvent):
+class SummarizationRetryScheduled(RetryAttemptEvent, starts=phases.SummarizationRetryPhase):
     retry_reason_code = "summarization_retry"
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolExecutionEnd(NativePiEvent, DurablePiEvent):
+class ToolExecutionEnd(NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPhase):
     accepts_prompt = True
 
     is_error: bool | None = field(default=None, metadata={"wire_name": "isError"})
@@ -850,8 +854,6 @@ class ToolExecutionEnd(NativePiEvent, DurablePiEvent):
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .tool_declaration import ToolDeclaration
-
         name = self.tool_name or "tool"
         is_ok = self.is_error is not True
         tool_id = self.tool_call_id or name
@@ -869,7 +871,7 @@ class ToolExecutionEnd(NativePiEvent, DurablePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolExecutionStart(NativePiEvent, DurablePiEvent):
+class ToolExecutionStart(NativePiEvent, DurablePiEvent, starts=phases.ToolRunningPhase):
     accepts_prompt = True
 
     args: dict[str, JsonValue] = field(default_factory=dict, metadata={"wire_name": "args", "wire_nonnull": True})
@@ -881,8 +883,7 @@ class ToolExecutionStart(NativePiEvent, DurablePiEvent):
         return self.tool_call_id or self.tool_name or "tool"
 
     def convert(self):
-        from .tool_declaration import ToolDeclaration
-        return (ToolDeclaration.start(self.tool_id, self.tool_name or "tool", self.args),)
+        return (events.ToolStart.from_call(self.tool_id, self.tool_name or "tool", self.args),)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.prompt_accepted = True
