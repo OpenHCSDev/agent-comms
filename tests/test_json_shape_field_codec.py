@@ -6,7 +6,15 @@ from dataclasses import dataclass
 import pytest
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
+from agent_comms.field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord
+from agent_comms.launch_runtime import ImportPath, NoImportPath, SpecifiedImportPath
+from agent_comms.native_claim_epoch import NativeClaimEpoch, RecordedNativeClaim, UnrecordedNativeClaim
+from agent_comms.selected_triage import (
+    AbsentTriageDecisionRecord,
+    DecidedTriageRecord,
+    IgnoreSelectedTriage,
+    TriageDecisionRecord,
+)
 
 
 class ExternalValue(DeclaredFamily, JsonShapeFamily, affix="Value"):
@@ -92,7 +100,7 @@ def test_external_shape_family_uses_one_codec_for_children_and_new_cases():
         FieldCodec.decode(ExternalValue, float("nan"))
 
 
-def test_ambiguous_shape_declarations_fail_and_semantic_members_stay_out():
+def test_semantic_members_stay_out_of_shape_selection():
     class Meaning(DeclaredFamily, JsonShapeFamily, affix="Meaning"):
         pass
 
@@ -111,9 +119,33 @@ def test_ambiguous_shape_declarations_fail_and_semantic_members_stay_out():
     assert FieldCodec.decode(Meaning, "typed") == DecodedMeaning("typed")
     assert FieldCodec.encode(DecodedMeaning("typed")) == "typed"
 
+
+@pytest.mark.parametrize(("family", "wire", "expected", "refused"), [
+    (NativeClaimEpoch, None, UnrecordedNativeClaim(), "5"),
+    (NativeClaimEpoch, 5, RecordedNativeClaim(5), "5"),
+    (TriageDecisionRecord, None, AbsentTriageDecisionRecord(), 1),
+    (TriageDecisionRecord, "IGNORE", DecidedTriageRecord(IgnoreSelectedTriage), 1),
+    (ImportPath, None, NoImportPath(), 1),
+    (ImportPath, "/opt/lib", SpecifiedImportPath("/opt/lib"), 1),
+])
+def test_shape_family_decodes_each_member_and_refuses_an_unowned_type(family, wire, expected, refused):
+    assert FieldCodec.decode(family, wire) == expected
+    with pytest.raises(MalformedRecord, match=f"Expected one {family.__name__} owner for"):
+        FieldCodec.decode(family, refused)
+
+
+@pytest.mark.parametrize(("annotations", "message"), [
+    ({"value": str}, "Two .* owners for str"),
+    ({"value": int, "other": int}, "one value field"),
+    ({"value": complex}, "Unsupported JSON shape"),
+])
+def test_bad_shape_declaration_fails_when_the_member_is_defined(annotations, message):
+    class Meaning(DeclaredFamily, JsonShapeFamily, affix="BadMeaning"):
+        pass
+
     @dataclass(frozen=True)
-    class OtherTextMeaning(JsonShapeMember, Meaning):
+    class TextMeaning(JsonShapeMember, Meaning):
         value: str
 
-    with pytest.raises(ValueError, match="Expected one"):
-        FieldCodec.decode(Meaning, "ambiguous")
+    with pytest.raises(TypeError, match=message):
+        type("BadMember", (JsonShapeMember, Meaning), {"__annotations__": annotations})
