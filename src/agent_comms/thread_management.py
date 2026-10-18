@@ -23,12 +23,13 @@ from .registration import Registration
 from .thread_status import StoppedThreadStatus
 
 if TYPE_CHECKING:
+    from .cli_bridges.history import History
     from .tool_caller import ThreadCaller
 from .agent_activity import AgentActivity
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .importing import ImportFormat, ImportLimits, ImportReceipt
+from .importing import ImportLimits, ImportReceipt, ImportSnapshot
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
@@ -149,19 +150,16 @@ class ThreadManagement:
 
     def import_thread(
         self,
-        source: Path | str,
-        format: ImportFormat,
+        history: History,
         *,
         name: str,
-        session_id: str | None = None,
         worktree: str | None = None,
         model: str | None = None,
         tags: frozenset[str] = frozenset(),
         limits: ImportLimits | None = None,
     ) -> ImportReceipt:
-        """Import a stopped, resumable snapshot without adopting a source executor."""
-        source_path = Path(source).expanduser().resolve()
-        snapshot = format.read(source_path, limits or ImportLimits(), session_id)
+        """Import a stopped, resumable snapshot of any harness session, without adopting its executor."""
+        snapshot = ImportSnapshot.read(history, limits or ImportLimits())
         directory = worktree or snapshot.project
         if not directory:
             raise ValueError("The source has no project directory; supply --worktree.")
@@ -202,7 +200,7 @@ class ThreadManagement:
         return ImportReceipt(
             name,
             str(session_path),
-            format,
+            snapshot.harness,
             snapshot.source_id,
             len(snapshot.messages),
             snapshot.messages_seen - len(snapshot.messages),

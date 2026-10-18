@@ -1,4 +1,4 @@
-"""Codex transport for the shared Core CLI bridge."""
+"""Codex sessions held by a running app-server, and the bridge that follows one."""
 from __future__ import annotations
 
 import argparse
@@ -7,18 +7,21 @@ from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import AsyncIterator
+from typing import AsyncIterator, Self
 from uuid import uuid4
 
 import aiohttp
 from pydantic import JsonValue
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.messages import Message
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
-from .shared import IncomingFrame, TranscriptBridge, Options, TranscriptUpdate, run_bridge
+from .history import CodexHistory, OnlineHistory
+from .shared import Binding, IncomingFrame, SessionFacts, TranscriptBridge, Options, TranscriptUpdate, run_bridge
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcReply, RpcNotification, TextInput,
     ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
+    ItemEntry,
 )
 
 
@@ -83,45 +86,87 @@ class CodexOptions(Options):
     socket: str
 
 
-class CodexBridge(TranscriptBridge[CodexOptions]):
+class CodexAppServer(CodexHistory, OnlineHistory):
+    """A thread the running Codex app-server can resume, read through its item list."""
+
+    SOCKET = Path.home() / '.codex/app-server-control/app-server-control.sock'
+
+    def __init__(self, thread: str, socket: str) -> None:
+        self.thread = thread
+        self.socket = socket
+
+    @classmethod
+    def connected(cls, thread: str, address: str | None, directory: Path) -> Self:
+        return cls(thread, address or str(cls.SOCKET))
+
+    async def history(self) -> AsyncIterator[TranscriptUpdate]:
+        async with CodexConnection.open(self.socket) as codex:
+            async for update in self.seen(codex):
+                yield update
+
+    async def entries(self, codex: CodexConnection) -> list[ItemEntry]:
+        """Every item of the thread, newest first."""
+        entries: list[ItemEntry] = []
+        cursor = None
+        while True:
+            page = ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread, cursor=cursor)))
+            entries.extend(page.data)
+            if (cursor := page.nextCursor) is None:
+                return entries
+
+    async def seen(self, codex: CodexConnection) -> AsyncIterator[TranscriptUpdate]:
+        resumed = ResumedThread.model_validate(await codex.call(ResumeThread(threadId=self.thread)))
+        yield SessionFacts(source_id=self.thread, project=resumed.thread.cwd)
+        # Only completed snapshots. An active item's deltas must be assembled
+        # from its actual start, not appended to an overlapping snapshot
+        # fetched concurrently with those deltas.
+        for entry in reversed(await self.entries(codex)):
+            if entry.completed:
+                yield entry.publication()
+        # Codex's own thread status says whether its newest turn still runs.
+        yield resumed.thread.status.update()
+
+
+class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
+    declared_name = None  # Follows a thread; not one more way to read it.
+
+    def __init__(self, options: CodexOptions, binding: Binding, db: CoordinationStore) -> None:
+        TranscriptBridge.__init__(self, options, binding, db)
+        CodexAppServer.__init__(self, binding.thread, options.socket)
+
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument('--socket', default=str(Path.home() / '.codex/app-server-control/app-server-control.sock'))
+        parser.add_argument('--socket', default=str(cls.SOCKET))
+
+    async def entries(self, codex: CodexConnection) -> list[ItemEntry]:
+        """A restarted bridge publishes again only the newest page."""
+        return ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread))).data
 
     async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
-        async with CodexConnection.open(self.options.socket) as codex:
-            resumed = ResumedThread.model_validate(
-                await codex.call(ResumeThread(threadId=self.binding.thread)))
-            page = ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.binding.thread)))
-            # Seed only completed snapshots. An active item's deltas must be
-            # assembled from its actual start, not appended to an overlapping
-            # snapshot fetched concurrently with those deltas.
-            for entry in reversed(page.data):
-                if entry.completed:
-                    yield entry.publication()
-            # Codex's own thread status says whether its newest turn still runs.
-            yield resumed.thread.status.update()
-            stream = ItemStream(self.binding.thread)
+        async with CodexConnection.open(self.socket) as codex:
+            async for update in self.seen(codex):
+                yield update
+            stream = ItemStream(self.thread)
             async for notification in codex.notifications():
                 update = stream.receive(notification)
                 if update is not None:
                     yield update
 
     async def deliver(self, message: Message) -> type[Outcome]:
-        async with CodexConnection.open(self.options.socket) as codex:
-            await codex.call(BusInput.for_message(self.binding.thread, message.message_id, IncomingFrame(message).text))
+        async with CodexConnection.open(self.socket) as codex:
+            await codex.call(BusInput.for_message(self.thread, message.message_id, IncomingFrame(message).text))
         return DeliveredOutcome
 
     async def show_sent(self, result: str, target: str, body: str) -> None:
-        async with CodexConnection.open(self.options.socket) as codex:
+        async with CodexConnection.open(self.socket) as codex:
             await codex.call(DisplayOutput(
-                threadId=self.binding.thread, clientUserMessageId=f'comms-out:{result}',
+                threadId=self.thread, clientUserMessageId=f'comms-out:{result}',
                 toolOutput=ToolOutput(output=self.sent_text(result, target, body))))
 
     async def report_failure(self, text: str) -> None:
-        async with CodexConnection.open(self.options.socket) as codex:
+        async with CodexConnection.open(self.socket) as codex:
             await codex.call(MessageInput(
-                threadId=self.binding.thread, clientUserMessageId=f'bridge-error:{uuid4()}',
+                threadId=self.thread, clientUserMessageId=f'bridge-error:{uuid4()}',
                 input=(TextInput(text=text),)))
 
 

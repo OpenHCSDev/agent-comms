@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 from pydantic import JsonValue
 from urllib.parse import quote
 
@@ -17,6 +17,56 @@ from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
+
+if TYPE_CHECKING:
+    from .importing import ImportBuffer, ImportLimits
+
+
+TRUNCATED = "\n[Import excerpt truncated]"
+
+
+@dataclass(frozen=True, slots=True)
+class ImportedMessage(ABC):
+    """One transcript event as portable text in the imported Pi session."""
+
+    body: str
+    truncated: bool = False
+
+    def bounded(self, limits: ImportLimits) -> ImportedMessage:
+        cap = min(limits.per_message, limits.characters)
+        if len(self.body) <= cap:
+            return self
+        return replace(self, body=self.body[: max(0, cap - len(TRUNCATED))] + TRUNCATED[:cap], truncated=True)
+
+    def remember(self, buffer: ImportBuffer) -> None:
+        """Only a request is the source session's latest request."""
+
+    @abstractmethod
+    def pi_message(self, timestamp: int) -> dict[str, object]: ...
+
+
+class ImportedInput(ImportedMessage):
+    """Text the source session's model received: tool calls, results and context."""
+
+    def pi_message(self, timestamp: int) -> dict[str, object]:
+        return {"role": "user", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp}
+
+
+class ImportedRequest(ImportedInput):
+    """A person's or a commanding agent's prompt."""
+
+    def remember(self, buffer: ImportBuffer) -> None:
+        buffer.latest_request = self.body[: buffer.limits.per_message]
+
+
+class ImportedReply(ImportedMessage):
+    def pi_message(self, timestamp: int) -> dict[str, object]:
+        zero = {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
+        return {
+            "role": "assistant", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp,
+            "api": "openai-responses", "provider": "imported", "model": "historical-context", "stopReason": "stop",
+            "usage": {**zero, "totalTokens": 0, "cost": {**zero, "total": 0}},
+        }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -40,6 +90,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     @abstractmethod
     def routed(self) -> bool:
         return False
+
+    def imported(self) -> ImportedMessage | None:
+        """This event as portable text in an imported conversation; activity is not conversation."""
+        return None
 
 
 @dataclass(frozen=True)
@@ -162,9 +216,13 @@ class UserTranscript(NativeTextTranscript):
     def routed(self) -> bool:
         return self.routing is not None and bool(self.routing.requests)
 
+    def imported(self) -> ImportedMessage:
+        return ImportedRequest(self.text)
+
 
 class AssistantTranscript(AgentTextTranscript):
-    pass
+    def imported(self) -> ImportedMessage:
+        return ImportedReply(self.text)
 
 
 class NoticeTranscript(AgentTextTranscript):
@@ -209,7 +267,8 @@ class ThinkingTranscript(SilentTranscript, LiveTextTranscript):
 
 
 class ContextTranscript(SilentTranscript, NativeTextTranscript):
-    pass
+    def imported(self) -> ImportedMessage:
+        return ImportedInput(self.text)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -234,6 +293,10 @@ class ToolStartTranscript(ToolTranscript):
     def title(self) -> str:
         return tool_declaration.ToolDeclaration.caption(self.tool_name, self.raw_input)
 
+    def imported(self) -> ImportedMessage:
+        return ImportedInput(f"[Historical tool call: {self.tool_name}]\n"
+                             + json.dumps(self.raw_input, ensure_ascii=False))
+
 
 @dataclass(frozen=True, kw_only=True)
 class ToolEndTranscript(ToolTranscript):
@@ -251,6 +314,10 @@ class ToolEndTranscript(ToolTranscript):
     @property
     def text_size(self) -> int:
         return len(self.text)
+
+    def imported(self) -> ImportedMessage:
+        outcome = "" if self.ok else ", failed"
+        return ImportedInput(f"[Historical tool result{outcome}]\n{self.text}")
 
     text: str = ""
     ok: bool = True

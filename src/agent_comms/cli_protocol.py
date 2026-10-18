@@ -49,11 +49,15 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
         return self.wire_tag
 
     @classmethod
+    def tag_of(cls, value: object) -> str:
+        return cls.header.model_validate(value).type
+
+    @classmethod
     def declared_union(cls) -> object:
         def tag(value: object) -> str:
             if isinstance(value, cls):
                 return value.wire_tag
-            return cls.header.model_validate(value).type
+            return cls.tag_of(value)
         by_tag: dict[str, list[builtins.type[TaggedWire]]] = {}
         for member in cls.__registry_config__.registry_dict.values():
             by_tag.setdefault(member.wire_tag, []).append(member)
@@ -67,6 +71,16 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
             alternatives = Union[tuple(reversed(tuple(hierarchy.static_order())))]
             variants.append(Annotated[alternatives, Tag(wire_tag)])
         return Annotated[Union[tuple(variants)], Discriminator(tag)]
+
+
+class OpenWire(TaggedWire, ABC):
+    """A family whose source adds kinds freely: a tag it does not declare decodes as its
+    member tagged 'foreign', which carries no conversation."""
+
+    @classmethod
+    def tag_of(cls, value: object) -> str:
+        tag = super().tag_of(value)
+        return tag if tag in cls.__registry_config__.registry_dict else 'foreign'
 
 
 class Outcome(DeclaredFamily, affix='Outcome'):
