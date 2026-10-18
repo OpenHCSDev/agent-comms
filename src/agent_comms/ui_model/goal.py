@@ -13,7 +13,7 @@ from agent_comms.acp_extension import AgentCommsUpdate, decode_updates
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
-from agent_comms.goal_presentation import GoalExecution, IdleGoalExecution, GoalSnapshot
+from agent_comms.goal_presentation import ThreadGoalExecution, GoalSnapshot
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,7 @@ class OwnerGoalSnapshot(GoalSnapshot):
         raw_goal, raw_execution = result["goal"], result["goalExecution"]
         return cls(
             FieldCodec.decode(Goal, raw_goal) if raw_goal is not None else None,
-            FieldCodec.decode(GoalExecution | IdleGoalExecution, raw_execution),
+            FieldCodec.decode(ThreadGoalExecution, raw_execution),
             decode_updates(result["_meta"]),
         )
 
@@ -45,12 +45,12 @@ class GoalDisplay(DeclaredFamily):
         return self.snapshot is not None
 
     @abstractmethod
-    def heading(self, execution: GoalExecution | IdleGoalExecution) -> str: ...
+    def heading(self, execution: ThreadGoalExecution) -> str: ...
 
-    def details_heading(self, execution: GoalExecution | IdleGoalExecution) -> str:
+    def details_heading(self, execution: ThreadGoalExecution) -> str:
         return self.heading(execution)
 
-    def standby(self, execution: GoalExecution | IdleGoalExecution) -> bool:
+    def standby(self, execution: ThreadGoalExecution) -> bool:
         return False
 
     def action_failure(self, error: Exception) -> str:
@@ -68,7 +68,7 @@ class NoGoal(GoalDisplay):
     def snapshot(self) -> None:
         return None
 
-    def heading(self, execution: GoalExecution | IdleGoalExecution) -> str:
+    def heading(self, execution: ThreadGoalExecution) -> str:
         return "No current goal"
 
     def action_failure(self, error: Exception) -> str:
@@ -83,14 +83,14 @@ class ShowingGoal(GoalDisplay):
     def snapshot(self) -> Goal:
         return self.goal
 
-    def standby(self, execution: GoalExecution | IdleGoalExecution) -> bool:
+    def standby(self, execution: ThreadGoalExecution) -> bool:
         return execution.waiting_for(self.goal)
 
-    def heading(self, execution: GoalExecution | IdleGoalExecution) -> str:
+    def heading(self, execution: ThreadGoalExecution) -> str:
         status = "Standby" if self.standby(execution) else self.goal.state.declared_name
         return f"Goal · {status} · rev {self.goal.revision}"
 
-    def details_heading(self, execution: GoalExecution | IdleGoalExecution) -> str:
+    def details_heading(self, execution: ThreadGoalExecution) -> str:
         heading = self.heading(execution)
         if self.standby(execution):
             heading += f" · {execution.presentation('').summary}"
@@ -110,6 +110,6 @@ class GoalUnavailable(GoalDisplay):
     def visible(self) -> bool:
         return True
 
-    def heading(self, execution: GoalExecution | IdleGoalExecution) -> str:
+    def heading(self, execution: ThreadGoalExecution) -> str:
         # A failed read says nothing about why; the session's own state explains it.
         return "Goal state unavailable · last confirmed snapshot" if self.last_confirmed else "Goal state unavailable"

@@ -20,7 +20,7 @@ from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import CommandTarget
 from .channels import Channel
 from .display_order import ChannelSort, NameChannelSort
-from .goal_presentation import GoalExecution, IdleGoalExecution
+from .goal_presentation import ThreadGoalExecution, IdleGoalExecution
 from .goal_waits import GoalWaits
 from .external_transcript import ExternalTranscript
 from .notification_assignment import NotificationAssignment
@@ -588,7 +588,7 @@ class ThreadView:
     activity: ObservedActivity
     runtime: RuntimeInfo
     last_seen: float
-    goal_execution: GoalExecution | IdleGoalExecution = IdleGoalExecution()
+    goal_execution: ThreadGoalExecution = IdleGoalExecution()
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
 
     @classmethod
