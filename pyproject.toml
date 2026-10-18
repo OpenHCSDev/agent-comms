@@ -10,15 +10,12 @@ authors = [{ name = "Tristan Simas", email = "tristan.simas@mail.mcgill.ca" }]
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Communications",
@@ -64,6 +61,7 @@ pi-comms-native = "agent_comms.native_pi:main"
 agent-comms-claude-bridge = "agent_comms.cli_bridges.claude:main"
 agent-comms-codex-bridge = "agent_comms.cli_bridges.codex:main"
 agent-comms-opencode-bridge = "agent_comms.cli_bridges.opencode:main"
+agent-comms-commander = "agent_comms.commander.cli:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 
 [tool.hatch.build.targets.wheel]
