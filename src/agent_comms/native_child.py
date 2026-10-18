@@ -41,6 +41,12 @@ class PiChild:
         proc = await AttachedChild.start(argv, cwd=cwd, env=env, pass_fds=pass_fds)
         return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type), **state)
 
+    def write(self, command):
+        """Write now, while the caller's send decision is still held."""
+        if self.retired:
+            raise RuntimeError('Pi child has retired')
+        self.proc.stdin.write(self.reader.encode(command))
+
     async def request(self, command):
         if self.retired:
             raise RuntimeError('Pi child has retired')
@@ -57,9 +63,9 @@ class PiChild:
             return False
         return not job.cancelled() and job.exception() is None and isinstance(job.result(), ChildOutcome)
 
-    def forward_input(self, operation: Callable[[], Coroutine[None, None, None]]) -> None:
+    def forward_input(self, operation: Callable[[], Coroutine[None, None, None]], *, create_task=asyncio.create_task) -> None:
         if self.forwarding_task is None:
-            self.forwarding_task = asyncio.create_task(operation())
+            self.forwarding_task = create_task(operation())
 
     async def finish_input(self) -> None:
         """Retire this input's ingress without retiring a retained idle child."""

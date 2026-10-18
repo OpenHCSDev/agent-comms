@@ -11,8 +11,9 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import AgentBackend, RuntimeLocation, Steers
-from .agent_events import Error, Done, OriginalInputStarted, FollowingInputStarted, InputStarted
+from .agent_backend import AgentBackend, InputId, RuntimeLocation, Steers, TurnInboxItem, WhenBusy
+from .agent_events import AgentInfo, Error, Done, OriginalInputStarted, FollowingInputStarted
+from .turn_inputs import TurnInboxReceiver
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
 from .pi_native_backend import PiCapabilities
@@ -21,7 +22,7 @@ from .external_transcript import ExternalCut
 from .native_entries import StoredEntry
 from .native_session_files import SessionFiles
 from .native_transcript import StoredRecord
-from .pi_commands import Abort, PiCommand, SetModel, SetThinkingLevel
+from .pi_commands import Abort, GetState, PiCommand, SetModel, SetThinkingLevel
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiResponseData
 from .transcript_sources import TranscriptSource
@@ -57,6 +58,11 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
 
     def storage_files(self):
         return (self,)
+
+
+@dataclass(kw_only=True)
+class DurableChild(PiChild):
+    location: DurableDatabase
 
 
 @dataclass(frozen=True)
@@ -188,24 +194,56 @@ class SubmissionData(PiResponseData):
 
 
 @dataclass(frozen=True)
-class Submit(HostQuery):
+class Submit(HostQuery, TurnInboxItem):
     request_id: str = field(metadata={'wire_name': 'requestId'})
     text: str
     images: tuple[ImageInput, ...] = ()
-    when_busy: str = field(default='steer', metadata={'wire_name': 'whenBusy'})
+    when_busy: WhenBusy = field(default=WhenBusy.STEER, metadata={'wire_name': 'whenBusy'})
     response_payload = SubmissionData
+
+    @property
+    def carried_inputs(self):
+        return (InputId(self.request_id),)
+
+    @property
+    def public_input_id(self):
+        return self.request_id
+
+    def written(self, turn):
+        pass
+
+    def deliver_to(self, receiver, turn):
+        return receiver.submit(self)
 
 
 class SubmitInitial(Submit):
-    pass
+    @property
+    def carried_inputs(self):
+        return ()
+
+    @property
+    def public_input_id(self):
+        return None
+
+    def written(self, turn):
+        turn.initial_written.set()
 
 
 class AwaitTurn(HostQuery):
     pass
 
 
+class DurableInputStarted(DurablePiEvent):
+    declared_name = None
+
+    async def during_turn(self, turn):
+        if not turn.delivery.input_started(self.id, self.native_id, self.text):
+            await turn.child.request(Abort())
+            raise RuntimeError('Core refused a started durable input')
+
+
 @dataclass(frozen=True, kw_only=True)
-class DurableOriginalStarted(DurablePiEvent, OriginalInputStarted):
+class DurableOriginalStarted(DurableInputStarted, OriginalInputStarted):
     native_id: str
     text: str
 
@@ -214,7 +252,7 @@ class DurableOriginalStarted(DurablePiEvent, OriginalInputStarted):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DurableFollowingStarted(DurablePiEvent, FollowingInputStarted):
+class DurableFollowingStarted(DurableInputStarted, FollowingInputStarted):
     native_id: str
     text: str
 
@@ -231,19 +269,35 @@ class DurableTurnEnd(DurablePiEvent):
     def convert(self):
         return (Done(text=self.text, ok=self.ok, reason_code=self.reason),)
 
+    async def finished_turn(self, completion):
+        await completion
+        return True
 
-class DurableTurn:
+
+class DurableTurn(TurnInboxReceiver):
     """One Core turn's ingress and its existing child, not another transport."""
 
     def __init__(self, child, delivery, barrier):
         self.child, self.delivery, self.barrier = child, delivery, barrier
+        self.queue = delivery.inbox
+        self.initial_written = asyncio.Event()
 
-    async def submit(self, command, public_id):
+    async def write(self, session, *commands):
+        for command in commands:
+            await self.child.request(command)
+
+    def authority_changed(self, session):
+        raise RuntimeError('Thread changed before durable input write')
+
+    async def submit(self, command):
+        command = replace(command, id=uuid4().hex)
+        def write():
+            self.child.write(command)
+            command.written(self)
         async with self.barrier.ingress_async() as status:
-            with status.phase.send_running(self.delivery.send_boundary, public_id,
+            with status.phase.send_running(self.delivery.send_boundary, command.public_input_id,
                                            command.request_id, command.text) as outcome:
-                completion = outcome.dispatch(self, self, command,
-                                              lambda: self.child.request(command))
+                completion = outcome.dispatch(self, self.child.proc, command, write)
         return await completion
 
     def refuse(self, turn, input_ids):
@@ -251,25 +305,13 @@ class DurableTurn:
 
     async def place(self, turn, item):
         return await self.submit(Submit(request_id=item.input_id.value,
-            text=item.content.text, images=item.content.images,
-            when_busy=item.when_busy.value), item.input_id.value)
-
-    async def use_settings(self, turn, item):
-        await self.child.request(SetModel.from_name(item.model))
-        await self.child.request(SetThinkingLevel(level=item.thinking_level))
-        return True
+            text=item.content.text, images=item.content.images, when_busy=item.when_busy))
 
     async def send_now(self, turn, item):
         raise ValueError('Pi Durable does not support send-now')
 
     async def clear_queue(self, turn, item):
         raise ValueError('Pi Durable queue withdrawal is not implemented')
-
-    async def forward(self):
-        while True:
-            item = await self.delivery.inbox.get()
-            if not await item.deliver_to(self, self):
-                return
 
 
 class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
@@ -294,13 +336,15 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
     async def open(self, thread):
         async with self.lock:
             if self.child is None:
-                path = Path(thread.runtime.path)
+                location = thread.runtime.new_location(self.barrier.registry_path.parent, thread.worktree)
+                path = location.session
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with ExitStack() as resources:
-                    lock = resources.enter_context(thread.runtime.writer_lock.open('a+b'))
+                    lock = resources.enter_context(location.writer_lock.open('a+b'))
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
-                        cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
+                    child = await DurableChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
+                        cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent,
+                        resources=resources.pop_all(), location=location)
                 async with child.failures():
                     model = SetModel.from_name(thread.model)
                     await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
@@ -319,34 +363,38 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
 
     async def run_turn(self, thread, content, delivery):
         child = await self.open(thread)
+        state = await child.request(GetState())
+        yield AgentInfo(model=state.model.display_name,
+            thinking_level=thread.thinking_level, session_file=child.location.path,
+            context_size=state.model.context_window)
         turn = DurableTurn(child, delivery, self.barrier)
         self.owner = asyncio.current_task()
         try:
-            async with child.failures(), child.reader.turn():
+            async with child.failures(), child.reader.turn(), asyncio.TaskGroup() as tasks:
                 await child.request(Watch())
                 try:
+                    child.forward_input(lambda: turn.forward(turn), create_task=tasks.create_task)
                     await turn.submit(SubmitInitial(request_id=uuid4().hex,
-                        text=content.text, images=content.images), None)
-                    child.forward_input(turn.forward)
+                        text=content.text, images=content.images))
+                    await turn.initial_written.wait()
                     completion = asyncio.create_task(child.request(AwaitTurn()))
                     try:
-                        async for event in child.reader.converted():
-                            if isinstance(event, InputStarted):
-                                if not delivery.input_started(event.id, event.native_id, event.text):
-                                    await child.request(Abort())
-                                    raise RuntimeError('Core refused a started durable input')
-                            yield event
-                            if isinstance(event, Done):
-                                await completion
+                        while (event := await child.reader.next_event()) is not None:
+                            await event.during_turn(turn)
+                            for update in event.convert():
+                                yield update
+                            if await event.finished_turn(completion):
                                 return
                         raise EOFError('Durable host ended before turn settlement')
                     finally:
                         completion.cancel()
                         await asyncio.gather(completion, return_exceptions=True)
                 finally:
-                    await child.request(Unwatch())
+                    try:
+                        await child.request(Unwatch())
+                    finally:
+                        await child.finish_input()
         finally:
-            await child.finish_input()
             self.owner = None
 
     async def abort(self, owner):

@@ -4,8 +4,6 @@ from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
 from collections.abc import Awaitable, Callable
 
-from . import turn_failure as failures
-
 
 class SendOutcome(ABC):
     def resume(self, inbox):
@@ -42,10 +40,7 @@ class RefusedSend(SendOutcome):
 
 class AuthorityChangedSend(SendOutcome):
     def dispatch(self, inputs, session, item, write):
-        inputs.uncertain = True
-        session.output.final_assistant_stop = False
-        session.output.record_failure(failures.AuthorityChanged("Input authority changed before native send."))
-        return asyncio.sleep(0, result=False)
+        return inputs.authority_changed(session)
 
 
 SendBoundary = Callable[[str | None, str, str], AbstractContextManager[SendOutcome]]

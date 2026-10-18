@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from uuid import uuid4
 from typing import TYPE_CHECKING
@@ -15,6 +16,7 @@ from typing import TYPE_CHECKING
 from . import agent_events as events
 from . import pi_commands as commands
 from .maintenance_barrier import MaintenanceBarrier
+from . import turn_failure as failures
 from .agent_backend import ClearQueue, InputId, InputRequest, SendNow, UseSettings, WhenBusy, TurnInbox, TurnInboxItem
 
 if TYPE_CHECKING:
@@ -26,8 +28,36 @@ if TYPE_CHECKING:
 _PI_STREAMING_BEHAVIOR = {WhenBusy.STEER: "steer", WhenBusy.FOLLOW_UP: "followUp"}
 
 
+class TurnInboxReceiver(ABC):
+    """Pi receivers share inbox order and settings; transports own writes."""
+
+    @abstractmethod
+    async def write(self, session, *commands): ...
+
+    @abstractmethod
+    def authority_changed(self, session): ...
+
+    async def prepare_forwarding(self, session):
+        pass
+
+    async def forward(self, session):
+        await self.prepare_forwarding(session)
+        while True:
+            self.current = await self.queue.get()
+            try:
+                if not await self.current.deliver_to(self, session):
+                    return
+            finally:
+                self.current = None
+
+    async def use_settings(self, session, item):
+        await self.write(session, commands.SetModel.from_name(item.model),
+                         commands.SetThinkingLevel(level=item.thinking_level))
+        return True
+
+
 @dataclass
-class InputForwarding:
+class InputForwarding(TurnInboxReceiver):
     queue: TurnInbox = field(default_factory=TurnInbox)
     pending: dict[str, commands.Prompt] = field(default_factory=dict)
     accepted: set[str] = field(default_factory=set)
@@ -68,21 +98,18 @@ class InputForwarding:
         self.changed.set()
         return item
 
-    async def forward(self, session: TurnSession) -> None:
-        # Inputs that wait through one tool batch reach the model together,
-        # not one model call apiece.
+    async def prepare_forwarding(self, session):
         await self.write(session, commands.SetSteeringMode(mode="all"))
-        while True:
-            self.current = await self.queue.get()
-            try:
-                if not await self.current.deliver_to(self, session):
-                    return
-            finally:
-                self.current = None
+
+    def authority_changed(self, session):
+        self.uncertain = True
+        session.output.final_assistant_stop = False
+        session.output.record_failure(failures.AuthorityChanged("Input authority changed before native send."))
+        return asyncio.sleep(0, result=False)
 
     async def write(self, session: TurnSession, *written: commands.PiCommand) -> None:
         for command in written:
-            session.stdin.write(session.native.reader.encode(replace(command, id=uuid4().hex)))
+            session.native.write(replace(command, id=uuid4().hex))
         await session.stdin.drain()
 
     async def queued(self, input_ids: tuple[InputId, ...]) -> tuple[str, ...]:
@@ -111,16 +138,6 @@ class InputForwarding:
         session.rejected_signal.set()
         return True
 
-    async def use_settings(self, session: TurnSession, item: UseSettings) -> bool:
-        provider, model_id = item.model.split("/", 1)
-        # Pi resets thinking to the new model's default, so the level follows the model.
-        await self.write(
-            session,
-            commands.SetModel(provider=provider, model_id=model_id),
-            commands.SetThinkingLevel(level=item.thinking_level),
-        )
-        return True
-
     async def send_now(self, session: TurnSession, item: SendNow) -> bool:
         candidates = await self.queued(item.input_ids)
         if not candidates:
@@ -128,8 +145,8 @@ class InputForwarding:
         first = self.pending[candidates[0]]
         async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
             with status.phase.send_running(session.interrupt_boundary, first.id, candidates[0], first.message) as outcome:
-                completion = outcome.dispatch(self, session, item, lambda: session.stdin.write(
-                    session.native.reader.encode(commands.InterruptSteering(input_ids=list(candidates)))
+                completion = outcome.dispatch(self, session, item, lambda: session.native.write(
+                    commands.InterruptSteering(input_ids=list(candidates))
                 ))
         return await completion
 
@@ -148,7 +165,7 @@ class InputForwarding:
         def write():
             if command.images:
                 session.output.sensitive = True
-            session.stdin.write(session.native.reader.encode(command))
+            session.native.write(command)
             self.pending[native_id] = command
             self.generation += 1
 

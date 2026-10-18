@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from .image_inputs import ImageInput
     from .threads import Thread
     from .turn_context import InputContributionCoordinates
+    from .turn_inputs import TurnInboxReceiver
 
 
 class BackendDeclarationError(TypeError):
@@ -127,15 +128,6 @@ class InputContent:
     text: str
     images: tuple[ImageInput, ...] = ()
     contributions: tuple[InputContributionCoordinates, ...] = ()
-
-
-class TurnInboxReceiver(Protocol):
-    """What a running turn does with each record its inbox carries."""
-
-    def place(self, turn: object, item: InputRequest) -> Awaitable[bool]: ...
-    def send_now(self, turn: object, item: SendNow) -> Awaitable[bool]: ...
-    def use_settings(self, turn: object, item: UseSettings) -> Awaitable[bool]: ...
-    def clear_queue(self, turn: object, item: ClearQueue) -> Awaitable[bool]: ...
 
 
 class TurnInbox(asyncio.Queue):
@@ -251,6 +243,9 @@ class ContextUsage:
 class CompactionOutcome(DeclaredFamily, affix="Compaction"):
     """The result of one requested compaction."""
 
+    def display_summary(self):
+        return None
+
 
 @dataclass(frozen=True)
 class PlacedCompaction(CompactionOutcome):
@@ -259,6 +254,11 @@ class PlacedCompaction(CompactionOutcome):
     summary: str
     first_kept: str | None
     tokens_before: int | None
+
+    def display_summary(self):
+        from .backend import compaction_summary
+
+        return compaction_summary(self.summary)
 
 
 @dataclass(frozen=True)

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
 from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
-from .agent_backend import CompactionOutcome, NothingToCompaction, PlacedCompaction
+from .agent_backend import CompactionOutcome, NothingToCompaction, PlacedCompaction, StaleCompaction
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
@@ -1054,20 +1054,16 @@ class CompactionData(PiResponseData):
 
     @classmethod
     def normalize_wire(cls, value):
-        if 'outcome' not in value:
-            summary = value.get('summary')
-            outcome = (NothingToCompaction() if summary is None else
-                       PlacedCompaction(summary, value.get('firstKeptEntryId'), value.get('tokensBefore')))
-            value = {'outcome': FieldCodec.encode(outcome), 'usage': value.get('usage'),
-                     'estimatedTokensAfter': value.get('estimatedTokensAfter')}
-        return super().normalize_wire(value)
+        summary = value.get('summary')
+        outcome = (StaleCompaction() if value.get('stale') is True else
+                   NothingToCompaction() if summary is None else
+                   PlacedCompaction(summary, value.get('firstKeptEntryId'), value.get('tokensBefore')))
+        return super().normalize_wire({'outcome': FieldCodec.encode(outcome), 'usage': value.get('usage'),
+                                      'estimatedTokensAfter': value.get('estimatedTokensAfter')})
 
     @property
     def display_summary(self):
-        from .backend import compaction_summary
-
-        return (compaction_summary(self.outcome.summary)
-                if isinstance(self.outcome, PlacedCompaction) else None)
+        return self.outcome.display_summary()
 
     def charge(self, session):
         yield from session.usage.charge_compaction(self.usage)

@@ -185,12 +185,15 @@ const handlers = {
     requireResumed();
     const task = await harness.waitForTask(await root.compact(request.customInstructions, context), context);
     const outcome = task.state.outcome;
-    if (outcome.status !== 'completed') return { outcome: { kind: 'failed', message: JSON.stringify(outcome) } };
-    if (!outcome.result.submissionId) return { outcome: { kind: 'nothing_to' } };
+    if (outcome.status !== 'completed') throw new Error(JSON.stringify(outcome));
+    if (!outcome.result.submissionId) return {};
     const placed = await (await harness.submission(outcome.result.submissionId, context)).wait(context);
-    if (placed.status !== 'done') return { outcome: placed.reason === 'stale' ? { kind: 'stale' } : { kind: 'failed', message: JSON.stringify(placed) } };
+    if (placed.status !== 'done') {
+      if (placed.reason === 'stale') return { stale: true };
+      throw new Error(JSON.stringify(placed));
+    }
     const entry = await root.commit(tx => tx.entry(placed.entry), context);
-    return { outcome: { kind: 'placed', summary: text(entry), first_kept: String(entry.head), tokens_before: null } };
+    return { summary: text(entry), firstKeptEntryId: String(entry.head), tokensBefore: null };
   },
   async close() {
     if (turn) await turn.stop();

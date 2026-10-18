@@ -92,6 +92,12 @@ class PiEvent(PiPayload, DeclaredFamily):
     def convert(self):
         return ()
 
+    async def during_turn(self, turn):
+        pass
+
+    async def finished_turn(self, completion):
+        return False
+
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         """Apply shared progress and phase behavior around this event's meaning."""
         async for event in session.consume_native_event(self):
