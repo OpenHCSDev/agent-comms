@@ -1,4 +1,4 @@
-"""The commander's rule reviews: the rules each reviewer's latest review drew and the answer to each."""
+"""The commander's rule reviews: the rules each reviewer's latest review drew, and each answer."""
 
 from __future__ import annotations
 
@@ -66,15 +66,19 @@ class AnsweredRuleReviewEntry(RuleReviewEntry):
 
     def __post_init__(self) -> None:
         if len(self.text.split()) < self.least_words:
-            raise ValueError(f"Say in {self.least_words}+ words what this tick does about the rule,"
-                             " naming a unit, problem or file.")
+            raise ValueError(
+                f"Say in {self.least_words}+ words what this tick does about the rule,"
+                " naming a unit, problem or file."
+            )
 
     def write(self, db: sqlite3.Connection, reviewer: str) -> None:
         drawn = DrawnRule.one(db, reviewer=reviewer, n=self.n)
         if drawn is None:
             raise ValueError(f"{reviewer} has no review that drew rule {self.n}.")
         if drawn.cited and not re.search(r"\S+\.py:\d+|P\d+", self.text):
-            raise ValueError("A correct-maintenance answer names the file:line or P-number it was applied to.")
+            raise ValueError(
+                "A correct-maintenance answer names the file:line or P-number it was applied to."
+            )
         DrawnRule.delete(db, reviewer=reviewer, n=self.n)
         DrawnRule(reviewer, self.n, drawn.rule, drawn.cited, drawn.drawn_at, self.text).insert(db)
 

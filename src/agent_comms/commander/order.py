@@ -735,8 +735,8 @@ class RuledVerb(CommanderVerb):
         super().gate()
         for due in RulesDue.violations(COMMS, self.who):
             flag = '' if self.who == ME else f' --as {self.who}'
-            sys.exit(f'REFUSED, nothing recorded: {due.why}. Run agent-comms-commander rules review{flag},'
-                     f' then answer each drawn rule{flag}.')
+            sys.exit(f'REFUSED, nothing recorded: {due.why}. Run agent-comms-commander'
+                     f' rules review{flag}, then answer each drawn rule{flag}.')
 
 
 def unstrike(task: str, why: str, at: str | None = None) -> None:

@@ -45,6 +45,7 @@ from .private_registry_guard import (
 )
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
+from .rule_reviews import RuleReviews
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
@@ -402,7 +403,6 @@ class ThreadManagement:
         """Every store whose rows end with a thread declaration."""
         from .goal_waits import GoalWaits
         from .relationships import RelationshipStore
-        from .rule_reviews import RuleReviews
         from .view_unread import transcript_read_state
 
         states = (

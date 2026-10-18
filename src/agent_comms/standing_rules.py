@@ -94,7 +94,7 @@ class HuntDue(ReasonedStandingRule):
 
 @dataclass(frozen=True)
 class RulesDue(ReasonedStandingRule):
-    """A reviewer acts only on a review younger than ``max_age`` whose drawn rules are all answered."""
+    """A reviewer acts only while its last review is fresh and every drawn rule is answered."""
 
     max_age: ClassVar[int] = 20 * 60
     text = (
@@ -104,16 +104,22 @@ class RulesDue(ReasonedStandingRule):
 
     @classmethod
     def due(cls, comms: Comms, reviewer: str) -> tuple[str, float] | None:
-        """Why the reviewer's actions are refused and since when, or None while its review is fresh."""
+        """Why the reviewer's actions are refused and since when; None while its review is fresh."""
         drawn = RuleReviews(comms.root).drawn(reviewer)
         if not drawn:
             return f"no rule review recorded for {reviewer}", 0.0
         at = drawn[0].drawn_at
         if missing := [rule.n for rule in drawn if not rule.answer]:
-            return (f"drawn rules {missing} of the {time.strftime('%H:%M', time.localtime(at))}"
-                    " review are unanswered", at)
+            return (
+                f"drawn rules {missing} of the {time.strftime('%H:%M', time.localtime(at))}"
+                " review are unanswered",
+                at,
+            )
         if (age := time.time() - at) > cls.max_age:
-            return f"last rule review was {int(age // 60)} min ago (max {cls.max_age // 60})", at + cls.max_age
+            return (
+                f"last rule review was {int(age // 60)} min ago (max {cls.max_age // 60})",
+                at + cls.max_age,
+            )
         return None
 
     @classmethod
