@@ -4,6 +4,7 @@ Fake native Pi only; real provider acceptance stays with the pinned executor.
 """
 
 from __future__ import annotations
+from conftest import publish_initial
 from binding_reads import binding_rows
 
 import asyncio
@@ -74,7 +75,7 @@ def _root(tmp_path: Path):
     for person in people:
         comms.registry.declare(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    message = comms.messaging.send_initial_cohort("sender", "#team", "Compute 17+25.")
+    message = publish_initial(comms, "sender", "#team", "Compute 17+25.")
     initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -328,7 +329,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     root, root_id, comms, first, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    second = comms.messaging.send_initial_cohort("sender", "#team", "Second source.")
+    second = publish_initial(comms, "sender", "#team", "Second source.")
     lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
     bus = comms.bus
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -372,7 +373,7 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
-    second = comms.messaging.send_initial_cohort("sender", "alpha", "Second selected source.")
+    second = publish_initial(comms, "sender", "alpha", "Second selected source.")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
@@ -414,7 +415,7 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
         store.participants.register(
             RecordedThreadIncarnation("fixture", beta.created_at).lookup, "beta", "beta", committed=True
         )
-    second = comms.messaging.send_initial_cohort("sender", "#team", "@beta please review.")
+    second = publish_initial(comms, "sender", "#team", "@beta please review.")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     assert (
@@ -579,7 +580,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
             NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha-new")
             is None
         )
-    second = comms.messaging.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
+    second = publish_initial(comms, "sender", "alpha-new", "Canonical recipient.")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     fresh = await SelectedExecution(

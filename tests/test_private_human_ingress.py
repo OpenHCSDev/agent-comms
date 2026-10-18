@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import asyncio
 import os
 import subprocess
@@ -210,7 +211,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
         second.messaging.send_user_message("alice", "different new human input", worktree=str(tmp_path))
     assert list(second.bus.full_history_page().messages) == []
-    later_agent = second.messaging.send_initial_cohort("alice", "bob", "unrelated agent input")
+    later_agent = publish_initial(second, "alice", "bob", "unrelated agent input")
     assert later_agent.seq == 2
     with pytest.raises(RelationViolationError, match="sequence gap has UNKNOWN"):
         second.messaging.send_user_message("alice", "new human input", worktree=str(tmp_path))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import os
 import sqlite3
 import tempfile
@@ -64,7 +65,7 @@ def _fresh(tmp_path: Path, count: int = 2):
 
 
 def _seal(comms: Comms, root: Path, root_id: str, target: str, body: str):
-    message = comms.messaging.send_initial_cohort("sender", target, body)
+    message = publish_initial(comms, "sender", target, body)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert accept_delivery_cohort(comms.bus, root_id, message.seq, store).value.member_count
     return message
@@ -82,7 +83,7 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
     # The certificate filters 1,001 committed initials for another owner.
     # Do not accept, inject, acknowledge, or replay those unrelated sources.
     for n in range(1001):
-        comms.messaging.send_initial_cohort("sender", "other001", f"unrelated-{n}:" + "x" * 8400)
+        publish_initial(comms, "sender", "other001", f"unrelated-{n}:" + "x" * 8400)
     assert comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
     selected = _seal(comms, root, root_id, "#team", "@alpha selected after churn")
     second = await runtime.SelectedExecution(

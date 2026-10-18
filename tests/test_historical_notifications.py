@@ -1,5 +1,6 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
+from conftest import publish_initial
 from dataclasses import replace
 from pathlib import Path
 import sqlite3
@@ -32,9 +33,9 @@ def archived_notification(tmp_path, *, thread_registration):
         comms.registry.declare(thread_registration.new_thread('agent', frozenset(), str(tmp_path), created_at=12.0 if comms is old else 212.0))
     root_id = old.messaging.initialize_private_initial_protocol()
     messages = (
-        old.messaging.send_initial_cohort("sender", "agent", "authored pending delivery"),
-        old.messaging.send_initial_cohort("sender", "reader", "painted historical delivery"),
-        old.messaging.send_initial_cohort("sender", "reader", "unpainted historical delivery"),
+        publish_initial(old, "sender", "agent", "authored pending delivery"),
+        publish_initial(old, "sender", "reader", "painted historical delivery"),
+        publish_initial(old, "sender", "reader", "unpainted historical delivery"),
     )
     source = live.views.attach_history(old.root)
     return old, live, source, messages, root_id
@@ -344,7 +345,7 @@ def test_recorded_response_resolution_keeps_other_collective_lifecycles(
         old.registry.register(
             replace(old.registry.require(name), tags=frozenset({"team"}))
         )
-    original = old.messaging.send_initial_cohort(
+    original = publish_initial(old, 
         "sender", "#team", "collective mixed response states"
     )
     with Coordination(str(old.root / "coordination.sqlite3")) as store:

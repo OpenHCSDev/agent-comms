@@ -3,6 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+from conftest import publish_initial
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
 import hashlib
@@ -154,7 +155,7 @@ async def configured_pure_channel(arguments):
         service.registry.declare(service.registry.new_thread('history-sender', frozenset(), str(project)))
         service.registry.declare(service.registry.new_thread('history-recipient', frozenset(), str(project)))
         for index in range(arguments.history):
-            service.messaging.send_initial_cohort('history-sender', 'history-recipient',
+            publish_initial(service, 'history-sender', 'history-recipient',
                 f'Original private retained history {index}: ' + 'history ' * 400)
     packets, timeline, compaction_events = [], [], []
     class Observation:
@@ -818,7 +819,7 @@ async def run(arguments):
             Path(str(saved)+'.input-proof').chmod(0o600)
             service.registry.register(replace(owner, session_file=str(saved)))
     for index in range(arguments.history):
-        service.messaging.send_initial_cohort('fixture-sender','history-recipient',
+        publish_initial(service, 'fixture-sender','history-recipient',
             f'Retained unrelated canonical source {index}: ' + 'history '*250)
     started = time.perf_counter()
     failure = None

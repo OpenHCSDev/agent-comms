@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import json
 import os
 import sqlite3
@@ -59,7 +60,7 @@ def _page(
 
 def test_hint_is_pure_and_crash_after_bus_before_wal_catches_up(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
-    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
+    first = publish_initial(comms, "sender", "member000", "first")
     before = comms.bus.log.path.read_bytes()
     hint = index.notify_committed_append(root_id=root_id, through_bytes=len(before))
     assert hint == CommittedAppendHint(root_id, len(before))
@@ -82,7 +83,7 @@ def test_catch_up_always_admits_one_record_beyond_the_batch_budget(
     tmp_path: Path,
 ) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
-    message = comms.messaging.send_initial_cohort("sender", "member000", "x" * 4096)
+    message = publish_initial(comms, "sender", "member000", "x" * 4096)
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
     # A batch budget smaller than the next single record still advances the
     # checkpoint by admitting that one record; it never refuses progress.
@@ -99,7 +100,7 @@ def test_catch_up_admits_a_record_larger_than_the_default_batch_budget(
     comms, index, root_id, lookup = _fresh(tmp_path)
     # The live defect: bus records of ~630KB versus the scheduler's fixed
     # 256KB batch budget made every catch-up batch admit zero rows forever.
-    message = comms.messaging.send_initial_cohort(
+    message = publish_initial(comms, 
         "sender", "member000", "x" * (300 * 1024)
     )
     assert comms.bus.log.path.stat().st_size > 256 * 1024
@@ -113,7 +114,7 @@ def test_catch_up_admits_a_record_larger_than_the_default_batch_budget(
 
 def test_crash_after_wal_before_ack_is_idempotent_and_future_hint_refuses(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
-    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
+    first = publish_initial(comms, "sender", "member000", "first")
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
     assert index.catch_up_committed_append(hint, start=FirstBuild()).caught_up
     # A bus commit+index WAL commit may survive while the caller loses the ACK.
@@ -129,12 +130,12 @@ def test_crash_after_wal_before_ack_is_idempotent_and_future_hint_refuses(tmp_pa
 @pytest.mark.parametrize("damage", ["truncate", "replace", "incomplete"])
 def test_changed_bus_or_incomplete_tail_never_promotes_a_hint(tmp_path: Path, damage: str) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
-    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
+    first = publish_initial(comms, "sender", "member000", "first")
     assert index.catch_up_committed_append(
         index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size),
         start=FirstBuild(),
     ).caught_up
-    second = comms.messaging.send_initial_cohort("sender", "member000", "second")
+    second = publish_initial(comms, "sender", "member000", "second")
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
     path = comms.bus.log.path
     if damage == "truncate":
@@ -155,11 +156,11 @@ def test_changed_bus_or_incomplete_tail_never_promotes_a_hint(tmp_path: Path, da
 
 def test_foreign_root_is_rejected(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path / "one")
-    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
+    first = publish_initial(comms, "sender", "member000", "first")
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
     assert index.catch_up_committed_append(hint, start=FirstBuild()).caught_up
     other, other_index, other_id, _ = _fresh(tmp_path / "other")
-    other.messaging.send_initial_cohort("sender", "member000", "elsewhere")
+    publish_initial(other, "sender", "member000", "elsewhere")
     with pytest.raises(ProjectionRebuildRequiredError, match="another root"):
         index.catch_up_committed_append(
             other_index.notify_committed_append(root_id=other_id, through_bytes=other_index.log.path.stat().st_size)
@@ -173,12 +174,12 @@ def test_foreign_root_is_rejected(tmp_path: Path) -> None:
 
 def test_reader_snapshot_does_not_block_deferred_wal_catch_up(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path)
-    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
+    first = publish_initial(comms, "sender", "member000", "first")
     assert index.catch_up_committed_append(
         index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size),
         start=FirstBuild(),
     ).caught_up
-    second = comms.messaging.send_initial_cohort("sender", "member000", "second")
+    second = publish_initial(comms, "sender", "member000", "second")
     with sqlite3.connect(index.path, timeout=0.05) as reader:
         reader.execute("BEGIN")
         assert reader.execute("SELECT last_seq FROM candidate_checkpoint").fetchone() == (1,)
@@ -194,7 +195,7 @@ def test_bounded_101_initials_and_150_frozen_recipients(tmp_path: Path) -> None:
     send_times: list[float] = []
     for number in range(101):
         start = time.perf_counter()
-        message = comms.messaging.send_initial_cohort(
+        message = publish_initial(comms, 
             "sender", "#cohort", f"@member000 benchmark {number}"
         )
         send_times.append(time.perf_counter() - start)
@@ -242,7 +243,7 @@ def test_bounded_101_initials_and_150_frozen_recipients(tmp_path: Path) -> None:
 
 def test_damaged_schema_requires_external_reset_without_repair(tmp_path):
     comms, index, root_id, lookup = _fresh(tmp_path)
-    message = comms.messaging.send_initial_cohort("sender", "member000", "keep checkpoint")
+    message = publish_initial(comms, "sender", "member000", "keep checkpoint")
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
     assert index.catch_up_committed_append(hint, start=FirstBuild()).caught_up
     with sqlite3.connect(index.path) as db:

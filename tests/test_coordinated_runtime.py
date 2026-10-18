@@ -6,6 +6,7 @@ acceptance and final post-merge review; no fake can establish Pi model authority
 
 from __future__ import annotations
 
+from conftest import publish_initial
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.messages import NoticeRole
 import asyncio
@@ -123,7 +124,7 @@ def _root(
     root_id = comms.messaging.initialize_private_initial_protocol()
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
-    message = comms.messaging.send_initial_cohort("sender", target, body)
+    message = publish_initial(comms, "sender", target, body)
     initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         for recipient in initial.audience.recipients:
@@ -647,7 +648,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     # These are committed frozen direct sources for another recipient. They
     # must not become beta's work or move beta's proven-injected cursor.
     for index in range(101):
-        comms.messaging.send_initial_cohort("sender", "alpha", f"unrelated {index}")
+        publish_initial(comms, "sender", "alpha", f"unrelated {index}")
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
@@ -1169,7 +1170,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     )
     comms.registry.rename("beta", "gamma")
     root_id = comms.messaging.initialize_private_initial_protocol()
-    incoming = comms.messaging.send_initial_cohort("sender", "gamma", "Compute 17+25")
+    incoming = publish_initial(comms, "sender", "gamma", "Compute 17+25")
     initial = comms.bus.log.read_delivery_cohort(root_id, incoming.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -1540,7 +1541,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
         for number in range(100):
-            message = comms.messaging.send_initial_cohort(
+            message = publish_initial(comms, 
                 "sender", "#team", f"Bounded selected-page item {number}"
             )
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
@@ -1680,7 +1681,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
         is None
     )
     assert len(calls) == before  # Failed input never replayed.
-    fresh = comms.messaging.send_initial_cohort("sender", "beta", "New independent message")
+    fresh = publish_initial(comms, "sender", "beta", "New independent message")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)

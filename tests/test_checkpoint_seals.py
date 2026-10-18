@@ -1,5 +1,6 @@
 """Actual marker/seal persistence contract and every writer-seal fsync seam."""
 
+from conftest import publish_initial
 import copy
 import json
 import shutil
@@ -96,7 +97,7 @@ def test_malformed_marker_denied_by_wire_and_registry_same_boundary(tmp_path, da
 @pytest.mark.parametrize("copy_root", [False, True])
 def test_uncertain_seal_publication_recovers_exact_committed_suffix(tmp_path, monkeypatch, stage, copy_root):
     comms, _ = _root(tmp_path)
-    comms.messaging.send_initial_cohort("sender", "Alice", "original")
+    publish_initial(comms, "sender", "Alice", "original")
     real = WireLog.write_metadata_unlocked
     armed = True
 
@@ -117,7 +118,7 @@ def test_uncertain_seal_publication_recovers_exact_committed_suffix(tmp_path, mo
     with monkeypatch.context() as patch:
         patch.setattr(WireLog, "write_metadata_unlocked", write)
         with pytest.raises(RelationViolationError, match="UNKNOWN"):
-            comms.messaging.send_initial_cohort("sender", "Alice", "durable bus, uncertain seal")
+            publish_initial(comms, "sender", "Alice", "durable bus, uncertain seal")
     if copy_root:
         from agent_comms.comms import Comms
 

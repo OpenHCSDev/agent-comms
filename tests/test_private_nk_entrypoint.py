@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import json
 import fcntl
 import os
@@ -463,7 +464,7 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     comms.registry.declare(comms.registry.new_thread('late-owner', frozenset(), str(tmp_path)))
     late = comms.registry.require("late-owner")
     lookup = RecordedThreadIncarnation("fixture", late.created_at).lookup
-    message = comms.messaging.send_initial_cohort("sender", "late-owner", "fresh private task")
+    message = publish_initial(comms, "sender", "late-owner", "fresh private task")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         participant = store.participants.get(lookup)
         assert participant.committed and participant.owner_thread == "late-owner"
