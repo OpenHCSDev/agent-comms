@@ -1,3 +1,4 @@
+import json
 import re
 
 import pytest
@@ -8,6 +9,23 @@ from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_
 
 
 class TestToolCatalog:
+    def test_native_launch_carries_the_existing_catalog_and_thread_tier(self, comms):
+        from agent_comms.pi_vocabulary import ServiceTier
+        from agent_comms.tool_caller import ToolCatalogResult
+        from agent_comms.tools import ToolsCliCommand
+
+        thread = comms.registry.new_thread(
+            name="catalog-owner", tags=frozenset(), worktree="/wt", service_tier=ServiceTier.STANDARD,
+        )
+        comms.registry.declare(thread)
+        launch = thread.native_environment(comms.root, comms.registry.snapshot(), thread.worktree)
+        payload = json.loads(launch[ToolCatalogResult.launch_variable])
+        assert payload == ToolsCliCommand(name=thread.name).apply(comms).encoded()
+        assert payload["service_tier"] == "standard"
+        assert {tool["name"] for tool in payload["tools"]} == {
+            tool["name"] for tool in tool_catalog()
+        }
+
     def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))

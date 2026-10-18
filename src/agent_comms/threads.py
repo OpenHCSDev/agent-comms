@@ -154,12 +154,15 @@ class Thread(ThreadProvenance):
     def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
         """Project this captured owner through the original native binding."""
         from .runtime_requests import ProjectRuntimeRequest
+        from .tool_caller import ThreadToolCatalogResult
+        from .tools import tool_catalog
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
         return {
             **replace(self.launch(), worktree=worktree, managed=True).encode(),
             "AGENT_COMMS_ROOT": str(root),
             **project.environment(root),
+            **ThreadToolCatalogResult(tuple(tool_catalog()), self.service_tier).native_environment(),
         }
 
     def launch(self) -> ThreadLaunch:
