@@ -195,14 +195,13 @@ def publish_selected_resource_claim(
                 raise ClaimConflict(existing)
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
-        committed = bus.publisher.publish_claim_envelope(
+        committed = bus.publisher._publish_claim_envelope_unlocked(
+            bus_lock, registry,
             Message(owner.name, owner.name, "Claimed", ClaimNoticeKind),
             worktree=Path(owner.worktree),
             incarnation=str(owner.created_at),
             claims=[resource_path],
-            _locked_registry_snapshot=registry,
-            _bus_lock=bus_lock,
-            _claim=claim_scope,
+            claim=claim_scope,
         )
         transition = committed.claim_transition
         assert transition is not None and transition.generation is not None

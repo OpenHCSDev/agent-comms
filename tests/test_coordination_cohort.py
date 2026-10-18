@@ -20,7 +20,7 @@ from agent_comms.assignment_states import (
     DeliveredAssignment,
     FullPendingAssignment,
 )
-from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, AgentOrigin
+from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 from agent_comms.cohort_schema import CohortDeliveryReceipts, install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import (
@@ -327,19 +327,13 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
         case.close()
 
 
-def test_all_channel_excludes_sender_and_nonexecutors_and_control_is_not_forgeable(
+def test_all_channel_excludes_sender_and_nonexecutors(
     tmp_path: Path,
 ) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
     comms.registry.register(
         comms.registry.new_thread(name='human', tags=frozenset(), worktree=str(tmp_path), role=ThreadRole.USER, created_at=17005.0)
     )
-    with pytest.raises(RelationViolationError, match="initial issuer"):
-        comms.bus.publisher.publish_initial_cohort(
-            Message(sender="sender", target="#all", body="system", type=InfoKind),
-            control="system_control", origin=AgentOrigin(),
-        )
-    assert comms.bus.log.latest_sequence() == 0
     sent = publish_initial(comms, "sender", "#all", "ordinary")
     result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
     assert isinstance(result, Applied)

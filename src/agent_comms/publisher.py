@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from collections.abc import Sequence
-from contextlib import ExitStack, nullcontext
+from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,6 +15,8 @@ from agent_comms.coordination_tables.publications import (
     canonical_publication_key,
 )
 
+from .active_route import guard_original_root_write
+from .audience_manifest import MAX_WIRE_SEQ, FrozenRecipient, freeze_audience
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     CommittedDelivery,
@@ -22,6 +24,8 @@ from .bus_publication import (
     initial_sideband,
 )
 from .channel_targets import CommandTarget, NamedTarget
+from .coordinator import Coordination
+from .delivery_policy import InitialDeliveryPolicy
 from .envelope_claim_transitions import (
     ClaimRelease,
     ClaimTransition,
@@ -34,20 +38,26 @@ from .errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
+from .field_codec import FieldCodec
 from .mentions import ThreadMention
 from .messages import Message
+from .private_bus_checkpoint import (
+    install_private_bus_checkpoint,
+    opened_private_checkpoint_unlocked,
+)
 from .private_path import FileRevision
-from .private_registry_guard import _require_no_private_owner_rename
+from .private_registry_guard import PrivateRegistryGuard, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import StoreLock, _store_lock
+from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
 
-    from .registration import Registration
     from .private_bus_checkpoint import CertifiedSourceRead
+    from .registration import Registration
 
-from .catalog_store import ChannelCatalog
 from .catalog_document import CatalogDocument
+from .catalog_store import ChannelCatalog
 from .wire_log import WireLog
 from .wire_metadata import WireMetadata
 
@@ -133,9 +143,6 @@ class ClaimWrites(PrivateWrites):
         incarnation: str,
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path | ClaimRelease] = (),
-        _locked_registry_snapshot: RegistrySnapshot | None = None,
-        _bus_lock: StoreLock | None = None,
-        _claim: WakeClaim | None = None,
     ) -> Message:
         """One guarded message and whole-set claim transition in ONE bus row.
 
@@ -144,8 +151,25 @@ class ClaimWrites(PrivateWrites):
         guarded reader may re-fsync/adopt a complete visible row, but the caller
         MUST NOT replay its message or provider/tool work automatically.
         """
-        from .audience_manifest import MAX_WIRE_SEQ
+        with self.log.locked() as bus_lock:
+            return self._publish_claim_envelope_unlocked(
+                bus_lock, self._registry.snapshot(), message,
+                worktree=worktree, incarnation=incarnation, claims=claims, releases=releases,
+            )
 
+    def _publish_claim_envelope_unlocked(
+        self,
+        bus_lock: StoreLock,
+        snapshot: RegistrySnapshot,
+        message: Message,
+        *,
+        worktree: Path,
+        incarnation: str,
+        claims: Sequence[FileClaimPath] = (),
+        releases: Sequence[str | Path | ClaimRelease] = (),
+        claim: WakeClaim | None = None,
+    ) -> Message:
+        """The claim envelope under a held bus lock and its locked registry snapshot."""
         if message.claim_transition is not None or (not claims and not releases):
             raise RelationViolationError("A claim send needs exactly one fresh transition.")
         if (
@@ -157,59 +181,51 @@ class ClaimWrites(PrivateWrites):
             raise RelationViolationError("Claim and release sets must be finite sequences.")
         if len(claims) + len(releases) > ClaimTransition.max_resources:
             raise RelationViolationError("Claim envelope exceeds the bounded resource set.")
-        if _claim is not None and (
-            not claims or releases or _bus_lock is None or _locked_registry_snapshot is None
-        ):
+        if claim is not None and (not claims or releases):
             raise RelationViolationError("Bound claims require the selected wake boundary.")
-        with nullcontext(_bus_lock) if _bus_lock is not None else self.log.locked() as bus_lock:
-            metadata = self.log.private_marker_unlocked()
-            if not metadata.claims:
-                raise RelationViolationError("Claim read barrier is unavailable.")
-            snapshot = (
-                self._registry.snapshot()
-                if _locked_registry_snapshot is None
-                else _locked_registry_snapshot
+        metadata = self.log.private_marker_unlocked()
+        if not metadata.claims:
+            raise RelationViolationError("Claim read barrier is unavailable.")
+        sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
+        with bus_lock.current_source(self.log, metadata) as source:
+            # The checkpoint high-water also covers a prior visible append;
+            # accepting new input never replays a historical message or claim.
+            last_sequence = max(metadata.last_seq, source.committed_sequence())
+            if last_sequence >= MAX_WIRE_SEQ:
+                raise RelationViolationError("Claim bus sequence is exhausted.")
+            stored = self._prepare_message_unlocked(
+                message, sender=sender, target=target,
+                sequence=last_sequence + 1, snapshot=snapshot,
             )
-            sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
-            with bus_lock.current_source(self.log, metadata) as source:
-                # The checkpoint high-water also covers a prior visible append;
-                # accepting new input never replays a historical message or claim.
-                last_sequence = max(metadata.last_seq, source.committed_sequence())
-                if last_sequence >= MAX_WIRE_SEQ:
-                    raise RelationViolationError("Claim bus sequence is exhausted.")
-                stored = self._prepare_message_unlocked(
-                    message, sender=sender, target=target,
-                    sequence=last_sequence + 1, snapshot=snapshot,
-                )
-                owner_incarnation = str(incarnation)
-                requested = tuple(sorted(path.normalized(worktree) for path in claims))
-                release_records: list[ClaimRelease] = []
-                for release in releases:
-                    if isinstance(release, ClaimRelease):
-                        # Recorded incarnation/generation, not current project,
-                        # determines whether this exact resource may be released.
-                        release_records.append(release)
-                    else:
-                        resource = _release_resource(worktree, release)
-                        current = source.claim(resource)
-                        if current is None:
-                            raise RelationViolationError("Cannot release an unclaimed resource.")
-                        release_records.append(ClaimRelease(resource, current.generation))
-                release_records.sort(key=lambda release: release.resource)
-                transition = ClaimTransition(
-                    stored.sender, owner_incarnation, stored.seq, stored.message_id,
-                    requested, tuple(release_records),
-                    uuid.uuid4().hex if requested else None, _claim,
-                )
-                source.prepare_claim(transition)  # pre-append conflict is synchronous
-            stored = replace(stored, claim_transition=transition)
-            try:
-                self.log.append_private_unlocked(metadata, stored.to_wire())
-            except (OSError, RelationViolationError) as error:
-                raise ClaimEnvelopeUnknownError(
-                    "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
-                ) from error
-            return stored
+            owner_incarnation = str(incarnation)
+            requested = tuple(sorted(path.normalized(worktree) for path in claims))
+            release_records: list[ClaimRelease] = []
+            for release in releases:
+                if isinstance(release, ClaimRelease):
+                    # Recorded incarnation/generation, not current project,
+                    # determines whether this exact resource may be released.
+                    release_records.append(release)
+                else:
+                    resource = _release_resource(worktree, release)
+                    current = source.claim(resource)
+                    if current is None:
+                        raise RelationViolationError("Cannot release an unclaimed resource.")
+                    release_records.append(ClaimRelease(resource, current.generation))
+            release_records.sort(key=lambda release: release.resource)
+            transition = ClaimTransition(
+                stored.sender, owner_incarnation, stored.seq, stored.message_id,
+                requested, tuple(release_records),
+                uuid.uuid4().hex if requested else None, claim,
+            )
+            source.prepare_claim(transition)  # pre-append conflict is synchronous
+        stored = replace(stored, claim_transition=transition)
+        try:
+            self.log.append_private_unlocked(metadata, stored.to_wire())
+        except (OSError, RelationViolationError) as error:
+            raise ClaimEnvelopeUnknownError(
+                "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
+            ) from error
+        return stored
 
 
 class InitialWrites(PrivateWrites):
@@ -222,7 +238,6 @@ class InitialWrites(PrivateWrites):
         unmarked data requires the explicit archival cutover; a send never
         rewrites history or falls back to an uncoordinated append.
         """
-        from .active_route import guard_original_root_write
 
         with guard_original_root_write(self.log.path.parent), self.log.locked() as bus_lock:
             if not self.log.read_metadata_unlocked().private:
@@ -231,7 +246,7 @@ class InitialWrites(PrivateWrites):
                 # snapshot that selects the audience below.
                 self._validate_publish_request(message)
                 self._initialize_private_protocol_unlocked()
-            return self.publish_initial_cohort(message, origin=origin, _bus_lock=bus_lock)
+            return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin)
 
     def initialize_private_protocol(self) -> str:
         """Marker issuer for a NEW, isolated bus root only.
@@ -245,14 +260,11 @@ class InitialWrites(PrivateWrites):
 
     def _initialize_private_protocol_unlocked(self) -> str:
         self.log.require_fresh_private_root_unlocked()
-        from agent_comms.coordinator import Coordination
 
         # The public marker must never advertise a root whose runtime cannot wake.
         with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
             store.install_private_runtime()
         root_id = uuid.uuid4().hex
-        from .private_bus_checkpoint import install_private_bus_checkpoint
-        from .private_registry_guard import PrivateRegistryGuard
 
         # Total order: caller's wire lock, bus lock, registry lock. The
         # durable PENDING guard precedes marker visibility; a failed
@@ -274,35 +286,25 @@ class InitialWrites(PrivateWrites):
             guard.commit_initial()
             return root_id
 
-    def publish_initial_cohort(
-        self,
-        message: Message,
-        *,
-        origin: InitialOrigin,
-        control: str = "ordinary",
-        _bus_lock: StoreLock | None = None,
-    ) -> Message:
+    def publish_initial_cohort(self, message: Message, *, origin: InitialOrigin) -> Message:
         """Commit public envelope and FULL N private decisions in the SAME fsynced row.
 
         This private path assumes cooperating Comms writers hold the global
         wire lock. It never publishes from a caller-supplied audience or claim.
         """
-        from .audience_manifest import MAX_WIRE_SEQ, FrozenRecipient, freeze_audience
-        from .wake import ControlClassification, resolve_wake_cohort
+        with self.log.locked() as bus_lock:
+            return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin)
 
+    def _publish_initial_cohort_unlocked(
+        self, bus_lock: StoreLock, message: Message, *, origin: InitialOrigin
+    ) -> Message:
+        """An ordinary initial cohort under the held bus lock."""
         if message.claim_transition is not None:
             raise RelationViolationError("An initial cohort cannot carry resource claims.")
-        classification = ControlClassification(control)
-        if not classification.supports_initial:
-            raise RelationViolationError("System-control initial issuer is not available.")
-        with (
-            (nullcontext(_bus_lock) if _bus_lock is not None else self.log.locked()) as bus_lock,
-            ExitStack() as resources,
-        ):
+        with ExitStack() as resources:
             _require_no_private_owner_rename(self.log.path.parent)
             metadata = self.log.private_marker_unlocked()
             metadata.access.require_append()
-            from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
             # Fresh initialization occurs after lock acquisition and has no
             # acquired source. Existing roots already borrowed this exact cut
@@ -368,11 +370,8 @@ class InitialWrites(PrivateWrites):
                 sender_name=sender,
             )
             decisions = resolve_wake_cohort(
-                stored, frozen_audience=audience, control=classification
+                stored, frozen_audience=audience, control=ControlClassification.ORDINARY
             )
-            from .delivery_policy import InitialDeliveryPolicy
-            from .field_codec import FieldCodec
-
             row = {
                 **stored.to_wire(),
                 PRIVATE_WIRE_FIELD: FieldCodec.encode(
@@ -383,7 +382,7 @@ class InitialWrites(PrivateWrites):
                             stored,
                             audience,
                             decisions,
-                            control=classification.value,
+                            control=ControlClassification.ORDINARY.value,
                         ),
                     )
                 ),
@@ -395,11 +394,8 @@ class InitialWrites(PrivateWrites):
             # Every frozen subscriber needs an identity, including stopped
             # observers. Register from this authoritative registry snapshot,
             # before publishing; an inbox must never invent owners from a row.
-            from .coordinator import Coordination
-
             with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
-                if sender_thread.role.executable:
-                    store.participants.register(sender_lookup, sender, sender, committed=True)
+                sender_thread.role.register_sender(store.participants, sender_lookup, sender)
                 for thread, lookup in zip(selected, lookups, strict=True):
                     store.participants.register(lookup, thread.name, thread.name, committed=True)
             origin.append(self.log, metadata, row, stored)
@@ -417,8 +413,6 @@ class ResponseWrites(PrivateWrites):
         registry_snapshot: RegistrySnapshot | None = None,
     ) -> Message:
         """Internal append with bus lock; a supplied registry snapshot stays locked."""
-
-        from .audience_manifest import MAX_WIRE_SEQ
 
         matched, previous_sequence, metadata = self.log.keyed_publication_unlocked(intent)
         if matched is not None:
