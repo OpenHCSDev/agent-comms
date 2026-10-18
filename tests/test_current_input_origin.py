@@ -36,14 +36,14 @@ def capture(comms):
 def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tmp_path):
     from agent_comms.acp_extension import (
         AvailableQueueProjection, PendingQueueProjection, QueueChangedUpdate,
-        QueueScope, UnavailableQueueProjection,
+        LiveQueueScope, NoQueueScope, UnavailableQueueProjection,
     )
     comms, agent, _, _ = _owner(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     claim_scope = comms.registry.snapshot().claimed_identity('beta')
-    scope = QueueScope('beta', claim_scope, comms.registry.require('beta').pid)
+    scope = LiveQueueScope('beta', claim_scope, comms.registry.require('beta').pid)
     for projection in (PendingQueueProjection(), UnavailableQueueProjection()):
-        observation = QueueChangedUpdate(None, 0, projection)
+        observation = QueueChangedUpdate(NoQueueScope(), 0, projection)
         assert FieldCodec.decode(QueueChangedUpdate, FieldCodec.encode(observation)) == observation
         def unavailable_scope():
             raise AssertionError('Unavailable projection acquired input scope')

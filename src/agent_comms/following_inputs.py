@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .acp_extension import QueueScope
+from .acp_extension import LiveQueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
 from .owned_send import OwnedSend
@@ -57,7 +57,7 @@ class OwnerFollowingInputs(FollowingInputs):
     session_id: str
     owner: Thread
     inbox: TurnInbox
-    scope: QueueScope = field(init=False)
+    scope: LiveQueueScope = field(init=False)
 
     async def pass_on_unread(self, turns: TurnRunner) -> None:
         """Inputs the ended turn never read start the next turn or are refused, never replayed."""
@@ -95,12 +95,12 @@ class OwnerFollowingInputs(FollowingInputs):
             original=original,
             goal_permit=None,
         )
-        self.scope = QueueScope(
+        self.scope = LiveQueueScope(
             self.session_id,
             ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
             thread.pid,
         )
-        inputs.original_sources[self.session_id] = original
+        inputs.first_sources[self.session_id] = original
         session.forward_inbox(self.inbox, sender)
         await self.ready(
             inputs, self.session_id,

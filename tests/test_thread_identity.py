@@ -148,7 +148,7 @@ def test_identity_codec_and_counter_domain_are_not_parallel_registries():
 
 
 def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
-    from agent_comms.acp_extension import CursorScope, QueueScope
+    from agent_comms.acp_extension import LiveCursorScope, LiveQueueScope
     from agent_comms.queued_input import QueuedInputContext
 
     registry = registry_with_owner(tmp_path)
@@ -172,8 +172,8 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
     assert claim_scope.claimed_generation != registry_owner.generation
     original_binding = snapshot.owner_binding("owner")
     assert not original_binding.superseded_by(snapshot.owner_binding("owner"))
-    for scope in (QueueScope("official-session", claim_scope, owner.pid),
-                  CursorScope("official-session", "a" * 32, claim_scope, owner.pid)):
+    for scope in (LiveQueueScope("official-session", claim_scope, owner.pid),
+                  LiveCursorScope("official-session", "a" * 32, claim_scope, owner.pid)):
         encoded = FieldCodec.encode(scope)
         assert FieldCodec.decode(type(scope), encoded) == scope
         encoded["claim_scope"] = FieldCodec.encode(registry_owner)

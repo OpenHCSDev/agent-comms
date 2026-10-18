@@ -472,7 +472,7 @@ class DeliveredInput(QueuedInput):
         """
         inbox = await inputs.effects.turns.active_backend_inbox(session_id)
         # A turn takes later inputs once its first one is in.
-        if inbox is None or session_id not in inputs.original_sources:
+        if inbox is None or session_id not in inputs.first_sources:
             return
         store_path = inputs.comms.root / "coordination.sqlite3"
         lookup = owner.incarnation.lookup

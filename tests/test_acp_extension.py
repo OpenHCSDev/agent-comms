@@ -12,7 +12,7 @@ from agent_comms.acp_extension import (
     ContextAnnotatedUpdate,
     CursorAdvancedUpdate,
     CursorEnvelope,
-    CursorScope,
+    LiveCursorScope,
     GoalChangedUpdate,
     InputDeliveryChangedUpdate,
     InputFailedUpdate,
@@ -20,7 +20,7 @@ from agent_comms.acp_extension import (
     McpClientAcknowledgementUpdate,
     QueueChangedUpdate,
     QueueItem,
-    QueueScope,
+    LiveQueueScope,
     RequestFailedUpdate,
     PromptCancelledUpdate,
     SelectedWriteAcceptedUpdate,
@@ -51,7 +51,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     comms.registry.declare(comms.registry.new_thread('pilot', frozenset(), str(tmp_path)))
     read = comms.transcripts.capture_page_read("pilot")
     owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
-    queue_scope = QueueScope("pilot", owner, 123)
+    queue_scope = LiveQueueScope("pilot", owner, 123)
     samples = (
         ContextAnnotatedUpdate(
             ContextManifest(
@@ -63,7 +63,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         SelectedWriteAcceptedUpdate("operation", 1, "claim"),
         CursorAdvancedUpdate(
             CursorEnvelope(
-                CursorScope("pilot", "a" * 32, owner, 123), 1, UnavailableCursorObservation()
+                LiveCursorScope("pilot", "a" * 32, owner, 123), 1, UnavailableCursorObservation()
             )
         ),
         QueueChangedUpdate(queue_scope, 1, AvailableQueueProjection((QueueItem("input", "text"),))),

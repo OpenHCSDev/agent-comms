@@ -139,7 +139,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
         assert store.snapshot(goal.id).lifecycle == expected_state
         assert comms.registry.require(name).active_turn is None
         assert session.session_id not in owner.inputs.backend_inboxes
-        assert session.session_id not in owner.inputs.original_sources
+        assert session.session_id not in owner.inputs.first_sources
         assert not owner.inputs.input_keys(session.session_id)
         assert tuple(owner.inputs.pending_turns.get(session.session_id, ())) == pending_before
         if failure == "receipt_capture":
@@ -199,7 +199,7 @@ async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
         original, = stored_inputs(owner.inputs.dispositions.root).rows.values()
         assert isinstance(original, NotSentInput)
         assert comms.registry.require(name).turn_lease is None
-        assert session.session_id not in owner.inputs.original_sources
+        assert session.session_id not in owner.inputs.first_sources
         assert session.session_id not in owner.inputs.backend_inboxes
         assert not owner.turns.persistent_backends
     finally:
