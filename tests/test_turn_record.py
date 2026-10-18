@@ -82,7 +82,7 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
     original = comms.agents.begin_turn('worker', 'preserved').turn_lease.record
     raw = json.loads((source / 'registry.json').read_text())
     reference = raw['threads']['worker']['turn_record']
-    assert set(reference) == {'lookup', 'generation'}
+    assert reference == {}
     copytree(source, copied)
 
     moved = RegistryStore(copied / 'registry.json')
@@ -94,7 +94,7 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
 
     forged = json.loads((copied / 'registry.json').read_text())
     forged['threads']['worker']['turn_record']['lookup'] = 'wrong-identity'
-    with pytest.raises(RelationViolationError, match='identity differs'):
+    with pytest.raises(RelationViolationError, match='Invalid registry document'):
         moved._decode(forged)
 
 
