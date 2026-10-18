@@ -119,9 +119,7 @@ class Messaging:
         """Choose the durable USER identity while the caller holds the wire lock."""
         for thread in self._user_identities():
             return thread
-        name, suffix = "user", 2
-        while self.registry.name_reserved(name):
-            name, suffix = f"user-{suffix}", suffix + 1
+        name = self.registry.snapshot().claim_name("user")
         thread = self.registry.new_thread(name, frozenset(), worktree, role=UserThreadRole)
         self.registry.register(thread)
         return thread

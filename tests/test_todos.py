@@ -15,7 +15,7 @@ from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    Assignment, ChangeTodoState, DoneTodoState, GoalRef, PendingProblemOrder,
+    Assignment, ChangeTodoState, DoneTodoState, GoalRef, MechanicalOrderRun, PendingProblemOrder,
     TodoConflict, TodoError, TodoState, TodoStore,
 )
 
@@ -26,7 +26,7 @@ def thread(name: str, root: Path, created: float) -> Thread:
 
 
 def order(root: Path):
-    return PendingProblemOrder(id="checked-order", owner=FileLine(__file__, 1),
+    return PendingProblemOrder(id="checked-order", owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
         check=OrderCheck(str(root), "true"), edits=("Fix the problem",),
         banned=("No extra store",), report="Report the delivered commit",
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
