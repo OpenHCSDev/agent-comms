@@ -16,6 +16,7 @@ from test_acp_private_nk_delivery import _session
 from test_acp_private_nk_delivery import tmp_path as private_root_fixture
 from test_coordinated_runtime import _fake_model
 from stored_inputs import stored_inputs
+from selected_owner_rpc_fixture import scripted_owner, recorded_request, requests
 
 tmp_path = private_root_fixture
 
@@ -33,15 +34,11 @@ def accepted_input(response):
 @pytest.mark.parametrize("goal_mode", ["none", "active", "standby"])
 @pytest.mark.parametrize("native_ok", [True, False])
 async def test_selected_turn_accepts_and_starts_fresh_input_once(
-    tmp_path, monkeypatch, goal_mode, native_ok
+    tmp_path, scripted_owner, goal_mode, native_ok
 ):
-    comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
-    fake, _ = _fake_model()
-    entered, release = asyncio.Event(), asyncio.Event()
-    starts = []
+    comms, agent, control = scripted_owner
+    if not native_ok:
+        (control / "fail").touch()
     if goal_mode != "none":
         from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 
@@ -55,27 +52,11 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
     before_goal = comms.registry.require("beta").goal
     before_wait = comms.goals.goal_wait("beta")
 
-    async def blocked(package, **kwargs):
-        entered.set()
-        await release.wait()
-        return await fake(package, **kwargs)
-
-    async def native(*args, **kwargs):
-        native_id = "b" * 32
-        with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
-            assert allowed is True
-        assert kwargs["native_start"](None, native_id, args[2])
-        starts.append(args[2])
-        yield events.InputStarted(id=None)
-        yield events.StreamSettled()
-        yield events.Done(ok=native_ok, text="Fresh owner input completed")
-
-    monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
     comms.messaging.send_message("sender", "beta", "Selected direct message")
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
-        await asyncio.wait_for(entered.wait(), 5)
+        await recorded_request(control)
+        wake = agent.inputs.wake_tasks["beta"]
         assert comms.registry.require("beta").active_turn is not None
         response = await asyncio.wait_for(
             agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
@@ -83,15 +64,16 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         acknowledgement = accepted_input(response)
         accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{acknowledgement.input_id}"]
         assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
-        assert not starts
-        release.set()
+        assert len(requests(control)) == 1
+        (control / "release").touch()
+        assert await asyncio.wait_for(turn, 8) == 1
         if native_ok:
-            await asyncio.wait_for(turn, 8)
+            await asyncio.wait_for(wake, 12)
         else:
             from agent_comms.acp_failure import RequestFailure
 
             with pytest.raises(RequestError) as failed:
-                await asyncio.wait_for(turn, 8)
+                await asyncio.wait_for(wake, 12)
             assert failed.value.__cause__ is not None
             request_failure = RequestFailure.from_error(
                 failed.value.code, str(failed.value), failed.value.data
@@ -100,9 +82,10 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
             assert request_failure.failure.input_state is type(
                 stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{acknowledgement.input_id}")
             )
-        assert len(starts) == 1 and "Fresh owner input" in starts[0]
+        sent = requests(control)
+        assert len(sent) == 2 and "Fresh owner input" in sent[1]["message"]
         row = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{acknowledgement.input_id}"]
-        assert not row.unresolved and row.native_id == "b" * 32
+        assert not row.unresolved and row.native_id == sent[1]["inputId"]
         assert not agent.inputs.queued_inputs.get("beta")
         assert "beta" not in agent.inputs.backend_inboxes
         assert "beta" not in agent.turns.turn_tasks
@@ -115,7 +98,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert comms.goals.goal_wait("beta") == (NoGoalWait() if goal_mode == "standby" else before_wait)
         assert not (comms.root / "goal-private").exists()
     finally:
-        release.set()
+        (control / "release").touch()
         await asyncio.gather(turn, return_exceptions=True)
         await agent.shutdown()
 
