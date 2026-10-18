@@ -29,6 +29,9 @@ def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
                 with pytest.raises(TypeError, match='JSON value'):
                     operation()
     assert FieldCodec.decode(dict[str, JsonValue], payload) == payload
+    assert FieldCodec.decode(dict[str, object], payload) == payload
+    with pytest.raises(TypeError, match='JSON value'):
+        FieldCodec.decode(dict[str, object], {'nested': object()})
     assert FieldCodec.value_schema(dict[str, JsonValue]) == {
         'type': 'object', 'additionalProperties': {},
     }
