@@ -19,7 +19,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, InlineRecord, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
-from .response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
+from .response_policy import InformationalPolicy, ResponseEligibility
 from .thread_identity import ThreadRole
 from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 
@@ -133,24 +133,17 @@ class MessageRole(InlineRecord):
     @classmethod
     def from_wire(cls, data):
         wire = FieldCodec.decode(MessageRoleWire, data)
-        delivery = NoticeRole() if wire.notice else ConversationRole()
-        return delivery if wire.change is None else MembershipRole(wire.change, delivery)
+        ordinary, membership = (
+            (NoticeRole, MembershipNoticeRole) if wire.notice
+            else (ConversationRole, MembershipConversationRole)
+        )
+        return ordinary() if wire.change is None else membership(wire.change)
 
     def to_wire(self):
         return FieldCodec.encode_record(self.wire_fields())
 
-    def response_policy(self, message):
-        return InformationalPolicy.instance()
-
-    def counts_as_conversation(self):
-        return False
-
     def notification_references(self, message):
         return ()
-
-    def wake_mode(self, target, recipient, mentions, control):
-        from .wake_policy import PassiveWake
-        return PassiveWake()
 
     def response_wake_mode(self):
         from .wake_policy import BoundedTriageWake
@@ -166,6 +159,18 @@ class MessageRole(InlineRecord):
             raise ValueError("direct frozen recipient must match the exact stored target.")
 
 
+class InformationalMessage:
+    def response_policy(self, message):
+        return InformationalPolicy.instance()
+
+    def counts_as_conversation(self):
+        return False
+
+    def wake_mode(self, target, recipient, mentions, control):
+        from .wake_policy import PassiveWake
+        return PassiveWake()
+
+
 @dataclass(frozen=True, slots=True)
 class ConversationRole(MessageRole):
     def wire_fields(self):
@@ -177,6 +182,9 @@ class ConversationRole(MessageRole):
     def counts_as_conversation(self):
         return True
 
+    def as_historical(self):
+        return HistoricalConversationRole()
+
     def response_policy(self, message):
         return (CommandTarget.named(message.target).response_policy(message)
                 if message.type.conversation_message else InformationalPolicy.instance())
@@ -186,17 +194,21 @@ class ConversationRole(MessageRole):
 
     def wake_mode(self, target, recipient, mentions, control):
         if control.passive:
-            return super(ConversationRole, self).wake_mode(target, recipient, mentions, control)
+            from .wake_policy import PassiveWake
+            return PassiveWake()
         return target.wake_policy(recipient, mentions)
 
 
 @dataclass(frozen=True, slots=True)
-class NoticeRole(MessageRole):
+class NoticeRole(InformationalMessage, MessageRole):
     def wire_fields(self):
         return MessageRoleWire(notice=True)
 
     def export_attributes(self):
         return ("notice=true",)
+
+    def as_historical(self):
+        return HistoricalNoticeRole()
 
     def response_wake_mode(self):
         from .wake_policy import PassiveWake
@@ -207,28 +219,62 @@ class NoticeRole(MessageRole):
             super(NoticeRole, self).require_recipients(target, audience)
 
 
-@dataclass(frozen=True, slots=True)
-class MembershipRole(MessageRole):
+@dataclass(frozen=True)
+class Membership(InformationalMessage):
     change: MembershipChange
-    delivery: ConversationRole | NoticeRole = field(default_factory=ConversationRole)
 
     def wire_fields(self):
-        return replace(self.delivery.wire_fields(), change=self.change)
+        return replace(super().wire_fields(), change=self.change)
 
     def export_attributes(self):
-        return (*self.delivery.export_attributes(), f"membership={self.change.value}")
-
-    def notification_references(self, message):
-        return self.delivery.notification_references(message)
-
-    def response_wake_mode(self):
-        return self.delivery.response_wake_mode()
+        return (*super().export_attributes(), f"membership={self.change.value}")
 
     def as_notice(self):
-        return replace(self, delivery=NoticeRole())
+        return MembershipNoticeRole(self.change)
 
-    def require_recipients(self, target, audience):
-        self.delivery.require_recipients(target, audience)
+
+@dataclass(frozen=True, slots=True)
+class MembershipConversationRole(Membership, ConversationRole):
+    def as_historical(self):
+        return HistoricalMembershipConversationRole(self.change)
+
+
+@dataclass(frozen=True, slots=True)
+class MembershipNoticeRole(Membership, NoticeRole):
+    def as_historical(self):
+        return HistoricalMembershipNoticeRole(self.change)
+
+
+class HistoricalRole:
+    """Historical rows cannot create current reply or notification work."""
+
+    def notification_references(self, message):
+        return ()
+
+    def response_policy(self, message):
+        return InformationalPolicy.instance()
+
+    def as_historical(self):
+        return self
+
+    def as_notice(self):
+        return super().as_notice().as_historical()
+
+
+class HistoricalConversationRole(HistoricalRole, ConversationRole):
+    pass
+
+
+class HistoricalNoticeRole(HistoricalRole, NoticeRole):
+    pass
+
+
+class HistoricalMembershipConversationRole(HistoricalRole, MembershipConversationRole):
+    pass
+
+
+class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,10 +336,6 @@ class Message:
     @property
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
-
-    def notification_references(self) -> tuple[MessageReference, ...]:
-        """Only an authorized delivery has recipient-handling outcomes to project."""
-        return self.role.notification_references(self)
 
     def require_decision(self) -> Decision:
         return self.task.require_decision()
@@ -419,11 +461,6 @@ class Message:
                 "Unattested public initial exceeds the retained history boundary."
             )
 
-    @property
-    def response_policy(self) -> ResponsePolicy:
-        """Typed response semantics without changing the stored target."""
-        return self.role.response_policy(self)
-
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
     ) -> ResponseEligibility:
@@ -433,17 +470,8 @@ class Message:
         The audience remains authoritative for membership, so a valid mention
         outside the channel cannot acquire delivery by being named.
         """
-        policy = self.response_policy
+        policy = self.role.response_policy(self)
         return ResponseEligibility(policy, policy.recipients(self, audience, aliases=aliases))
-
-    @property
-    def starts_turn(self) -> bool:
-        """Whether every delivered recipient may start a turn."""
-        return self.response_policy.starts_turn
-
-    def starts_turn_for(self, name: str, *, aliases: Mapping[str, str] | None = None) -> bool:
-        """Whether this message enters one canonical recipient's model context."""
-        return self.response_policy.starts_turn_for(self, name, aliases)
 
     @property
     def exact_reply_target(self) -> str:

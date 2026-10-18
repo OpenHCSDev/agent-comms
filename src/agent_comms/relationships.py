@@ -786,7 +786,7 @@ class ThreadRelationships:
         messages, _ = self._recent_messages()
         correspondents: dict[str, float] = {}
         for message in messages:
-            peer = message.response_policy.context_peer(
+            peer = message.role.response_policy(message).context_peer(
                 thread.name, registry.canonical_name(message.sender),
                 registry.canonical_name(message.target))
             if peer is not None:

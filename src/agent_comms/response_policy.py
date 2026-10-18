@@ -37,7 +37,7 @@ class ResponsePolicy(DeclaredFamily, affix="Policy"):
     def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
         """Instructions included in a queued input."""
 
-    def starts_turn_for(self, message: Message, name: str, aliases: Mapping[str, str] | None) -> bool:
+    def starts_turn_for(self, message: Message, name: str, aliases: Mapping[str, str] | None = None) -> bool:
         return name in self.recipients(message, (name,), aliases=aliases)
 
     def context_peer(self, owner: str, sender: str, target: str) -> str | None:
@@ -57,7 +57,7 @@ class DirectPolicy(NoChannelRecipients, ResponsePolicy):
     starts_turn = True
     separate_turn = True
 
-    def starts_turn_for(self, message: Message, name: str, aliases: Mapping[str, str] | None) -> bool:
+    def starts_turn_for(self, message: Message, name: str, aliases: Mapping[str, str] | None = None) -> bool:
         return self.starts_turn
 
     def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:

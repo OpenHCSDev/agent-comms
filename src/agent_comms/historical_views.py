@@ -302,15 +302,13 @@ class HistoricalMessage(Message):
             target_created_at=creation(message.target),
         )
 
-    def notification_references(self) -> tuple[MessageReference, ...]:
-        """An archived row has no current recipient handling authority."""
-        return ()
+    def __post_init__(self) -> None:
+        super(HistoricalMessage, self).__post_init__()
+        object.__setattr__(self, "role", self.role.as_historical())
 
     @property
     def history_source(self) -> HistorySource:
         return self.source
-
-    response_policy = InformationalPolicy.instance()
 
     @property
     def view_cursor(self) -> HistoryCursor:
