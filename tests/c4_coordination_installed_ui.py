@@ -61,7 +61,7 @@ async def main():
     assert original[message.seq, message.message_id]
     assert comms.views.message_notifications_for_references(
         (message.reference,) * (MessageNotification.window_limit + 1)) == original
-    page = comms.views.channel_display_page('#team', viewer=NamedViewer(comms.messaging.user_identity(str(root)).name, comms.registry.snapshot()))
+    page = comms.views.channel_display_page('#team', viewer=NamedViewer(comms.messaging.user_identity(str(root)).name))
     comms.views.mark_channel_view_read('#team', worktree=str(root),
                                       mark=ReadThrough(page.newest_seq, page.display_scope))
     assert comms.views.viewer_snapshot(str(root)).channel_unread['#team'] == 0
