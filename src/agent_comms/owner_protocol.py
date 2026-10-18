@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import Annotated, Any
+from typing import Annotated
 
 from acp import RequestError
 
@@ -46,7 +46,7 @@ class ControllerTokenText(TextRepresentation):
 class OwnerReady:
     """The subscription line that completes attachment: session metadata and its controller."""
 
-    ready: dict[str, Any]
+    ready: dict[str, object]
     controller_token: Annotated[str, ControllerTokenText] = field(
         metadata={"wire_name": "controllerToken"}
     )
