@@ -517,7 +517,7 @@ class NativePiRpcLaunch:
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
         runtime = LaunchRuntime.running()
-        package = cls.package_for_command(command, runtime)
+        package = cls.package_for_command(command, runtime, root)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
@@ -555,7 +555,7 @@ class NativePiRpcLaunch:
         launch/auth key and checking its actual saved-source revision/liveness.
         A different package or selected file needs its own fresh acquisition.
         """
-        package, _ = self._command_selection(command, self.runtime)
+        package, _ = self._command_selection(command, self.runtime, root)
         saved = Path(session_file).absolute() if session_file is not None else None
         if package != self.package or saved != self.session.path:
             return None
