@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import pi_events, selected_tool_broker
+import agent_comms.pi_events as pi_events
+import agent_comms.selected_tool_broker as selected_tool_broker
 
 pytestmark = pytest.mark.refactor_guard
 

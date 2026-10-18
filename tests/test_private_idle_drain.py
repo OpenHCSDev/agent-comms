@@ -10,8 +10,12 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import acp, cohort_foreground, coordinated_runtime, native_pi, private_nk_entrypoint
-from agent_comms import agent_events as events
+import agent_comms.acp as acp
+import agent_comms.cohort_foreground as cohort_foreground
+import agent_comms.coordinated_runtime as coordinated_runtime
+import agent_comms.native_pi as native_pi
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
+import agent_comms.agent_events as events
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_cohort import next_sealed_assignment
@@ -285,7 +289,7 @@ async def test_settled_empty_cursor_is_not_rescanned_while_nothing_changes(
 
 @pytest.mark.asyncio
 async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkeypatch):
-    from agent_comms import input_drain
+    import agent_comms.input_drain as input_drain
 
     comms, agent, _root_id = _session(tmp_path)
     ticks, done = asyncio.Queue(), asyncio.Queue()
@@ -609,7 +613,7 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     tmp_path, monkeypatch
 ) -> None:
     """A foreign append consults the address owner without decoding bus rows."""
-    from agent_comms import input_drain
+    import agent_comms.input_drain as input_drain
     from agent_comms.private_bus_checkpoint import Addressed
 
     comms, agent, _root_id = _session(tmp_path)

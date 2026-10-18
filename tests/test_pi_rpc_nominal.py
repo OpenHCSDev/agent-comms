@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import pi_commands as commands
-from agent_comms import pi_events as pi
-from agent_comms import turn_failure as failures
+import agent_comms.pi_commands as commands
+import agent_comms.pi_events as pi
+import agent_comms.turn_failure as failures
 from agent_comms.backend import TurnSession
 from agent_comms.native_startup import NativeStartup
 from agent_comms.native_pi import NativePiRpcLaunch

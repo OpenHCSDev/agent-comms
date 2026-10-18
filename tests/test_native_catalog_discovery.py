@@ -10,7 +10,7 @@ import pytest
 from agent_comms.native_startup import NativeStartup
 from agent_comms.pi_vocabulary import OffThinkingLevel
 
-from agent_comms import backend
+import agent_comms.backend as backend
 from agent_comms.child_process import AttachedChild, BoundedRun
 from agent_comms.comms import Comms
 from agent_comms.config_options import ModelConfigOption, ThinkingLevelConfigOption
@@ -33,7 +33,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     from functools import partial
     from pathlib import Path
 
-    from agent_comms import native_pi
+    import agent_comms.native_pi as native_pi
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.coordination_errors import IdentityConflict
     from agent_comms.coordinator import Coordination

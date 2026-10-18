@@ -55,7 +55,7 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
     from .comms import Comms
-    from .ui_model.observation import ReadNotifications, ThreadsObserved
+    from .ui_model.observation import ThreadsObserved
     from .bus_publication import CommittedDelivery
     from .goal_waits import RecordedGoalWait
     from .catalog_document import CatalogDocument
@@ -788,9 +788,6 @@ class ReadState:
     def registrations_changed_since(self, earlier: ReadState) -> bool:
         return True
 
-    def notification_read_changed(self, request: ReadNotifications, current: WireRevision) -> bool:
-        return True
-
 
 class NoRevision(ReadState):
     __slots__ = ()
@@ -923,9 +920,6 @@ class WireRevision(ReadState):
     def external_transcripts_changed_since(self, earlier: WireRevision) -> bool:
         """CLI drafts and finished items changed, independently of coordination status."""
         return self.external_transcripts != earlier.external_transcripts
-
-    def notification_read_changed(self, request: ReadNotifications, current: WireRevision) -> bool:
-        return request.changed_since(current, self)
 
     def notifications_changed_since(self, earlier: WireRevision) -> bool:
         """Whole-window changes; activity is attributed to its message participants."""

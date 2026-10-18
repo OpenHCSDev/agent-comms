@@ -1,6 +1,6 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
-from agent_comms import invoke_tool
+from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import wire

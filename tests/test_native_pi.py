@@ -542,7 +542,7 @@ def test_compiled_pins_include_model_services_and_bedrock_and_reject_drift(monke
     import agent_comms.native_pi as native
 
     assert native.CAPABILITY == "pi-native-input-v1-live-only"
-    from agent_comms import native_package
+    import agent_comms.native_package as native_package
 
     with TemporaryDirectory(prefix="agent-comms-pi-native-", dir="/var/tmp") as raw:
         package = Path(raw) / "node_modules" / "@earendil-works" / "pi-coding-agent"
@@ -1080,7 +1080,8 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
 
 
 def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp_path, monkeypatch):
-    from agent_comms import native_pi, private_nk_entrypoint
+    import agent_comms.native_pi as native_pi
+    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 
     launch = private_nk_entrypoint.PrivateNkLaunch(tmp_path, "a" * 32, tmp_path / "pi")
     monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: launch))
@@ -1124,7 +1125,8 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
 
 
 def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
-    from agent_comms import native_pi, private_nk_entrypoint
+    import agent_comms.native_pi as native_pi
+    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 
     monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: None))
     with pytest.raises(NativePiUnavailable, match="configured private route"):

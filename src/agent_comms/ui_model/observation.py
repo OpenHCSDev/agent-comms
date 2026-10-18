@@ -24,7 +24,7 @@ import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -528,9 +528,9 @@ class ReadNotifications(ReadRequest):
     def read(self, comms: Comms) -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
         return comms.views.message_notifications_for_references(self.references)
 
-    def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
-        return (revision.notifications_changed_since(previous)
-                or revision.activity != previous.activity)
+    def changed_since(self, comms: Comms, revision: WireRevision,
+                      previous: NotificationsRead) -> bool:
+        return previous.live_changed(comms, revision)
 
 
 @dataclass(frozen=True)
@@ -546,8 +546,52 @@ class ReadRecordedNotifications(ReadNotifications):
             source = HistorySource.require(sources, self.source)
             return source.notification_references(sources, self.references)
 
-    def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
-        return revision.history != previous.history
+    def changed_since(self, comms: Comms, revision: WireRevision,
+                      previous: NotificationsRead) -> bool:
+        return revision.history != previous.revision.history
+
+
+@dataclass(frozen=True)
+class NotificationsRead:
+    """Where one notification read settled: its revision and the activity of every participant
+    its notifications name, captured before the read for participants already known and right
+    after it for new ones."""
+
+    revision: WireRevision
+    activity: Mapping[str, ObservedActivity | None] = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, revision: WireRevision, comms: Comms, known: Mapping[str, ObservedActivity],
+           outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]],
+           ) -> NotificationsRead:
+        names = {name for items in outcomes.values()
+                 for item in items for name in item.activity_names()}
+        known = {**observed_activity(comms, names - known.keys()), **known}
+        return cls(revision, {name: known.get(name) for name in names})
+
+    def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
+        """The whole window changed, or one of its participants' activity did."""
+        if revision.notifications_changed_since(self.revision):
+            return True
+        current = observed_activity(comms, self.activity) if self.activity else {}
+        return any(current.get(name) != seen for name, seen in self.activity.items())
+
+
+class UnreadableNotificationsRead(NotificationsRead):
+    """An unreadable read names no participants, so any later revision reads again."""
+
+    def live_changed(self, comms: Comms, revision: WireRevision) -> bool:
+        return revision != self.revision
+
+
+def observed_activity(comms: Comms, names: Iterable[str]) -> dict[str, ObservedActivity]:
+    """Each named thread's current activity, keyed by the name it was asked for."""
+    snapshot = comms.registry.snapshot()
+    names = frozenset(names)
+    captured = comms.agents.all_activity(
+        snapshot.visible_threads(DEFAULT_ROSTER, names=names), snapshot=snapshot)
+    return {name: captured[canonical] for name in names
+            if (canonical := snapshot.canonical_name(name)) in captured}
 
 
 @dataclass(frozen=True)
@@ -722,27 +766,32 @@ class ObserveNotifications(InterestRequest):
 class NotificationReading(Observation[ObserveNotifications]):
     def __init__(self, request: ObserveNotifications):
         super().__init__(request)
-        self.read_states: dict[ReadNotifications, ReadState] = {}
+        self.read_states: dict[ReadNotifications, NotificationsRead] = {}
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[ObservationStep]:
         for request in self.request.reads:
-            if not self.read_states.get(request, NoRevision()).notification_read_changed(request, revision):
+            previous = self.read_states.get(request)
+            if previous is not None and not request.changed_since(comms, revision, previous):
                 continue
-            yield self.notifications(request, comms, revision)
+            yield self.notifications(request, comms, revision, previous)
 
-    def notifications(self, request: ReadNotifications, comms: Comms,
-                      revision: WireRevision) -> ObservationStep:
+    def notifications(self, request: ReadNotifications, comms: Comms, revision: WireRevision,
+                      previous: NotificationsRead | None) -> ObservationStep:
+        known = observed_activity(comms, () if previous is None else previous.activity)
+
         def read() -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
             request.require_root(comms)
             return request.read(comms)
 
-        def settled(result: Observed) -> Observed:
-            self.read_states[request] = revision
+        def settled(result: Observed, state: NotificationsRead) -> Observed:
+            self.read_states[request] = state
             return result
         return UnreadableHistory.outcome(read).answer(
-            lambda outcomes: settled(NotificationsObserved(revision, request, outcomes)),
+            lambda outcomes: settled(NotificationsObserved(revision, request, outcomes),
+                                     NotificationsRead.of(revision, comms, known, outcomes)),
             ObservationPending,  # Keep the interest pending until its source can be read.
-            lambda error: settled(NotificationsUnreadable(revision, request, error)))
+            lambda error: settled(NotificationsUnreadable(revision, request, error),
+                                  UnreadableNotificationsRead(revision)))
 
 
 class ThreadReading(Observation[ObserveThreads]):
@@ -764,14 +813,10 @@ class ThreadReading(Observation[ObserveThreads]):
 
         def located() -> dict[str, Callable[[], ThreadPresentation | None]]:
             nonlocal activity, names
-            snapshot = comms.registry.snapshot()
             readable, _ = previous.revision_inputs()
             watched = names | frozenset(actor for view in readable.values()
                                         for actor in view.notification_activity_names())
-            captured = comms.agents.all_activity(snapshot.visible_threads(
-                DEFAULT_ROSTER, names=watched), snapshot=snapshot)
-            activity = {name: captured[canonical] for name in watched
-                        if (canonical := snapshot.canonical_name(name)) in captured}
+            activity = observed_activity(comms, watched)
             names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
             if not names:
                 return {}

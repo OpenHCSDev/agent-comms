@@ -6,8 +6,8 @@ import pytest
 
 from agent_comms.turn_lease import NoTurn
 
-from agent_comms import agent_events as ae
-from agent_comms import ordinary_turn_rules as rules
+import agent_comms.agent_events as ae
+import agent_comms.ordinary_turn_rules as rules
 from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.send_outcome import GrantedSend
 from agent_comms.store_files import _store_lock

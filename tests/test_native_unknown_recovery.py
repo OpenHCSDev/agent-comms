@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import coordinated_runtime as runtime
+import agent_comms.coordinated_runtime as runtime
 from agent_comms.assignment_states import CompletedAssignment, FailedAssignment
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.child_process import ProcessIdentity
@@ -36,7 +36,7 @@ def unknown_owner(directory, authorized, output, exit_allowed):
     # Both recorded and unrecorded original inputs remain UNKNOWN; no obsolete
     # failure hook or fabricated owner-loss grant is used.
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
-    from agent_comms import native_pi
+    import agent_comms.native_pi as native_pi
 
     native_pi._trusted_package = lambda path: path
     fake, _calls = _fake_model()
@@ -274,7 +274,7 @@ def test_missing_claim_cannot_borrow_a_live_successor_release(released_unknown):
 
 @pytest.mark.asyncio
 async def test_real_local_rpc_failure_reaps_child_and_releases_slot(tmp_path, monkeypatch):  # noqa: F811
-    from agent_comms import native_pi
+    import agent_comms.native_pi as native_pi
     from agent_comms.durable_turn import DurableTurn
 
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)

@@ -8,8 +8,9 @@ from dataclasses import replace
 import pytest
 from acp import RequestError
 
-from agent_comms import agent_events as events
-from agent_comms import coordinated_runtime, private_nk_entrypoint
+import agent_comms.agent_events as events
+import agent_comms.coordinated_runtime as coordinated_runtime
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
 from agent_comms.input_attempt import ClearedUnsentInput, ReservedInput, StartedInput
 from agent_comms.native_arguments import NativeArguments

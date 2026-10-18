@@ -5,7 +5,7 @@ import os
 import pytest
 from acp import RequestError
 
-from agent_comms import agent_events as ae
+import agent_comms.agent_events as ae
 from delivery_owner_fixture import canonical_agent
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
