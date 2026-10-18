@@ -41,6 +41,10 @@ if TYPE_CHECKING:
 class OrderDelivery(DeclaredFamily, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
 
+    @property
+    def work(self) -> str:
+        return "delivered work"
+
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
         if result.outcome != ExitedOutcome(0):
@@ -74,6 +78,10 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     @property
     def delivered(self) -> str:
         return self.commit
+
+    @property
+    def work(self) -> str:
+        return f"delivered commit {self.delivered}"
 
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
@@ -555,6 +563,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     pending: ClassVar[bool]
 
+    def require_transfer(self, todo: Todo) -> None:
+        raise ValueError("Only an undelivered order can change owner.")
+
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
 
@@ -595,6 +606,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
 
+    def require_transfer(self, todo: Todo) -> None:
+        pass
+
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
                             superseded_by=superseded_by)
@@ -604,6 +618,10 @@ class PendingProblemOrder(ProblemOrder):
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
+
+    def require_transfer(self, todo: Todo) -> None:
+        owner = (todo.assignment or todo.released[-1].previous).owner
+        raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
         if delivery != self.delivery:
@@ -1159,6 +1177,7 @@ class Todo(TypedTable):
         return proposed
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+        self.order.require_transfer(self)
         if self.assignment is not None:
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)
