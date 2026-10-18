@@ -1,4 +1,4 @@
-"""Configured native storage rules; filesystem ownership is registry data."""
+"""Configured storage limits over current filesystem and Git worktrees."""
 from __future__ import annotations
 
 import json
@@ -7,48 +7,31 @@ import re
 import shlex
 import shutil
 import subprocess
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from itertools import groupby
 from pathlib import Path
 from typing import Annotated, ClassVar, TYPE_CHECKING
 
 from .field_codec import FieldCodec, PathText
 from .native_tool_call import SelectedToolDenied
-from .thread_identity import ThreadIncarnation
-
 if TYPE_CHECKING:
-    from .registration import Registration
+    from .threads import Thread
 
 StoragePath = Annotated[Path, PathText]
 
 
 @dataclass(frozen=True)
 class StorageRoots:
-    checkouts: tuple[StoragePath, ...]
     scratch: StoragePath
 
     def __post_init__(self):
-        if not self.checkouts or any(not p.is_absolute() for p in (*self.checkouts, self.scratch)):
-            raise ValueError("Storage roots require absolute registered paths.")
-
-    def adding(self, path: Path):
-        return replace(self, checkouts=tuple(dict.fromkeys((*self.checkouts, path))))
-
-    def removing(self, paths):
-        return replace(self, checkouts=tuple(p for p in self.checkouts if p not in paths))
-
-    def usage(self):
-        paths = tuple(dict.fromkeys(p for p in (*self.checkouts, self.scratch) if p.exists()))
-        if not paths:
-            return 0
-        result = subprocess.run(('du', '-sbc', '--', *(str(p) for p in paths)),
-                                capture_output=True, text=True, check=True, timeout=30)
-        return int(result.stdout.splitlines()[-1].split()[0])
+        if not self.scratch.is_absolute():
+            raise ValueError("Storage scratch requires an absolute path.")
 
 
 @dataclass(frozen=True)
 class StorageRule:
-    floor_gib: float = 30.0
+    floor_gib: float = 5.0
     unit_cap_gib: float = 3.0
     max_checkouts: int = 2
     volume: StoragePath = Path.home()
@@ -66,8 +49,34 @@ class StorageRule:
         path = root / 'storage.json'
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
 
-    def initial_roots(self, name, worktree):
-        return StorageRoots((Path(worktree).expanduser().resolve(),), self.scratch_base / name)
+    def initial_roots(self, name):
+        return StorageRoots(self.scratch_base / name)
+
+    def owns_checkout(self, thread: Thread, path: Path) -> bool:
+        return (path.parent == self.checkout_base.resolve()
+                and re.fullmatch(re.escape(thread.name) + r'--P[1-9][0-9]*', path.name) is not None)
+
+    def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
+        """Read each repository now; directories and names do not register ownership."""
+        home = self.checkout_base / thread.name
+        home = (home if home.exists() else Path(thread.worktree)).expanduser().resolve()
+        candidates = (home, *(path for path in self.checkout_base.glob(f'{thread.name}--P*')
+                              if path.is_dir() and self.owns_checkout(thread, path)))
+        checkouts = {home}
+        listed = set()
+        for repository in candidates:
+            if repository in listed or not (repository / '.git').exists():
+                continue
+            output = subprocess.run(
+                ('git', '-C', str(repository), 'worktree', 'list', '--porcelain', '-z'),
+                capture_output=True, text=True, check=True, timeout=10,
+            ).stdout
+            entries = tuple(Path(field.removeprefix('worktree ')).resolve()
+                            for field in output.split('\0') if field.startswith('worktree '))
+            listed.update(entries)
+            checkouts.update(path for path in entries
+                             if path.is_dir() and self.owns_checkout(thread, path))
+        return (home, *sorted(checkouts - {home}))
 
     def deny(self, reason):
         raise SelectedToolDenied(f'StorageRule: {reason}')
@@ -75,22 +84,28 @@ class StorageRule:
     def free_gib(self):
         return shutil.disk_usage(self.volume).free / 2**30
 
-    def require_quota(self, roots):
-        if len(roots.checkouts) > self.max_checkouts + 1:
+    def require_quota(self, thread: Thread, *proposed: Path):
+        checkouts = tuple(dict.fromkeys((*self.checkouts_of(thread), *proposed)))
+        if len(checkouts) > self.max_checkouts + 1:
             self.deny(f'at most {self.max_checkouts} checkouts besides the home checkout')
-        if roots.usage() > self.unit_cap_gib * 2**30:
-            self.deny(f'checkout and scratch usage exceeds {self.unit_cap_gib:g} GiB')
+        paths = tuple(dict.fromkeys(path for path in (*checkouts, thread.storage_roots.scratch)
+                                    if path.exists()))
+        if paths:
+            result = subprocess.run(('du', '-sbc', '--', *(str(path) for path in paths)),
+                                    capture_output=True, text=True, check=True, timeout=30)
+            if int(result.stdout.splitlines()[-1].split()[0]) > self.unit_cap_gib * 2**30:
+                self.deny(f'checkout and scratch usage exceeds {self.unit_cap_gib:g} GiB')
 
-    def require_allocation(self, roots):
+    def require_allocation(self, thread: Thread, *proposed: Path):
         if self.free_gib() < self.floor_gib:
             self.deny(f'allocation requires {self.floor_gib:g} GiB free on {self.volume}')
-        self.require_quota(roots)
+        self.require_quota(thread, *proposed)
 
-    def require_path(self, roots, path):
+    def require_path(self, thread: Thread, path):
         if '.artifacts' in path.parts:
             self.deny('writes inside .artifacts are forbidden')
-        if path.is_relative_to(self.scratch_base) and not any(path.is_relative_to(p) for p in (roots.scratch, *roots.checkouts)):
-            self.deny(f'foreign scratch destination {path}; registered scratch is {roots.scratch}')
+        if path.is_relative_to(self.scratch_base) and not path.is_relative_to(thread.storage_roots.scratch):
+            self.deny(f'foreign scratch destination {path}; registered scratch is {thread.storage_roots.scratch}')
 
     def render(self, roots):
         return (f'StorageRule: scratch {roots.scratch}; {self.unit_cap_gib:g} GiB combined cap; '
@@ -123,80 +138,49 @@ class ShellProgram:
 
 
 class StorageEffect:
-    def removed_checkouts(self):
-        return ()
+    """Preflight one actual operation; completion stores no filesystem facts."""
 
 
 @dataclass(frozen=True)
 class WriteStorageEffect(StorageEffect):
     path: Path
 
-    def check(self, rule, roots):
-        rule.require_path(roots, self.path)
-        return roots
+    def check(self, rule, thread):
+        rule.require_path(thread, self.path)
 
 
 @dataclass(frozen=True)
 class ForbiddenStorageEffect(StorageEffect):
     reason: str
 
-    def check(self, rule, roots):
+    def check(self, rule, thread):
         rule.deny(self.reason)
 
 
 @dataclass(frozen=True)
 class AllocateStorageEffect(StorageEffect):
-    def check(self, rule, roots):
-        rule.require_allocation(roots)
-        return roots
+    def check(self, rule, thread):
+        rule.require_allocation(thread)
 
 
 @dataclass(frozen=True)
 class CheckoutStorageEffect(AllocateStorageEffect):
     path: Path
 
-    def check(self, rule, roots):
-        rule.require_path(roots, self.path)
-        if self.path.parent != rule.checkout_base.resolve() or not re.fullmatch(re.escape(roots.scratch.name) + r'--P[1-9][0-9]*', self.path.name):
-            rule.deny(f'checkout destination must be {rule.checkout_base}/{roots.scratch.name}--P<number>')
-        proposed = roots.adding(self.path)
-        rule.require_allocation(proposed)
-        return proposed
+    def check(self, rule, thread):
+        rule.require_path(thread, self.path)
+        if not rule.owns_checkout(thread, self.path):
+            rule.deny(f'checkout destination must be {rule.checkout_base}/{thread.name}--P<number>')
+        rule.require_allocation(thread, self.path)
 
 
 @dataclass(frozen=True)
 class RemoveCheckoutStorageEffect(StorageEffect):
     path: Path
 
-    def check(self, rule, roots):
-        if self.path not in roots.checkouts[1:]:
-            rule.deny('only a registered extra checkout can be removed')
-        return roots
-
-    def removed_checkouts(self):
-        return (self.path,)
-
-
-@dataclass(frozen=True)
-class StorageDecision:
-    actor: ThreadIncarnation
-    removed: tuple[Path, ...]
-    registry: Registration
-
-    def complete(self):
-        if not self.removed:
-            return
-        gone = tuple(path for path in self.removed if not path.exists())
-        if not gone:
-            return
-        with self.registry.store.editing() as edit:
-            current = edit.document.require(self.actor.name)
-            if current.incarnation != self.actor:
-                raise SelectedToolDenied('StorageRule: checkout removal owner changed')
-            proposed = current.storage_roots.removing(gone)
-            if proposed != current.storage_roots:
-                edit.document.threads[current.name] = replace(current, storage_roots=proposed)
-                edit.commit()
+    def check(self, rule, thread):
+        if self.path not in rule.checkouts_of(thread)[1:]:
+            rule.deny('only a current extra checkout can be removed')
 
 
 def physical_path(value, cwd):

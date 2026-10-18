@@ -4,6 +4,7 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from agent_comms.messages import NoticeRole
 from unittest.mock import AsyncMock
 
 import asyncio
@@ -1697,11 +1698,11 @@ class TestFailureFeedback:
         history = list(wired.views.channel_history_page("#team").messages)
         assert history, "failed agent delivery must be reported where the request came from"
         notice = history[-1]
-        assert notice.notice is True
+        assert isinstance(notice.role, NoticeRole) is True
         assert notice.body.startswith("Request failed: backend turn did not complete. ")
         assert "[Open diagnostic](file://" in notice.body
         assert message not in notice.body
-        assert not notice.starts_turn
+        assert not notice.role.response_policy(notice).starts_turn
         assert len(history) == 1
 
     @pytest.mark.parametrize("channel", [False, True])
@@ -1741,12 +1742,12 @@ class TestFailureFeedback:
             else list(wired.views.dm_history_page("proj", human.name).messages)
         )
         assert len(history) == 1
-        assert history[0].notice is True
+        assert isinstance(history[0].role, NoticeRole) is True
         assert history[0].type is AlertKind
         assert history[0].body.startswith("Request failed: backend turn did not complete. ")
         assert "[Open diagnostic](file://" in history[0].body
         assert "SECRET_PRIVATE_938" not in history[0].body
-        assert not history[0].starts_turn
+        assert not history[0].role.response_policy(history[0]).starts_turn
         assert not routed
 
     async def test_missing_terminal_discards_partial_reply_and_route(
@@ -1775,7 +1776,7 @@ class TestFailureFeedback:
             )
         history = list(wired.views.dm_history_page("proj", human.name).messages)
         assert len(history) == 1
-        assert history[0].notice is True
+        assert isinstance(history[0].role, NoticeRole) is True
         assert history[0].body.startswith("Request failed: backend turn did not complete. ")
         assert "[Open diagnostic](file://" in history[0].body
         assert not routed
@@ -1837,7 +1838,7 @@ class TestFailureFeedback:
         history = list(wired.views.full_history_page().messages)
         assert len(history) == 1
         assert {message.target for message in history} == {"#team"}
-        assert all((message.notice and (not message.starts_turn) for message in history))
+        assert all((isinstance(message.role, NoticeRole) and (not message.role.response_policy(message).starts_turn) for message in history))
         assert all(("unfinished" not in message.body for message in history))
 
 

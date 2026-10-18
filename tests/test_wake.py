@@ -10,7 +10,10 @@ from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freez
 from agent_comms.comms import wire
 from agent_comms.wake_policy import MessageAudience
 from agent_comms.mentions import ThreadMention
-from agent_comms.messages import AckKind, HandoffKind, InfoKind, MembershipChange, Message, MessageKind
+from agent_comms.messages import (
+    AckKind, HandoffKind, InfoKind, MembershipChange, MembershipConversationRole, Message, MessageKind,
+    NoticeRole,
+)
 from agent_comms.obligation_states import SilentResponse
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
 from agent_comms.thread_identity import ThreadRole
@@ -79,12 +82,12 @@ def test_ordinary_unmentioned_channel_reaches_all_members_without_full_turns(
     assert decide(message, "lookup-outsider") is None
     assert message.target == "#team"
     # Shadow does not change the existing sender-role-dependent live behavior.
-    assert message.response_policy is (
+    assert message.role.response_policy(message) is (
         CollectivePolicy.instance()
         if sender_role is ThreadRole.USER
         else InformationalPolicy.instance()
     )
-    assert message.starts_turn_for("alpha") is (sender_role is ThreadRole.USER)
+    assert message.role.response_policy(message).starts_turn_for(message, "alpha") is (sender_role is ThreadRole.USER)
 
 
 @pytest.mark.parametrize("sender_role", [ThreadRole.USER, ThreadRole.AGENT])
@@ -110,8 +113,9 @@ def test_valid_mention_selects_canonical_name_and_leaves_other_member_unaddresse
     assert decide(message, "lookup-outsider") is None  # Not in the frozen audience.
     assert MEMBERS[0] in audience(message).recipients  # The bus must retain both identities.
     assert message.exact_reply_target == "#team"
-    assert message.response_policy is MentionedOnlyPolicy.instance()
-    assert message.starts_turn_for("beta") and not message.starts_turn_for("alpha")
+    assert message.role.response_policy(message) is MentionedOnlyPolicy.instance()
+    assert message.role.response_policy(message).starts_turn_for(message, "beta")
+    assert not message.role.response_policy(message).starts_turn_for(message, "alpha")
     assert message.reply_target is None
 
 
@@ -158,15 +162,11 @@ def test_mixed_in_and_out_of_scope_mentions_only_name_valid_frozen_member() -> N
 
 
 @pytest.mark.parametrize("control", list(ControlClassification))
-@pytest.mark.parametrize("kind", ["notice", "membership"])
+@pytest.mark.parametrize("role", [NoticeRole(), MembershipConversationRole(MembershipChange.JOINED)])
 def test_notice_and_membership_are_passive_regardless_of_control_or_sender(
-    kind: str, control: ControlClassification
+    role, control: ControlClassification
 ) -> None:
-    message = stored(sender_role=ThreadRole.AGENT)
-    if kind == "notice":
-        message = replace(message, notice=True)
-    else:
-        message = replace(message, membership=MembershipChange.JOINED)
+    message = replace(stored(sender_role=ThreadRole.AGENT), role=role)
     assert decide(message, control=control) == WakeDecision(
         "lookup-alpha", MessageAudience.COLLECTIVE, PassiveWake()
     )
@@ -277,18 +277,17 @@ def test_prepared_message_must_match_frozen_manifest_identity(field: str) -> Non
         )
 
 
-@pytest.mark.parametrize("field", ["mentions", "notice", "membership", "type", "sender_role"])
-def test_same_message_id_does_not_override_frozen_full_envelope(field: str) -> None:
+@pytest.mark.parametrize("changes", [
+    {"mentions": ()},
+    pytest.param({"role": NoticeRole()}, id="notice"),
+    pytest.param({"role": MembershipConversationRole(MembershipChange.JOINED)}, id="membership"),
+    {"type": HandoffKind},
+    {"sender_role": ThreadRole.USER},
+])
+def test_same_message_id_does_not_override_frozen_full_envelope(changes) -> None:
     message = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
     manifest = audience(message)
-    replacements = {
-        "mentions": (),
-        "notice": True,
-        "membership": MembershipChange.JOINED,
-        "type": HandoffKind,
-        "sender_role": ThreadRole.USER,
-    }
-    changed = replace(message, **{field: replacements[field]})
+    changed = replace(message, **changes)
     assert changed.message_id == message.message_id
     assert changed.to_wire() != message.to_wire()
     with pytest.raises(ValueError, match="frozen audience envelope"):
@@ -354,7 +353,7 @@ def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None
         )
     with pytest.raises(ValueError, match="frozen audience envelope"):
         resolve_wake_cohort(
-            replace(collective, notice=True),
+            replace(collective, role=NoticeRole()),
             frozen_audience=audience(collective),
             control=ControlClassification.ORDINARY,
         )
@@ -392,8 +391,8 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
     bus_before = comms.bus.log.path.read_bytes()
     high_water = comms.bus.log.latest_sequence()
     pending = comms.bus.pending_count("alpha")
-    live_policy = message.response_policy
-    live_starts = message.starts_turn_for("alpha")
+    live_policy = message.role.response_policy(message)
+    live_starts = message.role.response_policy(message).starts_turn_for(message, "alpha")
     live_reply = message.reply_target
     assert resolve_wake(
         message,
@@ -406,7 +405,7 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
     assert comms.bus.log.path.read_bytes() == bus_before
     assert comms.bus.log.latest_sequence() == high_water
     assert comms.bus.pending_count("alpha") == pending
-    assert (message.response_policy, message.starts_turn_for("alpha"), message.reply_target) == (
+    assert (message.role.response_policy(message), message.role.response_policy(message).starts_turn_for(message, "alpha"), message.reply_target) == (
         live_policy,
         live_starts,
         live_reply,

@@ -233,7 +233,7 @@ class InputDispositions(TypedStore):
 
     @staticmethod
     def bus_key(message: Message, owner: Thread) -> str:
-        return message.response_policy.disposition_key(message, owner)
+        return message.role.response_policy(message).disposition_key(message, owner)
 
     def record(
         self, key: str, *, seq: int | None, owner: str, claim_scope: int, target: str, text: str,

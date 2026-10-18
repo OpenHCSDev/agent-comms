@@ -28,4 +28,6 @@ class InputEffects(ABC):
     @abstractmethod
     def configured_root_id(self) -> str: ...
 
-    _private_nk_native_package: Path | None
+    @property
+    @abstractmethod
+    def private_nk_native_package(self) -> Path | None: ...

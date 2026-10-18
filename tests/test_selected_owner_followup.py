@@ -1,5 +1,6 @@
 """Selected execution and ACP followups share one live input lifetime."""
 
+from agent_comms.messages import NoticeRole
 import asyncio
 from contextlib import asynccontextmanager, nullcontext
 from dataclasses import replace
@@ -91,7 +92,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
                 await asyncio.wait_for(wake, 12)
             assert isinstance(failed.value.failure, ModelRequestFailed)
             notice = list(comms.views.full_history_page().messages)[-1]
-            assert notice.notice and notice.type is AlertKind
+            assert isinstance(notice.role, NoticeRole) and notice.type is AlertKind
             assert notice.target == "sender" and "No automatic retry" in notice.body
             assert "Scripted provider failure" in drain_diagnostic(comms, "beta").reason
         sent = requests(control)
@@ -274,7 +275,8 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
     )
     parked_goal = comms.registry.require("beta").goal
     parked_wait = comms.goals.goal_wait("beta")
-    agent._private_nk_native_package = Path(package)
+    owners = agent._comms.owners
+    owners._private_nk_launch = replace(owners.launch_authority, native_package=Path(package))
     agent.turns.agent_args = NativeArguments.parse(
         [
             "--no-extensions",

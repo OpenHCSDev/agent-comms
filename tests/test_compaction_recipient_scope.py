@@ -1,4 +1,5 @@
 """Retained source applicability follows the original frozen recipient birth."""
+from agent_comms.messages import NoticeRole
 from dataclasses import replace
 
 from agent_comms.comms import Comms
@@ -16,7 +17,7 @@ def test_ordinary_peer_reply_preserves_facts_but_new_user_instruction_changes_th
     original = comms.messaging.send_user_message("#team", "Preserve this original constraint", worktree=str(tmp_path))
     before = facts_for(comms, owner)
     assert [fact.source.reference for fact in before] == [original.reference]
-    comms.messaging.send_message("Bob", "#team", "Ordinary peer acknowledgement", notice=True)
+    comms.messaging.send_message("Bob", "#team", "Ordinary peer acknowledgement", role=NoticeRole())
     assert facts_for(comms, owner) == before
     changed = comms.messaging.send_user_message("#team", "A distinct new original instruction", worktree=str(tmp_path))
     after = facts_for(comms, owner)

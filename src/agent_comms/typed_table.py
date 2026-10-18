@@ -602,6 +602,11 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             db.execute(statement)
 
     @classmethod
+    def drop(cls, db: sqlite3.Connection) -> None:
+        """Drop the declared table; SQLite drops its indexes with it."""
+        db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.declared_name)}")
+
+    @classmethod
     def _condition(
         cls, where: str, parameters: tuple, key: dict[str, object]
     ) -> tuple[str, tuple]:

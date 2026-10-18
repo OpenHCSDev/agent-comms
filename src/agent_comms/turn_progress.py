@@ -20,7 +20,7 @@ from .thread_identity import ClaimedIdentity
 from .comms import Comms
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress
-from .messages import AlertKind
+from .messages import AlertKind, NoticeRole
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
 from .turn_phase import PublishingPhase
@@ -170,7 +170,7 @@ class TurnProgress(events.AgentEventConsumer):
                 # Publish it once as visible, non-waking progress; the
                 # final reply contains only subsequent assistant text.
                 for target in self.reply_targets:
-                    self.comms.messaging.send(self.thread_name, target, progress, notice=True)
+                    self.comms.messaging.send(self.thread_name, target, progress, role=NoticeRole())
                 self.reply_parts.clear()
 
     @handles(events.Error)
@@ -327,7 +327,7 @@ class TurnProgress(events.AgentEventConsumer):
                     f"{prefix}: backend turn did not complete. "
                     f"[Open diagnostic]({diagnostic_path.as_uri()})",
                     AlertKind,
-                    notice=True,
+                    role=NoticeRole(),
                 )
         return self.comms.transcripts.transcript_checkpoint(self.thread_name)
 

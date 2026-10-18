@@ -478,7 +478,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
 
                 env.update(
                     AGENT_COMMS_ROOT=str(owner._comms.root),
-                    AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=owner._private_nk_wire_root_id,
+                    AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=owner.configured_root_id,
                     AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(pinned_native_package()),
                     AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
                 )

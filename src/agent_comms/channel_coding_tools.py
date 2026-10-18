@@ -24,11 +24,9 @@ from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,
 )
-from .native_tool_call import NativeToolCall, SelectedToolDenied
+from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied
 from .native_tools import NativeExecutableTool
-from .storage_rules import StorageDecision
 from .selected_tool_broker import (
-    NativeToolMode,
     OwnerToolSocket,
     consume_selected_slot,
     record_selected_terminal,
@@ -39,7 +37,6 @@ from .selected_tool_broker import (
 @dataclass
 class CodingCall(NativeToolCall):
     tool: NativeExecutableTool
-    storage_decisions: tuple[StorageDecision, ...] = field(default=(), init=False, compare=False, repr=False)
 
     @property
     def name(self) -> str:
@@ -48,8 +45,6 @@ class CodingCall(NativeToolCall):
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int
     ) -> None:
-        for decision in self.storage_decisions:
-            decision.complete()
         slot = self.slot(input_id, round_number)
         record_selected_terminal(directory, slot, slot)
 
@@ -126,7 +121,7 @@ class CodingToolOwner:
             try:
                 effects = call.tool.storage_effects(Path(owner.worktree))
                 if effects:
-                    call.storage_decisions = (self.comms.registry.decide_storage(self.owner_name, effects),)
+                    self.comms.registry.decide_storage(self.owner_name, effects)
             except SelectedToolDenied as error:
                 raise SelectedToolDenied(f'{error}\n{self.comms.registry.storage_rule.render(owner.storage_roots)}') from error
             resource = call.tool.claim
@@ -162,8 +157,8 @@ class CodingToolMode(NativeToolMode):
         return ("--tools", ",".join(tool.declared_name for tool in declarations),
                 *(argument for extension in extensions for argument in ("-e", str(extension))))
 
-    def socket(self, directory: Path, token: str) -> OwnerToolSocket:
-        return CodingToolSocket(directory, token, self.owner)
+    async def open_transport(self, turn, ownership) -> OwnerToolSocket:
+        return await CodingToolSocket.open(turn, ownership, self.owner)
 
 class CodingToolSocket(OwnerToolSocket[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""

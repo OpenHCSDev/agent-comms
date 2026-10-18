@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 from .publisher import Publisher
-from .wire_log import WireSnapshot, WireLog
+from .wire_log import CurrentSnapshotOpening, WireSnapshot, WireLog
 from .wire_watch import WatchSource, WireWatch
 
 
@@ -87,7 +87,7 @@ class MessageBus:
     def opened_activity(self) -> Iterator[ActivityClocks]:
         """Own a fresh bus cut for callers without an existing snapshot."""
         with self.log._opened_wire_snapshot(
-            need_sequence=False, prepared_indexes=self.log.prepare_append_indexes(),
+            opening=CurrentSnapshotOpening(), prepared_indexes=self.log.prepare_append_indexes(),
         ) as source:
             yield self.activity_clocks(source)
 
@@ -100,7 +100,7 @@ class MessageBus:
                 message.target,
                 message.timestamp,
                 not message.sender_role.executable,
-                message.membership is None and not message.notice,
+                message.role.counts_as_conversation(),
             )
 
     @contextmanager
@@ -215,10 +215,7 @@ class MessageBus:
             for actor in set(actors.values())
         }
         seen = {
-            actor: source.read(
-                lambda opened: basis.document.cursor(actor, basis.registry, opened.revision.identity),
-                absent=lambda: basis.document.cursor(actor, basis.registry),
-            ) for actor in deliveries
+            actor: basis.document.cursor(actor, basis.registry, source) for actor in deliveries
         }
         with OpenedRouteCounts(self.log.path, source, basis.registry, deliveries) as index:
             counts = index.unseen_counts(seen)

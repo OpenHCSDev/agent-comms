@@ -419,7 +419,6 @@ def test_wire_claim_obligation_and_publication_contract():
         body=body,
         type=InfoKind,
         timestamp=1.0,
-        notice=False,
     )
     intent = PublicationIntents(
         execution_id="execution-1",
@@ -1297,7 +1296,6 @@ def sql_intent_envelope(*, body="hello", target="requester", expected_id=None, m
         body=body,
         type=InfoKind,
         timestamp=1.0,
-        notice=False,
     )
     return (
         "e",
@@ -1372,7 +1370,6 @@ def test_numeric_only_message_id_input_is_not_text(db):
             body=body,
             type=InfoKind,
             timestamp=1.0,
-            notice=False,
         )
         if message.message_id.isdigit() and not message.message_id.startswith("0"):
             break
@@ -1510,7 +1507,6 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
         body=body,
         type=InfoKind,
         timestamp=1.0,
-        notice=False,
     )
     key = canonical_publication_key("e", "requester")
     insert_intent = INSERT_INTENT

@@ -13,7 +13,7 @@ from agent_comms import coordinated_runtime as runtime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import IdentityConflict, StaleFence
+from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
@@ -83,21 +83,13 @@ def test_owner_configuration_requires_nominal_intent_and_private_binding(
     wire = private_root / "wire"
     wire.mkdir(mode=0o700)
     comms = Comms(wire)
-    with pytest.raises(ValueError, match="exact N/K root"):
-        CommsAgent(comms, private_selected_tool_intent=intent_type())
     with pytest.raises(TypeError, match="nominal owner intent"):
-        CommsAgent(
-            comms,
-            private_nk_native_package=private_root,
-            private_nk_wire_root_id="private-id",
-            private_selected_tool_intent=object(),
-        )
-    agent = CommsAgent(
-        comms,
-        private_nk_native_package=private_root,
-        private_nk_wire_root_id="private-id",
-        private_selected_tool_intent=intent_type(),
-    )
+        CommsAgent(comms, private_selected_tool_intent=object())
+    with pytest.raises(PublicationActivationBlocked, match="private bus root"):
+        CommsAgent(comms, private_selected_tool_intent=intent_type())
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.owners.pin_private_nk_launch(comms.root, root_id, private_root)
+    agent = CommsAgent(comms, private_selected_tool_intent=intent_type())
     assert type(agent._private_selected_tool_intent) is intent_type
 
 
@@ -163,7 +155,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
         result = await fake(*args, **kwargs)
         mode = kwargs["selected_tool_mode"]
         mode.action(SelectedToolRequest("call_1", SelectedWriteArguments("notes.txt", "after")))
-        return replace(result, selected_tool_call_id="call_1")
+        return result
 
     monkeypatch.setattr(TrackedTurnSession, "execute", selected_model)
     result = await runtime.SelectedExecution(
@@ -274,7 +266,7 @@ async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nomin
         selected_tool_intent=intent_type(),
     ).run()
     assert len(calls) == len(kwargs_seen) == 1
-    assert kwargs_seen[0]["selected_tool_mode"] is None
+    assert kwargs_seen[0]["selected_tool_mode"].launch_arguments(private_root) == ("--no-tools",)
     assert "selected_claimed_write" not in calls[0][1]
     assert not bound
 

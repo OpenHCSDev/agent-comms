@@ -12,7 +12,6 @@ from .coordination_tables.publications import canonical_publication_key
 from .declared_family import DeclaredFamily
 from .wake import ControlClassification, resolve_wake_cohort
 from .wake_policy import WakeDecision
-from .wake_policy import BoundedTriageWake, PassiveWake
 
 
 @dataclass(frozen=True)
@@ -83,7 +82,7 @@ class ResponseDeliveryPolicy(DeliveryPolicy):
     def resolve(message, audience, control):
         # Informative replies allow consideration/IGNORE, including mentions
         # and DMs; they never impose a mandatory ACK ping-pong.
-        mode = PassiveWake() if message.notice else BoundedTriageWake()
+        mode = message.role.response_wake_mode()
         return tuple(
             WakeDecision(member.recipient_lookup, MessageAudience.COLLECTIVE, mode)
             for member in audience.recipients

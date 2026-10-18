@@ -18,6 +18,7 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wire_metadata import ArchivedAccess, WritableAccess
+from agent_comms.wire_log import CurrentSnapshotOpening
 
 
 def retained_source(root, count, *, access=ArchivedAccess()):
@@ -62,6 +63,13 @@ def test_page_queries_prepare_owned_offsets_and_leave_archives_unchanged(tmp_pat
     path.unlink()
     sqlite3.connect(path).close()
     assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
+    path.unlink()
+    with sqlite3.connect(path) as db:  # an earlier declaration of the offsets table
+        db.execute(f'CREATE TABLE "{BusPageRow.declared_name}" ("seq" INTEGER NOT NULL, '
+                   '"offset" INTEGER NOT NULL, PRIMARY KEY ("seq")) STRICT')
+    assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
+    with sqlite3.connect(path) as db:
+        BusPageIndex._schema(db)
 
     archive = retained_source(tmp_path / 'archive', 9)
     assert [message.seq for message in archive.incoming_page('b', after=6).messages] == [9]
@@ -76,7 +84,7 @@ def test_page_queries_prepare_owned_offsets_and_leave_archives_unchanged(tmp_pat
 
 def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
     bus = retained_source(tmp_path / 'race', 9, access=WritableAccess())
-    with bus.log._opened_wire_snapshot(need_sequence=False) as opened:
+    with bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
         message, _ = next(opened.public_records())
     with BusPageIndex(bus.log.path) as index:
         index.invalidate()
@@ -84,7 +92,7 @@ def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
     captured = threading.Semaphore(0)
 
     def read_reference():
-        with bus.log._opened_wire_snapshot(need_sequence=False) as opened:
+        with bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             with BusPageIndex(bus.log.path) as index:
                 assert not index.covers(opened)
             captured.release()
@@ -104,5 +112,5 @@ def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
                     reader.result(timeout=0.05)
         assert [reader.result(timeout=5) for reader in readers] == [(message,), (message,)]
     with BusPageIndex(bus.log.path) as index:
-        with bus.log._opened_wire_snapshot(need_sequence=False) as opened:
+        with bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             assert index.covers(opened)

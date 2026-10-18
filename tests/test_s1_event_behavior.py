@@ -1,4 +1,5 @@
 """Current S1 consumer effects and fenced settlement, with real durable owners."""
+from agent_comms.messages import NoticeRole
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -146,11 +147,12 @@ class InterruptedCase(EffectCase):
 
 @pytest.fixture
 async def owner_turn(comms, tmp_path, fake_native_catalog):
+    comms.owners.pin_private_nk_launch(
+        comms.root, comms.messaging.initialize_private_initial_protocol(), tmp_path
+    )
     owner = CommsAgent(
         comms,
         agent_bin="unused",
-        private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
-        private_nk_native_package=tmp_path,
     )
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
@@ -249,7 +251,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
             await progress.publish_result()
         messages = list(comms.bus.full_history_page().messages)
         assert not any(row.body == "provisional" for row in messages)
-        assert any(row.notice and "[Open diagnostic]" in row.body for row in messages)
+        assert any(isinstance(row.role, NoticeRole) and "[Open diagnostic]" in row.body for row in messages)
         assert progress.result is not None and progress.result.diagnostic == diagnostic
     await runner.settle_turn(
         execution.session_id,
@@ -352,6 +354,9 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
 
         monkeypatch.setattr(native.provider, "response_chunks", with_progress)
     comms = Comms(native.root)
+    comms.owners.pin_private_nk_launch(
+        comms.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], pinned_native_package()
+    )
     owner = CommsAgent(
         comms,
         agent_bin="pi",
@@ -360,8 +365,6 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             "--offline", "--no-extensions", "--no-skills", "--no-context-files",
             "--no-prompt-templates",
         ],
-        private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-        private_nk_native_package=pinned_native_package(),
     )
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
@@ -388,7 +391,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
         rows = list(comms.bus.full_history_page().messages)
         replies = [row for row in rows if row.sender == name]
         if provider_status == 200:
-            assert [(row.body, row.notice) for row in replies] == (
+            assert [(row.body, isinstance(row.role, NoticeRole)) for row in replies] == (
                 [("Working", True), ("Native response lifecycle.", True)]
                 if committed_progress else [("Native response lifecycle.", True)]
             )
@@ -401,7 +404,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             assert final[0].source == replies[-1].reference
             assert final[0].routing.reply.targets == (origin.sender,)
         else:
-            assert len(replies) == 1 and replies[0].notice
+            assert len(replies) == 1 and isinstance(replies[0].role, NoticeRole)
             assert "[Open diagnostic]" in replies[0].body
             assert not any(row.body == "Native response lifecycle." for row in replies)
     finally:
@@ -424,11 +427,12 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
     settings["compaction"] = {"enabled": True, "reserveTokens": 128, "keepRecentTokens": 32}
     (config / "settings.json").write_text(json.dumps(settings))
     comms = Comms(native.root)
+    comms.owners.pin_private_nk_launch(
+        comms.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], pinned_native_package()
+    )
     owner = CommsAgent(
         comms,
         agent_bin="pi",
-        private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-        private_nk_native_package=pinned_native_package(),
     )
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])

@@ -117,7 +117,7 @@ class CommittedDelivery(MessageWireRecord):
 
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and its original addressed incarnation agree."""
-        policy = self.message.response_policy
+        policy = self.message.role.response_policy(self.message)
         return (
             policy.starts_turn
             and policy.separate_turn

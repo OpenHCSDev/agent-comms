@@ -4,6 +4,7 @@ Only HTTP provider responses and process termination are controlled. The native
 package, claim_scope writer, proof journal, bus and SQLite lifetime are real.
 """
 
+from agent_comms.messages import NoticeRole
 import asyncio
 import json
 import os
@@ -183,7 +184,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     assert all(not child.alive() for child in journey.children)
     assert journey.comms.registry.require("beta").active_turn is None
     notice = list(journey.comms.views.full_history_page().messages)[-1]
-    assert notice.notice and "No automatic retry" in notice.body
+    assert isinstance(notice.role, NoticeRole) and "No automatic retry" in notice.body
     delivery = journey.comms.bus.log.read_delivery_cohort(journey.root_id, notice.seq)
     assert all(decision.wake_mode == PassiveWake() for decision in delivery.decisions)
     with Coordination(str(journey.root / "coordination.sqlite3")) as store:

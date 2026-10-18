@@ -1,5 +1,6 @@
 """One fresh installed native journey covers delayed rounds and error settlement."""
 
+from agent_comms.messages import NoticeRole
 import asyncio
 import json
 from pathlib import Path
@@ -218,8 +219,8 @@ async def test_actual_native_requested_answer_and_following_input(native_backend
         replies = [message for line in comms.bus.log.path.read_text().splitlines()
                    for message in WireRecord.public_from_wire(json.loads(line)).messages()
                    if message.sender == session]
-        notices = [message for message in replies if message.notice]
-        replies = [message for message in replies if not message.notice]
+        notices = [message for message in replies if isinstance(message.role, NoticeRole)]
+        replies = [message for message in replies if not isinstance(message.role, NoticeRole)]
         if following == "provider_error":
             assert not replies and len(notices) == len(failures) == 1
             assert isinstance(failures[0], NativePiTerminalFailure)

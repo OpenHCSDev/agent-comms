@@ -127,7 +127,7 @@ class InputForwarding:
             return True
         first = self.pending[candidates[0]]
         async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
-            with status.phase.send(session.interrupt_boundary, first.id, candidates[0], first.message) as outcome:
+            with status.phase.send_running(session.interrupt_boundary, first.id, candidates[0], first.message) as outcome:
                 completion = outcome.dispatch(self, session, item, lambda: session.stdin.write(
                     session.native.reader.encode(commands.InterruptSteering(input_ids=list(candidates)))
                 ))
@@ -153,7 +153,7 @@ class InputForwarding:
             self.generation += 1
 
         async with MaintenanceBarrier(session.startup.root / "registry.json").ingress_async() as status:
-            with status.phase.send(session.send_boundary, public_id, native_id, text) as outcome:
+            with status.phase.send_running(session.send_boundary, public_id, native_id, text) as outcome:
                 completion = outcome.dispatch(self, session, item, write)
         return await completion
 

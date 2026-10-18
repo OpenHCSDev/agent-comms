@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import sqlite3
@@ -15,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from io import DEFAULT_BUFFER_SIZE
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, TYPE_CHECKING
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -77,18 +78,26 @@ class WireSnapshot(ABC):
     @abstractmethod
     def boundary(self) -> int: ...
 
+    @property
+    @abstractmethod
+    def position(self) -> int: ...
+
     @abstractmethod
     def same_file(self, identity: FileIdentity) -> bool: ...
 
     @abstractmethod
     def changed_since(self, revision) -> bool: ...
 
-    @property
-    @abstractmethod
-    def opened(self) -> OpenedWireSnapshot: ...
+
+
+    if TYPE_CHECKING:
+        revision: FileRevision
 
     @abstractmethod
-    def read[T](self, present: Callable[[OpenedWireSnapshot], T], *, absent: Callable[[], T]) -> T: ...
+    def rows(self, after_offset: int = 0, before_offset: int | None = None): ...
+
+    @abstractmethod
+    def fingerprint(self, offset: int) -> str: ...
 
     @abstractmethod
     def checked(self, source) -> OpenedWireSnapshot: ...
@@ -97,7 +106,7 @@ class WireSnapshot(ABC):
     def records(self) -> Iterator[WireRecord]: ...
 
     @abstractmethod
-    def query_page_index[T](self, read: Callable[[BusPageIndex], T], *, empty: T) -> T: ...
+    def query_page_index[T](self, read: Callable[[BusPageIndex], T]) -> T: ...
 
     @abstractmethod
     def indexed_records(self, rows: Iterable[BusPageRow], *, before_offset: int) -> Iterator[tuple[Message, int]]: ...
@@ -172,7 +181,7 @@ class WireSnapshot(ABC):
 class AbsentWireSnapshot(WireSnapshot):
     """No descriptor existed at acquisition; later appends stay outside this cut."""
 
-    complete_boundary = boundary = 0
+    complete_boundary = boundary = position = 0
 
     def same_file(self, identity: FileIdentity) -> bool:
         return False
@@ -180,12 +189,17 @@ class AbsentWireSnapshot(WireSnapshot):
     def changed_since(self, revision) -> bool:
         return revision is not None
 
-    @property
-    def opened(self) -> OpenedWireSnapshot:
-        raise RelationViolationError("Wire snapshot has no opened source")
 
-    def read[T](self, present: Callable[[OpenedWireSnapshot], T], *, absent: Callable[[], T]) -> T:
-        return absent()
+
+    @property
+    def revision(self) -> FileRevision:
+        raise FileNotFoundError("An absent wire cut has no file revision")
+
+    def rows(self, after_offset: int = 0, before_offset: int | None = None):
+        return iter(())
+
+    def fingerprint(self, offset: int) -> str:
+        return hashlib.sha256(b"").hexdigest()
 
     def checked(self, source) -> OpenedWireSnapshot:
         raise RelationViolationError("Opened read differs from its certified source cut")
@@ -193,11 +207,14 @@ class AbsentWireSnapshot(WireSnapshot):
     def records(self) -> Iterator[WireRecord]:
         return iter(())
 
-    def query_page_index[T](self, read: Callable[[BusPageIndex], T], *, empty: T) -> T:
-        return empty
+    def query_page_index[T](self, read: Callable[[BusPageIndex], T]) -> T:
+        from .bus_page_index import EmptyBusPageIndex
+        return read(EmptyBusPageIndex())
 
     def indexed_records(self, rows: Iterable[BusPageRow], *, before_offset: int) -> Iterator[tuple[Message, int]]:
-        raise RelationViolationError("Indexed read exceeds its opened wire cut")
+        if before_offset or any(True for _ in rows):
+            raise RelationViolationError("Indexed read exceeds its opened wire cut")
+        return iter(())
 
     def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
         return None
@@ -222,18 +239,38 @@ class OpenedWireSnapshot(WireSnapshot):
     stream: BinaryIO
     revision: FileRevision
 
+    @property
+    def position(self) -> int:
+        return self.stream.tell()
+
     def same_file(self, identity: FileIdentity) -> bool:
         return self.revision.identity == identity
 
     def changed_since(self, revision) -> bool:
         return self.revision != revision
 
-    @property
-    def opened(self) -> OpenedWireSnapshot:
-        return self
 
-    def read[T](self, present: Callable[[OpenedWireSnapshot], T], *, absent: Callable[[], T]) -> T:
-        return present(self)
+
+    def rows(self, after_offset: int = 0, before_offset: int | None = None):
+        """Complete rows whose starts fall within the requested original cut."""
+        stop = self.boundary if before_offset is None else min(before_offset, self.boundary)
+        if after_offset < 0 or stop < 0:
+            raise ValueError("Wire row offsets must be nonnegative")
+        self.stream.seek(after_offset)
+        while self.stream.tell() < stop:
+            offset = self.stream.tell()
+            raw = self.stream.readline(min(WireRecord.max_row_bytes + 1, self.boundary - offset))
+            WireRecord.require_row_size(raw, error_type=RelationViolationError)
+            if not raw.endswith(b"\n"):
+                raise RelationViolationError("Wire source has an incomplete original row")
+            if raw.strip():
+                record = json.loads(raw, object_pairs_hook=unique_wire_object)
+                if not isinstance(record, Mapping):
+                    raise ValueError("JSONL bus row must be an object")
+                yield record, offset, self.stream.tell()
+
+    def fingerprint(self, offset: int) -> str:
+        return AppendCheckpoint.fingerprint(self.stream, offset)
 
     def checked(self, source) -> OpenedWireSnapshot:
         if (self.revision != FileRevision.from_file(source.stream)
@@ -275,9 +312,12 @@ class OpenedWireSnapshot(WireSnapshot):
             stream.seek(position)
 
     def query_page_index[T](
-        self, read: Callable[[BusPageIndex], T], *, empty: T
+        self, read: Callable[[BusPageIndex], T]
     ) -> T:
         """Prepare/query this cut; source absence and index repair stay owned here."""
+        if self.boundary == 0:
+            from .bus_page_index import EmptyBusPageIndex
+            return read(EmptyBusPageIndex())
         access = self.metadata.access
         with BusPageIndex(Path(self.stream.name)) as index:
             try:
@@ -386,7 +426,7 @@ class ScannedWireSnapshot(OpenedWireSnapshot):
             )
             return tuple(self.indexed_records(rows, before_offset=before_offset))
 
-        yield from self.query_page_index(read, empty=())
+        yield from self.query_page_index(read)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -434,6 +474,51 @@ class ConversationSourceWindowRequest:
             return tuple(iter(()) for request in requests)
         with log.certified_read() as source:
             return tuple(request.capture(source, lookup) for request in requests)
+
+
+class SnapshotOpening(ABC):
+    @abstractmethod
+    def capture(self, log: WireLog, resources: ExitStack): ...
+
+
+class CurrentSnapshotOpening(SnapshotOpening):
+    def through(self, log: WireLog, lock: StoreLock) -> int:
+        return 0
+
+    @contextmanager
+    def capture(self, log: WireLog, resources: ExitStack):
+        with log.locked(shared=True) as lock:
+            metadata = (
+                log._private_marker_unlocked()
+                if log.path.exists() or log.metadata_path.exists()
+                else WireMetadata()
+            )
+            through = self.through(log, lock)
+            opened = log._open_snapshot_unlocked(resources, metadata, through)
+            if lock.source is not None:
+                source = lock.certified_read()
+                source.require_marker(metadata)
+                source.require_open_prefix()
+                opened = opened.checked(source)
+        yield opened
+
+
+class SequencedSnapshotOpening(CurrentSnapshotOpening):
+    def through(self, log: WireLog, lock: StoreLock) -> int:
+        return log._committed_sequence_unlocked(lock)
+
+
+class SavedPrefixOpening(SnapshotOpening):
+    """Capture bytes only; the saved checkpoint must verify its own original prefix.
+
+    This never certifies the current tail or grants publication/input authority.
+    An interrupted later append cannot invalidate an already verified prefix.
+    """
+
+    @contextmanager
+    def capture(self, log: WireLog, resources: ExitStack):
+        metadata = log._private_marker_unlocked()
+        yield log._open_snapshot_unlocked(resources, metadata, 0)
 
 
 class WireLog:
@@ -746,37 +831,23 @@ class WireLog:
 
     @contextmanager
     def _opened_wire_snapshot(
-        self, *, need_sequence: bool = True,
+        self, *,
         prepared_indexes: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...] = (),
+        opening: SnapshotOpening = SequencedSnapshotOpening(),
     ):
-        """Keep a fixed opened inode and byte boundary after releasing the bus locks."""
+        """Keep one owned descriptor/cut; acquisition follows its source contract."""
         with ExitStack() as resources:
-            with self.locked(shared=True) as lock:
-                metadata = (
-                    self._private_marker_unlocked()
-                    if self.path.exists() or self.metadata_path.exists()
-                    else WireMetadata()
-                )
-                through = self._committed_sequence_unlocked(lock) if need_sequence else 0
-                try:
-                    stream = resources.enter_context(self.path.open("rb"))
-                except FileNotFoundError:
-                    opened = AbsentWireSnapshot(metadata, through)
-                else:
-                    revision = FileRevision.from_file(stream)
-                    opened = OpenedWireSnapshot(metadata, through, stream, revision)
-                if lock.source is not None:
-                    source = lock.certified_read()
-                    source.require_marker(metadata)
-                    # A reserved but unappended sequence blocks new input,
-                    # not the original committed bytes of this read-only cut.
-                    source.require_open_prefix()
-                    # Bind the retained descriptor to this exact checked inode/cut.
-                    opened = opened.checked(source)
-            # Transfer candidate records without reading files or hashing here.
-            # Consumers validate after the caller's outer locks are released.
-            opened.capture_append_indexes(prepared_indexes)
-            yield opened
+            with opening.capture(self, resources) as opened:
+                opened.capture_append_indexes(prepared_indexes)
+                yield opened
+
+    def _open_snapshot_unlocked(self, resources: ExitStack, metadata: WireMetadata, through: int) -> WireSnapshot:
+        """The sole descriptor acquisition and absent/present snapshot selection."""
+        try:
+            stream = resources.enter_context(self.path.open("rb"))
+        except FileNotFoundError:
+            return AbsentWireSnapshot(metadata, through)
+        return OpenedWireSnapshot(metadata, through, stream, FileRevision.from_file(stream))
 
     @contextmanager
     def verified_snapshot(self) -> Iterator[Iterator[WireRecord]]:
@@ -785,15 +856,13 @@ class WireLog:
         Uncertified streams retain the same complete validation algorithm.
         This resource is a fixed read, not permission to append or start input.
         """
-        with self._opened_wire_snapshot(need_sequence=False) as opened:
+        with self._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             yield opened.records()
 
     @contextmanager
-    def _record_snapshot(
-        self, *, need_sequence: bool = True
-    ) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
+    def _record_snapshot(self) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
         """Explicit sequential history borrows the original opened byte boundary."""
-        with self._opened_wire_snapshot(need_sequence=need_sequence) as opened:
+        with self._opened_wire_snapshot() as opened:
             yield opened.through, opened.public_records()
 
     @contextmanager
@@ -803,7 +872,7 @@ class WireLog:
             yield through, (message for message, _ in records)
 
     def messages_for_references(self, references):
-        with self._opened_wire_snapshot(need_sequence=False) as opened:
+        with self._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             return opened.messages_for_references(references)
 
     def deliveries_for_references(self, references):

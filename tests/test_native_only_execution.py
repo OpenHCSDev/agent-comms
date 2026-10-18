@@ -33,8 +33,6 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
     from agent_comms import native_pi, private_nk_entrypoint
 
     package = tmp_path / "package"
-    route = PrivateNkLaunch(tmp_path, "a" * 32, package, None)
-    monkeypatch.setattr(private_nk_entrypoint, "private_nk_from_environment", lambda: route)
     verified = []
     monkeypatch.setattr(native_pi, "_trusted_package", lambda value: verified.append(value))
     forged = tmp_path / "pi-comms-native"
@@ -105,16 +103,8 @@ async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, mo
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
         pytest.skip("Prepared package is required; never build or contact a provider")
-    monkeypatch.setattr(
-        private_nk_entrypoint,
-        "private_nk_from_environment",
-        lambda: PrivateNkLaunch(
-            tmp_path,
-            "a" * 32,
-            Path(package),
-            None,
-        ),
-    )
+    route = PrivateNkLaunch(tmp_path, "a" * 32, Path(package))
+    monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda _cls: route))
     launch = NativePiRpcLaunch.managed(
         "pi",
         (
@@ -188,9 +178,8 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             registered = comms.registry.require("headless")
             assert registered.pid == child.pid
             assert registered.worktree == str(project)
-            client = CommsClient(
-                comms, private_nk_wire_root_id=root_id, private_nk_native_package=Path(package)
-            )
+            comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
+            client = CommsClient(comms)
             try:
                 loaded = await client.load_session(str(project), "headless")
                 assert loaded.field_meta["agentComms"]["imagePrompts"]

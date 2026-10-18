@@ -1,5 +1,6 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
+from agent_comms.messages import NoticeRole
 import asyncio
 import os
 import threading
@@ -159,7 +160,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             await progress.chunk(events.Chunk("committed progress"))
             await progress.committed_progress(events.CommittedProgress("committed progress"))
             assert progress.reply_parts == []
-            assert [(row.body, row.notice) for row in list(comms.bus.full_history_page().messages)] == [
+            assert [(row.body, isinstance(row.role, NoticeRole)) for row in list(comms.bus.full_history_page().messages)] == [
                 ("committed progress", True),
             ]
             progress.result = events.Done("refused", False)
@@ -187,7 +188,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             with pytest.raises(asyncio.CancelledError):
                 await task
             rows = list(comms.bus.full_history_page().messages)
-            assert len(rows) == 2 and rows[-1].notice
+            assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
             assert "[Open diagnostic]" in rows[-1].body
             assert comms.registry.require("beta").turn_lease == execution.turn_lease
     assert comms.registry.require("beta").active_turn is None
@@ -319,7 +320,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         assert settled <= 3
         activity_of = comms.agents.activity_of
 
-        def no_idle_activity(*_args, **_kwargs):
+        def no_idle_activity(thread, *, snapshot):
             raise AssertionError("an unchanged tick reread activity and the registry")
 
         monkeypatch.setattr(comms.agents, "activity_of", no_idle_activity)
@@ -464,7 +465,10 @@ async def test_runtime_configuration_invalidates_idle_observation(tmp_path, monk
     assert await agent.inputs.drain_inbox("beta") == 0
     agent.sessions.runtime_enabled = True
     assert await agent.inputs.drain_inbox("beta") == 0
-    agent._private_nk_native_package = tmp_path / "replacement-package"
+    owners = agent._comms.owners
+    owners._private_nk_launch = replace(
+        owners.launch_authority, native_package=tmp_path / "replacement-package"
+    )
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 6
 

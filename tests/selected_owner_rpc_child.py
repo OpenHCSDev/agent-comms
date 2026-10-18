@@ -37,7 +37,8 @@ while True:
         with (control / 'requests.jsonl').open('a') as stream:
             stream.write(json.dumps(request) + '\n')
         if count == 1:
-            (control / 'entered').touch()
+            with (control / 'entered').open('w') as entered:
+                entered.write('entered\n')
             deadline = time.monotonic() + 20
             while not (control / 'release').exists():
                 if time.monotonic() >= deadline:
