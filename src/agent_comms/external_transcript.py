@@ -22,7 +22,7 @@ from .declared_family import DeclaredFamily
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest
-from .transcript_sources import TranscriptSource
+from .transcript_sources import NoDraft, TranscriptDraft, TranscriptSource
 from .typed_table import Column, TypedRow, TypedStore, TypedTable
 from .wire_watch import WatchSource, WireWatch
 
@@ -85,6 +85,12 @@ class RequestedEarlierPage(EarlierPage):
 class NoItems:
     start = 0
 
+    def has_records(self, through: int) -> bool:
+        return False
+
+    def valid_offset(self, offset: int, through: int) -> bool:
+        return 0 <= offset <= through
+
     def has_older(self, offset: int) -> bool:
         return False
 
@@ -115,6 +121,12 @@ class ExternalPageRow(TypedRow):
     @property
     def start(self) -> int:
         return self.seq - 1
+
+    def has_records(self, through: int) -> bool:
+        return True  # Zero and negative positions name real prepended items.
+
+    def valid_offset(self, offset: int, through: int) -> bool:
+        return offset <= through
 
     def has_older(self, offset: int) -> bool:
         return self.earlier.has_older(offset, self)
@@ -157,13 +169,20 @@ class ExternalItemRow(ExternalPageRow, TypedTable):
 
 
 @dataclass(frozen=True)
-class ExternalDraftRow(TypedTable):
+class ExternalDraftRow(TypedTable, TranscriptDraft):
     """The current CLI item, replaced as it grows and retired at completion."""
 
     thread: str = field(metadata={"sql": Column(primary_key=True)})
     turn_id: str
     item_id: str
     events: tuple[TranscriptEvent, ...]
+
+    def external_row(self):
+        return self
+
+    def end_turn(self, transcript: TypedStore) -> None:
+        with transcript.writing() as connection:
+            self.delete(connection, thread=self.thread, turn_id=self.turn_id, item_id=self.item_id)
 
 
 @dataclass(frozen=True)
@@ -206,9 +225,10 @@ class ExternalCut(RecordsCut, TypedRow):
 
 
 @dataclass(frozen=True, slots=True)
-class ExternalTranscriptRead(TranscriptSource):
-    """A bound external source; subclasses own absent and connected reads."""
+class StoreRead(TranscriptSource):
+    """One SQL snapshot supplies both empty and populated external reads."""
     transcript: ExternalTranscript
+    connection: Connection
 
     def forward(self, after: int, through: int) -> Iterator[ExternalRecord]:
         return self._records("seq > ? AND seq <= ?", (after, through), descending=False)
@@ -216,35 +236,15 @@ class ExternalTranscriptRead(TranscriptSource):
     def reverse(self, before: int) -> Iterator[ExternalRecord]:
         return self._records("seq <= ?", (before,), descending=True)
 
-
-@dataclass(frozen=True, slots=True)
-class NoStoreRead(ExternalTranscriptRead, NoItems):
-    def cut(self) -> ExternalCut:
-        return ExternalCut(0)
-
-    def _records(self, where, parameters, *, descending):
-        yield from ()
-
-    def turns(self, last):
-        return ()
-
-    def end_turn(self) -> None:
-        pass
-
-
-@dataclass(frozen=True, slots=True)
-class StoreRead(ExternalTranscriptRead):
-    connection: Connection
-
     @property
     def start(self) -> int:
         return self.transcript.oldest(self.connection).start
 
     def has_records(self, through: int) -> bool:
-        return True  # Zero and negative positions name real prepended items.
+        return self.transcript.oldest(self.connection).has_records(through)
 
     def valid_offset(self, offset: int, through: int) -> bool:
-        return offset <= through
+        return self.transcript.oldest(self.connection).valid_offset(offset, through)
 
     def has_older(self, offset: int) -> bool:
         return self.transcript.oldest(self.connection).has_older(offset)
@@ -258,12 +258,8 @@ class StoreRead(ExternalTranscriptRead):
     def frames(self) -> tuple:
         return self.transcript.oldest(self.connection).frames()
 
-    def end_turn(self) -> None:
-        with self.transcript.writing() as connection:
-            ExternalDraftRow.delete(connection, thread=self.transcript.lookup)
-
-    def current_draft(self) -> ExternalDraftRow | None:
-        return ExternalDraftRow.one(self.connection, thread=self.transcript.lookup)
+    def current_draft(self) -> TranscriptDraft:
+        return ExternalDraftRow.one(self.connection, thread=self.transcript.lookup) or NoDraft()
 
     def cut(self) -> ExternalCut:
         return self.transcript._cut(self.connection)
@@ -364,18 +360,14 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     def end_turn(self) -> None:
         with self.reading() as records:
-            records.end_turn()
+            draft = records.current_draft()
+        draft.end_turn(self)
 
     @contextmanager
     def reading(self):
-        """Decode absence once; connected reads retain one WAL snapshot."""
-        try:
-            self.path.stat()
-        except FileNotFoundError:
-            yield NoStoreRead(self)
-        else:
-            with self.snapshot() as connection:
-                yield StoreRead(self, connection)
+        """Keep item and draft queries within the same SQL snapshot."""
+        with self.snapshot() as connection:
+            yield StoreRead(self, connection)
 
     def _cut(self, connection) -> ExternalCut:
         return ExternalItemRow.select(connection, row_type=ExternalCut, thread=self.lookup)[0]

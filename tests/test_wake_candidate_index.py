@@ -73,6 +73,24 @@ def participants(private_comms, tmp_path: Path) -> dict[str, str]:
     return {name: RecordedThreadIncarnation("fixture", identity).lookup for name, identity in created.items()}
 
 
+def test_unbuilt_index_rejects_pages_and_resume_without_creating_storage(private_comms, participants):
+    comms, lookup = private_comms, participants
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    message = comms.messaging.send_initial_cohort("sender", "Alice", "not indexed")
+    index = WakeCandidateIndex(comms.bus.log)
+    with pytest.raises(ProjectionUnavailableError, match="stale or unrelated"):
+        index.page(root_id=root_id, recipient_lookup=lookup["Alice"], after_seq=0,
+                   required_through_seq=message.seq)
+    with pytest.raises(ProjectionRebuildRequiredError, match="initial build"):
+        index._verified_checkpoint(root_id)
+    hint = index.notify_committed_append(root_id=root_id,
+                                        through_bytes=comms.bus.log.path.stat().st_size)
+    with pytest.raises(ProjectionRebuildRequiredError, match="initial build"):
+        index.catch_up_committed_append(hint)
+    assert not index.path.exists()
+    assert not index.path.with_name(f".{index.filename}.lock").exists()
+
+
 def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path, private_comms, participants) -> None:
     comms = private_comms
     root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id

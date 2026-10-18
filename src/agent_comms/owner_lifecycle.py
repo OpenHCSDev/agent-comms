@@ -182,10 +182,6 @@ class OwnerReleaseStore(ThreadOwnedState, TypedStore):
     filename = "owner_releases.sqlite3"
     rows = (OwnerReleaseEvidence,)
 
-    def __post_init__(self) -> None:
-        with self.writing():
-            pass  # Opening establishes the empty store; reads never manufacture absence.
-
     def get(self, name: str) -> OwnerRelease:
         with self.snapshot() as db, closing(OwnerReleaseEvidence.stream(db, name=name)) as records:
             return next(records, NoRelease())
