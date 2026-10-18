@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .child_process import ProcessState
 from .errors import RelationViolationError
 from .thread_presentation import ThreadPresentation
 
@@ -65,7 +66,7 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def allows_owner_control(self) -> bool:
         return True
 
-    def allows_owner_start(self, *, owner_pid: int) -> bool:
+    def allows_owner_start(self, *, process: ProcessState) -> bool:
         return self.allows_owner_control()
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
@@ -87,8 +88,8 @@ class ActiveThreadPresence:
     def for_deletion(self) -> ThreadStatus:
         raise RelationViolationError("Stop a running thread before permanently deleting it.")
 
-    def allows_owner_start(self, *, owner_pid: int) -> bool:
-        return owner_pid <= 0
+    def allows_owner_start(self, *, process: ProcessState) -> bool:
+        return not process.has_process
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
         return activity.ordinary_presentation(title)

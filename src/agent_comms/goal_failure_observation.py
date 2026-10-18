@@ -245,7 +245,7 @@ def read_failed_turn_projection(
         return FailedTurnProjection("unavailable", reason)
 
     goal = owner.goal
-    if goal is None or not owner_status.active or owner.pid <= 0:
+    if goal is None or not owner_status.active or not owner.process_identity.has_process:
         return unavailable("owner_or_goal_changed")
     try:
         # Resolve lifecycle eligibility before reading the ledger; active goals

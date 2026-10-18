@@ -29,7 +29,8 @@ from typing import Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireValue
+from .errors import RelationViolationError
 from .sealed import Sealed
 
 STOP_GRACE_SECONDS = 2.0
@@ -51,8 +52,83 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
     """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
+class ProcessState(WireValue):
+    """An exact recorded process or a worker which has never started."""
+
+    accepts_null = True
+    external_json_shape = True
+
+    @classmethod
+    def from_wire(cls, data):
+        return FieldCodec.decode(NoProcess | ProcessIdentity, data)
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(ProcessIdentity | NoProcess)
+
+    @property
+    @abstractmethod
+    def has_process(self) -> bool: ...
+
+    @abstractmethod
+    def require(self, message: str = "No worker process has started") -> ProcessIdentity: ...
+
+    @abstractmethod
+    def alive(self) -> bool: ...
+
+    @abstractmethod
+    def matches_pid(self, pid: int) -> bool: ...
+
+    @abstractmethod
+    def signal(self, signum: int) -> None: ...
+
+    @abstractmethod
+    def require_release_by(self, process: ProcessIdentity) -> None: ...
+
+    @abstractmethod
+    def pid_fields(self) -> dict[str, int]: ...
+
+
 @dataclass(frozen=True)
-class ProcessIdentity:
+class NoProcess(ProcessState):
+    @classmethod
+    def from_wire(cls, data):
+        FieldCodec.decode(type(None), data)
+        return cls()
+
+    def to_wire(self):
+        return None
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(type(None))
+
+    @property
+    def has_process(self):
+        return False
+
+    def require(self, message="No worker process has started"):
+        raise RelationViolationError(message)
+
+    def alive(self):
+        return False
+
+    def matches_pid(self, pid):
+        return False
+
+    def signal(self, signum):
+        pass
+
+    def require_release_by(self, process):
+        # Stopping before the first start still produces a valid release.
+        pass
+
+    def pid_fields(self):
+        return {}
+
+
+@dataclass(frozen=True)
+class ProcessIdentity(ProcessState):
     pid: int
     start_time: int
 
@@ -66,6 +142,37 @@ class ProcessIdentity:
 
     def alive(self) -> bool:
         return Platform.current().matches(self)
+
+    @classmethod
+    def from_wire(cls, data):
+        return FieldCodec.decode_record(cls, data)
+
+    def to_wire(self):
+        return FieldCodec.encode_record(self)
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.record_schema(cls)
+
+    @property
+    def has_process(self):
+        return True
+
+    def require(self, message="No worker process has started"):
+        return self
+
+    def matches_pid(self, pid):
+        return self.pid == pid
+
+    def signal(self, signum):
+        Platform.current().send(self, signum)
+
+    def require_release_by(self, process):
+        if self != process:
+            raise RelationViolationError("Only the registered owner may release itself.")
+
+    def pid_fields(self):
+        return {"pid": self.pid}
 
 
 class ProcessGroups(ABC):

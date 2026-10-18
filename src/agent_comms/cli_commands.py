@@ -28,7 +28,7 @@ from .channels import Channel
 from .channel_targets import CommandTarget, ResolvedChannel
 from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
-from .child_process import ProcessIdentity
+from .child_process import NoProcess, ProcessIdentity
 from .command import Command
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .field_codec import FieldCodec, PathText, compile_decoder
@@ -1184,7 +1184,7 @@ class RegisterCliCommand(CliCommand):
     )
     parent: str | None = option("--parent", default=None)
     task: str | None = option("--task", default=None)
-    pid: int = option("--pid", default=0)
+    pid: int | None = option("--pid", default=None)
     execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution, editor=ChoiceTargetField,
                                             parser_default=FieldCodec.encode(ExternalThreadExecution))
 
@@ -1196,7 +1196,7 @@ class RegisterCliCommand(CliCommand):
             worktree=self.worktree,
             parent=self.parent,
             task=self.task,
-            process_identity=ProcessIdentity.capture(self.pid) if self.pid > 0 else None,
+            process_identity=NoProcess() if self.pid is None else ProcessIdentity.capture(self.pid),
             execution=self.execution,
         )
         ctx.registry.declare(thread)
@@ -1248,12 +1248,13 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
 
     def apply(self, ctx: Comms) -> Any:
         attached = ctx.threads.attach_session(
-            ctx.registry.require(self.name), self.session_file, pid=self.pid
+            ctx.registry.require(self.name), self.session_file,
+            process=ProcessIdentity.capture(self.pid) if self.pid is not None else None,
         )
         return {
             "attached": attached.name,
             "session_file": attached.session_file,
-            "pid": attached.pid,
+            **attached.process_identity.pid_fields(),
         }
 
 

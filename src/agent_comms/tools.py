@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar, Type
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
 from .channel_targets import ChannelTarget
+from .child_process import ProcessState
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -94,12 +95,12 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](NativeRequestTools, NativeExe
     action_order: ClassVar[int] = 0
 
     @classmethod
-    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
         return True
 
     @classmethod
     def available_for_thread(cls, thread, status: ThreadStatus) -> bool:
-        return cls.available_for(status, owner_pid=thread.pid)
+        return cls.available_for(status, process=thread.process_identity)
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
         return {
@@ -211,7 +212,7 @@ def _bounded_inbox_response(
 class NativeOwnerCommand:
     @classmethod
     def available_for_thread(cls, thread, status: ThreadStatus) -> bool:
-        return thread.execution.native_command_available(cls, status, owner_pid=thread.pid)
+        return thread.execution.native_command_available(cls, status, process=thread.process_identity)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -968,7 +969,7 @@ class OwnerLifecycleControl:
     """Commands that act on the owner lifecycle share its eligibility query."""
 
     @classmethod
-    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
         return status.allows_owner_control()
 
 
@@ -1001,8 +1002,8 @@ class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     name: str = tool_field("Thread to start", binding=SubjectBinding)
 
     @classmethod
-    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
-        return status.allows_owner_start(owner_pid=owner_pid)
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return status.allows_owner_start(process=process)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import StartCliCommand
@@ -1068,7 +1069,7 @@ class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
     name: str = tool_field("Stopped thread name", binding=SubjectBinding)
 
     @classmethod
-    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
         return status.stopped
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:

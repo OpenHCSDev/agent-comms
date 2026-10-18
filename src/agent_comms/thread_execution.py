@@ -8,6 +8,7 @@ import os
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
+from .child_process import ProcessState
 from .errors import RelationViolationError
 from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, ThreadStatus
 
@@ -41,7 +42,7 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return preparation.external()
 
     @classmethod
-    def native_command_available(cls, command, status, *, owner_pid: int) -> bool:
+    def native_command_available(cls, command, status, *, process: ProcessState) -> bool:
         return False
 
     @classmethod
@@ -78,12 +79,12 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
 class NativeThreadExecution(ThreadExecution):
     @classmethod
-    def native_command_available(cls, command, status, *, owner_pid: int) -> bool:
-        return command.available_for(status, owner_pid=owner_pid)
+    def native_command_available(cls, command, status, *, process: ProcessState) -> bool:
+        return command.available_for(status, process=process)
 
     @classmethod
     def restart_candidates(cls, thread: Thread, status):
-        if thread.pid == os.getpid():
+        if thread.process_identity.matches_pid(os.getpid()):
             return ()
         return (thread,) if thread.role.executable and status.active and thread.process_alive else ()
 
@@ -111,7 +112,7 @@ class NativeThreadExecution(ThreadExecution):
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        if status.active and thread.has_process:
+        if status.active and thread.process_identity.has_process:
             return binding.native_presentation(ordinary)
         return ordinary
 
@@ -123,7 +124,7 @@ class NativeThreadExecution(ThreadExecution):
     @classmethod
     def project_activity(cls, thread: Thread, activity):
         """A running native owner displays its current turn phase."""
-        return thread.turn_state.project_activity(activity) if thread.has_process else activity
+        return thread.turn_state.project_activity(activity) if thread.process_identity.has_process else activity
 
 
 class ExternalThreadExecution(ThreadExecution):
@@ -143,7 +144,7 @@ class ExternalThreadExecution(ThreadExecution):
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         if not status.active:
             return ordinary
-        if thread.has_process and not thread.process_alive:
+        if thread.process_identity.has_process and not thread.process_alive:
             return replace(ordinary, marker="○", summary="CLI offline",
                            status=ordinary.status.without_work())
         return ordinary
