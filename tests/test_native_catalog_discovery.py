@@ -323,7 +323,7 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
                 if isinstance(event, Response):
                     channel.correlate(event)
             response = pending.result()
-            updates = [event async for event in command.on_response(response, session)]
+            updates = list(command.on_response(response, session))
             assert len(updates) == 1 and isinstance(updates[0], command.result_type)
             assert updates[0].id == command.id and updates[0].ok is expected
             if not expected:

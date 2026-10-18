@@ -549,12 +549,10 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
         raise ValueError("Native recovery requires an unambiguous failed terminal")
 
     async def apply_end(self, session):
-        if False:
-            yield
+        return ()
 
     async def apply_start(self, session, event):
-        if False:
-            yield
+        return ()
 
     def observe_start_abort(self, session, event):
         pass
@@ -626,8 +624,7 @@ class AssistantMessage(PiMessage):
 
     async def apply_start(self, session, event):
         session.output.start_message()
-        if False:
-            yield
+        return ()
 
     @property
     def retry_progress(self):
@@ -640,14 +637,15 @@ class AssistantMessage(PiMessage):
         from .agent_events import CommittedProgress
 
         reason = self.stop_reason
+        updates = []
         if reason.tool_round and session.committable_message(self.text):
-            yield CommittedProgress(text=self.text)
+            updates.append(CommittedProgress(text=self.text))
         session.output.start_message()
         if self.usage is not None and session.accepts_output:
-            yield session.usage.charge(self.usage)
+            updates.append(session.usage.charge(self.usage))
         session.output.final_assistant_stop = reason.successful and session.started_input
-        async for event in reason.apply(session, self):
-            yield event
+        updates.extend([event async for event in reason.apply(session, self)])
+        return tuple(updates)
 
     @property
     def unread_reply(self) -> bool:
@@ -688,8 +686,7 @@ class UserMessage(PiMessage):
             await session.later_input_started(event)
 
     async def apply_start(self, session, event):
-        async for update in session.accept_user_message(self, event):
-            yield update
+        return tuple([update async for update in session.accept_user_message(self, event)])
 
     def observe_start_abort(self, session, event):
         session.observe_input_during_abort(event)
