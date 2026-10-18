@@ -136,10 +136,11 @@ class OrderWords(str):
         r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b')
     REFUSED: ClassVar[re.Pattern]
     refusal: ClassVar[str]
+    least_words: ClassVar[int] = 1
 
     def __new__(cls, text: str):
-        if found := cls.found(text):
-            raise ValueError(cls.refusal.format(found))
+        if len(text.split()) < cls.least_words or (found := cls.found(text)):
+            raise ValueError(cls.refusal.format(cls.least_words, cls.found(text)))
         return super().__new__(cls, text)
 
     @classmethod
@@ -151,12 +152,8 @@ class PlainText(OrderWords):
     """What a unit did, in the words the user uses: ten or more words and no word that hides what happened."""
 
     REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
-    refusal = "Jargon {} hides what happened; say it the way you would tell the user."
-
-    def __new__(cls, text: str):
-        if len(text.split()) < 10:
-            raise ValueError("Say what the unit actually did, plainly, in a full sentence (10+ words).")
-        return super().__new__(cls, text)
+    refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
+    least_words = 10
 
 
 class OrderText(OrderWords):
@@ -165,7 +162,7 @@ class OrderText(OrderWords):
     REFUSED = re.compile(r"\b(please|could you|would you|can you|if possible|consider|maybe|perhaps|when you get a chance|"
                          r"feel free|if you (think|agree|want)|thoughts\??|what do you think|thanks|thank you|sorry|"
                          r"no rush|optional(ly)?|up to you|might want|suggest)\b", re.I)
-    refusal = "Soft wording {}: state the edit, do not ask."
+    refusal = "Soft wording {1}: state the edit, do not ask."
 
 
 @dataclass(frozen=True, kw_only=True)
