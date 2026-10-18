@@ -19,9 +19,8 @@ from .diagnostics import owner_process_output
 from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
-from .native_package import NativePackageError, pinned_native_package
 from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRuntime, RestartEnvironment, PACKAGE_ENV, ROOT_ID_ENV
+from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .private_nk_entrypoint import PrivateNkLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -237,12 +236,7 @@ class OwnerLifecycle:
     def pin_private_nk_launch(
         self, validated_root: Path, wire_root_id: str, native_package: Path
     ) -> None:
-        """Bind a launch handed down by a parent owner, or a published route.
-
-        Recheck the root marker before retaining the exact lexical absolute
-        path; child env is generated from this pin, not a later cwd/env read.
-        Without a pin, a private root derives its own (see launch_authority).
-        """
+        """Retain this root's derived launch after rechecking the root marker."""
         if (
             not isinstance(validated_root, Path)
             or not validated_root.is_absolute()
@@ -315,23 +309,15 @@ class OwnerLifecycle:
     def launch_authority(self) -> PrivateNkLaunch | None:
         """The private launch for this root, or None for an ordinary root.
 
-        A pin handed down by a parent owner or a published route wins. Otherwise
-        each fact comes from its owner: the root ID from this root's marker and
-        the native package from this installation's pin. Nothing is guessed: the
-        root is the one this lifecycle serves, and validate() still refuses a
+        Derived once per process (PrivateNkLaunch.derive); the root is the one
+        this lifecycle serves and is never guessed. validate() still refuses a
         package that differs from the reviewed tree or a replaced root.
         """
         if self._private_nk_launch is None:
-            metadata = self.bus.log.read_metadata_unlocked()
-            if not metadata.private:
+            launch = PrivateNkLaunch.derive(self.root)
+            if launch is None:
                 return None
-            try:
-                package = pinned_native_package()
-            except NativePackageError as error:
-                raise PublicationActivationBlocked(
-                    "private owner launch needs this installation's prepared native package"
-                ) from error
-            self.pin_private_nk_launch(self.root, metadata.wire_root_id, package)
+            self.pin_private_nk_launch(launch.validated_root, launch.wire_root_id, launch.native_package)
         return self._private_nk_launch
 
     def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
@@ -348,7 +334,7 @@ class OwnerLifecycle:
         launch = self.launch_authority
         if launch is not None:
             launch.validate()
-            launch.apply_environment(result)
+            result["AGENT_COMMS_ROOT"] = str(launch.validated_root)
         return result
 
     def restart_owners(
@@ -458,8 +444,6 @@ class OwnerLifecycle:
             "PI_PARENT_ID",
             "PI_TASK",
             RestartEnvironment.initial_input_key,
-            ROOT_ID_ENV,
-            PACKAGE_ENV,
         ):
             env.pop(key, None)
         private_launch = self.require_launch_authority()
@@ -495,7 +479,8 @@ class OwnerLifecycle:
             }
         )
         if private_launch is not None:
-            private_launch.apply_environment(env)
+            # The child derives the same launch from this root.
+            env["AGENT_COMMS_ROOT"] = str(private_launch.validated_root)
         else:
             # Ordinary roots keep their canonical child path across symlink changes.
             env["AGENT_COMMS_ROOT"] = str(self.root.resolve())

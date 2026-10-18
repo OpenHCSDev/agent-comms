@@ -42,7 +42,7 @@ def main():
                        PI_OFFLINE="1",
                        NODE_DISABLE_COMPILE_CACHE="1", PATH=f"{commands}:{os.environ['PATH']}")
     for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE", "PI_PARENT_ID",
-                 "AGENT_COMMS_THREAD", "PYTHONPATH", "AGENT_COMMS_PRIVATE_NK_ROOT_ID", "AGENT_COMMS_PRIVATE_NK_PACKAGE"):
+                 "AGENT_COMMS_THREAD", "PYTHONPATH"):
         environment.pop(name, None)
     environment["AGENT_COMMS_THREAD"] = "native-startup-fixture"
     from agent_comms.child_process import ProcessIdentity

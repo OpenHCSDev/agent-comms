@@ -94,9 +94,10 @@ class NativePiPromptRejected(NativePiUnavailable):
 
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
+    from .active_route import resolve_comms_route
     from .private_nk_entrypoint import PrivateNkLaunch
 
-    launch = PrivateNkLaunch.current()
+    launch = PrivateNkLaunch.derive(resolve_comms_route().root)
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = launch.validate()
@@ -434,13 +435,14 @@ class NativePiRpcLaunch:
         name this installation's entrypoint, its pinned CLI, or the source stack
         launcher; execution always uses the verified native package.
         """
+        from .active_route import resolve_comms_route
         from .private_nk_entrypoint import PrivateNkLaunch
 
         stack_launcher = MANIFEST.parent / "bin" / "pi-native"
         executable = (
             Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
         )
-        route = PrivateNkLaunch.current()
+        route = PrivateNkLaunch.derive(resolve_comms_route().root)
         if route is not None:
             package = route.native_package
         elif executable is not None and executable == stack_launcher.resolve():
