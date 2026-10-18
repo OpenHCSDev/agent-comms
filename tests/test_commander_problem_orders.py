@@ -1,10 +1,14 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
 import importlib
 import os
+import sqlite3
 import subprocess
 
 import pytest
+from contextlib import closing
 from dataclasses import replace
+
+from cutover.carry_problem_goals import ProblemGoals
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
@@ -18,7 +22,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
 from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
-    RecordedCommitDelivery, MechanicalOrderRun,
+    RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     Assignment, DoneTodoState, RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, Todo, TodoConflict, VoidStrikeTodo)
@@ -490,6 +494,81 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
     request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
     assert request.stalled() == []
+
+
+def stray(commander, problem, generation):
+    """A pending problem stored the way pre-P48 joins and refused sends left them: under a Goal id that is
+    not the unit's open Goal."""
+    comms, _ = commander
+    lead = comms.registry.require('lead')
+    return comms.goals.todos.create(problem, 'OpenHCSDev/agent-comms', 'Fix ' + problem, creator=lead,
+        owner=comms.registry.require('worker'), generation=generation, deadline=RecordedEventTime(1000),
+        order=order(comms.root, 'order-' + problem), goal=GoalRef('lead', lead.created_at, 'request'))
+
+
+def completed_with_pending(commander):
+    """ci-1370's shape: the Goal completed on its only problem, then later problems were stored under it
+    and under a Goal that was never published."""
+    comms, caller = commander
+    create(commander, 'P1')
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    goal = comms.registry.require('worker').goal
+    assert isinstance(goal.state, CompletedGoal)
+    stray(commander, 'P2', goal.id)
+    stray(commander, 'P3', 'never-published')
+    return goal
+
+
+def todo_row(comms, problem):
+    with closing(sqlite3.connect(TodoStore.path_in(comms.root))) as db:
+        return db.execute('SELECT * FROM todo WHERE id=?', (problem,)).fetchone()
+
+
+def test_goal_stays_open_while_problems_pend(commander):
+    """Delivering a problem never completes the Goal while another assigned problem pends, even one
+    stored under a stale generation; a revised order for one keeps the other's order and deadline."""
+    comms, caller = commander
+    create(commander, 'P1')
+    create(commander, 'P2', deadline=2000)
+    stray(commander, 'P3', 'never-published')
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    assert comms.registry.require('worker').goal.state.active
+    other = comms.goals.todos.get('P3')
+    CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P2', order=order(comms.root, 'revised'),
+        request='request', deadline=RecordedEventTime(3000), commander='lead',
+        expected_revision=comms.goals.todos.get('P2').revision)).apply(comms, caller)
+    assert comms.goals.todos.get('P2').order.id == 'revised'
+    assert comms.goals.todos.get('P3') == other
+    CommsOrderDoneTool(problem='P2', delivery=OperationDelivery()).apply(comms, caller)
+    assert comms.registry.require('worker').goal.state.active
+
+
+def test_a_refused_send_leaves_the_todo_row_byte_identical(commander):
+    comms, caller = commander
+    goal = completed_with_pending(commander)
+    before = todo_row(comms, 'P3')
+    with pytest.raises(ValueError, match='Finish or release the assigned problems'):
+        CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P3', order=order(comms.root, 'resent'),
+            request='request', deadline=RecordedEventTime(3000), commander='lead',
+            expected_revision=comms.goals.todos.get('P3').revision)).apply(comms, caller)
+    assert todo_row(comms, 'P3') == before
+    assert comms.registry.require('worker').goal == goal
+
+
+def test_problem_goals_carry_reattaches_pending_problems_and_reopens_their_goal(commander):
+    comms, caller = commander
+    goal = completed_with_pending(commander)
+    assert ProblemGoals.carry(comms.root, apply=False).changed == 2
+    carried = ProblemGoals.carry(comms.root, apply=True)
+    assert (carried.changed, carried.detail) == (2, {'reattached': 1, 'reopened': 1})
+    assert ProblemGoals.carry(comms.root, apply=True).changed == 0
+    reopened = comms.registry.require('worker').goal
+    assert (reopened.id, reopened.revision, reopened.state.active) == (goal.id, goal.revision + 1, True)
+    assert {comms.goals.todos.get(p).assignment.generation for p in ('P2', 'P3')} == {goal.id}
+    CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P3', order=order(comms.root, 'revised'),
+        request='request', deadline=RecordedEventTime(3000), commander='lead',
+        expected_revision=comms.goals.todos.get('P3').revision)).apply(comms, caller)
+    assert comms.goals.todos.get('P3').order.id == 'revised'
 
 
 def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):

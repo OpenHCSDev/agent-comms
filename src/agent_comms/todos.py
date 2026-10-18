@@ -974,6 +974,12 @@ class TodoStore(TypedStore):
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
+    def holds_pending(self, owner: ThreadIncarnation) -> bool:
+        """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
+        return any(todo.pending for todo in self._select(
+            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=?",
+            (owner.name, owner.wire_birth)))
+
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         """The orders serving one request: a Goal on the commander's thread."""
         return self._select(
