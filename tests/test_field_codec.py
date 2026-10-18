@@ -136,6 +136,18 @@ class CountChoice(Choice):
     value: int
 
 
+@pytest.mark.parametrize("annotation,data", [
+    (type[Choice], "absent"),
+    (Choice, {"kind": "absent"}),
+])
+def test_family_refusal_keeps_its_own_message_once(annotation, data):
+    with pytest.raises(MalformedRecord) as refused:
+        FieldCodec.decode(annotation, data)
+    assert str(refused.value) == "Unknown Choice name: 'absent'"
+    assert type(refused.value.__cause__) is ValueError
+    assert str(refused.value.__cause__) == str(refused.value)
+
+
 @dataclass(frozen=True)
 class Record:
     choice: Choice
