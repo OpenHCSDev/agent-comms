@@ -55,7 +55,6 @@ from agent_comms.pi_payloads import PiUsage, ReportedModel, StateData
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.turn_phase import CompactionPhase
 from delivery_owner_fixture import canonical_agent
-from test_backend_native_lifecycle import native_backend
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 

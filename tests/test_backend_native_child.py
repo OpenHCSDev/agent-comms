@@ -9,7 +9,6 @@ import pytest
 from agent_comms.child_process import ChildRetirementCancelled, ChildRetirementError, ChildRetirementFailed
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 @pytest.mark.parametrize("stage", ["release_io", "reap"])

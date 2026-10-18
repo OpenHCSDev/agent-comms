@@ -10,7 +10,6 @@ from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 from native_event_host import install_event_host
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_backend, monkeypatch):

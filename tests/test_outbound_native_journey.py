@@ -12,7 +12,6 @@ from agent_comms.comms import Comms
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 async def test_retained_native_tool_send_uses_original_source_and_cold_acp_replay(

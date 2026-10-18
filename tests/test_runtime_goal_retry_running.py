@@ -23,7 +23,6 @@ from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import CompletedGeneration, ReadyGeneration
 from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
-from test_backend_native_lifecycle import native_backend
 from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")

@@ -23,7 +23,6 @@ from agent_comms.goal_failure_observation import read_failed_turn_projection
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
-from test_backend_native_lifecycle import native_backend as native_backend
 from stored_inputs import sent_text, stored_inputs
 
 

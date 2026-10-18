@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
+from native_backend_fixture import native_backend_fixture
 
 
 _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
@@ -168,6 +169,15 @@ def selected_model(monkeypatch, tmp_path):
     monkeypatch.setenv(NativeArguments.binary_key, NativeArguments.owner_launcher(runtime))
     monkeypatch.setenv(NativeArguments.arguments_key, shlex.join(settings.argv))
     return SelectedModel.decode(settings.model)
+
+
+@pytest.fixture
+async def native_backend(tmp_path_factory, monkeypatch, selected_model):
+    monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
+    # Native originals belong to the persistent run, even when a consuming
+    # module supplies a separate auto-deleting sealed-bus tmp_path fixture.
+    async with native_backend_fixture(tmp_path_factory.mktemp("saved-native-owner")) as owner:
+        yield owner
 
 
 @pytest.fixture

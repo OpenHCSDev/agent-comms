@@ -16,7 +16,6 @@ from agent_comms.native_arguments import (
     SelectedModel,
     ValueArgument,
 )
-from test_backend_native_lifecycle import native_backend as native_backend
 from agent_comms.pi_vocabulary import OffThinkingLevel
 
 

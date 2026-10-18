@@ -23,7 +23,6 @@ from agent_comms.tools import tool_catalog
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 @pytest.mark.parametrize('recorded_readers', [True])

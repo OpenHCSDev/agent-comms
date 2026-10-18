@@ -7,7 +7,6 @@ import json
 from dataclasses import replace
 
 from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
-from test_backend_native_lifecycle import native_backend as native_backend
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity

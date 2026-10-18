@@ -12,7 +12,6 @@ from agent_comms.native_pi import NativePiTerminalFailure
 from agent_comms.turn_failure import ModelRequestFailed
 from agent_comms.tracked_turn import TrackedTurnSession
 from delivery_owner_fixture import reply_turn_finished
-from test_backend_native_lifecycle import native_backend
 
 
 async def test_actual_native_delayed_round_then_tool_effect_and_error(native_backend, monkeypatch):

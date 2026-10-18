@@ -32,7 +32,6 @@ from stored_inputs import stored_inputs
 
 tmp_path = private_root_fixture
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 class OwnerClaimCase(DeclaredFamily, affix="Case"):
