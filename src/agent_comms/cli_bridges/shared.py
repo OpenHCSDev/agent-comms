@@ -13,20 +13,20 @@ import sys
 import traceback
 from abc import ABC, abstractmethod
 from contextlib import closing, contextmanager
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar
+from typing import TYPE_CHECKING, AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar, Unpack
 
-from pydantic import JsonValue, TypeAdapter, Field, model_validator
+from pydantic import AliasChoices, ConfigDict, JsonValue, TypeAdapter, Field, model_validator
 from metaclass_registry import RegistryConfig
 
 from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
-    DeliveredOutcome, EarlierItems, EmittedOutcome, FilteredOutcome, Outcome, TaggedWire,
+    DeliveredOutcome, EarlierItems, EmittedOutcome, FilteredOutcome, Outcome, TaggedWire, WireModel,
     UnconfirmedOutcome, WatchLine, raise_child_exit,
 )
 from agent_comms.declared_family import DeclaredFamily
@@ -35,6 +35,8 @@ from agent_comms.coordination_errors import CoordinationError
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalPage, ExternalTranscript
 from agent_comms.field_codec import FieldCodec
+from agent_comms.native_tools import (
+    BashTool, EditTool, GlobTool, GrepTool, ReadTool, ReplacementEdit, WriteTool)
 from agent_comms.messages import Message, MessageKind, InfoKind
 from agent_comms.message_reference import MessageReference
 from agent_comms.launch_runtime import LaunchRuntime
@@ -51,21 +53,132 @@ if TYPE_CHECKING:
     from .claude_protocol import ClaudeReaderPhase
 
 
+class CliToolArguments(WireModel):
+    """A CLI's arguments for one Core tool in its own spelling (Claude Code's, OpenCode's), read
+    once into the Core record; the CLI's other keys stay in its raw input."""
+    cli_names: ClassVar[tuple[str, ...]] = ()
+    types: ClassVar[dict[str, type[CliToolArguments]]] = {}
+    model_config = {'extra': 'allow'}
+
+    def __init_subclass__(cls, **kwargs: Unpack[ConfigDict]) -> None:
+        super().__init_subclass__(**kwargs)
+        cls.types.update(dict.fromkeys(cls.cli_names, cls))
+
+    def diff(self) -> ToolDiff | None:
+        return None
+
+    @abstractmethod
+    def record(self) -> ToolDeclaration: ...
+
+    @classmethod
+    def record_of(cls, name: str, arguments: dict[str, JsonValue]) -> ToolDeclaration | None:
+        try:
+            return cls.types[name].model_validate(arguments).record()
+        except (KeyError, ValueError):  # no shape for the name, or the values are refused
+            return None
+
+
+class CliCommandArguments(CliToolArguments):
+    cli_names = ('Bash', 'bash')
+    command: str
+
+    def record(self) -> BashTool:
+        return BashTool(command=self.command)
+
+
+class CliPatternArguments(CliToolArguments):
+    cli_names: ClassVar[tuple[str, ...]] = ('Grep', 'grep')
+    pattern: str
+    path: str | None = None
+
+    def record(self) -> ToolDeclaration:
+        return GrepTool(pattern=self.pattern, path=self.path)
+
+
+class CliGlobArguments(CliPatternArguments):
+    cli_names = ('Glob', 'glob')
+
+    def record(self) -> GlobTool:
+        return GlobTool(pattern=self.pattern, path=self.path)
+
+
+class CliPathArguments(CliToolArguments):
+    path: str = Field(validation_alias=AliasChoices('file_path', 'filePath'))
+
+
+class CliReadArguments(CliPathArguments):
+    cli_names = ('Read', 'read')
+
+    def record(self) -> ReadTool:
+        return ReadTool(path=self.path)
+
+
+class CliReplacement(WireModel):
+    old_string: str = Field(validation_alias=AliasChoices('old_string', 'oldString'))
+    new_string: str = Field(validation_alias=AliasChoices('new_string', 'newString'))
+
+
+class CliReplacingArguments(CliPathArguments):
+    """A file edit by replacements, however many the CLI's call shape carries."""
+
+    @abstractmethod
+    def replacements(self) -> Sequence[CliReplacement]: ...
+
+    def record(self) -> EditTool:
+        return EditTool(path=self.path, edits=tuple(ReplacementEdit(
+            old_text=edit.old_string, new_text=edit.new_string) for edit in self.replacements()))
+
+    def diff(self) -> ToolDiff:
+        return ToolDiff(''.join(patch.text for edit in self.replacements()
+            if (patch := ToolDiff.from_versions(self.path, edit.old_string, edit.new_string))))
+
+
+class CliEditArguments(CliReplacement, CliReplacingArguments):
+    """One replacement, its fields in the call itself (Claude Code's Edit, OpenCode's edit)."""
+    cli_names = ('Edit', 'edit')
+
+    def replacements(self) -> Sequence[CliReplacement]:
+        return (self,)
+
+
+class CliMultiEditArguments(CliReplacingArguments):
+    """A list of replacements (Claude Code's MultiEdit)."""
+    cli_names = ('MultiEdit',)
+    edits: list[CliReplacement]
+
+    def replacements(self) -> Sequence[CliReplacement]:
+        return self.edits
+
+
+class CliWriteArguments(CliPathArguments):
+    cli_names = ('Write', 'write')
+    content: str
+
+    def record(self) -> WriteTool:
+        return WriteTool(path=self.path, content=self.content)
+
+    def diff(self) -> ToolDiff | None:
+        return ToolDiff.from_versions(self.path, '', self.content,
+                                     before_path=self.path + ' (previous content not supplied)')
+
+
 @dataclass(frozen=True)
 class ToolCall:
-    """A CLI invocation uses the same preview and history as a native tool."""
+    """A CLI invocation uses the same preview and history as a native tool: its arguments as the
+    CLI sent them, and the Core tool record its bridge decoded them into once."""
     id: str
     name: str
     arguments: dict[str, JsonValue]
     diff: ToolDiff | None = None
+    tool: ToolDeclaration | None = None
 
     @property
     def title(self) -> str:
-        return ToolDeclaration.caption(self.name, self.arguments)
+        return ToolDeclaration.caption(self.name, self.tool)
 
     def finished(self, text: str, ok: bool) -> tuple[TranscriptEvent, ...]:
         return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=self.arguments),
+                                    raw_input=self.arguments, tool=self.tool),
                 ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
                                   text=text, ok=ok, diff=self.diff))
 

@@ -17,6 +17,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
+from .tool_declaration import ToolDeclaration
 from .pi_vocabulary import NoThinkingOverride, PiStopReason, ThinkingLevel, ThinkingLevelField, UnreportedStopReason
 from .transcript_events import SentTranscript
 
@@ -316,7 +317,8 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
         from .transcript_events import ToolStartTranscript
 
         return [
-            ToolStartTranscript(tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments)
+            ToolStartTranscript(tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments,
+                                tool=ToolDeclaration.record(self.name, self.arguments))
         ]
 
     id: str
