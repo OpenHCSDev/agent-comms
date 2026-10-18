@@ -133,11 +133,6 @@ class TextTranscript(TranscriptEvent):
     def text_size(self) -> int:
         return len(self.text)
 
-    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
-        if self.tool_call_id in calls:
-            calls[self.tool_call_id] = replace(
-                calls[self.tool_call_id], state=SucceededCallState if self.ok else FailedCallState)
-
 
 @dataclass(frozen=True)
 class NativeTextTranscript(TextTranscript, RecordedTranscript):
@@ -337,6 +332,11 @@ class ToolEndTranscript(ToolTranscript):
     @property
     def text_size(self) -> int:
         return len(self.text)
+
+    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
+        if self.tool_call_id in calls:
+            calls[self.tool_call_id] = replace(
+                calls[self.tool_call_id], state=SucceededCallState if self.ok else FailedCallState)
 
     def imported(self) -> ImportedMessage:
         outcome = "" if self.ok else ", failed"
