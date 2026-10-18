@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
+
+if TYPE_CHECKING:
+    from .backend import TurnSession
 
 
 class PiStopReason(DeclaredFamily, affix="StopReason"):
@@ -36,7 +40,7 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         return True
 
     @classmethod
-    def interrupted(cls, session):
+    def interrupted(cls, session: TurnSession) -> bool:
         """An abort the user asked for by sending now: the request was replaced, not failed."""
         return session.explicit_interrupt and cls.explicit_abort
 
