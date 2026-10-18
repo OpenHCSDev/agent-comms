@@ -1056,7 +1056,8 @@ class Todo(TypedTable):
         """A live strike on ``unit`` recorded since the current order was sent; a send-back that
         replaces this order is that same miss, so it counts no second strike."""
         sent = self.order.at.recorded_at("An order")
-        return any(recorded.at.recorded_at("A strike") >= sent for recorded in self.live_strikes(unit))
+        return any(recorded.at.recorded_at("A strike") >= sent
+                   for recorded in self.live_strikes(unit))
 
     def struck_out(self, unit: str) -> bool:
         """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical

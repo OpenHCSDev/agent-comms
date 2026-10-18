@@ -276,7 +276,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
                         'the check must also count their `from agent_comms` imports')
     if any(re.search(r'(?<![\w/])tools/', edit) for edit in edits) and not all(
-            f'--root {root}' in body for root in ('tools', 'src')):
+            said in body for said in ('--root tools', '--root src')):
         problems.append('the order changes tools/: say "ratchet with --root tools and with '
                         '--root src, each as its own command"')
     # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
@@ -336,7 +336,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         strike(unit, f'sent back on {group[0]}: {verdict}')
 
 
-def importers(modules, check):
+def importers(modules: set[str], check: OrderCheck) -> list[str]:
     """The other configured repos whose `from agent_comms` imports name a module, unless the
     check reads them."""
     pattern = rf'^\s*(from|import) agent_comms\b.*\b({"|".join(sorted(modules))})\b'
