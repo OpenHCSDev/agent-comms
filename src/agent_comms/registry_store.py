@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import threading
@@ -16,7 +15,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .locked_store import LockedStore
 from .private_path import FileRevision
-from .private_registry_guard import PrivateRegistryGuard
+from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .registry_document import RegistryDocument, RegistryEntry
 from .store_files import SharedLock
 
@@ -57,7 +56,7 @@ class RegistryCache:
     decoding: threading.Lock = field(default_factory=threading.Lock)
     # A successful guard check, keyed by the revisions of the three files it
     # reads. Unchanged files give the same answer; failures are never kept.
-    guard: tuple[tuple, PrivateRegistryGuard | None] | None = None
+    guard: tuple[tuple, RegistryPrivacy] | None = None
 
     _by_path: ClassVar[dict[str, RegistryCache]] = {}
 
@@ -160,21 +159,11 @@ class RegistryStore(LockedStore[RegistryDocument]):
             self.cache.entry = RegistryRevision(revision, document.copy(), raw)
 
     def _write_unlocked(self, text: str) -> None:
-        # The two-file private guard protocol cannot use A8's rollback writer:
-        # a pending guard after any failed write MUST remain fail-closed.
-        from . import store_files
-
+        # The two-file private guard protocol cannot use A8's rollback writer.
         self.cache.entry = None
-        guard = self.private_guard_unlocked()
-        if guard is None:
-            store_files._atomic_write_text(self.path, text, fsync_parent=True)
-        else:
-            digest = hashlib.sha256(b"present\0" + text.encode("utf-8")).digest()
-            sequence, slot = guard.prepare(digest)
-            store_files._atomic_write_text(self.path, text, fsync_parent=True)
-            guard.commit(sequence, slot, digest)
+        self.private_guard_unlocked().write(self.path, text)
 
-    def private_guard_unlocked(self) -> PrivateRegistryGuard | None:
+    def private_guard_unlocked(self) -> RegistryPrivacy:
         """Validate the private marker/guard BEFORE even a cached registry read.
 
         The directory, guard file and registry are one private root. A marker
@@ -196,21 +185,19 @@ class RegistryStore(LockedStore[RegistryDocument]):
         self.cache.guard = key, guard
         return guard
 
-    def _check_guard_unlocked(self, marker_path: Path, guard_path: Path) -> PrivateRegistryGuard | None:
-        from .private_registry_guard import PrivateRegistryGuard
-
+    def _check_guard_unlocked(self, marker_path: Path, guard_path: Path) -> RegistryPrivacy:
         guard_present = guard_path.exists() or guard_path.is_symlink()
         if not marker_path.exists() and not marker_path.is_symlink():
             if guard_present:
                 raise RelationViolationError("Private registry guard has no protocol marker")
-            return None
+            return PublicRegistry()
         from .wire_log import WireLog
 
         marker = WireLog(self.path.with_name("bus.jsonl")).read_metadata_unlocked(required=True)
         if not marker.private:
             if guard_present:
                 raise RelationViolationError("Private registry guard marker is absent")
-            return None
+            return PublicRegistry()
         guard = PrivateRegistryGuard(self.path, marker.root_id)
         guard.verify()
         return guard

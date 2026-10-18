@@ -21,13 +21,20 @@ import json
 import os
 import stat
 import struct
+from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from . import store_files
+from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .private_path import fsync_directory
-from .store_files import _atomic_write_text
+
+if TYPE_CHECKING:
+    from .threads import Thread
 
 _MAGIC = b"ACRG"
 _VERSION = 1
@@ -101,7 +108,25 @@ def _decode(data: bytes, root_id: bytes) -> tuple[int, int, bytes]:
     return seq, phase, digest
 
 
-class PrivateRegistryGuard:
+class RegistryPrivacy(ABC):
+    """What a registry root's protocol marker decides, selected by the registry store."""
+
+    @abstractmethod
+    def write(self, registry_path: Path, text: str) -> None: ...
+
+    @abstractmethod
+    def register_restored(self, threads: Iterable[Thread]) -> None: ...
+
+
+class PublicRegistry(RegistryPrivacy):
+    def write(self, registry_path: Path, text: str) -> None:
+        store_files._atomic_write_text(registry_path, text, fsync_parent=True)
+
+    def register_restored(self, threads: Iterable[Thread]) -> None:
+        """A public bus has no coordinator identities for restored threads."""
+
+
+class PrivateRegistryGuard(RegistryPrivacy):
     def __init__(self, registry_path: Path, wire_root_id: str):
         if (
             type(wire_root_id) is not str
@@ -231,6 +256,22 @@ class PrivateRegistryGuard:
         finally:
             os.close(fd)
 
+    def write(self, registry_path: Path, text: str) -> None:
+        # A pending guard after any failed write MUST remain fail-closed.
+        digest = hashlib.sha256(b"present\0" + text.encode("utf-8")).digest()
+        sequence, slot = self.prepare(digest)
+        store_files._atomic_write_text(registry_path, text, fsync_parent=True)
+        self.commit(sequence, slot, digest)
+
+    def register_restored(self, threads: Iterable[Thread]) -> None:
+        """Stopped subscribers still belong to frozen audiences; their coordinator identities
+        must exist before any cohort can be accepted."""
+        with Coordination(str(self.registry_path.parent / "coordination.sqlite3")) as store:
+            for thread in threads:
+                store.participants.register(
+                    thread.incarnation.require_recorded().lookup, thread.name, thread.name,
+                    committed=True)
+
     def create_pending(self) -> None:
         """Caller holds bus then registry locks; no marker may exist yet."""
         self._trusted_root()
@@ -303,7 +344,7 @@ class PrivateOwnerRenameIntent:
     completed: bool = False
 
     def write(self, root: Path) -> None:
-        _atomic_write_text(root / PRIVATE_OWNER_RENAME_PENDING,
+        store_files._atomic_write_text(root / PRIVATE_OWNER_RENAME_PENDING,
                            json.dumps(FieldCodec.encode(self), sort_keys=True), fsync_parent=True)
 
     @classmethod

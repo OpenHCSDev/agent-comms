@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
@@ -38,7 +38,8 @@ from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
 from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel
 from .private_registry_guard import (
-    PRIVATE_OWNER_RENAME_PENDING, PrivateOwnerRenameIntent, _require_no_private_owner_rename,
+    PRIVATE_OWNER_RENAME_PENDING, PrivateOwnerRenameIntent, PrivateRegistryGuard, PublicRegistry,
+    RegistryPrivacy, _require_no_private_owner_rename,
 )
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
@@ -214,30 +215,20 @@ class ThreadManagement:
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         """Restore historical declarations and their private delivery identities.
 
-        Registry restoration owns collision checks and strips execution authority.
-        On a private bus, stopped subscribers still belong to frozen audiences;
-        their coordinator identities must exist before any cohort can be accepted.
+        Registry restoration owns collision checks and strips execution authority;
+        the registry's privacy registers what restored threads need beyond it.
         Repeating this operation repairs an interrupted coordinator registration
         without replacing existing owners or importing historical delivery state.
         """
-        from .coordinator import Coordination
-
         selected = tuple(dict.fromkeys(names))
         with _store_lock(self._wire_lock_path):
             restored = self.registry.restore_stopped(source, selected)
-            with _store_lock(self.registry.store.path):
-                private = self.registry.store.private_guard_unlocked() is not None
-            if private:
-                with Coordination(str(self.root / "coordination.sqlite3")) as store:
-                    for name in selected:
-                        thread = self.registry.require(name)
-                        store.participants.register(
-                            thread.incarnation.lookup,
-                            thread.name,
-                            thread.name,
-                            committed=True,
-                        )
+            self._privacy().register_restored(self.registry.require(name) for name in selected)
             return restored
+
+    def _privacy(self) -> RegistryPrivacy:
+        with _store_lock(self.registry.store.path):
+            return self.registry.store.private_guard_unlocked()
 
     def claim_thread(
         self,
@@ -493,24 +484,19 @@ class ThreadManagement:
 
 @dataclass(frozen=True, slots=True)
 class ThreadRename(ABC):
-    """One rename, its kind chosen once where the bus's private marker is read."""
+    """One rename, its kind derived from the registry's privacy."""
 
+    privacy: ClassVar[type[RegistryPrivacy]]
     threads: ThreadManagement
     before: Thread
     new_name: str
+    registry_privacy: RegistryPrivacy
 
-    @staticmethod
-    def chosen(threads: ThreadManagement, before: Thread, new_name: str) -> ThreadRename:
-        private_meta = threads.root / "bus_meta.json"
-        if private_meta.is_symlink():
-            raise RelationViolationError("Bus metadata cannot be a symlink.")
-        if private_meta.exists():
-            with threads.bus.log.locked():
-                metadata = threads.bus.log.read_metadata_unlocked(required=True)
-                if metadata.private:
-                    threads.bus.log.private_marker_unlocked()
-                    return PrivateOwnerRename(threads, before, new_name, metadata.root_id)
-        return PlainRename(threads, before, new_name)
+    @classmethod
+    def chosen(cls, threads: ThreadManagement, before: Thread, new_name: str) -> Self:
+        privacy = threads._privacy()
+        kind, = (k for k in cls.__subclasses__() if isinstance(privacy, k.privacy))
+        return kind(threads, before, new_name, privacy)
 
     @abstractmethod
     def renamed(self) -> tuple[str, str]:
@@ -539,6 +525,8 @@ class ThreadRename(ABC):
 
 
 class PlainRename(ThreadRename):
+    privacy = PublicRegistry
+
     def renamed(self) -> tuple[str, str]:
         return self.registry_renamed()
 
@@ -548,7 +536,8 @@ class PrivateOwnerRename(ThreadRename):
     """Moves a committed coordinator owner under a durable intent, so a crash between the two
     stores fails closed instead of turning an old attempt into a new send."""
 
-    wire_root_id: str
+    privacy = PrivateRegistryGuard
+    registry_privacy: PrivateRegistryGuard
 
     def renamed(self) -> tuple[str, str]:
         from .coordinator import Coordination
@@ -569,7 +558,7 @@ class PrivateOwnerRename(ThreadRename):
             raise ValueError("Private coordinator owner name exceeds its bound.")
         with Coordination(str(coordinator)) as store:
             try:
-                person = store.participants.get(before.incarnation.lookup)
+                person = store.participants.get(before.incarnation.require_recorded().lookup)
             except ParticipantNotRegistered:
                 return self.registry_renamed()
             if not person.committed or person.owner_thread != before.name:
@@ -577,7 +566,8 @@ class PrivateOwnerRename(ThreadRename):
                     "Private coordinator owner differs from the registered owner.")
             generation = person.participant_generation
             PrivateOwnerRenameIntent(lookup=person.lookup, old=before.name, new=new_name,
-                                     generation=generation, wire_root_id=self.wire_root_id,
+                                     generation=generation,
+                                     wire_root_id=self.registry_privacy.root_id.hex(),
                                      ).write(root)
             # An old selected attempt stays fenced in its old generation; never retry or
             # reassign it after this ownership change.
