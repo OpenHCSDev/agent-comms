@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import Annotated, ClassVar, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
 
 from metaclass_registry import RegistryConfig
 from pydantic import (
@@ -240,19 +240,37 @@ class RpcError(WireModel):
     data: JsonValue = None
 
 
-class RpcSuccess(WireModel):
+if TYPE_CHECKING:
+    from .codex import CodexConnection
+
+
+class RpcReply(WireModel, ABC):
+    @abstractmethod
+    def route(self, connection: CodexConnection) -> None: ...
+
+
+class RpcSuccess(RpcReply):
     id: int
     result: JsonValue
 
+    def route(self, connection: CodexConnection) -> None:
+        connection.answer(self.id).set_result(self.result)
 
-class RpcFailure(WireModel):
+
+class RpcFailure(RpcReply):
     id: int | None
     error: RpcError
 
+    def route(self, connection: CodexConnection) -> None:
+        connection.answer(self.id).set_exception(RuntimeError(f'Codex: {self.error.message}'))
 
-class RpcNotification(WireModel):
+
+class RpcNotification(RpcReply):
     method: str
     params: JsonValue
+
+    def route(self, connection: CodexConnection) -> None:
+        connection.pending.append(self)
 
 
 RPC_RESPONSE = TypeAdapter(RpcSuccess | RpcFailure | RpcNotification)

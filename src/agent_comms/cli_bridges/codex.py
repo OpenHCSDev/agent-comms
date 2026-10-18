@@ -17,7 +17,7 @@ from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 from .shared import IncomingFrame, TranscriptBridge, Options, TranscriptUpdate, run_bridge
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
-    Request, RPC_RESPONSE, RpcFailure, RpcNotification, RpcSuccess, TextInput,
+    Request, RPC_RESPONSE, RpcReply, RpcNotification, TextInput,
     ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
 )
 
@@ -29,8 +29,17 @@ class CodexConnection:
         self.socket = socket
         self.sequence = 0
         self.pending: deque[RpcNotification] = deque()
+        self.answers: dict[int, asyncio.Future[JsonValue]] = {}
 
-    async def receive(self) -> RpcSuccess | RpcFailure | RpcNotification:
+    def answer(self, request_id: int | None) -> asyncio.Future[JsonValue]:
+        if request_id is None:
+            raise ConnectionError('Codex reported a failure outside any request')
+        try:
+            return self.answers.pop(request_id)
+        except KeyError as error:
+            raise ValueError('Codex replied to an unknown request') from error
+
+    async def receive(self) -> RpcReply:
         frame = await self.socket.receive()
         if frame.type is not aiohttp.WSMsgType.TEXT:
             raise ConnectionError(f'Codex connection ended: {frame.type.name}')
@@ -39,28 +48,24 @@ class CodexConnection:
     async def call(self, params: RequestParams) -> JsonValue:
         self.sequence += 1
         request = Request[type(params)](id=self.sequence, method=params.method, params=params)
-        await self.socket.send_str(request.model_dump_json(by_alias=True))
-        async with asyncio.timeout(15):
-            while True:
-                reply = await self.receive()
-                if isinstance(reply, RpcNotification):
-                    self.pending.append(reply)
-                    continue
-                if reply.id != request.id:
-                    raise ValueError('Codex replied to an unknown request')
-                if isinstance(reply, RpcFailure):
-                    raise RuntimeError(f'Codex {params.method}: {reply.error.message}')
-                return reply.result
+        future = asyncio.get_running_loop().create_future()
+        self.answers[request.id] = future
+        try:
+            async with asyncio.timeout(15):
+                await self.socket.send_str(request.model_dump_json(by_alias=True))
+                while not future.done():
+                    (await self.receive()).route(self)
+                return await future
+        finally:
+            self.answers.pop(request.id, None)
+            future.cancel()
 
     async def notifications(self) -> AsyncIterator[RpcNotification]:
         while True:
             if self.pending:
                 yield self.pending.popleft()
                 continue
-            reply = await self.receive()
-            if not isinstance(reply, RpcNotification):
-                raise ValueError('Unrequested Codex response on transcript subscription')
-            yield reply
+            (await self.receive()).route(self)
 
     @classmethod
     @asynccontextmanager
