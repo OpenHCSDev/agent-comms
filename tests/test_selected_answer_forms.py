@@ -8,6 +8,7 @@ and the answer was never delivered.
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import asyncio
 import json
 import os
@@ -46,7 +47,7 @@ def alice_batch(*sent: tuple[str, str]):
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
             comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), dirname, process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
         root_id = comms.messaging.initialize_private_initial_protocol()
-        messages = [comms.messaging.send_initial_cohort("sender", target, text) for target, text in sent]
+        messages = [publish_initial(comms, "sender", target, text) for target, text in sent]
         with Coordination(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             deliveries = [comms.bus.log.read_delivery_cohort(root_id, m.seq) for m in messages]

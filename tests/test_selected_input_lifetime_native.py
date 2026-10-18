@@ -4,6 +4,7 @@ Only HTTP provider responses and process termination are controlled. The native
 package, claim_scope writer, proof journal, bus and SQLite lifetime are real.
 """
 
+from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import asyncio
 import json
@@ -71,7 +72,7 @@ class SelectedNativeJourney:
         )
 
     def send(self, text):
-        message = self.comms.messaging.send_initial_cohort(
+        message = publish_initial(self.comms, 
             "sender", "beta" if self.direct else "#team", text
         )
         with Coordination(str(self.root / "coordination.sqlite3")) as store:

@@ -11,9 +11,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .catalog_store import ChannelCatalog
+from .cli_result import CliResult
 from .goal_waits import GoalWaits
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
+from .shared_ledger import LedgerDocument
 from .thread_identity import ThreadIncarnation
 from .thread_execution import ConversationPreparation
 from .transcript_sources import AssignedSourceIdentity
@@ -34,7 +36,7 @@ from .exporting import (
     WireExportBoundary,
     WireExportFormat,
     WireExportLimit,
-    WireExportReceipt,
+    WireExportProvenance,
     WireExportScope,
     WireTranscriptExporter,
 )
@@ -62,6 +64,23 @@ from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ThreadPoll(CliResult):
+    """One thread's state, its inbox, the shared ledger and its peers at one read."""
+    thread: ThreadRecord
+    inbox: tuple[Message, ...]
+    ledger: LedgerDocument
+    peers: tuple[Mapping[str, object], ...]
+
+    def encoded(self) -> object:
+        return self.to_wire()
+
+    def to_wire(self) -> dict[str, object]:
+        return {"thread": self.thread.to_wire(),
+                "inbox": [message.to_wire() for message in self.inbox],
+                "ledger": self.ledger.to_wire(), "peers": list(self.peers)}
 
 
 @dataclass(frozen=True)
@@ -302,7 +321,7 @@ class HistoryViews:
         limit: WireExportLimit,
         overwrite: bool = False,
         export_started_at: float | None = None,
-    ) -> WireExportReceipt:
+    ) -> WireExportProvenance:
         """Export one fixed, non-mutating snapshot of authoritative wire rows."""
         started_at = time.time() if export_started_at is None else export_started_at
         with ExitStack() as stack:
@@ -484,22 +503,19 @@ class HistoryViews:
         return [record.to_wire() for record in ThreadRecord.read(
             snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)]
 
-    def thread_detail(self, name: str, *, include_pending: bool = True) -> Mapping[str, object]:
+    def thread_detail(self, name: str, *, include_pending: bool = True) -> ThreadRecord:
         thread = self.registry.require(name)
         pending = self.bus.pending_counts_all((thread.name,)) if include_pending else None
         record, = ThreadRecord.read(self.registry.snapshot(), self.agents,
                                     GoalWaits.at(self.root).read(), (thread,), pending)
-        return record.to_wire()
+        return record
 
-    def poll(self, name: str | None = None) -> Mapping:
+    def poll(self, name: str | None = None) -> ThreadPoll:
         """One-shot status snapshot: self state plus inbox."""
         if name is None:
             me = current_thread(self.registry)
             name = me.name
         self.registry.require(name)
-        return {
-            "thread": self.thread_detail(name),
-            "inbox": [m.to_wire() for m in self.bus.inbox(name)],
-            "ledger": self.ledger.read(),
-            "peers": [person for person in self.presence() if person["name"] != name],
-        }
+        return ThreadPoll(self.thread_detail(name), tuple(self.bus.inbox(name)),
+                          self.ledger.document(),
+                          tuple(person for person in self.presence() if person["name"] != name))

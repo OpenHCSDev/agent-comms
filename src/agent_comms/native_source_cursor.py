@@ -32,8 +32,6 @@ class NativeSourceCursor:
     """Own current cursor observation and monotonic publication for one private bus."""
 
     def __init__(self, bus: MessageBus, store: Coordination, *, wire_root_id: str) -> None:
-        if type(bus) is not MessageBus or type(store) is not Coordination:
-            raise ValueError("current native cursor needs actual private stores")
         self.bus, self.store, self.wire_root_id = bus, store, wire_root_id
 
     @classmethod

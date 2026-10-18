@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import asyncio
 import threading
 from functools import partial
@@ -29,7 +30,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
 ):
     comms, agent, root_id = _session(tmp_path)
     owner = comms.registry.require("beta")
-    message = comms.messaging.send_initial_cohort("sender", "beta", "must survive selection")
+    message = publish_initial(comms, "sender", "beta", "must survive selection")
     store_path = comms.root / "coordination.sqlite3"
     lookup = RecordedThreadIncarnation("fixture", owner.created_at).lookup
     await _accept_visible_deliveries(
@@ -112,7 +113,7 @@ async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_
     from agent_comms.turn_phase import PromptAcceptancePhase
 
     comms, agent, root_id = _session(tmp_path)
-    original = comms.messaging.send_initial_cohort("sender", "beta", "selected batch")
+    original = publish_initial(comms, "sender", "beta", "selected batch")
     owner = comms.registry.require("beta")
     path = comms.root / "coordination.sqlite3"
     lookup = RecordedThreadIncarnation("fixture", owner.created_at).lookup
@@ -135,7 +136,7 @@ async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_
                 inbox = agent.inputs.bind_native_turn("beta", leased)
                 agent.inputs.first_sources["beta"] = SelectedOriginalInput.answering("selected batch")
                 following = await Coordination.run_worker(partial(
-                    comms.messaging.send_initial_cohort, "sender", "beta", "following message",
+                    publish_initial, comms, "sender", "beta", "following message",
                 ))
                 await _accept_visible_deliveries(
                     comms.bus, root_id, path, lookup, original.seq, owner_name="beta",
@@ -169,7 +170,7 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
 
     comms, agent, root_id = _session(tmp_path)
     owner = comms.registry.require("beta")
-    comms.messaging.send_initial_cohort("sender", "beta", "unbound recovery source")
+    publish_initial(comms, "sender", "beta", "unbound recovery source")
     store_path = comms.root / "coordination.sqlite3"
     lookup = RecordedThreadIncarnation("fixture", owner.created_at).lookup
     await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, 0, owner_name="beta")
@@ -205,7 +206,7 @@ async def test_delivery_worker_retires_unplaced_inputs_after_cancellation_or_inb
     leased = comms.agents.begin_turn("beta", "delivery-worker-turn")
     inbox = agent.inputs.bind_native_turn("beta", leased.thread)
     agent.inputs.first_sources["beta"] = SelectedOriginalInput.answering("live selected work")
-    message = comms.messaging.send_initial_cohort("sender", "beta", "worker-held delivery")
+    message = publish_initial(comms, "sender", "beta", "worker-held delivery")
     path = comms.root / "coordination.sqlite3"
     lookup = RecordedThreadIncarnation("fixture", leased.thread.created_at).lookup
     await _accept_visible_deliveries(comms.bus, root_id, path, lookup, 0, owner_name="beta")

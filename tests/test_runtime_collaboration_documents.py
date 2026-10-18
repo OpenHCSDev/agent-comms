@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import LockedStore
 from agent_comms.runtime_info import RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
@@ -87,8 +86,8 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path, *, t
     assert store.read()["old"].timestamp == 456.25
     assert store.path.read_bytes() == original
     store.rename_thread("old", "new")
-    reopened = RuntimeInfoStore(store.path).read()
-    assert FieldCodec.encode(reopened["new"]) == {**saved["old"], "thread": "new"}
+    assert RuntimeInfoStore(store.path).read()["new"].timestamp == 456.25
+    assert json.loads(store.path.read_text()) == {"new": {**saved["old"], "thread": "new"}}
     before = store.path.stat()
     store.remove_threads((thread_registration.new_thread('absent', frozenset(), str(tmp_path)),))
     assert store.path.stat() == before

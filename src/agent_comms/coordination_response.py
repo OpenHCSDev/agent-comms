@@ -43,6 +43,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
+from agent_comms.publisher import ResponseWrites
 from agent_comms.messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole
 from agent_comms.private_send_rules import RunningTurnRegistryCheck
 from agent_comms.native_input_owner import RegistryOwner
@@ -280,8 +281,6 @@ def _assert_response_schema(db: sqlite3.Connection) -> None:
 
 def install_private_response_schema(store: Coordination) -> None:
     """Install the current response tables on a fresh coordinator only."""
-    if type(store) is not Coordination:
-        raise TypeError("response schema requires the actual coordinator store")
     with store.session.transaction() as db:
         exists = SQLiteSchemaObject.read(
             db.execute(
@@ -314,7 +313,7 @@ class LiveResponseOwner(RegistryOwner):
         self.require_active_turn()
 
     async def publish_responses(
-        self, store_path: Path, bus: MessageBus, fence: OwnerFence,
+        self, store_path: Path, bus: MessageBus[ResponseWrites], fence: OwnerFence,
         replies: tuple[Message, ...],
     ) -> RecoverySnapshot:
         """Wait for every route write before releasing the turn's resources.
@@ -341,7 +340,7 @@ class LiveResponseOwner(RegistryOwner):
             )
 
     def _publish_owned(
-        self, bus: MessageBus, fence: OwnerFence,
+        self, bus: MessageBus[ResponseWrites], fence: OwnerFence,
         replies: tuple[Message, ...], store: Coordination,
     ) -> RecoverySnapshot:
         # SelectedSourceBatch.response_message already requires a nonempty
@@ -370,19 +369,12 @@ class LiveResponseOwner(RegistryOwner):
 
 
 def _require_bound_stores(bus: MessageBus, store: Coordination) -> None:
-    if type(bus) is not MessageBus or type(store) is not Coordination:
-        raise TypeError("response requires real, explicitly gated bus and coordinator stores")
     if (
         store.session.path.name != "coordination.sqlite3"
         or Path(bus.log.path.parent).absolute() != Path(store.session.path.parent).absolute()
         or bus._registry.store.path.absolute() != (bus.log.path.parent / "registry.json").absolute()
     ):
         raise IdentityConflict("response bus and coordinator have different trusted roots")
-
-
-def _require_response_writes(bus: MessageBus) -> None:
-    if bus.publisher._private_response_writes is not True:
-        raise PublicationActivationBlocked("private response publication is disabled")
 
 
 def _require_cohort_assignments(
@@ -477,7 +469,7 @@ def _answered_by(bus, metadata, owner: LiveResponseOwner, registry, snapshot, ob
 
 def prepare_fenced_response(
     store: Coordination,
-    bus: MessageBus,
+    bus: MessageBus[ResponseWrites],
     fence: OwnerFence,
     payload: str,
     *,
@@ -494,13 +486,7 @@ def prepare_fenced_response(
     fence plus final backend/death evidence can prepare it.
     """
     _require_bound_stores(bus, store)
-    _require_response_writes(bus)
-    if (
-        type(fence) is not OwnerFence
-        or not (isinstance(message_type, type) and issubclass(message_type, MessageKind))
-    ):
-        raise TypeError("response requires exact fence and message kind")
-    if not isinstance(payload, str) or not payload:
+    if not payload:
         raise ValueError("response payload must be nonempty")
     with store.session.boundary(bus) as boundary:
         registry_snapshot = boundary.registry
@@ -588,7 +574,7 @@ def _terminal_replay(
 
 def _settle_fenced_response(
     store: Coordination,
-    bus: MessageBus,
+    bus: MessageBus[ResponseWrites],
     fence: OwnerFence,
     *,
     allow_append: bool,
@@ -596,9 +582,6 @@ def _settle_fenced_response(
     owner_witness: LiveResponseOwner,
 ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
     _require_bound_stores(bus, store)
-    _require_response_writes(bus)
-    if type(fence) is not OwnerFence:
-        raise TypeError("response settlement requires an exact owner fence")
     # One registry revision is held through dispatch, append and Tx2. SQL's
     # current owner generation remains guarded by the transaction fence.
     with store.session.boundary(bus) as boundary:
@@ -660,7 +643,7 @@ def _settle_fenced_response(
 
 def publish_fenced_response(
     store: Coordination,
-    bus: MessageBus,
+    bus: MessageBus[ResponseWrites],
     fence: OwnerFence,
     *,
     exact_target: str,
@@ -674,7 +657,7 @@ def publish_fenced_response(
 
 def resolve_existing_response(
     store: Coordination,
-    bus: MessageBus,
+    bus: MessageBus[ResponseWrites],
     fence: OwnerFence,
     *,
     exact_target: str,

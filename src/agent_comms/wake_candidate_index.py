@@ -233,8 +233,8 @@ class WakeCandidateIndex(TypedStore):
     rows = tuple(TypedTable.members_with(CandidateTable))
 
     def __init__(self, log: WireLog):
-        if type(log) is not WireLog or log.path.name != "bus.jsonl":
-            raise TypeError("candidate index requires the canonical wire log")
+        if log.path.name != "bus.jsonl":
+            raise ValueError("candidate index requires the canonical wire log")
         self.log = log
 
     @property
@@ -419,8 +419,6 @@ class WakeCandidateIndex(TypedStore):
         the index catches up. This
         contains no seal, owner, claim or native proof and never retries work.
         """
-        if type(hint) is not CommittedAppendHint:
-            raise ValueError("candidate catch-up requires the original append hint")
         hint = hint.validated()
         self._validate_limits(max_rows, max_bytes)
         if self.log.private_marker_unlocked().root_id != hint.root_id:

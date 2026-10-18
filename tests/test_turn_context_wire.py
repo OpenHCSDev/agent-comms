@@ -1,4 +1,5 @@
 """Original sealed messaging survives silent context rows through every projection."""
+from conftest import publish_initial
 import hashlib
 
 import pytest
@@ -26,7 +27,7 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
     from agent_comms.context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
 
     comms, _ = _root(tmp_path)
-    comms.messaging.send_initial_cohort('sender', '#team', '@Alice original question')
+    publish_initial(comms, 'sender', '#team', '@Alice original question')
     owner = comms.registry.require('Alice')
     original = comms.bus.awareness_segments(owner, ())
     assert len(original) == 1 and isinstance(original[0], AwarenessSegment)
@@ -54,7 +55,7 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
 
 def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_path, monkeypatch):
     comms,root_id=_root(tmp_path)
-    first=comms.messaging.send_initial_cohort('sender','#team','@Alice original question')
+    first=publish_initial(comms, 'sender','#team','@Alice original question')
     lookup=RecordedThreadIncarnation("fixture", 17002.0).lookup
     prior=_page(comms,lookup)
     raw=comms.bus.log.path.read_bytes()
@@ -76,7 +77,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert list(comms.bus.full_history_page().messages)==[first]
     with comms.bus.log.full_history_snapshot() as (_, messages):
         assert list(messages)==[first]
-    second=comms.messaging.send_initial_cohort('sender','#team','@Alice next original message')
+    second=publish_initial(comms, 'sender','#team','@Alice next original message')
     assert second.seq==first.seq+1
     comms.bus.log.record_context(manifest(comms.registry.require('Alice'),2))
     reopened=Comms(comms.root)

@@ -45,7 +45,7 @@ from .wire_log import CurrentSnapshotOpening, WireSnapshot, WireLog
 from .wire_watch import WatchSource, WireWatch
 
 
-class MessageBus:
+class MessageBus[Writes: Publisher]:
     lock_rank = 0
 
     @property
@@ -56,10 +56,8 @@ class MessageBus:
         self,
         bus_path: Path,
         registry: Registration,
+        publisher: type[Writes],
         *,
-        private_response_writes: bool = False,
-        private_initial_writes: bool = False,
-        private_claim_writes: bool = False,
         projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ):
         from .catalog_store import ChannelCatalog
@@ -72,14 +70,7 @@ class MessageBus:
         self._registry = registry
         self._channels = ChannelCatalog.at(bus_path.parent)
         self.activity_index = self.log.register_append_index(BusActivityIndex(bus_path))
-        self.publisher = Publisher(
-            self.log,
-            registry,
-            self._channels,
-            private_response_writes=private_response_writes,
-            private_initial_writes=private_initial_writes,
-            private_claim_writes=private_claim_writes,
-        )
+        self.publisher = publisher(self.log, registry, self._channels)
 
     @contextmanager
     def opened_activity(self) -> Iterator[ActivityClocks]:

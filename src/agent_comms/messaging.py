@@ -16,6 +16,7 @@ from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
 from .messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole, NoticeRole
+from .publisher import InitialWrites, OwnerPublisher
 from .change_report import ChangeReport
 from .store_files import SharedLock, _store_lock
 from .thread_identity import ThreadRole
@@ -85,8 +86,9 @@ class Messaging:
                 report=report,
                 answers=self._answered_by(owner, target),
             )
+            publisher: OwnerPublisher = self.bus.publisher
             if claims or releases:
-                committed = self.bus.publisher.publish_claim_envelope(
+                committed = publisher.publish_claim_envelope(
                     message,
                     worktree=Path(owner.worktree),
                     incarnation=str(owner.created_at),
@@ -94,7 +96,7 @@ class Messaging:
                     releases=releases,
                 )
             else:
-                committed = self.bus.publisher.publish_ordinary(message, origin=AgentOrigin())
+                committed = publisher.publish_ordinary(message, origin=AgentOrigin())
         return committed
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
@@ -110,28 +112,9 @@ class Messaging:
 
     def initialize_private_initial_protocol(self) -> str:
         """Initialize the private protocol on a fresh owner-only root."""
+        publisher: InitialWrites = self.bus.publisher
         with _store_lock(self._wire_lock_path):
-            return self.bus.publisher.initialize_private_protocol()
-
-    def send_initial_cohort(
-        self,
-        sender: str,
-        target: str,
-        body: str,
-        type: Type[MessageKind] = InfoKind,
-        *,
-        role: MessageRole = ConversationRole(),
-    ) -> Message:
-        """Test-gated full-N send. No automatic SQL acceptance or live wake."""
-        type.require_sendable()
-        with _store_lock(self._wire_lock_path):
-            if sender not in self.registry or not self.registry.require(sender).role.executable:
-                raise RelationViolationError("Initial sender must be a registered executable.")
-            committed = self.bus.publisher.publish_initial_cohort(
-                Message(sender=sender, target=target, body=body, type=type, role=role),
-                origin=AgentOrigin(),
-            )
-        return committed
+            return publisher.initialize_private_protocol()
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
         """Choose the durable USER identity while the caller holds the wire lock."""

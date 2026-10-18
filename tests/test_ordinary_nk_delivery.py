@@ -58,19 +58,3 @@ def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
         comms.messaging.send_message("sender", "beta", "must not append")
     assert comms.bus.log.path.read_bytes() == before
     assert not comms.bus.log.metadata_path.exists()
-
-
-def test_explicitly_disabled_private_writer_refuses(tmp_path):
-    comms = Comms(tmp_path / "wire")
-    for name in ("sender", "beta"):
-        comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-        )
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    before = comms.bus.log.path.read_bytes()
-    disabled = Comms(comms.root, private_initial_writes=False)
-    with pytest.raises(RelationViolationError, match="Private initial publication is disabled"):
-        disabled.messaging.send_message("sender", "beta", "disabled writer")
-    meta = json.loads((comms.root / "bus_meta.json").read_text())
-    assert meta["wire_root_id"] == root_id and meta["last_seq"] == 0
-    assert comms.bus.log.path.read_bytes() == before

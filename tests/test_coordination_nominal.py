@@ -129,7 +129,7 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path, mo
 
     from agent_comms.comms import Comms
 
-    comms = Comms(tmp_path, private_initial_writes=True)
+    comms = Comms(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     with Coordination(tmp_path / "coordination.sqlite3") as store:
         store.participants.register("owner", "owner", "owner", committed=True)

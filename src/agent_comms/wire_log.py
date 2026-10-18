@@ -149,26 +149,18 @@ class WireSnapshot(ABC):
 
     def messages_for_references(self, references):
         """Resolve exact public identities, including rows without a wake cohort."""
+        if not references:
+            return ()
+        sequences = frozenset(reference.seq for reference in references)
+        boundary = self.complete_prefix.boundary
         messages = {
             message.reference: message
-            for message, _ in self.public_records_for(
-                frozenset(reference.seq for reference in references),
-                before_offset=self.complete_prefix.boundary,
-            )
+            for message, _ in self.query_page_index(lambda index: tuple(self.indexed_records(
+                index.sequence_offsets(sequences, before_offset=boundary), before_offset=boundary)))
         }
         if any(reference not in messages for reference in references):
             raise RelationViolationError("Notification reference is not its original source")
         return tuple(messages[reference] for reference in references)
-
-    def public_records_for(self, sequences: frozenset[int], *, before_offset: int
-                           ) -> Iterator[tuple[Message, int]]:
-        """An unscanned cut validates every original row, including silence."""
-        if not 0 <= before_offset <= self.boundary:
-            raise ValueError("Public read exceeds its opened source cut")
-        if sequences:
-            for message, size in self.public_records(before_offset=before_offset):
-                if message.seq in sequences:
-                    yield message, size
 
     @classmethod
     def public_page_records(cls, record: Mapping, raw_size: int,
@@ -413,25 +405,6 @@ class ScannedWireSnapshot(OpenedWireSnapshot):
     @staticmethod
     def messages(record: Mapping) -> tuple[Message, ...]:
         return WireRecord.certified_public_messages(record)
-
-    def public_records_for(self, sequences: frozenset[int], *, before_offset: int
-                           ) -> Iterator[tuple[Message, int]]:
-        """Resolve sparse changes through the same prepared index as page reads."""
-        if not 0 <= before_offset <= self.boundary:
-            raise ValueError("Public read exceeds its opened source cut")
-        if not sequences:
-            return
-
-        def read(index):
-            rows = (
-                row for seq in sorted(sequences)
-                for row in index.offsets(lower=seq - 1, upper=seq + 1,
-                                        descending=False, targets=None,
-                                        before_offset=before_offset)
-            )
-            return tuple(self.indexed_records(rows, before_offset=before_offset))
-
-        yield from self.query_page_index(read)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

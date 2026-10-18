@@ -234,8 +234,6 @@ def accept_delivery_cohort(
     participant owner or commit one based merely on a bus message. If the
     coordinator has not registered each frozen stable lookup, no N is accepted.
     """
-    if type(bus) is not MessageBus or type(store) is not Coordination:
-        raise TypeError("cohort acceptance requires the actual bus and coordinator stores")
     # Hold the bus read open for the whole SQL write.
     with bus.log.certified_read() as source, store.session.transaction() as db:
         marker = source.marker

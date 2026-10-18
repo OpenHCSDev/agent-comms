@@ -91,8 +91,6 @@ class SourceCoverage:
         self, bus: MessageBus, store: Coordination, *, wire_root_id: str, recipient_lookup: str,
         contention: StoreLockContention | None = None,
     ):
-        if type(bus) is not MessageBus or type(store) is not Coordination:
-            raise ValueError("Source coverage needs the original bus and coordinator")
         self.bus, self.store = bus, store
         self.contention = contention  # Borrowed lock wait resource; never source evidence.
         self.wire_root_id = FieldCodec.decode(Annotated[str, WireRootIdText], wire_root_id)

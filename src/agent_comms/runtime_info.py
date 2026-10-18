@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .locked_store import LockedStore, RootFile
@@ -18,10 +19,8 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class RuntimeInfo(ABC):
+class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
     """A runtime-info read is observed or explicitly unobserved."""
-
-    __slots__ = ()
 
     @abstractmethod
     def context_reading(self) -> ContextReading: ...

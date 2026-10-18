@@ -5,6 +5,8 @@ activate private processing for existing public sessions.
 """
 
 from __future__ import annotations
+
+from conftest import responder
 from agent_comms.tool_caller import NoThreadCaller
 
 import asyncio
@@ -25,11 +27,10 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import PublicationActivationBlocked, StaleFence
+from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.message_bus import MessageBus
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.pi_payloads import PublishedMessageToolDetails
@@ -164,7 +165,7 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old-before-rename"}, caller=NoThreadCaller())
     if seal_old:
-        bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+        bus = responder(comms.root, comms.registry)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             await _accept_visible_deliveries(bus, root_id, store.session.path, lookup, 0, owner_name="beta")
     comms.threads._rename_thread("beta", "gamma")
@@ -209,6 +210,18 @@ def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tm
     assert comms.registry.require("beta").name == "beta"
     assert "gamma" not in comms.registry
     assert comms.bus.log.latest_sequence() == 0
+
+
+def test_private_rename_of_unregistered_participant_takes_the_plain_path(tmp_path):
+    comms, _, _ = _session(tmp_path)
+    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("sender").created_at).lookup
+    renamed = comms.threads._rename_thread("sender", "courier")
+    assert (renamed.previous, renamed.current) == ("sender", "courier")
+    assert comms.registry.require("sender").name == "courier"
+    assert not (comms.root / ".private-owner-rename.pending").exists()
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        with pytest.raises(ParticipantNotRegistered):
+            store.participants.get(lookup)
 
 
 @pytest.mark.asyncio
@@ -261,7 +274,7 @@ async def test_private_rename_compensates_registry_failure_with_new_old_owner_ge
     assert (comms.root / ".private-owner-rename.pending").is_file()
     with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
         comms.messaging.send_message("sender", "beta", "not published after uncertain rename")
-    bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+    bus = responder(comms.root, comms.registry)
     with (
         Coordination(str(comms.root / "coordination.sqlite3")) as store,
         pytest.raises(RelationViolationError, match="Private owner rename is pending"),

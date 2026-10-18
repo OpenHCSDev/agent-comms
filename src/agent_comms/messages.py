@@ -401,13 +401,10 @@ class Message:
         self.task.require_sender(self.sender)
         if self.claim_transition is not None:
             transition = self.claim_transition
-            if type(transition) is not ClaimTransition or (
-                self.seq > 0
-                and (
-                    transition.owner != self.sender
-                    or transition.seq != self.seq
-                    or transition.message_id != self.message_id
-                )
+            if self.seq > 0 and (
+                transition.owner != self.sender
+                or transition.seq != self.seq
+                or transition.message_id != self.message_id
             ):
                 raise RelationViolationError("Claim transition does not bind this message.")
         if any(

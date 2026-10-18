@@ -3,6 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+from conftest import publish_initial
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
 import hashlib
@@ -72,7 +73,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
             source_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     if not continue_existing:
         (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
-    service = Comms(stage/'wire', private_initial_writes=True)
+    service = Comms(stage/'wire')
     if continue_existing:
         with service.bus.log.locked():
             root_id = service.bus.log.private_marker_unlocked().root_id
@@ -154,7 +155,7 @@ async def configured_pure_channel(arguments):
         service.registry.declare(service.registry.new_thread('history-sender', frozenset(), str(project)))
         service.registry.declare(service.registry.new_thread('history-recipient', frozenset(), str(project)))
         for index in range(arguments.history):
-            service.messaging.send_initial_cohort('history-sender', 'history-recipient',
+            publish_initial(service, 'history-sender', 'history-recipient',
                 f'Original private retained history {index}: ' + 'history ' * 400)
     packets, timeline, compaction_events = [], [], []
     class Observation:
@@ -786,7 +787,7 @@ async def run(arguments):
         'type': 'api_key', 'key': 'local-only'}}))
     (config/'settings.json').write_text(json.dumps({'compaction':{'enabled':False},
         'retry':{'enabled':False,'maxRetries':0,'provider':{'maxRetries':0}}}))
-    service = Comms(stage/'wire', private_initial_writes=True)
+    service = Comms(stage/'wire')
     root_id = service.messaging.initialize_private_initial_protocol()
     env = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
@@ -818,7 +819,7 @@ async def run(arguments):
             Path(str(saved)+'.input-proof').chmod(0o600)
             service.registry.register(replace(owner, session_file=str(saved)))
     for index in range(arguments.history):
-        service.messaging.send_initial_cohort('fixture-sender','history-recipient',
+        publish_initial(service, 'fixture-sender','history-recipient',
             f'Retained unrelated canonical source {index}: ' + 'history '*250)
     started = time.perf_counter()
     failure = None

@@ -29,6 +29,7 @@ from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
+from .publisher import ResponseWrites
 from .native_entries import NativeEvidenceScope
 from .native_source_cursor import NativeSourceCursor
 from .runtime import RuntimeServer
@@ -125,10 +126,7 @@ class CursorPublication:
         if not scope.matches_session(session_id):
             return unavailable
         try:
-            bus = MessageBus(
-                self.comms.root / "bus.jsonl", self.comms.registry,
-                private_response_writes=True,
-            )
+            bus = MessageBus(self.comms.root / "bus.jsonl", self.comms.registry, ResponseWrites)
             read_cursor = (
                 NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
             )
