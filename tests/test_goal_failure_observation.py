@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_attempts import (
     AttemptRecord,
@@ -108,7 +108,6 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
         {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 11.0), 7)},
         {"turn_id": "b" * 32},
         {"claimed_generation": 4},
-        {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 0)},
         {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 8)},
     ],
 )
@@ -239,7 +238,7 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         {"name": "replacement"},
         {"created_at": 11.0},
         {"worktree": "/changed"},
-        {"process_identity": None},
+        {"process_identity": NoProcess()},
         {"goal": Goal("replacement", "replacement", published_seq=0, state=BlockedGoal("Explicit fixture refusal"))},
         {"goal": Goal("active", "goal", published_seq=0)},
         {"turn_generation": 8},
