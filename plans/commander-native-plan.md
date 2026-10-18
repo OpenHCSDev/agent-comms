@@ -11,6 +11,7 @@
 5. **The live commander runs a third copy.** On Tristan's machine the loop runs scratch copies in `/home/ts/.cache/agent-scratch/rts/` with their own `problems.json`, `deadlines.json` and `strikes.jsonl`. Core's `commander/` package is not running there at all (no `commander.json` on that machine). On 2026-10-18 four rules were added only there: an order states the user-visible run that closes it (`Works when:`, 8+ words); `done` needs a file proving that run happened; moving a problem past two owners needs the commander's own trace (`--traced PATH:LINE`); wording in unit messages gets a correction, not a strike (86 wording strikes were deleted from the scratch strikes file instead of voided). Branch `rts-commander-tools` pushed a further copy under `tools/rts`.
 6. **Noise pushed the commander onto cheap checks.** About 700 of 1,136 recent feed messages were units posting "Claimed" to their own thread, and OVERDUE repeated 150-170 times per missed order. Under that load the commander closed P437 on a grep without starting the CLI (it broke every `agent-comms` command in the next build) and let Pi Durable pass through five owners without one real turn. Measurements: `commander-game.md`.
 7. **Names diverged.** The design's tool names (`comms_todo_create`, `comms_todo_assign`, ...) differ from what shipped (`CommsTodoCreateTool`, `CommsOrderTool`, `CommsOrderDoneTool`, ...). This plan uses the shipped names and updates the design to match.
+8. **One commander per machine.** `CommanderConfig.path()` is the single file `~/.config/agent-comms/commander.json`, and `install` writes the state directory as `~/.local/state/agent-comms/commander`. A second commander for another project, such as DQDock beside OpenHCS on 2026-10-18, has two options. It can overwrite the running commander's config, or it can share that commander's state, board, repositories, load count and strikes. The send guard is a global PreToolUse hook that knows only the one installed commander name, so it cannot protect a second one.
 
 ## Rules for this work
 
@@ -50,6 +51,7 @@
 | 19 | Storage hygiene | `storage.py`: worktree limit per unit, cleanup due under 30 GB free, nothing allocates under 5 GB | `UnitStorage` derived on read from worktree paths and free disk | 7 |
 | 20 | Commander reaches units only through orders | `send_guard.py` (PreToolUse hook) | stays a hook, at the harness boundary, checking against Core's order tools | 7 |
 | 21 | Paths, repositories, commander identity | `CommanderConfig` from `commander.json` | Core's project and registry configuration | 8 |
+| 33 | Several commanders on one machine and bus, one per project | none (one `commander.json`; a second install overwrites the first) | each commander is a registered thread that owns one project. Orders, strikes, load, board, alarms and forks are keyed by that commander, and the commander for a call comes from its `--from` thread. The send guard refuses a raw send from any registered commander. Two commanders for one project are refused when the second registers | 1, 8 |
 | 22 | Seeing the fleet: board, strikes, queue, story, alarms | `fleet-board.md`, `order.py board`, the terminal output of `rotate.py` and `judge.py` | a commander page in Toad, rendering Core's answers through `ui_model` | 6 |
 | 23 | An order states the user-visible run that closes it | scratch `rts/order.py send` (`Works when:`) | `OrderText` requires it; `CommsProblemCloseTool.works` is checked against it | 3 |
 | 24 | Reassigning past two owners needs the commander's trace | scratch `rts/order.py send --reassign --traced` | the transfer operation reads owners from the Todo's assignment history and refuses without a traced source location | 3 |
@@ -92,7 +94,7 @@ This phase removes the duplicate authority that exists today, before any new fea
 
 **Changes.**
 - Every script command that writes `problems.json`, `deadlines.json`, `closed.jsonl` or `strikes.jsonl` calls the native tool instead: problems through `CommsTodoCreateTool`, assignment and reassignment through `CommsOrderTool` and `CommsTodoTool`, completion through `CommsOrderDoneTool`, closing through `CommsProblemCloseTool`, strikes through `CommsTodoTool`.
-- `order.py board` and `overdue` read the native tools.
+- `order.py board` and `overdue` read the native tools, and only the orders whose Goal names the calling commander (row 33). A second commander's orders never appear on the first one's board.
 - Delete `ToolCaller.from_environment`; every caller identifies with `invoke --from`.
 
 **Deletes:** the writes to those four files and the environment-variable caller.
@@ -184,7 +186,7 @@ Toad is a view of Core, so the commander's page is one more view over Core's ans
 
 **Changes.**
 - A one-shot move, outside `src`, run once and deleted in the change that lands it: open problems become Todos, open deadlines become assignments, strikes become strike rows. Rows whose cause cannot be named exactly are listed for the commander, never guessed.
-- `CommanderConfig` becomes Core project and registry configuration.
+- `CommanderConfig` becomes Core project and registry configuration. A commander is declared once, as a registered thread with its project (row 33). Every tool takes its commander from the calling thread, never from a single machine-wide file. Each commander's open orders, strikes, load and board stay separate, and the board and capacity read only that commander's orders.
 
 **Deletes:** the `commander` package's scripts and private stores, and the state directory.
 
