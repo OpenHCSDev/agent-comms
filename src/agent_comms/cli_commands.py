@@ -693,7 +693,6 @@ class DeclaredOptions(Command):
     A DeclaredFamily of dataclass Commands inherits it; the namespace's ``command`` names
     the member."""
     help: ClassVar[str]
-    declared_name: ClassVar[str]
     __dataclass_fields__: ClassVar[dict[str, Field[object]]]
 
     @classmethod
@@ -731,7 +730,7 @@ class DeclaredOptions(Command):
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
-        payload: dict[str, object] = {"kind": cls.declared_name}
+        payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
         hints = get_type_hints(cls)
         for declared in fields(cls):
             key = FieldCodec.wire_key(declared)
@@ -1395,7 +1394,7 @@ class InstallCliCommand(CliCommand):
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
         return InstallResult(str(config.write(home)), {
-            type(harness).declared_name: harness.install(ctx, self.commander, project)
+            type(harness).require_name(): harness.install(ctx, self.commander, project)
             for harness in Harness.present(home)})
 
 
@@ -1693,7 +1692,7 @@ class ContextCliCommand(CliCommand):
     @classmethod
     def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         super().add_parser(subparsers)
-        parser = subparsers.choices[cls.declared_name]
+        parser = subparsers.choices[cls.require_name()]
         parser.add_argument("--turn", type=int, default=argparse.SUPPRESS)
         parser.add_argument("--diff", action="store_true")
         parser.add_argument("--imported", action="store_true")

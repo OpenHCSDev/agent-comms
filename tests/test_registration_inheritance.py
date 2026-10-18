@@ -4,7 +4,7 @@ from agent_comms.pi_vocabulary import HighThinkingLevel
 from dataclasses import dataclass, field, replace
 
 from agent_comms.comms import wire
-from agent_comms.registration_inheritance import RegistrationInheritance
+from agent_comms.registration_inheritance import PredicateInheritance
 from agent_comms.threads import Thread
 
 
@@ -16,7 +16,7 @@ def test_unchanged_registration_retains_generated_creation_marker(*, thread_regi
 
 
 def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(thread_registration):
-    class InheritUnsetCount(RegistrationInheritance):
+    class InheritUnsetCount(PredicateInheritance):
         @staticmethod
         def inherits(incoming: object) -> bool:
             return incoming == -1

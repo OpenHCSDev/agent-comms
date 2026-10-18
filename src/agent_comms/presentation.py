@@ -128,6 +128,9 @@ class MessageNotification:
     def recipient(self) -> str:
         return self.recipient_identity.canonical_thread
 
+    def activity_names(self) -> tuple[str, ...]:
+        return (self.recipient, *(() if self.message is None else (self.message.sender,)))
+
     @property
     def label(self) -> str:
         return self.state.notification_label(self)
@@ -862,9 +865,7 @@ class WireRevision(ReadState):
         """Attribute changes using the retained observation and existing route rows."""
         earlier = previous.revision
         names = previous.results.keys()
-        readable, changed = {}, set()
-        for name, result in previous.results.items():
-            result.collect_revision_inputs(name, readable, changed)
+        readable, changed = previous.revision_inputs()
         if (self.registry != earlier.registry or self.bus_source_changed_since(earlier)
                 or not readable):
             return frozenset(names)
@@ -879,30 +880,33 @@ class WireRevision(ReadState):
             for actor in actors:
                 changed.update(CommandTarget.named(actor).changed_threads(names, snapshot, catalog))
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
+        activity_changed = {name for name in activity
+                            if activity[name] != previous.activity.get(name)}
         status_names = names if (self.goal_waits, self.expiry_period) != (
-            earlier.goal_waits, earlier.expiry_period) else ()
-        if not status_names and self.activity != earlier.activity:
-            status_names = tuple(name for name in names if activity.get(name) != previous.activity.get(name))
+            earlier.goal_waits, earlier.expiry_period) else names & activity_changed
         if status_names:
             status_batch = comms.views.thread_presentations(status_names)
-            changed.update(name for name in status_names if (view := status_batch.view(name)) is None
-                           or not previous.results[name].same_status(view.presentation))
-        if self.notifications_changed_since(earlier):
-            remaining = {name: view for name, view in readable.items() if name not in changed}
-            references = tuple(dict.fromkeys(reference for view in remaining.values()
-                                            for reference in (*view.incoming_references, *view.sent_references)))
-            if references:
-                outcomes = MessageNotification.references(comms.root, comms.registry, comms.bus.log, references)
-                for name, view in remaining.items():
-                    viewer = OwnerOutcomes.of(view.read_identity.thread)
-                    current = tuple(replace(item, message=None)
-                                    for reference in (*view.incoming_references, *view.sent_references)
-                                    for item in outcomes[reference.seq, reference.message_id]
-                                    if viewer.includes(item.sender_lookup, item.recipient_identity))
-                    before = tuple(replace(item, message=None)
-                                   for item in (*view.notifications, *view.sent_notifications))
-                    if current != before:
-                        changed.add(name)
+            changed.update(name for name in status_names
+                           if (status_view := status_batch.view(name)) is None
+                           or not previous.results[name].same_status(status_view.presentation))
+        notifications_changed = self.notifications_changed_since(earlier)
+        remaining = {name: view for name, view in readable.items() if name not in changed
+                     and (notifications_changed
+                          or view.notification_activity_names() & activity_changed)}
+        references = tuple(dict.fromkeys(reference for view in remaining.values()
+                                        for reference in (*view.incoming_references, *view.sent_references)))
+        if references:
+            outcomes = MessageNotification.references(comms.root, comms.registry, comms.bus.log, references)
+            for name, view in remaining.items():
+                viewer = OwnerOutcomes.of(view.read_identity.thread)
+                current = tuple(replace(item, message=None)
+                                for reference in (*view.incoming_references, *view.sent_references)
+                                for item in outcomes[reference.seq, reference.message_id]
+                                if viewer.includes(item.sender_lookup, item.recipient_identity))
+                before = tuple(replace(item, message=None)
+                               for item in (*view.notifications, *view.sent_notifications))
+                if current != before:
+                    changed.add(name)
         return frozenset(changed & names)
 
     def bus_source_changed_since(self, earlier: WireRevision) -> bool:
@@ -947,7 +951,7 @@ class WireRevision(ReadState):
         return request.changed_since(current, self)
 
     def notifications_changed_since(self, earlier: WireRevision) -> bool:
-        """Recipient state depends on assignments, presence, bus replies and read marks."""
-        return (self.registry, self.activity, self.reads, self.notifications) != (
-            earlier.registry, earlier.activity, earlier.reads, earlier.notifications
+        """Whole-window changes; activity is attributed to its message participants."""
+        return (self.registry, self.reads, self.notifications) != (
+            earlier.registry, earlier.reads, earlier.notifications
         ) or self.expiry_period != earlier.expiry_period

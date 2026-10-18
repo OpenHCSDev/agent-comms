@@ -11,7 +11,6 @@ implementation modules (``backend``, ``pi_commands``, ``pi_events``,
 
 from __future__ import annotations
 
-from .field_codec import FieldCodec
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -217,8 +216,6 @@ class PiNativeBackend(
 
     def arguments(self, thread: Thread) -> tuple[str, ...]:
         """Pi's command-line arguments for this thread's model and thinking level."""
-        from .pi_vocabulary import ThinkingLevel
-
         return self.agent_args.with_model(thread.model).with_thinking(
             thread.thinking_level
         ).argv
@@ -240,6 +237,7 @@ class PiNativeBackend(
             self.agent_bin,
             self.arguments(thread),
             worktree=thread.worktree,
+            root=self.comms.root,
             environment=environment,
             session_file=thread.runtime.read_key,
             observe=partial(self.observe, thread),
@@ -343,7 +341,6 @@ class PiNativeBackend(
     async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
         from .native_pi import NativePiUnavailable
         from .pi_commands import SetModel, SetThinkingLevel
-        from .pi_vocabulary import ThinkingLevel
 
         commands = []
         if model is not None:
@@ -358,7 +355,7 @@ class PiNativeBackend(
             arguments = self.agent_args.with_model(state.model.display_name).with_thinking(
                 state.thinking_level
             ).argv
-        selected, level = state.model.display_name, FieldCodec.encode(state.thinking_level)
+        selected, level = state.model.display_name, state.thinking_level.declared_name
         if selected is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")
         return selected, level
