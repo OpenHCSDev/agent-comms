@@ -382,11 +382,10 @@ class RegistryDocument(RegistryPresence):
             return canonical, canonical
         current = self.threads[canonical]
         self.statuses[canonical].require_self_rename()
-        alias_owner = self.aliases.get(new_name)
-        if new_name in self.threads or (alias_owner is not None and alias_owner != canonical):
+        if self.taken(new_name, owner=canonical):
             raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
         replacement = replace(current, name=new_name)
-        if alias_owner == canonical:
+        if new_name in self.aliases:  # free for this thread: one of its own aliases
             del self.aliases[new_name]
         status = self.statuses.pop(canonical)
         last_seen = self.last_seen.pop(canonical)

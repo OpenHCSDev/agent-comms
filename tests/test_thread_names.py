@@ -2,8 +2,11 @@
 
 import os
 
+import pytest
+
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
 
 
 def _declare(comms, name, worktree):
@@ -28,8 +31,21 @@ def test_a_permanent_alias_is_reserved_except_for_its_own_thread(tmp_path):
     _declare(comms, "worker", str(tmp_path))
     comms.registry.rename("worker", "renamed")
     names = comms.registry.snapshot()
-    assert names.reserves("worker") and names.reserves("renamed")
+    assert names.taken("worker") and names.taken("renamed")
     assert names.claim_name("worker") == "worker-2"
     # A rename back to one of the thread's own names keeps that name.
     assert names.claim_name("worker", owner="renamed") == "worker"
     assert names.claim_name("renamed", owner="renamed") == "renamed"
+
+
+def test_rename_takes_its_own_alias_and_refuses_another_threads(tmp_path):
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    _declare(comms, "other", str(tmp_path))
+    comms.registry.rename("worker", "renamed")
+    names = comms.registry.snapshot()
+    assert names.taken("worker") and not names.taken("worker", owner="renamed")
+    with pytest.raises(RelationViolationError, match="'worker' is already in use"):
+        comms.threads._rename_thread("other", "worker")
+    assert comms.threads._rename_thread("renamed", "worker").current == "worker"
+    assert comms.registry.canonical_name("renamed") == "worker"

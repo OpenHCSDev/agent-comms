@@ -39,23 +39,23 @@ from ..native_tool_call import SelectedToolDenied
 from ..recorded_time import RecordedEventTime
 from ..todos import (
     ApplicationOrderRun,
-    MechanicalOrderRun,
-    OrderRun,
-    VoidStrikeTodo,
     BluntText,
     CleanHunt,
     CommitDelivery,
     FairText,
     HierarchyText,
+    MechanicalOrderRun,
     NotifiedFirstCallEvent,
     ObservedFirstCallEvent,
     OperationDelivery,
     OrderedHunt,
+    OrderRun,
     PendingProblemOrder,
     PlainText,
     RecordFirstCallTodo,
     RecordHuntTodo,
     StrikeTodo,
+    VoidStrikeTodo,
 )
 from ..tool_caller import ThreadCaller
 from ..tools import (
@@ -226,7 +226,7 @@ class Slop:
                 f'{self.by} owns it, and {self.derive} derives it from there, so the copy is deleted.')
 
 
-def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None, traced=None):
+def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=None, new=None, traced=None):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -321,8 +321,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
-    goal = COMMS.registry.require(unit).goal
-    common = dict(order=order, goal_id=goal.id if goal.is_set() else uuid4().hex, deadline=deadline(due), commander=ME)
+    common = dict(order=order, request=request, deadline=deadline(due), commander=ME)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
             problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
@@ -380,7 +379,7 @@ def say(units, body_file):
     print(post(units.split(','), body.rstrip()))
 
 
-def problem(text, unit, due, order_file):
+def problem(text, unit, due, order_file, request):
     """A problem is born owned: Core records it with its order in one step, or not at all."""
     body = open(order_file).read()
     if 'Problem: NEW' not in body:
@@ -390,7 +389,7 @@ def problem(text, unit, due, order_file):
     pid = f'P{max([int(t.id[1:]) for t in todos() if t.id[1:].isdigit()] + [0]) + 1}'
     open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
     try:
-        send(unit, due, order_file, new=(pid, text))
+        send(unit, due, order_file, request, new=(pid, text))
     except SystemExit:
         open(order_file, 'w').write(body)
         raise
@@ -426,6 +425,24 @@ def board():
 STAGES = ('tool call', 'review', 'install', 'live', 'user')  # where a mistake was caught; later is worse
 
 
+def on_record(line: str, recorded: str) -> None:
+    """Put one line on the public record: the narrative file, then #comms.
+
+    Core already holds what `recorded` names, so a failed post is reposted, never recorded again.
+    """
+    new_file = not os.path.exists(NARRATIVE)
+    with open(NARRATIVE, 'a') as f:
+        if new_file:
+            f.write('# What the fleet actually did\n\nEvery failure, in plain words, as it happened. '
+                    'Written by agent-comms-commander order; never edited.\n\n')
+        f.write(f'- {line}\n')
+    try:
+        post(['#comms'], f'On the record: {line}')
+    except SystemExit as failed:
+        print(f'{recorded} recorded, but the #comms post failed ({failed}). '
+              'Repost with order.post; do not record it again.', file=sys.stderr)
+
+
 def strike(unit, why, caught=f'{ME} at review'):
     """HARD RULE: every failure goes on the public record, in plain words, damning and exact.
 
@@ -447,15 +464,7 @@ def strike(unit, why, caught=f'{ME} at review'):
     n = struck(COMMS.goals.todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {task}{f", {task} taken away" if n >= 2 else ""}; '
             f'caught by {caught}): {why}')
-    new_file = not os.path.exists(NARRATIVE)
-    with open(NARRATIVE, 'a') as f:
-        if new_file:
-            f.write('# What the fleet actually did\n\nEvery failure, in plain words, as it happened. Written by agent-comms-commander order strike; never edited.\n\n')
-        f.write(f'- {line}\n')
-    try:
-        post(['#comms'], f'On the record: {line}')
-    except SystemExit as failed:  # the strike is already on the record; a rerun would strike twice
-        print(f'Strike recorded, but the #comms post failed ({failed}). Repost with order.post; do not strike again.', file=sys.stderr)
+    on_record(line, 'Strike')
     print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
 
 
@@ -698,13 +707,7 @@ def unstrike(task: str, why: str, at: str | None = None) -> None:
     n = struck(COMMS.goals.todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
             f'recorded {hhmm(voided.at)}; {n} strike(s) remain): {why}')
-    with open(NARRATIVE, 'a') as f:
-        f.write(f'- {line}\n')
-    try:
-        post(['#comms'], f'On the record: {line}')
-    except SystemExit as failed:  # the void is on the record; a rerun would find no live strike
-        print(f'Void recorded, but the #comms post failed ({failed}). Repost with order.post.',
-              file=sys.stderr)
+    on_record(line, 'Void')
     print(f'{unit}: {n} strike(s) on {task}')
 
 
@@ -730,12 +733,13 @@ class SendVerb(OrderVerb, LoadedVerb):
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     mechanical: bool = option("--mechanical", default=False)
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
+    request: str = option("--request", help="the owner request this order serves")
     traced: str | None = option("--traced", default=None, metavar="PATH:LINE",
                                 help="the first failing source line, required after two owners")
 
     def run(self) -> None:
-        send(self.unit, self.due, self.body_file, clean=self.clean, mechanical=self.mechanical,
-             reassign=self.reassign, traced=self.traced)
+        send(self.unit, self.due, self.body_file, self.request, clean=self.clean,
+             mechanical=self.mechanical, reassign=self.reassign, traced=self.traced)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -801,9 +805,10 @@ class ProblemVerb(OrderVerb, LoadedVerb):
     to: str = option("--to")
     due: str = option("--due", help="HH:MM local time")
     order: str = option("--order", help="the order body file")
+    request: str = option("--request", help="the owner request this order serves")
 
     def run(self) -> None:
-        problem(self.text, self.to, self.due, self.order)
+        problem(self.text, self.to, self.due, self.order, self.request)
 
 
 @dataclass(frozen=True, kw_only=True)

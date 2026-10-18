@@ -20,6 +20,10 @@ from .ui_model.goal import GoalDisplay
 if TYPE_CHECKING:
     from .goal_presentation import ThreadGoalExecution
 
+if TYPE_CHECKING:
+    from .goal_management import Goals
+    from .todos import Todo
+
 
 @dataclass(frozen=True, kw_only=True)
 class GoalMentionBinding(DeclaredFamily, affix="MentionBinding"):
@@ -257,8 +261,17 @@ class OrderCheck:
         return found and cls(found[1], found[2], CountCheckResult(int(found[3])))
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
-    def require_completion(self) -> None:
+    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
+
+    def require_request(self) -> None:
+        raise ValueError("An order serves an open owner request: request add records one.")
+
+    def serving(
+        self, goal: Goal, goals: Goals, owner: ThreadIncarnation
+    ) -> tuple[Todo, ...] | None:
+        """The undelivered orders serving this Goal as an owner request; None if it is none."""
+        return None
 
     def instructions(self, todos) -> str:
         return ""
@@ -283,10 +296,33 @@ class UnorderedGoalOrder(GoalOrder):
 
 
 @dataclass(frozen=True)
+class RequestGoalOrder(GoalOrder):
+    """An owner request on the commander's own Goal: each order names the one it serves, and the
+    request stays open until no order serving it is open."""
+
+    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+        pass
+
+    def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+        if not goal.state.terminal:
+            raise ValueError(f"Request {goal.id} is still open; mark it done first.")
+
+    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+        if self.serving(goal, goals, owner):
+            raise ValueError(f"Request {goal.id} still has open orders.")
+
+    def require_request(self) -> None:
+        pass
+
+    def serving(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> tuple[Todo, ...]:
+        return tuple(todo for todo in goals.todos.for_request(owner, goal.id) if todo.pending)
+
+
+@dataclass(frozen=True)
 class ProblemGoalOrder(GoalOrder):
     """A unit's one Goal groups its canonical Todo assignments, not copied orders."""
 
-    def require_completion(self):
+    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         raise ValueError("Complete each problem with its checked delivered commit.")
 
     def require_order(self, goal, goals, owner):

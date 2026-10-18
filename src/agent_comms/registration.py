@@ -318,11 +318,6 @@ class Registration:
                 thread.created_at, thread.goal, goal_id=goal_id
             )
 
-    def name_reserved(self, name: str) -> bool:
-        """Return whether a canonical name or permanent alias occupies text."""
-        with self.store.reading() as document:
-            return document.reserves(name)
-
     def last_seen(self, name: str) -> float:
         with self.store.reading() as document:
             return document.seen_at(name)

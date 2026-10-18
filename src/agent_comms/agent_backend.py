@@ -47,6 +47,7 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     path: str
     _backend: ClassVar[type[AgentBackend]]
+    resumable: ClassVar[bool] = True
 
     @property
     def backend(self):
@@ -66,9 +67,6 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     def read_keys(self):
         return (self.read_key,)
-
-    def presentation(self):
-        return {"resumable": True}
 
     def history_locations(self, thread, registry, visited):
         yield self, False

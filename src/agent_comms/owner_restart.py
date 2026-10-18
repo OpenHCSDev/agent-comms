@@ -307,7 +307,7 @@ class ClaimedOwnerBatch:
             launches = tuple(RetainedOwnerLaunch.capture(
                 thread, snapshot, interpreter=request.source_interpreter,
             ) for thread, _ in captured)
-            if captured.is_set():
+            if captured:
                 cutover.require_launch(lifecycle)
             authorized = cls(lifecycle, tuple(captured), launches, request, runtime)
             fenced = authorized.fence()

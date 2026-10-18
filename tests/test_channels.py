@@ -17,6 +17,7 @@ from agent_comms.channel_management import (
     DeleteExclusiveInactiveThreadsTagDisposition,
 )
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.display_order import (
     ChannelSort, CreatedChannelSort, CreatedThreadSort, LastActivityChannelSort,
     LastActivityThreadSort, LastMessageThreadSort, LastUserInputChannelSort, ThreadSort,
@@ -566,7 +567,7 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
         [name for name in original if name in {"#ui", "#none"}]
         + [name for name in original if name not in {"#ui", "#none"}]
     )
-    assert all(views[name].to_wire()["pinned"] for name in list(views)[:2])
+    assert all(FieldCodec.encode(views[name])["pinned"] for name in list(views)[:2])
     assert observer.channels.catalog.read().list_order is order
     for channel in ("#ui", "#none"):
         observer.channels.set_channel_pinned(channel, False)

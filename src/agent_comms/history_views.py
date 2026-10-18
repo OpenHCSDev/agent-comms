@@ -8,10 +8,11 @@ from collections.abc import Iterable, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 from .catalog_store import ChannelCatalog
 from .cli_result import CliResult
+from .field_codec import FieldCodec, WireForm
 from .goal_waits import GoalWaits
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
@@ -73,17 +74,12 @@ _LOG = logging.getLogger(__name__)
 class ThreadPoll(CliResult):
     """One thread's state, its inbox, the shared ledger and its peers at one read."""
     thread: ThreadRecord
-    inbox: tuple[Message, ...]
-    ledger: LedgerDocument
-    peers: tuple[Mapping[str, object], ...]
+    inbox: tuple[Annotated[Message, WireForm], ...]
+    ledger: Annotated[LedgerDocument, WireForm]
+    peers: tuple[ThreadView, ...]
 
     def encoded(self) -> object:
-        return self.to_wire()
-
-    def to_wire(self) -> dict[str, object]:
-        return {"thread": self.thread.to_wire(),
-                "inbox": [message.to_wire() for message in self.inbox],
-                "ledger": self.ledger.to_wire(), "peers": list(self.peers)}
+        return FieldCodec.project(self, "presence")
 
 
 @dataclass(frozen=True)
@@ -444,11 +440,12 @@ class HistoryViews:
         views = self._presence_views()
         # One bus snapshot for every thread, not one per thread.
         pending = self.bus.pending_counts_all(tuple(view.thread.name for view in views))
-        return [replace(view, pending=pending[view.thread.name]).to_wire() for view in views]
+        counted = (replace(view, pending=pending[view.thread.name]) for view in views)
+        return [FieldCodec.project(view, "presence") for view in counted]
 
     def presence(self) -> Sequence[Mapping]:
         """Presence without viewer-specific unread scans."""
-        return [view.to_wire() for view in self._presence_views()]
+        return [FieldCodec.project(view, "presence") for view in self._presence_views()]
 
     def _presence_views(self):
         return sorted(self.thread_views(), key=lambda view: view.thread.name)
@@ -459,7 +456,7 @@ class HistoryViews:
         threads = tuple(thread for name, thread in sorted(snapshot.threads.items())
                         if not active_only or snapshot.statuses[name].active)
         pending = self.bus.pending_counts_all(tuple(thread.name for thread in threads))
-        return [record.to_wire() for record in ThreadRecord.read(
+        return [FieldCodec.project(record, "presence") for record in ThreadRecord.read(
             snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)]
 
     def thread_detail(self, name: str, *, include_pending: bool = True) -> ThreadRecord:
@@ -475,6 +472,6 @@ class HistoryViews:
             me = current_thread(self.registry)
             name = me.name
         self.registry.require(name)
+        peers = tuple(view for view in self._presence_views() if view.thread.name != name)
         return ThreadPoll(self.thread_detail(name), tuple(self.bus.inbox(name)),
-                          self.ledger.document(),
-                          tuple(person for person in self.presence() if person["name"] != name))
+                          self.ledger.document(), peers)
