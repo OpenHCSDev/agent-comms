@@ -64,7 +64,10 @@ class CommandTarget(ABC):
         return True
 
     @abstractmethod
-    def bindings(self, declaration, comms, channel, snapshot, catalog): ...
+    def resolve(self, snapshot, catalog): ...
+
+    @abstractmethod
+    def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog): ...
 
     def contexts(self, declaration, channel):
         return (None,)
@@ -146,10 +149,13 @@ class ThreadTarget(NamedTarget):
     def pending_count(self, counts, snapshot, catalog):
         return counts.get(snapshot.require(self.name).name, 0)
 
-    def bindings(self, declaration, comms, channel, snapshot, catalog):
+    def resolve(self, snapshot, catalog):
         thread = snapshot.require(self.name)
-        return declaration.thread_bindings(comms, thread, snapshot.status(thread.name),
-                                           channel, catalog=catalog)
+        return thread, snapshot.status(thread.name)
+
+    def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog):
+        thread, status = resolved
+        return declaration.thread_bindings(comms, thread, status, channel, catalog=catalog)
 
     def validate(self, message):
         if message.sender == self.name and message.type.conversation_message:
@@ -218,8 +224,15 @@ class ChannelTarget(NamedTarget):
     def pending_count(self, counts, snapshot, catalog):
         return catalog.resolve(self.name).pending_count(counts)
 
-    def bindings(self, declaration, comms, channel, snapshot, catalog):
-        return declaration.channel_bindings(comms, catalog.resolve(self.name), snapshot=snapshot)
+    def resolve(self, snapshot, catalog):
+        channel = catalog.resolve(self.name)
+        members = tuple((thread, snapshot.status(thread.name))
+                        for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
+                        if channel.matches(thread.tags))
+        return channel, members
+
+    def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog):
+        return declaration.channel_bindings(comms, resolved, snapshot=snapshot, catalog=catalog)
 
     def validate(self, sender=None):
         if BuiltinChannel.lookup(self.name) is None:
@@ -277,8 +290,11 @@ class ProjectTarget(CommandTarget):
     def names(self) -> tuple[str, ...]:
         return ()
 
-    def bindings(self, declaration, comms, channel, snapshot, catalog):
-        return declaration.project_bindings(comms, self.project)
+    def resolve(self, snapshot, catalog):
+        return self.project
+
+    def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog):
+        return declaration.project_bindings(comms, resolved)
 
 
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")

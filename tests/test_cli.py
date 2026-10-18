@@ -473,7 +473,14 @@ class TestSelectedTargetActions:
                                ArchivedThreadStatus())
         comms.registry.declare(comms.registry.new_thread('human', frozenset({'team'}), str(tmp_path), role=ThreadRole.USER),
                                StoppedThreadStatus())
-        commands = StartCliCommand.bindings(comms, "#team")
+        from agent_comms.channel_targets import ChannelTarget
+
+        snapshot = comms.registry.snapshot()
+        catalog = comms.channels.catalog.read()
+        target = ChannelTarget("#team")
+        commands = StartCliCommand.bindings(
+            comms, target, snapshot=snapshot, catalog=catalog,
+            resolved=target.resolve(snapshot, catalog))
         assert tuple(command.name for command in commands) == ("alpha",)
         assert all(comms.registry.require(name).process_identity is None
                    for name in ("alpha", "external", "archived", "human"))
