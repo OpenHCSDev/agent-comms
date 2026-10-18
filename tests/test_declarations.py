@@ -273,8 +273,9 @@ class TestRegistration:
         turn, _ = registry.lease_live_turn_with_generation(
             owner, "mine", expected_owner_generation=claimed_generation
         )
-        assert registry.release_turn(turn.turn_lease)[0]
-        assert not registry.release_turn(turn.turn_lease)[0]
+        lease = turn.require_turn_lease()
+        assert registry.release_turn(lease)[0]
+        assert not registry.release_turn(lease)[0]
         assert "owner_epoch" not in owner.to_wire()
 
     @pytest.mark.parametrize("revocation", ["stop", "finish"])
