@@ -1,6 +1,7 @@
 """One physical encoded-row budget, independent of candidate work quantum."""
 from __future__ import annotations
 
+import io
 import json
 from dataclasses import replace
 
@@ -35,14 +36,15 @@ def test_scan_and_candidate_share_physical_boundary(tmp_path, extra, newline):
         last_seq=1, claimed_after_seq=1, writer_protocol_version=1,
         wire_root_id='0' * 32,
     )
+    scanned = lambda: [WireScan(metadata).read(row) for _, row in WireRecord.rows(io.BytesIO(raw))]
     if extra:
         with pytest.raises(RelationViolationError, match='Oversized'):
-            WireScan(metadata).read(raw)
+            scanned()
     elif not newline:
         with pytest.raises(RelationViolationError, match='Incomplete'):
-            WireScan(metadata).read(raw)
+            scanned()
     else:
-        assert WireScan(metadata).read(raw).messages()[0].seq == 1
+        assert scanned()[0].messages()[0].seq == 1
 
     path = tmp_path / 'row.jsonl'
     path.write_bytes(raw)
@@ -77,3 +79,33 @@ def test_oversized_append_preserves_marker_and_sequence(tmp_path):
             log.append_private_unlocked(metadata, row)
         assert metadata.last_seq == previous
     assert (log.path.read_bytes(), log.metadata_path.read_bytes()) == before
+
+
+READERS = {
+    'snapshot rows': lambda log, metadata: log.opened_wire_snapshot(opening=CurrentSnapshotOpening()),
+    'snapshot records': lambda log, metadata: log.opened_wire_snapshot(opening=CurrentSnapshotOpening()),
+    'verified records': lambda log, metadata: log.locked(),
+}
+READS = {
+    'snapshot rows': lambda source, log, metadata: list(source.rows()),
+    'snapshot records': lambda source, log, metadata: list(source.records()),
+    'verified records': lambda source, log, metadata: list(log.verified_records_unlocked(metadata)),
+}
+
+
+@pytest.mark.parametrize('bad', ['oversized', 'no newline', 'cut mid-row'])
+@pytest.mark.parametrize('reader', READERS)
+def test_every_row_reader_refuses_a_bad_physical_row(tmp_path, reader, bad):
+    good = _row(200, True)
+    raw = {'oversized': _row(WireRecord.max_row_bytes + 1, True),
+           'no newline': _row(200, False),
+           'cut mid-row': good + good[:100]}[bad]
+    metadata = WireMetadata(last_seq=1, claimed_after_seq=1, writer_protocol_version=1, wire_root_id='0' * 32)
+    path = tmp_path / 'row.jsonl'
+    path.write_bytes(raw)
+    path.chmod(0o600)
+    log = WireLog(path)
+    log.write_metadata_unlocked(metadata)
+    with READERS[reader](log, metadata) as source:
+        with pytest.raises(RelationViolationError):
+            READS[reader](source, log, metadata)

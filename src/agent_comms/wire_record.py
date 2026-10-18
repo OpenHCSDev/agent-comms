@@ -8,9 +8,9 @@ it creates no durable representation, codec or second proof store.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, BinaryIO, ClassVar
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec, MalformedRecord
@@ -29,13 +29,23 @@ class WireRecord(ABC):
     max_row_bytes: ClassVar[int] = 8 * 1024 * 1024
 
     @classmethod
-    def require_row_size(
-        cls, row: bytes, *, error_type: type[Exception] = RelationViolationError,
-        message: str = "Oversized private bus row.",
-    ) -> None:
+    def require_row_size(cls, row: bytes, *, message: str = "Oversized private bus row.") -> None:
         """Bound the encoded physical row, including its terminating newline."""
         if len(row) > cls.max_row_bytes:
-            raise error_type(message)
+            raise RelationViolationError(message)
+
+    @classmethod
+    def rows(cls, stream: BinaryIO, stop: int | None = None) -> Iterator[tuple[int, bytes]]:
+        """Each complete physical row from the stream position to stop (end of file when None)."""
+        while stop is None or stream.tell() < stop:
+            offset = stream.tell()
+            limit = cls.max_row_bytes + 1
+            if not (raw := stream.readline(limit if stop is None else min(limit, stop - offset))):
+                return
+            cls.require_row_size(raw)
+            if not raw.endswith(b"\n"):
+                raise RelationViolationError("Incomplete bus row blocks keyed publication.")
+            yield offset, raw
 
     @classmethod
     def from_wire(cls, value: Mapping, root_id: str) -> WireRecord:
@@ -226,9 +236,6 @@ class WireScan:
     seen_keys: set[str] = field(default_factory=set)
 
     def read(self, line: bytes) -> WireRecord:
-        WireRecord.require_row_size(line)
-        if not line.endswith(b"\n"):
-            raise RelationViolationError("Incomplete bus row blocks keyed publication.")
         try:
             value = FieldCodec.parse(line)
             if not isinstance(value, dict):

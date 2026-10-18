@@ -255,12 +255,9 @@ class OpenedWireSnapshot(WireSnapshot):
         if after_offset < 0 or stop < 0:
             raise MalformedRecord("Wire row offsets must be nonnegative")
         self.stream.seek(after_offset)
-        while self.stream.tell() < stop:
-            offset = self.stream.tell()
-            raw = self.stream.readline(min(WireRecord.max_row_bytes + 1, self.boundary - offset))
-            WireRecord.require_row_size(raw, error_type=RelationViolationError)
-            if not raw.endswith(b"\n"):
-                raise RelationViolationError("Wire source has an incomplete original row")
+        for offset, raw in WireRecord.rows(self.stream, self.boundary):
+            if offset >= stop:
+                return
             if raw.strip():
                 record = FieldCodec.parse(raw)
                 if not isinstance(record, Mapping):
@@ -279,10 +276,7 @@ class OpenedWireSnapshot(WireSnapshot):
 
     def records(self) -> Iterator[WireRecord]:
         scan = WireScan(self.metadata)
-        while self.stream.tell() < self.boundary:
-            raw = self.stream.readline(min(WireRecord.max_row_bytes + 1, self.boundary - self.stream.tell()))
-            if not raw:
-                break
+        for _, raw in WireRecord.rows(self.stream, self.boundary):
             yield scan.read(raw)
 
     @property
@@ -371,14 +365,7 @@ class OpenedWireSnapshot(WireSnapshot):
             raise RelationViolationError("Wire tail does not extend the settled source")
         self.stream.seek(previous.size)
         scan = WireScan(self.metadata, previous_sequence=previous_sequence)
-        records = []
-        while self.stream.tell() < self.boundary:
-            raw = self.stream.readline(
-                min(WireRecord.max_row_bytes + 1, self.boundary - self.stream.tell())
-            )
-            if not raw:
-                break
-            records.append(scan.read(raw))
+        records = [scan.read(raw) for _, raw in WireRecord.rows(self.stream, self.boundary)]
         if scan.previous_sequence != self.metadata.last_seq:
             raise RelationViolationError("Wire tail does not reach its marker")
         if FileRevision.from_file(self.stream) != self.revision:
@@ -705,11 +692,7 @@ class WireLog:
         if not self.path.exists():
             return
         with self.path.open("rb") as stream:
-            while True:
-                offset = stream.tell()
-                line = stream.readline(WireRecord.max_row_bytes + 1)
-                if not line:
-                    break
+            for offset, line in WireRecord.rows(stream):
                 try:
                     record = scan.read(line)
                 except StoredHistoryUnreadable as error:
