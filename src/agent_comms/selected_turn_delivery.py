@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from .agent_backend import InputContent, TurnDelivery, TurnInbox
-from .agent_events import Done
+from .agent_events import AgentEvent, Done
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .diagnostics import record_request_progress
@@ -19,13 +21,15 @@ from .native_pi import NativePiUnavailable, NativeTurnResult
 
 if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
+    from .native_session_reopen import NativeSessionIdentity
     from .private_send_claim import PrivateSendClaim
+    from .threads import Thread
     from .tracked_turn import NativeObserver
 from .send_outcome import GrantedSend
 
 
 class NoSelectedAnswer:
-    def require(self):
+    def require(self) -> NoReturn:
         raise NativePiUnavailable("Selected turn ended without a final answer")
 
 
@@ -37,20 +41,22 @@ class SelectedTurnDelivery(TurnDelivery):
     observe_event: NativeObserver
     following: FollowingInputs
 
-    def request_id(self):
+    def request_id(self) -> str:
         return self.claim.input_id
 
-    async def prepare_identity(self, identity):
+    async def prepare_identity(self, identity: NativeSessionIdentity) -> None:
         await Coordination.run_worker(partial(self.claim._start_once, identity))
 
     @staticmethod
     @contextmanager
-    def boundary(claim, public_id, native_id, text):
+    def boundary(claim: PrivateSendClaim, public_id: str | None, native_id: str,
+                 text: str) -> Iterator[GrantedSend]:
         if public_id is not None or native_id != claim.input_id or text != claim.prompt.text:
             raise IdentityConflict("Selected write differs from its original claim")
         yield GrantedSend()
 
-    async def native_events(self, backend, thread, content):
+    async def native_events(self, backend: Any, thread: Thread,
+                            content: InputContent) -> AsyncIterator[AgentEvent]:
         result = await backend.run_tracked_turn(
             self.claim,
             self.execution,
@@ -59,12 +65,13 @@ class SelectedTurnDelivery(TurnDelivery):
             observe_event=self.observe_event,
             following=self.following,
         )
-        yield SelectedDone(text=result.text, result=result)
+        yield SelectedDone(text=result.text, ok=True, result=result)
 
     @classmethod
     async def execute(
-        cls, claim, execution, *, model, selected_tool_mode, observe_event, following
-    ):
+        cls, claim: PrivateSendClaim, execution: SelectedExecution, *, model: SelectedModel,
+        selected_tool_mode: Any, observe_event: NativeObserver, following: FollowingInputs
+    ) -> NativeTurnResult:
         thread = replace(
             claim.owner.thread, session_file=str(claim.session.path), model=model.qualified
         )
@@ -95,8 +102,8 @@ class SelectedTurnDelivery(TurnDelivery):
             ui_request=None,
             selected_tool_mode=selected_tool_mode,
         )
-        result = NoSelectedAnswer()
-        async for event in execution.pi_session.run_turn(
+        result: NoSelectedAnswer | NativeTurnResult = NoSelectedAnswer()
+        async for event in execution.backend.run_turn(
             thread,
             InputContent(text=claim.prompt.text, contributions=claim.prompt.contributions),
             delivery,
@@ -110,5 +117,5 @@ class SelectedTurnDelivery(TurnDelivery):
 class SelectedDone(Done):
     result: NativeTurnResult
 
-    def selected_result(self, path, current):
+    def selected_result(self, path: Path, current: Any) -> NativeTurnResult:
         return self.result

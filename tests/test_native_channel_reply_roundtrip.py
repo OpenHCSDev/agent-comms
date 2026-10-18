@@ -1,4 +1,6 @@
 """A published native reply automatically reaches the original channel sender."""
+
+from native_backend_fixture import standalone_backend
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
@@ -531,7 +533,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
             completed.set()
 
     monkeypatch.setattr(SelectedExecution, "validate", observed_validation)
-    execution = SelectedExecution(root=comms.root, wire_root_id=root_id,
+    execution = SelectedExecution(backend=standalone_backend(comms.root), root=comms.root, wire_root_id=root_id,
                                   owner_name="unregistered", native_package=Path(pin))
     task = asyncio.create_task(execution.run())
     try:
@@ -554,7 +556,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
     # A separate invalid acquisition still refuses before participant/claim
     # selection; no cancellation or prior validation grants it trust.
     monkeypatch.setattr(SelectedExecution, "validate", validate)
-    invalid = SelectedExecution(root=comms.root, wire_root_id=root_id,
+    invalid = SelectedExecution(backend=standalone_backend(comms.root), root=comms.root, wire_root_id=root_id,
                                 owner_name="unregistered", native_package=tmp_path)
     with pytest.raises(NativePiUnavailable):
         await invalid.run()

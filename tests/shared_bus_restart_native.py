@@ -3,6 +3,8 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+
+from native_backend_fixture import standalone_backend
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
@@ -613,7 +615,7 @@ async def retained_owner():
         owner = service.registry.require(name)
         await agent.load_session(owner.worktree, name)
         assert await asyncio.to_thread(sys.stdin.readline) == 'GO\n'
-        execution = SelectedExecution(root=service.root,
+        execution = SelectedExecution(backend=standalone_backend(service.root), root=service.root,
             wire_root_id=launch.wire_root_id, owner_name=name,
             native_package=launch.native_package, session_file=Path(owner.session_file))
         result = await agent.turns.run_selected(name, execution)

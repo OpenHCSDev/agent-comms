@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import AsyncExitStack, ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
+from typing import Any, ClassVar
 from uuid import uuid4
 
 from pydantic import JsonValue
@@ -38,6 +39,7 @@ from .maintenance_barrier import MaintenanceBarrier
 from .native_child import PiChild
 from .native_entries import StoredEntry
 from .native_pi import (
+    ContextProof,
     DurableContextProof,
     NativeContextRecord,
     NativeTurnResult,
@@ -67,33 +69,33 @@ from .unstarted_runtime import UnstartedRuntime
 class DurableDatabase(SessionFiles, RuntimeLocation):
     path: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not Path(self.path).is_absolute():
             raise ValueError('Durable database path must be absolute')
 
-    def require_forkable(self):
+    def require_forkable(self) -> None:
         raise ValueError('Durable database forking is not implemented')
 
-    def history_source(self, root, incarnation):
+    def history_source(self, root: Path, incarnation: Any) -> DurableTranscript:
         return DurableTranscript(self)
 
     @property
-    def session(self):
+    def session(self) -> Path:
         return Path(self.path)
 
     @property
-    def writer_lock(self):
+    def writer_lock(self) -> Path:
         return self.session.with_suffix(self.session.suffix + '.lock')
 
     @property
-    def members(self):
+    def members(self) -> tuple[Path, ...]:
         path = self.session
         return (path, *(path.with_name(path.name + suffix) for suffix in ('-wal', '-shm', '-journal')), self.writer_lock)
 
-    def storage_files(self):
+    def storage_files(self) -> tuple[SessionFiles, ...]:
         return (self,)
 
-    def select_session(self, directory, execution):
+    def select_session(self, directory: Path, execution: Any) -> DurableSelectedSession:
         return DurableSelectedSession(directory, self)
 
 
@@ -102,18 +104,18 @@ class DurableSelectedSession(SelectedSession):
     location: DurableDatabase
 
     @property
-    def path(self):
+    def path(self) -> Path:
         return self.location.session
 
     @property
-    def session_file(self):
+    def session_file(self) -> str:
         return self.location.path
 
-    def verify_start(self, actual):
+    def verify_start(self, actual: NativeSessionIdentity) -> Path:
         actual.require_session(self.location.path)
         return self.path
 
-    def require_context(self, context):
+    def require_context(self, context: ContextProof) -> None:
         self.verify_start(NativeSessionIdentity(context.session_id, str(context.session_file)))
 
 
@@ -128,7 +130,7 @@ class HistoryData(PiResponseData):
     cursor: dict[str, JsonValue] | None = None
 
 
-def _history_request(source, command):
+def _history_request(source: DurableTranscript, command: Entries) -> HistoryData:
     with source.reading() as reader:
         return reader.execute(reader, command)
 
@@ -136,10 +138,10 @@ def _history_request(source, command):
 @dataclass(frozen=True)
 class DurableTranscript(TranscriptSource):
     location: DurableDatabase
-    execute: Callable = field(default=_history_request, repr=False, compare=False)
+    execute: Callable[[DurableTranscript, Entries], HistoryData] = field(default=_history_request, repr=False, compare=False)
 
     @contextmanager
-    def reading(self):
+    def reading(self) -> Iterator[DurableTranscript]:
         if not Path(self.location.path).is_file():
             yield replace(self, execute=lambda source, command: HistoryData(()))
             return
@@ -152,10 +154,10 @@ class DurableTranscript(TranscriptSource):
             finally:
                 loop.run(child.shutdown())
 
-    def cut(self):
+    def cut(self) -> ExternalCut:
         return ExternalCut(max((entry.id for entry in self.execute(self, Entries(1)).items), default=0))
 
-    def records(self, minimum, maximum, order):
+    def records(self, minimum: int, maximum: int, order: str) -> Iterator[StoredRecord]:
         if maximum < minimum:
             return
         cursor = None
@@ -167,10 +169,10 @@ class DurableTranscript(TranscriptSource):
             if cursor is None:
                 return
 
-    def forward(self, after, through):
+    def forward(self, after: int, through: int) -> Iterator[StoredRecord]:
         return self.records(after + 1, through, 'ascending')
 
-    def reverse(self, before):
+    def reverse(self, before: int) -> Iterator[StoredRecord]:
         return self.records(1, before, 'descending')
 
 
@@ -302,8 +304,7 @@ class AwaitTurn(HostQuery):
     pass
 
 
-class DurableInputStarted(DurablePiEvent):
-    declared_name = None
+class DurableInputStarted(DurablePiEvent, declared_name=None):
 
     async def during_turn(self, turn):
         if not turn.delivery.input_started(self.id, self.native_id, self.text):
@@ -339,7 +340,7 @@ class DurableProofData:
 class DurableDone(Done):
     proof: DurableProofData
 
-    def selected_result(self, path, current):
+    def selected_result(self, path: Path, current: Any) -> NativeTurnResult:
         record = self.proof.context
         proof = DurableContextProof(record.input_id, record.session_id, record.session_entry_id,
             record.request_generation, record.llm_context_digest, record.committed_at_ms,
@@ -417,7 +418,7 @@ class OutcomeData(PiResponseData):
 
 class CompactDurable(Compact):
     strict_response = True
-    response_payload = OutcomeData
+    response_payload: ClassVar[type[PiResponseData]] = OutcomeData
 
 
 class PiDurableBackend(PiCapabilities, AgentBackend, Steers):

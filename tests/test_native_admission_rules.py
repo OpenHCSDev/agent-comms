@@ -1,4 +1,6 @@
 """Named private claim_scope refusals against production-created SQLite rows."""
+
+from native_backend_fixture import standalone_backend
 from binding_reads import binding_rows
 
 import os
@@ -168,7 +170,7 @@ async def test_durable_private_claim_names_each_changed_authority(
         "agent_comms.tracked_turn.TrackedTurnSession.execute", inspect_before_native
     )
     with pytest.raises(InspectedError):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
         ).run()
     assert observed == [True]

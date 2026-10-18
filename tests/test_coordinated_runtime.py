@@ -6,6 +6,8 @@ acceptance and final post-merge review; no fake can establish Pi model authority
 
 from __future__ import annotations
 
+from native_backend_fixture import standalone_backend
+
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.messages import NoticeRole
@@ -262,7 +264,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     first, alpha_calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", first)
-    alpha = await SelectedExecution(
+    alpha = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     ).run()
     assert alpha is not None and alpha.disposition is IgnoredAssignment
@@ -289,7 +291,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert len(list(comms.views.channel_history_page("#team").messages)) == 1
     second, beta_calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", second)
-    beta = await SelectedExecution(
+    beta = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
     assert beta is not None and beta.disposition is CompletedAssignment
@@ -304,7 +306,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert response.body == "42" and response.sender == "beta"
     assert "_agent_comms_private_v1" not in response.to_wire()
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
         is None
@@ -340,7 +342,7 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
     runner, calls = _fake_model()
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",
@@ -427,7 +429,7 @@ async def test_unavailable_sent_outcomes_propagate_before_model_start(
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
 
     with pytest.raises(NativePiUnavailable, match="optional sent outcome unavailable"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta",
             native_package=tmp_path, opt_in=True,
         ).run()
@@ -440,7 +442,7 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
-    outcome = await SelectedExecution(
+    outcome = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
     assert outcome is not None and tuple(
@@ -488,7 +490,7 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    outcome = await SelectedExecution(
+    outcome = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
     assert outcome is not None and outcome.publications
@@ -524,7 +526,7 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
 
     monkeypatch.setattr(OptionalAwarenessProjection, "__call__", stalled_builder)
     try:
-        outcome = await SelectedExecution(
+        outcome = await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="beta",
@@ -591,7 +593,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         runner, native_calls = _fake_model()
         monkeypatch.setattr(TrackedTurnSession, "execute", runner)
         original = await asyncio.wait_for(
-            SelectedExecution(
+            SelectedExecution(backend=standalone_backend(second_root), 
                 root=second_root, wire_root_id=second_id, owner_name="beta", native_package=tmp_path
             ).run(),
             timeout=3,
@@ -626,7 +628,7 @@ async def test_optional_awareness_requires_complete_binding_and_resource_budget(
             return replace(captured(*args, **kwargs), max_text_bytes=1)
 
         monkeypatch.setattr(OptionalAwarenessProjection, "for_selected", small_budget)
-    outcome = await SelectedExecution(
+    outcome = await SelectedExecution(backend=standalone_backend(root), 
         root=root,
         wire_root_id=root_id,
         owner_name="beta",
@@ -652,7 +654,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    outcome = await SelectedExecution(
+    outcome = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
     assert outcome is not None and outcome.publications
@@ -698,7 +700,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
                 recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
                 source_seq=initial.message.seq,
             )
-    result = await SelectedExecution(
+    result = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
     assert result is not None and result.disposition is CompletedAssignment
@@ -773,7 +775,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", renamed)
     with pytest.raises(IdentityConflict, match="exact saved session"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="beta",
@@ -812,7 +814,7 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(
     failing, calls = _fake_model(fail_on=1)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", failing)
     with pytest.raises(NativePiUnavailable):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(calls) == 1
@@ -842,7 +844,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(
     runner, calls = _fake_model(fail_on=1)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
     with pytest.raises(NativePiUnavailable):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",
@@ -850,7 +852,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(
             opt_in=True,
         ).run()
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",
@@ -890,7 +892,7 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", forged)
     with pytest.raises(NativePiUnavailable):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",
@@ -917,7 +919,7 @@ async def test_session_file_registration_during_native_triage_keeps_owner(
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", register_session)
     with pytest.raises(StaleFence, match="native session changed"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
         ).run()
     assert len(calls) == 1
@@ -938,7 +940,7 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", register_session)
     with pytest.raises(StaleFence, match="native session changed"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(calls) == 1
@@ -964,7 +966,7 @@ async def test_project_change_during_native_full_turn_denies_response(
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", change_project)
     with pytest.raises(StaleFence, match="owner stopped or changed"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(calls) == 1
@@ -987,7 +989,7 @@ async def test_owner_generation_revoked_during_native_triage_fails_closed(
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", revoke)
     with pytest.raises(StaleFence):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",
@@ -1013,7 +1015,7 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
         return replace(result, text=malformed)
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", bad)
-    failed = await SelectedExecution(
+    failed = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha",
         native_package=tmp_path, opt_in=True,
     ).run()
@@ -1040,7 +1042,7 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
         )
         assert rejected[0].proves_triage_source(rejected)
         assert "decision" not in {item.name for item in fields(rejected[0])}
-    assert await SelectedExecution(root=root, wire_root_id=root_id, owner_name="alpha",
+    assert await SelectedExecution(backend=standalone_backend(root), root=root, wire_root_id=root_id, owner_name="alpha",
                                    native_package=tmp_path).run() is None
     assert len(calls) == 1  # A rejected decision is never tried again.
 
@@ -1059,7 +1061,7 @@ async def test_registered_owner_stopped_during_model_cannot_settle(
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", stop_owner)
     with pytest.raises(StaleFence, match="stopped or changed"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",
@@ -1086,7 +1088,7 @@ async def test_stop_before_atomic_turn_lease_does_not_revive_or_prompt(
 
     monkeypatch.setattr(Registration, "lease_live_turn_with_claim", stop_before_claim)
     with pytest.raises(StaleFence, match="stopped or busy before native turn"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert not calls
@@ -1127,7 +1129,7 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
     )
     if mutation == "stop_then_heartbeat":
         with pytest.raises(StaleFence, match="stopped or busy before native turn"):
-            await SelectedExecution(
+            await SelectedExecution(backend=standalone_backend(root), 
                 root=root,
                 wire_root_id=root_id,
                 owner_name="beta",
@@ -1137,7 +1139,7 @@ async def test_owner_generation_denies_revival_without_blocking_another_owner(
         assert not calls
         assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 1
     else:
-        result = await SelectedExecution(
+        result = await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
         assert result is not None and result.disposition is CompletedAssignment
@@ -1196,7 +1198,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     monkeypatch.setattr(TrackedTurnSession, "execute", maybe_rename)
     if rename_during_turn:
         with pytest.raises(StaleFence):
-            await SelectedExecution(
+            await SelectedExecution(backend=standalone_backend(root), 
                 root=root,
                 wire_root_id=root_id,
                 owner_name="beta",
@@ -1206,7 +1208,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
         assert not comms.registry.require("delta").active_turn.executing
         assert len(list(comms.bus.dm_history_page("sender", "gamma").messages)) == 1
     else:
-        result = await SelectedExecution(
+        result = await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
         assert result is not None and result.disposition is CompletedAssignment
@@ -1234,7 +1236,7 @@ async def test_owner_stop_before_response_boundary_never_appends(
 
     monkeypatch.setattr(coordination_response, method, stopped_before_boundary)
     with pytest.raises(StaleFence, match="stopped or changed"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(list(comms.bus.dm_history_page("sender", "beta").messages)) == 1
@@ -1278,7 +1280,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
     monkeypatch.setattr(ResponseWrites, "_publish_keyed_response_unlocked", blocking_append)
     try:
         with pytest.raises(StaleFence, match="stopped or changed"):
-            await SelectedExecution(
+            await SelectedExecution(backend=standalone_backend(root), 
                 root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
             ).run()
     finally:
@@ -1323,7 +1325,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
         revoke,
     )
     with pytest.raises(StaleFence, match="turn"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert len(calls) == 1
@@ -1374,7 +1376,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
         comms.agents.begin_turn("beta", "old-authorized-turn")
         revoke_and_restore()
         with pytest.raises(StaleFence, match="stopped or changed"):
-            await SelectedExecution(
+            await SelectedExecution(backend=standalone_backend(root), 
                 root=root,
                 wire_root_id=root_id,
                 owner_name="beta",
@@ -1391,7 +1393,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
 
         monkeypatch.setattr(TrackedTurnSession, "execute", revoke_after_model)
         with pytest.raises(StaleFence, match="stopped or changed"):
-            await SelectedExecution(
+            await SelectedExecution(backend=standalone_backend(root), 
                 root=root,
                 wire_root_id=root_id,
                 owner_name="beta",
@@ -1423,7 +1425,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
 
         monkeypatch.setattr(coordination_response, method, revoke_after_tx1)
         with pytest.raises(StaleFence, match="turn stopped or changed|turn witness is invalid"):
-            await SelectedExecution(
+            await SelectedExecution(backend=standalone_backend(root), 
                 root=root,
                 wire_root_id=root_id,
                 owner_name="beta",
@@ -1461,7 +1463,7 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
     with pytest.raises(StaleFence, match="stopped or busy before native turn"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert calls == []
@@ -1480,7 +1482,7 @@ async def test_existing_owner_turn_is_not_borrowed_or_consumed(tmp_path: Path, m
             == 0
         )
     comms.agents.finish_turn(comms.registry.require("beta").turn_lease)
-    result = await SelectedExecution(
+    result = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
     assert result is not None and result.disposition is CompletedAssignment
@@ -1495,11 +1497,11 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
     runner, calls = _fake_model(fail_on=1)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
     with pytest.raises(NativePiUnavailable):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
         is None
@@ -1560,7 +1562,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
-    outcome = await SelectedExecution(
+    outcome = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     ).run()
     assert outcome is not None and outcome.disposition is IgnoredAssignment
@@ -1584,7 +1586,7 @@ async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path)
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     with pytest.raises(NativePiUnavailable):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id="0" * 32, owner_name="alpha", native_package=tmp_path
         ).run()
     assert not list(root.iterdir())
@@ -1601,7 +1603,7 @@ async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monk
         return await fake(package, **kwargs)
 
     monkeypatch.setattr(TrackedTurnSession, "execute", capture)
-    result = await SelectedExecution(
+    result = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
     assert result.disposition is CompletedAssignment
@@ -1618,7 +1620,7 @@ async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypat
     fake, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     with pytest.raises(IdentityConflict, match="no configured provider/model"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
     assert calls == []
@@ -1653,7 +1655,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
 
     monkeypatch.setattr(TrackedTurnSession, "execute", failed)
     with pytest.raises(NativePiTerminalFailure, match="usage limit"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
     notice = list(comms.views.full_history_page().messages)[-1]
@@ -1675,7 +1677,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     assert json.loads(diagnostics[0].read_text())["sequences"] == [initial.message.seq]
     before = len(calls)
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
         is None
@@ -1685,7 +1687,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    result = await SelectedExecution(
+    result = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
     assert result.disposition is CompletedAssignment
@@ -1731,7 +1733,7 @@ async def test_transient_provider_failure_retries_two_attempts_then_completes(
 
     monkeypatch.setattr("agent_comms.private_send_stage.asyncio.sleep", no_wait)
     monkeypatch.setattr(TrackedTurnSession, "execute", transient)
-    result = await SelectedExecution(
+    result = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
 
@@ -1777,7 +1779,7 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    result = await SelectedExecution(
+    result = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     ).run()
     assert result.disposition is CompletedAssignment
@@ -1811,7 +1813,7 @@ async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, mon
         return await fake(*args, **kwargs)
 
     monkeypatch.setattr(TrackedTurnSession, "execute", paused)
-    execution = SelectedExecution(
+    execution = SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
     )
     task = asyncio.create_task(execution.run())
@@ -1857,7 +1859,7 @@ async def test_native_rpc_refusal_retains_private_details_without_replay(tmp_pat
 
     monkeypatch.setattr(TrackedTurnSession, "execute", refused)
     with pytest.raises(NativePiPromptRejected):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="beta",
@@ -1873,7 +1875,7 @@ async def test_native_rpc_refusal_retains_private_details_without_replay(tmp_pat
     assert evidence["sequences"] == [initial.message.seq]
     assert len(calls) == 1
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="beta",

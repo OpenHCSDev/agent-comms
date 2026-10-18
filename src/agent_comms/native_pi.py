@@ -331,7 +331,8 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
 class ContextProof(NativeContextRecord):
     session_file: Path
 
-    def verify_selected(self, stage, store, owner, input_id, token_digest, *, wire_root_id, prompt):
+    def verify_selected(self, stage: Any, store: Any, owner: Any, input_id: str,
+                        token_digest: str, *, wire_root_id: str, prompt: str) -> None:
         from .coordination_errors import IdentityConflict
 
         with self.input_evidence() as evidence:
@@ -344,27 +345,27 @@ class ContextProof(NativeContextRecord):
                     original = stage.pending_input(store, input_id, owner, token_digest)
                     original.require_session_identity().require_context(self)
 
-    def commit_selected(self, claim, store):
+    def commit_selected(self, claim: Any, store: Any) -> None:
         claim.stage.commit(store, claim.participant, claim.input_id, claim.token_digest, self)
 
-    def input_evidence(self):
+    def input_evidence(self) -> Any:
         raise NotImplementedError
 
-    def matches_prompt(self, binding, evidence):
+    def matches_prompt(self, binding: Any, evidence: Any) -> bool:
         raise NotImplementedError
 
-    def corroborates_input(self, input_id, *, evidence=None):
+    def corroborates_input(self, input_id: str, *, evidence: Any = None) -> bool:
         raise NotImplementedError
 
 
 @dataclass(frozen=True, slots=True)
 class NativeContextProof(ContextProof):
-    def input_evidence(self):
+    def input_evidence(self) -> Any:
         from .native_entries import NativeEntry
 
         return NativeEntry.open_input_evidence(self.session_file)
 
-    def matches_prompt(self, binding, evidence):
+    def matches_prompt(self, binding: Any, evidence: Any) -> bool:
         from .native_prompt_binding import expected_prompt_matches_journal
 
         return expected_prompt_matches_journal(self.session_file, binding, evidence=evidence)
@@ -410,7 +411,7 @@ class DurableContextProof(ContextProof):
     evidence_entry_id: str
 
     @contextmanager
-    def input_evidence(self):
+    def input_evidence(self) -> Iterator[sqlite3.Connection]:
         path = self.session_file.resolve(strict=True)
         if path != self.session_file:
             raise NativePiUnavailable('Durable context database was redirected')
@@ -419,7 +420,7 @@ class DurableContextProof(ContextProof):
             db.execute('PRAGMA query_only=ON')
             yield db
 
-    def corroborates_input(self, input_id, *, evidence=None):
+    def corroborates_input(self, input_id: str, *, evidence: sqlite3.Connection | None = None) -> bool:
         if evidence is None:
             with self.input_evidence() as db:
                 return self.corroborates_input(input_id, evidence=db)
@@ -433,7 +434,7 @@ class DurableContextProof(ContextProof):
             self.llm_context_digest, self.committed_at_ms,
         )
 
-    def matches_prompt(self, binding, evidence):
+    def matches_prompt(self, binding: Any, evidence: sqlite3.Connection) -> bool:
         from .private_sidecar import native_request_digest
 
         row = evidence.execute('SELECT record FROM entries WHERE id=?', (self.evidence_entry_id,)).fetchone()
@@ -468,7 +469,7 @@ class NativePiTerminalFailure(NativePiUnavailable):
 
 @dataclass(frozen=True, slots=True)
 class NativeTurnResult:
-    def require(self):
+    def require(self) -> NativeTurnResult:
         return self
 
     def require_publishable(self) -> None:

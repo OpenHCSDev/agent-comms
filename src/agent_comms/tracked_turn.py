@@ -235,7 +235,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         selected_tool_mode,
         observe_event: NativeObserver,
         request_observer: RequestObserver,
-        pi_session: PersistentPiSession,
+        backend: PersistentPiSession,
         following: FollowingInputs,
     ):
         # The owner's Pi session child: an idle child left by its previous
@@ -246,7 +246,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             model_wait=model_wait,
             startup=startup,
             request_observer=request_observer,
-            native_session=pi_session,
+            native_session=backend,
         )
         self.retainable = False
         self.command = command
@@ -324,7 +324,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
             request_observer=request_observer,
-            pi_session=execution.pi_session,
+            backend=execution.backend,
             following=following,
         )
         return await turn.complete()

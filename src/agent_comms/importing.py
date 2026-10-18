@@ -91,7 +91,7 @@ class ImportSnapshot:
 
         return asyncio.run(collect()).snapshot(history.harness)
 
-    def pi_session(self, project: Path) -> str:
+    def session_document(self, project: Path) -> str:
         """A valid Pi v3 tree, using text-only portable historical context."""
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()

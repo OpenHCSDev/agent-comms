@@ -1,4 +1,6 @@
 """SelectedExecution with pinned native Pi, local deterministic coding provider."""
+
+from native_backend_fixture import standalone_backend
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import LowThinkingLevel
 from binding_reads import binding_rows
@@ -209,7 +211,7 @@ async def test_native_full_four_tools_publish_and_release(
     )
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    execution = SelectedExecution(
+    execution = SelectedExecution(backend=standalone_backend(root), 
         root=root,
         wire_root_id=root_id,
         owner_name="beta",

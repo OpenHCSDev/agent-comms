@@ -25,6 +25,7 @@ from pathlib import Path
 
 from agent_comms.coordination_errors import PublicationActivationBlocked
 
+from .agent_backend import AgentBackend
 from .child_process import ProcessIdentity
 from .comms import Comms
 from .coordinated_runtime import SelectedExecution
@@ -47,6 +48,7 @@ class ForegroundOwner:
     wire_root_id: str
     name: str
     native_package: Path
+    backend: AgentBackend
     _started: bool = field(default=False, init=False, repr=False)
 
     async def run_go(self, line: str) -> CoordinatedTurn | None:
@@ -57,6 +59,7 @@ class ForegroundOwner:
             raise PublicationActivationBlocked("Foreground owner accepts exactly one GO")
         self._started = True  # Before the first await: even an uncertain attempt is spent.
         return await SelectedExecution(
+            backend=self.backend,
             root=self.root,
             wire_root_id=self.wire_root_id,
             owner_name=self.name,
@@ -116,7 +119,11 @@ def reserve_foreground_owner(
         comms.registry.register(owner)
         with comms.channels.catalog.editing() as document:
             document.remember_tags(owner.tags, owner.created_at)
-    return ForegroundOwner(root, wire_root_id, owner.name, package)
+    from .acp import CommsAgent
+
+    agent = CommsAgent(comms, auto_wake=False)
+    backend = agent.turns.backend_for(owner.name, owner)
+    return ForegroundOwner(root, wire_root_id, owner.name, package, backend)
 
 
 def _emit(payload: dict[str, object]) -> None:

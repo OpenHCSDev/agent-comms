@@ -78,7 +78,7 @@ class PiSessionFile(RuntimeLocation):
 
     def select_session(self, directory, execution):
         path = Path(self.path).absolute()
-        retained = execution.retained_source(path)
+        retained = execution.backend.retained_source(path, execution.native_package)
         identity = (retained.identity if retained is not None else
                     SessionIdentityHelper.locate(execution.native_package, str(path)))
         return SavedSelectedSession(directory, identity=identity)
@@ -143,6 +143,18 @@ class PersistentPiSession:
             execution=execution,
             following=following,
         )
+
+    def retained_source(self, session_file: Path, package: Path):
+        from .native_pi import NativePiUnavailable
+
+        try:
+            retained = self.child_state.idle()
+        except NativePiUnavailable:
+            return None
+        if (retained.identity.session_file != str(session_file)
+                or retained.child.key[0].package != package):
+            return None
+        return retained
 
     @property
     def available(self) -> bool:

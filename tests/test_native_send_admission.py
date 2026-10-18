@@ -1,6 +1,8 @@
 """Actual raw-pipe claim_scope; no provider or native acceptance inferred."""
 
 from __future__ import annotations
+
+from native_backend_fixture import standalone_backend
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -54,7 +56,7 @@ async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, di
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", race)
     with pytest.raises(StaleFence):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=pinned_native_package()
         ).run()
     assert calls == []
@@ -153,7 +155,7 @@ async def test_actual_raw_writes_follow_committed_claim_without_global_exclusion
 
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=pinned_native_package()
         ).run()
     if revoke:
@@ -260,7 +262,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         patch.setattr(native_pi.os, "killpg", cancel_during_cleanup)
         start = time.monotonic()
         task = asyncio.create_task(
-            SelectedExecution(
+            SelectedExecution(backend=standalone_backend(root), 
                 root=root,
                 wire_root_id=root_id,
                 owner_name=owner.name,
@@ -285,7 +287,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         assert _held(root) == []
         if mode not in {"lifecycle", "preflight-drain"}:
             assert (
-                await SelectedExecution(
+                await SelectedExecution(backend=standalone_backend(root), 
                     root=root, wire_root_id=root_id, owner_name=owner.name, native_package=pinned_native_package()
                 ).run()
                 is None
@@ -399,7 +401,7 @@ async def test_short_claim_contention_sends_once_after_release(
     # The child intentionally exits after reading the prompt; this tests raw
     # claim_scope only, not a native context or successful model response.
     with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=pinned_native_package()
         ).run()
     if revoke:
@@ -526,7 +528,7 @@ async def test_actual_native_claim_commits_before_bytes_and_releases_feedback_re
     # The local child supplies capability+reads prompt then exits without proof;
     # the expected downstream error is NOT a post-write claim_scope failure.
     with pytest.raises(native_pi.NativePiUnavailable) as caught:
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=pinned_native_package()
         ).run()
     assert "post-write" not in str(caught.value)

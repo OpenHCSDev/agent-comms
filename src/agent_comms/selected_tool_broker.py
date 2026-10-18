@@ -9,7 +9,6 @@ claim append or file mutation, and UNKNOWN is never retried automatically.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import os
@@ -55,7 +54,6 @@ _MAX_CONTENT = 128 * 1024
 _MAX_REQUEST = _MAX_CONTENT + 8192
 _CALL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 _TOKEN = re.compile(r"[0-9a-f]{64}\Z")
-_TOOL_SOURCE_SHA = "136695f78d636886725c22c1bd7373d1f18d1b6001f4192d3afe9ec3a1ba102b"
 
 _LOG = logging.getLogger(__name__)
 
@@ -173,7 +171,7 @@ def selected_extension(package: Path) -> Path:
     info = source.lstat()
     if (
         not stat.S_ISREG(info.st_mode)
-        or hashlib.sha256(source.read_bytes()).hexdigest() != _TOOL_SOURCE_SHA
+        or source.read_bytes() != Path(__file__).with_name("selected_claimed_write.mjs").read_bytes()
     ):
         raise SelectedToolDenied("Selected native extension differs from reviewed source")
     return source

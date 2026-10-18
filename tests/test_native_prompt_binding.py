@@ -4,6 +4,8 @@ Fake native Pi only; real provider acceptance stays with the pinned executor.
 """
 
 from __future__ import annotations
+
+from native_backend_fixture import standalone_backend
 from conftest import publish_initial
 from binding_reads import binding_rows
 
@@ -115,7 +117,7 @@ async def test_suppressed_binding_insert_denies_native_send(tmp_path, monkeypatc
 
     monkeypatch.setattr(binding, "sidecar_connection", suppressed)
     with pytest.raises(IdentityConflict, match="insert did not preserve exact identity"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert calls == []
@@ -136,14 +138,14 @@ async def test_uncertain_binding_commit_denies_native_send_and_retry(tmp_path, m
 
     monkeypatch.setattr(private_sidecar, "_publish", uncertain)
     with pytest.raises(private_sidecar.SidecarCommitUnknown):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert calls == []
     # Reservation is already deferred: a new run cannot resend this input even
     # when durable binding bytes happen to be present after an uncertain return.
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
         is None
@@ -279,7 +281,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
     root, root_id, comms, initial, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
-    turn = await SelectedExecution(
+    turn = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert journal_without_sql == [True]
@@ -335,7 +337,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
         assert before.covered_seq == 0 and before.blocked_seq == first.message.seq
-    first_turn = await SelectedExecution(
+    first_turn = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert first_turn is not None and first_turn.cursor_status == "proven"
@@ -348,7 +350,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
         assert current is not None and current.injected_seq == first.message.seq
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(bus, root_id, second.seq, store)
-    second_turn = await SelectedExecution(
+    second_turn = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert second_turn is not None and second_turn.cursor_status == "proven"
@@ -370,14 +372,14 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
     good, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     second = publish_initial(comms, "sender", "alpha", "Second selected source.")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
-    later = await SelectedExecution(
+    later = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert later is not None and later.cursor_status == "blocked_gap"
@@ -419,7 +421,7 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
         is not None
@@ -450,7 +452,7 @@ async def test_source_coverage_stops_at_triage_without_required_full(tmp_path, m
 
     monkeypatch.setattr(TrackedTurnSession, "execute", fail_full)
     with pytest.raises(NativePiUnavailable):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert len(calls) == 1
@@ -470,7 +472,7 @@ async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monk
     root, root_id, comms, initial, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    turn = await SelectedExecution(
+    turn = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert turn is not None and turn.cursor_status == "proven"
@@ -496,7 +498,7 @@ async def test_old_input_id_cannot_directly_seed_new_claim_cursor(tmp_path, monk
     root, root_id, comms, _, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    turn = await SelectedExecution(
+    turn = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert turn is not None and turn.cursor_status == "proven"
@@ -550,7 +552,7 @@ async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
     root, root_id, comms, first, _ = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    turn = await SelectedExecution(
+    turn = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert turn is not None and turn.cursor_status == "proven"
@@ -568,7 +570,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
     root, root_id, comms, first, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    old_turn = await SelectedExecution(
+    old_turn = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert old_turn is not None and old_turn.cursor_status == "proven"
@@ -583,7 +585,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
     second = publish_initial(comms, "sender", "alpha-new", "Canonical recipient.")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
-    fresh = await SelectedExecution(
+    fresh = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
     ).run()
     assert fresh is not None and fresh.cursor_status == "blocked_gap"
@@ -605,7 +607,7 @@ async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, 
     root, root_id, comms, initial, people = _root(tmp_path)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
-    turn = await SelectedExecution(
+    turn = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert journal_without_sql == [True, True]
@@ -635,7 +637,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
     fake, _ = _fake_model(digest_override="b" * 64)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",
@@ -660,7 +662,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
         assert binding is not None and binding[1] == "isolated-session"
     # The uncertain, already reserved input remains deferred, not retried.
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",
@@ -683,7 +685,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
 
     monkeypatch.setattr(TrackedTurnSession, "execute", corrupt_full)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert len(calls) == 1
@@ -704,7 +706,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
             ("triage", True),
         ]
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
         is None
@@ -751,7 +753,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
     with pytest.raises(
         IdentityConflict, match="native send differs from its durable prompt binding"
     ):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert len(calls) == (1 if stage == "triage" else 2)
@@ -772,7 +774,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
         )
 
     assert (
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
         is None
@@ -806,7 +808,7 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
         "agent_comms.private_send_claim.bind_expected_prompt", generation_bumps_then_bind
     )
     with pytest.raises((IdentityConflict, StaleFence)) as error:
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",
@@ -825,7 +827,7 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", dying)
     with pytest.raises(NativePiUnavailable):
-        await SelectedExecution(
+        await SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",

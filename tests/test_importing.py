@@ -156,7 +156,7 @@ def test_claude_reads_from_its_latest_compaction(tmp_path):
     assert bodies(snapshot) == ["Next step"]
     # The selected history has no request, so the newest earlier one is reported.
     assert snapshot.latest_request == "Obsolete request"
-    context = json.loads(snapshot.pi_session(tmp_path).splitlines()[2])["message"]["content"][0]["text"]
+    context = json.loads(snapshot.session_document(tmp_path).splitlines()[2])["message"]["content"][0]["text"]
     assert "Most recent user request in the source session:\nObsolete request" in context
 
 
@@ -341,7 +341,7 @@ def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(t
     tail = read(CodexHarness, source, ImportLimits(1, 100, 100))
     assert len(tail.messages) == 1 and tail.messages[0].body.startswith("[Historical tool result]")
     assert tail.latest_request == "Message 9"
-    assert "Message 9" in tail.pi_session(tmp_path)
+    assert "Message 9" in tail.session_document(tmp_path)
 
 
 class CountingReader:
@@ -487,7 +487,7 @@ def test_codex_compaction_record_may_span_several_reverse_blocks(tmp_path):
 def test_latest_request_is_not_duplicated_when_retained(tmp_path):
     source = lines(tmp_path / "rollout.jsonl", [codex_meta("dedupe", tmp_path),
                                                 codex_message("user", "Continue exactly once")])
-    assert read(CodexHarness, source).pi_session(tmp_path).count("Continue exactly once") == 1
+    assert read(CodexHarness, source).session_document(tmp_path).count("Continue exactly once") == 1
 
 
 def test_codex_rollout_must_start_with_its_session_and_decode_completely(tmp_path):

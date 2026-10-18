@@ -1,4 +1,6 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
+
+from native_backend_fixture import standalone_backend
 from agent_comms.native_package import pinned_native_package
 from agent_comms.native_arguments import SelectedModel
 
@@ -56,7 +58,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     ), cwd=native.project)
     session = SavedSelectedSession(created.path.parent,
         identity=NativeSessionIdentity(created.session_id, created.session_file))
-    execution = SelectedExecution(root=native.root,
+    execution = SelectedExecution(backend=standalone_backend(native.root), root=native.root,
         wire_root_id=Comms(native.root).owners.require_private_launch().wire_root_id,
         owner_name="launch-ownership", native_package=package)
     verifications = []

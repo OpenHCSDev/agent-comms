@@ -198,7 +198,7 @@ class ThreadManagement:
                 or stat.S_IMODE(info.st_mode) != 0o700
             ):
                 raise ValueError("Imported session directory is not owner-controlled.")
-            _atomic_write_text(session_path, snapshot.pi_session(project))
+            _atomic_write_text(session_path, snapshot.session_document(project))
             try:
                 self.registry._declare_unlocked(thread, StoppedThreadStatus())
                 self.bus.mark_delivered_through(name, self.bus.log.latest_sequence())

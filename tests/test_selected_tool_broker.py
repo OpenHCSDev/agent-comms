@@ -424,15 +424,13 @@ async def test_shipped_javascript_tool_uses_authenticated_owner_socket(tmp_path)
             "--input-type=module",
             "--eval",
             f"""import register from {json.dumps(extension.as_uri())};
+import {{configureOwnerTools}} from {json.dumps(extension.with_name('owner_tool_socket.mjs').as_uri())};
+configureOwnerTools({json.dumps({'kind': 'socket', 'path': str(socket.address), 'token': token})});
 let tool;
 register({{registerTool(value) {{tool = value}}}});
 await tool.execute('paired', {json.dumps(arguments)}, new AbortController().signal);
 """,
-            env={
-                **os.environ,
-                "AGENT_COMMS_SELECTED_TOOL_SOCKET": str(socket.address),
-                "AGENT_COMMS_SELECTED_TOOL_TOKEN": token,
-            },
+            env=os.environ.copy(),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

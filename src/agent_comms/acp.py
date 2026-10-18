@@ -388,6 +388,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # One execution owns this wake's package acquisition: acceptance of new
         # originals and the selected launch share it instead of verifying twice.
         execution = SelectedExecution(
+            backend=self.turns.backend_for(session_id, owner),
             root=self._comms.root,
             wire_root_id=wire_root_id,
             owner_name=thread_name,

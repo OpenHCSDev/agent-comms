@@ -4,6 +4,8 @@ Only HTTP provider responses and process termination are controlled. The native
 package, claim_scope writer, proof journal, bus and SQLite lifetime are real.
 """
 
+from native_backend_fixture import standalone_backend
+
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import asyncio
@@ -63,7 +65,7 @@ class SelectedNativeJourney:
 
     def execution(self):
         WakeCandidateIndex(self.comms.bus.log).maintain(start=RebuildIndex())
-        return SelectedExecution(
+        return SelectedExecution(backend=standalone_backend(self.root), 
             root=self.root,
             wire_root_id=self.root_id,
             owner_name="beta",

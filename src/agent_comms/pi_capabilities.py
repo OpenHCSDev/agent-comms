@@ -1,68 +1,82 @@
 """Pi operations shared by RPC and Durable; each transport owns its queries."""
+from __future__ import annotations
 
 from abc import abstractmethod
+from typing import TYPE_CHECKING, Any, cast
 
-from .agent_backend import Compacts, ConfiguresModel, ContextUsage, FailedCompaction, ReportsContext
+from .agent_backend import (
+    CompactionOutcome,
+    Compacts,
+    ConfiguresModel,
+    ContextUsage,
+    FailedCompaction,
+    ReportsContext,
+)
+
+if TYPE_CHECKING:
+    from .native_child import PiChild
+    from .native_tool_call import NativeToolMode, ToolTransport
+    from .pi_commands import Compact, PiCommand, SettingCommand
+    from .pi_payloads import ModelsData, StateData
+    from .threads import Thread
 
 
 class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
     @staticmethod
-    async def configure_tools(child, mode, transport):
+    async def configure_tools(child: PiChild, mode: NativeToolMode, transport: ToolTransport) -> None:
         from .pi_commands import ConfigureTools
 
         await child.request(ConfigureTools(tools=mode.tool_names, broker=transport.host_binding()))
 
     @abstractmethod
-    async def inspect(self, thread, command): ...
+    async def inspect(self, thread: Thread, command: PiCommand) -> Any: ...
 
-    def compaction_request(self, instructions):
+    def compaction_request(self, instructions: str | None) -> Compact:
         from .pi_commands import Compact
 
         return Compact(custom_instructions=instructions)
 
-    async def compact(self, thread, instructions):
+    async def compact(self, thread: Thread, instructions: str | None) -> CompactionOutcome:
         from .native_pi import NativePiUnavailable
 
         try:
-            return (await self.inspect(thread, self.compaction_request(instructions))).outcome
+            data = await self.inspect(thread, self.compaction_request(instructions))
+            return cast(CompactionOutcome, data.outcome)
         except (NativePiUnavailable, ValueError) as error:
             return FailedCompaction(str(error))
 
-    async def context_usage(self, thread):
+    async def context_usage(self, thread: Thread) -> ContextUsage:
         from .pi_commands import GetSessionStats
 
         usage = (await self.inspect(thread, GetSessionStats())).context_usage
-        return (
-            ContextUsage(None, None)
-            if usage is None
-            else ContextUsage(usage.tokens, usage.context_window)
-        )
+        return (ContextUsage(None, None) if usage is None else
+                ContextUsage(usage.tokens, usage.context_window))
 
-    async def discover_models(self, thread):
+    async def discover_models(self, thread: Thread) -> ModelsData:
         from .pi_commands import GetAvailableModels
+        from .pi_payloads import ModelsData
 
-        return await self.inspect(thread, GetAvailableModels())
+        return cast(ModelsData, await self.inspect(thread, GetAvailableModels()))
 
-    async def models(self, thread):
+    async def models(self, thread: Thread) -> tuple[str, ...]:
         data = await self.discover_models(thread)
-        return tuple(
-            dict.fromkeys(
-                model.display_name for model in data.models if model.provider and model.id
-            )
-        )
+        return tuple(dict.fromkeys(
+            name for model in data.models if (name := model.display_name) is not None
+        ))
 
-    async def apply_settings(self, thread, commands):
+    async def apply_settings(self, thread: Thread, commands: list[SettingCommand]) -> StateData:
         from .pi_commands import GetState
+        from .pi_payloads import StateData
 
         for command in commands:
             await self.inspect(thread, command)
-        return await self.inspect(thread, GetState())
+        return cast(StateData, await self.inspect(thread, GetState()))
 
-    async def configure(self, thread, model, thinking):
+    async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
         from .native_pi import NativePiUnavailable
         from .pi_commands import SetModel, SetThinkingLevel
 
-        commands = []
+        commands: list[SettingCommand] = []
         if model is not None:
             commands.append(SetModel.from_name(model))
         if thinking is not None:

@@ -14,18 +14,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
+from .agent_backend import AgentBackend
 from .agent_events import CompactionEvent
-from .pi_native_backend import PersistentPiSession
 from .comms import Comms
 from .coordination_errors import (
     IdentityConflict,
     PublicationActivationBlocked,
     RetryScheduled,
 )
-from .coordinator import Coordination
 from .coordination_snapshot import RecoverySnapshot
+from .coordinator import Coordination
 from .following_inputs import FollowingInputs
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
+from .native_pi import NativePiRpcLaunch, _private_session_dir
 from .selected_actions import CodingSelectedAction, SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
@@ -37,7 +37,7 @@ from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthori
 
 @dataclass(kw_only=True)
 class NativeExecution(ABC):
-    pi_session: PersistentPiSession = field(default_factory=PersistentPiSession, compare=False)
+    backend: AgentBackend = field(compare=False)
 
     @abstractmethod
     def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch: ...
@@ -84,16 +84,6 @@ class SelectedExecution(NativeExecution):
             raise IdentityConflict("Selected launch precedes its execution package acquisition")
         return self._tracked_factory(**options)
 
-    def retained_source(self, session_file: Path):
-        """The owner's idle child on this saved source with this package, if still current."""
-        try:
-            retained = self.pi_session.child_state.idle()
-        except NativePiUnavailable:
-            return None
-        if retained.identity.session_file != str(session_file) or retained.child.key[0].package != self.native_package:
-            return None
-        return retained
-
     def validate(self) -> None:
         """Acquire this execution's package once; claim acceptance and launch share it."""
         if self._tracked_factory is not None:
@@ -129,13 +119,10 @@ class SelectedExecution(NativeExecution):
 
     async def run(
         self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
-        pi_session: PersistentPiSession | None = None,
         following: FollowingInputs | None = None,
     ) -> CoordinatedTurn | None:
         if not self._run_permit.acquire(blocking=False):
             raise IdentityConflict("Selected execution cannot be reused")
-        if pi_session is not None:
-            self.pi_session = pi_session
         if following is not None:
             self.following = following
         self.root = Path(self.root).absolute()

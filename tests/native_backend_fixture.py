@@ -25,6 +25,13 @@ from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
 
 
+def standalone_backend(root):
+    """An explicitly requested native backend for direct protocol tests."""
+    from agent_comms.pi_native_backend import PiNativeBackend
+
+    return PiNativeBackend.for_worker(canonical_agent(Comms(root)).turns, "standalone")
+
+
 async def wait_for(predicate):
     async with asyncio.timeout(30):
         while not predicate():

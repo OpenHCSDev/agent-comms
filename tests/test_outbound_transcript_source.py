@@ -1,5 +1,7 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
+from native_backend_fixture import standalone_backend
+
 from agent_comms import invoke_tool
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -243,7 +245,7 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
     runner, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
-    outcome = await SelectedExecution(
+    outcome = await SelectedExecution(backend=standalone_backend(root), 
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path,
     ).run()
     assert outcome is not None and outcome.disposition is IgnoredAssignment

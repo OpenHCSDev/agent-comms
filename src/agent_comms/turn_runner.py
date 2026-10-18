@@ -407,7 +407,6 @@ class TurnRunner:
             try:
                 result = await execution.run(
                     on_compaction=partial(self.effects._emit_event, session_id),
-                    pi_session=self.backend_for(session_id, owner),
                     following=(following := OwnerFollowingInputs(self.inputs, session_id, owner, inbox)),
                 )
                 await following.pass_on_unread(self)

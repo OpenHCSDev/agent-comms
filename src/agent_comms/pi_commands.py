@@ -411,7 +411,7 @@ class ClearQueue(PiCommand):
 class Compact(NativeQuery):
     """Pi's own compaction engine, run now; Pi adds Core's task brief to the instructions."""
 
-    response_payload = CompactionData
+    response_payload: ClassVar[type[PiResponseData]] = CompactionData
     writes_session = True
     custom_instructions: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "customInstructions"}

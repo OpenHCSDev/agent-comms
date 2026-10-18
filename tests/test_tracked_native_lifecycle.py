@@ -1,4 +1,6 @@
 """Installed selected coding journey through real CLI/tools; localhost responses only."""
+
+from native_backend_fixture import standalone_backend
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
@@ -141,7 +143,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
     await agent._runtime.start()
     started = time.monotonic()
     task = asyncio.create_task(
-        SelectedExecution(
+        SelectedExecution(backend=standalone_backend(root), 
             root=root,
             wire_root_id=root_id,
             owner_name="beta",
@@ -197,7 +199,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
                 assert rows[0].context_anchor is None
         before = provider.posts
         try:
-            replay = await SelectedExecution(
+            replay = await SelectedExecution(backend=standalone_backend(root), 
                 root=root,
                 wire_root_id=root_id,
                 owner_name="beta",

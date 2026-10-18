@@ -1,4 +1,6 @@
 """Real selected native tools over an isolated retained source; localhost only."""
+
+from native_backend_fixture import standalone_backend
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
@@ -152,7 +154,7 @@ async def test_installed_retained_native_read_round_preserves_original_inputs(tm
     monkeypatch.setattr(AttachedChild, "start", observe_child)
     started = time.perf_counter()
     try:
-        execution = SelectedExecution(
+        execution = SelectedExecution(backend=standalone_backend(root), 
             root=root, wire_root_id=root_id, owner_name="beta",
             native_package=Path(PACKAGE).resolve(strict=True), session_file=saved,
         )
@@ -170,7 +172,7 @@ async def test_installed_retained_native_read_round_preserves_original_inputs(tm
                 await task
             before = provider.posts
             try:
-                replay = await SelectedExecution(
+                replay = await SelectedExecution(backend=standalone_backend(root), 
                     root=root, wire_root_id=root_id, owner_name="beta",
                     native_package=Path(PACKAGE).resolve(strict=True), session_file=saved,
                 ).run()
