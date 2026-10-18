@@ -46,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cutover.carry import CarryChain, CarryLedger, Step
 
-from agent_comms.active_route import acquire_exclusive_route_lock
+from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
@@ -261,16 +261,29 @@ class Backup:
         print(f"Restored the bus; the failed one is kept at {failed}", file=sys.stderr)
 
 
-def route_readers() -> None:
-    """Toad and ACP clients hold the route directory shared; an upgrade waits for them to close.
-    Bus watches close on their own once the maintenance phase is declared."""
+def route_readers(patience: int = 120) -> None:
+    """Bus watches close on their own once maintenance is declared. Toad's observation process
+    (ui_model/observation.py:1223) and an ACP agent (acp.py:512) hold the route for their whole
+    life and never pause, so the wait gives up after ``patience`` seconds and names them."""
     directory = Path.home() / ".local/state/agent-comms"
     if not directory.exists():
         return
     descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+
+    def gave_up(signum: int, frame: object) -> None:
+        raise TimeoutError
+
+    previous = signal.signal(signal.SIGALRM, gave_up)
+    signal.alarm(patience)
     try:
         acquire_exclusive_route_lock(descriptor)
+    except TimeoutError:
+        holders = "; ".join(f"PID {holder.pid}: {holder.command}"
+                            for holder in route_lock_holders(descriptor))
+        raise UpgradeRefused(f"Clients still hold the route after {patience}s: {holders}") from None
     finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
         os.close(descriptor)
 
 

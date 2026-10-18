@@ -796,6 +796,9 @@ class Inbox(Operation[OperationBridge]):
 
             registry = await asyncio.to_thread(
                 Registration, Path(bridge.binding.root) / 'registry.json')
+            # A bridge started during an upgrade's drain waits for it to clear, as a running
+            # watch does, instead of being refused at registration.
+            await bridge.comms.bus.resumed()
             # The endpoint, not a particular CLI's record parser, owns presence.
             with registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid())):
                 async with asyncio.TaskGroup() as tasks:
