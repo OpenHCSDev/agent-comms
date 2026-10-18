@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import order
 from .config import CommanderConfig
+from ..field_codec import MalformedRecord
 from ..native_tool_call import SelectedToolDenied
 from ..native_tools import CodingTool
 from ..tool_declaration import one_line
@@ -30,7 +31,7 @@ def decoded(name, args):
     """Core's argument record of the call; None when Core declares none or refuses it."""
     try:
         return CodingTool.from_call(name, args, call_id='tool_watch').tool
-    except (SelectedToolDenied, TypeError, ValueError):
+    except (SelectedToolDenied, MalformedRecord):
         return None
 
 

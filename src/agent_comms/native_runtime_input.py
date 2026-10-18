@@ -16,6 +16,7 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .coordination_errors import StaleFence, IdentityConflict
+from .field_codec import FieldCodec, MalformedRecord
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution
 from .selected_triage import SelectedTriage, RecordedTriageText
@@ -103,8 +104,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         from .native_session_reopen import NativeSessionIdentity
 
         try:
-            return NativeSessionIdentity(self.session_id, self.session_file)
-        except (TypeError, ValueError) as error:
+            return FieldCodec.decode(
+                NativeSessionIdentity,
+                {"sessionId": self.session_id, "sessionFile": self.session_file},
+            )
+        except MalformedRecord as error:
             raise IdentityConflict("Native input has no recorded selected session") from error
 
     def require_context_proof(self) -> NativeContextProof:
@@ -122,7 +126,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     def execution(self) -> NativeInputExecution:
         try:
             return self.stage.from_columns(self.execution_id, self.attempt_ordinal)
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise IdentityConflict("Native input execution columns conflict with their stage") from error
 
     @classmethod

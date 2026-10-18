@@ -14,7 +14,7 @@ from functools import singledispatch
 from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, TextRepresentation
+from .field_codec import FieldCodec, MalformedRecord, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
 from .tool_declaration import ToolDeclaration
@@ -68,7 +68,7 @@ class PiPayload:
     @classmethod
     def normalize_wire(cls, value):
         if not isinstance(value, dict):
-            raise ValueError(f"Expected {cls.__name__} object")
+            raise MalformedRecord(f"Expected {cls.__name__} object")
         member = cls
         data = {}
         if issubclass(cls, DeclaredFamily):
@@ -79,7 +79,7 @@ class PiPayload:
         declared = FieldCodec.record_fields(member)
         names = {key for _, key in declared}
         if member.strict_fields and set(value) - names - {member.wire_tag}:
-            raise ValueError(f"Unexpected {member.__name__} fields")
+            raise MalformedRecord(f"Unexpected {member.__name__} fields")
         hints = FieldCodec._types(member)
         for f, key in declared:
             if key in value:
@@ -115,15 +115,15 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
     def wire_member(cls, value):
         try:
             success = FieldCodec.decode(bool, value.get("success"))
-        except (TypeError, ValueError) as error:
-            raise ValueError(
+        except MalformedRecord as error:
+            raise MalformedRecord(
                 "Provider retry end requires a boolean success outcome"
             ) from error
         if success:
             return SucceededProviderRetry
         final_error = value.get("finalError")
         if not isinstance(final_error, str) or not final_error.strip():
-            raise ValueError("Failed provider retry end requires finalError")
+            raise MalformedRecord("Failed provider retry end requires finalError")
         return FailedProviderRetry
 
     @abstractmethod
@@ -1131,7 +1131,7 @@ class NativeEditDetails(PiPayload):
     def capture_diff(cls, raw):
         try:
             details = cls.from_wire(raw)
-        except (ValueError, TypeError):
+        except MalformedRecord:
             # Extension-defined metadata may be opaque. Preserve the original
             # result and output; unsupported formatting grants no diff evidence.
             return None
@@ -1322,14 +1322,11 @@ class McpLiveAcknowledgement:
         Same-user extensions can imitate this claim. It is never a package
         attestation or permission, even when the current input identity matches.
         """
-        import json
-        from .jsonl_stream import unique_fields
-
         if text is None or len(text) > 8192:
             return None
         try:
-            acknowledgement = FieldCodec.decode(cls, json.loads(text, object_pairs_hook=unique_fields))
-        except (TypeError, ValueError):
+            acknowledgement = FieldCodec.decode(cls, FieldCodec.parse(text))
+        except MalformedRecord:
             return None
         return acknowledgement if acknowledgement.input_id == input_id else None
 

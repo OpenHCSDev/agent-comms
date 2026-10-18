@@ -16,7 +16,7 @@ from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, InlineRecord, NullMember, projected
+from .field_codec import FieldCodec, InlineRecord, MalformedRecord, NullMember, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .response_policy import InformationalPolicy, ResponseEligibility
@@ -446,13 +446,13 @@ class Message:
         from .bus_publication import PRIVATE_WIRE_FIELD, _canonical, public_envelope_digest
 
         if not isinstance(record, Mapping):
-            raise ValueError("Bus row is not an object.")
+            raise MalformedRecord("Bus row is not an object.")
         public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
         message = cls.from_wire(public)
         if _canonical(public) != _canonical(message.to_wire()):
-            raise ValueError("Noncanonical public bus envelope.")
+            raise MalformedRecord("Noncanonical public bus envelope.")
         if not 0 < message.seq <= MAX_WIRE_SEQ:
-            raise ValueError("Bus sequence is outside the durable range.")
+            raise MalformedRecord("Bus sequence is outside the durable range.")
         public_envelope_digest(public)
         return message
 

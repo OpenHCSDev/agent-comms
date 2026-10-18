@@ -25,7 +25,8 @@ from acp.exceptions import RequestError
 from acp.schema import RequestPermissionResponse
 
 from .jsonl_stream import JsonlStreamReader
-from .owner_protocol import OwnerAnnouncement
+from .field_codec import FieldCodec, MalformedRecord
+from .owner_protocol import OwnerAnnouncement, OwnerReady
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
 from .registry_document import RegistryEntry
 from .child_process import ProcessIdentity
@@ -474,25 +475,25 @@ class RuntimeProxy(RuntimeConnection):
             announcement = await reader.readline()
             if not announcement:
                 raise RuntimeError("Thread owner disconnected during attachment")
-            data = json.loads(announcement)
+            data = FieldCodec.decode(dict[str, Any], FieldCodec.parse(announcement))
             _raise_owner_error(data)
             OwnerAnnouncement().require_same_core(self.session_id, data)
             while line := await reader.readline():
-                data = json.loads(line)
+                data = FieldCodec.decode(dict[str, Any], FieldCodec.parse(line))
                 _raise_owner_error(data)
                 if "ready" in data:
-                    token = data.get("controllerToken")
-                    if not isinstance(token, str) or len(token) != 64:
-                        raise ValueError(
+                    try:
+                        ready = FieldCodec.decode(OwnerReady, data)
+                    except MalformedRecord as error:
+                        raise MalformedRecord(
                             "Owner subscription ready requires a valid controllerToken."
-                        )
-                    metadata = cast(dict[str, Any], data["ready"])
+                        ) from error
                     presented = await Coordination.run_worker(
-                        partial(present_session, metadata, self.session_id)
+                        partial(present_session, ready.ready, self.session_id)
                     )
                     if self._closed:
                         raise ConnectionError("Owner attachment closed during subscription")
-                    self._controller_token = token
+                    self._controller_token = ready.controller_token
                     return reader, presented
                 await self.update(data)
             raise RuntimeError("Thread owner disconnected during attachment")

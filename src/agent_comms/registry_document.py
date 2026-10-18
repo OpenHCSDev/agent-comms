@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .registration_change import (
     InitialRegistration,
     NativeSourcePublication,
@@ -239,6 +239,10 @@ class RegistryDocument(RegistryPresence):
             else:
                 earlier_raw, decoded = earlier
                 thread_rows = cls.thread_rows()
+                if not isinstance(raw, dict) or any(
+                    not isinstance(raw.get(section), dict) for section in thread_rows
+                ):
+                    raise MalformedRecord("registry thread sections must be objects")
                 kept = {
                     section: {
                         name for name, row in raw[section].items()
@@ -262,19 +266,19 @@ class RegistryDocument(RegistryPresence):
                 })
             names = set(document.threads)
             if names != set(document.statuses) or names != set(document.last_seen):
-                raise ValueError("thread presence does not match declarations")
+                raise MalformedRecord("thread presence does not match declarations")
             if not names <= document.owners.generations.keys():
-                raise ValueError("missing owner generation")
+                raise MalformedRecord("missing owner generation")
             if not names <= document.claims.generations.keys():
-                raise ValueError("missing claim_scope generation")
+                raise MalformedRecord("missing claim_scope generation")
             if any(name != thread.name for name, thread in document.threads.items()):
-                raise ValueError("thread name differs from its declaration")
+                raise MalformedRecord("thread name differs from its declaration")
             if any(
                 target not in names or alias in names for alias, target in document.aliases.items()
             ):
-                raise ValueError("alias has no exclusive retained owner")
+                raise MalformedRecord("alias has no exclusive retained owner")
             return document
-        except (ValueError, TypeError, KeyError, AttributeError) as error:
+        except MalformedRecord as error:
             raise RelationViolationError(f"Invalid registry document: {error}") from error
 
     def claim_name(self, base_name: str) -> str:
