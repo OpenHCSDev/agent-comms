@@ -322,7 +322,7 @@ class ToolCallContent(PiContent, declared_name="toolCall"):
 
     id: str
     name: str
-    arguments: dict[str, Any]
+    arguments: object
     tool_round_allowed = True
 
 

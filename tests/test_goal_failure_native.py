@@ -88,7 +88,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             sid = created.session_id
             # Bound the journey to exactly one scheduler launch; observers are
             # independent of the explicit wake exercised below.
-            drain = agent.inputs.drain_tasks.pop(sid)
+            drain, agent.inputs.state(sid).drain_task = agent.inputs.state(sid).drain_task, None
             drain.cancel()
             await asyncio.gather(drain, return_exceptions=True)
             comms.registry.register(replace(comms.registry.require(sid), auto_title_pending=False))
@@ -98,7 +98,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
                 {"cwd": str(native.project), "sessionId": sid, "mcpServers": []},
                 False,
             )
-            drain = agent.inputs.drain_tasks.pop(sid)
+            drain, agent.inputs.state(sid).drain_task = agent.inputs.state(sid).drain_task, None
             drain.cancel()
             await asyncio.gather(drain, return_exceptions=True)
             goal = comms.goals.update_goal(
@@ -120,7 +120,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             native.provider.text = "Journaled local summary and successful goal continuation."
             agent.inputs.auto_wake = True
             await agent.turns.goals.schedule_goal(sid)
-            await agent.inputs.wake_tasks[sid]
+            await agent.inputs.state(sid).wake_task
             agent.inputs.auto_wake = False
             assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
             assert len(native.saved_inputs()) == 3
@@ -209,7 +209,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
                         # Only the localhost response is controlled. Pause at
                         # the actual provider request of the tracked native turn.
                         current = comms.registry.require(sid)
-                        assert current.executing
+                        assert current.active_turn.executing
                         paused = comms.goals.update_goal(
                             sid, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
                             actor=OwnerInvocable,
@@ -236,7 +236,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert stored_inputs(agent.inputs.dispositions.root).rows[key] == unknown
             registry = comms.registry.snapshot()
             owner = registry.threads[sid]
-            assert owner.active_turn is None
+            assert not owner.active_turn.executing
             assert any(
                 json.loads(path.read_text()).get("reason") == FailureReason.MODEL_REQUEST_FAILED
                 for path in (comms.root / "diagnostics").glob("*.json")
@@ -252,7 +252,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             with pytest.raises(UnresolvedAttemptError):
                 GoalAttemptStore(store.root).resume(goal.id, 1)
             await agent.turns.goals.schedule_goal(sid)
-            assert not agent.inputs.pending_turns.get(sid)
+            assert not agent.inputs.state(sid).pending_turns
             assert len(native.saved_inputs()) == 3
             if owner_pauses:
                 reopened = Comms(comms.root)
@@ -270,7 +270,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             proxy = RuntimeProxy(agent, sid, socket_path(comms.root, os.getpid()))
             try:
                 await proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
-                await agent.inputs.wake_tasks[sid]
+                await agent.inputs.state(sid).wake_task
                 agent.inputs.auto_wake = False  # bound this isolated journey to one retry
             finally:
                 await proxy.close()
@@ -282,7 +282,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             )
             assert native.session.read_bytes().startswith(history)
             assert stored_inputs(agent.inputs.dispositions.root).rows[key] == unknown
-            assert not agent.inputs.pending_turns.get(sid)
+            assert not agent.inputs.state(sid).pending_turns
             print(f"native_failed_goal_projection={projected.to_primitive()} provider_posts={native.provider.posts} retry_generation=2 next_ready_generation=3 saved_inputs=4")
     finally:
         await agent.shutdown()

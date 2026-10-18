@@ -167,7 +167,7 @@ async def run(stage, package):
     finally:
         current = service.registry.require(child.name)
         # Observation expiry cannot authorize aborting a still-running input.
-        if current.active_turn is None:
+        if not current.active_turn.executing:
             await asyncio.to_thread(service.owners.stop, child.name)
         acknowledgement['owned_owner_after_observation'] = FieldCodec.encode(service.registry.require(child.name).process_identity)
         acknowledgement['configured_source_hashes_unchanged'] = all(

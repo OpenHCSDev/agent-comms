@@ -175,13 +175,13 @@ async def run(arguments):
                     # Keep the observer genuinely non-reading throughout the
                     # original native completion, rather than resuming it at an
                     # arbitrary provider-write time while publication continues.
-                    await until(pilot, lambda: not service.registry.require("wait-native").executing, 90)
+                    await until(pilot, lambda: not service.registry.require("wait-native").active_turn.executing, 90)
                     report["completed_with_nonreading_observer"] = True
                     reader._transport.resume_reading()
                     await asyncio.wait_for(consume(reader, slow_packets), 30)
                     report["nonreading_observer_retired"] = True
                     slow_writer.close(); await slow_writer.wait_closed(); slow_writer = None
-                await until(pilot, lambda: not service.registry.require("wait-native").executing, 90)
+                await until(pilot, lambda: not service.registry.require("wait-native").active_turn.executing, 90)
                 assert app._exception is None, app._exception
                 await until(pilot, lambda: response_painted(app, view, f"WAIT_NATIVE_OK_{index}"), 30)
                 assert view.agent.session.connected, "Fast controller lost its original attachment"

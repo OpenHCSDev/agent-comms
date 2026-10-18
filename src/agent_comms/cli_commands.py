@@ -58,7 +58,7 @@ from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportLimits, ImportedSessionMetadata, ThreadImported
-from .historical_views import HistoryCursor
+from .message_page import HistoryCursor, PageBounds, PageTraversal
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .shared_ledger import LedgerDocument
 from .tool_caller import ToolCaller
@@ -1272,13 +1272,13 @@ class HistoryCliCommand(CliCommand):
     def apply(self, ctx: Comms) -> CliResult:
         if sum(bool(x) for x in (self.with_thread, self.channel, self.everything)) > 1:
             raise ValueError("history takes at most one of --with, --channel, --everything")
-        paging = {"before": self.before, "limit": self.limit}
+        bounds = PageBounds(PageTraversal.capture(self.before, None), self.limit)
         if self.with_thread:
-            page = ctx.views.dm_history_page(ToolCaller.from_actor(self.me).subject(""), self.with_thread, **paging)
+            page = ctx.views.dm_history_page(ToolCaller.from_actor(self.me).subject(""), self.with_thread, bounds)
         elif self.channel:
-            page = ctx.views.channel_history_page(self.channel, **paging)
+            page = ctx.views.channel_history_page(self.channel, bounds)
         else:
-            page = ctx.views.full_history_page(**paging)
+            page = ctx.views.full_history_page(bounds)
         return HistoryPageResult(tuple(reversed(page.messages)), page.oldest_cursor, page.has_older)
 
 
@@ -1590,7 +1590,7 @@ class RestartCliCommand(CliCommand):
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        if thread.executing:
+        if thread.active_turn.executing:
             return ()
         return (cls(name=thread.name),) if thread.restart_candidates(status) else ()
 

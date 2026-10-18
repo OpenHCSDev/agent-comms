@@ -31,10 +31,10 @@ class NativeExecutableTool(ToolDeclaration):
     def native_extension(cls, package: Path) -> Path: ...
 
     @classmethod
-    def from_call(cls, name: str, arguments: dict[str, object], *, call_id: str):
+    def from_call(cls, name: str, arguments: object, *, call_id: str):
         cls._member_declarations()
-        FieldCodec.encode(arguments)
-        return cls.field_value(name).create_call(call_id, arguments)
+        decoded = FieldCodec.decode(dict[str, object], arguments)
+        return cls.field_value(name).create_call(call_id, decoded)
 
 
 class NativeRequestTools:
@@ -76,7 +76,7 @@ class PatternSearchTool:
     acp_kind = "search"
     pattern: str
     path: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
+        default=None, metadata={"wire_omit_default": True})
 
     def reads(self) -> str:
         return self.pattern
@@ -103,9 +103,9 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
 
     @classmethod
     def create_call(cls, call_id: str, arguments: dict[str, object]):
-        from .channel_coding_tools import CodingCall
+        from .channel_coding_tools import ExecutableCodingCall
 
-        return CodingCall(call_id, cls.parse_arguments(arguments))
+        return ExecutableCodingCall(call_id, cls.parse_arguments(arguments))
 
     @classmethod
     def native_extension(cls, package: Path) -> Path:
@@ -116,8 +116,8 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
 class ReadTool(PathTool, CodingTool):
     acp_kind = "read"
     label = "Read"
-    offset: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
-    limit: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
+    offset: float | None = field(default=None, metadata={"wire_omit_default": True})
+    limit: float | None = field(default=None, metadata={"wire_omit_default": True})
 
     def _parse_resource(self) -> None:
         return None
@@ -128,7 +128,7 @@ class BashTool(CodingTool):
     acp_kind = "execute"
     label = "Run"
     command: str
-    timeout: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
+    timeout: float | None = field(default=None, metadata={"wire_omit_default": True})
 
     def reads(self) -> str:
         return self.command

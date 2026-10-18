@@ -11,7 +11,8 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.message_page import MessagePageRequest
+from agent_comms.coordination_errors import DMScopeChanged
+from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest, PageBounds
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
@@ -51,10 +52,10 @@ def test_dm_preparation_releases_native_claim_lock(tmp_path, monkeypatch):
         return page
 
     monkeypatch.setattr(MessagePageRequest, "read", inspect)
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=1)
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=1))
     assert prepared == [True]
     assert page.messages[0].body == "original 2"
-    assert page.display_basis.older_unread
+    assert page.has_older
     assert comms.bus.pending_count(viewer, "peer") == 4
 
 
@@ -67,7 +68,7 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
     comms.threads.rename_managed_thread("peer", "renamed", owner_pid=os.getpid())
     markers = tmp_path / "read_ledger.json"
     marker_before = markers.read_bytes() if markers.exists() else None
-    with pytest.raises(ValueError, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged, match="incarnation changed"):
         _mark(comms, "peer", tmp_path, old)
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
     assert comms.bus.pending_count(viewer, "renamed") == 1
@@ -97,7 +98,7 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     markers = tmp_path / "read_ledger.json"
     marker_before = markers.read_bytes() if markers.exists() else None
     assert before == 1
-    with pytest.raises(ValueError, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged, match="incarnation changed"):
         _mark(comms, "peer", tmp_path, old)
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
     assert comms.bus.pending_count(viewer, "peer") == 1
@@ -113,7 +114,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms.messaging.send("peer", viewer, "old viewer painted")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert page.display_basis is not None
-    with pytest.raises(ValueError, match="contiguous"):
+    with pytest.raises(DMScopeChanged, match="different root, worktree or peer"):
         comms.views.mark_dm_view_read(
             "peer",
             worktree=str(tmp_path / "foreign"),
@@ -126,7 +127,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms.messaging.send("peer", viewer, "new viewer unseen")
     before = comms.bus.pending_count(viewer, "peer")
     assert before == 1
-    with pytest.raises(ValueError, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged, match="incarnation changed"):
         _mark(comms, "peer", tmp_path, page)
     assert comms.bus.pending_count(viewer, "peer") == before
 
@@ -149,7 +150,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     assert before == 1
     marker_path = tmp_path / "read_ledger.json"
     marker_before = marker_path.read_bytes() if marker_path.exists() else None
-    with pytest.raises(ValueError, match="registry changed|viewer/peer incarnation changed"):
+    with pytest.raises(DMScopeChanged, match="registry changed|viewer/peer incarnation changed"):
         _mark(comms, "peer", tmp_path, page)
     assert (marker_path.read_bytes() if marker_path.exists() else None) == marker_before
     assert comms.bus.pending_count("new_user", "peer") == before
@@ -166,10 +167,10 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
     messages = {
         name: comms.messaging.send_message(name, viewer, name) for name in ("peer", "other")
     }
-    original = comms.bus.conversation_page
+    original = ConversationMessagePageRequest.read
 
-    def interpose(*args, **kwargs):
-        page = original(*args, **kwargs)
+    def interpose(request, log):
+        page = original(request, log)
         comms.bus.reads.mark_displayed(
             viewer,
             comms.bus.reads.capture(
@@ -178,10 +179,10 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
         )
         return page
 
-    monkeypatch.setattr(comms.bus, "conversation_page", interpose)
+    monkeypatch.setattr(ConversationMessagePageRequest, "read", interpose)
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert page.messages == (messages["peer"],)
-    assert page.display_basis is not None and not page.display_basis.older_unread
+    assert page.display_basis is not None
     _mark(comms, "peer", tmp_path, page)
     cursor = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     expected = {messages["peer"].seq, messages[marked_sender].seq}
@@ -189,32 +190,16 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
     assert all(sequence in cursor for sequence in expected)
 
 
-def test_read_progress_after_older_check_keeps_conservative_page(tmp_path: Path, monkeypatch):
+def test_newest_page_mark_leaves_older_message_unread(tmp_path: Path):
     comms = wire(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     older = comms.messaging.send_message("peer", viewer, "older")
     newest = comms.messaging.send_message("peer", viewer, "newest")
-    query = comms.bus.conversation_older_unread
-
-    def progress_after_query(*args, **kwargs):
-        result = query(*args, **kwargs)
-        comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
-            viewer, (older,), comms.registry.snapshot(), comms.bus.log.path,
-        ))
-        return result
-
-    monkeypatch.setattr(comms.bus, "conversation_older_unread", progress_after_query)
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=1)
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=1))
     assert page.messages == (newest,)
-    assert page.display_basis is not None and page.display_basis.older_unread
-    with pytest.raises(ValueError, match="contiguous"):
-        _mark(comms, "peer", tmp_path, page)
-    assert comms.bus.pending_count(viewer, "peer") == 1
-    fresh = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=1)
-    assert not fresh.display_basis.older_unread
-    _mark(comms, "peer", tmp_path, fresh)
-    assert comms.bus.pending_count(viewer, "peer") == 0
+    _mark(comms, "peer", tmp_path, page)
+    assert comms.bus.inbox(viewer, "peer") == [older]
 
 
 def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):
@@ -233,7 +218,7 @@ def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):
         # stale basis, but the registry->marker path must not hang.
         try:
             marked.result(timeout=3)
-        except ValueError as error:
+        except DMScopeChanged as error:
             assert "registry changed" in str(error)
         lifecycle.result(timeout=3)
     assert comms.bus.pending_count(viewer, "peer") in {0, 1}

@@ -23,7 +23,6 @@ from .input_attempt import ACPInputIdText, InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .field_codec import FieldCodec, MalformedRecord, WireValue
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
-from .goals import Goal
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveAcknowledgement
@@ -120,10 +119,9 @@ class UpdateMetadata:
 
 
 @dataclass(frozen=True)
-class GoalSnapshotReply(DeclaredReply):
+class GoalSnapshotReply(DeclaredReply, GoalSnapshot):
     """A goal request's reply: the owner's goal snapshot and its turn state."""
 
-    goal: Goal | None
     execution: ThreadGoalExecution = field(metadata={"wire_name": "goalExecution"})
     meta: UpdateMetadata = field(metadata={"wire_name": "_meta"})
 

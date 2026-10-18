@@ -60,7 +60,7 @@ async def test_current_project_observation_keeps_original_binding_across_rename_
                 async def wait(self):
                     current = await Coordination.run_worker(comms.registry.snapshot)
                     selected = current.require(name)
-                    assert selected.executing
+                    assert selected.active_turn.executing
                     if not changed:
                         assert selected.worktree == str(first)
                         changed.append((selected.turn_lease,
@@ -81,9 +81,9 @@ async def test_current_project_observation_keeps_original_binding_across_rename_
                     # The registry records the resume as due; the owner's own
                     # observation starts it, with no call from the finished turn.
                     assert comms.registry.require(name).project_resume_due
-                    while native.provider.posts != 2 or owner.turns.turn_state(session).busy:
+                    while native.provider.posts != 2 or owner.turns.turn_state(session).active.phase.busy:
                         await asyncio.sleep(0.01)
-                    await owner.inputs.wake_tasks[session]
+                    await owner.inputs.state(session).wake_task
             finally:
                 native.provider.response_gate = None
             assert len(changed) == 1 and changed[0][1].changed

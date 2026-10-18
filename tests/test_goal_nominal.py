@@ -87,7 +87,7 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
         )
         event = wire(comms.root).goals.goal_changed("worker", previous)
         assert isinstance(event, GoalChanged)
-        assert event.goal.progress == "Evidence recorded"
+        assert event.snapshot.goal.progress == "Evidence recorded"
         updates = []
 
         class Client:
@@ -103,7 +103,7 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
             if isinstance(row, GoalChangedUpdate)
         )
         assert update.goal.revision == 2
-        assert comms.goals.goal_changed("worker", event.signature) is None
+        assert comms.goals.goal_changed("worker", event.snapshot) is None
     finally:
         GoalAction.__registry__.pop("checkpoint")
 
@@ -163,7 +163,18 @@ def test_cas_rejects_aba_and_unknown_payload_without_effects(owner):
     with pytest.raises(ValueError, match="Unknown fields"):
         GoalAction.from_payload({"kind": "active", "text": "wrong action fields"})
     assert comms.registry.require("worker").goal == current
-    assert comms.goals.goal_changed("worker", previous).goal == current
+    assert comms.goals.goal_changed("worker", previous).snapshot.goal == current
+
+
+def test_goal_changed_compares_goal_snapshots(owner):
+    comms, _ = owner
+    before = comms.goals.goal_snapshot("worker")
+    assert comms.goals.goal_changed("worker", before) is None
+    changed = comms.goals.update_goal("worker", ActiveGoalAction(progress="moved"))
+    event = comms.goals.goal_changed("worker", before)
+    assert event.snapshot == comms.goals.goal_snapshot("worker")
+    assert event.snapshot.goal == changed
+    assert comms.goals.goal_changed("worker", event.snapshot) is None
 
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():

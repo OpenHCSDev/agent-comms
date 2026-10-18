@@ -132,7 +132,7 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
                               "stop_reason": answer.stop_reason}
         assert fixture.provider.posts == 1
         assert any(update["marker"] == fixture.provider.text for update in updates)
-        assert not comms.registry.require(session).executing
+        assert not comms.registry.require(session).active_turn.executing
         (fixture.project / "isolated-read.txt").write_text("LATENCY_READ_FILE_OK\n")
         fixture.provider.tool_call = ("read", {"path": "isolated-read.txt"})
         fixture.provider.text = "LATENCY_READ_OK"
@@ -145,7 +145,7 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
         assert any(span["boundary"] == "ProjectRuntimeRequest.result" for span in spans), "Actual native extension must query its original owner"
         assert any(update["marker"] == fixture.provider.text for update in updates)
         assert not failures, failures
-        assert not comms.registry.require(session).executing
+        assert not comms.registry.require(session).active_turn.executing
         report["complete"] = True
     finally:
         children = [persistent.child_state.idle().child.proc

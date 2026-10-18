@@ -190,7 +190,7 @@ class OptionalAwarenessProjection:
             ProjectionUnavailableError("selected owner is not executable")
         )
         turn = owner.active_turn
-        if turn is None or turn.claimed_generation != self.expected_claimed_generation:
+        if not turn.has_claim(self.expected_claimed_generation):
             raise ProjectionUnavailableError("selected owner turn changed")
         if FrozenRecipient(assignment.recipient_lookup, assignment.recipient) != FrozenRecipient(
             owner.incarnation.lookup,

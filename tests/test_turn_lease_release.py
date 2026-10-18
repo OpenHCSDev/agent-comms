@@ -24,7 +24,7 @@ def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypa
         replacement.append(successor.turn_lease)
         raise OSError("activity publication failed")
 
-    monkeypatch.setattr(comms.agents.activity, "emit", fail_after_replacement)
+    monkeypatch.setattr(comms.agents, "_emit_activity", fail_after_replacement)
     with pytest.raises(OSError, match="activity publication failed"):
         comms.agents.begin_turn("owner", "same-id")
     assert comms.registry.require("owner").turn_lease == replacement[0]
@@ -52,12 +52,12 @@ def test_revoked_claim_cleanup_cannot_attest_goal_completion(tmp_path):
     lease = comms.agents.begin_turn("owner", "turn").turn_lease
     comms.registry.archive("owner")
     assert comms.registry.release_turn(lease) == (True, None)
-    assert comms.registry.require("owner").active_turn is None
+    assert not comms.registry.require("owner").active_turn.executing
 
 
 def test_unattested_saved_turn_remains_data_without_a_lease(tmp_path, *, thread_registration):
     owner = thread_registration.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-    retained = replace(owner, active_turn=ActiveTurn("retained", owner.pid))
+    retained = replace(owner, active_turn=ActiveTurn("retained", owner.process_identity.require().pid))
     restored = FieldCodec.decode(Thread, FieldCodec.encode(retained))
     assert restored.active_turn == retained.active_turn
     assert restored.turn_lease is None

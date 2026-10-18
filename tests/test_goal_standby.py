@@ -167,7 +167,7 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
     )
     comms.agents.begin_turn("carol", "carol-turn")
     carol_thread = comms.registry.require("carol")
-    assert carol_thread.active_turn is not None
+    assert carol_thread.active_turn.executing
     comms.registry.register(
         replace(
             carol_thread,

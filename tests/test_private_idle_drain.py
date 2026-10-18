@@ -192,7 +192,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
             assert "[Open diagnostic]" in rows[-1].body
             assert comms.registry.require("beta").turn_lease == execution.turn_lease
-    assert comms.registry.require("beta").active_turn is None
+    assert not comms.registry.require("beta").active_turn.executing
 
 
 def _covered_session(tmp_path):
@@ -411,12 +411,14 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         # A standby's wait graph reads other threads' entries: any registry
         # change runs its tick, including closed-group recovery. Nothing on a
         # clock does.
-        from agent_comms.goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
+        from agent_comms.goal_presentation import (
+            GoalExecution, GoalExecutionState, GoalSnapshot, GoalWaitTarget,
+        )
 
         recovered = []
         monkeypatch.setattr(comms.goals, "recover_closed_goal_wait", recovered.append)
         sender = comms.registry.require("sender")
-        agent.inputs.effects.turns.goals.goal_execution_signatures["beta"] = (None, GoalExecution(
+        agent.inputs.effects.turns.goals.goal_snapshots["beta"] = GoalSnapshot(None, GoalExecution(
             GoalExecutionState.STANDBY, "goal", (GoalWaitTarget(sender.incarnation.require_recorded()),),
         ))
         comms.registry.declare(comms.registry.new_thread('unrelated', frozenset(), str(tmp_path)))
@@ -425,7 +427,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         for _ in range(3):
             await tick()
         assert len(drains) == settled + 2 and recovered == ["beta"]
-        agent.inputs.effects.turns.goals.goal_execution_signatures.pop("beta")
+        agent.inputs.effects.turns.goals.goal_snapshots.pop("beta")
         # Process-local work waiting on the next tick is never skipped.
         for _ in range(2):
             await tick()
@@ -436,11 +438,11 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         # another owner, whose separate tests exercise the provider path.
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         before = len(drains)
-        agent.inputs.pending_turns["beta"] = [ScheduledTurn("queued locally")]
+        agent.inputs.state("beta").pending_turns = [ScheduledTurn("queued locally")]
         await tick()
         assert len(drains) == before + 1
     finally:
-        agent.inputs.pending_turns.pop("beta", None)
+        agent.inputs.state("beta").pending_turns = []
         observer.cancel()
         await asyncio.gather(observer, return_exceptions=True)
 
@@ -519,7 +521,7 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
     assert len(calls) == 5
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 6
-    before = agent.inputs._idle_private_revisions["beta"]
+    before = agent.inputs.state("beta").idle_revision
     second = publish_initial(comms, "sender", "beta", "new pending input")
     assert first.seq < second.seq
     with Coordination(comms.root / "coordination.sqlite3") as store:

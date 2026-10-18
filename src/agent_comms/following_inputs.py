@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
@@ -29,8 +28,8 @@ class FollowingInputs:
     @staticmethod
     async def ready(inputs: InputDrain, session_id: str, after_seq: int = 0) -> None:
         """Take accepted work when a running turn opens or frees following capacity."""
-        async with inputs.drain_locks.setdefault(session_id, asyncio.Lock()):
-            inputs._idle_private_revisions.pop(session_id, None)
+        async with inputs.state(session_id).lock:
+            inputs.state(session_id).idle_revision = None
             owner = await Coordination.run_worker(partial(
                 inputs.comms.registry.require, inputs.sessions.require(session_id),
             ))
@@ -69,7 +68,7 @@ class OwnerFollowingInputs(FollowingInputs):
 
     async def pass_on(self, turns: TurnRunner, input_id: str) -> bool:
         inputs, session_id = self.inputs, self.session_id
-        item = inputs.queued_inputs.get(session_id, {}).get(input_id)
+        item = inputs.state(session_id).queued.get(input_id)
         try:
             if item is None:
                 raise InputHandoffRefused("The input was retired before its turn read it")
@@ -100,7 +99,7 @@ class OwnerFollowingInputs(FollowingInputs):
             ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
             thread.require_process().pid,
         )
-        inputs.first_sources[self.session_id] = original
+        inputs.state(self.session_id).first_source = original
         session.forward_inbox(self.inbox, sender)
         await self.ready(
             inputs, self.session_id,
@@ -108,7 +107,7 @@ class OwnerFollowingInputs(FollowingInputs):
         )
 
     async def started(self, input_id: str) -> AcceptedFollowingInput:
-        source = self.inputs.following_sources[self.session_id][input_id]
+        source = self.inputs.state(self.session_id).following[input_id]
         await source.started(self.inputs, self.session_id, self.scope)
         await self.ready(self.inputs, self.session_id)
         return source

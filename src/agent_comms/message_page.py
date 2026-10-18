@@ -13,15 +13,13 @@ from .bus_page_index import BusPageIndex
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import (
-    ChannelDisplayScope, DisplaySelection, DMDisplayBasis, DMDisplayScope,
-    MessageDisplayScope, NoDisplaySelection, ReadCursor,
+    ChannelDisplayScope, DisplaySelection, DMDisplayBasis,
+    MessageDisplayScope, NoDisplaySelection,
 )
 from .wire_log import CurrentSnapshotOpening, WireSnapshot
 
 if TYPE_CHECKING:
-    from .historical_views import HistoryCursor
     from .read_basis import HistoricalDisplay
-    from .bus_page_index import BusPageRow
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,16 +78,39 @@ class MessagePageRow:
     size: int
 
 
+@dataclass(frozen=True, slots=True)
+class HistoryCursor:
+    source: str
+    sequence: int
+
+
 class PageTraversal(ABC):
-    """Exclusive cursor, traversal order and edge meaning belong together."""
+    """Exclusive cursor, traversal order and edge meaning belong together.
+
+    A cursor taken from an attached history source names that source; the
+    live log's cursors name none.
+    """
 
     cursor: int | None
+    source: str | None
 
     @staticmethod
-    def capture(before: int | None, after: int | None) -> PageTraversal:
+    def capture(
+        before: int | HistoryCursor | None = None, after: int | HistoryCursor | None = None
+    ) -> PageTraversal:
         if before is not None and after is not None:
             raise ValueError("History pages accept either before or after, not both.")
-        return NewerTraversal(after) if after is not None else OlderTraversal(before)
+        if isinstance(after, HistoryCursor):
+            return NewerTraversal(after.sequence, after.source)
+        if after is not None:
+            return NewerTraversal(after)
+        if isinstance(before, HistoryCursor):
+            return OlderTraversal(before.sequence, before.source)
+        return OlderTraversal(before)
+
+    @property
+    def historical(self) -> bool:
+        return self.source is not None
 
     def __post_init__(self) -> None:
         if self.cursor is not None and self.cursor < 0:
@@ -118,6 +139,7 @@ class PageTraversal(ABC):
 @dataclass(frozen=True, slots=True)
 class OlderTraversal(PageTraversal):
     cursor: int | None = None
+    source: str | None = None
 
     def source_indexes(self, start, count):
         return range(start, -1, -1)
@@ -140,6 +162,7 @@ class OlderTraversal(PageTraversal):
 @dataclass(frozen=True, slots=True)
 class NewerTraversal(PageTraversal):
     cursor: int = 0
+    source: str | None = None
 
     def source_indexes(self, start, count):
         return range(start, count)
@@ -179,6 +202,27 @@ class PageWindow:
 
 
 @dataclass(frozen=True, slots=True)
+class PageBounds:
+    """A requested page's direction and budget; the default is the newest page."""
+
+    traversal: PageTraversal = OlderTraversal()
+    limit: int = 100
+    max_bytes: int = 256 * 1024
+
+    def __post_init__(self) -> None:
+        if self.limit <= 0:
+            raise ValueError("History page limit must be positive.")
+        if self.max_bytes <= 0:
+            raise ValueError("History page byte budget must be positive.")
+
+    def conversation(self, scope: MessageDisplayScope) -> ConversationMessagePageRequest:
+        return ConversationMessagePageRequest(scope, self)
+
+
+NEWEST_PAGE = PageBounds()
+
+
+@dataclass(frozen=True, slots=True)
 class MessageReadRequest[T](ABC):
     """One opened-source/index lifetime for scoped pages and existence queries."""
 
@@ -211,20 +255,8 @@ class MessageReadRequest[T](ABC):
 class MessagePageRequest(MessageReadRequest[MessagePage]):
     """Captured membership, direction and bounds for indexed paging."""
 
-    traversal: PageTraversal
-    limit: int = 100
-    max_bytes: int = 256 * 1024
+    bounds: PageBounds = NEWEST_PAGE
     empty: ClassVar[MessagePage] = MessagePage((), False, False)
-
-    def __post_init__(self):
-        if self.limit <= 0:
-            raise ValueError("History page limit must be positive.")
-        if self.max_bytes <= 0:
-            raise ValueError("History page byte budget must be positive.")
-
-    @classmethod
-    def capture(cls, scope, *, before=None, after=None, limit=100, max_bytes=256 * 1024):
-        return cls(scope, PageTraversal.capture(before, after), limit, max_bytes)
 
     @classmethod
     def every(cls, scope: MessageDisplayScope, *, after: int = 0) -> MessagePageRequest:
@@ -233,37 +265,20 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
         The page index finds them by target, so the read costs their rows and
         not the silent records between them.
         """
-        return cls(scope, NewerTraversal(after), sys.maxsize, sys.maxsize)
+        return cls(scope, PageBounds(NewerTraversal(after), sys.maxsize, sys.maxsize))
 
     def indexed(self, index, source: WireSnapshot) -> MessagePage:
-        window = PageWindow(self.limit, self.max_bytes)
+        traversal = self.bounds.traversal
+        window = PageWindow(self.bounds.limit, self.bounds.max_bytes)
         opposite = more = False
-        with closing(self.traversal.opposite_offsets(index, self.scope, source.boundary)) as rows:
+        with closing(traversal.opposite_offsets(index, self.scope, source.boundary)) as rows:
             opposite = any(True for _ in self.indexed_records(source, rows))
-        with closing(self.traversal.offsets(index, self.scope, source.boundary)) as rows:
+        with closing(traversal.offsets(index, self.scope, source.boundary)) as rows:
             for row in self.indexed_records(source, rows):
-                if not window.take(self.traversal, row):
+                if not window.take(traversal, row):
                     more = True
                     break
-        return self.traversal.result(window, more, opposite)
-
-
-@dataclass(frozen=True, slots=True)
-class UnreadBeforeRequest(MessageReadRequest[bool]):
-    """Existence, not a one-item page that searches for a second result."""
-
-    scope: DMDisplayScope
-    before: int
-    seen: ReadCursor
-    empty: ClassVar[bool] = False
-
-    def includes(self, message: Message | BusPageRow) -> bool:
-        return self.scope.unread_before(message, self.before, self.seen)
-
-    def indexed(self, index, source: WireSnapshot) -> bool:
-        with closing(self.scope.offsets(index, lower=self.seen.high_water, upper=self.before, descending=True, before_offset=source.boundary)) as rows:
-            candidates = (row for row in rows if self.includes(row))
-            return any(True for _ in self.indexed_records(source, candidates))
+        return traversal.result(window, more, opposite)
 
 
 class ConversationMessagePageRequest(MessagePageRequest):

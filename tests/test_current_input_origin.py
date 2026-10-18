@@ -64,7 +64,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     comms.messaging.initialize_private_initial_protocol()
     agent.on_connect(Client())
     comms.agents.begin_turn("beta", "held-native", "Existing original")
-    agent.inputs.backend_inboxes["beta"] = asyncio.Queue()
+    agent.inputs.state("beta").inbox = asyncio.Queue()
     origin = capture(comms)
     before = list(comms.bus.full_history_page().messages)
     command = QueuePromptRequest("Never replay UNKNOWN", origin=origin)
@@ -78,7 +78,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         assert row.origin == origin and row.source_text == command.user_text
         assert len(stored_inputs(inputs.root).rows) == 1 and list(comms.bus.full_history_page().messages) == before
         from agent_comms.turn_context import UserFollowupSegment
-        queued = agent.inputs.backend_inboxes['beta'].get_nowait()
+        queued = agent.inputs.state('beta').inbox.get_nowait()
         assert queued.input_id.value == command.input_id
         assert queued.content.text == 'User follow-up:\n' + command.user_text
         contribution, = queued.content.contributions

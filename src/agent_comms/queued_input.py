@@ -177,7 +177,7 @@ class QueuedInput:
             ownership = ExitStack()
             rollback.push_async_callback(Coordination.run_worker, ownership.close)
             async with inputs.queue_lock:
-                sources = tuple(inputs.following_sources.get(session_id, {}).values())
+                sources = tuple(inputs.state(session_id).following.values())
 
                 def capture():
                     with _store_lock(inputs.comms._wire_lock_path):
@@ -200,8 +200,8 @@ class QueuedInput:
 
         inputs.require_inbox(session_id, inbox)
         source = self.source()
-        inputs.following_sources.setdefault(session_id, {})[self.input_id] = source
-        inputs.queued_inputs.setdefault(session_id, {})[self.input_id] = self
+        inputs.state(session_id).following[self.input_id] = source
+        inputs.state(session_id).queued[self.input_id] = self
         inbox.put_nowait(InputRequest(
             input_id=InputId(self.input_id), content=content, when_busy=source.when_busy,
         ))
@@ -239,7 +239,7 @@ class QueuedInput:
         )
 
     def require_live_source(self, inputs: InputDrain, session_id: str) -> None:
-        if inputs.following_sources.get(session_id, {}).get(self.input_id) != self.source():
+        if inputs.state(session_id).following.get(self.input_id) != self.source():
             raise RelationViolationError("Accepted input source changed")
 
     def current(self, owner: Thread, claim_scope: int) -> bool:
@@ -257,7 +257,7 @@ class QueuedInput:
         owner = snapshot.require_active(name)
         snapshot.statuses[owner.name].require_running()
         owner.require_local_process(ProcessIdentity.capture(os.getpid()))
-        owner.require_idle()
+        owner.active_turn.require_idle()
         claim_scope = snapshot.claimed_generations[owner.name]
         if not self.current(owner, claim_scope):
             raise RelationViolationError("Queued input acceptance context changed")
@@ -392,7 +392,7 @@ class DeliveredInput(QueuedInput):
     ) -> None:
         # Capture the loop-owned transfer before the first await; a turn may
         # retire its placed inputs while an unplaced input is being restored.
-        placed = inputs.queued_inputs.get(session_id, {})
+        placed = inputs.state(session_id).queued
         unplaced = tuple(
             item for item, _content in reserved if placed.get(item.input_id) is not item
         )
@@ -413,7 +413,7 @@ class DeliveredInput(QueuedInput):
         async with inputs.queue_lock:
             name = inputs.sessions.require(session_id)
             live_keys = frozenset(
-                item.key for item in inputs.queued_inputs.get(session_id, {}).values()
+                item.key for item in inputs.state(session_id).queued.values()
             )
             return await Coordination.run_worker(partial(
                 cls._recover_locked, inputs.comms, inputs.dispositions,
@@ -472,7 +472,7 @@ class DeliveredInput(QueuedInput):
         """
         inbox = await inputs.effects.turns.active_backend_inbox(session_id)
         # A turn takes later inputs once its first one is in.
-        if inbox is None or session_id not in inputs.first_sources:
+        if inbox is None or not inputs.state(session_id).turn_started():
             return
         store_path = inputs.comms.root / "coordination.sqlite3"
         lookup = owner.incarnation.lookup
@@ -497,7 +497,7 @@ class DeliveredInput(QueuedInput):
         async with AsyncExitStack() as rollback:
             rollback.push_async_callback(cls._restore_unplaced, inputs, session_id, reserved)
             async with inputs.queue_lock:
-                sources = tuple(inputs.following_sources.get(session_id, {}).values())
+                sources = tuple(inputs.state(session_id).following.values())
                 await Coordination.run_worker(partial(
                     cls.reserve_pending, inputs, owner.name, root_id, pending, sources, reserved,
                 ))
@@ -562,7 +562,7 @@ class InitialInput(QueuedInput):
                 controller=inputs.runtime.controller.get(), input_id=input_id, origin=origin,
             ) as reservation:
                 item = reservation.item
-                inputs.queued_inputs.setdefault(session_id, {})[item.input_id] = item
+                inputs.state(session_id).queued[item.input_id] = item
                 resources.push_async_callback(item.finish, inputs, session_id)
                 reservation.release()
             await inputs.emit_input_disposition(session_id, reservation.source)
@@ -571,7 +571,7 @@ class InitialInput(QueuedInput):
 
     async def finish(self, inputs: InputDrain, session_id: str) -> None:
         """Retire only this captured original after its dispatch resources join."""
-        queued = inputs.queued_inputs.get(session_id, {})
+        queued = inputs.state(session_id).queued
         if queued.get(self.input_id) is self:
             try:
                 await Coordination.run_worker(partial(
@@ -584,7 +584,7 @@ class InitialInput(QueuedInput):
             await inputs.emit_queue_state(session_id)
 
     def require_live_source(self, inputs: InputDrain, session_id: str) -> None:
-        if inputs.queued_inputs.get(session_id, {}).get(self.input_id) is not self:
+        if inputs.state(session_id).queued.get(self.input_id) is not self:
             raise RelationViolationError("Original input acceptance changed")
 
     def after_clear(self) -> InitialInput:

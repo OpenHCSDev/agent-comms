@@ -26,7 +26,7 @@ async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private
     lock = agent.turns.turn_locks.setdefault("owner", asyncio.Lock())
     await lock.acquire()
     queued = ScheduledTurn("Never dispatch this cancelled wake")
-    inputs.pending_turns["owner"] = [queued]
+    inputs.state("owner").pending_turns = [queued]
     try:
 
         async def observe_controller():
@@ -36,21 +36,22 @@ async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private
         assert inputs.runtime.controller.get() is controller
         check = WakeScheduleCheck(session_id="owner", inputs=inputs)
         check.schedule()
-        task = inputs.wake_tasks["owner"]
+        task = inputs.state("owner").wake_task
         check.schedule()
-        assert inputs.wake_tasks["owner"] is task
+        assert inputs.state("owner").wake_task is task
         await asyncio.sleep(0)
         assert not task.done()
-        assert inputs.pending_turns["owner"] == [queued]
+        assert inputs.state("owner").pending_turns == [queued]
         await asyncio.wait_for(inputs.close(), 1)
         assert task.cancelled()
-        assert inputs.pending_turns["owner"] == [queued]
+        assert inputs.state("owner").pending_turns == [queued]
         assert not stored_inputs(inputs.dispositions.root).rows
         assert not agent.turns.turn_tasks
         check.schedule()
-        assert not inputs.wake_tasks
+        assert not any(state.wake_task for state in inputs.drained.values())
         assert inputs.runtime.controller.get() is controller
     finally:
         lock.release()
         inputs.runtime.controller.reset(token)
         await agent.shutdown()
+

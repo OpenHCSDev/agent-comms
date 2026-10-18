@@ -16,7 +16,7 @@ from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, InlineRecord, MalformedRecord, WireValue, projected
+from .field_codec import FieldCodec, InlineRecord, MalformedRecord, NullMember, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .response_policy import InformationalPolicy, ResponseEligibility
@@ -25,7 +25,7 @@ from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
-    from .historical_views import HistoryCursor
+    from .message_page import HistoryCursor
 
 
 class SendableMessageKind:
@@ -122,21 +122,7 @@ class MembershipChange(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class NoMembershipChange(WireValue):
-    accepts_null = True
-
-    @classmethod
-    def from_wire(cls, data):
-        FieldCodec.decode(type(None), data)
-        return cls()
-
-    def to_wire(self):
-        return None
-
-    @classmethod
-    def schema(cls):
-        return FieldCodec.value_schema(type(None))
-
+class NoMembershipChange(NullMember):
     def conversation_role(self):
         return ConversationRole()
 

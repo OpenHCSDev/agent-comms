@@ -59,13 +59,13 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
     comms.goals.update_goal(
         session, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",))
     )
-    expected_goal, expected_execution = comms.goals.goal_snapshot(session)
+    expected = comms.goals.goal_snapshot(session)
     before = {p: p.read_bytes() for p in comms.root.rglob("*") if p.is_file()}
     for _ in range(2):
         result = await proxy.request("goal_snapshot")
         assert result == {
-            "goal": json.loads(json.dumps(expected_goal.to_wire())),
-            "goalExecution": json.loads(json.dumps(expected_execution.to_wire())),
+            "goal": json.loads(json.dumps(expected.goal.to_wire())),
+            "goalExecution": json.loads(json.dumps(expected.execution.to_wire())),
             "_meta": encode_updates(TurnChangedUpdate(comms.registry.require(session).turn_state)),
         }
         assert result["goalExecution"]["state"] == "standby"
@@ -76,7 +76,7 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
     paused = await proxy.request("goal_snapshot")
     assert paused["goal"]["revision"] > result["goal"]["revision"]
     assert paused["goalExecution"]["state"] == "paused"
-    assert scheduled == [] and not owner.inputs.pending_turns and not owner.inputs.wake_tasks
+    assert scheduled == [] and not any(state.pending_turns for state in owner.inputs.drained.values()) and not any(state.wake_task for state in owner.inputs.drained.values())
 
 
 async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
