@@ -146,8 +146,8 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     """Every verdict, mine or a fork's, is made after reviewing paper 1's
     correct-maintenance results. Each member declares the facts its verdict carries as required options."""
     ids: tuple[str, ...] = option("ids", nargs="+", metavar="ID:CODE")
-    why: str = option("--why")
-    msg: str = option("--msg", help="BUSID of my order message to the unit")
+    why: str = option()
+    msg: str = option(help="BUSID of my order message to the unit")
     lines: tuple[str, ...] = option(
         "--line", action="append", metavar="LINE", help="an exact diff line; repeat for each")
 
@@ -165,10 +165,10 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         cited = next((m for m in my_messages(edit['thread']) if m['id'] == self.msg), None)
         if cited is None:
             sys.exit(f'Refused: edit {edit["id"]}: {self.msg} is not a message from {ME} to {edit["thread"]}')
-        candidates: list[Todo] = order.COMMS.goals.todos.held_for_commander(
+        candidates: tuple[Todo, ...] = order.COMMS.goals.todos.held_for_commander(
             order.COMMS.registry.require(ME).incarnation, edit['thread'])
         if found := re.search(r'\bP\d+\b', cited['text']):
-            candidates = [todo for todo in candidates if todo.id == found.group()]
+            candidates = tuple(todo for todo in candidates if todo.id == found.group())
         if len(candidates) != 1:
             sys.exit(f'Refused: edit {edit["id"]} by {edit["thread"]} needs one open order Todo; '
                      f'found {[todo.id for todo in candidates]}; cite the message that names its P-number')
@@ -204,7 +204,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class OkVerb(VerdictVerb):
     help = "the edit serves the order"
-    serves: str = option("--serves", help="exact words of the order")
+    serves: str = option(help="exact words of the order")
 
     def operation(self, todo: Todo, edit_id: str) -> AcceptedVerdict:
         return AcceptedVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
@@ -231,7 +231,7 @@ class OkVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class OkUnownedVerb(OkVerb, declared_name="ok-unowned"):
     help = "the edit serves the order and its added branches have no type that could own them"
-    no_owner: str = option("--no-owner", help="12+ words with because and file:line")
+    no_owner: str = option(help="12+ words with because and file:line")
 
     def own_branches(self, edit: Edit, extra: int) -> None:
         if not (len(self.no_owner.split()) >= 12 and re.search(r'\bbecause\b', self.no_owner)
@@ -243,13 +243,13 @@ class OkUnownedVerb(OkVerb, declared_name="ok-unowned"):
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(VerdictVerb):
     help = "send the edit back; the roast is posted to #comms"
-    roast: str = option("--roast", help="blunt, why it is stupid, with because")
-    fix: str = option("--fix", help="owner and replacing shape")
+    roast: str = option(help="blunt, why it is stupid, with because")
+    fix: str = option(help="owner and replacing shape")
     slop_kind: str = option("--slop", help="|".join(order.Slop.KINDS))
-    fact: str = option("--fact", help="the required fact, 4+ words")
-    at: str = option("--at", help="PATH:LINE where it is restated")
-    derive: str = option("--derive", help="|".join(order.Slop.MECHANISMS))
-    by: str = option("--by", help="PATH:LINE of the declaration that owns it")
+    fact: str = option(help="the required fact, 4+ words")
+    at: str = option(help="PATH:LINE where it is restated")
+    derive: str = option(help="|".join(order.Slop.MECHANISMS))
+    by: str = option(help="PATH:LINE of the declaration that owns it")
 
     def slop(self) -> order.Slop:
         return order.Slop(self.slop_kind, self.fact, self.at, self.derive, self.by)
