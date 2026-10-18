@@ -215,7 +215,8 @@ class ThinkingChoice(ABC):
 
     @classmethod
     @abstractmethod
-    def wire_value(cls) -> str | None: ...
+    def wire_value(cls) -> str | None:
+        raise NotImplementedError("Abstract thinking choices have no wire value.")
 
 
 class ThinkingLevel(ThinkingChoice, DeclaredFamily, affix="ThinkingLevel"):

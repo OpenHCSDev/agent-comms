@@ -1,7 +1,6 @@
 """Opt-in Pi Durable: existing Pi records, RPC correlation and history owners."""
 from __future__ import annotations
 
-from .field_codec import FieldCodec
 import asyncio
 import fcntl
 from contextlib import ExitStack, contextmanager

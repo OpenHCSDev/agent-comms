@@ -695,14 +695,13 @@ class DeclaredOptions(Command):
     A DeclaredFamily of dataclass Commands inherits it; the namespace's ``command`` names
     the member."""
     help: ClassVar[str]
-    declared_name: ClassVar[str]
     __dataclass_fields__: ClassVar[dict[str, Field[object]]]
 
     @classmethod
     def add_parser(cls, subparsers: Any) -> None:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, include_extras=True)
         for declared in fields(cls):
             metadata = declared.metadata
             group = metadata["group"]
@@ -713,9 +712,8 @@ class DeclaredOptions(Command):
                 owner = groups[group]
             options = dict(metadata["parser_options"])
             annotation = hints[declared.name]
-            scalar = (
-                get_args(annotation)[0] if get_origin(annotation) is types.UnionType else annotation
-            )
+            scalar, _ = FieldCodec._representation(annotation)
+            scalar = get_args(scalar)[0] if get_origin(scalar) is types.UnionType else scalar
             if scalar is bool:
                 options.setdefault("action", "store_true")
             elif scalar in (int, float):
@@ -741,11 +739,8 @@ class DeclaredOptions(Command):
                 options["required"] = True
             if isinstance(options.get("default"), DeclaredFamily):
                 options["default"] = options["default"].declared_name
-            elif (
-                isinstance(options.get("default"), type)
-                and issubclass(options["default"], DeclaredFamily)
-            ):
-                options["default"] = options["default"].declared_name
+            elif isinstance(options.get("default"), type):
+                options["default"] = FieldCodec.encode(options["default"], annotation)
             if any(flag.startswith("-") for flag in metadata["flags"]):
                 options["dest"] = FieldCodec.wire_key(declared)
             else:
@@ -754,7 +749,7 @@ class DeclaredOptions(Command):
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
-        payload = {"kind": cls.declared_name}
+        payload = {"kind": FieldCodec.encode(cls)}
         hints = get_type_hints(cls)
         for declared in fields(cls):
             key = FieldCodec.wire_key(declared)

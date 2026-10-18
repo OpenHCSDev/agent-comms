@@ -7,12 +7,12 @@ into a root must never start a second registry for the same lifecycle.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import ClassVar, Self
+from typing import Self
+
+from .field_codec import FieldCodec
 
 
 class LifecycleState(ABC):
-    declared_name: ClassVar[str]
-
     @classmethod
     @abstractmethod
     def successors(cls) -> tuple[type[LifecycleState], ...]:
@@ -29,8 +29,8 @@ class LifecycleState(ABC):
     @classmethod
     def transition_table(cls) -> dict[str, frozenset[str]]:
         return {
-            member.declared_name: frozenset(
-                state.declared_name
+            FieldCodec.encode(member): frozenset(
+                FieldCodec.encode(state)
                 for successor in member.successors()
                 for state in cls.members_with(successor)
             )
