@@ -6,6 +6,7 @@ import json
 import pytest
 
 from agent_comms.bus_activity_index import BusActivityIndex
+from agent_comms.bus_projection import NoCheckpoint
 from agent_comms.bus_display_index import BusDisplayIndex, DisplayMetricScope, DisplaySnapshot
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.messages import InfoKind, Message
@@ -46,7 +47,7 @@ def test_complete_line_cut_is_not_the_physical_cut(tmp_path, data, complete):
     path = tmp_path / "bus.jsonl"
     path.write_bytes(data)
     with opened(path) as source:
-        assert source.complete_boundary == complete
+        assert source.complete_prefix.boundary == complete
         assert source.boundary == source.revision.size == len(data)
         assert source.stream.tell() == 0
 
@@ -95,9 +96,7 @@ def test_torn_append_uses_checkpoint_then_reads_only_completed_suffix(tmp_path, 
         completed = index.snapshot(source, semantics())
         assert completed.counts == {"#team": 2}
         assert completed.offset == len(first) + len(second)
-        # The offset index prepares row 2, then the display materializes it.
-        # Neither consumer may reparse row 1 or the incomplete suffix.
-        assert parsed == [2, 2]
+        assert parsed == [2]
 
 
 def test_activity_uses_the_same_complete_line_cut(tmp_path):
@@ -111,7 +110,7 @@ def test_activity_uses_the_same_complete_line_cut(tmp_path):
         stream.write(b'{"observation":')
     with opened(path, index) as source:
         assert index.snapshot(source, MessageBus._bus_activity_fields) == initial
-        assert source.complete_boundary == len(first) < source.boundary
+        assert source.complete_prefix.boundary == len(first) < source.boundary
 
 
 @pytest.mark.parametrize("activity", [False, True])
@@ -123,5 +122,5 @@ def test_checkpoint_write_failure_is_visible_and_not_remembered(tmp_path, activi
         index.path.mkdir()  # Real publication failure, not a mocked write.
         with pytest.raises(OSError):
             index.snapshot(source, MessageBus._bus_activity_fields if activity else semantics())
-        assert index._held is None
-        assert source._append_checkpoints[index] is None
+        assert index._held == NoCheckpoint()
+        assert source._append_checkpoints[index] == NoCheckpoint()

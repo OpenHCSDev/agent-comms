@@ -49,7 +49,7 @@ class BusPageSource(PageIndexTable, TypedTable):
 
     def covers(self, snapshot: WireSnapshot) -> bool:
         return (snapshot.same_file(self.revision.identity)
-                and snapshot.complete_boundary <= self.revision.size
+                and snapshot.complete_prefix.boundary <= self.revision.size
                 and snapshot.fingerprint(self.revision.size) == self.tail)
 
 
@@ -175,7 +175,7 @@ class BusPageIndex:
 
     def prepare(self, opened: WireSnapshot) -> None:
         """Bring this disposable index up to the caller's original source cut."""
-        while opened.complete_boundary:
+        while opened.complete_prefix.boundary:
             saved, source, offset, rows = self._prepare(opened)
             if saved == source:
                 return
@@ -197,7 +197,7 @@ class BusPageIndex:
                     last_rows = BusPageRow.select(self.connection, order_by=("seq",),
                                                   descending=True, limit=1)
         revision = opened.revision
-        size = opened.complete_boundary
+        size = opened.complete_prefix.boundary
         if saved is not None and saved.covers(opened):
             return saved, saved, saved.revision.size, ()
         offset = saved.revision.size if saved is not None else 0

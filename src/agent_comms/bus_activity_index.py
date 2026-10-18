@@ -28,6 +28,9 @@ class ActivityCheckpoint(AppendCheckpoint):
     sent: dict[str, float]
     schema: Literal[3] = field(default=3, kw_only=True)
 
+    def restore_clocks(self):
+        return dict(self.channels), dict(self.sent), self.offset
+
     @property
     def snapshot(self) -> ActivityClocks:
         return ActivityClocks(
@@ -44,13 +47,9 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
 
     def snapshot(self, opened: WireSnapshot,
                  parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivityClocks:
-        boundary = opened.complete_boundary
+        boundary = opened.complete_prefix.boundary
         checkpoint = opened.append_checkpoint(self)
-        if checkpoint is None:
-            channels, sent, offset = {}, {}, 0
-        else:
-            channels, sent = dict(checkpoint.channels), dict(checkpoint.sent)
-            offset = checkpoint.offset
+        channels, sent, offset = checkpoint.restore_clocks()
         if offset == boundary:
             return ActivityClocks({name: ChannelActivity(*clock) for name, clock in channels.items()}, sent)
         for record, _, _ in opened.rows(offset, boundary):
