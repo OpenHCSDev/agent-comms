@@ -69,8 +69,9 @@ class OneOrderOwnerPhase(MergedPhase):
     delivered = "9293095d9"
 
 
-class DesignReconciledPhase(PlanPhase):
+class DesignReconciledPhase(MergedPhase):
     after = (OneOrderOwnerPhase,)
+    delivered = "64fbd8bc1"
 
 
 class RecordPlanePhase(PlanPhase):
