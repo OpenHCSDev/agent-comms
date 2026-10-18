@@ -78,7 +78,7 @@ class DisplayCheckpoint(DisplaySnapshot, AppendCheckpoint):
         return self.semantics == semantics
 
     def current_for(self, opened: WireSnapshot, semantics: DisplayMetricScope) -> bool:
-        return not opened.changed_since(self.source) and self.matches_scope(semantics)
+        return self.current_at(opened.revision) and self.matches_scope(semantics)
 
     @classmethod
     def from_prefix(cls, index: BusDisplayIndex, opened: WireSnapshot, boundary: int,

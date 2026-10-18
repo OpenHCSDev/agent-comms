@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar, Literal
 
 from .activity import Activity
-from .bus_projection import AppendCheckpoint, AppendProjectionStore, NoCheckpoint
-from .locked_store import JsonDocument, RootFile
+from .bus_projection import AppendCheckpoint, AppendProjectionStore
+from .locked_store import RootFile
 from .private_path import FileRevision
 
 
@@ -37,21 +37,10 @@ class ActivityCheckpoint(AppendCheckpoint):
 
 
 @dataclass(frozen=True, slots=True)
-class ActivityCheckpointStore(
-    RootFile, JsonDocument[ActivityCheckpoint | NoCheckpoint], AppendProjectionStore[ActivityCheckpoint]
-):
-    """Keep the established activity document codec and shared prefix publisher."""
+class ActivityCheckpointStore(RootFile, AppendProjectionStore[ActivityCheckpoint]):
+    """The shared append projection owns both decoding and publication."""
 
+    path: Path
     source_path: Path
     filename: ClassVar[str] = "activity_latest.json"
-
-    @property
-    def record_type(self) -> type[ActivityCheckpoint | NoCheckpoint]:
-        return ActivityCheckpoint | NoCheckpoint
-
-    def empty(self) -> NoCheckpoint:
-        return NoCheckpoint()
-
-    def _unreadable(self, error: Exception) -> NoCheckpoint:
-        # Never recover authoritative log data from an invalid derived cache.
-        return NoCheckpoint()
+    record_type: ClassVar[type[ActivityCheckpoint]] = ActivityCheckpoint

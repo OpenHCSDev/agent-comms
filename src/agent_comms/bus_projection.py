@@ -47,7 +47,8 @@ class CompleteWirePrefix(WirePrefix):
 class NoCheckpoint:
     """No valid saved prefix; consumers obtain their initial projection."""
 
-    source_revision = None
+    def current_at(self, revision):
+        return False
 
     def prepare(self, store):
         return store.read()
@@ -92,9 +93,8 @@ class AppendCheckpoint:
     offset: int
     tail: str
 
-    @property
-    def source_revision(self):
-        return self.source
+    def current_at(self, revision):
+        return self.source == revision
 
     def prepare(self, store):
         return self
@@ -133,7 +133,7 @@ class AppendCheckpoint:
     def accepts(self, revision: FileRevision, stream: BinaryIO) -> bool:
         if not self.source.holds_cut(revision, self.offset):
             return False
-        if self.offset == revision.size and self.source != revision:
+        if self.offset == revision.size and not self.current_at(revision):
             return False
         return self.tail == self.fingerprint(stream, self.offset)
 
