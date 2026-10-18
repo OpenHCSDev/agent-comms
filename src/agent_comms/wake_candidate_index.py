@@ -225,8 +225,7 @@ class WakeCandidateIndex(TypedStore):
                         recipient.recipient_lookup,
                         message.sender,
                         message.target,
-                        next((type(selected.wake_policy())
-                              for selected in decision.claim_decisions()), None),
+                        decision.candidate_wake_mode(),
                     )
                 )
         return _ParsedRow(sequence, tuple(rows), verified.acknowledgement)

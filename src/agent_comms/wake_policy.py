@@ -39,6 +39,9 @@ class RecipientDecision(ABC):
     def claim_decisions(self) -> tuple[WakeDecision, ...]: ...
 
     @abstractmethod
+    def candidate_wake_mode(self) -> type[WakePolicy] | None: ...
+
+    @abstractmethod
     def to_wire(self) -> dict[str, str]: ...
 
     def initial_notification(self, recipient, *, observation):
@@ -58,6 +61,9 @@ class NoWakeDecision(RecipientDecision):
     def claim_decisions(self) -> tuple[WakeDecision, ...]:
         return ()
 
+    def candidate_wake_mode(self) -> type[WakePolicy] | None:
+        return None
+
     def to_wire(self) -> dict[str, str]:
         return {"recipient_lookup": self.recipient, "no_wake": self.reason.value}
 
@@ -72,6 +78,9 @@ class WakeDecision(RecipientDecision):
 
     def claim_decisions(self) -> tuple[WakeDecision, ...]:
         return (self,)
+
+    def candidate_wake_mode(self) -> type[WakePolicy]:
+        return type(self.wake_mode)
 
     def to_wire(self) -> dict[str, str]:
         return {"recipient_lookup": self.recipient, "audience": self.audience.value,

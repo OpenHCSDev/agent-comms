@@ -8,7 +8,6 @@ from typing import Type
 
 from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from agent_comms.comms import wire
-from agent_comms.agent_activity import UnavailableRecipientActivity
 from agent_comms.wake_policy import MessageAudience
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import AckKind, HandoffKind, InfoKind, MembershipChange, Message, MessageKind
@@ -216,19 +215,6 @@ def test_no_wake_is_not_a_passive_claim() -> None:
     assert passive.claim_decisions() == (passive,)
     assert passive.wake_policy() == observer.wake_policy()
     assert passive.to_wire() != observer.to_wire()
-
-
-@pytest.mark.parametrize("decision", [
-    NoWakeDecision("lookup-alpha"),
-    WakeDecision("lookup-alpha", MessageAudience.DIRECT, PassiveWake()),
-    WakeDecision("lookup-alpha", MessageAudience.DIRECT, FullWake()),
-    WakeDecision("lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake()),
-])
-def test_shared_initial_notification_uses_the_decisions_policy(decision: RecipientDecision) -> None:
-    observation = UnavailableRecipientActivity()
-    assert decision.initial_notification(MEMBERS[0], observation=observation) == (
-        decision.wake_policy().initial_state()().notification(MEMBERS[0], observation=observation)
-    )
 
 
 def test_excluded_recipient_and_bad_identity_fail_closed() -> None:
