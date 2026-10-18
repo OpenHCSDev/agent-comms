@@ -3,6 +3,8 @@ from dataclasses import replace
 import hashlib
 import sys
 
+import pytest
+
 from agent_comms.private_bus_checkpoint import RecordedContextManifestSources
 
 from agent_comms.field_codec import FieldCodec
@@ -142,3 +144,8 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
     finally:
         sys.setprofile(previous_profile)
     assert len(decoded) == len(set(decoded)) == 3
+    last = rows[-1].decode_bytes(captured[-1][1], prefix.root_id)
+    delta = rows[32].decode_bytes(captured[32][1], prefix.root_id)
+    with pytest.raises(ValueError, match='predecessor'):
+        replace(last.segments[2], previous=rows[32].offset).restore(
+            {}, {rows[32].offset: delta})
