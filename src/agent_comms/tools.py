@@ -808,9 +808,10 @@ class CommsTodoListTool(ThreadReadTool):
 class CommsStandingRulesTool(ThreadReadTool):
     label = "Read broken standing rules"
     description = "Every standing rule the commander breaks now, one line each, derived on read."
+    after: float = tool_field("Only rules broken since this time; 0 lists every one", default=0.0)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> StandingRulesRead:
-        broken = StandingRule.broken(comms, caller.subject(self.thread))
+        broken = StandingRule.broken(comms, caller.subject(self.thread), self.after)
         return StandingRulesRead(tuple(rule.line() for rule in broken))
 
 
