@@ -10,7 +10,7 @@ from agent_comms.todos import Todo
 
 
 class TodoOpenIndexes(carry.TodoRows):
-    after = "carry_todo_verdicts"
+    after = "carry_todo_corrections"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> carry.Carried:
