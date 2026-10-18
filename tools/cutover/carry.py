@@ -325,7 +325,7 @@ class CarryChain:
 
 
 class TodoColumnCarry(Carry):
-    """Todo rows gain one declared record column, empty; every other stored column stays as it was."""
+    """Todo rows gain one declared record column, empty; every other column stays as it was."""
 
     column: ClassVar[str]
 
@@ -360,15 +360,16 @@ class TodoColumnCarry(Carry):
         selected = ", ".join(f'? AS "{item.wire_name}"' if item is added else f'"{item.wire_name}"'
                              for item in fields)
         empty = (added.encode(()),)
-        count = sum(1 for _row in Todo.iterate(db.execute(f'SELECT {selected} FROM "{table}"', empty)))
+        rows = db.execute(f'SELECT {selected} FROM "{table}"', empty)
+        count = sum(1 for _row in Todo.iterate(rows))
         if not apply:
             db.rollback()
             return count
         saved = f"{table}_before_{cls.column}"
         db.execute(f'ALTER TABLE "{table}" RENAME TO "{saved}"')
         Todo.create(db)
-        db.execute(f'INSERT INTO "{table}" ({Todo._column_list(expected)}) SELECT {selected} FROM "{saved}"',
-                   empty)
+        columns = Todo._column_list(expected)
+        db.execute(f'INSERT INTO "{table}" ({columns}) SELECT {selected} FROM "{saved}"', empty)
         db.execute(f'DROP TABLE "{saved}"')
         db.commit()
         return count
