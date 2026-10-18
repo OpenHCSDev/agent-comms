@@ -432,7 +432,7 @@ WHEN json_extract(NEW.lifecycle, '$.kind') = 'failed' AND EXISTS (
   SELECT 1 FROM publication_receipts WHERE execution_id =
   NEW.execution_id)
 BEGIN SELECT RAISE(ABORT,
-'failed execution cannot erase publication acknowledgement' ); END"""
+'failed execution cannot erase publication receipt' ); END"""
             ),
             "execution_delete_frozen": (
                 """ BEFORE DELETE ON executions BEGIN
