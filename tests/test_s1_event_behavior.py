@@ -1,4 +1,5 @@
 """Current S1 consumer effects and fenced settlement, with real durable owners."""
+from agent_comms.messages import NoticeRole
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -249,7 +250,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
             await progress.publish_result()
         messages = list(comms.bus.full_history_page().messages)
         assert not any(row.body == "provisional" for row in messages)
-        assert any(row.notice and "[Open diagnostic]" in row.body for row in messages)
+        assert any(isinstance(row.role, NoticeRole) and "[Open diagnostic]" in row.body for row in messages)
         assert progress.result is not None and progress.result.diagnostic == diagnostic
     await runner.settle_turn(
         execution.session_id,
@@ -388,7 +389,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
         rows = list(comms.bus.full_history_page().messages)
         replies = [row for row in rows if row.sender == name]
         if provider_status == 200:
-            assert [(row.body, row.notice) for row in replies] == (
+            assert [(row.body, isinstance(row.role, NoticeRole)) for row in replies] == (
                 [("Working", True), ("Native response lifecycle.", True)]
                 if committed_progress else [("Native response lifecycle.", True)]
             )
@@ -401,7 +402,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             assert final[0].source == replies[-1].reference
             assert final[0].routing.reply.targets == (origin.sender,)
         else:
-            assert len(replies) == 1 and replies[0].notice
+            assert len(replies) == 1 and isinstance(replies[0].role, NoticeRole)
             assert "[Open diagnostic]" in replies[0].body
             assert not any(row.body == "Native response lifecycle." for row in replies)
     finally:

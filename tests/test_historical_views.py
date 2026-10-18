@@ -265,8 +265,8 @@ def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
     assert len(collect(live, "full_history_page")) == 18
     for message in collect(live, "full_history_page"):
         if isinstance(message, HistoricalMessage):
-            assert not message.starts_turn
-            assert not message.starts_turn_for("bob")
+            assert not message.role.response_policy(message).starts_turn
+            assert not message.role.response_policy(message).starts_turn_for(message, "bob")
             assert message.display_metadata["history"]["source"] == message.source.original_root
     assert len(list(live.bus.full_history_page().messages)) == 4
 

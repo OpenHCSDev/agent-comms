@@ -117,7 +117,7 @@ class ScheduledTurn:
     def incoming(
         cls, message: Message, *, aliases: Mapping[str, str] | None = None
     ) -> ScheduledTurn:
-        guidance = message.response_policy.guidance(message, aliases=aliases)
+        guidance = message.role.response_policy(message).guidance(message, aliases=aliases)
         scope = CommandTarget.named(message.target).guidance_scope
         return cls(
             f"[agent-comms from {message.sender} to {message.target}]\n"
@@ -130,7 +130,7 @@ class ScheduledTurn:
         """Combine channel turns sharing a route, keeping each direct input separate."""
         if not pending:
             return [], []
-        if pending[0].origin and pending[0].origin.response_policy.separate_turn:
+        if pending[0].origin and pending[0].origin.role.response_policy(pending[0].origin).separate_turn:
             return pending[:1], pending[1:]
         boundary = next(
             (
@@ -138,7 +138,7 @@ class ScheduledTurn:
                 for index, turn in enumerate(pending)
                 if (turn.origin.exact_reply_target if turn.origin else None)
                 != (pending[0].origin.exact_reply_target if pending[0].origin else None)
-                or (turn.origin and turn.origin.response_policy.separate_turn)
+                or (turn.origin and turn.origin.role.response_policy(turn.origin).separate_turn)
             ),
             len(pending),
         )

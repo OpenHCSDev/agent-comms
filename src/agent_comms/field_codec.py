@@ -10,12 +10,13 @@ from collections.abc import Callable, Iterable
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing_extensions import TypeAliasType
 from typing import (
     Annotated,
     Any,
+    ClassVar,
     Literal,
     Self,
     TypeVar,
@@ -33,6 +34,59 @@ from .sealed import Sealed
 T = TypeVar("T")
 
 
+@dataclass(frozen=True)
+class FieldPlan:
+    """One field's wire keys, checks and compiled value decoder."""
+
+    name: str
+    key: str
+    required: bool
+    reject_null: bool
+    choices: object
+    value: ValueDecoder
+
+    @property
+    def keys(self):
+        return (self.key,)
+
+    @property
+    def required_wire_keys(self):
+        return self.keys
+
+    def encoded(self, value, *, key=None):
+        return {key or self.key: value}
+
+    def schema_fields(self, schema):
+        return {self.key: schema}
+
+    def decoded(self, data):
+        if self.key not in data:
+            return {}
+        value = data[self.key]
+        if self.choices is not None and value not in self.choices():
+            raise ValueError(f"Field {self.key} must be one of: {', '.join(self.choices())}")
+        return {self.name: self.value.decode(value)}
+
+
+class InlineFieldPlan(FieldPlan):
+    @cached_property
+    def keys(self):
+        return tuple(self.value.representation.schema()["properties"])
+
+    @cached_property
+    def required_wire_keys(self):
+        return tuple(self.value.representation.schema().get("required", ()))
+
+    def encoded(self, value, *, key=None):
+        return value
+
+    def schema_fields(self, schema):
+        return schema["properties"]
+
+    def decoded(self, data):
+        return {self.name: self.value.decode({key: data[key] for key in self.keys if key in data})}
+
+
 class FieldRepresentation(ABC):
     """A field capability, declared as ``Annotated[ValueType, Representation]``.
 
@@ -40,6 +94,7 @@ class FieldRepresentation(ABC):
     ordinary JSON. All record structure remains owned by FieldCodec.
     """
 
+    field_plan: ClassVar[type[FieldPlan]] = FieldPlan
     accepts_null = False
     # True when the wire value is one external JSON shape decoded by from_wire
     # rather than the representation's own validated decode.
@@ -78,6 +133,13 @@ class WireValue(FieldRepresentation):
     def decode(cls, value: object) -> Self:
         FieldCodec.encode(value)  # Custom forms still cross the JSON boundary.
         return cls.from_wire(value)
+
+
+class InlineRecord(WireValue):
+    """A typed field represented by its declared object's sibling wire fields."""
+
+    field_plan = InlineFieldPlan
+    external_json_shape = True
 
 
 class JsonShapeMember:
@@ -248,7 +310,7 @@ class FieldCodec(Sealed):
     @staticmethod
     @lru_cache(maxsize=_declaration_cache_capacity)
     def record_fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
-        """The codec's record declarations and wire keys, in wire order."""
+        """The record's field declarations, in wire order; plans own expanded keys."""
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
         declared = [
@@ -259,10 +321,6 @@ class FieldCodec(Sealed):
         keys = [key for _, key in declared]
         if any(not isinstance(key, str) or not key for key in keys):
             raise TypeError("Wire field names must be nonempty strings.")
-        if len(set(keys)) != len(keys) or (
-            issubclass(cls, DeclaredFamily) and cls.family_discriminator in keys
-        ):
-            raise TypeError("Conflicting wire field names.")
         return tuple(
             item
             for _, item in sorted(
@@ -330,19 +388,14 @@ class FieldCodec(Sealed):
             {value.family_discriminator: value.declared_name}
             if isinstance(value, DeclaredFamily) else {}
         )
-        result.update(
-            (key, cls.encode(getattr(value, field.name), hints[field.name]))
-            for field, key in cls.record_fields(type(value))
-            if not (
-                field.metadata.get("wire_omit_default")
-                and getattr(value, field.name) == (
-                    field.default if field.default is not MISSING else (
-                        field.default_factory()
-                        if field.default_factory is not MISSING else MISSING
-                    )
-                )
+        plans = {entry.name: entry for entry in cls._record_plan(type(value)).fields}
+        for field, key in cls.record_fields(type(value)):
+            current = getattr(value, field.name)
+            default = field.default if field.default is not MISSING else (
+                field.default_factory() if field.default_factory is not MISSING else MISSING
             )
-        )
+            if not (field.metadata.get("wire_omit_default") and current == default):
+                result.update(plans[field.name].encoded(cls.encode(current, hints[field.name])))
         result.update(
             (member.wire_name, cls.encode(getattr(value, name)))
             for name, member in cls._projections(type(value), "wire").items()
@@ -395,7 +448,11 @@ class FieldCodec(Sealed):
                 required.append(key)
             elif declared.default is not MISSING and declared.default is not None:
                 schema["default"] = cls.encode(declared.default, annotation)
-            properties[key] = schema
+            entry = next(item for item in cls._record_plan(target).fields if item.name == declared.name)
+            properties.update(entry.schema_fields(schema))
+            if key in required and key not in entry.keys:
+                required.remove(key)
+                required.extend(schema.get("required", ()))
         return {
             "type": "object",
             "properties": properties,
@@ -458,13 +515,14 @@ class FieldCodec(Sealed):
             return cls.encode(value, annotation)
         if is_dataclass(value) and not isinstance(value, type):
             hints = cls._types(type(value))
-            result = {
-                field.metadata.get(f"{view}_name", key): cls.project(
-                    getattr(value, field.name), view, hints[field.name]
-                )
-                for field, key in cls.record_fields(type(value))
-                if not field.metadata.get(f"{view}_exclude")
-            }
+            result = {}
+            plans = {entry.name: entry for entry in cls._record_plan(type(value)).fields}
+            for field, key in cls.record_fields(type(value)):
+                if not field.metadata.get(f"{view}_exclude"):
+                    encoded = cls.project(getattr(value, field.name), view, hints[field.name])
+                    result.update(plans[field.name].encoded(
+                        encoded, key=field.metadata.get(f"{view}_name", key)
+                    ))
             properties = cls._projections(type(value), view)
             result.update(
                 (member.wire_name, cls.project(getattr(value, name), view))
@@ -476,21 +534,10 @@ class FieldCodec(Sealed):
         return cls.encode(value)
 
     @dataclass(frozen=True)
-    class _FieldPlan:
-        """One field's wire key, checks and compiled value decoder."""
-
-        name: str
-        key: str
-        required: bool
-        reject_null: bool
-        choices: object
-        value: ValueDecoder
-
-    @dataclass(frozen=True)
     class _RecordPlan:
         """A record's whole decode plan, derived once from its declaration."""
 
-        fields: tuple[FieldCodec._FieldPlan, ...]
+        fields: tuple[FieldPlan, ...]
         required_keys: tuple[str, ...]
         init_required_keys: tuple[str, ...]
         reject_null_keys: frozenset[str]
@@ -504,7 +551,7 @@ class FieldCodec(Sealed):
         hints = cls._types(record)
         computed = {member.wire_name for member in cls._projections(record, "wire").values()}
         entries = tuple(
-            cls._FieldPlan(
+            (cls._representation(hints[field.name])[1] or FieldRepresentation).field_plan(
                 name=field.name,
                 key=key,
                 required=bool(field.metadata.get("wire_required")),
@@ -514,15 +561,21 @@ class FieldCodec(Sealed):
             )
             for field, key in declared
         )
+        wire_keys = [key for entry in entries for key in entry.keys]
+        if len(set(wire_keys)) != len(wire_keys) or (
+            issubclass(record, DeclaredFamily) and record.family_discriminator in wire_keys
+        ):
+            raise TypeError("Conflicting wire field names.")
         return cls._RecordPlan(
             fields=entries,
-            required_keys=tuple(entry.key for entry in entries if entry.required),
+            required_keys=tuple(key for entry in entries if entry.required for key in entry.required_wire_keys),
             init_required_keys=tuple(
-                entry.key for entry, (field, _) in zip(entries, declared)
+                key for entry, (field, _) in zip(entries, declared)
                 if field.default is MISSING and field.default_factory is MISSING
+                for key in entry.required_wire_keys
             ),
             reject_null_keys=frozenset(entry.key for entry in entries if entry.reject_null),
-            accepted_keys=frozenset(entry.key for entry in entries) | computed,
+            accepted_keys=frozenset(key for entry in entries for key in entry.keys) | computed,
         )
 
     @staticmethod
@@ -817,14 +870,7 @@ class _RecordDecoder(ValueDecoder):
             raise ValueError(f"Null field for {target.__name__}")
         values = {}
         for entry in plan.fields:
-            if entry.key not in data:
-                continue
-            value = data[entry.key]
-            if entry.choices is not None and value not in entry.choices():
-                raise ValueError(
-                    f"Field {entry.key} must be one of: {', '.join(entry.choices())}"
-                )
-            values[entry.name] = entry.value.decode(value)
+            values.update(entry.decoded(data))
         return target(**values)
 
 @dataclass(frozen=True, slots=True)

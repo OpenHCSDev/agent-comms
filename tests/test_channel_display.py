@@ -1,5 +1,6 @@
 """The opt-in channel activity feed is a local display, never wire authority."""
 
+from agent_comms.messages import Membership
 from agent_comms.read_basis import NamedViewer
 from agent_comms.presentation import ReadThrough
 import json
@@ -300,7 +301,7 @@ def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
     later = comms.views.channel_display_page("#api")
     assert "late nonmember" not in bodies(later)
     assert all(message.target == "#api" for message in later.messages)
-    assert any(message.membership is not None for message in later.messages)
+    assert any(isinstance(message.role, Membership) for message in later.messages)
 
 
 def test_direct_retag_before_open_is_captured_with_its_source(tmp_path):

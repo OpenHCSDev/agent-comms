@@ -1,5 +1,6 @@
 """Standby liveness preserves goal authority and never replays an input."""
 
+from agent_comms.messages import ConversationRole, NoticeRole
 import asyncio
 import os
 import threading
@@ -206,7 +207,7 @@ def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
 def test_only_substantive_direct_reply_prevents_release(tmp_path, notice):
     comms, _goal = _waiting(tmp_path)
     comms.messaging.send_message(
-        "child", "owner", "Result" if not notice else "Failure notice", notice=notice
+        "child", "owner", "Result" if not notice else "Failure notice", role=NoticeRole() if notice else ConversationRole()
     )
     child_fence = _finish(comms, "child", "child-turn")
     changed = comms.goals.release_waits_after_terminal_turn(child_fence)

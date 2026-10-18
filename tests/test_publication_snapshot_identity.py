@@ -32,7 +32,7 @@ def test_publication_snapshot_is_frozen_content_not_delivery_enrichment():
             changed = replace(delivered, type=kind)
             assert changed.message_id == original.message_id
             assert changed.publication_snapshot != original
-    assert replace(delivered, notice=True).publication_snapshot != original
+    assert replace(delivered, role=delivered.role.as_notice()).publication_snapshot != original
 
 
 def test_new_declared_delivery_field_inherits_snapshot_without_consumer_edit():
@@ -68,7 +68,7 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
                 case.bus, snapshot, snapshot.require_wire_response(case.reply_target)
             )
             changed = (
-                replace(response, notice=True)
+                replace(response, role=response.role.as_notice())
                 if notice
                 else replace(response, type=QuestionKind)
             )

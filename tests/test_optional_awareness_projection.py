@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.messages import NoticeRole
 import os
 import tempfile
 from dataclasses import replace
@@ -615,7 +616,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
     try:
         initial, assignment = _accepted(comms, store, root_id, "#team", "@member000 act")
         notice = comms.messaging.send_initial_cohort(
-            "sender", "member000", "Passive retained context", notice=True
+            "sender", "member000", "Passive retained context", role=NoticeRole()
         )
         passive = accept_delivery_cohort(comms.bus, root_id, notice.seq, store).value.assignments[0]
         assert isinstance(passive.lifecycle, PassiveAssignment)

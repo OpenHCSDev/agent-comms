@@ -43,7 +43,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
-from agent_comms.messages import InfoKind, Message, MessageKind
+from agent_comms.messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole
 from agent_comms.private_send_rules import RunningTurnRegistryCheck
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
@@ -483,7 +483,7 @@ def prepare_fenced_response(
     *,
     exact_target: str,
     message_type: Type[MessageKind] = InfoKind,
-    notice: bool = False,
+    role: MessageRole = ConversationRole(),
     timestamp: float | None = None,
     owner_witness: LiveResponseOwner,
 ) -> Applied[PublicationIntents] | AlreadyApplied[PublicationIntents]:
@@ -498,9 +498,8 @@ def prepare_fenced_response(
     if (
         type(fence) is not OwnerFence
         or not (isinstance(message_type, type) and issubclass(message_type, MessageKind))
-        or type(notice) is not bool
     ):
-        raise TypeError("response requires exact fence, message kind and notice")
+        raise TypeError("response requires exact fence and message kind")
     if not isinstance(payload, str) or not payload:
         raise ValueError("response payload must be nonempty")
     with store.session.boundary(bus) as boundary:
@@ -526,7 +525,7 @@ def prepare_fenced_response(
                         payload,
                         message_type,
                         timestamp=existing.message.timestamp if timestamp is None else timestamp,
-                        notice=notice,
+                        role=role,
                         answers=answers,
                     )
                 )
@@ -538,7 +537,7 @@ def prepare_fenced_response(
                 payload,
                 message_type,
                 timestamp=time.time() if timestamp is None else timestamp,
-                notice=notice,
+                role=role,
                 answers=answers,
             )
             intent = PublicationIntents(

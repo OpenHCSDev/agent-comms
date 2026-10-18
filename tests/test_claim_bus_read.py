@@ -177,7 +177,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert [message.body for message in raw_channel] == ["@Alice investigate"]
         channel = comms.views.channel_display_page("#team").messages
         assert [message.body for message in channel] == ["@Alice investigate"]
-        assert all(message.notification_references() for message in channel)
+        assert all(message.role.notification_references(message) for message in channel)
         with pytest.raises(ValueError, match="not generically sendable"):
             comms.messaging.send_message(
                 "Alice", "sender", "Invented claim notice", ClaimNoticeKind

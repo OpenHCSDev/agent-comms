@@ -19,6 +19,7 @@ from agent_comms.native_package import pinned_native_package
 async def scripted_owner(tmp_path, selected_model, monkeypatch):
     control = tmp_path / 'rpc-control'
     control.mkdir()
+    os.mkfifo(control / 'entered')
     tests = Path(__file__).parent
     source = tests.parent / 'src'
     child = tests / 'selected_owner_rpc_child.py'
@@ -63,14 +64,20 @@ async def scripted_owner(tmp_path, selected_model, monkeypatch):
 
 
 async def recorded_request(control, agent):
+    loop = asyncio.get_running_loop()
+    entered = loop.create_future()
+    fd = os.open(control / 'entered', os.O_RDONLY | os.O_NONBLOCK)
     try:
         async with asyncio.timeout(15):
-            while not (control / 'entered').exists():
-                await asyncio.sleep(.005)
+            loop.add_reader(fd, entered.set_result, None)
+            await entered
     except TimeoutError:
         from delivery_owner_fixture import drain_diagnostic
 
         raise AssertionError(f'Scripted input never arrived: {drain_diagnostic(agent._comms, "beta")!r}') from None
+    finally:
+        loop.remove_reader(fd)
+        os.close(fd)
 
 
 def requests(control):

@@ -322,7 +322,6 @@ def published_snapshot(pending):
         body="done",
         type=InfoKind,
         timestamp=1.0,
-        notice=False,
     )
     intent = PublicationIntents(
         "exec",
