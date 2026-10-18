@@ -26,7 +26,7 @@ def launcher(tmp_path, monkeypatch, route):
 
 def test_installed_owner_and_alias_use_route_and_full_package_verification(tmp_path, monkeypatch):
     package = tmp_path / "package"
-    executable = launcher(tmp_path, monkeypatch, PrivateNkLaunch(tmp_path, "f" * 32, package, None))
+    executable = launcher(tmp_path, monkeypatch, PrivateNkLaunch(tmp_path, "f" * 32, package))
     verified = []
     monkeypatch.setattr(native_pi, "_trusted_package", verified.append)
     assert NativePiRpcLaunch.package_for_command("pi-comms-native", LaunchRuntime.running()) == package
@@ -43,7 +43,7 @@ def test_unconfigured_owner_launcher_cannot_fall_back_to_legacy_pi(tmp_path, mon
 
 
 def test_route_does_not_override_native_package_commitment(tmp_path, monkeypatch):
-    launcher(tmp_path, monkeypatch, PrivateNkLaunch(tmp_path, "f" * 32, tmp_path / "wrong", None))
+    launcher(tmp_path, monkeypatch, PrivateNkLaunch(tmp_path, "f" * 32, tmp_path / "wrong"))
 
     def fail(_package):
         raise NativePackageError("Native package tree differs")
@@ -68,7 +68,7 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     environment = {}
-    PrivateNkLaunch(comms.root, root_id, package, None).apply_environment(environment)
+    PrivateNkLaunch(comms.root, root_id, package).apply_environment(environment)
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
     selected = tmp_path / "selected-core"

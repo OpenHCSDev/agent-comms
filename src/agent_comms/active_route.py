@@ -25,7 +25,7 @@ from .field_codec import FieldCodec, PathText
 from .wire_metadata import WireRootIdText
 
 if TYPE_CHECKING:
-    from .owner_lifecycle import OwnerLifecycle
+    from .private_nk_entrypoint import PrivateNkLaunch
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,22 +54,21 @@ class CommsRoute(ABC):
             yield
 
     @abstractmethod
-    def bind_owners(self, owners: OwnerLifecycle) -> None:
-        """Configure launch authority when a caller actually constructs a service."""
+    def launch(self) -> PrivateNkLaunch | None:
+        """The launch pin this selection carries, decoded before any store exists.
+
+        None leaves the owner lifecycle to derive a private root's launch itself.
+        """
 
 
 @dataclass(frozen=True, slots=True)
 class LocalRoute(CommsRoute):
     """Explicit/environment roots and the unconfigured historical default."""
 
-    def bind_owners(self, owners: OwnerLifecycle) -> None:
+    def launch(self) -> PrivateNkLaunch | None:
         from .private_nk_entrypoint import PrivateNkLaunch
 
-        launch = PrivateNkLaunch.from_environment(self.root, os.environ)
-        if launch is not None:
-            owners.pin_private_nk_launch(
-                launch.validated_root, launch.wire_root_id, launch.native_package
-            )
+        return PrivateNkLaunch.from_environment(self.root, os.environ)
 
 
 class AbsoluteRoutePathText(PathText):
@@ -120,9 +119,10 @@ class ActiveRoute(CommsRoute):
             raise RelationViolationError("private route root ID changed")
         return super(ActiveRoute, self).observe_root()
 
-    def bind_owners(self, owners: OwnerLifecycle) -> None:
-        # Actual service binding retains the bus-locked durable verification.
-        owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)
+    def launch(self) -> PrivateNkLaunch:
+        from .private_nk_entrypoint import PrivateNkLaunch
+
+        return PrivateNkLaunch(self.root, self.wire_root_id, self.native_package)
 
 
 def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRoute:
@@ -301,7 +301,7 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     if path.name != "active-route.json" or not path.is_absolute():
         raise ValueError("active comms route requires its absolute route path")
     FieldCodec.encode(route)
-    PrivateNkLaunch(route.root, route.wire_root_id, route.native_package, None).validate()
+    PrivateNkLaunch(route.root, route.wire_root_id, route.native_package).validate()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
@@ -358,7 +358,7 @@ def _publish_active_route_locked(
             os.fsync(fd)
         finally:
             os.close(fd)
-        PrivateNkLaunch(route.root, route.wire_root_id, route.native_package, None).validate()
+        PrivateNkLaunch(route.root, route.wire_root_id, route.native_package).validate()
         parent = path.parent.lstat()
         if (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino):
             raise ValueError("active comms route directory changed before publication")

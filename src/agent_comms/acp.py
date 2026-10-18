@@ -78,6 +78,7 @@ from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
 
 if TYPE_CHECKING:
+    from .private_nk_entrypoint import PrivateNkLaunch
     from .selected_tool_broker import SelectedToolIntent
 
 from .turn_runner import RELAY_PREFIX
@@ -100,32 +101,25 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         runtime_enabled: bool = False,
         use_unstable_protocol: bool = False,
         auto_wake: bool = True,
-        private_nk_native_package: Path | None = None,
-        private_nk_wire_root_id: str | None = None,
         private_selected_tool_intent: SelectedToolIntent | None = None,
         private_nk_verified_cli: Path | None = None,
     ):
-        if (private_nk_native_package is None) != (private_nk_wire_root_id is None):
-            raise ValueError("private N/K ACP requires both reviewed Pi package and exact root")
+        self._comms = comms
         if private_selected_tool_intent is not None:
             from .selected_tool_broker import SelectedToolIntent
 
             if type(private_selected_tool_intent) is not SelectedToolIntent:
                 raise TypeError("private selected tool needs a nominal owner intent")
-            if private_nk_wire_root_id is None or private_nk_native_package is None:
-                raise ValueError("private selected tool requires exact N/K root and native package")
+            self._private_launch()
         self._private_selected_tool_intent = private_selected_tool_intent
-        self._private_nk_native_package = private_nk_native_package
         # A worker's startup check already verified its package; reuse it.
         self._verified_native_launcher = None
         if private_nk_verified_cli is not None:
             from .native_pi import NativePiRpcLaunch
 
             self._verified_native_launcher = NativePiRpcLaunch.verified_launcher(
-                private_nk_native_package, private_nk_verified_cli
+                self._private_launch().native_package, private_nk_verified_cli
             )
-        self._private_nk_wire_root_id = private_nk_wire_root_id
-        self._comms = comms
         self.use_unstable_protocol = use_unstable_protocol
         # Enabled for verified native owners by default. Explicit construction
         # may disable it; model/tool content cannot change this owner policy.
@@ -134,7 +128,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         from .working_memory_worker import AnnotationWorker
 
         self.annotations = AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())
-        self.cursors = CursorPublication(comms, self._runtime, private_nk_wire_root_id)
+        self.cursors = CursorPublication(comms, self._runtime)
         self.turns = TurnRunner(
             comms,
             self._runtime,
@@ -327,14 +321,22 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
+    def _private_launch(self) -> PrivateNkLaunch:
+        """This root's launch authority, owned by its owner lifecycle."""
+        launch = self._comms.owners.launch_authority
+        if launch is None:
+            raise PublicationActivationBlocked("private N/K ACP session requires a private bus root")
+        return launch
+
+    @property
+    def private_nk_native_package(self) -> Path | None:
+        launch = self._comms.owners.launch_authority
+        return None if launch is None else launch.native_package
+
     @property
     def configured_root_id(self) -> str:
-        """The configured bus root ID; the bus reader checks it against the marker."""
-        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
-            raise PublicationActivationBlocked(
-                "private N/K ACP session requires explicit matching root and package"
-            )
-        return self._private_nk_wire_root_id
+        """The bus root ID the launch pinned; the bus reader checks it against the marker."""
+        return self._private_launch().wire_root_id
 
     def _private_nk_marker(self) -> str:
         """Require the configured, certified root before any selected request."""
@@ -356,7 +358,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         if self._verified_native_launcher is None:
             self._verified_native_launcher = NativePiRpcLaunch.acquire_tracked(
-                self._private_nk_native_package
+                self._private_launch().native_package
             )
         return self._verified_native_launcher
 
@@ -372,11 +374,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         from .selected_write_authority import AcpSelectedWriteAuthority
         from .selected_write_plan import SelectedWritePlans
 
-        package = self._private_nk_native_package
-        if package is None or self._private_nk_wire_root_id != wire_root_id:
-            raise PublicationActivationBlocked(
-                "private N/K ACP requires an explicit matching root and native package"
-            )
+        launch = self._private_launch()
+        package = launch.native_package
+        if launch.wire_root_id != wire_root_id:
+            raise PublicationActivationBlocked("private N/K ACP root does not match its launch")
         thread_name = await self.sessions.sync_identity(session_id)
         snapshot = await Coordination.run_worker(self._comms.registry.snapshot)
         owner = snapshot.require(thread_name)
@@ -534,17 +535,12 @@ def main() -> int:
                 format="%(asctime)s %(name)s %(levelname)s %(message)s",
                 filename=debug_path + ".log",
             )
-        # The stdio ACP client only attaches to a separately owned worker. An
-        # explicit private launch must be checked before it can create a wire or
-        # request an owner; the worker independently repeats the same preflight.
-        from .private_nk_entrypoint import private_nk_from_environment
-
-        private_nk = private_nk_from_environment()
-        comms = wire(private_nk.validated_root) if private_nk is not None else wire()
-        if private_nk is not None:
-            comms.owners.pin_private_nk_launch(
-                private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
-            )
+        # The stdio ACP client only attaches to a separately owned worker. A
+        # private launch is checked before it can request an owner; the worker
+        # independently repeats the same preflight.
+        comms = wire()
+        if (launch := comms.owners.launch_authority) is not None:
+            launch.validate()
 
         async def run() -> None:
             if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
@@ -569,8 +565,6 @@ def main() -> int:
                 comms,
                 runtime_enabled=True,
                 use_unstable_protocol=True,
-                private_nk_native_package=private_nk.native_package if private_nk else None,
-                private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
             )
 
             def observe(event: Any) -> None:

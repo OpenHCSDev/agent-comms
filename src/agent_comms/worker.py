@@ -10,7 +10,6 @@ from contextlib import suppress
 
 from .acp import CommsAgent
 from .comms import wire
-from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
 from .native_arguments import NativeArguments
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 
@@ -18,22 +17,15 @@ from .launch_runtime import LaunchRuntime, RestartEnvironment
 async def run() -> None:
     # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
     lower_priority()
-    private_nk = PrivateNkLaunch.current()
-    # Fail before wire creation/attach; the check verifies the native package once.
-    verified_cli = private_nk.validate() if private_nk is not None else None
-    comms = wire(private_nk.validated_root) if private_nk is not None else wire()
-    if private_nk is not None:
-        comms.owners.pin_private_nk_launch(
-            private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
-        )
+    comms = wire()
+    # Fail before attach; the check verifies the native package once.
+    launch = comms.owners.launch_authority
+    verified_cli = launch.validate() if launch is not None else None
     name = RestartEnvironment.calling_thread()
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
-        private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
-        private_nk_native_package=private_nk.native_package if private_nk else None,
-        private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
         private_nk_verified_cli=verified_cli,
         agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
     )
@@ -108,10 +100,9 @@ def main() -> int:
     ).parse_args()
     name = RestartEnvironment.calling_thread()
 
-    launch = private_nk_from_environment()
-    if launch is None:
-        raise ValueError("Headless execution requires a configured native route")
-    comms = wire(launch.validated_root)
+    comms = wire()
+    if comms.owners.launch_authority is None:
+        raise ValueError("Headless execution requires a private bus root")
     thread = comms.registry.require(name)
     if thread.process_identity is not None and thread.process_identity.alive():
         raise ValueError(f"Thread {thread.name!r} already has a live owner")

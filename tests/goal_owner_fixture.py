@@ -21,6 +21,5 @@ def activate_empty_source(agent):
         metadata = issuer.bus.log.read_metadata_unlocked()
     root_id = (metadata.root_id if metadata.private
                else issuer.messaging.initialize_private_initial_protocol())
-    agent._private_nk_wire_root_id = root_id
-    agent._private_nk_native_package = pinned_native_package()
+    agent._comms.owners.pin_private_nk_launch(root, root_id, pinned_native_package())
     agent.inputs.auto_wake = False

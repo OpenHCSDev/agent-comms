@@ -147,11 +147,12 @@ class InterruptedCase(EffectCase):
 
 @pytest.fixture
 async def owner_turn(comms, tmp_path, fake_native_catalog):
+    comms.owners.pin_private_nk_launch(
+        comms.root, comms.messaging.initialize_private_initial_protocol(), tmp_path
+    )
     owner = CommsAgent(
         comms,
         agent_bin="unused",
-        private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
-        private_nk_native_package=tmp_path,
     )
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
@@ -353,6 +354,9 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
 
         monkeypatch.setattr(native.provider, "response_chunks", with_progress)
     comms = Comms(native.root)
+    comms.owners.pin_private_nk_launch(
+        comms.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], pinned_native_package()
+    )
     owner = CommsAgent(
         comms,
         agent_bin="pi",
@@ -361,8 +365,6 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             "--offline", "--no-extensions", "--no-skills", "--no-context-files",
             "--no-prompt-templates",
         ],
-        private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-        private_nk_native_package=pinned_native_package(),
     )
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
@@ -425,11 +427,12 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
     settings["compaction"] = {"enabled": True, "reserveTokens": 128, "keepRecentTokens": 32}
     (config / "settings.json").write_text(json.dumps(settings))
     comms = Comms(native.root)
+    comms.owners.pin_private_nk_launch(
+        comms.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], pinned_native_package()
+    )
     owner = CommsAgent(
         comms,
         agent_bin="pi",
-        private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-        private_nk_native_package=pinned_native_package(),
     )
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])

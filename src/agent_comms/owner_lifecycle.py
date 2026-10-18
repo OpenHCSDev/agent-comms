@@ -19,6 +19,7 @@ from .errors import RelationViolationError
 from .locked_store import LockedStore
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
+from .native_package import NativePackageError, pinned_native_package
 from .native_arguments import NativeArguments
 from .launch_runtime import LaunchRuntime, RestartEnvironment, PACKAGE_ENV, ROOT_ID_ENV
 from .private_nk_entrypoint import PrivateNkLaunch
@@ -202,12 +203,11 @@ class OwnerLifecycle:
     def pin_private_nk_launch(
         self, validated_root: Path, wire_root_id: str, native_package: Path
     ) -> None:
-        """Bind an already preflighted ACP/worker launch to future owner handoffs.
+        """Bind a launch handed down by a parent owner, or a published route.
 
-        A marker never grants authority. Service factories validate explicit
-        environment pairs; direct composition requires a caller-supplied pin.
         Recheck the root marker before retaining the exact lexical absolute
         path; child env is generated from this pin, not a later cwd/env read.
+        Without a pin, a private root derives its own (see launch_authority).
         """
         if (
             not isinstance(validated_root, Path)
@@ -221,9 +221,7 @@ class OwnerLifecycle:
             marker = source.marker
             if marker.root_id != wire_root_id:
                 raise RelationViolationError("private owner launch root ID changed")
-        self._private_nk_launch = PrivateNkLaunch(
-            validated_root, wire_root_id, native_package, None
-        )
+        self._private_nk_launch = PrivateNkLaunch(validated_root, wire_root_id, native_package)
 
     def acquire_thread(self, name: str, *, owner_pid: int) -> Thread:
         """Bind only this calling process; stored birth time is signal authority."""
@@ -279,19 +277,44 @@ class OwnerLifecycle:
             )
             return OwnerStartResult(owner.name, owner.pid, True)
 
+    @property
+    def launch_authority(self) -> PrivateNkLaunch | None:
+        """The private launch for this root, or None for an ordinary root.
+
+        A pin handed down by a parent owner or a published route wins. Otherwise
+        each fact comes from its owner: the root ID from this root's marker and
+        the native package from this installation's pin. Nothing is guessed: the
+        root is the one this lifecycle serves, and validate() still refuses a
+        package that differs from the reviewed tree or a replaced root.
+        """
+        if self._private_nk_launch is None:
+            metadata = self.bus.log.read_metadata_unlocked()
+            if not metadata.private:
+                return None
+            try:
+                package = pinned_native_package()
+            except NativePackageError as error:
+                raise PublicationActivationBlocked(
+                    "private owner launch needs this installation's prepared native package"
+                ) from error
+            self.pin_private_nk_launch(self.root, metadata.wire_root_id, package)
+        return self._private_nk_launch
+
     def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
         """Choose this runtime's reviewed native entrypoint for a private handoff."""
-        if self._private_nk_launch is None:
+        launch = self.launch_authority
+        if launch is None:
             return source_binary
-        self._private_nk_launch.validate()
+        launch.validate()
         return runtime.native_entrypoint
 
     def restart_environment(self, environment: Mapping[str, str], runtime: LaunchRuntime) -> dict[str, str]:
-        """Project the retained launch authority into the target runtime policy."""
+        """Project the launch authority into the target runtime policy."""
         result = runtime.environment(environment)
-        if self._private_nk_launch is not None:
-            self._private_nk_launch.validate()
-            self._private_nk_launch.apply_environment(result)
+        launch = self.launch_authority
+        if launch is not None:
+            launch.validate()
+            launch.apply_environment(result)
         return result
 
     def restart_owners(
@@ -369,13 +392,8 @@ class OwnerLifecycle:
         Callers hold the wire lock. A preserving restart can check before
         fencing; every actual launch rechecks the same owner after cutover.
         """
-        private_launch = self._private_nk_launch
-        if private_launch is None:
-            if self.bus.log.read_metadata_unlocked().private:
-                raise PublicationActivationBlocked(
-                    "private owner launch requires explicit matching root and package"
-                )
-        else:
+        private_launch = self.launch_authority
+        if private_launch is not None:
             private_launch.validate()
         return private_launch
 

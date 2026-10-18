@@ -59,13 +59,12 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         return child
 
     monkeypatch.setattr(ParentedProcess, "launch", hold_worker)
+    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     client = CommsClient(
         comms,
         agent_bin=launcher,
         agent_args=arguments,
         auto_wake=False,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
     )
     updates = []
 

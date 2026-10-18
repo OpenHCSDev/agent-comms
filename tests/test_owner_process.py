@@ -46,13 +46,14 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         assert comms.owners.start("worker").pid == owner.pid
         assert owner.pid != os.getpid()
         assert owner.process_identity is not None
-        from agent_comms.coordination_errors import PublicationActivationBlocked
+        from agent_comms.native_pi import NativePiUnavailable
         from agent_comms.owner_cutover import StoppedOwnerInstallation
 
-        unpinned = Comms(tmp_path)
+        mismatched = Comms(tmp_path)
+        mismatched.owners.pin_private_nk_launch(tmp_path, root_id, tmp_path / "other-package")
         before = comms.registry.snapshot()
-        with pytest.raises(PublicationActivationBlocked, match="explicit matching root and package"):
-            unpinned.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
+        with pytest.raises(NativePiUnavailable, match="Canonical native Pi package layout"):
+            mismatched.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
         assert owner.process_alive
         assert comms.registry.snapshot() == before
         assert "worker" not in comms.owners.releases.read()
