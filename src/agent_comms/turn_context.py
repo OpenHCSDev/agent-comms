@@ -1067,7 +1067,7 @@ class TurnContext:
 
     def with_goal(self, owner: Thread, goals) -> TurnContext:
         context = self
-        for goal in owner.goal.active().context_goals():
+        for goal in owner.goal.active().active_goals():
             context = context.prepend(GoalSegment.capture(owner, goal, goals))
         return context
 

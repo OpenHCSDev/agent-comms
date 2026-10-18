@@ -77,7 +77,7 @@ class QueuedInputContext:
 
     @property
     def goal_permission(self) -> AcceptedGoalPermission:
-        return self.goal.active().accepted_permission()
+        return AcceptedGoalPermission(self.goal.active().accepted_goal_id())
 
 
 @dataclass(frozen=True, slots=True)

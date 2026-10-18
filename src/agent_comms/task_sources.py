@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .goals import GoalRevision
+from .goals import Goal, GoalDeclaration, GoalRevision, NoGoal
 from .message_reference import MessageReference
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
 from .turn_context import Provenance, WireProvenance
@@ -26,6 +26,20 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True)
 class TaskScope(DeclaredFamily, affix="TaskScope"):
     project: str
+    _serves: ClassVar[dict[type[GoalDeclaration], type[TaskScope]]] = {}
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        served = cls.__dict__.get("serves")
+        if served is not None:
+            if served in TaskScope._serves:
+                raise TypeError(f"Duplicate task scope for {served.__name__}")
+            TaskScope._serves[served] = cls
+
+    @classmethod
+    def current(cls, owner: Thread) -> TaskScope:
+        goal = owner.goal.active()
+        return cls._serves[type(goal)].of(owner, goal)
 
     def require_current(self, owner: Thread) -> None:
         if self.project != owner.worktree:
@@ -52,13 +66,18 @@ class TaskScope(DeclaredFamily, affix="TaskScope"):
 @dataclass(frozen=True, kw_only=True)
 class GoalTaskScope(TaskScope):
     goal: GoalRevision
+    serves = Goal
+
+    @classmethod
+    def of(cls, owner: Thread, goal: Goal) -> GoalTaskScope:
+        return cls(project=owner.worktree, goal=goal.checkpoint)
 
     def require_context(self, owner: Thread) -> None:
         owner.goal.require_id(self.goal.id).require_active()
         owner.goal.require_checkpoint(self.goal)
 
     def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
-        return owner.goal.active().task_scope(owner) == self
+        return TaskScope.current(owner) == self
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -73,9 +92,14 @@ class ProjectTaskScope(TaskScope):
 @dataclass(frozen=True, kw_only=True)
 class TurnTaskScope(TaskScope):
     """The enclosing declaration's original turn determines this scope."""
+    serves = NoGoal
+
+    @classmethod
+    def of(cls, owner: Thread, goal: NoGoal) -> TurnTaskScope:
+        return cls(project=owner.worktree)
 
     def require_context(self, owner: Thread) -> None:
-        if owner.goal.active().task_scope(owner) != self:
+        if TaskScope.current(owner) != self:
             raise RelationViolationError("An active goal requires its revision scope")
 
     def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
@@ -104,10 +128,10 @@ class TaskScopeSelection(DeclaredFamily, affix="ScopeSelection"):
 @dataclass(frozen=True)
 class CurrentTaskScopeSelection(TaskScopeSelection, declared_name="current"):
     def select(self, owner: Thread) -> TaskScope:
-        return owner.goal.active().task_scope(owner)
+        return TaskScope.current(owner)
 
     def select_human(self, owner: Thread) -> TaskScope:
-        return owner.goal.active().task_scope(owner).for_human()
+        return TaskScope.current(owner).for_human()
 
 
 @dataclass(frozen=True)

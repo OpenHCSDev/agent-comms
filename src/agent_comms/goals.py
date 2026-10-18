@@ -412,11 +412,7 @@ class GoalDeclaration(WireValue):
     def owes_project_resume(self, thread) -> bool:
         return thread.project_resume_due and not thread.executing
 
-    def task_scope(self, thread):
-        from .task_sources import TurnTaskScope
-        return TurnTaskScope(project=thread.worktree)
-
-    def context_goals(self) -> tuple[Goal, ...]:
+    def active_goals(self) -> tuple[Goal, ...]:
         return ()
 
     def permits_continuation(self, goal_id: str) -> bool:
@@ -431,19 +427,11 @@ class GoalDeclaration(WireValue):
     def permits_accepted(self, goal_id: str | None) -> bool:
         return goal_id is None
 
-    def accepted_permission(self):
-        from .turn_goal_permission import AcceptedGoalPermission
-        return AcceptedGoalPermission(None)
-
-    def continuation_permission(self):
-        from .turn_goal_permission import InactiveGoalPermission
-        return InactiveGoalPermission()
+    def accepted_goal_id(self) -> str | None:
+        return None
 
     def defers_following_from(self, original: GoalDeclaration) -> bool:
         return False
-
-    async def pause_for_cancel(self, runner, name):
-        pass
 
     def prepare_turn(self, turn, permits) -> bool:
         return not turn.autonomous_goal
@@ -578,11 +566,7 @@ class Goal(GoalDeclaration):
     def owes_project_resume(self, thread) -> bool:
         return False
 
-    def task_scope(self, thread):
-        from .task_sources import GoalTaskScope
-        return GoalTaskScope(project=thread.worktree, goal=self.checkpoint)
-
-    def context_goals(self) -> tuple[Goal, ...]:
+    def active_goals(self) -> tuple[Goal, ...]:
         return (self,)
 
     def continues(self, goal_id: str) -> bool:
@@ -592,26 +576,13 @@ class Goal(GoalDeclaration):
         return False
 
     def permits_accepted(self, goal_id: str | None) -> bool:
-        return self.active().accepted_permission().goal_id == goal_id
+        return self.active().accepted_goal_id() == goal_id
 
-    def accepted_permission(self):
-        from .turn_goal_permission import AcceptedGoalPermission
-        return AcceptedGoalPermission(self.id)
-
-    def continuation_permission(self):
-        from .turn_goal_permission import ContinuationGoalPermission
-        return ContinuationGoalPermission(self)
+    def accepted_goal_id(self) -> str:
+        return self.id
 
     def defers_following_from(self, original: GoalDeclaration) -> bool:
         return original.permits_inactive_input()
-
-    async def pause_for_cancel(self, runner, name):
-        from .coordinator import Coordination
-        from .goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
-        await Coordination.run_worker(partial(
-            runner.comms.goals.update_goal, name,
-            PausedGoalAction(expect=GoalPrecondition(goal_id=self.id)), actor=OwnerInvocable,
-        ))
 
     def prepare_turn(self, turn, permits) -> bool:
         from .turn_goal_account import TurnGoalAccount

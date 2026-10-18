@@ -228,7 +228,12 @@ class TurnRunner:
         name = self.sessions.bindings.get(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
         if thread is not None:
-            await thread.goal.active().pause_for_cancel(self, name)
+            for goal in thread.goal.active().active_goals():
+                await Coordination.run_worker(partial(
+                    self.comms.goals.update_goal, name,
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                    actor=OwnerInvocable,
+                ))
         task = self.turn_tasks.get(session_id)
         if task is not None:
             current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None

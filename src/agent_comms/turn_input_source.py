@@ -129,7 +129,7 @@ class OriginalTurnInput(TurnInputSource):
 
     @classmethod
     def permission(cls, turn):
-        return turn.thread.goal.active().continuation_permission()
+        return TurnGoalPermission.for_continuation(turn.thread.goal.active())
 
     @property
     def keys(self) -> tuple[str, ...]:
