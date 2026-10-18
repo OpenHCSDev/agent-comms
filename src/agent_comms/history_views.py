@@ -92,7 +92,9 @@ class ThreadViewRead(ConversationPreparation):
 
     def native(self):
         if self.through.session_file != self.thread.runtime.read_key:
-            raise ValueError("Transcript changed; refresh before marking it read.")
+            from .view_unread import TranscriptChanged
+
+            raise TranscriptChanged("Transcript changed; refresh before marking it read.")
         for key in self.thread.runtime.read_keys():
             self.views.transcript_reads.mark_read(self.viewer.name, key, self.through.offset)
 

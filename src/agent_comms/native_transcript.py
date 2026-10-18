@@ -68,25 +68,69 @@ class RecordsCut(DeclaredFamily, affix="Cut"):
         """Whether this cut can still accompany the source's current draft."""
 
 
-@dataclass(frozen=True)
 class SessionCut(RecordsCut):
-    revision: FileRevision | None  # None until the native session file exists
+    """The saved session's actual file state, including one not written yet."""
 
-    @property
-    def offset(self) -> int:
-        return self.revision.size if self.revision is not None else 0
-
-    def contains(self, current: SessionCut, through: int) -> bool:
-        # A session is append-only within one inode: later bytes belong to the
-        # next update. Replacement, truncation or a rewrite changes the cut.
-        if self.revision is None or current.revision is None:
-            return self.revision == current.revision
-        return self.revision.holds_cut(current.revision, through)
+    @classmethod
+    def capture(cls, path: Path) -> SessionCut:
+        revision = FileRevision.capture(path)
+        return MissingSessionCut() if revision is None else PresentSessionCut(revision)
 
     def draft_current(self, current: RecordsCut) -> bool:
         # Native drafts belong to the ACP stream, not this saved-record reader.
-        # Appends do not invalidate the already captured page's absent draft.
         return self.holds(current, self.offset)
+
+    def mark_read(self, reads, viewer: str, source: str, through: int) -> None:
+        from .view_unread import TranscriptChanged
+
+        if not 0 <= through <= self.offset:
+            raise TranscriptChanged("Transcript changed; refresh before marking it read.")
+        self.record_read(reads, viewer, source, through)
+
+    @abstractmethod
+    def record_read(self, reads, viewer: str, source: str, through: int) -> None: ...
+
+    @abstractmethod
+    def publication_revision(self, root, reader, recipient): ...
+
+
+@dataclass(frozen=True)
+class MissingSessionCut(SessionCut):
+    offset = 0
+
+    def contains(self, current: SessionCut, through: int) -> bool:
+        return through == 0
+
+    def record_read(self, reads, viewer: str, source: str, through: int) -> None:
+        # No file means no written transcript, just as unread counts return zero.
+        pass
+
+    def publication_revision(self, root, reader, recipient):
+        from .native_runtime_input import PublishedReplyRevision
+
+        return PublishedReplyRevision(0, 0)
+
+
+@dataclass(frozen=True)
+class PresentSessionCut(SessionCut):
+    revision: FileRevision
+
+    @property
+    def offset(self) -> int:
+        return self.revision.size
+
+    def contains(self, current: PresentSessionCut, through: int) -> bool:
+        # A session is append-only within one inode; replacement changes the cut.
+        return self.revision.holds_cut(current.revision, through)
+
+    def record_read(self, reads, viewer: str, source: str, through: int) -> None:
+        reads.mark_transcript(viewer, source, self.revision.identity.inode,
+                              through, self.revision.size)
+
+    def publication_revision(self, root, reader, recipient):
+        from .native_runtime_input import NativeRuntimeInput
+
+        return NativeRuntimeInput.publication_revision(root, reader, recipient.lookup)
 
 
 @dataclass(frozen=True)
@@ -174,14 +218,10 @@ class NativeTranscript(TranscriptSource):
         return tuple(sources)
 
     def cut(self) -> SessionCut:
-        return SessionCut(FileRevision.capture(self.path))
+        return SessionCut.capture(self.path)
 
     def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
-        from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
-
-        if not self.path.is_file():
-            return PublishedReplyRevision(0, 0)
-        return NativeRuntimeInput.publication_revision(root, self, recipient.lookup)
+        return self.cut().publication_revision(root, self, recipient)
 
     @contextmanager
     def projection(self, sources, routes):
