@@ -11,12 +11,13 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.send_outcome import HeldSend
+from agent_comms.send_outcome import GrantedSend, HeldSend
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.maintenance_barrier import (
+    DrainingPhase,
     InstallingPhase,
     MaintenanceBarrier,
     MaintenanceOperatorField,
@@ -135,6 +136,20 @@ async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monke
 def test_maintenance_operator_rejects_invalid_external_text(text: object) -> None:
     with pytest.raises((ValueError, TypeError)):
         FieldCodec.decode(MaintenanceOperatorField, text)
+
+
+def test_draining_lends_existing_turn_but_holds_new_prompt(tmp_path: Path) -> None:
+    gate = MaintenanceBarrier(tmp_path / 'wire' / 'registry.json')
+    hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'operator'))
+    assert hold.phase is DrainingPhase
+    with gate.read().phase.send_new(None) as new:
+        assert isinstance(new, HeldSend)
+    with gate.read().phase.send_running(None) as running:
+        assert isinstance(running, GrantedSend)
+    paused = gate.advance(hold, PausedPhase)
+    with paused.phase.send_running(None) as running:
+        assert isinstance(running, HeldSend)
+    gate.advance(paused, InstallingPhase)
 
 
 def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
@@ -325,7 +340,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
     assert proc.exitcode == 0
     assert q.get(timeout=2)[0] == "denied"
     async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
-        with status.phase.send(None, None, "native", "original") as outcome:
+        with status.phase.send_new(None, None, "native", "original") as outcome:
             assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
     assert comms.registry.require("owner").active_turn is None
@@ -435,7 +450,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
 
     async def native_write():
         async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
-            with status.phase.send(None, None, "native", "original"):
+            with status.phase.send_running(None, None, "native", "original"):
                 entered.set()
 
     async with _async_store_lock(root / "wire"):
@@ -466,7 +481,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
 
     async def fake_send() -> None:
         async with MaintenanceBarrier(root / "registry.json").ingress_async() as status:
-            with status.phase.send(None, None, "id", "text"):
+            with status.phase.send_running(None, None, "id", "text"):
                 entered.set()
                 assert release.wait(5)
 
