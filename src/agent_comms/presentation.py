@@ -36,7 +36,7 @@ from .private_path import FileRevision
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
 from .read_ledger import ReadLedger
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
-from .runtime_info import AgentRuntimeInfo, UnobservedRuntimeInfo
+from .runtime_info import RuntimeInfo
 from .store_files import SharedLock, _store_lock
 from .wire_log import WireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
@@ -656,7 +656,7 @@ class ThreadRecord(CliResult):
 @dataclass(frozen=True, slots=True)
 class ThreadView(ThreadRecord):
     activity: ObservedActivity
-    runtime: AgentRuntimeInfo | UnobservedRuntimeInfo
+    runtime: RuntimeInfo
     last_seen: float
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
 
