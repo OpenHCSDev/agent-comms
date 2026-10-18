@@ -26,14 +26,14 @@ from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
-    DeliveredOutcome, EmittedOutcome, FilteredOutcome, Outcome, TaggedWire,
+    DeliveredOutcome, EarlierItems, EmittedOutcome, FilteredOutcome, Outcome, TaggedWire,
     UnconfirmedOutcome, WatchLine, raise_child_exit,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.comms import Comms
-from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.external_transcript import ExternalPage, ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageKind, InfoKind
 from agent_comms.message_reference import MessageReference
@@ -264,6 +264,10 @@ class TranscriptUpdate(ABC):
         """Whether this update still needs publication before later updates."""
         return True
 
+    def page_record(self, turn_id: str, item_id: str) -> FinishedItem:
+        """Even an invisible item owns a source position and its page continuation."""
+        return FinishedItem(turn_id, item_id, ())
+
     def add_to(self, history: ImportBuffer) -> None:
         """What this update contributes to an imported conversation; activity contributes nothing."""
 
@@ -325,8 +329,47 @@ class FinishedItem(TranscriptUpdate):
         later.add((self.turn_id, self.item_id))
         return True
 
+    def page_record(self, turn_id: str, item_id: str) -> FinishedItem:
+        return self
+
     def add_to(self, history: ImportBuffer) -> None:
         history.add(self.events)
+
+
+@dataclass(frozen=True)
+class PageItem:
+    """An item-list identity survives even when its update is invisible in the live view."""
+    turn_id: str
+    item_id: str
+    update: TranscriptUpdate
+
+    def record(self) -> FinishedItem:
+        return self.update.page_record(self.turn_id, self.item_id)
+
+    def add_to(self, history: ImportBuffer) -> None:
+        self.update.add_to(history)
+
+
+@dataclass(frozen=True)
+class PublishedPage(TranscriptUpdate):
+    """A bounded harness snapshot publishes items, never current activity or drafts."""
+    items: tuple[PageItem, ...]
+    earlier: ExternalPage
+
+    def publish(self, output: ThreadOutput) -> None:
+        output.transcript.publish_page(tuple(item.record() for item in self.items), self.earlier)
+
+    def add_to(self, history: ImportBuffer) -> None:
+        for item in self.items:
+            item.add_to(history)
+
+
+@dataclass(frozen=True)
+class EarlierPublishedPage(PublishedPage):
+    request: EarlierItems
+
+    def publish(self, output: ThreadOutput) -> None:
+        output.transcript.prepend(self.request, tuple(item.record() for item in self.items), self.earlier)
 
 
 @dataclass(frozen=True)

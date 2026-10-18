@@ -164,7 +164,8 @@ class TranscriptTraversal(ABC):
         # interrupted call (its result record never arrives) from growing a page.
         open_rounds: set[str] = set()
         round_grace = 0
-        native = self.native(reader, initial, frontier) if frontier.offset else (record for record in ())
+        native = (self.native(reader, initial, frontier) if reader.has_records(frontier.offset)
+                  else (record for record in ()))
         projected = project(native, max_records=max_messages + 1, max_bytes=max_bytes)
         try:
             record, events = next(projected, (None, ()))
@@ -205,7 +206,7 @@ class TranscriptTraversal(ABC):
                     consumed = consumed.at_sequence(self.receipt_position(message.message))
                     message = next(source_rows, None)
             if record is None:
-                consumed = consumed.at_offset(frontier.offset if self.ascending else 0)
+                consumed = consumed.at_offset(frontier.offset if self.ascending else reader.start)
             if message is None:
                 consumed = consumed.at_sequence(frontier.wire.sequence if self.ascending else 0)
             return consumed, records
@@ -274,6 +275,23 @@ class TranscriptSource:
     Native and external stores supply their original records. An assigned
     source adds the separately acquired wire/publication capability below.
     """
+
+    start = 0
+
+    def has_records(self, through: int) -> bool:
+        return through > 0
+
+    def valid_offset(self, offset: int, through: int) -> bool:
+        return 0 <= offset <= through
+
+    def has_older(self, offset: int) -> bool:
+        return offset > self.start
+
+    def request_earlier(self, offset: int) -> bool:
+        return False
+
+    async def watch_requests(self, emit) -> None:
+        """Sources without a harness continuation have no bridge requests."""
 
     def turns(self, last: int):
         """Read input-bounded turns under one original record-source cut."""

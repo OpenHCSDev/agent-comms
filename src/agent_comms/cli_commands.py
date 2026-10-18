@@ -999,7 +999,14 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
                 async for message in messages:
                     emit(ArrivedMessage(message=message).model_dump_json())
 
-        asyncio.run(stream())
+        async def watch() -> None:
+            thread = ctx.registry.require(self.thread)
+            source = thread.runtime.history_source(ctx.root, thread.incarnation)
+            async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(stream())
+                tasks.create_task(source.watch_requests(lambda frame: emit(frame.model_dump_json())))
+
+        asyncio.run(watch())
         return 0
 
 

@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSeri
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .messages import Message
+from .external_transcript import RequestedEarlierPage
 
 if TYPE_CHECKING:
     from .child_process import AttachedChild
@@ -165,6 +166,17 @@ class ArrivedMessage(WatchLine):
 
     async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
         await bridge.accept(self.message)
+
+
+class EarlierItems(WatchLine):
+    """The pager's outstanding continuation, handled only by its socket-owning bridge."""
+    wire_tag = 'earlier-items'
+    turn_id: str
+    item_id: str
+    request: RequestedEarlierPage
+
+    async def handle(self, bridge, child: AttachedChild) -> None:
+        await bridge.earlier(self)
 
 
 WATCH_LINE = TypeAdapter(WatchLine.declared_union())

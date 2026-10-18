@@ -18,6 +18,7 @@ from pydantic import (
 )
 
 from agent_comms.activity import ActivityState
+from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.tool_results import ToolDiff
@@ -37,6 +38,8 @@ from .shared import (
     FinishedTurn,
     HiddenItem,
     ParagraphDraft,
+    PageItem,
+    PublishedPage,
     StartedItem,
     TextDraft,
     ToolCall,
@@ -740,6 +743,16 @@ class ItemEntry(WireModel):
 class ItemsPage(WireModel):
     data: list[ItemEntry]
     nextCursor: str | None = None
+
+    def publication(self) -> PublishedPage:
+        # Codex's nullable wire value is decoded here; no reader interprets it.
+        match self.nextCursor:
+            case str() as cursor:
+                earlier = EarlierPage(cursor)
+            case None:
+                earlier = NoEarlierPage()
+        return PublishedPage(tuple(PageItem(entry.turnId, entry.item.id, entry.publication())
+                                   for entry in reversed(self.data) if entry.completed), earlier)
 
 
 class TranscriptNotification(WireModel, ABC, metaclass=RegisteredWireMeta):
