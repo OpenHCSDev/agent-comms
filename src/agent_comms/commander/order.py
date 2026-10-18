@@ -39,7 +39,7 @@ from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntTex
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, OrderProgress, Todo)
-from . import capacity, rules, storage
+from . import capacity, rules
 from .config import CommanderConfig, Repo
 
 CONFIG = CommanderConfig.installed()
@@ -302,7 +302,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
     if problems:
         sys.exit('Refused order:\n  ' + '\n  '.join(problems))
-    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + storage.RULE.replace('<you>', unit) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
+    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + COMMS.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in CONFIG.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
                + '\nStart now and push as you go.')  # a unit shown a due time takes until then
     taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
     refuse('\n'.join((message, *taken.values())), *OUTGOING)  # before Core: refused records nothing
@@ -638,20 +638,7 @@ def deadline_lines(held: list[Todo]) -> list[str]:
 
 
 def overdue():
-    checked = 0
     while True:
-        if time.time() - checked > 300:
-            checked = time.time()
-            if storage.free_gb() < storage.CLEANUP_GB:
-                print(f'DISK LOW: {CONFIG.disk} has {storage.free_gb():.1f} GB free (cleanup due under {storage.CLEANUP_GB} GB) -> put a cleanup owner on it now', flush=True)
-            heavy = []
-            for unit in sorted({t.assignment.owner for t in open_todos()}):
-                try:
-                    COMMS.registry.storage_rule.require_quota(COMMS.registry.require(unit))
-                except SelectedToolDenied as quota:
-                    heavy.append(f'{unit}: {quota}')
-            if heavy:
-                print('VIOLATION storage quota: ' + '; '.join(heavy) + ' -> order the cleanup', flush=True)
         if missing := first_calls():
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
                   flush=True)

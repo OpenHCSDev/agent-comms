@@ -322,3 +322,54 @@ class CarryChain:
         if done != sorted(done, reverse=True):
             raise ValueError("Bus ledger skips a step that a later recorded step runs after")
         return tuple(step for step, applied_step in zip(self.steps, done) if not applied_step)
+
+
+class TodoColumnCarry(Carry):
+    """Todo rows gain one declared record column, empty; every other column stays as it was."""
+
+    column: ClassVar[str]
+
+    @classmethod
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
+        path = TodoStore.path_in(root)
+        if not path.exists():
+            return Carried(0)
+        with closing(CoordinationStore.writer(path)) as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                changed = cls._carry(db, apply=apply)
+            except BaseException:
+                db.rollback()
+                raise
+        rewritten = tuple(item.name for item in root.glob(f"{path.name}*"))
+        return Carried(changed, {}, rewritten if changed and apply else ())
+
+    @classmethod
+    def _carry(cls, db: sqlite3.Connection, *, apply: bool) -> int:
+        table, fields = Todo.declared_name, Todo._fields()
+        (added,) = (item for item in fields if item.name == cls.column)
+        actual = tuple(row[1] for row in db.execute(f'PRAGMA table_info("{table}")'))
+        expected = tuple(item.wire_name for item in fields)
+        if actual == expected:
+            for _row in Todo.stream(db):
+                pass
+            db.rollback()
+            return 0
+        if actual != tuple(item.wire_name for item in fields if item is not added):
+            raise ValueError(f"Unexpected todo columns: {actual!r}")
+        selected = ", ".join(f'? AS "{item.wire_name}"' if item is added else f'"{item.wire_name}"'
+                             for item in fields)
+        empty = (added.encode(()),)
+        rows = db.execute(f'SELECT {selected} FROM "{table}"', empty)
+        count = sum(1 for _row in Todo.iterate(rows))
+        if not apply:
+            db.rollback()
+            return count
+        saved = f"{table}_before_{cls.column}"
+        db.execute(f'ALTER TABLE "{table}" RENAME TO "{saved}"')
+        Todo.create(db)
+        columns = Todo._column_list(expected)
+        db.execute(f'INSERT INTO "{table}" ({columns}) SELECT {selected} FROM "{saved}"', empty)
+        db.execute(f'DROP TABLE "{saved}"')
+        db.commit()
+        return count

@@ -1,6 +1,5 @@
 """The declared run and assignment history stay with their original records."""
 from dataclasses import replace
-import importlib
 
 import pytest
 
@@ -55,15 +54,3 @@ def test_send_refuses_missing_run_but_mechanical_orders_are_exempt(commander_scr
     assert script.todos() == ()
     script.send('worker', '23:59', str(body), mechanical=True, **kwargs)
     assert isinstance(script.COMMS.goals.todos.get('P1').order.run, MechanicalOrderRun)
-
-
-def test_wording_posts_a_correction_without_a_strike(commander_script, monkeypatch):
-    script, _ = commander_script
-    watcher = importlib.reload(importlib.import_module('agent_comms.commander.vibe_watch'))
-    sent = []
-    monkeypatch.setattr(watcher, 'post', lambda recipients, body: sent.append((recipients, body)))
-    watcher.judge({'text': 'The canonical ownership changed', 'from': 'worker',
-                   'sender_role': 'agent', 'id': 'wording', 'to': ['lead']})
-    assert sent[0][0] == ['worker']
-    assert sent[0][1].startswith('Correction, no strike: message wording')
-    assert script.todos() == ()

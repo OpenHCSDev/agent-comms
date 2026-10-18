@@ -16,7 +16,7 @@ import asyncio
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Final, Self
 
 from .change_report import FileLine
 from .child_process import BoundedRun, ExitedOutcome
@@ -31,10 +31,17 @@ from .typed_table import Column, JsonStorage, TypedStore, TypedTable
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
+if TYPE_CHECKING:
+    from .goal_management import Goals
+
 
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+
+    @property
+    def work(self) -> str:
+        return "delivered work"
 
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
@@ -69,6 +76,10 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     @property
     def delivered(self) -> str:
         return self.commit
+
+    @property
+    def work(self) -> str:
+        return f"delivered commit {self.delivered}"
 
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
@@ -433,10 +444,19 @@ class PlainText(OrderWords):
 
 
 class StrikeReason(PlainText):
-    """What a unit did, plainly, in enough words to stand on the public record."""
+    """What a unit did, plainly, in enough words to stand on the public record. A unit's
+    wording is answered by a correction, never a strike: a reason whose every quoted span
+    is jargon is about wording alone."""
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
+
+    @classmethod
+    def refused(cls, text: str) -> str | None:
+        cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
+        if cited and all(PlainText.found(span) for span in cited):
+            return f"{cited} is the unit's wording; send it a correction, not a strike."
+        return super().refused(text)
 
 
 class OrderText(OrderWords):
@@ -550,6 +570,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     pending: ClassVar[bool]
 
+    def require_transfer(self, todo: Todo) -> None:
+        raise ValueError("Only an undelivered order can change owner.")
+
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
 
@@ -590,6 +613,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
 
+    def require_transfer(self, todo: Todo) -> None:
+        pass
+
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
                             superseded_by=superseded_by)
@@ -599,6 +625,10 @@ class PendingProblemOrder(ProblemOrder):
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
+
+    def require_transfer(self, todo: Todo) -> None:
+        owner = (todo.assignment or todo.released[-1].previous).owner
+        raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
         if delivery != self.delivery:
@@ -835,6 +865,10 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     def prepare(self, goals, current):
         return self
 
+    def record(self, goals: Goals, problem: str) -> Todo:
+        """Write this operation; one that also revises the holder's Goal routes through it."""
+        return goals.apply_problem(problem, self)
+
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
 
@@ -875,6 +909,54 @@ class StrikeTodo(TodoOperation):
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class OrderVerdict(TodoOperation, declared_name=None):
+    """The commander's verdict on one tool call the holder made for its order, kept on the order."""
+    actor: ThreadIncarnation
+    previous: Assignment
+    tool_call_id: str
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
+
+    @abstractmethod
+    def judged(self, current: Todo) -> Todo: ...
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        current.require_assignment(self.previous)
+        _text(self.tool_call_id, "Judged tool call ID", 200)
+        judged = self.judged(current)
+        return replace(judged, verdicts=(*judged.verdicts, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class AcceptedVerdict(OrderVerdict):
+    """The tool call carries out the order clause it quotes."""
+    quote: str
+
+    def judged(self, current: Todo) -> Todo:
+        quoted = " ".join(self.quote.split())
+        order = " ".join(current.order.instructions(current).split())
+        if len(quoted.split()) < 4 or quoted not in order:
+            raise ValueError("Quote 4+ words of the order this tool call carries out.")
+        return current
+
+
+@dataclass(frozen=True)
+class SendBackVerdict(OrderVerdict):
+    """The tool call goes back; the same write strikes the holder and revises the order Goal."""
+    reason: StrikeReason
+
+    def judged(self, current: Todo) -> Todo:
+        strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
+                            self.at)
+        struck: Todo = strike.apply(current)
+        return struck
+
+    def record(self, goals: Goals, problem: str) -> Todo:
+        return goals.send_back(problem, self)
 
 
 @dataclass(frozen=True)
@@ -1055,6 +1137,7 @@ class Todo(TypedTable):
     hunts: tuple[Hunt, ...] = ()
     voided: tuple[VoidStrikeTodo, ...] = ()
     released: tuple[ReleaseTodo, ...] = ()
+    verdicts: tuple[OrderVerdict, ...] = ()
 
     @property
     def pending(self):
@@ -1115,6 +1198,7 @@ class Todo(TypedTable):
         return proposed
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+        self.order.require_transfer(self)
         if self.assignment is not None:
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)
