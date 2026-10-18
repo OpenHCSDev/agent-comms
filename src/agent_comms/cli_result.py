@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .field_codec import FieldCodec
+from .pi_vocabulary import ServiceTier
 from .tool_result import DeclaredReply
 
 
@@ -23,3 +26,13 @@ class CliResult(DeclaredReply):
     def encoded(self) -> object:
         """The CLI's JSON; a record with its own wire form overrides it."""
         return FieldCodec.encode(self)
+
+
+@dataclass(frozen=True)
+class ToolCatalogResult(CliResult):
+    tools: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True)
+class ThreadToolCatalogResult(ToolCatalogResult):
+    service_tier: ServiceTier

@@ -61,7 +61,8 @@ from .todos import (CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, O
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing, ToolCatalogResult
+from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
+from .cli_result import ToolCatalogResult
 from .tool_result import ToolResult
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
@@ -1186,7 +1187,7 @@ class ToolsCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
         caller = ToolCaller.from_actor(self.name)
-        return caller.catalog(ctx, tuple(tool_catalog()))
+        return caller.catalog(ctx, tuple(NativeRequestTools.catalog()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1209,10 +1210,6 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         json.dump(self.apply(ctx), output, indent=2)
         output.write("\n")
         return 0
-
-
-def tool_catalog() -> list[dict[str, object]]:
-    return [tool.schema() for tool in ToolRequest.members_with(ToolRequest)]
 
 
 def context_tool_catalog(context: str) -> list[dict[str, object]]:
