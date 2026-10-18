@@ -67,7 +67,7 @@ def scenario(comms: Comms, project, monkeypatch):
         edits=("Repair the existing owner",), banned=("No second store",),
         report="Report the result", at=RecordedEventTime(100),
         first_call_deadline=RecordedEventTime(220))
-    yield CommsInboxTool, {"thread": "worker", "goal_id": "ongoing", "wait_for": ["lead"]}, worker
+    yield CommsInboxTool, {"thread": "worker", "standby": {"goal_id": "ongoing", "wait_for": ["lead"]}}, worker
     yield CommsTodoCreateTool, {"owner": "worker", "order": FieldCodec.encode(CreateProblemGoalAction(
         problem="P1", order=order, request="request", deadline=RecordedEventTime(1000),
         commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P1"))}, lead
