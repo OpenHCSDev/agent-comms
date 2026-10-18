@@ -15,7 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from cutover.carry import Carried, TodoRows
+from cutover import carry
+from cutover.carry import Carried
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import ApplicationOrderRun, MechanicalOrderRun, OrderRun, ProblemOrder, Todo
@@ -38,7 +39,7 @@ def declared_run(body: str) -> OrderRun:
     return MechanicalOrderRun() if found is None else ApplicationOrderRun(found.group(1))
 
 
-class OrderRuns(TodoRows):
+class OrderRuns(carry.TodoRows):
     """Saved problem orders gain their declared closing run; no other stored field changes."""
 
     after = "carry_wake_index"

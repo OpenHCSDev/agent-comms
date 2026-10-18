@@ -176,7 +176,8 @@ class Step:
         """The step a module declares, read without importing it; None if it holds no Carry."""
         for node in ast.parse(source).body:
             if isinstance(node, ast.ClassDef) and any(
-                isinstance(base, ast.Name) and base.id in carry_parents() for base in node.bases
+                (base.id if isinstance(base, ast.Name) else getattr(base, "attr", None))
+                in carry_parents() for base in node.bases
             ):
                 for statement in node.body:
                     if (isinstance(statement, ast.Assign)
