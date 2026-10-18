@@ -337,7 +337,7 @@ class StoredTurnReference(TurnRecord):
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLeaseFence | None:
-        self.read()
+        raise RelationViolationError("Turn reference must be bound by its registry")
 
 
 @dataclass(frozen=True)
