@@ -34,12 +34,12 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
     message = Message("owner", "peer", "Claim file", InfoKind, seq=8, timestamp=1.0)
     bound = replace(message, claim_transition=replace(claimed, message_id=message.message_id))
     assert Message.from_wire(bound.to_wire()) == bound
-    invalid = raw.copy()
-    invalid["claim_scope"]["version"] = 99
+    admission_key = FieldCodec.record_key(ClaimTransition, "claim_scope")
+    invalid = {**raw, admission_key: {**raw[admission_key], "version": 99}}
     with pytest.raises(ValueError, match="Wake claim_scope version or revision"):
         FieldCodec.decode(ClaimTransition, invalid)
     null_claim = raw.copy()
-    null_claim["claim_scope"] = None
+    null_claim[admission_key] = None
     with pytest.raises(ValueError, match="Null field"):
         FieldCodec.decode(ClaimTransition, null_claim)
 
@@ -204,7 +204,7 @@ def test_raw_path_aliases_cannot_acquire_or_release_same_file(tmp_path):
         with pytest.raises(ClaimTransitionError, match="canonical absolute"):
             ClaimRelease(alias, G1)
         claiming_row = FieldCodec.encode(transition(2, owner="competitor", claims=(a,), generation=G2))
-        claiming_row["claims"] = [alias]
+        claiming_row[FieldCodec.record_key(ClaimTransition, "claims")] = [alias]
         with pytest.raises(ClaimTransitionError, match="canonical absolute"):
             FieldCodec.decode(ClaimTransition, claiming_row)
         releasing_row = FieldCodec.encode(transition(2, releases=(ClaimRelease(a, G1),)))

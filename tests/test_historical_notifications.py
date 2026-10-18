@@ -74,7 +74,7 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     unpainted, = results[messages[2].seq, messages[2].message_id]
     assert painted.displayed_to == (source.provenance.require("reader").incarnation,)
     assert unpainted.displayed_to == ()
-    assert not live.bus.reads.seen_sequences("reader", live.registry.snapshot())
+    assert not live.bus.reads.cursor("reader", live.registry.snapshot())
     ledger = ReadLedger.at(source.root)
     document = ledger.read()
     reused = replace(basis, viewer_created_at=111.0)

@@ -22,12 +22,12 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
         "#team", worktree=str(tmp_path),
         mark=ReadThrough(page.newest_seq, page.display_scope),
     )
-    assert message.seq in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert message.seq in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     original = comms.registry.require(viewer)
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
     comms.registry.register(replace(original, created_at=original.created_at + 1))
-    assert message.seq not in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert message.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     with pytest.raises(ValueError):
         comms.views.mark_channel_view_read(
             "#team", worktree=str(tmp_path),
@@ -38,7 +38,7 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
         "#team", worktree=str(tmp_path),
         mark=ReadThrough(refreshed.newest_seq, refreshed.display_scope),
     )
-    assert message.seq in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert message.seq in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
 
 
 def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_path):
@@ -52,7 +52,7 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     append(source, content="unpainted reply")
     message = comms.messaging.send_message("worker", "#team", "unpainted bus row")
     page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
-    assert message.seq not in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert message.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     comms.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=shown)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 1
     document = comms.bus.reads.read()
