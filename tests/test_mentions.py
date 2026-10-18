@@ -88,7 +88,7 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
     assert "Response policy: informational; observe and dismiss without replying" in agent_prompt
     assert "delivery and history remain #team" in agent_prompt
 
-    informational = comms.messaging.send_message("alpha", "#team", "notice only", notice=True)
+    informational = comms.messaging.send_message("alpha", "#team", "notice only", role=NoticeRole())
     assert informational.role.response_policy(informational) is InformationalPolicy.instance()
     assert not informational.response_eligibility(("alpha", "beta")).recipients
     assert not informational.role.response_policy(informational).starts_turn_for(informational, "beta")
@@ -163,7 +163,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     for name in ("sender", "owner"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
-    comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, notice=True)
+    comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, role=NoticeRole())
     notice = list(comms.views.channel_history_page("#team").messages)[-1]
     assert isinstance(notice.role, NoticeRole) and not notice.role.response_policy(notice).starts_turn
     with comms.bus.opened_activity() as clocks:
