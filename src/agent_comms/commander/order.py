@@ -271,7 +271,8 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     if check and os.path.isdir(check.directory) and not problems:
         try:
             ran = subprocess.run(['bash', '-c', check.command], cwd=check.directory, capture_output=True, timeout=90)
-            problems += CheckPrinted.decoded(ran.stdout).unproven(check.command, check.result.expected)
+            printed = CheckPrinted.decoded(ran.stdout)
+            problems += printed.unproven(check.command, check.result.expected)
         except subprocess.TimeoutExpired:
             problems.append('Check took over 90 s; done runs it too, so make it a focused count')
     for path, line in re.findall(r'(?<![\w.])(/\S+?\.\w+):(\d+)', body):

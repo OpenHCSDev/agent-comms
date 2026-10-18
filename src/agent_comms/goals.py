@@ -255,21 +255,21 @@ class CheckPrinted(DeclaredFamily, affix="Printed"):
 class CountPrinted(CheckPrinted):
     count: int
 
-    def require(self, expected):
+    def require(self, expected: int) -> None:
         if self.count != expected:
             raise ValueError(f"The order check printed {self.count}, not its expected count {expected}.")
 
-    def unproven(self, command, expected):
+    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         return (f"Check already prints {self.count} before any work: `{command}` proves nothing; "
                 "write a check that fails now",) * (self.count == expected)
 
 
 @dataclass(frozen=True)
 class NoIntegerPrinted(CheckPrinted):
-    def require(self, expected):
+    def require(self, expected: int) -> None:
         raise ValueError(f"The order check printed no integer, so no count of {expected}.")
 
-    def unproven(self, command, expected):
+    def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         return ("the check printed no integer; use grep -c PATTERN FILE or ... | wc -l",)
 
 
