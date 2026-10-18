@@ -17,7 +17,9 @@ from acp.schema import SessionInfoUpdate
 from .acp_extension import (
     CursorAdvancedUpdate,
     CursorEnvelope,
+    LiveCursorScope,
     CursorScope,
+    NoCursorScope,
     EmptyCursorObservation,
     UnavailableCursorObservation,
     VerifiedCursorObservation,
@@ -79,16 +81,16 @@ class CursorPublication:
     def delivery(self, session_id: str) -> CursorDelivery:
         return self.deliveries.setdefault(session_id, CursorDelivery())
 
-    def scope(self, thread_name: str, session_id: str) -> CursorScope | None:
+    def scope(self, thread_name: str, session_id: str) -> CursorScope:
         if self.root_id is None:
-            return None
+            return NoCursorScope()
         try:
             owner, generation = self.comms.registry.live_owner_with_claim(thread_name)
         except RelationViolationError:
-            return None  # This process has no live owner input grant.
+            return NoCursorScope()  # This process has no live owner input grant.
         if owner.pid != os.getpid():
-            return None
-        return CursorScope(
+            return NoCursorScope()
+        return LiveCursorScope(
             session_id,
             self.root_id,
             ClaimedIdentity(owner.incarnation, generation),
@@ -114,7 +116,7 @@ class CursorPublication:
         revision = delivery.next_revision()
         scope = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         unavailable = CursorEnvelope(scope, revision, UnavailableCursorObservation())
-        if scope is None:
+        if not scope.matches_session(session_id):
             return unavailable
         try:
             bus = MessageBus(

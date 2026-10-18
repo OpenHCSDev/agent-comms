@@ -17,7 +17,9 @@ from .acp_extension import (
     InputDeliveryChangedUpdate,
     InputStartedUpdate,
     QueueChangedUpdate,
+    LiveQueueScope,
     QueueScope,
+    NoQueueScope,
     QueueProjection,
     encode_updates,
 )
@@ -541,7 +543,7 @@ class InputDrain(InputObservation):
         self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.queue_revisions: dict[str, int] = {}
         self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}
-        self.original_sources: dict[str, OriginalTurnInput] = {}
+        self.first_sources: dict[str, OriginalTurnInput] = {}
         self.dispositions = InputDispositions(comms.root)
         self.auto_wake = auto_wake
         self.pending_turns: dict[str, list[ScheduledTurn]] = {}
@@ -582,28 +584,30 @@ class InputDrain(InputObservation):
             self.restored_inputs.pop(session_id, None)
         await self.emit_queue_state(session_id)
 
-    async def queue_binding(self, session_id: str) -> QueueScope | None:
+    async def queue_binding(self, session_id: str) -> QueueScope:
         try:
             owner, claim_scope = await Coordination.run_worker(partial(
                 self.comms.registry.live_owner_with_claim,
                 self.sessions.bindings.get(session_id, session_id),
             ))
         except (RelationViolationError, UnregisteredThreadError):
-            # No live local owner turn: the queue has no current scope.
-            return None
-        return QueueScope(
+            # The unavailable observation carries no local queue authority.
+            return NoQueueScope()
+        return LiveQueueScope(
             session_id,
             ClaimedIdentity(owner.incarnation, claim_scope),
             owner.pid,
         )
 
+    def next_revision(self, session_id: str) -> int:
+        revision = self.queue_revisions.get(session_id, 0) + 1
+        self.queue_revisions[session_id] = revision
+        return revision
+
     async def queue_state(self, session_id: str) -> QueueChangedUpdate:
         """The producer owns the complete exact-ID queue projection."""
         scope = await self.queue_binding(session_id)
-        revision = self.queue_revisions.get(session_id, 0) + 1
-        self.queue_revisions[session_id] = revision
-        return QueueChangedUpdate(scope, revision, QueueProjection.capture(
-            scope,
+        return QueueChangedUpdate(scope, self.next_revision(session_id), scope.projection(
             tuple(self.queued_inputs.get(session_id, {}).values()),
             tuple(self.restored_inputs.get(session_id, {}).values()),
         ))
@@ -619,18 +623,15 @@ class InputDrain(InputObservation):
         session_id: str,
         text: str | None,
         input_id: str | None = None,
-        source_scope: QueueScope | None = None,
+        source_scope: QueueScope = NoQueueScope(),
         *,
         native_id: str | None,
         client: Any = None,
     ) -> None:
         scope = await self.queue_binding(session_id)
-        if source_scope is None or scope is None or not source_scope.relation(scope).current:
-            scope = None
-        revision = None
-        if scope is not None:
-            revision = self.queue_revisions.get(session_id, 0) + 1
-            self.queue_revisions[session_id] = revision
+        if not source_scope.current_for(scope):
+            scope = NoQueueScope()
+        revision = scope.start_revision(self, session_id)
         await (client or self.runtime).session_update(
             session_id=session_id,
             update=InputStartedUpdate(input_id, text, scope, revision, native_id).acp_chunk(),
@@ -651,7 +652,7 @@ class InputDrain(InputObservation):
 
     def input_keys(self, session_id: str) -> frozenset[str]:
         """Live captured source membership, never rebuilt from durable notices."""
-        original = self.original_sources.get(session_id)
+        original = self.first_sources.get(session_id)
         following = frozenset(
             key for source in self.following_sources.get(session_id, {}).values()
             for key in source.keys
@@ -790,9 +791,9 @@ class InputDrain(InputObservation):
         self,
         session_id: str,
         input_id: str | None,
-        source_scope: QueueScope,
+        source_scope: LiveQueueScope,
     ) -> None:
-        original = self.original_sources[session_id]
+        original = self.first_sources[session_id]
         input_id = input_id if input_id is not None else original.accepted_id
         source = self.following_sources.get(session_id, {}).get(input_id)
         started_keys = original.keys if input_id is None else source.keys if source else ()
@@ -859,7 +860,7 @@ class InputDrain(InputObservation):
         while not inbox.empty():
             inbox.get_nowait()
         try:
-            original = self.original_sources.pop(session_id, None)
+            original = self.first_sources.pop(session_id, None)
             if original is not None:
                 await Coordination.run_worker(partial(self.finish_original_inputs, original.keys))
         finally:

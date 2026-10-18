@@ -21,7 +21,7 @@ from .declared_family import DeclaredFamily
 from .context_reading import ContextReading
 from .input_attempt import ACPInputIdText, InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireValue
 from .goal_presentation import GoalSnapshot
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
@@ -124,7 +124,56 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
     return FieldCodec.decode(UpdateBatch, extension).updates
 
 
-class AttachmentScope:
+class AttachmentScope(WireValue):
+    """One decoded attachment; JSON null is an absent attachment, not Python None."""
+    accepts_null = True
+    external_json_shape = True
+
+    @classmethod
+    def from_wire(cls, data):
+        return cls.empty_scope() if data is None else FieldCodec.decode_record(cls.record_type(), data)
+
+    @classmethod
+    @abstractmethod
+    def empty_scope(cls): ...
+
+    @classmethod
+    @abstractmethod
+    def record_type(cls): ...
+
+    @classmethod
+    def schema(cls):
+        return {"anyOf": [{"type": "null"}, FieldCodec.record_schema(cls.record_type())]}
+
+    def to_wire(self):
+        return None
+
+    def for_session(self, session_id: str):
+        return self
+
+    def matches_session(self, session_id: str) -> bool:
+        return False
+
+    def foreign_session(self, session_id: str) -> bool:
+        return False
+
+    def relation(self, other: AttachmentScope) -> AttachmentRelation:
+        return AttachmentRelation()
+
+    def relation_from(self, original: LiveAttachmentScope) -> AttachmentRelation:
+        return AttachmentRelation()
+
+    def current_for(self, other: AttachmentScope) -> bool:
+        return self.relation(other).current
+
+    def same_request(self, other: AttachmentScope) -> bool:
+        return self == other or self.current_for(other)
+
+    def require_live(self):
+        raise ValueError('Attachment has no live local owner scope.')
+
+
+class LiveAttachmentScope(AttachmentScope):
     """Logical ACP attachment and executor evidence have separate identities."""
     session_id: str
     claim_scope: ClaimedIdentity
@@ -142,12 +191,40 @@ class AttachmentScope:
     def claimed_generation(self):
         return self.claim_scope.claimed_generation
 
+    def to_wire(self):
+        return FieldCodec.encode_record(self)
+
+    def for_session(self, session_id: str):
+        return replace(self, session_id=session_id)
+
+    def matches_session(self, session_id: str) -> bool:
+        return self.session_id == session_id
+
+    def foreign_session(self, session_id: str) -> bool:
+        return self.session_id != session_id
+
+    def require_live(self):
+        return self
+
     def relation(self, other: AttachmentScope) -> AttachmentRelation:
-        return AttachmentRelation(self, other)
+        return other.relation_from(self)
+
+    def relation_from(self, original: LiveAttachmentScope) -> AttachmentRelation:
+        return ObservedAttachmentRelation(original, self)
+
+
+class AttachmentRelation:
+    """Absent evidence cannot identify a common live attachment."""
+    foreign = True
+    same_incarnation = False
+    ambiguous = True
+    newer = False
+    older = False
+    current = False
 
 
 @dataclass(frozen=True)
-class AttachmentRelation:
+class ObservedAttachmentRelation(AttachmentRelation):
     """Compare original scope witnesses once; no state or alias registry."""
     original: AttachmentScope
     received: AttachmentScope
@@ -181,8 +258,23 @@ class AttachmentRelation:
                 and self.original.owner_pid == self.received.owner_pid)
 
 
-@dataclass(frozen=True)
 class CursorScope(AttachmentScope):
+    @classmethod
+    def empty_scope(cls):
+        return NoCursorScope()
+
+    @classmethod
+    def record_type(cls):
+        return LiveCursorScope
+
+
+@dataclass(frozen=True)
+class NoCursorScope(CursorScope):
+    pass
+
+
+@dataclass(frozen=True)
+class LiveCursorScope(CursorScope, LiveAttachmentScope):
     session_id: str
     wire_root_id: str
     claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
@@ -211,7 +303,7 @@ class CursorObservation(DeclaredFamily, affix="CursorObservation"):
     @abstractmethod
     def status(self) -> str: ...
 
-    def validate_scope(self, scope: CursorScope | None) -> None:
+    def validate_scope(self, scope: CursorScope) -> None:
         pass
 
     @property
@@ -250,11 +342,11 @@ class VerifiedCursorObservation(CursorObservation):
     def status(self) -> str:
         return "proven" if self.cursor.injected_seq else "coverage_only"
 
-    def validate_scope(self, scope: CursorScope | None) -> None:
+    def validate_scope(self, scope: CursorScope) -> None:
+        scope = scope.require_live()
         cursor = self.cursor
         if (
-            scope is None
-            or cursor.wire_root_id != scope.wire_root_id
+            cursor.wire_root_id != scope.wire_root_id
             or cursor.owner_thread != scope.claim_scope.incarnation.name
             or cursor.owner_claimed_generation != scope.claimed_generation
             or not 0 <= cursor.injected_seq <= cursor.covered_seq
@@ -264,7 +356,7 @@ class VerifiedCursorObservation(CursorObservation):
 
 @dataclass(frozen=True)
 class CursorEnvelope:
-    scope: CursorScope | None
+    scope: CursorScope
     revision: int
     observation: CursorObservation
 
@@ -294,18 +386,42 @@ class CursorAdvancedUpdate(AgentCommsUpdate):
     selected_status: str | None = None
 
     def for_session(self, session_id: str) -> CursorAdvancedUpdate:
-        if self.envelope.scope is None:
-            return self
-        return replace(
-            self,
-            envelope=replace(
-                self.envelope, scope=replace(self.envelope.scope, session_id=session_id)
-            ),
-        )
+        return replace(self, envelope=replace(
+            self.envelope, scope=self.envelope.scope.for_session(session_id)))
+
+
+class QueueScope(AttachmentScope):
+    @classmethod
+    def empty_scope(cls):
+        return NoQueueScope()
+
+    @classmethod
+    def record_type(cls):
+        return LiveQueueScope
+
+    def projection(self, queued, restored) -> QueueProjection:
+        return UnavailableQueueProjection()
+
+    def validate_scope(self, projection: QueueProjection) -> None:
+        projection.without_scope()
+
+    def start_revision(self, inputs: InputDrain, session_id: str) -> int | None:
+        return None
+
+    def accepts_request(self, projection: QueueProjection) -> bool:
+        return True
+
+    def unidentified_start(self, input_id: str | None) -> bool:
+        return input_id is None
 
 
 @dataclass(frozen=True)
-class QueueScope(AttachmentScope):
+class NoQueueScope(QueueScope):
+    pass
+
+
+@dataclass(frozen=True)
+class LiveQueueScope(QueueScope, LiveAttachmentScope):
     session_id: str
     claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
     owner_pid: int
@@ -313,6 +429,30 @@ class QueueScope(AttachmentScope):
     @property
     def logical_key(self):
         return (self.session_id,)
+
+    def projection(self, queued, restored) -> QueueProjection:
+        items = tuple(row for item in queued for row in item.queue_items(self))
+        previous = tuple(row for item in restored for row in item.queue_items(self))
+        rows = items + previous
+        try:
+            sizes = [len(row.text.encode("utf-8")) for row in rows]
+        except UnicodeError:
+            return UnavailableQueueProjection()
+        if len(rows) > 32 or any(size > 4096 for size in sizes) or sum(sizes) > 65536:
+            return UnavailableQueueProjection()
+        return AvailableQueueProjection(items, previous)
+
+    def validate_scope(self, projection: QueueProjection) -> None:
+        pass
+
+    def start_revision(self, inputs: InputDrain, session_id: str) -> int:
+        return inputs.next_revision(session_id)
+
+    def accepts_request(self, projection: QueueProjection) -> bool:
+        return projection.status == 'available'
+
+    def unidentified_start(self, input_id: str | None) -> bool:
+        return False
 
 
 
@@ -333,27 +473,8 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
     @abstractmethod
     def feedback(self, supported: bool) -> str: ...
 
-    @classmethod
-    def capture(
-        cls, scope: QueueScope | None, queued: tuple[QueuedInput, ...],
-        restored: tuple[QueuedInput, ...],
-    ) -> QueueProjection:
-        """Project live inputs without repairing or withdrawing their authority."""
-        if scope is None:
-            return UnavailableQueueProjection()
-        items = tuple(row for item in queued for row in item.queue_items(scope))
-        previous = tuple(row for item in restored for row in item.queue_items(scope))
-        rows = items + previous
-        try:
-            sizes = [len(row.text.encode("utf-8")) for row in rows]
-        except UnicodeError:
-            return UnavailableQueueProjection()
-        if len(rows) > 32 or any(size > 4096 for size in sizes) or sum(sizes) > 65536:
-            return UnavailableQueueProjection()
-        return AvailableQueueProjection(items, previous)
-
-    def validate_scope(self, scope: QueueScope | None) -> None:
-        """Pending/unavailable wire observations may have no scope."""
+    def without_scope(self) -> None:
+        """Unavailable/pending observations do not certify a live scope."""
 
     def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
         """Pending/unavailable observations cannot certify original ingress."""
@@ -402,12 +523,8 @@ class AvailableQueueProjection(QueueProjection):
     def feedback(self, supported: bool) -> str:
         return ""
 
-    def validate_scope(self, scope: QueueScope | None) -> None:
-        # Null is authorized by the external observation envelope for unavailable
-        # queues. An available observation without its scope is malformed, not
-        # another waiting state or permission to infer a different input grant.
-        if scope is None:
-            raise ValueError('Available input queue has no original attachment scope.')
+    def without_scope(self) -> None:
+        raise ValueError('Available input queue has no original attachment scope.')
 
     def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
         return HumanInputOrigin.capture(comms, acquire_scope().claim_scope)
@@ -415,19 +532,15 @@ class AvailableQueueProjection(QueueProjection):
 
 @dataclass(frozen=True)
 class QueueChangedUpdate(AgentCommsUpdate):
-    scope: QueueScope | None
+    scope: QueueScope
     revision: int
     projection: QueueProjection
 
     def __post_init__(self):
-        self.projection.validate_scope(self.scope)
+        self.scope.validate_scope(self.projection)
 
     def for_session(self, session_id: str) -> QueueChangedUpdate:
-        return (
-            self
-            if self.scope is None
-            else replace(self, scope=replace(self.scope, session_id=session_id))
-        )
+        return replace(self, scope=self.scope.for_session(session_id))
 
     @property
     def status(self) -> str | None:
@@ -444,16 +557,12 @@ class QueueChangedUpdate(AgentCommsUpdate):
 class InputStartedUpdate(AgentCommsUpdate):
     input_id: str | None
     text: str | None
-    scope: QueueScope | None
+    scope: QueueScope
     revision: int | None
     native_id: str | None
 
     def for_session(self, session_id: str) -> InputStartedUpdate:
-        return (
-            self
-            if self.scope is None
-            else replace(self, scope=replace(self.scope, session_id=session_id))
-        )
+        return replace(self, scope=self.scope.for_session(session_id))
 
 
 @dataclass(frozen=True)
