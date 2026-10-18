@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms.agent_backend import AgentBackend, BackendDeclarationError, RuntimeLocation
 from agent_comms.field_codec import FieldCodec
+from agent_comms.turn_digests import LastTurns
 from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
 from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.threads import Thread
@@ -47,7 +48,7 @@ def test_location_methods_and_missing_history(tmp_path):
         assert reader.cut().offset == 0
         assert tuple(reader.reverse(0)) == ()
         assert reader.current_draft().external_row() is None
-    assert source.turns(5) == ()
+    assert source.turns(LastTurns(5)) == ()
     assert not Path(location.path).exists()
     files, = location.storage_files()
     assert files.schema_paths == (Path(location.path),)
@@ -102,7 +103,7 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_
                     assert forward == tuple(reversed(records))
                     with reader.projection(None, None) as project:
                         assert tuple(project(iter(forward), max_records=10, max_bytes=1024))
-                turns = source.turns(1)
+                turns = source.turns(LastTurns(1))
                 assert len(turns) == 1
                 assert [event.text for event in turns[0].events] == ['entry 258', 'entry 259']
             await asyncio.to_thread(read)

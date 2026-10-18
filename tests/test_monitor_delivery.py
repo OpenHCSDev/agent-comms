@@ -168,3 +168,25 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
     assert {m.reference for m in wired.bus.inbox('fixer')}=={first.reference,second.reference}
     assert wired.messaging.acknowledge('fixer',(first.reference,))==1
     assert [m.reference for m in wired.bus.inbox('fixer')]==[second.reference]
+
+
+@pytest.mark.asyncio
+async def test_watch_prints_its_monitor_probe_before_waiting(tmp_path, capsys):
+    import asyncio
+    with Binding.open(tmp_path/'state') as db:
+        binding=Binding(str(tmp_path),'viewer','session')
+        Binding.bind(db, binding)
+        bridge=ClaudeBridge(Options(Watch(),None,tmp_path/'state'),binding,db)
+        bridge.PROBE_NOTICE_SECONDS=0.05
+        waiting=asyncio.create_task(bridge.prepare_delivery())
+        await asyncio.sleep(0)
+        # The probe is flushed before the wait, with no later loop pass to flush it.
+        assert capsys.readouterr().out==bridge.probe.model_dump_json()+'\n'
+        assert not waiting.done()
+        async with asyncio.timeout(3):
+            while 'not observed' not in (notice:=capsys.readouterr().out):
+                await asyncio.sleep(0.01)
+        assert notice.startswith('Monitor probe not observed after 0.05s') and not waiting.done()
+        bridge.confirm_probe(bridge.probe)
+        async with asyncio.timeout(3):
+            await waiting
