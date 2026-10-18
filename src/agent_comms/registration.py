@@ -23,7 +23,7 @@ from .thread_status import (
     ConnectedThreadStatus, NoBridgeThreadStatus, RunningThreadStatus, ThreadStatus,
 )
 from .threads import Thread
-from .storage_rules import StorageDecision, StorageRule
+from .storage_rules import StorageRule
 from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
 
@@ -151,29 +151,12 @@ class Registration:
 
     def new_thread(self, name, tags, worktree, *args, kind: type[Thread] = Thread, **values) -> Thread:
         return kind(name, tags, worktree, *args,
-                      storage_roots=self.storage_rule.initial_roots(name, worktree), **values)
+                      storage_roots=self.storage_rule.initial_roots(name), **values)
 
     def decide_storage(self, name, effects):
         current = self.require(name)
-        roots = current.storage_roots
-        proposed = roots
         for effect in effects:
-            proposed = effect.check(self.storage_rule, proposed)
-        if proposed != roots:
-            with self.store.editing() as edit:
-                latest = edit.document.require(name)
-                if latest.incarnation != current.incarnation or latest.storage_roots != roots:
-                    self.storage_rule.deny('registered storage ownership changed during the check')
-                added = set(proposed.checkouts) - set(roots.checkouts)
-                for other in edit.document.threads.values():
-                    if other.name != name:
-                        for path in added:
-                            if any(path == existing or path.is_relative_to(existing) for existing in other.storage_roots.checkouts):
-                                self.storage_rule.deny(f'checkout {path} is registered to {other.name}')
-                edit.document.threads[name] = replace(latest, storage_roots=proposed)
-                edit.commit()
-        removed = tuple(path for effect in effects for path in effect.removed_checkouts())
-        return StorageDecision(current.incarnation, removed, self)
+            effect.check(self.storage_rule, current)
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         with self.store.editing() as edit:

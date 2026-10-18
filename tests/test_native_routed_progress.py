@@ -1,5 +1,6 @@
 """Real Pi RPC publishes committed channel progress before the final turn."""
 
+from agent_comms.messages import NoticeRole
 import asyncio
 import json
 import os
@@ -36,7 +37,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
                     index = len(requests)
                     if index == 2:
                         observed.extend(
-                            (message.body, message.notice)
+                            (message.body, isinstance(message.role, NoticeRole))
                             for message in list(comms.views.channel_history_page("#team").messages)
                         )
                     assert index <= 2
@@ -150,7 +151,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             assert len(requests) == 2
             assert observed == [("Working", True)]
             assert [
-                (message.body, message.notice) for message in list(comms.views.channel_history_page("#team").messages)
+                (message.body, isinstance(message.role, NoticeRole)) for message in list(comms.views.channel_history_page("#team").messages)
             ] == [("Working", True), ("Done", False)]
         finally:
             await agent.shutdown()

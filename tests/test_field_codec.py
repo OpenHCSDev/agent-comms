@@ -4,7 +4,11 @@ from typing import Annotated, ClassVar
 import pytest
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText, TimestampText, TextRepresentation, WireValue
+from agent_comms.field_codec import FieldCodec, InlineRecord, PathText, TimestampText, TextRepresentation, WireValue
+from agent_comms.messages import (
+    ConversationRole, InfoKind, MembershipChange, MembershipConversationRole,
+    MembershipNoticeRole, Message, NoticeRole,
+)
 
 
 def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
@@ -385,3 +389,63 @@ def test_uninhabited_family_schema_rejects_every_value_without_a_manual_roster()
     assert FieldCodec.value_schema(Empty) == {"not": {}}
     with pytest.raises(ValueError, match="Unknown"):
         FieldCodec.decode(Empty, {"kind": "unregistered"})
+
+
+@dataclass(frozen=True)
+class InlinePair(InlineRecord):
+    number: int
+    text: str
+
+    def to_wire(self):
+        return FieldCodec.encode_record(self)
+
+    @classmethod
+    def from_wire(cls, data):
+        return FieldCodec.decode_record(cls, data)
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.record_schema(cls)
+
+
+@dataclass(frozen=True)
+class InlineContainer:
+    pair: InlinePair
+
+
+def test_inline_representation_owns_keys_for_encode_decode_schema_and_projection():
+    value = InlineContainer(InlinePair(7, "seven"))
+    wire = {"number": 7, "text": "seven"}
+    assert FieldCodec.encode(value) == wire
+    assert FieldCodec.decode(InlineContainer, wire) == value
+    assert FieldCodec.project(value, "report") == wire
+    assert set(FieldCodec.record_schema(InlineContainer)["required"]) == wire.keys()
+    with pytest.raises(TypeError):
+        FieldCodec.decode(InlineContainer, {"text": "seven"})
+    with pytest.raises(ValueError):
+        FieldCodec.decode(InlineContainer, {**wire, "other": 1})
+
+    @dataclass(frozen=True)
+    class Collision:
+        pair: InlinePair
+        number: int
+
+    with pytest.raises(TypeError, match="Conflicting"):
+        FieldCodec.encode(Collision(value.pair, 8))
+
+
+@pytest.mark.parametrize("role,external", [
+    (ConversationRole(), {}),
+    (NoticeRole(), {"notice": True}),
+    (MembershipConversationRole(MembershipChange.JOINED), {"membership": "joined"}),
+    (MembershipNoticeRole(MembershipChange.LEFT), {"membership": "left", "notice": True}),
+])
+def test_message_role_keeps_the_exact_external_envelope(role, external):
+    message = Message("sender", "reader", "hello", InfoKind, timestamp=1.0, role=role)
+    wire = {
+        "seq": 0, "id": message.message_id, "from": "sender", "to": "reader",
+        "ts": 1.0, "type": "info", "text": "hello", "sender_role": "agent", **external,
+    }
+    assert message.to_wire() == wire
+    assert Message.from_wire(wire) == message
+    assert "role" not in FieldCodec.record_schema(Message)["properties"]

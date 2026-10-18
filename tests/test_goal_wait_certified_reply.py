@@ -1,5 +1,6 @@
 """Dependency replies retain original certified identities across registry changes."""
 
+from agent_comms.messages import NoticeRole
 import os
 from agent_comms.tool_caller import NoThreadCaller
 import asyncio
@@ -114,7 +115,7 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     )
     wait = comms.goals.goal_wait("owner")
     wrong = comms.messaging.send_message("peer", "other", "Different addressed recipient")
-    notice = comms.messaging.send_message("peer", "owner", "Diagnostic only", notice=True)
+    notice = comms.messaging.send_message("peer", "owner", "Diagnostic only", role=NoticeRole())
     reply = comms.messaging.send_message("peer", "owner", "Original addressed reply")
     with comms.bus.log.certified_read() as source:
         assert not wait.matches(source.delivery(wrong.seq), owner.incarnation.require_recorded())

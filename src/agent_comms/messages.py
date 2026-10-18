@@ -16,10 +16,10 @@ from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, projected
+from .field_codec import FieldCodec, InlineRecord, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
-from .response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
+from .response_policy import InformationalPolicy, ResponseEligibility
 from .thread_identity import ThreadRole
 from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 
@@ -118,6 +118,166 @@ class MembershipChange(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class MessageRoleWire:
+    """The unchanged external fields, decoded once into a message role."""
+
+    change: MembershipChange | None = field(default=None, metadata={"wire_name": "membership", "wire_omit_default": True})
+    notice: bool = field(default=False, metadata={"wire_omit_default": True})
+
+
+class MessageRole(InlineRecord):
+    @classmethod
+    def schema(cls):
+        return FieldCodec.record_schema(MessageRoleWire)
+
+    @classmethod
+    def from_wire(cls, data):
+        wire = FieldCodec.decode(MessageRoleWire, data)
+        ordinary, membership = (
+            (NoticeRole, MembershipNoticeRole) if wire.notice
+            else (ConversationRole, MembershipConversationRole)
+        )
+        return ordinary() if wire.change is None else membership(wire.change)
+
+    def to_wire(self):
+        return FieldCodec.encode_record(self.wire_fields())
+
+    def notification_references(self, message):
+        return ()
+
+    def response_wake_mode(self):
+        from .wake_policy import BoundedTriageWake
+        return BoundedTriageWake()
+
+    def as_notice(self):
+        return NoticeRole()
+
+    def require_recipients(self, target, audience):
+        if len(audience.recipients) != len(target.direct_names):
+            raise ValueError("a direct message must have exactly one frozen eligible recipient.")
+        if tuple(member.canonical_thread for member in audience.recipients) != target.direct_names:
+            raise ValueError("direct frozen recipient must match the exact stored target.")
+
+
+class InformationalMessage:
+    def response_policy(self, message):
+        return InformationalPolicy.instance()
+
+    def counts_as_conversation(self):
+        return False
+
+    def wake_mode(self, target, recipient, mentions, control):
+        from .wake_policy import PassiveWake
+        return PassiveWake()
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationRole(MessageRole):
+    def wire_fields(self):
+        return MessageRoleWire()
+
+    def export_attributes(self):
+        return ()
+
+    def counts_as_conversation(self):
+        return True
+
+    def as_historical(self):
+        return HistoricalConversationRole()
+
+    def response_policy(self, message):
+        return (CommandTarget.named(message.target).response_policy(message)
+                if message.type.conversation_message else InformationalPolicy.instance())
+
+    def notification_references(self, message):
+        return (message.reference,) if message.type.conversation_message else ()
+
+    def wake_mode(self, target, recipient, mentions, control):
+        if control.passive:
+            from .wake_policy import PassiveWake
+            return PassiveWake()
+        return target.wake_policy(recipient, mentions)
+
+
+@dataclass(frozen=True, slots=True)
+class NoticeRole(InformationalMessage, MessageRole):
+    def wire_fields(self):
+        return MessageRoleWire(notice=True)
+
+    def export_attributes(self):
+        return ("notice=true",)
+
+    def as_historical(self):
+        return HistoricalNoticeRole()
+
+    def response_wake_mode(self):
+        from .wake_policy import PassiveWake
+        return PassiveWake()
+
+    def require_recipients(self, target, audience):
+        if audience.recipients:
+            super(NoticeRole, self).require_recipients(target, audience)
+
+
+@dataclass(frozen=True)
+class Membership(InformationalMessage):
+    change: MembershipChange
+
+    def wire_fields(self):
+        return replace(super().wire_fields(), change=self.change)
+
+    def export_attributes(self):
+        return (*super().export_attributes(), f"membership={self.change.value}")
+
+    def as_notice(self):
+        return MembershipNoticeRole(self.change)
+
+
+@dataclass(frozen=True, slots=True)
+class MembershipConversationRole(Membership, ConversationRole):
+    def as_historical(self):
+        return HistoricalMembershipConversationRole(self.change)
+
+
+@dataclass(frozen=True, slots=True)
+class MembershipNoticeRole(Membership, NoticeRole):
+    def as_historical(self):
+        return HistoricalMembershipNoticeRole(self.change)
+
+
+class HistoricalRole:
+    """Historical rows cannot create current reply or notification work."""
+
+    def notification_references(self, message):
+        return ()
+
+    def response_policy(self, message):
+        return InformationalPolicy.instance()
+
+    def as_historical(self):
+        return self
+
+    def as_notice(self):
+        return super().as_notice().as_historical()
+
+
+class HistoricalConversationRole(HistoricalRole, ConversationRole):
+    pass
+
+
+class HistoricalNoticeRole(HistoricalRole, NoticeRole):
+    pass
+
+
+class HistoricalMembershipConversationRole(HistoricalRole, MembershipConversationRole):
+    pass
+
+
+class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
 class Message:
     """Declares one inter-thread message.
 
@@ -136,10 +296,7 @@ class Message:
     sender_role: ThreadRole = field(
         default=ThreadRole.AGENT, metadata={"wire_order": 7, "publication_exclude": True}
     )
-    membership: MembershipChange | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_order": 8}
-    )
-    notice: bool = field(default=False, metadata={"wire_omit_default": True, "wire_order": 9})
+    role: MessageRole = field(default_factory=ConversationRole, metadata={"wire_order": 8})
     mentions: tuple[ThreadMention, ...] = field(
         default=(),
         metadata={"wire_omit_default": True, "wire_order": 10, "publication_exclude": True},
@@ -179,10 +336,6 @@ class Message:
     @property
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
-
-    def notification_references(self) -> tuple[MessageReference, ...]:
-        """Only an authorized delivery has recipient-handling outcomes to project."""
-        return (self.reference,) if self.type.conversation_message and not self.notice else ()
 
     def require_decision(self) -> Decision:
         return self.task.require_decision()
@@ -308,13 +461,6 @@ class Message:
                 "Unattested public initial exceeds the retained history boundary."
             )
 
-    @property
-    def response_policy(self) -> ResponsePolicy:
-        """Typed response semantics without changing the stored target."""
-        if self.type.conversation_message and not self.notice and self.membership is None:
-            return CommandTarget.named(self.target).response_policy(self)
-        return InformationalPolicy.instance()
-
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
     ) -> ResponseEligibility:
@@ -324,17 +470,8 @@ class Message:
         The audience remains authoritative for membership, so a valid mention
         outside the channel cannot acquire delivery by being named.
         """
-        policy = self.response_policy
+        policy = self.role.response_policy(self)
         return ResponseEligibility(policy, policy.recipients(self, audience, aliases=aliases))
-
-    @property
-    def starts_turn(self) -> bool:
-        """Whether every delivered recipient may start a turn."""
-        return self.response_policy.starts_turn
-
-    def starts_turn_for(self, name: str, *, aliases: Mapping[str, str] | None = None) -> bool:
-        """Whether this message enters one canonical recipient's model context."""
-        return self.response_policy.starts_turn_for(self, name, aliases)
 
     @property
     def exact_reply_target(self) -> str:

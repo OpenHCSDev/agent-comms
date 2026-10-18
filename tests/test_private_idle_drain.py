@@ -1,5 +1,6 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
+from agent_comms.messages import NoticeRole
 import asyncio
 import os
 import threading
@@ -159,7 +160,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             await progress.chunk(events.Chunk("committed progress"))
             await progress.committed_progress(events.CommittedProgress("committed progress"))
             assert progress.reply_parts == []
-            assert [(row.body, row.notice) for row in list(comms.bus.full_history_page().messages)] == [
+            assert [(row.body, isinstance(row.role, NoticeRole)) for row in list(comms.bus.full_history_page().messages)] == [
                 ("committed progress", True),
             ]
             progress.result = events.Done("refused", False)
@@ -187,7 +188,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             with pytest.raises(asyncio.CancelledError):
                 await task
             rows = list(comms.bus.full_history_page().messages)
-            assert len(rows) == 2 and rows[-1].notice
+            assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
             assert "[Open diagnostic]" in rows[-1].body
             assert comms.registry.require("beta").turn_lease == execution.turn_lease
     assert comms.registry.require("beta").active_turn is None
