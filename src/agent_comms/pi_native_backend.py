@@ -11,6 +11,7 @@ implementation modules (``backend``, ``pi_commands``, ``pi_events``,
 
 from __future__ import annotations
 
+from .field_codec import FieldCodec
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -219,7 +220,7 @@ class PiNativeBackend(
         from .pi_vocabulary import ThinkingLevel
 
         return self.agent_args.with_model(thread.model).with_thinking(
-            ThinkingLevel.optional_name(thread.thinking_level)
+            thread.thinking_level
         ).argv
 
     # -- lifecycle --------------------------------------------------------
@@ -272,6 +273,7 @@ class PiNativeBackend(
             native_start=delivery.input_started,
             request_observer=delivery.request_progress,
             persistent_session=self,
+            root=self.comms.root,
             ui_request=delivery.ui_request,
         ):
             yield event
@@ -354,9 +356,9 @@ class PiNativeBackend(
         for command in commands:
             state = await command.configure(self.agent_bin, arguments, worktree=Path(thread.worktree))
             arguments = self.agent_args.with_model(state.model.display_name).with_thinking(
-                ThinkingLevel.optional_name(state.thinking_level)
+                state.thinking_level
             ).argv
-        selected, level = state.model.display_name, ThinkingLevel.optional_name(state.thinking_level)
+        selected, level = state.model.display_name, FieldCodec.encode(state.thinking_level)
         if selected is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")
         return selected, level

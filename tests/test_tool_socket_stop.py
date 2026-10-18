@@ -10,7 +10,7 @@ from types import MethodType, SimpleNamespace
 import pytest
 
 from agent_comms.selected_tool_broker import SelectedToolMode
-from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.tracked_turn import NoObserver, TrackedTurnSession
 
 
 class _Measurements:
@@ -33,7 +33,7 @@ async def test_cancelled_turn_unlinks_tool_socket_before_native_retirement(tmp_p
     turn.selected_tool_mode = SelectedToolMode(lambda _request: None)
     turn.launch = SimpleNamespace(session=SimpleNamespace(directory=sessions), env={})
     turn.watchdog = SimpleNamespace(reading=lambda: None)
-    turn.observe_event = None
+    turn.observe_event = NoObserver()
     turn.finished = False
 
     native = SimpleNamespace(

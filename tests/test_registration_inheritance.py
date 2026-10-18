@@ -1,5 +1,6 @@
 """Current registration declarations, incarnation and saved relationship ownership."""
 
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from dataclasses import dataclass, field, replace
 
 from agent_comms.comms import wire
@@ -39,7 +40,7 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
         '/old',
         session_file=str(tmp_path / "session.jsonl"),
         model="provider/model",
-        thinking_level="high",
+        thinking_level=HighThinkingLevel,
         auto_title_pending=True,
         title="retained",
     )

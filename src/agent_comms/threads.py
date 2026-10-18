@@ -12,11 +12,13 @@ from .child_process import ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .thread_execution import ThreadExecution, NativeThreadExecution
-from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
+from .pi_vocabulary import (
+    SERVICE_TIER_ENVIRONMENT, NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField,
+)
 from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
-from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
+from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious, InheritThinkingLevel
 from .storage_rules import StoragePath, StorageRoots, StorageRule
 from .thread_identity import (
     ThreadProvenance,
@@ -49,8 +51,8 @@ class Thread(ThreadProvenance):
         default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
     )
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
-    thinking_level: type[ThinkingLevel] | None = field(
-        default=None, metadata={"registration_inheritance": InheritMissing}
+    thinking_level: ThinkingLevelField = field(
+        default=NoThinkingOverride, metadata={"registration_inheritance": InheritThinkingLevel}
     )
     service_tier: ServiceTier = field(
         default=ServiceTier.PRIORITY, kw_only=True,
@@ -183,8 +185,6 @@ class Thread(ThreadProvenance):
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
         if self.model is not None and not self.model.strip():
             raise ValueError("Thread model cannot be empty.")
-        if self.thinking_level is not None:
-            object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
 
     def require_original_model_configuration(self, original: Thread) -> None:
         changed = any((
@@ -198,13 +198,13 @@ class Thread(ThreadProvenance):
             raise RelationViolationError("Thread configuration changed before publication")
 
     def with_model_configuration(
-        self, *, model: str | None = None, thinking_level: str | None = None,
+        self, *, model: str | None = None, thinking_level: type[ThinkingLevel] = NoThinkingOverride,
         service_tier: ServiceTier | None = None,
     ) -> Thread:
         return replace(
             self,
             model=self.model if model is None else model.strip(),
-            thinking_level=self.thinking_level if thinking_level is None else thinking_level,
+            thinking_level=thinking_level.applied(self.thinking_level),
             service_tier=self.service_tier if service_tier is None else service_tier,
         )
 
@@ -213,15 +213,13 @@ class Thread(ThreadProvenance):
         return self.model is None
 
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: str | None,
+        self, *, model: str | None, thinking_level: type[ThinkingLevel],
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
             self,
             model=model if self.needs_model_observation() else self.model,
-            thinking_level=(
-                self.thinking_level if self.thinking_level is not None else thinking_level
-            ),
+            thinking_level=self.thinking_level.observed(thinking_level),
         )
 
     @property

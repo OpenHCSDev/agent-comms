@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from .agent_backend import TurnInbox
 from .child_process import ProcessIdentity
-from .request_progress import RequestProgress
+from .request_progress import NoRequestObserver, RequestObserver, RequestProgress
 
 from . import agent_events as events
 from . import pi_commands as commands
@@ -52,7 +52,7 @@ from .turn_output import TurnOutput
 from .turn_phase import ShutdownPhase, TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
-from .turn_watchdog import ProgressWatchdog, TurnWaitExpired
+from .turn_watchdog import ModelWait, ProgressWatchdog, TurnWait, TurnWaitExpired
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
@@ -72,8 +72,7 @@ def compaction_summary(value: Any) -> str:
 # transport backstop must remain strictly longer so Pi can emit its authoritative
 # timeout, auto-retry, and transport evidence before agent-comms intervenes.
 _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS = 300.0
-MODEL_WAIT_TIMEOUT_SECONDS = 360.0
-assert MODEL_WAIT_TIMEOUT_SECONDS > _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
+assert ModelWait().budget > _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
 RPC_ABORT_GRACE_SECONDS = 2.0
 CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
 PROMPT_START_TIMEOUT_SECONDS = 180.0
@@ -98,16 +97,17 @@ async def stream_agent_events(
     steering_queue: TurnInbox | None = None,
     finish_event: asyncio.Event | None = None,
     images: Sequence[ImageInput] = (),
-    model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
+    model_wait: TurnWait = ModelWait(),
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
     send_boundary: SendBoundary | None = None,
     interrupt_boundary: SendBoundary | None = None,
     native_start: Callable[[str | None, str, str], bool] | None = None,
     *,
     persistent_session: PersistentPiSession,
+    root: Path,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
-    request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
+    request_observer: RequestObserver = NoRequestObserver(),
 ) -> AsyncIterator[events.AgentEvent]:
     """Run the backend; native completion ends with a ``done`` event.
 
@@ -125,6 +125,7 @@ async def stream_agent_events(
                     persistent_session.child_state.managed_launch,
                     agent_bin,
                     tuple(agent_args),
+                    root=root,
                     worktree=Path(cwd),
                     environment=env_extra,
                     session_file=session_file,
@@ -144,7 +145,7 @@ async def stream_agent_events(
                         finish_event=finish_event,
                         images=images,
                         context_contributions=context_contributions,
-                        model_wait_timeout=model_wait_timeout,
+                        model_wait=model_wait,
                         rpc_abort_grace=rpc_abort_grace,
                         send_boundary=send_boundary,
                         native_start=native_start,
@@ -152,6 +153,7 @@ async def stream_agent_events(
                         persistent_session=persistent_session,
                         ui_request=ui_request,
                         request_observer=request_observer,
+                        startup=NativeStartup.for_launch(launch),
                     ).run()
                 ) as stream:
                     async for event in stream:
@@ -174,7 +176,7 @@ class TurnSession:
         steering_queue: TurnInbox | None = None,
         finish_event: asyncio.Event | None = None,
         images: Sequence[ImageInput] = (),
-        model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
+        model_wait: TurnWait = ModelWait(),
         rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
         send_boundary: SendBoundary | None = None,
         interrupt_boundary: SendBoundary | None = None,
@@ -182,9 +184,9 @@ class TurnSession:
         persistent_session: PersistentPiSession | None = None,
         native_session: PersistentPiSession | None = None,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
-        startup: NativeStartup | None = None,
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
-        request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
+        request_observer: RequestObserver = NoRequestObserver(),
+        *, startup: NativeStartup,
     ):
         self.launch = launch
         self.task = task
@@ -193,7 +195,7 @@ class TurnSession:
         self.context_contributions = context_contributions
         self.request_observer = request_observer
         self.watchdog = ProgressWatchdog(
-            model_wait_timeout, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
+            model_wait, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
         )
         self.rpc_abort_grace = rpc_abort_grace
         self.send_boundary = send_boundary
@@ -207,7 +209,7 @@ class TurnSession:
             raise ValueError("A Pi turn runs on its thread's Pi session child")
         self.native_session: PersistentPiSession = session
         self.extension_ui = ExtensionUiSession(ui_request)
-        self.startup = startup if startup is not None else NativeStartup.for_launch(launch)
+        self.startup = startup
         self.inputs = InputForwarding(steering_queue if steering_queue is not None else TurnInbox())
         self.prompt_state = self.prompt_type()
         self.stats = StatsRequest()
@@ -254,8 +256,7 @@ class TurnSession:
         observer binds the original public turn lease. No phase owns a copy of
         the transport clock or request lifecycle.
         """
-        if self.request_observer is not None:
-            self.request_observer(progress, self.native.proc.identity)
+        self.request_observer(progress, self.native.proc.identity)
 
     async def apply_native_event(self, event):
         async for update in event.apply(self):

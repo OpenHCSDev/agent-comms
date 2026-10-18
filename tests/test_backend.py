@@ -13,6 +13,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
+from agent_comms.turn_watchdog import ModelWait
 from agent_comms.acp_failure import ProviderRetryResult
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
 from agent_comms.pi_native_backend import PersistentPiSession
@@ -223,7 +224,7 @@ def _assert_full_rpc_stream(events: list[ae.AgentEvent]) -> None:
 
 class TestRpcParsing:
     def test_default_watchdog_yields_to_pi_provider_idle_authority(self):
-        assert backend.MODEL_WAIT_TIMEOUT_SECONDS > backend._PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
+        assert ModelWait().budget > backend._PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
 
     @pytest.mark.parametrize(
         ("assistant_stops", "successful"),
@@ -1398,7 +1399,7 @@ for line in sys.stdin:
         events = [
             event
             async for event in one_turn_events(
-                stub, [], "task", str(tmp_path), model_wait_timeout=0.05,
+                stub, [], "task", str(tmp_path), model_wait=ModelWait(0.05),
             )
         ]
         assert not [event for event in events if isinstance(event, ae.TurnState)]
@@ -1432,7 +1433,7 @@ time.sleep(60)
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.15,
+                model_wait=ModelWait(0.15),
                 rpc_abort_grace=0.1,
             )
         ]
@@ -1483,7 +1484,7 @@ time.sleep(60)
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.15,
+                model_wait=ModelWait(0.15),
                 rpc_abort_grace=0.03,
             )
         ]
@@ -1521,7 +1522,7 @@ time.sleep(60)
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.15,
+                model_wait=ModelWait(0.15),
                 rpc_abort_grace=0.1,
             )
         ]
@@ -1637,7 +1638,7 @@ answer_stats({{"contextUsage": {{}}}})
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.15,
+                model_wait=ModelWait(0.15),
                 rpc_abort_grace=0.1,
             )
         ]
@@ -1681,7 +1682,7 @@ answer_stats({{"contextUsage": {{}}}})
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.5,
+                model_wait=ModelWait(0.5),
             )
         ]
         assert [type(e) for e in events if isinstance(e, ae.CompactionEvent)] == [
@@ -1715,7 +1716,7 @@ time.sleep(60)
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.15,
+                model_wait=ModelWait(0.15),
                 rpc_abort_grace=0.1,
             )
         ]
@@ -1770,7 +1771,7 @@ time.sleep(60)
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.5,
+                model_wait=ModelWait(0.5),
                 native_start=native_start,
             )
         ]
@@ -1838,7 +1839,7 @@ time.sleep(60)
                 "task",
                 str(tmp_path),
                 steering_queue=queue,
-                model_wait_timeout=0.15,
+                model_wait=ModelWait(0.15),
                 rpc_abort_grace=0.2,
             )
         ]
@@ -1888,7 +1889,7 @@ answer_stats({"contextUsage": {}})
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.15,
+                model_wait=ModelWait(0.15),
             )
         ]
 
@@ -1924,7 +1925,7 @@ for line in sys.stdin:
                 [],
                 "task",
                 str(tmp_path),
-                model_wait_timeout=0.15,
+                model_wait=ModelWait(0.15),
                 rpc_abort_grace=0.1,
             )
         ]
@@ -2565,7 +2566,7 @@ for line in sys.stdin:
                     [],
                     "first",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2577,7 +2578,7 @@ for line in sys.stdin:
                     [],
                     "second",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2598,7 +2599,7 @@ for line in sys.stdin:
                     [],
                     "third",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2614,7 +2615,7 @@ for line in sys.stdin:
                     [],
                     "proof changed",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2631,7 +2632,7 @@ for line in sys.stdin:
                         [],
                         "cancel",
                         str(tmp_path),
-                        session_file=str(session_file),
+                        root=Path(str(tmp_path)), session_file=str(session_file),
                         persistent_session=persistent,
                     )
                 ]
@@ -2651,7 +2652,7 @@ for line in sys.stdin:
                     [],
                     "after",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2670,7 +2671,7 @@ for line in sys.stdin:
                     [],
                     "denied",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                     send_boundary=revoked_goal,
                 )
@@ -2684,7 +2685,7 @@ for line in sys.stdin:
                     [],
                     "revive",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2698,7 +2699,7 @@ for line in sys.stdin:
                     [],
                     "image turn",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                     images=(image,),
                 )
@@ -2712,7 +2713,7 @@ for line in sys.stdin:
                     [],
                     "fail after image",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2726,7 +2727,7 @@ for line in sys.stdin:
                     [],
                     "revive again",
                     str(tmp_path),
-                    session_file=str(session_file),
+                    root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                 )
             ]
@@ -2741,7 +2742,7 @@ for line in sys.stdin:
                         [],
                         "delayed stats",
                         str(tmp_path),
-                        session_file=str(session_file),
+                        root=Path(str(tmp_path)), session_file=str(session_file),
                         persistent_session=persistent,
                     )
                 ]

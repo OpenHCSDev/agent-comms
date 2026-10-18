@@ -348,7 +348,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 native_args,
                 "ORIGINAL_INPUT",
                 str(root),
-                env_extra={
+                root=Path(str(root)), env_extra={
                     "PI_CODING_AGENT_DIR": str(agent),
                     "OPENROUTER_API_KEY": "local-only",
                     "PI_OFFLINE": "1",

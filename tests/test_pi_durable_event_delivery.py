@@ -3,6 +3,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from agent_comms.pi_vocabulary import NoThinkingOverride
 
 from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
 from agent_comms.pi_payloads import PiUsage, TextDelta, ThinkingDelta
@@ -17,7 +18,7 @@ from agent_comms.pi_durable_backend import (
 
 async def open_host(tmp_path):
     backend = PiDurableBackend()
-    thread = SimpleNamespace(worktree=str(tmp_path), model=None, thinking_level=None,
+    thread = SimpleNamespace(worktree=str(tmp_path), model=None, thinking_level=NoThinkingOverride,
                              runtime=DurableDatabase(str(tmp_path / 'durable.sqlite')))
     return await backend.open(thread)
 

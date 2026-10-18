@@ -19,7 +19,7 @@ def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, m
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/reasoning,fixture/plain")
     else:
         monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
-    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/reasoning', thinking_level='high'))
+    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/reasoning', thinking_level=HighThinkingLevel))
     comms.registry.unregister("worker")
     original = comms.registry.require("worker")
     queried = []
@@ -47,7 +47,7 @@ def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, m
 
 def test_configure_refuses_model_outside_catalog_without_writing(comms, tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/reasoning")
-    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/reasoning', thinking_level='high'))
+    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/reasoning', thinking_level=HighThinkingLevel))
     comms.registry.unregister("worker")
     original = comms.registry.require("worker")
 
@@ -103,7 +103,7 @@ async def test_session_description_and_change_share_refusal(tmp_path, monkeypatc
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/plain")
     else:
         monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
-    thread = thread_registration.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/plain', thinking_level='high')
+    thread = thread_registration.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path), model='fixture/plain', thinking_level=HighThinkingLevel)
     option = ThinkingLevelConfigOption("unused", NativeArguments.parse([]), RestartEnvironment.inherit(os.environ))
 
     async def discover(self, binary, arguments):

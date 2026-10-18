@@ -12,6 +12,7 @@ import fcntl
 import json
 import os
 import stat
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
@@ -183,7 +184,18 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
             raise ValueError('Only an acquired draining phase can be cleared')
 
 
-class MaintenanceBarrier:
+class MaintenanceIngress(ABC):
+    @abstractmethod
+    def ingress_async(self): ...
+
+
+class UncoordinatedIngress(MaintenanceIngress):
+    @asynccontextmanager
+    async def ingress_async(self):
+        yield MaintenanceStatus()
+
+
+class MaintenanceBarrier(MaintenanceIngress):
     """One root's phase owner; writer and readers use the same durable witness.
 
     A phase transition acquires the wire lock, then the registry lock.
