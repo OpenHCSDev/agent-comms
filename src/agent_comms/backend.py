@@ -445,6 +445,9 @@ class TurnSession:
                                 await error.refuse(self)
                                 break
                             if self.native.attestation.observed:
+                                await Coordination.run_worker(partial(
+                                    self.startup.record_ready, self.native.proc.identity, self.watchdog,
+                                ))
                                 self.inputs.queue.begin(self.prompt_state)
                                 self.ensure_input_forwarding()
                         async for event in self.payload.consume(self):

@@ -60,7 +60,8 @@ from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, To
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing, ToolCatalogResult
+from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
+from .cli_result import ToolCatalogResult
 from .tool_result import ToolResult
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,

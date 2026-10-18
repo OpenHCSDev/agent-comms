@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .diagnostics import PublicationMeasurements
+from .field_codec import FieldCodec
+from .store_files import _atomic_write_text
 
 if TYPE_CHECKING:
     from .native_pi import NativePiRpcLaunch
+    from .child_process import ProcessIdentity
+    from .turn_watchdog import ProgressWatchdog
 
 
 @dataclass(frozen=True)
@@ -47,6 +52,15 @@ class NativeStartup:
 
     root: Path
     measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements, kw_only=True)
+
+    def record_ready(self, process: ProcessIdentity, watchdog: ProgressWatchdog) -> None:
+        """Record the actual get_state answer, not a readiness prediction."""
+        elapsed_ms = round((watchdog.clock() - watchdog.launch_started_at) * 1000)
+        _atomic_write_text(self.root / "diagnostics" / f"native-startup-{process.pid}.json", json.dumps({
+            "native_process": FieldCodec.encode(process),
+            "spawn_to_get_state_ms": elapsed_ms,
+            "spawn_ms": watchdog.spawn_ms,
+        }))
 
     @classmethod
     def for_launch(

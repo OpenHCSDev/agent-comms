@@ -13,6 +13,7 @@ from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .cli_result import ThreadToolCatalogResult
 from .launch_runtime import RestartEnvironment
 from .native_tools import NativeRequestTools
 from .store_files import _atomic_write_text
@@ -168,8 +169,6 @@ class Thread(ThreadProvenance):
 
     def native_launch_arguments(self, arguments: tuple[str, ...]) -> tuple[str, ...]:
         """Write this native launch's catalog in its config directory, not a CLI cache."""
-        from .tool_caller import ThreadToolCatalogResult
-
         directory = RestartEnvironment.inherit(os.environ).native_config
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = directory / f"comms-catalog-{self.incarnation.require_recorded().lookup}.json"
