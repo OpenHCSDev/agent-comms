@@ -102,6 +102,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def dated(self) -> tuple[float, ...]:
         return () if self.timestamp is None else (self.timestamp,)
 
+    def before(self, at: float) -> bool:
+        """Recorded before ``at``; an undated event is never before anything."""
+        return any(time < at for time in self.dated)
+
 
 @dataclass(frozen=True)
 class TranscriptCoverage:
@@ -303,17 +307,13 @@ class ToolStartTranscript(ToolTranscript):
         return tool_declaration.ToolDeclaration.caption(self.tool_name, self.tool)
 
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
-        """A call dated before ``since`` is not work since then; an undated one is its turn's."""
-        if self.timestamp is None or self.timestamp >= since:
+        """A call recorded before ``since`` is not work since then; an undated one is its turn's."""
+        if not self.before(since):
             calls[self.tool_call_id] = OrderCall(
-                self.tool_call_id, self.tool_name, self.digest, RunningCallState)
-
-    @property
-    def digest(self) -> str:
-        """The call in one line: its record's digest, or its raw arguments with no record."""
-        if self.tool is not None:
-            return self.tool.digest()
-        return f"{self.tool_name} {tool_declaration.one_line(json.dumps(self.raw_input), 260)}"
+                self.tool_call_id, self.tool_name,
+                tool_declaration.ToolDeclaration.call_digest(
+                    self.tool_name, self.tool, self.raw_input),
+                RunningCallState)
 
     def imported(self) -> ImportedMessage:
         return ImportedInput(f"[Historical tool call: {self.tool_name}]\n"
@@ -384,6 +384,6 @@ class TurnDigest:
     events: tuple[TranscriptEvent, ...]
 
     def before(self, at: float) -> bool:
-        """Every dated event of this turn precedes ``at``; an undated turn is never before."""
-        dated = [time for event in self.events for time in event.dated]
-        return bool(dated) and max(dated) < at
+        """The turn's last dated event precedes ``at``; an undated turn is never before."""
+        dated = [event for event in self.events if event.dated]
+        return bool(dated) and dated[-1].before(at)

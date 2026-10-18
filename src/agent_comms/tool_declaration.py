@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from collections.abc import Mapping
 from typing import ClassVar, Self
@@ -66,6 +67,11 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         """A call reads as its label, then what its record names; with no record, its label."""
         reads = one_line(text := tool.reads(), len(text)) if tool else ''
         return cls.for_name(name).label + (' ' + reads if reads else '')
+
+    @classmethod
+    def call_digest(cls, name: str, tool: ToolDeclaration | None, arguments: object) -> str:
+        """A call in one line: its record's digest; with no record, its name and raw arguments."""
+        return tool.digest() if tool else f'{name} {one_line(json.dumps(arguments), 260)}'
 
     @classmethod
     def result_diff(cls, result, ok):
