@@ -518,8 +518,6 @@ class CertifiedSourceRead:
 
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
-        if type(intent) is not PublicationIntents:
-            raise TypeError("Keyed response requires a validated PublicationIntents.")
         self.require_current()
         if ResponseKeys.one(self.connection, key=intent.publication_key) is None:
             return None
@@ -1188,10 +1186,8 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
     sidecar; after publication an uncertain marker write retains the sidecar and
     existing read barrier denies access rather than trusting an unsealed index.
     """
-    from .wire_log import WireLog
-
-    if type(bus) is not WireLog or bus.path.name != "bus.jsonl":
-        raise TypeError("Canonical private WireLog required")
+    if bus.path.name != "bus.jsonl":
+        raise ValueError("Canonical private WireLog required")
     with nullcontext() if _bus_locked else bus.locked():
         marker = bus.private_marker_unlocked()
         if not marker.claims:

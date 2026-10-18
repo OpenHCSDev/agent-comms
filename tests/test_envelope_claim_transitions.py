@@ -163,8 +163,6 @@ def test_owned_application_is_deterministic_and_requires_order(tmp_path):
     for stale in (transition(8, releases=(ClaimRelease(b, G2),)), transition(1, claims=(a,), generation=G1)):
         with pytest.raises(ClaimTransitionError, match="increase"):
             stale.apply(released)
-    with pytest.raises(ClaimTransitionError, match="typed claim projections"):
-        transition(9, claims=(a,), generation=G1).apply("not a projection")
 
 
 def test_only_exact_typed_nonempty_sequenced_envelopes(tmp_path):

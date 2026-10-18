@@ -35,7 +35,7 @@ class CandidateMaintenanceFailed(RuntimeError):  # noqa: N818 - named worker fai
 
 def schedule_candidate_catchup(log: WireLog, through_bytes: int) -> None:
     """Prepare writer indexes, then signal their existing maintenance worker."""
-    if type(log) is not WireLog or type(through_bytes) is not int or through_bytes <= 0:
+    if through_bytes <= 0:
         raise ValueError("candidate notification needs an actual committed byte position")
     BusRouteCounts(log.path).prepare()
     root = log.path.parent

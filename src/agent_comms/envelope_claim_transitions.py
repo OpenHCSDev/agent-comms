@@ -285,8 +285,6 @@ class ClaimTransition:
         Unrelated resources do not affect legality. The checkpoint supplies only
         the touched rows and the original claim high-water, not a replayed bus.
         """
-        if type(previous) is not ClaimProjection:
-            raise ClaimTransitionError("Only typed claim projections are accepted.")
         if self.seq <= previous.last_seq:
             raise ClaimTransitionError("Claim sequence must increase.")
         next_state = dict(previous)
