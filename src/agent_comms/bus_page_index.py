@@ -108,14 +108,20 @@ class BusPageIndex:
             return db
 
     @staticmethod
-    def _schema(db):
+    def _schema(db, *, writer: bool = False):
         actual = SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
         ))
         expected = {name: sql for table in TypedTable.members_with(PageIndexTable)
                     for name, sql in table.schema_objects().items()}
         if actual and SQLiteSchemaObject.differences(actual, expected):
-            raise StaleBusPageIndexError("Bus page index requires the quiet runtime reset")
+            if not writer:
+                raise StaleBusPageIndexError("Bus page index schema is not its declaration")
+            # Offsets derive from the bus: the writer discards a schema other
+            # than the declaration and rebuilds it under its lock.
+            for table in TypedTable.members_with(PageIndexTable):
+                table.drop(db)
+            actual = ()
         return actual, expected
 
     def __enter__(self) -> BusPageIndex:
@@ -227,7 +233,7 @@ class BusPageIndex:
         with closing(CoordinationStore.writer(self.path)) as db, db:
             db.execute("PRAGMA synchronous=FULL")
             db.execute("BEGIN IMMEDIATE")
-            actual, expected = self._schema(db)
+            actual, expected = self._schema(db, writer=True)
             if not actual:
                 for statement in expected.values():
                     db.execute(statement)
