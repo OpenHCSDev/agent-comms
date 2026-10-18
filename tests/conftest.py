@@ -56,6 +56,27 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
             origin=AgentOrigin(),
         )
 
+@pytest.fixture(scope="session")
+def native_runtime_package():
+    """Borrow this interpreter's installed artifact; source and runtime pins must agree."""
+    from importlib.metadata import distribution
+    from agent_comms import native_package
+
+    manifest = Path(distribution("agent-comms").locate_file("agent_comms/_native/pi-native.sha256"))
+    assert manifest.read_bytes() == native_package.MANIFEST.read_bytes()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(native_package, "MANIFEST", manifest)
+        return native_package.VerifiedNativePackage.acquire(native_package.pinned_native_package())
+
+
+@pytest.fixture(autouse=True)
+def _native_runtime_resources_are_explicit(monkeypatch, native_runtime_package):
+    """Source tests use the same reviewed native resource as their installed interpreter."""
+    from agent_comms import native_package
+
+    monkeypatch.setattr(native_package, "MANIFEST", native_runtime_package.path.parents[3] / "pi-native.sha256")
+
+
 @pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
     """A developer's live managed process is not a test wire or native child."""
@@ -293,7 +314,7 @@ def wired(comms: Comms) -> Comms:
 
 
 @pytest.fixture
-def selected_model(monkeypatch, tmp_path):
+def selected_model(monkeypatch, tmp_path, native_runtime_package):
     """Declare a source-test runtime; native validation and package checks stay real.
 
     Its CLI helpers must consume this Core, not an older installed console script.
@@ -317,6 +338,8 @@ def selected_model(monkeypatch, tmp_path):
         entrypoint = runtime.interpreter.with_name(name)
         entrypoint.write_text(
             f"#!{sys.executable}\nimport sys\nsys.path.insert(0, {source!r})\n"
+            "from pathlib import Path\nimport agent_comms.native_package as native_package\n"
+            f"native_package.MANIFEST = Path({str(native_runtime_package.path.parents[3] / 'pi-native.sha256')!r})\n"
             f"from {module} import main\nraise SystemExit(main())\n"
         )
         entrypoint.chmod(0o700)
@@ -353,13 +376,14 @@ def native_rpc_fixture(monkeypatch):
     original_retained = NativePiRpcLaunch.retained_managed
 
     def prepare(
-        command, arguments, *, worktree, root, environment=None, session_file=None
+        command, arguments, *, package, worktree, root, environment=None, session_file=None
     ):
         script = Path(command)
         if not script.is_file():
             return original(
                 command,
                 arguments,
+                package=package,
                 worktree=worktree,
                 root=root,
                 environment=environment,
@@ -378,9 +402,9 @@ def native_rpc_fixture(monkeypatch):
             SelectedSession.for_launch(
                 Path(worktree),
                 Path(session_file) if session_file is not None else None,
-                pinned_native_package(),
+                package,
             ),
-            Path(worktree),
+            package,
             root=Path(root), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
         )
 
