@@ -12,6 +12,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
+from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
 from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
@@ -191,7 +192,7 @@ class StoppedOwnerBatch:
         return results
 
 
-class StoppedOwnerFailure(Exception):
+class StoppedOwnerFailure(CoordinationError):
     """A failed fenced/stopped phase, not an unsignalled restart refusal."""
 
     def __init__(

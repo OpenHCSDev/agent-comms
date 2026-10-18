@@ -146,6 +146,11 @@ class PreserveOwnerRuntime(StoppedOwnerInstallation):
     def after_stopped(self, lifecycle: OwnerLifecycle) -> None:
         pass
 
+    def failed(self, failure: StoppedOwnerFailure) -> NoReturn:
+        # The CLI, the restart queue and Toad all restart through this member;
+        # it releases the failed batch itself, so no caller holds the wire lock.
+        self.leave_stopped(failure)
+
     def recover(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         # This member installs nothing. The shared handoff revalidates EVERY
         # captured thread identity, input generation and process before any launch.

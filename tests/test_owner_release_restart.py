@@ -140,6 +140,7 @@ from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
+from agent_comms.store_files import _store_lock
 
 
 def wait_for(path: Path) -> None:
@@ -297,21 +298,20 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
             comms.owners.releases.remove_threads((current,))
         with pytest.raises(StoppedOwnerFailure) as caught:
             stopping.result(timeout=5)
-        failure = caught.value
-        try:
-            assert isinstance(failure.__cause__, RelationViolationError)
-            assert "changed while stopping" in str(failure.__cause__)
-            phase = failure.stopped
-            assert isinstance(phase, FencedOwnerBatch)
-            assert len(phase.captured) == len(phase.unconfirmed) == 1
-            assert phase.captured[0][0].process_identity == child.identity
-            assert phase.exited_processes == phase.retired == ()
-            assert phase.launches[0].process == child.identity
-            assert child.alive(), "Stale fence must not authorize forced retirement"
-            assert comms.registry.require("worker").pid == child.identity.pid
-        finally:
-            # Disposition precedes fixture teardown; no replacement or stale signal.
-            failure.abandon()
+    failure = caught.value
+    assert isinstance(failure.__cause__, RelationViolationError)
+    # Toad shows a RuntimeError on the thread; its text names the cause.
+    assert isinstance(failure, RuntimeError) and "changed while stopping" in str(failure)
+    phase = failure.stopped
+    assert isinstance(phase, FencedOwnerBatch)
+    assert len(phase.captured) == len(phase.unconfirmed) == 1
+    assert phase.captured[0][0].process_identity == child.identity
+    assert phase.exited_processes == phase.retired == ()
+    assert phase.launches[0].process == child.identity
+    assert child.alive(), "Stale fence must not authorize forced retirement"
+    assert comms.registry.require("worker").pid == child.identity.pid
+    with _store_lock(comms._wire_lock_path, blocking=False):
+        pass  # the failed restart released the wire itself
 
 
 @pytest.mark.asyncio
