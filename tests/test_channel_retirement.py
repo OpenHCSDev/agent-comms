@@ -13,6 +13,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
+from agent_comms.message_page import OlderTraversal, PageBounds
 from test_private_human_ingress import _root
 
 
@@ -78,9 +79,9 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     assert set(
         next(v.members for v in comms.views.channel_views() if v.channel.name == "#engineering")
     ) == {"a", "b"}
-    tail = comms.views.channel_display_page("#engineering", limit=2)
+    tail = comms.views.channel_display_page("#engineering", bounds=PageBounds(limit=2))
     assert [m.seq for m in tail.messages] == [3, 4]
-    older = comms.views.channel_display_page("#engineering", before=3, limit=2)
+    older = comms.views.channel_display_page("#engineering", bounds=PageBounds(OlderTraversal(3), 2))
     assert [m.seq for m in older.messages] == [1, 2]
     assert [m.target for m in list(comms.views.channel_history_page("#engineering").messages)] == [
         m.target for m in rows

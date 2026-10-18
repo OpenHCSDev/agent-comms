@@ -11,7 +11,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.message_page import MessagePageRequest
+from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest, PageBounds
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
@@ -51,7 +51,7 @@ def test_dm_preparation_releases_native_claim_lock(tmp_path, monkeypatch):
         return page
 
     monkeypatch.setattr(MessagePageRequest, "read", inspect)
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=1)
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=1))
     assert prepared == [True]
     assert page.messages[0].body == "original 2"
     assert page.display_basis.older_unread
@@ -166,10 +166,10 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
     messages = {
         name: comms.messaging.send_message(name, viewer, name) for name in ("peer", "other")
     }
-    original = comms.bus.conversation_page
+    original = ConversationMessagePageRequest.read
 
-    def interpose(*args, **kwargs):
-        page = original(*args, **kwargs)
+    def interpose(request, log):
+        page = original(request, log)
         comms.bus.reads.mark_displayed(
             viewer,
             comms.bus.reads.capture(
@@ -178,7 +178,7 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
         )
         return page
 
-    monkeypatch.setattr(comms.bus, "conversation_page", interpose)
+    monkeypatch.setattr(ConversationMessagePageRequest, "read", interpose)
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert page.messages == (messages["peer"],)
     assert page.display_basis is not None and not page.display_basis.older_unread
@@ -205,13 +205,13 @@ def test_read_progress_after_older_check_keeps_conservative_page(tmp_path: Path,
         return result
 
     monkeypatch.setattr(comms.bus, "conversation_older_unread", progress_after_query)
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=1)
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=1))
     assert page.messages == (newest,)
     assert page.display_basis is not None and page.display_basis.older_unread
     with pytest.raises(ValueError, match="contiguous"):
         _mark(comms, "peer", tmp_path, page)
     assert comms.bus.pending_count(viewer, "peer") == 1
-    fresh = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=1)
+    fresh = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=1))
     assert not fresh.display_basis.older_unread
     _mark(comms, "peer", tmp_path, fresh)
     assert comms.bus.pending_count(viewer, "peer") == 0
