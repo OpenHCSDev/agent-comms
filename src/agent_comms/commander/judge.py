@@ -21,7 +21,7 @@ the commander to that unit. Nothing here judges code; it only refuses to let an 
 """
 import hashlib, json, os, re, sys, time
 
-from ..todos import PlainText
+from ..todos import BluntText, FairText, PlainText
 from . import order
 from .config import CommanderConfig
 
@@ -158,17 +158,13 @@ def verdict(kind, tokens, why, msg=None, serves=None, lines=(), peer=None, roast
     if kind == 'back':
         if not roast_text or len(roast_text.split()) < 12 or not re.search(r'\bbecause\b', roast_text):
             sys.exit('Refused: --roast (12+ words, with "because"): why this is stupid, naming the fact it restates or guesses and the thing that already answers it')
-        if not order.BLUNT.search(roast_text):
-            sys.exit('Refused: --roast is polite; call it stupid, slop, lazy or useless and say why')
         if not fix or len(fix.split()) < 8:
             sys.exit('Refused: --fix (8+ words): the owner and the exact shape that replaces the slop')  # the strike's own wording rule, checked before the verdict is written
         if slop is None:
             sys.exit(order.Slop.USAGE)
-        order.refuse_dogma(' '.join((why, roast_text, fix, *lines)))
-        try:
-            PlainText(why + ' ' + roast_text)
-        except ValueError as refused:
-            sys.exit(f'Refused: {refused}')
+        order.refuse(roast_text, BluntText)
+        order.refuse(' '.join((why, roast_text, fix, *lines)), FairText)
+        order.refuse(why + ' ' + roast_text, PlainText)
         tasks = {}
         for thread in {edits[i]['thread'] for i in ids}:
             if msg not in {m['id'] for m in my_messages(thread)}:

@@ -31,8 +31,8 @@ from ..goals import CountCheckResult, OrderCheck
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
 from ..tools import CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoTool
-from ..todos import (CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent, OperationDelivery,
-                     CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
+from ..todos import (BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+                     OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      RecordHuntTodo, StrikeTodo)
 from . import storage
 from .config import CommanderConfig, Repo
@@ -46,9 +46,15 @@ NARRATIVE = str(CONFIG.narrative)  # public record of every failure, in plain wo
 B = str(CONFIG.root)
 CLI = str(CONFIG.cli)
 
+def refuse(text, *families):
+    """Core's text families decide what the commander may write; nothing is recorded when one refuses."""
+    if refused := [r for family in families if (r := family.refused(text))]:
+        sys.exit('REFUSED, nothing recorded: ' + ' '.join(refused))
+
+
 def post(recipients, body):
     """Send one message from the commander; judge reads it back from the bus history."""
-    refuse_dogma(re.sub(r'(?m)`[^`\n]*`|"[^"\n]*"|^ {4}.*$', ' ', body))  # quoting the dogma to correct it is allowed
+    refuse(body, FairText)
     command = ['timeout', '300', CLI, '--root', B, 'send', '--from', ME]
     for unit in recipients:
         command += ['--to', unit]
@@ -91,24 +97,6 @@ def deadline(due):
     return RecordedEventTime(at + 86400 if at < now - 60 else at)
 
 
-# Paper 1 proves multiple
-# parents derive every required pair with nothing outside (the top rung), that composition and forwarding supply
-# the same pairs outside (Fig 3, Thm 4.6), and that is-a and has-a are not opposites. A reason that faults
-# inheritance, mixins or multiple parents as such is dogma, not a restated fact, and is refused wherever the
-# commander writes it. A real defect is stated as a Slop: line instead.
-DOGMA = re.compile(r"composition over inheritance|(prefer|favou?r|use) composition|inherits (two|both|multiple|several|\d+)\b"
-                   r"|multiple (inheritance|parents) (is (bad|wrong|dangerous|confusing|fragile|slop)|causes|creates|smells|complicates)|diamond problem|fragile base"
-                   r"|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))|too many (parents|base classes|mixins)"
-                   r"|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+|inheritance (abuse|soup|hell|is wrong)", re.I)
-
-
-def refuse_dogma(text):
-    if found := DOGMA.search(re.sub(r'(?m)^Banned:.*$', '', text)):
-        sys.exit(f'REFUSED, nothing recorded: "{found.group()}" faults inheritance itself. Paper 1 proves multiple parents derive '
-                 'what composition and forwarding supply outside (Thm 4.6, Fig 3). Name the restated fact in a Slop: line '
-                 '(identity, membership, implementation or state) and the declaration that derives it.')
-
-
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
 # A forwarder restates an implementation pair (paper 1 Fig 3: fields + forwarding leave routes to maintain), so
 # nothing the commander approves, delivers or orders may add or keep one. The cure is the hierarchy, never a
@@ -118,21 +106,6 @@ FORWARDER = re.compile(
     r"|\w+\s*=\s*property\(lambda \w+:\s*\w+\.\w+\.\w+\)"                                        # attr = property(lambda s: s._a.attr)
     r"|def __getattr__\(self)", re.M)
 FORWARD_BODY = re.compile(r"^\+(\s*)def (\w+)\(self[^)]*\)[^:]*:\s*\n\+\1\s+return self\.\w+\.\2\b", re.M)  # def x(self): / return self._a.x(...)
-KEEP_SLOP = re.compile(r"(leave|keep|retain|preserve)[^.\n]{0,60}\bforward|forwarders? (stay|remain)|reach(es|ing)? through"
-                       , re.I | re.M)
-HIERARCHY_WORD = re.compile(r"\b(new class(es)?|new base|base class|changing the hierarchy|inheritance|mixins?|multiple parents|changing \w+State)\b", re.I)
-UNDOES_HIERARCHY = re.compile(r"\b(flatten\w*|remov\w*|replac\w*|delet\w*|collaps\w*|single-parent|one-parent|merg\w*)\b", re.I)
-
-
-def bans_hierarchy_fix(text):
-    """A Banned item that forbids adding classes, bases or parents; banning their removal is fine."""
-    for line in re.findall(r'(?m)^Banned:(.*)$', text):
-        for item in re.split(r',|;|\bor\b', line):
-            if HIERARCHY_WORD.search(item) and not UNDOES_HIERARCHY.search(item):
-                return item.strip()
-    return None
-
-
 def overrides(sources):
     """Names a class answers again for a question a base in the same module declares: a per-state answer, not forwarding."""
     import ast
@@ -176,13 +149,6 @@ def forwarders_added(diff, sources=()):
              if not (defs(m.group(0)) and defs(m.group(0)).group(1) in kept) and not state_call.search(m.group(0))]
             + [f'def {m.group(2)} -> self.?.{m.group(2)}' for m in FORWARD_BODY.finditer(diff)
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
-
-
-def refuse_slop_love(text):
-    text = re.sub(r'(?m)`[^`\n]*`|"[^"\n]*"|^ {4}.*$', ' ', text)  # quoting an old order to correct it is allowed
-    if found := (m.group() if (m := KEEP_SLOP.search(text)) else bans_hierarchy_fix(text)):
-        sys.exit(f'REFUSED, nothing recorded: "{found.strip()}" keeps a forwarder or bans fixing the hierarchy. '
-                 'Fold the false owner into the real one or compose providers as parents, and delete every route.')
 
 
 class Slop:
@@ -235,9 +201,6 @@ class Slop:
                 f'{self.by} owns it, and {self.derive} derives it from there, so the copy is deleted.')
 
 
-BLUNT = re.compile(r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|sloppy|theater|dumb|worthless|broke|broken|pointless|waste)\b", re.I)
-
-
 def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, disk=False, new=None):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
@@ -250,12 +213,10 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, dis
         problems.append(f'{CONFIG.disk} has {storage.free_gb():.1f} GB free, under the {storage.FLOOR_GB} GB floor, and the order asks for "{asked.group()}"')
     if quota := storage.over_quota(unit):
         problems.append(f'{quota}: it cleans up its own checkouts and scratch before it gets new work')
-    refuse_dogma(body)
-    refuse_slop_love(body)
+    refuse(body, FairText, HierarchyText)
     Slop.from_order(body)  # calling something slop requires the fact, where it is restated, its owner and the mechanism
-    # Blunt at all times; the only exception is no witnessed incompetence.
-    if not clean and not BLUNT.search(body):
-        problems.append('not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was')
+    if not clean and (timid := BluntText.refused(body)):  # blunt at all times unless nothing was incompetent
+        problems.append(timid)
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
     if not edits:
         problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
@@ -332,7 +293,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, dis
     if replaces and not clean:
         # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
         # Done here so the commander cannot send work back and forget either.
-        verdict = next(l for l in body.splitlines() if BLUNT.search(l)).strip()
+        verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
         strike(unit, f'sent back on {group[0]}: {verdict}')
 
 
@@ -341,8 +302,7 @@ def say(units, body_file):
     # Numbered edits or a report line are an order: it needs a deadline, so it goes through send.
     if len(re.findall(r'(?m)^\s*\d+[.)] ', body)) >= 2 or re.search(r'(?mi)^\s*(report|due)\b.*:', body):
         sys.exit('Refused: a numbered edit list or a Report/Due line is an order. Use `order send` so it gets a tracked deadline.')
-    refuse_dogma(body)
-    refuse_slop_love(body)
+    refuse(body, FairText, HierarchyText)
     Slop.from_order(body)
     print(post(units.split(','), body.rstrip()))
 
