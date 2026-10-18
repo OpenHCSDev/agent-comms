@@ -382,3 +382,58 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     assert run_step("carry_turn_records", root)["changed"] == 0
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert not thread.executing
+
+
+LIVE_DRIVER = """
+import signal, sys
+from pathlib import Path
+from upgrade_bus import Stack, live, stopped
+
+
+class Owners(Stack):
+    def cli(self, root, *arguments):
+        print(' '.join(arguments), flush=True)
+        return {"threads": [{"name": "worker", "role": "agent", "status": "running"}]}
+
+
+for each in (signal.SIGTERM, signal.SIGINT):
+    signal.signal(each, stopped)
+root = Path(sys.argv[1])
+live(root, root, "", "", (), Owners(root), Owners(root), None)
+"""
+
+
+def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
+    """A reader holds the route; SIGTERM while the upgrade waits for it runs the abort: the bus
+    reads READY and the stopped thread is started again."""
+    import fcntl
+    import signal
+
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
+
+    root = tmp_path / "bus"
+    Comms(root)
+    routes = tmp_path / "home/.local/state/agent-comms"
+    routes.mkdir(parents=True)
+    reader = os.open(routes, os.O_RDONLY | os.O_DIRECTORY)
+    fcntl.flock(reader, fcntl.LOCK_SH)
+    try:
+        tool = subprocess.Popen(
+            [sys.executable, "-c", LIVE_DRIVER, str(root)], text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env={**os.environ, "HOME": str(tmp_path / "home"),
+                 "PYTHONPATH": os.pathsep.join(str(REPO / part) for part in ("src", "tools"))})
+        waited = ""
+        while "Waiting for default-route readers" not in waited:
+            line = tool.stderr.readline()
+            assert line, waited + tool.stdout.read()
+            waited += line
+        assert MaintenanceBarrier(root / "registry.json").read().phase is not ReadyPhase
+        tool.send_signal(signal.SIGTERM)
+        out, err = tool.communicate(timeout=60)
+    finally:
+        os.close(reader)
+    assert tool.returncode != 0
+    assert "stopped by SIGTERM" in err and "aborted before the backup" in err
+    assert out.splitlines() == ["threads", "stop --name worker", "start --name worker"]
+    assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase

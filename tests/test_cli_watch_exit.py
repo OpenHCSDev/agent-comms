@@ -1,6 +1,7 @@
 """Writer contention keeps the watch child; terminal failures end it."""
 import asyncio
 from contextlib import suppress
+from dataclasses import replace
 import os
 import sys
 
@@ -209,6 +210,55 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
             comms.messaging.send_message('sender', 'recipient', 'after')
             assert await asyncio.wait_for(arrived.get(), 20) == 'after'
             assert len(children) == 2 and bridge.failures == []
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+
+@pytest.mark.asyncio
+async def test_a_bridge_started_during_a_drain_waits_and_then_receives(tmp_path, monkeypatch):
+    """Registration is held during an upgrade's drain; the bridge waits for it to clear and is
+    not refused."""
+    from test_bus_route_counts_locking import _case
+    from agent_comms.cli_bridges.shared import Inbox
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+    from agent_comms.thread_execution import ExternalThreadExecution
+
+    comms = _case(tmp_path / 'wire', monkeypatch)
+    recipient = comms.registry.snapshot().threads['recipient']
+    comms.registry.declare(replace(recipient, execution=ExternalThreadExecution))
+    monkeypatch.setenv('HOME', str(tmp_path / 'home'))
+    maintenance = MaintenanceBarrier(comms.registry.store.path)
+    held = maintenance.begin(MaintenanceOperator('upgrade-bus'))
+    arrived: asyncio.Queue[str] = asyncio.Queue()
+    children = []
+    start = AttachedChild.start
+    driver = 'import sys\nfrom agent_comms.cli import main\nraise SystemExit(main(sys.argv[1:]))\n'
+
+    async def launch(command, **options):
+        children.append(await start((sys.executable, '-c', driver, *command[1:]), **options))
+        return children[-1]
+
+    class ReceivingBridge(ReportingBridge):
+        async def deliver(self, message):
+            await arrived.put(message.body)
+            return DeliveredOutcome
+
+    monkeypatch.setattr(AttachedChild, 'start', launch)
+    state = tmp_path / 'bridge'
+    with Binding.open(state) as db:
+        bridge = ReceivingBridge(Options(Inbox(), None, state),
+                                 Binding(str(comms.root), 'recipient', 'session'), db)
+        bridge.failures = []
+        task = asyncio.create_task(bridge.run())
+        try:
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(task), 1)
+            assert children == [] and bridge.failures == []
+            maintenance.clear(held)
+            assert await asyncio.wait_for(arrived.get(), 20) == 'first'
+            assert len(children) == 1 and bridge.failures == []
         finally:
             task.cancel()
             with suppress(asyncio.CancelledError):
