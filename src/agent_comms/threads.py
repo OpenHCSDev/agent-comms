@@ -20,7 +20,6 @@ from .goals import (
     PresentGoalCheckpoint,
 )
 from .pi_vocabulary import (
-    SERVICE_TIER_ENVIRONMENT,
     NoThinkingOverride,
     ServiceTier,
     ThinkingChoice,
@@ -160,7 +159,6 @@ class Thread(ThreadProvenance):
         return {
             **replace(self.launch(), worktree=worktree, managed=True).encode(),
             "AGENT_COMMS_ROOT": str(root),
-            SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
             **project.environment(root),
         }
 

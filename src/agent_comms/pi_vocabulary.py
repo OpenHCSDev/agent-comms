@@ -197,9 +197,6 @@ class ServiceTier(StrEnum):
     PRIORITY = "priority"
 
 
-SERVICE_TIER_ENVIRONMENT = "AGENT_COMMS_SERVICE_TIER"
-
-
 class ThinkingChoice(ABC):
     @classmethod
     @abstractmethod

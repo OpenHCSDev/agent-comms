@@ -66,7 +66,6 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
     package = tmp_path / "installed-package"
     monkeypatch.setattr(active_route, "active_route_path", lambda: tmp_path / "absent" / "active-route.json")
     monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: package)
-    monkeypatch.setattr(LaunchRuntime, "current", classmethod(lambda cls: LaunchRuntime.running()))
     for name in ("AGENT_COMMS_ROOT",):
         monkeypatch.delenv(name, raising=False)
     assert wire(tmp_path / "public").owners.launch_authority is None
@@ -453,7 +452,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
 
     monkeypatch.setattr(ParentedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
-        comms.owners._launch_owner_unlocked(thread_registration.new_thread('owner', frozenset(), str(tmp_path)), "pi", launch_runtime=LaunchRuntime.current())
+        comms.owners._launch_owner_unlocked(thread_registration.new_thread('owner', frozenset(), str(tmp_path)), "pi", launch_runtime=LaunchRuntime.running())
     assert seen == [str(physical)]
     assert not (other / "registry.json").exists()
 
@@ -475,7 +474,7 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     def intercept(_argv, *, env, **_kwargs):
         assert env["AGENT_COMMS_ROOT"] == str(root)
         assert env["AGENT_COMMS_AGENT_BIN"] == str(
-            LaunchRuntime.current().native_entrypoint
+            LaunchRuntime.running().native_entrypoint
         )
         with Coordination(str(root / "coordination.sqlite3")) as store:
             participant = store.participants.get(lookup)

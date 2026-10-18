@@ -297,7 +297,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         # The operator's model/arguments/credential must never overwrite a source owner.
         monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", shlex.join(("--thinking", declared_options[-1].value)))
         monkeypatch.setenv("BATCH_OWNER_CREDENTIAL", "operator-only")
-        target_runtime = LaunchRuntime.current()
+        target_runtime = LaunchRuntime.running()
         prefix = target_runtime.interpreter.parent.parent
         target_binary = tmp_path / "target-pi-comms-native"
         target_binary.symlink_to(target_runtime.native_entrypoint)

@@ -52,20 +52,19 @@ function run(args: string[], timeout = 30_000): Record<string, unknown> {
 
 export default function (pi: ExtensionAPI) {
 	const currentThread = process.env.AGENT_COMMS_THREAD;
+	let serviceTier = currentThread
+		? run(["thread", "--name", currentThread, "--no-pending"]).service_tier
+		: undefined;
 	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
 	const task = process.env.PI_TASK || "";
 	const managed = process.env.AGENT_COMMS_MANAGED === "1";
-	let serviceTier = process.env.AGENT_COMMS_SERVICE_TIER;
-	if (serviceTier !== undefined && serviceTier !== "standard" && serviceTier !== "priority") {
-		throw new Error(`Unsupported agent-comms service tier: ${serviceTier}`);
-	}
 	pi.on("before_provider_request", (event, ctx) => {
+		if (!currentThread || !ctx.model || !SERVICE_TIER_CAPABLE_APIS.has(ctx.model.api)) return;
 		if (serviceTier !== "priority") return;
 		if (typeof event.payload !== "object" || event.payload === null || Array.isArray(event.payload)) {
 			ctx.abort();
 			throw new TypeError("Provider request payload must be an object");
 		}
-		if (!ctx.model || !SERVICE_TIER_CAPABLE_APIS.has(ctx.model.api)) return;
 		return { ...event.payload, service_tier: serviceTier };
 	});
 	const activity = (state: string, detail = "") => {
@@ -183,11 +182,7 @@ export default function (pi: ExtensionAPI) {
 					JSON.stringify(params),
 				]);
 				if (declaration.name === "comms_model" && result.thread === currentThread) {
-					const selectedTier = result.service_tier;
-					if (selectedTier !== "standard" && selectedTier !== "priority") {
-						throw new Error(`agent-comms returned an invalid service tier: ${selectedTier}`);
-					}
-					serviceTier = selectedTier;
+					serviceTier = result.service_tier;
 				}
 				return {
 					content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
