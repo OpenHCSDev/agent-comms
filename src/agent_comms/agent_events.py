@@ -81,7 +81,7 @@ class OriginalInputStarted(InputStarted):
     id: ClassVar[None] = None
 
     def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
-        return inputs.first_sources[session_id]
+        return inputs.state(session_id).require_first_source()
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,7 @@ class FollowingInputStarted(InputStarted):
     id: str
 
     def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
-        return inputs.following_sources[session_id][self.id]
+        return inputs.state(session_id).following[self.id]
 
 
 class InputRefused(AgentEvent):
@@ -155,11 +155,11 @@ class ToolEvent(AgentEvent):
 @dataclass(frozen=True)
 class ToolStart(ToolEvent):
     title: str = ""
-    args: dict[str, Any] | None = None
+    args: object = None
     kind: str = "other"
 
     @classmethod
-    def from_call(cls, call_id: str, name: str, arguments: dict[str, object]) -> ToolStart:
+    def from_call(cls, call_id: str, name: str, arguments: object) -> ToolStart:
         declaration = ToolDeclaration.for_name(name)
         title = ToolDeclaration.caption(name, ToolDeclaration.record(name, arguments))
         return cls(call_id, name, title, arguments, declaration.acp_kind)

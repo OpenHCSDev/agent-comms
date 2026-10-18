@@ -60,7 +60,7 @@ async def test_mounted_cancel_does_not_cancel_other_session(prepared_owner):
             assert (await two).stop_reason == "end_turn"
         assert not owner.turns.turn_tasks
         assert not any(owner.turns.turn_state(sid).busy for sid in (first, second))
-        assert not owner.inputs.backend_inboxes
+        assert not any(state.inbox for state in owner.inputs.drained.values())
         assert all(not lock.locked() for lock in owner.turns.turn_locks.values())
         assert native.session.read_bytes().startswith(original)
         assert len(native.saved_inputs()) == 2  # saved SDK question + one original input
@@ -95,7 +95,7 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
     request_failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
     assert request_failure.notification_published and request_failure.failure.input_state.public_status == "not_sent"
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy
-    assert not owner.inputs.backend_inboxes
+    assert not any(state.inbox for state in owner.inputs.drained.values())
     assert not owner.turns.turn_locks[session].locked()
     assert native.session.read_bytes() == original and native.provider.posts == 0
 
@@ -115,7 +115,7 @@ async def test_shutdown_joins_running_turn_before_releasing_session(prepared_own
             assert (await turn).stop_reason == "cancelled"
         assert not child.alive() and not child.platform.group_members(child.identity)
         assert not owner.turns.turn_tasks
-        assert not owner.turns.persistent_backends and not owner.inputs.backend_inboxes
+        assert not owner.turns.persistent_backends and not any(state.inbox for state in owner.inputs.drained.values())
         assert not owner._comms.registry.status(session).running
         assert len(native.saved_inputs()) == 2 and native.provider.posts == 1
     finally:
@@ -182,7 +182,7 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
     assert native.provider.posts == 0  # Preparation/fault must not send or replay input.
     assert owner._comms.registry.require(session).active_turn is None
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy
-    assert not owner.inputs.backend_inboxes
+    assert not any(state.inbox for state in owner.inputs.drained.values())
 
 
 async def test_actual_provider_failure_reports_started_input_once_without_retry(prepared_owner):
@@ -221,7 +221,7 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
     assert original.sent_text.endswith("Actual failed input")
     assert owner._comms.registry.require(session).active_turn is None
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).busy
-    assert not owner.inputs.backend_inboxes
+    assert not any(state.inbox for state in owner.inputs.drained.values())
 
 
 def test_acp_has_no_superseded_component_accessors_or_dispatch():

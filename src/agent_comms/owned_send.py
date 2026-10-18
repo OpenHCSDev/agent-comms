@@ -56,7 +56,7 @@ class OwnedSend:
     def source(self, public_id: str | None) -> TurnInputSource:
         if public_id is None:
             return self.original
-        source = self.inputs.following_sources.get(self.session_id, {}).get(public_id)
+        source = self.inputs.state(self.session_id).following.get(public_id)
         return (
             source
             if source is not None
@@ -86,7 +86,7 @@ class OwnedSend:
         InputKeysCheck(source=source, text=text).require_valid()
         if source.accepted_id is None:
             return
-        accepted = self.inputs.queued_inputs.get(self.session_id, {}).get(source.accepted_id)
+        accepted = self.inputs.state(self.session_id).queued.get(source.accepted_id)
         if accepted is None:
             for row in self.inputs.dispositions.read(source.keys).rows.values():
                 row.require_not_cleared()
@@ -97,7 +97,7 @@ class OwnedSend:
             claim_scope=self.claim_scope,
             input_id=source.accepted_id,
             keys=source.keys,
-            accepted_source=self.inputs.following_sources.get(self.session_id, {}).get(
+            accepted_source=self.inputs.state(self.session_id).following.get(
                 source.accepted_id
             ),
         ).require_valid()

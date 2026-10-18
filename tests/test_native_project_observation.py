@@ -83,7 +83,7 @@ async def test_current_project_observation_keeps_original_binding_across_rename_
                     assert comms.registry.require(name).project_resume_due
                     while native.provider.posts != 2 or owner.turns.turn_state(session).busy:
                         await asyncio.sleep(0.01)
-                    await owner.inputs.wake_tasks[session]
+                    await owner.inputs.state(session).wake_task
             finally:
                 native.provider.response_gate = None
             assert len(changed) == 1 and changed[0][1].changed

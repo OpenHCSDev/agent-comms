@@ -7,7 +7,7 @@ from pathlib import Path
 from native_proof_cases import read_proof_rows
 
 import pytest
-from agent_comms.pi_vocabulary import NoThinkingOverride, OffThinkingLevel
+from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, OffThinkingLevel
 
 from agent_comms.native_arguments import (
     NamedOption,
@@ -17,7 +17,6 @@ from agent_comms.native_arguments import (
     SelectedModel,
     ValueArgument,
 )
-from agent_comms.pi_vocabulary import OffThinkingLevel
 
 
 @pytest.mark.parametrize("selection", [None, "", "model"])
@@ -51,7 +50,7 @@ def test_unconfigured_launch_has_no_provider_or_model_policy():
     arguments = NativeArguments.configured(environment={})
     assert arguments.argv == ()
     assert arguments.model is None
-    assert arguments.thinking is None
+    assert arguments.thinking is NoThinkingOverride
     assert NativeArguments.configured(environment={
         NativeArguments.arguments_key: "--provider user --model selected",
     }).model == "user/selected"
@@ -72,9 +71,9 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
         )
     )
     assert arguments.model == "original/old/model"
-    assert arguments.thinking == "high"
+    assert arguments.thinking is HighThinkingLevel
     selected = arguments.with_model("response-local/fixture").with_thinking(OffThinkingLevel)
-    assert selected.model == "response-local/fixture" and selected.thinking == "off"
+    assert selected.model == "response-local/fixture" and selected.thinking is OffThinkingLevel
     assert selected.rpc() == (
         "--offline",
         "-e",
@@ -88,9 +87,15 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
         "--mode",
         "rpc",
     )
-    assert selected.with_thinking(NoThinkingOverride).thinking is None
+    assert selected.with_thinking(NoThinkingOverride).thinking is NoThinkingOverride
     assert arguments.model == "original/old/model"
     assert NativeArguments.parse(("--model", "local/fixture")).model == "local/fixture"
+
+
+@pytest.mark.parametrize("argv", [("--thinking", "unknown"), ("--thinking=unknown",)])
+def test_unknown_thinking_fails_at_argument_parse(argv):
+    with pytest.raises(ValueError):
+        NativeArguments.parse(argv)
 
 
 def test_option_declaration_extends_consumption_rendering_and_mode_validation():

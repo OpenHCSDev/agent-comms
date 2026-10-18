@@ -4,7 +4,9 @@ from dataclasses import dataclass
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.message_page import MessagePageRequest
+from agent_comms.message_page import (
+    MessagePageRequest, NewerTraversal, OlderTraversal, PageBounds, PageTraversal,
+)
 from agent_comms.read_basis import MessageDisplayScope
 from agent_comms.threads import Thread
 
@@ -29,7 +31,7 @@ def test_new_scope_preserves_indexed_progress_and_edges(tmp_path, direction):
                      "noise", "review last")
     ]
     # No consumer edit/roster entry: one declared scope is sufficient.
-    request = MessagePageRequest.capture(ReviewScope("review"), max_bytes=1, **direction)
+    request = MessagePageRequest(ReviewScope("review"), PageBounds(PageTraversal.capture(**direction), max_bytes=1))
     indexed = request.read(comms.bus.log)
     assert len(indexed.messages) == 1
     assert indexed.messages[0] == messages[1 if "after" in direction else 4]
@@ -37,8 +39,31 @@ def test_new_scope_preserves_indexed_progress_and_edges(tmp_path, direction):
     assert indexed.has_older == ("before" in direction)
     cursor = indexed.newest_seq if "after" in direction else indexed.oldest_seq
     continuation = {"after" if "after" in direction else "before": cursor}
-    next_page = MessagePageRequest.capture(
-        request.scope, max_bytes=1, **continuation
+    next_page = MessagePageRequest(
+        request.scope, PageBounds(PageTraversal.capture(**continuation), max_bytes=1)
     ).read(comms.bus.log)
     assert next_page.messages == (messages[2],)
     assert next_page.has_older and next_page.has_newer
+
+
+@pytest.mark.parametrize("conversation", ["dm", "channel"])
+def test_dm_and_channel_pages_by_default_and_explicit_bounds(tmp_path, conversation):
+    comms = wire(tmp_path)
+    for name in ("sender", "recipient"):
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'review'}), str(tmp_path)))
+    target = "recipient" if conversation == "dm" else "#review"
+    sent = [comms.messaging.send_message("sender", target, f"{conversation} {n}") for n in range(4)]
+
+    def page(bounds=PageBounds()):
+        if conversation == "dm":
+            return comms.views.dm_history_page("sender", "recipient", bounds)
+        return comms.views.channel_history_page("#review", bounds)
+
+    everything = page()
+    assert everything.messages == tuple(sent) and not everything.has_older
+    newest = page(PageBounds(limit=2))
+    assert newest.messages == tuple(sent[2:]) and newest.has_older and not newest.has_newer
+    older = page(PageBounds(OlderTraversal(newest.oldest_seq), 2))
+    assert older.messages == tuple(sent[:2]) and older.has_newer and not older.has_older
+    one = page(PageBounds(NewerTraversal(sent[0].seq), max_bytes=1))
+    assert one.messages == (sent[1],) and one.has_older and one.has_newer

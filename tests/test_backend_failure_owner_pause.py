@@ -92,7 +92,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         with pytest.raises(UnresolvedAttemptError):
             wired.goals.open_goal_store().resume(goal.id, generation.number)
         await agent.turns.goals.schedule_goal("project")
-        assert not agent.inputs.pending_turns.get("project")
+        assert not agent.inputs.state("project").pending_turns
         diagnostics = list((wired.root / "diagnostics").glob("*.json"))
         assert len(diagnostics) == 1
         diagnostic = json.loads(diagnostics[0].read_text())

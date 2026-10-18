@@ -18,6 +18,7 @@ from agent_comms.launch_runtime import CallingThreadUnavailable, RestartEnvironm
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
+from agent_comms.message_page import PageBounds
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
@@ -93,7 +94,7 @@ class TestMessaging:
         for index in range(5):
             wired.messaging.send("PR111", "#all", f"m{index}")
 
-        page = wired.views.channel_history_page("#all", limit=2)
+        page = wired.views.channel_history_page("#all", PageBounds(limit=2))
         assert [message.body for message in page.messages] == ["m3", "m4"]
         assert page.has_older
         assert wired.bus.log.latest_sequence() == 5

@@ -18,6 +18,7 @@ from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.threads import Thread
+from agent_comms.message_page import PageBounds
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
@@ -129,7 +130,7 @@ class TestConcurrentWire:
             [(str(root), sender, 40) for sender in senders],
         )
 
-        messages = list(wire(root).views.full_history_page(limit=len(senders) * 40).messages)
+        messages = list(wire(root).views.full_history_page(PageBounds(limit=len(senders) * 40)).messages)
         assert len(messages) == len(senders) * 40
         assert [message.seq for message in messages] == list(range(1, len(messages) + 1))
         assert len({message.body for message in messages}) == len(messages)

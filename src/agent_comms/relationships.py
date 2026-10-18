@@ -270,7 +270,7 @@ class RelationshipEntry:
 class RelationshipGroup(DeclaredFamily, affix="RelationshipGroup"):
     """A declared group owns its identity, presentation and entry source."""
 
-    entries: tuple[RelationshipEntry, ...]
+    entries: dict[str, RelationshipEntry]
     family_discriminator: ClassVar[str] = "key"
     title: ClassVar[str]
     empty_text: ClassVar[str]
@@ -282,7 +282,7 @@ class RelationshipGroup(DeclaredFamily, affix="RelationshipGroup"):
 
     @classmethod
     def build(cls, context: RelationshipContext) -> RelationshipGroup:
-        return cls(cls.supply(context))
+        return cls({entry.target: entry for entry in cls.supply(context)})
 
     def selectable(self) -> tuple[SortableRelationshipGroup, ...]:
         return ()
@@ -363,7 +363,7 @@ class SortableRelationshipGroup(RelationshipGroup):
                 context.sent.get(item.target, 0) if person else 0,
             )
 
-        return cls(tuple(sorted(cls.supply(context), key=key)), order)
+        return cls({entry.target: entry for entry in sorted(cls.supply(context), key=key)}, order)
 
     def selectable(self) -> tuple[SortableRelationshipGroup, ...]:
         return (self,)
@@ -448,10 +448,10 @@ class ThreadCommsSnapshot:
 
     def current_entry(self, group: type[RelationshipGroup],
                       earlier: RelationshipEntry) -> RelationshipEntry | None:
-        current = self.groups_by_type.get(group)
-        if current is None:
+        if (current := self.groups_by_type.get(group)) is None:
             return None
-        return next((entry for entry in current.entries if entry.revalidates(earlier)), None)
+        entry = current.entries.get(earlier.target)
+        return entry if entry is not None and entry.revalidates(earlier) else None
 
     @property
     def sortable_groups(self) -> tuple[SortableRelationshipGroup, ...]:

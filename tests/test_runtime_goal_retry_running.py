@@ -128,7 +128,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
     )
     try:
         await asyncio.wait_for(entered.wait(), 30)
-        assert owner.turns.turn_state(session).busy and session in owner.inputs.backend_inboxes
+        assert owner.turns.turn_state(session).busy and owner.inputs.state(session).inbox is not None
         results = await asyncio.gather(
             *(
                 proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
@@ -150,7 +150,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
         )
         assert store.ready_grant(goal.id, 2)
         await owner.turns.goals.schedule_goal(session)
-        assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
+        assert len(calls) == 1 and not owner.inputs.state(session).pending_turns
         assert any(
             fact.goal.state.active
             for update in updates
@@ -162,17 +162,17 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
             assert (await turn)["stopReason"] == "cancelled"
             assert comms.registry.require(session).goal.state.declared_name == "paused"
             await owner.turns.goals.schedule_goal(session)
-            assert not owner.inputs.pending_turns.get(session) and len(calls) == 1
+            assert not owner.inputs.state(session).pending_turns and len(calls) == 1
             assert store.snapshot(goal.id) == generation
         else:
             release.set()
             await asyncio.wait_for(settled.wait(), 30)
             # Native settlement alone is not permission to overlap a still-open stream.
             assert (
-                owner.turns.turn_state(session).busy and session in owner.inputs.backend_inboxes
+                owner.turns.turn_state(session).busy and owner.inputs.state(session).inbox is not None
             )
             await owner.turns.goals.schedule_goal(session)
-            assert len(calls) == 1 and not owner.inputs.pending_turns.get(session)
+            assert len(calls) == 1 and not owner.inputs.state(session).pending_turns
             native.provider.status = 200
             finish.set()
             if outcome in {"exception", "error"}:
@@ -183,7 +183,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
             else:
                 assert (await turn)["stopReason"] == "end_turn"
             await asyncio.wait_for(continued.wait(), 30)
-            await owner.inputs.wake_tasks[session]
+            await owner.inputs.state(session).wake_task
             assert len(calls) == 2
             assert comms.registry.require(session).goal.state.declared_name == "completed"
             assert store.snapshot(goal.id).lifecycle == CompletedGeneration()
@@ -238,8 +238,8 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(native_backe
                     await proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
                 assert comms.registry.require(session).goal == blocked
                 assert store.snapshot(goal.id) == generation
-                assert not owner.inputs.pending_turns.get(session)
+                assert not owner.inputs.state(session).pending_turns
             finally:
                 await proxy.close()
-        assert not owner.turns.turn_state(session).busy and not owner.inputs.backend_inboxes
+        assert not owner.turns.turn_state(session).busy and not any(state.inbox for state in owner.inputs.drained.values())
     assert native.provider.posts == 0
