@@ -6,32 +6,29 @@ import json
 import pytest
 
 from agent_comms.bus_activity_index import BusActivityIndex
-from agent_comms.bus_display_index import BusDisplayIndex, DisplayMetricScope, EmptyDisplaySnapshot
+from agent_comms.bus_display_index import BusDisplayIndex, DisplayMetricScope, DisplaySnapshot
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.messages import InfoKind, Message
-from agent_comms.private_path import FileRevision
-from agent_comms.read_basis import ChannelDisplayScope
+from agent_comms.read_basis import ChannelDisplayScope, ReadCursor
 from agent_comms.message_bus import MessageBus
-from agent_comms.wire_log import AbsentWireSnapshot, OpenedWireSnapshot
+from agent_comms.wire_log import AbsentWireSnapshot, CurrentSnapshotOpening, WireLog
 from agent_comms.wire_metadata import WireMetadata
 
 
 @contextmanager
 def opened(path, *indexes):
     prepared = tuple((index, index.prepare()) for index in indexes)
-    with path.open("rb") as stream:
-        source = OpenedWireSnapshot(
-            WireMetadata(last_seq=2, claimed_after_seq=2), 0,
-            stream, FileRevision.from_file(stream),
-        )
-        source.capture_append_indexes(prepared)
+    path.chmod(0o600)
+    log = WireLog(path)
+    log.write_metadata_unlocked(WireMetadata(last_seq=2, claimed_after_seq=2, writer_protocol_version=1, wire_root_id="0" * 32))
+    with log._opened_wire_snapshot(opening=CurrentSnapshotOpening(), prepared_indexes=prepared) as source:
         yield source
 
 
 def semantics():
     return DisplayMetricScope(
         (ChannelDisplayScope("#team", frozenset({"#team"})),),
-        frozenset({"viewer"}), frozenset(),
+        frozenset({"viewer"}), ReadCursor(),
     )
 
 
@@ -57,7 +54,7 @@ def test_complete_line_cut_is_not_the_physical_cut(tmp_path, data, complete):
 def test_absent_bus_has_a_named_empty_display_result(tmp_path):
     source = AbsentWireSnapshot(WireMetadata(), 0)
     result = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer").snapshot(source, semantics())
-    assert isinstance(result, EmptyDisplaySnapshot)
+    assert isinstance(result, DisplaySnapshot)
     assert result.metrics == ({"#team": (0.0, 0.0)}, {"#team": 0})
 
 
@@ -98,7 +95,9 @@ def test_torn_append_uses_checkpoint_then_reads_only_completed_suffix(tmp_path, 
         completed = index.snapshot(source, semantics())
         assert completed.counts == {"#team": 2}
         assert completed.offset == len(first) + len(second)
-        assert parsed == [2]
+        # The offset index prepares row 2, then the display materializes it.
+        # Neither consumer may reparse row 1 or the incomplete suffix.
+        assert parsed == [2, 2]
 
 
 def test_activity_uses_the_same_complete_line_cut(tmp_path):
