@@ -30,7 +30,7 @@ import subprocess
 import sys
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -234,16 +234,19 @@ class CarryChain:
                 step = Step.declared(name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
                 if step is not None:
                     known[name] = step
-        for path in git(repo, "log", "--no-renames", "--format=", "--name-only", "--diff-filter=A", revision,
-                        "--", str(STEPS)).decode().split():
-            name = Path(path).stem
-            if name.startswith("carry_") and path.endswith(".py") and Path(path).name not in tree:
+        # Oldest first: the order every step reached this revision along its first parents.
+        entered = [Path(path).stem for path in reversed(git(
+            repo, "log", "--first-parent", "-m", "--no-renames", "--format=", "--name-only",
+            "--diff-filter=A", revision,
+            "--", str(STEPS)).decode().split()) if Path(path).name.startswith("carry_") and path.endswith(".py")]
+        for name in entered:
+            if f"{name}.py" not in tree:
                 step = cls.deleted(repo, revision, name)
                 if step is not None:
                     known[name] = step
         if not known:
             return cls(())
-        known = cls.spliced(known, revision)
+        known = cls.spliced(known, revision, entered.index)
         followed = {step.after for step in known.values()}
         heads = [step for step in known.values() if step.name not in followed]
         if len(heads) != 1:
@@ -264,26 +267,27 @@ class CarryChain:
         return cls(tuple(reversed(steps)))
 
     @staticmethod
-    def spliced(known: dict[str, Step], revision: str) -> dict[str, Step]:
-        """Deleted steps that forked off the chain run after the head of the other line,
-        whether or not a kept step later followed them, so no kept step moves."""
-        parents = [step.after for step in known.values()]
-        lines = []
-        for head in (step for step in known.values() if step.name not in parents):
-            line = [head]
-            # Walk back to the fork: the first step whose parent another step also follows.
-            while line[-1].after in known and parents.count(line[-1].after) == 1:
-                line.append(known[line[-1].after])
-            lines.append(line)
-        kept = [line for line in lines if line[-1].revision == revision]
-        if len(kept) != 1:
+    def spliced(known: dict[str, Step], revision: str, entered: Callable[[str], int]) -> dict[str, Step]:
+        """Each step runs after the step it names, and of the steps ready to run, the one
+        that entered history first runs first: a bus ran steps in the order they reached
+        it, so a step added after a deleted line runs after that line instead of stranding
+        every bus that ran it. Two steps in the tree that name one step are a fork in the
+        tree, and stay refused."""
+        named = [step.after for step in known.values() if step.revision == revision]
+        if len(named) != len(set(named)):
             return known
-        tail = kept[0][0].name
-        for line in lines:
-            if line is not kept[0]:
-                known = {**known, line[-1].name: replace(line[-1], after=tail)}
-                tail = line[0].name
-        return known
+        waiting = sorted(known.values(), key=lambda step: entered(step.name))
+        ordered: dict[str, Step] = {}
+        tail = None
+        while waiting:
+            ready = next((step for step in waiting
+                          if step.after in ordered or (step.after is None and not ordered)), None)
+            if ready is None:
+                return known
+            waiting.remove(ready)
+            ordered[ready.name] = replace(ready, after=tail)
+            tail = ready.name
+        return ordered
 
     @staticmethod
     def deleted(repo: Path, revision: str, name: str) -> Step | None:
