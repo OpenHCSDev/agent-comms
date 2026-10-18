@@ -86,6 +86,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def notification(
         self,
         recipient,
+        sender_lookup,
         *,
         observation: RecipientActivity,
         activity=None,
@@ -96,6 +97,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
 
         return MessageNotification(
             recipient,
+            sender_lookup,
             self.notification_state(UnrecordedProgress() if activity is None else activity.progress),
             changed=self.notification_changed,
         )
@@ -207,6 +209,7 @@ class PendingNotification:
     def notification(
         self,
         recipient,
+        sender_lookup,
         *,
         observation,
         activity=None,
@@ -214,7 +217,7 @@ class PendingNotification:
         triage_inflight=False,
     ):
         notification = super().notification(
-            recipient, observation=observation, activity=activity
+            recipient, sender_lookup, observation=observation, activity=activity
         )
         return (
             notification
@@ -229,6 +232,7 @@ class SelectedResponseNotification:
     def notification(
         self,
         recipient,
+        sender_lookup,
         *,
         observation,
         activity,
@@ -236,7 +240,7 @@ class SelectedResponseNotification:
         triage_inflight=False,
     ):
         notification = super().notification(
-            recipient, observation=observation, activity=activity
+            recipient, sender_lookup, observation=observation, activity=activity
         )
         return observation.selected_response(
             notification, updated_at_ms, activity.progress
@@ -393,6 +397,7 @@ class CompletedAssignment(BoundAssignment):
     def notification(
         self,
         recipient,
+        sender_lookup,
         *,
         observation,
         activity,
@@ -400,7 +405,7 @@ class CompletedAssignment(BoundAssignment):
         triage_inflight=False,
     ):
         notification = super().notification(
-            recipient, observation=observation, activity=activity
+            recipient, sender_lookup, observation=observation, activity=activity
         )
         return activity.completed_notification(notification)
 
@@ -482,6 +487,7 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
     def notification(
         self,
         recipient,
+        sender_lookup,
         *,
         observation,
         activity,
@@ -489,7 +495,7 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         triage_inflight=False,
     ):
         notification = super().notification(
-            recipient, observation=observation, activity=activity
+            recipient, sender_lookup, observation=observation, activity=activity
         )
         return activity.delivered_notification(notification, updated_at_ms)
 
@@ -515,6 +521,7 @@ class FailedAssignment(InterruptedAssignment):
     def notification(
         self,
         recipient,
+        sender_lookup,
         *,
         observation,
         activity,
@@ -522,7 +529,7 @@ class FailedAssignment(InterruptedAssignment):
         triage_inflight=False,
     ):
         notification = super().notification(
-            recipient, observation=observation, activity=activity
+            recipient, sender_lookup, observation=observation, activity=activity
         )
         return replace(notification, state=FailedProgress(notification.state))
 

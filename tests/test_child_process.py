@@ -22,6 +22,7 @@ from agent_comms.child_process import (
     ChildRetirementError,
     ChildRetirementFailed,
     ExitedOutcome,
+    GroupMember,
     IdentityMismatchError,
     ObservedProcess,
     ParentedProcess,
@@ -107,6 +108,63 @@ async def test_detached_mismatch_refuses_signal_without_harming_real_child() -> 
     finally:
         await child.stop()
     assert not child.alive()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups")
+@pytest.mark.parametrize("owner", (
+    pytest.param(lambda process, identity: ObservedProcess(identity), id="stored-observed"),
+    pytest.param(ParentedProcess, id="parented"),
+))
+@pytest.mark.parametrize("retire", (
+    pytest.param(lambda child: asyncio.to_thread(child.stop_sync), id="sync"),
+    pytest.param(lambda child: child.stop(), id="async"),
+))
+@pytest.mark.asyncio
+async def test_stop_shared_process_group_member_without_signalling_neighbors(owner, retire):
+    command = (sys.executable, "-c", "import time; time.sleep(60)")
+    child = subprocess.Popen(command, start_new_session=False)
+    neighbor = subprocess.Popen(command, start_new_session=False)
+    try:
+        captured = ProcessIdentity.capture(child.pid)
+        assert isinstance(captured, GroupMember)
+        stored = FieldCodec.decode(ProcessIdentity, FieldCodec.encode(captured))
+        assert captured == stored and hash(captured) == hash(stored)
+        await retire(owner(child, stored))
+        child.wait(timeout=5)
+        assert not captured.alive()
+        assert neighbor.poll() is None
+        assert ProcessIdentity.capture(os.getpid()).alive()
+    finally:
+        for process in (child, neighbor):
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_stored_leader_keeps_group_scope_after_term_exits_leader(tmp_path: Path):
+    acknowledgement = tmp_path / "stored-tree.json"
+    child = ParentedProcess.launch((sys.executable, "-c", TREE, str(acknowledgement)))
+    stored = FieldCodec.decode(ProcessIdentity, FieldCodec.encode(child.identity))
+    try:
+        await ready(acknowledgement)
+        await ObservedProcess(stored).stop()
+        assert all(not member.alive() for member in identities(acknowledgement))
+    finally:
+        await child.stop()
+
+
+def test_live_target_with_no_successful_signal_raises(monkeypatch):
+    child = subprocess.Popen((sys.executable, "-c", "import time; time.sleep(60)"))
+    observed = ObservedProcess(ProcessIdentity.capture(child.pid))
+    monkeypatch.setattr(observed.platform, "group_members", lambda identity: ())
+    try:
+        with pytest.raises(RuntimeError, match="was not signalled"):
+            observed.stop_sync()
+        assert child.poll() is None
+    finally:
+        child.kill()
+        child.wait(timeout=5)
 
 
 @pytest.mark.asyncio
@@ -204,6 +262,10 @@ def test_new_outcome_is_derived_and_field_encoded() -> None:
     @dataclass(frozen=True)
     class TestObservationOutcome(ChildOutcome):
         observation: str
+
+        @property
+        def summary(self) -> str:
+            return self.observation
 
         @property
         def successful(self) -> bool:

@@ -160,17 +160,26 @@ class CarryChain:
 
     @classmethod
     def at(cls, repo: Path, revision: str) -> CarryChain:
-        present = {}
-        for path in git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split():
+        """Steps in the tree, and every step its history added and later deleted."""
+        known = {}
+        tree = git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split()
+        for path in tree:
             if path.startswith("carry_") and path.endswith(".py"):
                 name = path.removesuffix(".py")
                 step = Step.declared(name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
                 if step is not None:
-                    present[name] = step
-        if not present:
+                    known[name] = step
+        for path in git(repo, "log", "--no-renames", "--format=", "--name-only", "--diff-filter=A", revision,
+                        "--", str(STEPS)).decode().split():
+            name = Path(path).stem
+            if name.startswith("carry_") and path.endswith(".py") and Path(path).name not in tree:
+                step = cls.deleted(repo, revision, name)
+                if step is not None:
+                    known[name] = step
+        if not known:
             return cls(())
-        followed = {step.after for step in present.values()}
-        heads = [step for step in present.values() if step.name not in followed]
+        followed = {step.after for step in known.values()}
+        heads = [step for step in known.values() if step.name not in followed]
         if len(heads) != 1:
             raise ValueError(f"Carry steps must form one chain; heads: {sorted(s.name for s in heads)}")
         steps = []
@@ -179,25 +188,23 @@ class CarryChain:
             steps.append(step)
             if step.after is None:
                 break
-            step = present.get(step.after) or cls.deleted(repo, revision, step.after)
+            if step.after not in known:
+                raise ValueError(f"Carry step {step.after} is in no revision of {revision}")
+            step = known[step.after]
             if step in steps:
                 raise ValueError(f"Carry chain loops at {step.name}")
-        if len(set(present) - {step.name for step in steps}):
+        if len(set(known) - {step.name for step in steps}):
             raise ValueError("Carry steps must form one chain")
         return cls(tuple(reversed(steps)))
 
     @staticmethod
-    def deleted(repo: Path, revision: str, name: str) -> Step:
-        """A step no longer in the tree, at the last revision that held it."""
+    def deleted(repo: Path, revision: str, name: str) -> Step | None:
+        """A step no longer in the tree, at the last revision that held it; None if
+        that revision held a plain script rather than a step."""
         path = f"{STEPS}/{name}.py"
-        deletion = git(repo, "log", "-1", "--format=%H", "--diff-filter=D", revision, "--", path).decode().strip()
-        if not deletion:
-            raise ValueError(f"Carry step {name} is in no revision of {revision}")
+        deletion = git(repo, "log", "--no-renames", "-1", "--format=%H", "--diff-filter=D", revision, "--", path).decode().strip()
         holder = git(repo, "rev-parse", f"{deletion}^").decode().strip()
-        step = Step.declared(name, git(repo, "show", f"{holder}:{path}"), holder)
-        if step is None:
-            raise ValueError(f"{name} at {holder} is not a carry step")
-        return step
+        return Step.declared(name, git(repo, "show", f"{holder}:{path}"), holder)
 
     def pending(self, applied: tuple[str, ...]) -> tuple[Step, ...]:
         """The steps a bus still needs. A bus recording a later step but not an

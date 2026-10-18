@@ -166,7 +166,7 @@ class CertifiedSourceRead:
         with bus.locked() as lock:
             prior = lock.certified_read()
             prior.require_current()
-            prior.require_marker(bus._private_marker_unlocked())
+            prior.require_marker(bus.private_marker_unlocked())
             if replace(prior.marker, checkpoint_version=None, checkpoint_seal=None) != expected:
                 raise RelationViolationError("Carry changed destination marker facts")
             with tempfile.TemporaryDirectory(prefix=".checkpoint-carry-", dir=bus.path.parent) as stage:
@@ -189,7 +189,7 @@ class CertifiedSourceRead:
                     raise RelationViolationError("Carried bytes differ from their certificate")
                 self.require_current()
                 prior.require_current()
-                prior.require_marker(bus._private_marker_unlocked())
+                prior.require_marker(bus.private_marker_unlocked())
                 try:
                     # Keep the required old seal and index until the shared
                     # installer publishes the new pair. Any failed replacement
@@ -326,7 +326,7 @@ class CertifiedSourceRead:
     def _addressed_after(self, bus: WireLog, lookup: str, after_seq: int) -> sqlite3.Cursor:
         """Select one recipient's newer rows from this certified address index."""
         self.require_current()
-        self.require_marker(bus._private_marker_unlocked())
+        self.require_marker(bus.private_marker_unlocked())
         try:
             return self.connection.execute(
                 f"SELECT a.seq FROM {Addressed.declared_name} a "
@@ -356,7 +356,7 @@ class CertifiedSourceRead:
         the bounded original bytes; no connection or stream survives capture.
         """
         self.require_current()
-        self.require_marker(bus._private_marker_unlocked())
+        self.require_marker(bus.private_marker_unlocked())
         db, witness = self.connection, self.witness
         window = witness if prefix is None else prefix
         witness.require_read_window(window)
@@ -374,7 +374,7 @@ class CertifiedSourceRead:
                 raise RelationViolationError("Certified initial high-water is invalid.")
             captured = self.capture_sources(tuple(rows[:request.limit]))
             self.require_current()
-            self.require_marker(bus._private_marker_unlocked())
+            self.require_marker(bus.private_marker_unlocked())
 
             def decoded():
                 for original in captured:
@@ -976,7 +976,7 @@ class Addressed(CheckpointTable, TypedTable):
                 raise RelationViolationError("Address observation changed during its read")
 
         require_captured_sources()
-        marker = bus._private_marker_unlocked()
+        marker = bus.private_marker_unlocked()
         with closing(_connect(path, readonly=True)) as db:
             witness = PrefixCertificate.read_witness(db)
             witness.require_marker(marker)
@@ -1193,7 +1193,7 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
     if type(bus) is not WireLog or bus.path.name != "bus.jsonl":
         raise TypeError("Canonical private WireLog required")
     with nullcontext() if _bus_locked else bus.locked():
-        marker = bus._private_marker_unlocked()
+        marker = bus.private_marker_unlocked()
         if not marker.claims:
             raise RelationViolationError(
                 "Checkpoint installation needs a claim-enabled private root."

@@ -342,7 +342,7 @@ class RecoverySnapshot:
 
         bus, bus_lock, registry = boundary.bus, boundary.bus_lock, boundary.registry
         attempt = self.require_attempt()
-        metadata = bus.log._private_marker_unlocked()
+        metadata = bus.log.private_marker_unlocked()
         with bus_lock.current_source(bus.log, metadata) as source:
             current = source.claim_projection()
         owned = tuple(

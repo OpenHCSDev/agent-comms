@@ -19,7 +19,7 @@ def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture
     first = comms.messaging.send_message("sender", "recipient", "first")
     log = comms.bus.log
 
-    original_marker = log._private_marker_unlocked
+    original_marker = log.private_marker_unlocked
     readers_entered = threading.Event()
     release_readers = threading.Event()
     calls_lock = threading.Lock()
@@ -37,10 +37,10 @@ def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture
             assert release_readers.wait(timeout=5)
         return marker
 
-    monkeypatch.setattr(log, "_private_marker_unlocked", pause_source_capture)
+    monkeypatch.setattr(log, "private_marker_unlocked", pause_source_capture)
 
     def capture():
-        with log._opened_wire_snapshot() as opened:
+        with log.opened_wire_snapshot() as opened:
             return opened.through, opened.boundary
 
     with ThreadPoolExecutor(max_workers=3) as executor:

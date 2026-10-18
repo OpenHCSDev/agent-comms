@@ -672,7 +672,7 @@ class _RepresentedDecoder(ValueDecoder):
 
 @dataclass(frozen=True, slots=True)
 class _AnyDecoder(ValueDecoder, FieldRepresentation):
-    annotations = (Any,)
+    annotations = (Any, object)
 
     @classmethod
     def from_annotation(cls, target, args):

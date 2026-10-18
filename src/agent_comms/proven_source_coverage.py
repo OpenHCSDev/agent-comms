@@ -100,7 +100,7 @@ class SourceCoverage:
 
     def witness_unlocked(self) -> PrefixWitness:
         return verify_private_bus_checkpoint_unlocked(
-            self.bus.log, self.bus.log._private_marker_unlocked()
+            self.bus.log, self.bus.log.private_marker_unlocked()
         )
 
     def witness(self) -> PrefixWitness:

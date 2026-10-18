@@ -494,7 +494,7 @@ class CurrentSnapshotOpening(SnapshotOpening):
     def capture(self, log: WireLog, resources: ExitStack):
         with log.locked(mode=SharedLock()) as lock:
             metadata = (
-                log._private_marker_unlocked()
+                log.private_marker_unlocked()
                 if log.path.exists() or log.metadata_path.exists()
                 else WireMetadata()
             )
@@ -510,7 +510,7 @@ class CurrentSnapshotOpening(SnapshotOpening):
 
 class SequencedSnapshotOpening(CurrentSnapshotOpening):
     def through(self, log: WireLog, lock: StoreLock) -> int:
-        return log._committed_sequence_unlocked(lock)
+        return log.committed_sequence_unlocked(lock)
 
 
 class SavedPrefixOpening(SnapshotOpening):
@@ -522,7 +522,7 @@ class SavedPrefixOpening(SnapshotOpening):
 
     @contextmanager
     def capture(self, log: WireLog, resources: ExitStack):
-        metadata = log._private_marker_unlocked()
+        metadata = log.private_marker_unlocked()
         yield log._open_snapshot_unlocked(resources, metadata, 0)
 
 
@@ -596,7 +596,7 @@ class WireLog:
     @contextmanager
     def _certified_source(self, lock: StoreLock):
         """Sync and async acquisition consume the same marker/currentness owner."""
-        marker = self._private_marker_unlocked()
+        marker = self.private_marker_unlocked()
         source = lock.certified_read()
         source.require_marker(marker)
         yield source
@@ -624,9 +624,9 @@ class WireLog:
     def record_context(self, manifest) -> None:
         """Append the context records chosen by the certified entry owner."""
         with self.locked() as lock:
-            marker = self._private_marker_unlocked()
+            marker = self.private_marker_unlocked()
             for record in lock.certified_read().context_records(manifest):
-                self._append_private_unlocked(marker, record.to_wire())
+                self.append_private_unlocked(marker, record.to_wire())
 
     def context_manifest_page(self, name: str, registry, *, cursor=None, previous=()):
         from .private_bus_checkpoint import RecordedContextManifestSources
@@ -698,7 +698,7 @@ class WireLog:
         with self.certified_read() as source:
             return source.claim_projection()
 
-    def _private_marker_unlocked(self) -> WireMetadata:
+    def private_marker_unlocked(self) -> WireMetadata:
         self._assert_private_directory()
         if self.path.parent.lstat().st_uid != os.geteuid():
             raise RelationViolationError("Private bus directory is not owner-controlled.")
@@ -742,7 +742,7 @@ class WireLog:
                     on_row(offset, line, record)
                 yield record
 
-    def _append_private_unlocked(self, metadata: WireMetadata, row: Mapping[str, object]) -> None:
+    def append_private_unlocked(self, metadata: WireMetadata, row: Mapping[str, object]) -> None:
         """Durably reserve a sequence, append one row, then sync its parent.
 
         A failed append or bus parent sync leaves the outcome UNKNOWN.
@@ -805,7 +805,7 @@ class WireLog:
         """Read checkpoint resources while the caller holds the bus locks."""
         from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
-        marker = self._private_marker_unlocked()
+        marker = self.private_marker_unlocked()
         if marker.root_id != wire_root_id:
             raise RelationViolationError("Initial wire root does not match the bus marker.")
         with opened_private_checkpoint_unlocked(self, marker) as source:
@@ -813,7 +813,7 @@ class WireLog:
             source.require_current()
             return originals
 
-    def _keyed_receipt_unlocked(
+    def keyed_publication_unlocked(
         self, intent: PublicationIntents
     ) -> tuple[Message | None, int, WireMetadata]:
         """Resolve the original acknowledgement through the canonical sealed prefix.
@@ -821,7 +821,7 @@ class WireLog:
         Caller holds the bus file lock. Absence is NOT authorization to append.
         """
 
-        metadata = self._private_marker_unlocked()
+        metadata = self.private_marker_unlocked()
         from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
         with opened_private_checkpoint_unlocked(self, metadata) as source:
@@ -839,7 +839,7 @@ class WireLog:
         return tuple((index, index.prepare()) for index in self._append_indexes)
 
     @contextmanager
-    def _opened_wire_snapshot(
+    def opened_wire_snapshot(
         self, *,
         prepared_indexes: tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...] = (),
         opening: SnapshotOpening = SequencedSnapshotOpening(),
@@ -865,13 +865,13 @@ class WireLog:
         Uncertified streams retain the same complete validation algorithm.
         This resource is a fixed read, not permission to append or start input.
         """
-        with self._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        with self.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             yield opened.records()
 
     @contextmanager
     def _record_snapshot(self) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
         """Explicit sequential history borrows the original opened byte boundary."""
-        with self._opened_wire_snapshot() as opened:
+        with self.opened_wire_snapshot() as opened:
             yield opened.through, opened.public_records()
 
     @contextmanager
@@ -881,7 +881,7 @@ class WireLog:
             yield through, (message for message, _ in records)
 
     def messages_for_references(self, references):
-        with self._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        with self.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             return opened.messages_for_references(references)
 
     def deliveries_for_references(self, references):
@@ -895,9 +895,9 @@ class WireLog:
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""
         with self.locked(mode=SharedLock()) as lock:
-            return self._committed_sequence_unlocked(lock)
+            return self.committed_sequence_unlocked(lock)
 
-    def _committed_sequence_unlocked(self, lock: StoreLock) -> int:
+    def committed_sequence_unlocked(self, lock: StoreLock) -> int:
         """Read the committed cut from the resource acquired by this barrier.
 
         The certificate's global through_seq is not the addressed page's

@@ -126,14 +126,14 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     ExistingFileClaim(Path(resource)),
                 )
             assert comms.bus.log.claim_projection().get(str(resource)) is None
-            append = comms.bus.log._append_private_unlocked
+            append = comms.bus.log.append_private_unlocked
 
             def append_then_lose_receipt(metadata: dict[str, int | str], row: dict) -> None:
                 append(metadata, row)
                 raise OSError("lost acknowledgement after durable append")
 
             with monkeypatch.context() as patch:
-                patch.setattr(comms.bus.log, "_append_private_unlocked", append_then_lose_receipt)
+                patch.setattr(comms.bus.log, "append_private_unlocked", append_then_lose_receipt)
                 with pytest.raises(ClaimEnvelopeUnknownError):
                     publish_selected_resource_claim(
                         comms, store, claim_scope, owner.name, ExistingFileClaim(Path(resource))

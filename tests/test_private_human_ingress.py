@@ -119,7 +119,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     comms, _, root_id, _ = _root(tmp_path)
-    original = comms.bus.log._append_private_unlocked
+    original = comms.bus.log.append_private_unlocked
     calls = 0
 
     def fail_after_append(metadata, row):
@@ -128,7 +128,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
         original(metadata, row)
         raise OSError("simulated lost acknowledgement after durable append")
 
-    monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', fail_after_append)
+    monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', fail_after_append)
     with pytest.raises(HumanInitialUnknownError, match="do not retry") as raised:
         comms.messaging.send_user_message("alice", "uncertain", worktree=str(tmp_path))
     assert calls == 1
@@ -137,7 +137,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
     initial = comms.bus.log.read_delivery_cohort(root_id, error.wire_seq)
     assert initial.message.message_id == error.message_id
     assert len(list(comms.bus.full_history_page().messages)) == 1
-    monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', original)
+    monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', original)
     user = comms.registry.require(initial.message.sender)
     same_input = Message(
         user.name,
@@ -160,7 +160,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     comms, _, root_id, _ = _root(tmp_path)
     original_open = os.open
     captured = {}
-    original_append = comms.bus.log._append_private_unlocked
+    original_append = comms.bus.log.append_private_unlocked
 
     def fail_bus_open(path, *args, **kwargs):
         if Path(path) == comms.bus.log.path and args[0] & os.O_WRONLY:
@@ -172,13 +172,13 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
         original_append(metadata, row)
 
     monkeypatch.setattr(os, "open", fail_bus_open)
-    monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', capture_then_append)
+    monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', capture_then_append)
     with pytest.raises(HumanInitialUnknownError, match="UNKNOWN") as raised:
         comms.messaging.send_user_message("alice", "first input", worktree=str(tmp_path))
     assert raised.value.wire_root_id == root_id
     assert captured["id"] == raised.value.message_id
     assert list(comms.bus.full_history_page().messages) == []
-    assert comms.bus.log._private_marker_unlocked().last_seq == 1
+    assert comms.bus.log.private_marker_unlocked().last_seq == 1
     monkeypatch.setattr(os, "open", original_open)
     second = Comms(comms.root)
     user = second.registry.require(captured["from"])
@@ -203,13 +203,13 @@ def test_cancellation_after_append_entry_is_typed_unknown(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     comms, _, root_id, _ = _root(tmp_path)
-    original = comms.bus.log._append_private_unlocked
+    original = comms.bus.log.append_private_unlocked
 
     def cancel_after_append(metadata, row):
         original(metadata, row)
         raise asyncio.CancelledError("cancelled after durable append")
 
-    monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', cancel_after_append)
+    monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', cancel_after_append)
     with pytest.raises(HumanInitialUnknownError, match="outcome UNKNOWN") as raised:
         comms.messaging.send_user_message("alice", "cancelled after append", worktree=str(tmp_path))
     assert comms.bus.log.read_delivery_cohort(root_id, raised.value.wire_seq).message.message_id == (
@@ -276,7 +276,7 @@ async def test_cancelled_ui_wait_does_not_replay_a_blocked_send(
 
     comms, _, root_id, _ = _root(tmp_path)
     entered, release = threading.Event(), threading.Event()
-    original = comms.bus.log._append_private_unlocked
+    original = comms.bus.log.append_private_unlocked
     calls = 0
 
     def blocked_append(metadata, row):
@@ -286,7 +286,7 @@ async def test_cancelled_ui_wait_does_not_replay_a_blocked_send(
         assert release.wait(5)
         original(metadata, row)
 
-    monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', blocked_append)
+    monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', blocked_append)
     pending = asyncio.create_task(
         asyncio.to_thread(comms.messaging.send_user_message, "alice", "cancelled", worktree=str(tmp_path))
     )
