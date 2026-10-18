@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from abc import abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
@@ -20,6 +20,7 @@ from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
+    from .goal_actions import GoalAction, GoalActionContext
     from .goal_presentation import ThreadGoalExecution
     from .goal_waits import GoalWaits
 
@@ -359,6 +360,12 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration: ...
 
     @abstractmethod
+    def __iter__(self) -> Iterator[Goal]: ...
+
+    @abstractmethod
+    def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R: ...
+
+    @abstractmethod
     def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T: ...
 
     @abstractmethod
@@ -450,6 +457,12 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
 @dataclass(frozen=True)
 class NoGoal(NullMember, GoalDeclaration):
+    def __iter__(self) -> Iterator[Goal]:
+        return iter(())
+
+    def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R:
+        return action.create(ctx)
+
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
         return previous
 
@@ -507,6 +520,12 @@ class Goal(RecordMember, GoalDeclaration):
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
+
+    def __iter__(self) -> Iterator[Goal]:
+        yield self
+
+    def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R:
+        return action.change(self, ctx)
 
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
         return self
