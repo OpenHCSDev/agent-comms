@@ -2,6 +2,7 @@ from agent_comms.acp_failure import ACPFailure
 
 """Declared extension decoding is strict and shares its owner with consumers."""
 import pytest
+from agent_comms.goal_presentation import IdleGoalExecution
 
 from agent_comms.acp_extension import (
     AgentCommsUpdate,
@@ -78,7 +79,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
             "Pilot",
             UnmeasuredContext(),
         ),
-        GoalChangedUpdate(None, None),
+        GoalChangedUpdate(None, IdleGoalExecution()),
         CompactionChangedUpdate(CompactionStart()),
         CompactionCommittedUpdate("summary", "first-kept"),
         TranscriptSnapshotUpdate(
