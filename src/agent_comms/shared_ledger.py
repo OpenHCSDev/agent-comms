@@ -6,12 +6,26 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
+from .cli_result import CliResult
 from .field_codec import FieldCodec
 from .locked_store import LockedStore, RootFile
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
     from .threads import Thread
+
+
+@dataclass(frozen=True)
+class LedgerDocument(CliResult):
+    """The ledger's one free-form JSON document as read; its keys are its authors'."""
+
+    entries: Mapping[str, object]
+
+    def encoded(self) -> object:
+        return self.to_wire()
+
+    def to_wire(self) -> dict[str, object]:
+        return dict(self.entries)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +42,9 @@ class SharedLedger(RootFile, ThreadOwnedState, LockedStore[dict[str, Any]]):
 
     def empty(self) -> dict[str, Any]:
         return {}
+
+    def document(self) -> LedgerDocument:
+        return LedgerDocument(self.read())
 
     def merge(self, updates: Mapping[str, object], author: str) -> None:
         changes = FieldCodec.decode(self.record_type, dict(updates))

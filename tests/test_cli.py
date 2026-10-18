@@ -581,3 +581,23 @@ class TestSelectedTargetActions:
         assert result.outcomes[1].result.archived == "alpha"
         with pytest.raises(ValueError, match="single target"):
             TargetEdit(ForkCliCommand, ("alpha", "beta"), {}).apply(comms)
+
+
+def test_result_kind_decides_exit_code_and_reconnected_targets():
+    from agent_comms.cli_commands import (
+        StartCliCommand, TargetBatchResult, TargetCompleted, TargetFailed, ThreadStoppedResult,
+    )
+    from agent_comms.owner_lifecycle import OwnerStartResult
+
+    launched = OwnerStartResult("alpha", 11, True)
+    attached = OwnerStartResult("beta", 12, False)
+    batch = TargetBatchResult((
+        TargetCompleted("alpha", StartCliCommand(name="alpha"), launched),
+        TargetCompleted("beta", StartCliCommand(name="beta"), attached),
+        TargetFailed("gamma", "ValueError", "gone"),
+    ))
+    assert launched.reconnect_targets() == ("alpha",) and attached.reconnect_targets() == ()
+    assert batch.reconnect_targets() == ("alpha",)
+    assert batch.exit_code() == 1
+    assert TargetBatchResult(batch.outcomes[:2]).exit_code() == 0
+    assert ThreadStoppedResult("alpha").exit_code() == 0
