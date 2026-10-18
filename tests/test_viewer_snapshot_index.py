@@ -21,7 +21,7 @@ from agent_comms.coordination_errors import CoordinationReadUnavailable, StaleRe
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
-from agent_comms.wire_log import OpenedWireSnapshot
+from agent_comms.wire_log import CurrentSnapshotOpening, OpenedWireSnapshot
 from agent_comms.ui_model.observation import (
     ObservationService,
     ObserveSidebar,
@@ -626,11 +626,11 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, t
     row = ObservationWireRecord(RecordedContextManifestWireObservation(recorded))
     log.path.write_text(json.dumps(row.to_wire()) + '\n')
     log.path.chmod(0o600)
-    with log._opened_wire_snapshot(need_sequence=False) as source:
+    with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         assert type(source) is OpenedWireSnapshot
         assert list(source.public_records()) == []
     log.path.write_text(json.dumps({'observation': {'kind': 'unknown'}}) + '\n')
-    with log._opened_wire_snapshot(need_sequence=False) as source:
+    with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         with pytest.raises((ValueError, TypeError, KeyError)):
             list(source.public_records())
         with pytest.raises((ValueError, TypeError, KeyError)):
@@ -649,7 +649,7 @@ def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
         marker = comms.bus.log._private_marker_unlocked()
         marker.last_seq += 1
         comms.bus.log.write_metadata_unlocked(marker)
-    with comms.bus.log._opened_wire_snapshot(need_sequence=False) as source:
+    with comms.bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         assert isinstance(source, ScannedWireSnapshot)
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
     with comms.bus.snapshot(viewer=NamedViewer('Alice')) as (basis, source):

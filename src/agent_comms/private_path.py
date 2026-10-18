@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import stat
 import sys
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +41,33 @@ class FileIdentity:
     @classmethod
     def from_stat(cls, observed: os.stat_result) -> FileIdentity:
         return cls(observed.st_dev, observed.st_ino)
+
+
+class ObservedPath(ABC):
+    @staticmethod
+    def at(path: Path) -> ObservedPath:
+        try:
+            observed = path.stat()
+        except FileNotFoundError:
+            return AbsentPath()
+        return PresentPath(FileIdentity.from_stat(observed))
+
+    @abstractmethod
+    def same_file(self, identity: FileIdentity) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class AbsentPath(ObservedPath):
+    def same_file(self, identity: FileIdentity) -> bool:
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class PresentPath(ObservedPath):
+    identity: FileIdentity
+
+    def same_file(self, identity: FileIdentity) -> bool:
+        return self.identity == identity
 
 
 @dataclass(frozen=True, slots=True)

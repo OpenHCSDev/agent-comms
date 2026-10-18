@@ -138,7 +138,7 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
                 "          OR NEW.resolver_version != OLD.resolver_version\n"
                 "          OR NEW.policy_version != OLD.policy_version\n"
                 "          OR NEW.accepted_at_ms != OLD.accepted_at_ms\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort acknowledgement facts are immu"
+                "        BEGIN SELECT RAISE(ABORT, 'cohort receipt facts are immu"
                 "table'); END"
             ),
             "cohort_receipt_seal_complete": (
@@ -165,7 +165,7 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
                 "                   WHERE m.wire_root_id = OLD.wire_root_id AND m"
                 ".wire_seq = OLD.wire_seq)\n"
                 "                  != OLD.claim_count;\n"
-                "            SELECT RAISE(ABORT, 'noncontiguous cohort acknowledgement or"
+                "            SELECT RAISE(ABORT, 'noncontiguous cohort receipt or"
                 "dinal')\n"
                 "            WHERE EXISTS (\n"
                 "                SELECT 1 FROM cohort_delivery_receipts d\n"
@@ -213,7 +213,7 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
             "cohort_receipt_delete_guard": (
                 "\n"
                 "        BEFORE DELETE ON claim_batch_receipts\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort acknowledgement cannot be dele"
+                "        BEGIN SELECT RAISE(ABORT, 'cohort receipt cannot be dele"
                 "ted'); END"
             ),
         }
@@ -388,13 +388,13 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
             "cohort_delivery_update_guard": (
                 " BEFORE UPDATE ON coh"
                 "ort_delivery_receipts\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery acknowledgement is im"
+                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery receipt is im"
                 "mutable'); END"
             ),
             "cohort_delivery_delete_guard": (
                 " BEFORE DELETE ON coh"
                 "ort_delivery_receipts\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery acknowledgement canno"
+                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery receipt canno"
                 "t be deleted'); END"
             ),
         }

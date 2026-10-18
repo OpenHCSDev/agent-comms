@@ -9,9 +9,8 @@ import pytest
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
-from agent_comms.private_path import FileRevision
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
-from agent_comms.wire_log import OpenedWireSnapshot
+from agent_comms.wire_log import CurrentSnapshotOpening, WireLog
 from agent_comms.wire_metadata import WireMetadata
 from agent_comms.wire_record import WireRecord, WireScan
 
@@ -47,10 +46,12 @@ def test_scan_and_candidate_share_physical_boundary(tmp_path, extra, newline):
 
     path = tmp_path / 'row.jsonl'
     path.write_bytes(raw)
-    with path.open('rb') as stream:
-        source = OpenedWireSnapshot(metadata, 1, stream, FileRevision.from_file(stream))
+    path.chmod(0o600)
+    log = WireLog(path)
+    log.write_metadata_unlocked(metadata)
+    with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         if extra or not newline:
-            with pytest.raises(ProjectionUnavailableError):
+            with pytest.raises(RelationViolationError):
                 WakeCandidateIndex._replay_prefix(source, 0, 0, max_rows=1, max_bytes=1)
         else:
             # A legal first row must advance even with a one-byte work quantum.
