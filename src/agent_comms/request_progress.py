@@ -30,7 +30,7 @@ class RequestProgress(PiPayload):
     available_tokens: int | None = field(default=None, metadata={"wire_name": "availableTokens", "wire_omit_default": True})
     output_token_field: str | None = field(default=None, metadata={"wire_name": "outputTokenField", "wire_omit_default": True})
     requested_output_tokens: int | None = field(default=None, metadata={"wire_name": "requestedOutputTokens", "wire_omit_default": True})
-    admitted_output_tokens: int | None = field(default=None, metadata={"wire_name": "admittedOutputTokens", "wire_omit_default": True})
+    allowed_output_tokens: int | None = field(default=None, metadata={"wire_name": "admittedOutputTokens", "wire_omit_default": True})
     minimum_output_tokens: int | None = field(default=None, metadata={"wire_name": "minimumOutputTokens", "wire_omit_default": True})
 
     def __post_init__(self):

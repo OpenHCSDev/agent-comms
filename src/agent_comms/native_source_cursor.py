@@ -155,7 +155,7 @@ class NativeSourceCursor:
             ):
                 raise IdentityConflict("current cursor would change owner or regress")
             cursor = prior
-            if identity.matches_prefix(db, evidence) and identity.admits(
+            if identity.matches_prefix(db, evidence) and identity.allows(
                 db, proof, injected, prior, committed_input_id
             ):
                 cursor = self._publish(db, identity, prior, coverage, proof)

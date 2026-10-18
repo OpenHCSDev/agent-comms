@@ -96,7 +96,7 @@ def main() -> int:
     """Run the explicitly selected, already declared persistent owner.
 
     Catalog and tool commands belong to agent-comms, not this launcher. Parse
-    before consulting a route or wire so discovery cannot admit an owner.
+    before consulting a route or wire so discovery cannot start an owner.
     Registration belongs to the original thread management operation.
     """
     argparse.ArgumentParser(

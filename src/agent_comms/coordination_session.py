@@ -39,7 +39,7 @@ class CoordinationSession(CoordinationStore):
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
-        """Admit a rollback-journal writer only after existing readers retire.
+        """Allow a rollback-journal writer only after existing readers retire.
 
         ``BEGIN IMMEDIATE`` lets new work proceed before old readers release,
         then makes those readers a fallible dependency of ``COMMIT``.  Every

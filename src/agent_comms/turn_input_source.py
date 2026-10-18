@@ -123,7 +123,7 @@ class OriginalTurnInput(TurnInputSource):
         return None
 
     def valid_keys(self, text: str) -> bool:
-        return super().valid_keys(text) or (self.batch.admits_multiple and text == self.prompt)
+        return super().valid_keys(text) or (self.batch.allows_multiple and text == self.prompt)
 
     def reserve(
         self, dispositions: InputDispositions, owner: Thread, turn: TurnId, claim_scope: int,

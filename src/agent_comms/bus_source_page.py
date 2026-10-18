@@ -45,7 +45,7 @@ class CoveragePage(AddressedPage):
             raise ValueError("Noninitial coverage page must declare partial coverage")
 
     def require_exhausted(self, has_more: bool) -> None:
-        """An unqualified coverage request cannot admit a truncated prefix."""
+        """An unqualified coverage request cannot accept a truncated prefix."""
         if has_more and not self.partial:
             raise IdentityConflict("source coverage exceeded its bounded private initial scan")
 

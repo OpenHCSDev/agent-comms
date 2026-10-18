@@ -2,7 +2,7 @@
 
 No bus send, file append, O_EXCL claim sidecar, write fence, or retry lives here.
 A caller must serialize send and every claim-bearing read under the wire→bus
-locks, admit only newline-complete rows after fsync of the opened bus file (and
+locks, accept only newline-complete rows after fsync of the opened bus file (and
 its parent on creation), and quarantine/re-fsync a visible row after failed
 fsync before any reader observes it. Parsed rows alone are NOT durable proof.
 """

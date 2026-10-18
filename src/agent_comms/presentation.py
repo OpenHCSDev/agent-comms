@@ -434,7 +434,7 @@ class BusPresentation:
 
     @contextmanager
     def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[DisplaySelection, WireSnapshot]]:
-        """Admit the display index before borrowing the bus-owned source cut."""
+        """Check the display index before borrowing the bus-owned source cut."""
         self.display_index(viewer.name)
         with self.bus.snapshot(viewer) as selected:
             yield selected

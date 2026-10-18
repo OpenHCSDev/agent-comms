@@ -237,7 +237,7 @@ class HistorySource:
         ReadLedger.at(self.root).mark_displayed(displayed.viewer, displayed)
 
     def require_original(self, root: Path) -> None:
-        """Admit an original typed acquisition before destination publication."""
+        """Check an original typed acquisition before destination publication."""
         root = root.resolve()
         if self.root != str(root) or self.original_root != str(root):
             raise ValueError("Recorded provenance belongs to another original source")

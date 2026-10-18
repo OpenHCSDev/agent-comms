@@ -36,7 +36,7 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path, *
         )
     prompt = "text 1\n\ntext 2"
     document = stored_inputs(ledger.root)
-    assert InputBatch.capture(origins, keys, prompt, owner, document).admits_multiple
+    assert InputBatch.capture(origins, keys, prompt, owner, document).allows_multiple
     for messages, input_keys, text in (
         (origins[:1], keys[:1], "text 1"),
         ((origins[0], origins[0]), keys, prompt),
@@ -45,7 +45,7 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path, *
         (origins, tuple(reversed(keys)), prompt),
         (origins, keys, "corrected prompt"),
     ):
-        assert not InputBatch.capture(messages, input_keys, text, owner, document).admits_multiple
+        assert not InputBatch.capture(messages, input_keys, text, owner, document).allows_multiple
 
     with pytest.raises(ValueError, match="acknowledgement is unavailable"):
         InputBatch.capture(origins, (keys[0], "missing"), prompt, owner, document)
@@ -79,7 +79,7 @@ async def test_captured_originals_reach_context_reservation_and_unbound_retireme
 
             async with native.original_input(agent, session_id, "Original direct input") as turn:
                 direct_keys = require_context(turn)
-                assert len(direct_keys) == 1 and not turn.original.batch.admits_multiple
+                assert len(direct_keys) == 1 and not turn.original.batch.allows_multiple
 
             comms.threads.claim_thread(
                 "peer", tags=frozenset(), worktree=str(native.project)
@@ -94,7 +94,7 @@ async def test_captured_originals_reach_context_reservation_and_unbound_retireme
             async with AsyncExitStack() as resources, AsyncExitStack() as permits:
                 assert await turn.acquire(resources, permits)
                 channel_keys = require_context(turn)
-                assert len(channel_keys) == 2 and turn.original.batch.admits_multiple
+                assert len(channel_keys) == 2 and turn.original.batch.allows_multiple
                 assert turn.original.batch.prompt == prompt
 
             turn = OwnedTurn(agent.turns, session_id, agent.sessions.require(session_id),
@@ -102,7 +102,7 @@ async def test_captured_originals_reach_context_reservation_and_unbound_retireme
             async with AsyncExitStack() as resources, AsyncExitStack() as permits:
                 assert await turn.acquire(resources, permits)
                 scheduled_keys = turn.original.keys
-                assert len(scheduled_keys) == 1 and not turn.original.batch.admits_multiple
+                assert len(scheduled_keys) == 1 and not turn.original.batch.allows_multiple
                 segment, = (item for item in turn.context.segments
                             if isinstance(item, UserInputSegment))
                 assert not any(isinstance(item, InputProvenance) for item in segment.provenance)

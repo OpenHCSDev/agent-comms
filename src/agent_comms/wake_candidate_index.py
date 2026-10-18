@@ -326,7 +326,7 @@ class WakeCandidateIndex(TypedStore):
                 break
             # A first record larger than the batch budget is authorized alone:
             # every batch with remaining source bytes must advance the
-            # checkpoint; WireRecord independently admits its physical size.
+            # checkpoint; WireRecord independently checks its physical size.
             authorized += 1
             record = json.loads(raw, object_pairs_hook=unique_wire_object)
             if not isinstance(record, dict):
