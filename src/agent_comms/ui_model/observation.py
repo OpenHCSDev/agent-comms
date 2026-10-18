@@ -502,7 +502,7 @@ class ObserveSidebar(InterestRequest):
 
     def _answer(
         self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str
-    ) -> SidebarObserved | SidebarUnreadable | None:
+    ) -> SidebarResult:
         from agent_comms.ui_model.sidebar import SidebarModel
 
         try:
@@ -512,27 +512,16 @@ class ObserveSidebar(InterestRequest):
         except RouteIndexRebuilding:
             raise  # A bounded preparation unit finished; runnable work remains.
         except UnreadableHistory.DEFERRED_READS:
-            return None  # No new snapshot; keep the original interest for the next observation.
+            return SidebarDeferred(revision, self)
         except StoredHistoryUnreadable as error:
             return SidebarUnreadable(revision, self, UnreadableHistory.capture(error))
-
-    def roster(
-        self, comms: Comms, revision: WireRevision
-    ) -> SidebarObserved | SidebarUnreadable | None:
-        viewer = comms.messaging.user_identity(self.worktree).name
-        return self._answer(revision, comms.views.presentation.roster, viewer)
-
-    def answer(
-        self, comms: Comms, revision: WireRevision
-    ) -> SidebarObserved | SidebarUnreadable | None:
-        return self._answer(revision, comms.views.viewer_snapshot, self.worktree)
 
 
 class SidebarReadStage(ABC):
     @abstractmethod
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
-    ) -> SidebarObserved | SidebarUnreadable | None: ...
+    ) -> SidebarResult: ...
 
     def next(self) -> SidebarReadStage:
         return self
@@ -541,8 +530,9 @@ class SidebarReadStage(ABC):
 class RosterSidebarRead(SidebarReadStage):
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
-    ) -> SidebarObserved | SidebarUnreadable | None:
-        return request.roster(comms, revision)
+    ) -> SidebarResult:
+        viewer = comms.messaging.user_identity(request.worktree).name
+        return request._answer(revision, comms.views.presentation.roster, viewer)
 
     def next(self) -> SidebarReadStage:
         return CompleteSidebarRead()
@@ -551,8 +541,8 @@ class RosterSidebarRead(SidebarReadStage):
 class CompleteSidebarRead(SidebarReadStage):
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
-    ) -> SidebarObserved | SidebarUnreadable | None:
-        return request.answer(comms, revision)
+    ) -> SidebarResult:
+        return request._answer(revision, comms.views.viewer_snapshot, request.worktree)
 
 
 class SidebarReading(Observation[ObserveSidebar]):
@@ -587,15 +577,16 @@ class SidebarReading(Observation[ObserveSidebar]):
                 # serve foreground requests between every bounded unit.
                 yield None
                 continue
-            if result is None:
-                return
-            self.sent = key
-            result.finish_read(self)
-            if self.published is None or not result.same_observation(self.published):
-                self.published = result
-                yield result
+            yield from result.finish_read(self, key)
             if self.stage is stage:
                 return
+
+    def publish(self, result: SidebarResult, key: SidebarSent) -> Iterator[SidebarResult]:
+        self.sent = key
+        result.advance(self)
+        if self.published is None or not result.same_observation(self.published):
+            self.published = result
+            yield result
 
 
 @dataclass(frozen=True)
@@ -823,8 +814,19 @@ class SidebarResult(Observed):
         """Every declared answer participates; a store stat is not another answer."""
         return replace(self, revision=previous.revision) == previous
 
-    @abstractmethod
-    def finish_read(self, reading: SidebarReading) -> None: ...
+    def finish_read(self, reading: SidebarReading, key: SidebarSent) -> Iterator[SidebarResult]:
+        return reading.publish(self, key)
+
+    def advance(self, reading: SidebarReading) -> None:
+        """Keep this stage until its source revision changes."""
+
+
+@dataclass(frozen=True)
+class SidebarDeferred(SidebarResult):
+    """Keep the original interest, stage and published answer for the next read."""
+
+    def finish_read(self, reading: SidebarReading, key: SidebarSent) -> Iterator[SidebarResult]:
+        return iter(())
 
 
 @dataclass(frozen=True)
@@ -832,7 +834,7 @@ class SidebarObserved(SidebarResult):
     snapshot: CoordinationSnapshot
     derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]
 
-    def finish_read(self, reading: SidebarReading) -> None:
+    def advance(self, reading: SidebarReading) -> None:
         reading.stage = reading.stage.next()
         if self.snapshot.unread_pending:
             reading.sent = None
@@ -843,9 +845,6 @@ class SidebarUnreadable(SidebarResult):
     """The requested sidebar could not be read; no stale snapshot is offered."""
 
     error: UnreadableHistory
-
-    def finish_read(self, reading: SidebarReading) -> None:
-        """Keep this stage until its source revision changes."""
 
 
 class ThreadReadResult(ABC):
