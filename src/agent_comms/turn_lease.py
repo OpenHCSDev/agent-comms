@@ -311,7 +311,9 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
 
     lookup: str
     generation: int
-    _registry_path: Path | None = field(default=None, init=False, repr=False, compare=False)
+    _registry_path: Path | None = field(
+        default=None, repr=False, compare=False, metadata={"wire_transient": True}
+    )
 
     record_type = ActiveTurn
 
@@ -322,7 +324,7 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
         return self._registry_path
 
     @property
-    def path(self) -> Path:
+    def path(self) -> Path:  # type: ignore[override]  # Derived from the bound registry.
         return self.registry_path.parent / "turns" / f"{self.lookup}-{self.generation}.json"
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
@@ -347,9 +349,8 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
 
     @classmethod
     def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        record = cls(identity.incarnation.require_recorded().lookup, identity.generation)
-        object.__setattr__(record, "_registry_path", registry_path.resolve())
-        return record
+        return cls(identity.incarnation.require_recorded().lookup, identity.generation,
+                   registry_path.resolve())
 
     @classmethod
     def begin(

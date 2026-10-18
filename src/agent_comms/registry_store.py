@@ -142,7 +142,9 @@ class RegistryStore(LockedStore[RegistryDocument]):
             if entry is None:
                 document = self._decode(raw)
             else:
-                document = self._bind_document(RegistryDocument.from_wire(raw, (entry.raw, entry.document)))
+                document = self._bind_document(
+                    RegistryDocument.from_wire(raw, (entry.raw, entry.document))
+                )
             self.cache.entry = RegistryRevision(revision, document, raw)
             return document
 
@@ -170,8 +172,10 @@ class RegistryStore(LockedStore[RegistryDocument]):
             if entry is not None and entry.revision == revision[0]:
                 return RegistryEntryRevision(revision, entry.document.entry(name))
             raw = json.loads(self.path.read_text())
-            entry = RegistryDocument.entry_from_wire(raw, name)
-            return RegistryEntryRevision(revision, replace(entry, thread=self._bind_thread(entry.thread)))
+            decoded_entry = RegistryDocument.entry_from_wire(raw, name)
+            return RegistryEntryRevision(
+                revision, replace(decoded_entry, thread=self._bind_thread(decoded_entry.thread))
+            )
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
