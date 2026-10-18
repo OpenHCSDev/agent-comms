@@ -95,7 +95,9 @@ def test_torn_append_uses_checkpoint_then_reads_only_completed_suffix(tmp_path, 
         completed = index.snapshot(source, semantics())
         assert completed.counts == {"#team": 2}
         assert completed.offset == len(first) + len(second)
-        assert parsed == [2]
+        # The offset index prepares row 2, then the display materializes it.
+        # Neither consumer may reparse row 1 or the incomplete suffix.
+        assert parsed == [2, 2]
 
 
 def test_activity_uses_the_same_complete_line_cut(tmp_path):

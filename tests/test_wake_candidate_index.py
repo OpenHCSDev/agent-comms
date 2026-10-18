@@ -23,6 +23,7 @@ from agent_comms.coordination_tables.publications import canonical_publication_k
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.private_path import FileRevision
+from agent_comms.wire_log import SavedPrefixOpening
 from agent_comms.threads import Thread
 from agent_comms.typed_table import TypedTable
 from agent_comms.wake_candidate_index import (
@@ -395,9 +396,6 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
     tmp_path: Path, first_batch_rows: int
 ) -> None:
     """Exercise decoder/transaction invariants, not certify a rewritten bus."""
-    from agent_comms.private_path import FileRevision
-    from agent_comms.wire_log import OpenedWireSnapshot
-
     comms, root_id, lookup = _private(tmp_path)
     messages = [
         comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
@@ -407,11 +405,8 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
     rows[1:3] = [_as_response(row, root_id, "duplicate-execution") for row in rows[1:3]]
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus.log)
-    with comms.bus.log.path.open("rb") as stream:
-        source = OpenedWireSnapshot(
-            comms.bus.log._private_marker_unlocked(), 0, stream, FileRevision.from_file(stream)
-        )
-        stat = os.fstat(stream.fileno())
+    with comms.bus.log._opened_wire_snapshot(opening=SavedPrefixOpening()) as source:
+        stat = os.fstat(source.stream.fileno())
         first_batch = index._replay_prefix(
             source, 0, 0, max_rows=first_batch_rows, max_bytes=256 * 1024
         )
