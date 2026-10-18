@@ -56,7 +56,8 @@ class ThreadRowModel:
 
     def disconnected(self, status: SessionDisconnected) -> ThreadRowModel:
         shown = status.presentation(self.title)
-        return replace(self, label=shown.label, summary=shown.summary, status=status)
+        return self.status.with_session(
+            self, lambda: replace(self, label=shown.label, summary=shown.summary, status=status))
 
     @classmethod
     def of(cls, person: ThreadView, unread: UnreadPresentation) -> ThreadRowModel:
