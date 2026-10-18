@@ -1052,6 +1052,15 @@ class CompactionData(PiResponseData):
     estimated_tokens_after: int | None = wire_field("estimatedTokensAfter")
 
     @property
+    def outcome(self):
+        from .agent_backend import NothingToCompaction, PlacedCompaction
+
+        if self.summary is None:
+            return NothingToCompaction()
+        return PlacedCompaction(summary=self.summary, first_kept=self.first_kept_entry_id,
+                                tokens_before=self.tokens_before)
+
+    @property
     def display_summary(self):
         from .backend import compaction_summary
 

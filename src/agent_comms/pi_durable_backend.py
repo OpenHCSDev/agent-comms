@@ -15,12 +15,8 @@ from pydantic import JsonValue
 from .agent_backend import (
     AgentBackend,
     CompactionOutcome,
-    Compacts,
-    ConfiguresModel,
-    ContextUsage,
     InputContent,
     InputId,
-    ReportsContext,
     RuntimeLocation,
     Steers,
     TurnDelivery,
@@ -58,14 +54,12 @@ from .native_transcript import StoredRecord
 from .pi_commands import (
     Abort,
     Compact,
-    GetAvailableModels,
-    GetSessionStats,
     GetState,
     PiCommand,
     SetModel,
-    SetThinkingLevel,
 )
 from .pi_events import AutoRetryEnd, DurablePiEvent, ModelRequestProgress, RetryEnd
+from .pi_capabilities import PiCapabilities
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField
 from .selected_session import SelectedSession
@@ -443,7 +437,7 @@ class CompactDurable(Compact):
     response_payload = OutcomeData
 
 
-class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel, Steers):
+class PiDurableBackend(PiCapabilities, AgentBackend, Steers):
     location_type = DurableDatabase
     unstarted_type = UnstartedRuntime
     event_kinds = frozenset(kind for member in DurablePiEvent.members_with(DurablePiEvent) for kind in member.known_kinds())
@@ -490,32 +484,15 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel, 
                 await self.child.shutdown()
                 self.child = None
 
-    async def request(self, thread, command):
+    async def inspect(self, thread, command):
         session = thread.runtime.select_session(self.comms.root / 'native-sessions' / thread.name, None)
+        registry = await Coordination.run_worker(self.comms.registry.snapshot)
         environment, _ = session.launch_environment(session.directory,
-            {**thread.launch().encode(), 'AGENT_COMMS_ROOT': str(self.comms.root)})
+            thread.native_environment(self.comms.root, registry, thread.worktree))
         return await (await self.open(thread, environment=environment)).request(command)
 
-    async def compact(self, thread, instructions):
-        return (await self.request(thread, CompactDurable(custom_instructions=instructions))).outcome
-
-    async def context_usage(self, thread):
-        usage = (await self.request(thread, GetSessionStats())).context_usage
-        if usage is None:
-            raise ValueError('Durable session has no context observation')
-        return ContextUsage(usage.tokens, usage.context_window)
-
-    async def models(self, thread):
-        return tuple(model.display_name for model in (await self.request(thread, GetAvailableModels())).models)
-
-    async def configure(self, thread, model, thinking):
-        if model is not None:
-            await self.request(thread, SetModel.from_name(model))
-        if thinking is not None:
-            await self.request(thread, SetThinkingLevel(level=thinking))
-        state = await self.request(thread, GetState())
-        reported = state.model.require_selection(model if model is not None else state.model.display_name)
-        return reported.display_name, state.thinking_level.wire_value()
+    def compaction_request(self, instructions):
+        return CompactDurable(custom_instructions=instructions)
 
     @classmethod
     async def run_selected(cls, claim, execution, *, model, selected_tool_mode,

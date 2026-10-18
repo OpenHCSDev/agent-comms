@@ -20,17 +20,9 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .agent_backend import (
     AgentBackend,
-    CompactionOutcome,
-    Compacts,
-    ConfiguresModel,
-    ContextUsage,
-    FailedCompaction,
     Forks,
     InputContent,
     Interrupts,
-    NothingToCompaction,
-    PlacedCompaction,
-    ReportsContext,
     RuntimeLocation,
     TurnDelivery,
 )
@@ -39,6 +31,7 @@ from .native_pi import NativePiRpcLaunch
 from .native_session_files import NativeSessionFiles
 from .native_session_reopen import SessionIdentityHelper
 from .native_transcript import NativeTranscript
+from .pi_capabilities import PiCapabilities
 from .selected_session import SavedSelectedSession
 from .unstarted_runtime import UnstartedRuntime
 
@@ -174,10 +167,8 @@ class PersistentPiSession:
 class PiNativeBackend(
     PersistentPiSession,
     Interrupts,
-    Compacts,
-    ReportsContext,
+    PiCapabilities,
     Forks,
-    ConfiguresModel,
     AgentBackend,
 ):
     """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
@@ -314,36 +305,6 @@ class PiNativeBackend(
 
         await backend.terminate_task_process(owner)
 
-    # -- ReportsContext ---------------------------------------------------
-
-    async def context_usage(self, thread: Thread) -> ContextUsage:
-        from .pi_commands import GetSessionStats
-
-        stats = await self.inspect(thread, GetSessionStats())
-        usage = stats.context_usage
-        if usage is None:
-            return ContextUsage(tokens=None, window=None)
-        return ContextUsage(tokens=usage.tokens, window=usage.context_window)
-
-    # -- Compacts ---------------------------------------------------------
-
-    async def compact(self, thread: Thread, instructions: str | None) -> CompactionOutcome:
-        """Ask Pi's own engine to compact through its ``compact`` RPC."""
-        from .native_pi import NativePiUnavailable
-        from .pi_commands import Compact
-
-        try:
-            data = await self.inspect(thread, Compact(custom_instructions=instructions))
-        except (NativePiUnavailable, ValueError) as error:
-            return FailedCompaction(str(error))
-        if data.summary is None:
-            return NothingToCompaction()
-        return PlacedCompaction(
-            summary=data.summary,
-            first_kept=data.first_kept_entry_id,
-            tokens_before=data.tokens_before,
-        )
-
     # -- Forks ------------------------------------------------------------
 
     @classmethod
@@ -363,32 +324,16 @@ class PiNativeBackend(
 
     # -- ConfiguresModel --------------------------------------------------
 
-    async def models(self, thread: Thread) -> tuple[str, ...]:
+    async def discover_models(self, thread: Thread):
         from .pi_commands import GetAvailableModels
 
-        data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
-        return tuple(dict.fromkeys(
-            model.display_name for model in data.models if model.provider and model.id
-        ))
+        return await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
 
-    async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
-        from .native_pi import NativePiUnavailable
-        from .pi_commands import SetModel, SetThinkingLevel
-
-        commands = []
-        if model is not None:
-            commands.append(SetModel.from_name(model))
-        if thinking is not None:
-            commands.append(SetThinkingLevel(level=thinking))
-        if not commands:
-            raise ValueError("A configuration change names a model or a thinking level")
+    async def apply_settings(self, thread, commands):
         arguments = self.arguments(thread)
         for command in commands:
             state = await command.configure(self.agent_bin, arguments, worktree=Path(thread.worktree))
             arguments = self.agent_args.with_model(state.model.display_name).with_thinking(
                 state.thinking_level
             ).argv
-        selected, level = state.model.display_name, state.thinking_level.wire_value()
-        if selected is None or level is None:
-            raise NativePiUnavailable("Native configuration did not report model and thinking level")
-        return selected, level
+        return state
