@@ -1,5 +1,6 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
 import importlib
+import json
 import os
 import sqlite3
 import subprocess
@@ -19,7 +20,7 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
+from agent_comms.tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsOrderWorkTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
 from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
@@ -43,6 +44,36 @@ def create(commander, problem, command='printf 1', expected=1, deadline=1000, ow
         repo='OpenHCSDev/agent-comms', text='Fix ' + problem,
     )).apply(comms, caller)
     return comms.goals.todos.get(problem)
+
+
+def test_order_work_reads_the_assignees_calls_since_its_order_newest_first(commander, tmp_path):
+    comms, caller = commander
+    session = tmp_path / 'unit.jsonl'
+
+    def turn(n, at, *calls):
+        stamp = f'1970-01-01T00:{at // 60:02d}:{at % 60:02d}+00:00'
+        yield dict(type='message', id=f'u{n}', timestamp=stamp, message=dict(role='user', content='go'))
+        yield dict(type='message', id=f'a{n}', timestamp=stamp, message=dict(role='assistant', content=[
+            dict(type='toolCall', id=call, name='read', arguments=dict(path=f'{call}.py')) for call in calls],
+            stopReason='toolUse'))
+        for call in calls[:-1]:
+            yield dict(type='message', id=f'r{call}', timestamp=stamp, message=dict(
+                role='toolResult', toolCallId=call, toolName='read', isError=call == 'late',
+                content=[dict(type='text', text='contents')]))
+
+    rows = [dict(type='session', id='source', version=3), *turn(1, 50, 'before'),
+            *turn(2, 150, 'early', 'late', 'running')]
+    session.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    session.chmod(0o600)
+    comms.registry.declare(comms.registry.new_thread(
+        'unit', frozenset(), str(tmp_path), session_file=str(session), created_at=3.0))
+    comms.goals.update_goal('unit', SetGoalAction(text='Unit brief', goal_id='unit-goal'))
+    create(commander, 'P1', owner='unit')
+    work = CommsOrderWorkTool(problem='P1').apply(comms, caller)
+    assert work.thread.name == 'unit' and work.since == 100
+    assert [(call.tool_call_id, call.digest, call.state.declared_name) for call in work.calls] == [
+        ('running', 'read running.py', 'running'), ('late', 'read late.py', 'failed'),
+        ('early', 'read early.py', 'succeeded')]
 
 
 def test_two_orders_keep_one_original_goal_and_independent_facts(commander):
