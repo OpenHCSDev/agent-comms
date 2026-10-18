@@ -114,9 +114,10 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
 
     @classmethod
     def require_name(cls) -> str:
-        if cls.declared_name is None:
+        name = cls.declared_name
+        if name is None:
             raise ValueError(f"{cls.__name__} is an unnamed declaration.")
-        return cls.declared_name
+        return name
 
     @classmethod
     def names(cls) -> tuple[str, ...]:

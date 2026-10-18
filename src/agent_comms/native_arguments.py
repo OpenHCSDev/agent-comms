@@ -54,7 +54,7 @@ class OptionArgument(NativeArgument):
     def consume(cls, inline: str | None, arguments: Iterator[str]) -> OptionArgument: ...
 
 
-class NamedOption:
+class NamedOption(OptionArgument):
     @classmethod
     def flag(cls) -> str:
         return "--" + cls.require_name().replace("_", "-")
