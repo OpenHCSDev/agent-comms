@@ -11,7 +11,7 @@ from .config import CommanderConfig
 from ..field_codec import MalformedRecord
 from ..native_tool_call import SelectedToolDenied
 from ..native_tools import CodingTool
-from ..tool_declaration import one_line
+from ..tool_declaration import ToolDeclaration, one_line
 from ..registration import Registration
 
 CONFIG = CommanderConfig.installed()
@@ -37,7 +37,7 @@ def decoded(name, args):
 
 def digest_line(name, args, tool):
     """What the call does, in enough detail to judge it."""
-    return tool and tool.digest() or f'{name} {one_line(json.dumps(args), 260)}'
+    return ToolDeclaration.call_digest(name, tool, args)
 
 
 def record_edit(thread, tool):

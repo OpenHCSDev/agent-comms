@@ -15,7 +15,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
+    from .native_transcript import NativeRecord
     from .transcript_events import TranscriptEvent
+    from .turn_digests import TurnBound
 
 from .field_codec import MalformedRecord
 from .bus_publication import CommittedDelivery
@@ -315,25 +317,27 @@ class TranscriptSource:
     async def watch_requests(self, emit) -> None:
         """Sources without a harness continuation have no bridge requests."""
 
-    def turns(self, last: int):
+    def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
         """Read input-bounded turns under one original record-source cut."""
-        turns, pending = [], []
         with self.reading() as reader:
             cut = reader.cut()
             if cut.offset == 0:
                 return ()
             with closing(reader.reverse(cut.offset)) as records:
-                for record in records:
-                    pending.append(record)
-                    if record.project(lambda original: original.entry.input_boundary):
-                        turns.append(TurnDigest(record.entry.require_entry_id(), tuple(
-                            event for original in reversed(pending) for event in original.events)))
-                        pending.clear()
-                        if len(turns) >= last:
-                            break
+                turns = bound.take(self._newest_turns(records))
             if not cut.holds(reader.cut(), cut.offset):
                 raise StaleRevision('Turn source changed during its read')
-        return tuple(turns)
+        return turns
+
+    @staticmethod
+    def _newest_turns(records: Iterator[NativeRecord]) -> Iterator[TurnDigest]:
+        pending: list[NativeRecord] = []
+        for record in records:
+            pending.append(record)
+            if record.project(lambda original: original.entry.input_boundary):
+                yield TurnDigest(record.entry.require_entry_id(), tuple(
+                    event for original in reversed(pending) for event in original.events))
+                pending.clear()
 
     def current_draft(self) -> TranscriptDraft:
         return NoDraft()
