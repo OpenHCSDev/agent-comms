@@ -119,8 +119,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
         yield resumed.thread.status.update()
 
 
-class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
-    declared_name = None  # Follows a thread; not one more way to read it.
+class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=None):
 
     def __init__(self, options: CodexOptions, binding: Binding, db: CoordinationStore) -> None:
         TranscriptBridge.__init__(self, options, binding, db)

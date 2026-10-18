@@ -102,7 +102,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
 
     @classmethod
     def model_choices(cls) -> tuple[str, ...]:
-        return tuple(member.require_name() for member in cls.members_with(ModelInvocable))
+        return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
 
     @classmethod
     async def submit_control(

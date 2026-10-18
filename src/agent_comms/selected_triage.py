@@ -220,5 +220,5 @@ class RecordedTriageText(TextRepresentation):
 
     @classmethod
     def sql_constraint(cls, column: str) -> str:
-        names = tuple(member.require_name().lower() for member in SelectedTriage.members_with(SelectedTriage))
+        names = tuple(member.declared_name.lower() for member in SelectedTriage.members_with(SelectedTriage))
         return TextStorage.constraints(column, Literal[names])[0]

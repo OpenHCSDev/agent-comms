@@ -30,7 +30,7 @@ from .native_input_record import NativeInputCommit, NativeInputIdText
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .native_tool_call import NativeToolMode, NoNativeTools
-from .pi_vocabulary import NoThinkingOverride, ThinkingLevel
+from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -42,7 +42,19 @@ CAPABILITY = "pi-native-input-v1-live-only"
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
 
-class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed outcome
+class NativeRequestFailure(RuntimeError):  # noqa: N818 - nominal request outcome
+    """A failed input is reported and settled without authorizing a retry."""
+
+    @property
+    def public_failure(self) -> str:
+        return str(self)
+
+    @property
+    def rejected_response(self) -> pi.Response | None:
+        return None
+
+
+class NativePiUnavailable(NativeRequestFailure):  # noqa: N818 - nominal fail-closed outcome
     """Tracked execution failed closed without committing a coordinator fact."""
 
     native_stderr = ""
@@ -55,9 +67,12 @@ class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed out
     def public_failure(self):
         return f"{self}; the input is uncertain."
 
-    @property
-    def rejected_response(self) -> pi.Response | None:
-        return None
+
+class NativeEmptyAnswer(NativeRequestFailure):  # noqa: N818 - nominal model outcome
+    """The model completed, but supplied no answer text; the runtime is available."""
+
+    def __init__(self) -> None:
+        super().__init__("The model finished with no text")
 
 
 class NativePiInputNotSent(NativePiUnavailable):
@@ -593,7 +608,7 @@ class NativePiRpcLaunch:
         root: Path,
         session: SelectedSession,
         model: SelectedModel,
-        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode = NoNativeTools(),
     ) -> NativePiRpcLaunch:

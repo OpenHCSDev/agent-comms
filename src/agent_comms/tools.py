@@ -260,7 +260,7 @@ def tool_field(
     binding: type[ContextBinding] | None = None,
     choices=None,
 ):
-    metadata = {"description": description, "wire_nonnull": True}
+    metadata = {"description": description, "wire_nonnull": default is not None}
     if wire_name is not None:
         metadata["wire_name"] = wire_name
     if binding is not None:
@@ -274,7 +274,6 @@ def tool_field(
 class ToolRequest[Caller: ToolCaller = ToolCaller](
     ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool
 ):
-    family_discriminator = "tool"
     description: ClassVar[str]
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
@@ -313,7 +312,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         if cls.family_discriminator in arguments:
-            raise ValueError("Unknown tool argument: tool")
+            raise ValueError(f"Unknown tool argument: {cls.family_discriminator}")
         try:
             request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
         except MalformedRecord as error:
