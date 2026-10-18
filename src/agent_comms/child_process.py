@@ -51,7 +51,7 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
     """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class ProcessIdentity:
     pid: int
     start_time: int
@@ -64,13 +64,34 @@ class ProcessIdentity:
     def capture(cls, pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
 
+    @classmethod
+    def in_group(cls, pid: int, start_time: int, pgid: int) -> ProcessIdentity:
+        return GroupLeader(pid, start_time) if pgid == pid else GroupMember(pid, start_time)
+
+    def __eq__(self, other):
+        if not isinstance(other, ProcessIdentity):
+            return NotImplemented
+        return (self.pid, self.start_time) == (other.pid, other.start_time)
+
+    def __hash__(self):
+        return hash((self.pid, self.start_time))
+
     def alive(self) -> bool:
         return Platform.current().matches(self)
 
+    def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
+        return ()  # A stored, exited identity cannot grant group ownership.
 
-class ProcessGroups(ABC):
-    @abstractmethod
-    def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]: ...
+
+class GroupLeader(ProcessIdentity):
+    def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
+        return tuple(member for member in platform.members_of_group(self.pid)
+                     if member.start_time >= self.start_time)
+
+
+class GroupMember(ProcessIdentity):
+    def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
+        return (self,) if platform.matches(self) else ()
 
 
 class PidfdHandles:
@@ -192,11 +213,11 @@ class Platform(DeclaredFamily, affix="Platform"):
     @abstractmethod
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch: ...
 
-    @abstractmethod
-    def terminate_group(self, identity: ProcessIdentity) -> None: ...
+    def terminate_group(self, identity: ProcessIdentity) -> None:
+        self.signal_group(identity, signal.SIGTERM)
 
-    @abstractmethod
-    def force_group(self, identity: ProcessIdentity) -> None: ...
+    def force_group(self, identity: ProcessIdentity) -> None:
+        self.signal_group(identity, signal.SIGKILL)
 
     @abstractmethod
     def identity(self, pid: int) -> ProcessIdentity: ...
@@ -220,12 +241,20 @@ class Platform(DeclaredFamily, affix="Platform"):
     def signal_group(self, leader: ProcessIdentity, signum: int) -> None:
         # Snapshot identities, then signal each exact member. Never signal a
         # numeric group after its leader may have been reaped and reused.
+        signalled = 0
         for member in self.group_members(leader):
-            with suppress(ProcessLookupError):
+            try:
                 self.send(member, signum)
+            except IdentityMismatchError:
+                raise
+            except ProcessLookupError:
+                continue
+            signalled += 1
+        if not signalled and self.matches(leader):
+            raise RuntimeError(f"Live process {leader.pid} was not signalled")
 
 
-class PosixPlatform(ProcessGroups, Platform):
+class PosixPlatform(Platform):
     def acquire_store_lock(self, descriptor: int, *, shared: bool, blocking: bool) -> None:
         import fcntl
 
@@ -241,24 +270,14 @@ class PosixPlatform(ProcessGroups, Platform):
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
         return PosixLaunch(command, pass_fds)
 
-    def terminate_group(self, identity: ProcessIdentity) -> None:
-        self.signal_group(identity, signal.SIGTERM)
-
-    def force_group(self, identity: ProcessIdentity) -> None:
-        self.signal_group(identity, signal.SIGKILL)
-
     def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]:
         try:
             current = self.identity(leader.pid)
         except ProcessLookupError:
-            current = None
-        if current is not None and current != leader:
-            raise IdentityMismatchError(f"Process group leader changed: {leader.pid}")
-        return tuple(
-            member
-            for member in self.members_of_group(leader.pid)
-            if member.start_time >= leader.start_time
-        )
+            return leader.members(self)
+        if current != leader:
+            raise IdentityMismatchError(f"Process incarnation changed: {leader.pid}")
+        return current.members(self)
 
     @abstractmethod
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]: ...
@@ -279,7 +298,8 @@ class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
             raise ProcessLookupError(pid) from None
         if fields[0] in {"Z", "X"}:
             raise ProcessLookupError(pid)
-        return ProcessIdentity(pid, int(fields[19])), int(fields[2])
+        group = int(fields[2])
+        return ProcessIdentity.in_group(pid, int(fields[19]), group), group
 
     def identity(self, pid: int) -> ProcessIdentity:
         return self._stat(pid)[0]
@@ -367,7 +387,9 @@ class DarwinPlatform(PosixPlatform):
             raise OSError(code, os.strerror(code))
         if info.status == 5:  # SZOMB: exited, awaiting reap.
             raise ProcessLookupError(pid)
-        return ProcessIdentity(pid, info.start_seconds * 1_000_000 + info.start_microseconds)
+        return ProcessIdentity.in_group(
+            pid, info.start_seconds * 1_000_000 + info.start_microseconds, info.pgid,
+        )
 
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
         # proc_listpids returns bytes. Grow until one query fits; never mistake
@@ -390,7 +412,7 @@ class DarwinPlatform(PosixPlatform):
         return tuple(members)
 
 
-class Win32Platform(ProcessGroups, Platform):
+class Win32Platform(Platform):
     """Kernel creation times and named job objects bind the complete child tree."""
 
     store_lock_interval = 0.01

@@ -22,6 +22,7 @@ from agent_comms.child_process import (
     ChildRetirementError,
     ChildRetirementFailed,
     ExitedOutcome,
+    GroupMember,
     IdentityMismatchError,
     ObservedProcess,
     ParentedProcess,
@@ -107,6 +108,37 @@ async def test_detached_mismatch_refuses_signal_without_harming_real_child() -> 
     finally:
         await child.stop()
     assert not child.alive()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups")
+@pytest.mark.parametrize("owner", (
+    pytest.param(lambda process, identity: ObservedProcess(identity), id="stored-observed"),
+    pytest.param(ParentedProcess, id="parented"),
+))
+@pytest.mark.parametrize("retire", (
+    pytest.param(lambda child: asyncio.to_thread(child.stop_sync), id="sync"),
+    pytest.param(lambda child: child.stop(), id="async"),
+))
+@pytest.mark.asyncio
+async def test_stop_shared_process_group_member_without_signalling_neighbors(owner, retire):
+    command = (sys.executable, "-c", "import time; time.sleep(60)")
+    child = subprocess.Popen(command, start_new_session=False)
+    neighbor = subprocess.Popen(command, start_new_session=False)
+    try:
+        captured = ProcessIdentity.capture(child.pid)
+        assert isinstance(captured, GroupMember)
+        stored = FieldCodec.decode(ProcessIdentity, FieldCodec.encode(captured))
+        assert captured == stored and hash(captured) == hash(stored)
+        await retire(owner(child, stored))
+        child.wait(timeout=5)
+        assert not captured.alive()
+        assert neighbor.poll() is None
+        assert ProcessIdentity.capture(os.getpid()).alive()
+    finally:
+        for process in (child, neighbor):
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=5)
 
 
 @pytest.mark.asyncio
