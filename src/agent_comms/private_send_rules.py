@@ -57,15 +57,13 @@ class RunningTurnRegistryCheck(RegistryClaimCheck):
 
     The registry's project selects the next turn, so changing it during a
     turn does not stop that turn from recording its result and replies. The
-    same lease, process and session must remain, and the turn's directory
-    must still be one of this conversation's. This accepts no new input.
+    same lease, process and session must remain. This accepts no new input.
     """
 
     def worktree_matches(self) -> bool:
         return super().worktree_matches() or (
             self.actual.project_resume_due
-            and self.expected.turn_lease is not None
-            and self.actual.turn_lease == self.expected.turn_lease
+            and self.actual.turn_lease == self.expected.require_turn_lease()
         )
 
 
