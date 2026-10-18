@@ -7,10 +7,12 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from acp import RequestError
+
 from .agent_backend import WhenBusy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .messages import Message
-from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
+from .turn_goal_permission import InactiveGoalPermission, OwnerGoalPermission, TurnGoalPermission
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -186,7 +188,6 @@ class OwnerOriginalInput(OriginalTurnInput, DirectInput):
 
     @classmethod
     def require_start_goal(cls, turn) -> None:
-        from acp import RequestError
         if not turn.original_goal_permission.allows(turn.thread.goal):
             raise RequestError.invalid_params({"reason": "input_authority_changed"})
 
@@ -196,7 +197,6 @@ class OwnerOriginalInput(OriginalTurnInput, DirectInput):
 
     @classmethod
     def permission(cls, turn):
-        from .turn_goal_permission import OwnerGoalPermission
         return OwnerGoalPermission(turn.thread.goal)
 
     @property

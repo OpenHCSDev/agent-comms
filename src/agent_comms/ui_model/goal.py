@@ -4,6 +4,8 @@ The owner's goal snapshot reaches the UI already decoded, with the turn
 settlement the owner read alongside it.
 """
 
+from __future__ import annotations
+
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -12,7 +14,7 @@ from typing import ClassVar
 from agent_comms.acp_extension import AgentCommsUpdate, decode_updates
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goals import Goal, GoalDeclaration
+from agent_comms.goals import Goal, GoalDeclaration, NoGoal as NoGoalDeclaration
 from agent_comms.goal_presentation import ThreadGoalExecution, GoalSnapshot
 
 
@@ -35,6 +37,15 @@ class OwnerGoalSnapshot(GoalSnapshot):
 
 class GoalDisplay(DeclaredFamily):
     can_control: ClassVar[bool] = True
+    shows: ClassVar[type[GoalDeclaration] | None] = None
+
+    @classmethod
+    def current(cls, goal: GoalDeclaration) -> GoalDisplay:
+        matching = tuple(member for member in cls.members_with(cls)
+                         if member.shows is type(goal))
+        if len(matching) != 1:
+            raise ValueError(f"No unique goal display for {type(goal).__name__}")
+        return matching[0].from_declaration(goal)
 
     @property
     @abstractmethod
@@ -60,6 +71,12 @@ class GoalDisplay(DeclaredFamily):
 @dataclass(frozen=True)
 class NoGoal(GoalDisplay):
     can_control: ClassVar[bool] = False
+    shows = NoGoalDeclaration
+
+    @classmethod
+    def from_declaration(cls, goal: NoGoalDeclaration) -> NoGoal:
+        return cls()
+
     @property
     def snapshot(self) -> None:
         return None
@@ -74,6 +91,11 @@ class NoGoal(GoalDisplay):
 @dataclass(frozen=True)
 class ShowingGoal(GoalDisplay):
     goal: Goal
+    shows = Goal
+
+    @classmethod
+    def from_declaration(cls, goal: Goal) -> ShowingGoal:
+        return cls(goal)
 
     @property
     def snapshot(self) -> Goal:

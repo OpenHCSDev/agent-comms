@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Self
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
-from .goals import Goal
+from .goals import Goal, NoGoal
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
@@ -824,7 +824,6 @@ class PeerState:
 
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
-        from .goals import NoGoal
         goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else NoGoal()
         return goal.peer_state(view.thread, relation, goals)
 

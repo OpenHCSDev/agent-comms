@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import Literal
 
@@ -17,6 +18,7 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .field_codec import FieldCodec, WireValue
 from .errors import RelationViolationError
 from .goal_states import ActiveGoal, GoalState
+from .goal_attempt_identity import FailureNotObserved
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -389,7 +391,6 @@ class GoalDeclaration(WireValue):
         pass
 
     def failure_projection(self, reason):
-        from .goal_attempt_identity import FailureNotObserved
         raise FailureNotObserved("owner_or_goal_changed")
 
     def matching(self, goal_id: str) -> GoalDeclaration:
@@ -518,9 +519,6 @@ class GoalDeclaration(WireValue):
         from .goal_presentation import IdleGoalExecution
         return IdleGoalExecution()
 
-    def display(self):
-        from .ui_model.goal import NoGoal as NoGoalDisplay
-        return NoGoalDisplay()
 
 
 @dataclass(frozen=True)
@@ -619,7 +617,6 @@ class Goal(GoalDeclaration):
     async def pause_for_cancel(self, runner, name):
         from .coordinator import Coordination
         from .goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
-        from functools import partial
         await Coordination.run_worker(partial(
             runner.comms.goals.update_goal, name,
             PausedGoalAction(expect=GoalPrecondition(goal_id=self.id)), actor=OwnerInvocable,
@@ -638,7 +635,6 @@ class Goal(GoalDeclaration):
 
     async def failed_schedule(self, error, scheduled, comms, owner):
         from .coordinator import Coordination
-        from functools import partial
         scheduled.require_dependency_wake(error)
         await Coordination.run_worker(partial(
             comms.goals.block_goal_after_failed_turn, owner.name,
@@ -715,10 +711,6 @@ class Goal(GoalDeclaration):
 
     def execution(self, rows, snapshot, agents):
         return self.wait(rows).project(self, snapshot, agents)
-
-    def display(self):
-        from .ui_model.goal import ShowingGoal
-        return ShowingGoal(self)
 
     def instructions(self, todos) -> str:
         return self.render_instructions(self.order.instructions(todos))

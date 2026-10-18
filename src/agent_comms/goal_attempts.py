@@ -50,6 +50,7 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
+from .ordinary_turn_rules import OrdinaryGoalGrantCheck
 
 
 class GoalAttemptError(RuntimeError):
@@ -398,7 +399,6 @@ class LaunchPermit(GoalPermit):
             turn.context = turn.context.prepend(segment)
 
     def require_send(self, store) -> None:
-        from .ordinary_turn_rules import OrdinaryGoalGrantCheck
         OrdinaryGoalGrantCheck(permit=self, store=store).require_valid()
 
     def current_goal(self, account):
