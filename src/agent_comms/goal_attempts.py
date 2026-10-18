@@ -18,8 +18,8 @@ import os
 import secrets
 import sqlite3
 import stat
-from collections.abc import Callable, Mapping
 from abc import abstractmethod
+from collections.abc import Callable, Mapping
 from contextlib import closing, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -204,12 +204,16 @@ class Reservation:
         goal = Generation.read_in(conn, self.goal_id)
         stale = StaleAttemptError("Attempt is no longer current or is already claimed.")
         attempt = AttemptRecord.read_in(conn, self.attempt_id).reserved_by(self, stale)
-        if goal != Generation(
-            self.goal_id,
-            self.generation,
-            ReservedGeneration(),
-            self.attempt_id,
-        ) or attempt.phase != phase:
+        if (
+            goal
+            != Generation(
+                self.goal_id,
+                self.generation,
+                ReservedGeneration(),
+                self.attempt_id,
+            )
+            or attempt.phase != phase
+        ):
             raise stale
         return attempt
 
@@ -343,8 +347,10 @@ class RecordedAttempt(LedgerAttempt):
         self, conn: sqlite3.Connection, lifecycle: GenerationState, goal_id: str, generation: int
     ) -> None:
         attempt = self.record.reservation
-        self.identified(GoalAttemptIdentity(goal_id, generation, attempt.attempt_id),
-                        StaleAttemptError("Unresolved goal has no matching attempt to retire."))
+        self.identified(
+            GoalAttemptIdentity(goal_id, generation, attempt.attempt_id),
+            StaleAttemptError("Unresolved goal has no matching attempt to retire."),
+        )
         if not lifecycle.permits_retirement(self.record.phase):
             raise StaleAttemptError("Goal or attempt is no longer eligible for retirement.")
         self.record.advance(conn, ResolvedAttempt(), resolution="goal cleared")
@@ -463,8 +469,10 @@ class LaunchPermit:
         """Read the original attempt, even after its successor generation advances."""
         with closing(store._connect()) as conn:
             original = AttemptRecord.read_in(conn, self.reservation.attempt_id)
-        return original.reserved_by(self.reservation, StaleAttemptError(
-            "Original launch attempt changed or is unavailable.")).phase.verified_progress
+        return original.reserved_by(
+            self.reservation,
+            StaleAttemptError("Original launch attempt changed or is unavailable."),
+        ).phase.verified_progress
 
     def record_verified_progress(
         self, store: GoalAttemptStore, progress_witness: str
@@ -1065,8 +1073,7 @@ class GoalAttemptStore:
                 or current.attempt_id != attempt_id
             ):
                 raise StaleAttemptError("Goal generation or attempt changed before retirement.")
-            attempt = (NoAttempt() if attempt_id is None
-                       else AttemptRecord.read_in(conn, attempt_id))
+            attempt = NoAttempt() if attempt_id is None else AttemptRecord.read_in(conn, attempt_id)
             attempt.retire(conn, current.lifecycle, goal_id, expected_generation)
             return current.advance(
                 conn,
