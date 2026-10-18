@@ -33,25 +33,25 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     )
     view = comms.views.thread_views()[0]
     assert view.thread.executing and view.presentation.status.working
-    current = comms.agents.activity_of("worker")
+    current = comms.agents.activity_of("worker", snapshot=comms.registry.snapshot())
     assert current.state is ActivityState.THINKING
     assert current.detail == "Long-running work"
 
     comms.agents.transition_turn(first, ToolRunningPhase(tools=(("call", "bash"),)))
-    assert comms.agents.activity_of("worker").presentation("Worker").summary == "Working · bash"
+    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Working · bash"
     comms.agents.observe_native_phase(first, ModelWaitPhase())
-    assert comms.agents.activity_of("worker").presentation("Worker").summary == "Thinking"
+    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Thinking"
     comms.agents.observe_native_phase(first, CompactionPhase())
-    assert comms.agents.activity_of("worker").detail == "Compacting context"
+    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).detail == "Compacting context"
     comms.agents.observe_native_phase(first, ModelWaitPhase())
-    assert comms.agents.activity_of("worker").presentation("Worker").summary == "Thinking"
+    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Thinking"
     comms.agents.observe_native_phase(first, ProviderRetryPhase())
-    assert comms.agents.activity_of("worker").detail == "Provider retry"
+    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).detail == "Provider retry"
     comms.agents.observe_native_phase(first, ModelWaitPhase())
-    assert comms.agents.activity_of("worker").presentation("Worker").summary == "Thinking"
+    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Thinking"
 
     comms.agents.finish_turn(first)
-    assert comms.agents.activity_of("worker").presentation("Worker").summary == "Ready"
+    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Ready"
     assert not comms.views.thread_views()[0].presentation.status.working
     comms.agents.begin_turn("worker", "second")
     comms.agents.finish_turn(first)

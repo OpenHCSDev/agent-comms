@@ -62,14 +62,14 @@ def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
     lease = comms.agents.begin_turn(thread.name, "long-status", detail).turn_lease
     try:
         assert comms.registry.require(thread.name).turn_state.phase.detail == detail
-        assert comms.agents.activity_of(thread.name).detail.endswith("…")
+        assert comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot()).detail.endswith("…")
         phase = ModelWaitPhase()
         for index in range(2):
             title = f"tool_{index}_" + "x" * Activity.detail_limit
             phase = phase.on(ToolExecutionStart(tool_call_id=str(index), tool_name=title),
                              {str(previous) for previous in range(index)})
             comms.agents.observe_native_phase(lease, phase)
-            activity = comms.agents.activity_of(thread.name)
+            activity = comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot())
             assert activity.state is ActivityState.WORKING
             assert activity.detail.startswith(f"tool_{index}_")
             assert len(activity.detail) == Activity.detail_limit
@@ -97,7 +97,7 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
     try:
         started = observed()
         assert members(started) == (native.name, cli.name)
-        assert comms.agents.activity_of(native.name).timestamp >= comms.registry.require(native.name).active_turn.started_at
+        assert comms.agents.activity_of(native.name, snapshot=comms.registry.snapshot()).timestamp >= comms.registry.require(native.name).active_turn.started_at
         output.status(ActivityState.WORKING, "unchanged")
         external = observed()
         assert members(external) == (cli.name, native.name)
@@ -107,28 +107,28 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
         progressed = observed()
         assert members(progressed) == (native.name, cli.name)
         assert not progressed.same_observation(external)
-        clock = comms.agents.activity_of(native.name).timestamp
+        clock = comms.agents.activity_of(native.name, snapshot=comms.registry.snapshot()).timestamp
         assert comms.agents.observe_native_phase(lease, phase) == ()
-        assert comms.agents.activity_of(native.name).timestamp == clock
+        assert comms.agents.activity_of(native.name, snapshot=comms.registry.snapshot()).timestamp == clock
         assert observed().same_observation(progressed)
     finally:
         comms.agents.finish_turn(lease)
-    finished = comms.agents.activity_of(native.name).timestamp
+    finished = comms.agents.activity_of(native.name, snapshot=comms.registry.snapshot()).timestamp
     assert comms.agents.observe_native_phase(lease, ModelWaitPhase()) == ()
-    assert comms.agents.activity_of(native.name).timestamp == finished
+    assert comms.agents.activity_of(native.name, snapshot=comms.registry.snapshot()).timestamp == finished
 
 
 def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
     thread = comms.registry.declare(comms.registry.new_thread('cli-worker', frozenset(), str(comms.root), execution=ExternalThreadExecution, process_identity=ProcessIdentity.capture(os.getpid())))
     output = ThreadOutput(ExternalTranscript(comms.root, thread.incarnation), comms.agents)
     output.status(ActivityState.WORKING, "  tool:\n\t" + "x" * Activity.detail_limit)
-    activity = comms.agents.activity_of(thread.name)
+    activity = comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot())
     assert activity.detail.startswith("tool: x")
     assert activity.detail.endswith("…")
     assert len(activity.detail) == Activity.detail_limit
     assert "\n" not in activity.detail and "\t" not in activity.detail
     output.status(ActivityState.WORKING, "  short:\n\ttext  ")
-    assert comms.agents.activity_of(thread.name).detail == "short: text"
+    assert comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot()).detail == "short: text"
     shown = comms.views.thread_presentations((thread.name,)).require(thread.name)
     assert shown.status.working
     assert shown.summary == "Working · short: text"

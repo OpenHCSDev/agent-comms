@@ -77,7 +77,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     channel.prompt.text = 'NEW_PRIVATE_CONTROLLED_PROVIDER_FAILURE'
     channel.prompt.prompt_text_area.focus()
     await pilot.press('enter')
-    await until(pilot, lambda: isinstance(comms.agents.activity_of('beta').readiness,
+    await until(pilot, lambda: isinstance(comms.agents.activity_of('beta', snapshot=comms.registry.snapshot()).readiness,
                                         UnavailableDrainReadiness), 25)
     assert len(requests) == 2
     failure_source = next(message for message in list(comms.bus.channel_history_page('#team').messages)

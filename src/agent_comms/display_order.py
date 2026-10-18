@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from .channel_management import ChannelManagement
     from .history_views import HistoryViews
     from .presentation import ChannelView
+    from .registry_document import RegistrySnapshot
 
 
 class DisplayOrder(ABC):
@@ -45,7 +46,7 @@ class ThreadSort(DisplayOrder, DeclaredFamily, affix="ThreadSort"):
         return channels.set_channel_sort(channel, cls).order
 
     @staticmethod
-    def sent_timestamps(views: HistoryViews) -> dict[str, float]:
+    def sent_timestamps(views: HistoryViews, *, registry: RegistrySnapshot) -> dict[str, float]:
         """Only ordering by sent messages requires this source."""
         return {}
 
@@ -58,9 +59,9 @@ class LastMessageThreadSort(ThreadSort, declared_name="last_message_sent"):
         return sent
 
     @staticmethod
-    def sent_timestamps(views: HistoryViews) -> dict[str, float]:
+    def sent_timestamps(views: HistoryViews, *, registry: RegistrySnapshot) -> dict[str, float]:
         with views.bus.opened_activity() as clocks:
-            return views.last_sent_timestamps(clocks.sent)
+            return views.last_sent_timestamps(clocks.sent, registry=registry)
 
 
 class CreatedThreadSort(ThreadSort, declared_name="created_at"):

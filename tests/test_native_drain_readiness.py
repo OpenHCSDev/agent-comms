@@ -83,4 +83,4 @@ async def test_real_saved_native_failure_then_distinct_fresh_input(native_backen
         assert sum('isolated fresh input' in str(content) for content in saved) == 1
         assert fresh.stop_reason == 'end_turn'
         assert native.provider.text in native.session.read_text()
-        comms.agents.activity_of(session_id).readiness.require_available()
+        comms.agents.activity_of(session_id, snapshot=comms.registry.snapshot()).readiness.require_available()
