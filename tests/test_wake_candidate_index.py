@@ -25,6 +25,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.private_path import FileRevision
 from agent_comms.wire_log import SavedPrefixOpening
+from agent_comms.wire_record import WireRecord
 from agent_comms.threads import Thread
 from agent_comms.typed_table import TypedTable
 from agent_comms.wake_candidate_index import (
@@ -596,12 +597,12 @@ def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_p
 
 def _as_response(row, root_id, execution_id):
     """Build current declared response shape for raw-writer corruption tests."""
-    from agent_comms.bus_publication import CommittedDelivery, initial_sideband
+    from agent_comms.bus_publication import initial_sideband
     from agent_comms.delivery_policy import KeyedResponseAcknowledgement, ResponseDeliveryPolicy
     from agent_comms.field_codec import FieldCodec
     from agent_comms.wake import ControlClassification
 
-    delivery = CommittedDelivery.from_wire(row, root_id)
+    delivery = WireRecord.from_wire(row, root_id)
     public = delivery.message.to_wire()
     policy = ResponseDeliveryPolicy(
         version=1,

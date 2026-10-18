@@ -8,7 +8,7 @@ from dataclasses import replace
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck
@@ -380,6 +380,24 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
         script.unstrike('P1', 'P1 has no strike left to take back after the first void was recorded')
 
 
+def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(commander, commander_script, tmp_path,
+                                                                           monkeypatch):
+    comms, _ = commander
+    script, _ = commander_script
+    create(commander, 'P1', deadline=1)
+    posted = []
+    monkeypatch.setattr(script, 'post', lambda recipients, body: posted.append((recipients, body)))
+    script.withdraw('P1', 'duplicate of P2, which owns the same fix', 'P2')
+    withdrawn = comms.goals.todos.get('P1')
+    assert script.open_todos() == [] and not withdrawn.pending and script.struck(withdrawn, 'worker') == 0
+    line = 'P1: order order-P1 withdrawn from worker, no strike: duplicate of P2, which owns the same fix (superseded by P2)'
+    assert (tmp_path / 'board.md').read_text().count(line) == 1
+    assert line in (tmp_path / 'narrative.md').read_text()
+    assert [recipients for recipients, _ in posted] == [['#comms'], ['worker']]
+    with pytest.raises(ValueError, match='Only an undelivered order'):
+        script.withdraw('P1', 'withdrawing the same order twice records nothing new')
+
+
 FIRED = 'The unit took two strikes on this problem and its second delivery was late again.'
 
 
@@ -472,6 +490,29 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
     request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
     assert request.stalled() == []
+
+
+def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
+    """An order saved before closing runs is refused until the carry gives it the mechanical run it implied."""
+    import json
+    import sqlite3
+    from contextlib import closing
+    from cutover.carry_order_run import OrderRuns
+    from agent_comms.todos import MechanicalOrderRun, TodoStore
+    comms, _caller = commander
+    saved = create(commander, 'P1')
+    path = TodoStore.path_in(comms.root)
+    with closing(sqlite3.connect(path)) as db:
+        (order,), = db.execute('SELECT "order" FROM todo WHERE id = ?', ('P1',))
+        db.execute('UPDATE todo SET "order" = ? WHERE id = ?',
+                   (json.dumps({k: v for k, v in json.loads(order).items() if k != 'run'}), 'P1'))
+        db.commit()
+    with pytest.raises(MalformedRecord, match='run'):
+        comms.goals.todos.get('P1')
+    assert OrderRuns.carry(comms.root, apply=False).detail == {MechanicalOrderRun.declared_name: 1}
+    assert OrderRuns.carry(comms.root, apply=True).changed == 1
+    assert OrderRuns.carry(comms.root, apply=False).changed == 0
+    assert comms.goals.todos.get('P1') == saved
 
 
 def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander, commander_script, tmp_path):

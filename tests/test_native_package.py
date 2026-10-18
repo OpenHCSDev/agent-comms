@@ -286,7 +286,8 @@ def test_launcher_uses_only_verified_copied_bootstrap(launcher, tmp_path):
     assert not marker.exists()
 
 
-def test_native_publication_installs_declared_source_with_one_link(launcher, tmp_path):
+@pytest.mark.parametrize("command", [["pi-native"], ["prepare-pi-native", "--publish"]])
+def test_launch_and_publication_install_declared_source_with_one_link(launcher, tmp_path, command):
     stack, package = launcher
     snapshot = tmp_path / "extensions/global/index.ts"
     snapshot.parent.mkdir(parents=True)
@@ -324,19 +325,29 @@ def test_native_publication_installs_declared_source_with_one_link(launcher, tmp
     prepared = stack / f".pi-native-{build}"
     package.parents[2].rename(prepared)
     deployments = tmp_path / "deployments"
+    script, *flags = command
+    launch = [str(stack / "bin" / script), *flags, *([str(deployments)] if flags else [])]
 
-    result = subprocess.run(
-        [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
+    # The launch ends by exec'ing node; the sources are installed before that.
+    interpreter = tmp_path / "interpreter"
+    interpreter.mkdir()
+    (interpreter / "node").write_text("#!/bin/sh\nexit 0\n")
+    (interpreter / "node").chmod(0o755)
+    env = dict(os.environ, PATH=f"{interpreter}:{os.environ['PATH']}")
 
-    assert result.returncode == 0, result.stderr
-    assert (deployments / f"native-current-{build}").is_dir()
+    def run():
+        result = subprocess.run(launch, capture_output=True, text=True, timeout=15, env=env)
+        assert result.returncode == 0, result.stderr
+
+    run()
+    assert (deployments / f"native-current-{build}").is_dir() == bool(flags)
     assert destination.read_bytes() == content
     assert destination.stat().st_nlink == 1
     assert stale_link.read_bytes() == b"stale\n"
+    installed = destination.stat()
+    run()
+    assert (destination.stat().st_ino, destination.stat().st_mtime_ns) == (
+        installed.st_ino, installed.st_mtime_ns)
 
 
 @pytest.mark.parametrize("script", ["pi-native", "prepare-pi-native"])
