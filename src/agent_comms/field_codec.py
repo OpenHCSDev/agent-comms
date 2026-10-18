@@ -905,12 +905,13 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     return result
 
 
-def _object_entries(data):
+def _object_entries(data: object) -> Iterable[tuple[object, object]]:
     if not isinstance(data, dict):
         raise MalformedRecord("Expected a JSON object.")
     return data.items()
 
-def _object_or_pair_entries(data):
+
+def _object_or_pair_entries(data: object) -> Iterable[tuple[object, object]] | list:
     """Keys that are not strings travel as an array of [key, value] pairs."""
     if isinstance(data, dict):
         return data.items()
