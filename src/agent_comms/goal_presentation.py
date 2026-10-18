@@ -8,7 +8,7 @@ from dataclasses import dataclass, fields
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion, WireValue
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
@@ -17,7 +17,11 @@ from .goal_states import (
     PausedGoal,
     UnrecordedBlockGoal,
 )
-from .goals import Goal, GoalCheckpoint, AbsentGoalCheckpoint, PresentGoalCheckpoint
+from .goals import (
+    Goal,
+    GoalCheckpoint,
+    GoalDeclaration,
+)
 from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
@@ -30,6 +34,9 @@ class ExecutionPresentation(ABC):
 
     @abstractmethod
     def render(self, execution: GoalExecution) -> tuple[str, str]: ...
+
+    def details_heading(self, execution: GoalExecution, heading: str) -> str:
+        return heading
 
     def represents(self, state: GoalState) -> bool:
         return False
@@ -53,6 +60,9 @@ class StateExecutionPresentation(ExecutionPresentation):
 
 class StandbyExecutionPresentation(ExecutionPresentation):
     waiting = True
+
+    def details_heading(self, execution: GoalExecution, heading: str) -> str:
+        return f"{heading} · {self.render(execution)[1]}"
 
     def waiting_presentation(self, execution: GoalExecution, ordinary: ThreadPresentation) -> ThreadPresentation:
         return execution.presentation(ordinary.title)
@@ -109,14 +119,13 @@ class GoalWaitTarget(WireValue):
         return RecordedThreadIncarnation.schema()
 
 
-class ThreadGoalExecution(WireValue):
+class ThreadGoalExecution(SubclassUnion):
     """The execution contract, including absence, consumed by thread views."""
 
     __slots__ = ()
-    accepts_null = True
 
-    @abstractmethod
-    def to_wire(self) -> dict | None: ...
+    def details_heading(self, heading: str) -> str:
+        return heading
 
     @abstractmethod
     def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation: ...
@@ -130,22 +139,17 @@ class ThreadGoalExecution(WireValue):
     @abstractmethod
     def validate_goal(self, goal: GoalCheckpoint) -> None: ...
 
-    @classmethod
-    def from_wire(cls, data) -> ThreadGoalExecution:
-        return IdleGoalExecution() if data is None else FieldCodec.decode_record(GoalExecution, data)
 
-    @classmethod
-    def schema(cls) -> dict:
-        return {"oneOf": [FieldCodec.record_schema(GoalExecution), {"type": "null"}]}
-
-
-@dataclass(frozen=True, slots=True)
-class GoalExecution(ThreadGoalExecution):
+@dataclass(frozen=True)
+class GoalExecution(RecordMember, ThreadGoalExecution):
     state: GoalExecutionState
     goal_id: str
     wait_for: tuple[GoalWaitTarget, ...] = ()
     inactive_wait_for: tuple[GoalWaitTarget, ...] = ()
     block_reason: str | None = None
+
+    def details_heading(self, heading: str) -> str:
+        return self.state.view.details_heading(self, heading)
 
     def presentation(self, title: str) -> ThreadPresentation:
         glyph, summary = self.state.view.render(self)
@@ -163,35 +167,10 @@ class GoalExecution(ThreadGoalExecution):
     def validate_goal(self, goal: GoalCheckpoint) -> None:
         goal.require_identity(self.goal_id)
 
-    def to_wire(self) -> dict:
-        """Use the one field codec; target births keep their original wire keys."""
-        return FieldCodec.encode_record(self)
 
-    @classmethod
-    def from_wire(cls, data: Mapping) -> GoalExecution:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict:
-        return FieldCodec.record_schema(cls)
-
-
-@dataclass(frozen=True, slots=True)
-class IdleGoalExecution(ThreadGoalExecution):
+@dataclass(frozen=True)
+class IdleGoalExecution(NullMember, ThreadGoalExecution):
     """No goal execution has been projected."""
-
-    def to_wire(self) -> None:
-        return None
-
-    @classmethod
-    def from_wire(cls, data) -> IdleGoalExecution:
-        if data is not None:
-            raise ValueError("An idle goal execution is null on the wire")
-        return cls()
-
-    @classmethod
-    def schema(cls) -> dict:
-        return {"type": "null"}
 
     def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary
@@ -213,7 +192,7 @@ class GoalSnapshot:
     The execution, when present, schedules exactly this goal.
     """
 
-    goal: Goal | None
+    goal: GoalDeclaration
     execution: ThreadGoalExecution
 
     @classmethod
@@ -222,6 +201,4 @@ class GoalSnapshot:
         return cls(*(getattr(snapshot, item.name) for item in fields(GoalSnapshot)), *extra)
 
     def __post_init__(self) -> None:
-        checkpoint = (AbsentGoalCheckpoint() if self.goal is None
-                      else PresentGoalCheckpoint(self.goal.checkpoint))
-        self.execution.validate_goal(checkpoint)
+        self.execution.validate_goal(self.goal.captured)

@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, Sha256Text
+from .goals import Goal, NoGoal
 from .message_reference import MessageReference
-from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
@@ -906,16 +906,16 @@ class PeerState:
     name: str
     relevance: type[PeerRelevance]
     note: str
-    goal: str | None
+    goal: tuple[str, ...]
 
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
-        goal = view.thread.active_goal if relation.relevance.grants(GoalShown) else None
+        goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else NoGoal()
         return cls(
             view.thread.name,
             relation.relevance,
             relation.note,
-            goal.instructions(goal.order.todos(goals, view.thread.incarnation, goal.id)) if goal is not None else None,
+            goal.instructions_for(goals, view.thread.incarnation),
         )
 
 
@@ -1178,9 +1178,12 @@ class TurnContext(DeclaredReply):
         """
         relations = comms.relationships.context_relations(owner.name)
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
-        for segment in owner.context_goal_segments(comms.goals):
-            context = context.prepend(segment)
-        return context.with_awareness(comms, owner, relations, blocking=True)
+        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations, blocking=True)
+
+    def with_goal(self, owner: Thread, goals) -> TurnContext:
+        return owner.goal.active().project(
+            lambda goal: self.prepend(GoalSegment.capture(owner, goal, goals)), lambda: self,
+        )
 
     def with_awareness(
         self, comms, owner: Thread, relations: tuple[PeerRelation, ...], *, blocking: bool = False
@@ -1260,7 +1263,9 @@ class TurnContext(DeclaredReply):
 
     @staticmethod
     def render_segments(segments: tuple[ContextSegment, ...], *, images=()) -> RenderedInput:
-        prompt_parts, provider, contributions = [], {}, []
+        prompt_parts: list[str] = []
+        provider: dict[str, object] = {}
+        contributions: list[InputContributionCoordinates] = []
         offset = 0
         for segment in segments:
             start = len(prompt_parts)
