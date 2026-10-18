@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from . import agent_events as events
 from . import backend
 from .native_pi import NativePiUnavailable
+from .native_package import VerifiedNativePackage
 from .native_startup import NativeStartup
 from .coordinator import Coordination
 from .pi_payloads import StateData
@@ -71,6 +72,7 @@ class NativeSessionPreparation(backend.TurnSession):
         agent_bin: str,
         agent_args: Sequence[str],
         *,
+        package: VerifiedNativePackage,
         worktree: str,
         root: Path,
         environment: dict[str, str],
@@ -79,13 +81,13 @@ class NativeSessionPreparation(backend.TurnSession):
     ) -> StateData:
         async with persistent.lock:
             return await cls.open_acquired(persistent, agent_bin, agent_args,
-                worktree=worktree, root=root, environment=environment,
+                package=package, worktree=worktree, root=root, environment=environment,
                 session_file=session_file, observe=observe)
 
     @classmethod
     async def open_acquired(
         cls, persistent: PersistentPiSession, agent_bin: str, agent_args: Sequence[str], *,
-        worktree: str, root: Path, environment: dict[str, str], session_file: str,
+        package: VerifiedNativePackage, worktree: str, root: Path, environment: dict[str, str], session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         """Keep the session's child owned through launch, observation and retention."""
@@ -93,7 +95,7 @@ class NativeSessionPreparation(backend.TurnSession):
         launch = await Coordination.run_worker(partial(
             persistent.child_state.managed_launch,
             agent_bin, tuple(agent_args), worktree=Path(worktree),
-            root=root,
+            package=package, root=root,
             environment=environment, session_file=session_file,
         ))
         preparation = cls(launch, "", persistent_session=persistent, startup=NativeStartup.for_launch(launch))

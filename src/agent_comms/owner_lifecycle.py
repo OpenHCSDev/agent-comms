@@ -299,8 +299,8 @@ class OwnerLifecycle:
         """The private launch for this root, or None for an ordinary root.
 
         Derived once per process (PrivateNkLaunch.derive); the root is the one
-        this lifecycle serves and is never guessed. validate() still refuses a
-        package that differs from the reviewed tree or a replaced root.
+        this lifecycle serves and is never guessed. Acquisition verifies the
+        immutable package once; validate() still refuses a replaced root.
         """
         if self._private_nk_launch is None:
             self._private_nk_launch = PrivateNkLaunch.derive(self.root)
