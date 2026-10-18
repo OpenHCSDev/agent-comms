@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
-from typing import ClassVar
+from typing import ClassVar, Final
 
 from .field_codec import FieldCodec
 from .command import Command
@@ -202,6 +202,9 @@ class StrikeReason(PlainText):
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
+
+
+StrikeLimit: Final = 2  # live strikes one unit may take on one problem
 
 
 class OrderText(OrderWords):
@@ -487,6 +490,9 @@ class Assignment:
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation:
             raise TodoConflict(current)
+        return self.handed_to(proposed)
+
+    def handed_to(self, proposed: Assignment) -> Assignment:
         previous = self.previous_owners
         if self.owner_identity != proposed.owner_identity:
             previous = (*previous, self.owner_identity)
@@ -617,6 +623,22 @@ class VoidStrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class ReleaseTodo(TodoOperation):
+    """The commander takes an open problem off its unit; the order and its strikes stay."""
+    actor: ThreadIncarnation
+    previous: Assignment
+    reason: StrikeReason
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        current.require_assignment(self.previous)
+        return replace(current, assignment=None, released=(*current.released, self),
+                       revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class CorrectCheckTodo(TodoOperation):
     """The commander replaces a wrong check of an open order.
 
@@ -722,6 +744,7 @@ class Todo(TypedTable):
     strikes: tuple[StrikeTodo, ...] = ()
     hunts: tuple[Hunt, ...] = ()
     voided: tuple[VoidStrikeTodo, ...] = ()
+    released: tuple[ReleaseTodo, ...] = ()
 
     @property
     def pending(self):
@@ -732,6 +755,11 @@ class Todo(TypedTable):
         return RecordedThreadIncarnation(self.creator, self.creator_created)
 
     @property
+    def holder(self) -> str | None:
+        """The unit holding this problem; None once it is closed or released."""
+        return None if self.assignment is None else self.assignment.owner
+
+    @property
     def strike_count(self) -> int:
         return 0 if self.assignment is None else len(self.live_strikes(self.assignment.owner))
 
@@ -740,6 +768,10 @@ class Todo(TypedTable):
         taken_back = tuple(void.strike for void in self.voided)
         return tuple(recorded for recorded in self.strikes
                      if unit in (None, recorded.previous.owner) and recorded not in taken_back)
+
+    def struck_out(self, unit: str) -> bool:
+        """The unit has taken StrikeLimit live strikes here; only mechanical orders reach it."""
+        return len(self.live_strikes(unit)) >= StrikeLimit
 
     def require_result(self, result: Todo) -> None:
         if self != result:
@@ -760,6 +792,8 @@ class Todo(TypedTable):
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         if self.assignment is not None:
             return replace(proposed, previous_owners=self.assignment.previous_owners)
+        if self.released:  # the released owner joins the next owner's history
+            return self.released[-1].previous.handed_to(proposed)
         return proposed
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:

@@ -493,6 +493,8 @@ class FieldCodec(Sealed):
             return value.declared_name
         if isinstance(value, Enum):
             return cls.encode(value.value)
+        if isinstance(value, str):  # a checked text type is its text on the wire
+            return str(value)
         if isinstance(value, (list, tuple, frozenset)):
             target, _ = cls._representation(annotation)
             arguments = get_args(target)
@@ -857,6 +859,18 @@ class _ExactScalarDecoder(_ScalarDecoder):
 
     def accepts(self, data: object) -> bool:
         return type(data) is self.target
+
+class _CheckedTextDecoder(_ScalarDecoder):
+    """A text type whose own constructor checks the wire text."""
+
+    __slots__ = ()
+
+    def decode(self, data: object) -> str:
+        text = cast(type[str], self.target)  # _member_decoder selects only str subclasses
+        if not isinstance(data, str):
+            raise MalformedRecord(f"Expected {text}, received {type(data).__name__}")
+        with MalformedRecord.refusing(f"Invalid {text.__name__}"):
+            return text(data)
 
 class _TextDecoder(_ExactScalarDecoder):
     __slots__ = ()
@@ -1225,4 +1239,6 @@ def _member_decoder(target: object) -> ValueDecoder[object]:
         return _RecordDecoder(target)
     if isinstance(target, type) and issubclass(target, Enum):
         return _EnumDecoder(target)
+    if isinstance(target, type) and issubclass(target, str):
+        return _CheckedTextDecoder(target)
     return _ScalarDecoder(target)
