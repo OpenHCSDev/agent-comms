@@ -62,6 +62,14 @@ class TranscriptChanged(StaleRevision):  # noqa: N818 - nominal outcome name
         super().__init__("Transcript changed; reload the latest page.")
 
 
+class DMPaintedBoundChanged(StaleRevision):
+    """The painted bound advanced beyond its fetched DM references."""
+
+
+class DMScopeChanged(StaleRevision):
+    """A DM read belongs to another root, peer or incarnation."""
+
+
 class StaleFence(CoordinationError):  # noqa: N818 - nominal outcome name
     """The owner, generation, pointer, token or attempt is no longer current."""
 
