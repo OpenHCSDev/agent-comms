@@ -34,7 +34,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
-from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnState
+from .turn_lease import ActiveTurn, NoTurn, FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
 
 if TYPE_CHECKING:
@@ -352,7 +352,7 @@ class RegistryDocument(RegistryPresence):
             if name in self.aliases or thread.created_at in identities:
                 raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
             identities[thread.created_at] = name
-            additions.append(replace(thread, process_identity=NoProcess(), active_turn=None))
+            additions.append(replace(thread, process_identity=NoProcess(), active_turn=NoTurn()))
         restored = {thread.name: thread for thread in additions}
         available = self.threads | restored
         aliases = source.restorable_aliases(available, self.aliases)
@@ -407,7 +407,7 @@ class RegistryDocument(RegistryPresence):
         snapshot = self.snapshot()
         current = snapshot.require_active(expected.name)
         try:
-            current.require_idle()
+            current.active_turn.require_idle()
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
         if current != expected:
@@ -428,7 +428,7 @@ class RegistryDocument(RegistryPresence):
             self.owners.advance(name)
         thread = self.threads[name]
         self.statuses[name] = thread.execution.registered_status(thread, StoppedThreadStatus())
-        self.threads[name] = replace(thread, active_turn=None)
+        self.threads[name] = replace(thread, active_turn=NoTurn())
         self.claims.advance(name)
 
     def archive(self, name: str) -> None:
@@ -547,7 +547,7 @@ class RegistryDocument(RegistryPresence):
         attested = attested and self.statuses[name].active
         self.threads[name] = replace(
             current,
-            active_turn=None,
+            active_turn=NoTurn(),
             last_finished_turn_id=(lease.turn_id if current.turn_generation else None),
             project_resume_due=(
                 current.project_resume_due and current.active_turn.phase.keeps_project_resume

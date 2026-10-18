@@ -88,7 +88,7 @@ async def test_native_full_four_tools_publish_and_release(
             'from pathlib import Path; from agent_comms.comms import Comms; from agent_comms.publisher import Publisher; '
             'from agent_comms.turn_phase import ToolRunningPhase; '
             f'c=Comms(Path({str(root)!r}), Publisher); '
-            'assert isinstance(c.registry.require("beta").turn_state.phase, ToolRunningPhase); '
+            'assert isinstance(c.registry.require("beta").active_turn.phase, ToolRunningPhase); '
             'print("CANONICAL_TOOL_RUNNING")'
         )
         python = shlex.quote(str(Path(entrypoint).with_name('python')))
@@ -104,7 +104,7 @@ async def test_native_full_four_tools_publish_and_release(
             try:
                 request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 requests.append(request)
-                phase = comms.registry.require('beta').turn_state.phase
+                phase = comms.registry.require('beta').active_turn.phase
                 phases.append(phase.declared_name)
                 assert request["model"] == "fixture"
                 assert self.headers["Authorization"] == "Bearer offline-only-fixture"
@@ -225,7 +225,7 @@ async def test_native_full_four_tools_publish_and_release(
             m for m in list(comms.views.full_history_page().messages) if m.reference in tuple(acknowledgement.reference for acknowledgement in outcome.publications)
         ]
         assert len(responses) == 1 and responses[0].body == "CODING_TOOLS_OK"
-        assert comms.registry.require("beta").active_turn is None
+        assert not comms.registry.require("beta").active_turn.executing
         assert phases and 'preparing' not in phases
         if not selected_write:
             assert not comms.bus.log.claim_projection()

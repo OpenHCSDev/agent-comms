@@ -61,7 +61,7 @@ def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
     detail = "preparing_" + "p" * Activity.detail_limit
     lease = comms.agents.begin_turn(thread.name, "long-status", detail).turn_lease
     try:
-        assert comms.registry.require(thread.name).turn_state.phase.detail == detail
+        assert comms.registry.require(thread.name).active_turn.phase.detail == detail
         assert comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot()).detail.endswith("…")
         phase = ModelWaitPhase()
         for index in range(2):

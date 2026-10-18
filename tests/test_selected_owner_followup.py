@@ -68,7 +68,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
     try:
         await recorded_request(control, agent)
         wake = agent.inputs.state("beta").wake_task
-        assert comms.registry.require("beta").active_turn is not None
+        assert comms.registry.require("beta").active_turn.executing
         response = await asyncio.wait_for(
             agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
         )
@@ -103,7 +103,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert not agent.inputs.state("beta").queued
         assert agent.inputs.state("beta").inbox is None
         assert "beta" not in agent.turns.turn_tasks
-        assert comms.registry.require("beta").active_turn is None
+        assert not comms.registry.require("beta").active_turn.executing
         assert comms.registry.require("beta").goal == before_goal
         # The completed selected reply consumes its certified dependency wait;
         # a queued owner input keeps its claim_scope/goal authority across that change.
@@ -306,7 +306,7 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
         assert len(requests) == 2
         assert "Exactly one fresh owner instruction" in json.dumps(requests[1])
         assert not any(state.inbox for state in agent.inputs.drained.values()) and not agent.turns.turn_tasks
-        assert comms.registry.require("beta").active_turn is None
+        assert not comms.registry.require("beta").active_turn.executing
         assert comms.registry.require("beta").goal == parked_goal
         assert comms.goals.goal_wait("beta") == parked_wait
         assert not (comms.root / "goal-private").exists()

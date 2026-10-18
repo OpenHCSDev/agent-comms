@@ -140,6 +140,6 @@ def test_certified_reply_consumes_only_original_wait(selected_goal):
         if owner is not None:
             comms.agents.finish_turn(owner)
         comms.agents.finish_turn(peer)
-    assert comms.registry.require("worker").active_turn is None
-    assert comms.registry.require("peer").active_turn is None
+    assert not comms.registry.require("worker").active_turn.executing
+    assert not comms.registry.require("peer").active_turn.executing
 

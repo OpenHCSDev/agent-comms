@@ -336,7 +336,7 @@ print(json.dumps({"type":"response", "id":request["id"],
         assert not snapshot.is_current and not snapshot.can_retry
         assert snapshot.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not snapshot.replay.replay_safe
-    assert comms.registry.require("beta").active_turn is None
+    assert not comms.registry.require("beta").active_turn.executing
     source = publish_initial(comms, 
         "sender", "beta", "Independent after local failure"
     )

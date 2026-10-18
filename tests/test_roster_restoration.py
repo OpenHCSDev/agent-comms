@@ -12,7 +12,7 @@ from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.errors import RelationViolationError
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
-from agent_comms.turn_lease import ActiveTurn
+from agent_comms.turn_lease import ActiveTurn, NoTurn
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
@@ -36,7 +36,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.threads["live"] == before.threads["live"]
     assert after.owner_generations["live"] == before.owner_generations["live"]
     assert after.claimed_generations["live"] == before.claimed_generations["live"]
-    assert after.threads["missing"] == replace(missing, process_identity=NoProcess(), active_turn=None)
+    assert after.threads["missing"] == replace(missing, process_identity=NoProcess(), active_turn=NoTurn())
     assert after.statuses["missing"] == StoppedThreadStatus()
     assert after.aliases["former-name"] == "missing"
     assert current.bus.log.path.read_bytes() == bus

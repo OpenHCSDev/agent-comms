@@ -213,7 +213,7 @@ async def test_native(retained_native_acp_owner):
             assert await turn == 1
         assert isinstance(comms.goals.goal_wait(sid), NoGoalWait)
         assert comms.registry.require(sid).goal == parked_goal
-        assert comms.registry.require(sid).active_turn is None
+        assert not comms.registry.require(sid).active_turn.executing
         handled = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
         assert not handled.unresolved and handled.has_native_binding
         assert not agent.inputs.state(sid).queued
