@@ -7,6 +7,7 @@ import pytest
 from agent_comms.todos import (CommittedProgress, MergedProgress, NoCommitProgress, OpenPrProgress, OrderProgress,
     PullRequest, PullRequests, PushedProgress, UnreadProgress)
 
+from agent_comms.storage_rules import StorageRule
 from test_commander_problem_orders import create
 
 
@@ -48,7 +49,7 @@ def commit(unit):
 
 def read(checkout, pulls=None):
     todo, unit = checkout
-    return OrderProgress.read(todo, unit.parent, pulls or Listed())
+    return OrderProgress.read(todo, StorageRule(checkout_base=unit.parent), pulls or Listed())
 
 
 def test_no_commit_since_the_order_draws_a_strike(checkout):

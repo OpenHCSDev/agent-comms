@@ -30,6 +30,7 @@ from .recorded_time import EventTime, UnrecordedEventTime
 from .change_report import FileLine
 from .goals import OrderCheck
 from .child_process import BoundedRun, ExitedOutcome
+from .storage_rules import StorageRule
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -200,12 +201,13 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     strikes: ClassVar[bool] = True
 
     @classmethod
-    def read(cls, todo: Todo, checkout_base: Path, pulls: PullRequests) -> OrderProgress:
+    def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
+        """The first found member by its declared precedence; with none found, no commit yet."""
         owner = todo.holder
         assert owner, "Only a held order has progress."
-        source = ProgressSource(todo, checkout_base / f"{owner}--{todo.id}", pulls)
+        source = ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls)
+        members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
         try:
-            members = (MergedProgress, OpenPrProgress, CommittedProgress, PushedProgress)
             found = (progress for member in members if (progress := member.found(source)))
             return next(found, NoCommitProgress())
         except (ValueError, subprocess.TimeoutExpired) as unread:
@@ -222,6 +224,16 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     @property
     def moved(self) -> float | None:
         return None
+
+
+@dataclass(frozen=True)
+class FoundProgress(OrderProgress):
+    """A state read finds in the checkout or on GitHub; the lowest ``precedence`` found wins."""
+    precedence: ClassVar[int]
+
+    @classmethod
+    @abstractmethod
+    def found(cls, source: ProgressSource) -> Self | None: ...
 
 
 @dataclass(frozen=True)
@@ -245,7 +257,8 @@ class UnreadProgress(OrderProgress):
 
 
 @dataclass(frozen=True)
-class CommittedProgress(OrderProgress):
+class CommittedProgress(FoundProgress):
+    precedence: ClassVar[int] = 3
     sha: str
     at: float
 
@@ -266,6 +279,7 @@ class CommittedProgress(OrderProgress):
 @dataclass(frozen=True)
 class PushedProgress(CommittedProgress):
     """Pushed past the default branch, with no PR naming the order yet."""
+    precedence: ClassVar[int] = 4
 
     @classmethod
     def found(cls, source: ProgressSource) -> Self | None:
@@ -278,7 +292,8 @@ class PushedProgress(CommittedProgress):
 
 
 @dataclass(frozen=True)
-class OpenPrProgress(OrderProgress):
+class OpenPrProgress(FoundProgress):
+    precedence: ClassVar[int] = 2
     number: int
     head: str
     at: float
@@ -298,8 +313,9 @@ class OpenPrProgress(OrderProgress):
 
 
 @dataclass(frozen=True)
-class MergedProgress(OrderProgress):
+class MergedProgress(FoundProgress):
     """Merged work is done; its deadline no longer draws a strike."""
+    precedence: ClassVar[int] = 1
     strikes: ClassVar[bool] = False
     sha: str
 

@@ -752,8 +752,8 @@ class CommsTodoListTool(ThreadReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
-        pulls, checkouts = PullRequests(), comms.registry.storage_rule.checkout_base
-        return TodoList(listed, {todo.id: OrderProgress.read(todo, checkouts, pulls)
+        pulls, storage = PullRequests(), comms.registry.storage_rule
+        return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
                                  for todo in listed if todo.state.open and todo.holder})
 
 
