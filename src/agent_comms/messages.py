@@ -16,12 +16,13 @@ from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, InlineRecord, projected
+from .field_codec import FieldCodec, InlineRecord, WireValue, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .response_policy import InformationalPolicy, ResponseEligibility
 from .thread_identity import ThreadRole
 from .task_sources import Decision, TaskAttachment, NoTaskAttachment
+from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
     from .historical_views import HistoryCursor
@@ -116,28 +117,50 @@ class MembershipChange(StrEnum):
     JOINED = "joined"
     LEFT = "left"
 
+    def conversation_role(self):
+        return MembershipConversationRole(self)
+
+
+@dataclass(frozen=True, slots=True)
+class NoMembershipChange(WireValue):
+    accepts_null = True
+
+    @classmethod
+    def from_wire(cls, data):
+        FieldCodec.decode(type(None), data)
+        return cls()
+
+    def to_wire(self):
+        return None
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(type(None))
+
+    def conversation_role(self):
+        return ConversationRole()
+
 
 @dataclass(frozen=True, slots=True)
 class MessageRoleWire:
     """The unchanged external fields, decoded once into a message role."""
 
-    change: MembershipChange | None = field(default=None, metadata={"wire_name": "membership", "wire_omit_default": True})
+    change: MembershipChange | NoMembershipChange = field(default_factory=NoMembershipChange, metadata={"wire_name": "membership", "wire_omit_default": True})
     notice: bool = field(default=False, metadata={"wire_omit_default": True})
+
+    def role(self):
+        role = self.change.conversation_role()
+        return role.as_notice() if self.notice else role
 
 
 class MessageRole(InlineRecord):
     @classmethod
-    def schema(cls):
-        return FieldCodec.record_schema(MessageRoleWire)
+    def wire_record(cls):
+        return MessageRoleWire
 
     @classmethod
     def from_wire(cls, data):
-        wire = FieldCodec.decode(MessageRoleWire, data)
-        ordinary, membership = (
-            (NoticeRole, MembershipNoticeRole) if wire.notice
-            else (ConversationRole, MembershipConversationRole)
-        )
-        return ordinary() if wire.change is None else membership(wire.change)
+        return FieldCodec.decode(MessageRoleWire, data).role()
 
     def to_wire(self):
         return FieldCodec.encode_record(self.wire_fields())
@@ -146,7 +169,6 @@ class MessageRole(InlineRecord):
         return ()
 
     def response_wake_mode(self):
-        from .wake_policy import BoundedTriageWake
         return BoundedTriageWake()
 
     def as_notice(self):
@@ -167,7 +189,6 @@ class InformationalMessage:
         return False
 
     def wake_mode(self, target, recipient, mentions, control):
-        from .wake_policy import PassiveWake
         return PassiveWake()
 
 
@@ -194,7 +215,6 @@ class ConversationRole(MessageRole):
 
     def wake_mode(self, target, recipient, mentions, control):
         if control.passive:
-            from .wake_policy import PassiveWake
             return PassiveWake()
         return target.wake_policy(recipient, mentions)
 
@@ -211,7 +231,6 @@ class NoticeRole(InformationalMessage, MessageRole):
         return HistoricalNoticeRole()
 
     def response_wake_mode(self):
-        from .wake_policy import PassiveWake
         return PassiveWake()
 
     def require_recipients(self, target, audience):
