@@ -18,6 +18,7 @@ from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import aclosing
 from dataclasses import MISSING, Field, dataclass, field, fields, replace
 from itertools import dropwhile, takewhile
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_type_hints
 
@@ -573,13 +574,33 @@ class ActiveStatusResult(CliResult):
 
 @dataclass(frozen=True)
 class HistoryPageResult(CliResult):
+    messages_key: ClassVar[str] = "messages"
     messages: tuple[Message, ...]
-    before: PageCursor | None
     has_older: bool
 
-    def encoded(self) -> object:
-        return {"messages": [{**m.to_wire(), **m.display_metadata} for m in self.messages],
+    @property
+    def before(self) -> PageCursor | None:
+        return self.messages[-1].view_cursor if self.messages else None
+
+    def encoded(self) -> dict[str, object]:
+        return {self.messages_key: [{**m.to_wire(), **m.display_metadata} for m in self.messages],
                 "before": FieldCodec.encode(self.before), "has_older": self.has_older}
+
+
+class DmHistoryPageResult(HistoryPageResult):
+    messages_key = "dm"
+
+
+class EverythingHistoryPageResult(HistoryPageResult):
+    messages_key = "everything"
+
+
+@dataclass(frozen=True)
+class ChannelHistoryPageResult(HistoryPageResult):
+    channel: str
+
+    def encoded(self) -> dict[str, object]:
+        return {**super().encoded(), "channel": self.channel}
 
 
 @dataclass(frozen=True)
@@ -1266,11 +1287,14 @@ class HistoryCliCommand(CliCommand):
         bounds = PageBounds(traversal, self.limit)
         if self.with_thread:
             page = ctx.views.dm_history_page(ToolCaller.from_actor(self.me).subject(""), self.with_thread, bounds)
+            result: Callable[[tuple[Message, ...], bool], HistoryPageResult] = DmHistoryPageResult
         elif self.channel:
             page = ctx.views.channel_history_page(self.channel, bounds)
+            result = partial(ChannelHistoryPageResult, channel=self.channel)
         else:
             page = ctx.views.full_history_page(bounds)
-        return HistoryPageResult(tuple(reversed(page.messages)), page.oldest_cursor, page.has_older)
+            result = EverythingHistoryPageResult
+        return result(tuple(reversed(page.messages)), page.has_older)
 
 
 @dataclass(frozen=True, kw_only=True)

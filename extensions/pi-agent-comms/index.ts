@@ -52,9 +52,8 @@ function run(args: string[], timeout = 30_000): Record<string, unknown> {
 
 export default function (pi: ExtensionAPI) {
 	const currentThread = process.env.AGENT_COMMS_THREAD;
-	let serviceTier = currentThread
-		? run(["thread", "--name", currentThread, "--no-pending"]).service_tier
-		: undefined;
+	const startup = run(["tools", ...(currentThread ? ["--name", currentThread] : [])]);
+	let serviceTier = startup.service_tier;
 	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
 	const task = process.env.PI_TASK || "";
 	const managed = process.env.AGENT_COMMS_MANAGED === "1";
@@ -137,7 +136,7 @@ export default function (pi: ExtensionAPI) {
 		});
 	}
 
-	const catalog = run(["tools"]).tools as ToolDeclaration[];
+	const catalog = startup.tools as ToolDeclaration[];
 	for (const declaration of catalog) {
 		pi.registerTool({
 			name: declaration.name,
