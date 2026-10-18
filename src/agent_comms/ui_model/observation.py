@@ -42,7 +42,10 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
-from agent_comms.presentation import NoRevision, WireRevision
+from agent_comms.presentation import NoRevision, ReadState, WireRevision
+from agent_comms.ui_model.delivery import InputDelivery
+from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel, ThreadRowModel
+from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
 from agent_comms.view_unread import IdleReplyPreparation
 
 if TYPE_CHECKING:
@@ -57,10 +60,7 @@ if TYPE_CHECKING:
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
-    from agent_comms.ui_model.delivery import InputDelivery
     from agent_comms.ui_model.goal import OwnerGoalSnapshot
-    from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel
-    from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
     from agent_comms.view_unread import ReplyIndexBatch
 
 
@@ -141,8 +141,7 @@ class LiveObservationInterest(ObservationInterest):
             if self.observations.get(kind) is not observation:
                 continue
             for result in observation.read(service.comms, revision):
-                if result is not None:
-                    service.send(result)
+                result.publish(service)
                 await service.answer_pending(attempted)
                 if self.observations.get(kind) is not observation:
                     break
@@ -153,19 +152,29 @@ class LiveObservationInterest(ObservationInterest):
 InterestT = TypeVar("InterestT", bound=InterestRequest)
 
 
-class NotObserved:
+class ObservationLifetime:
     def for_interest(self, requested: Observation) -> Observation:
         return requested
 
 
-class Observation(NotObserved, Generic[InterestT]):
+class NotObserved(ObservationLifetime): pass
+
+
+class ObservationStep:
+    def publish(self, service: ObservationService) -> None:
+        pass
+
+
+class ObservationPending(ObservationStep): pass
+
+
+class Observation(ObservationLifetime, Generic[InterestT]):
     """A requested view owns its read state and yields between store operations."""
 
     def __init__(self, request: InterestT):
         self.request = request
 
     def for_interest(self, requested: Observation) -> Observation:
-        """Keep an unchanged reader; a changed request continues from this reader."""
         return self if self.request == requested.request else requested.continue_from(self)
 
     def continue_from(self, previous: Self) -> Self:
@@ -173,7 +182,7 @@ class Observation(NotObserved, Generic[InterestT]):
         return self
 
     @abstractmethod
-    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]: ...
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | ObservationPending]: ...
 
     def after_read(self, service: ObservationService) -> None:
         """Subscribe to completion when this observation has unfinished preparation."""
@@ -319,11 +328,11 @@ class CancelRead(ObservationRequest):
             asking.cancel()
 
 
-TranscriptResult = TypeVar("TranscriptResult")
+ResultT = TypeVar("ResultT")
 
 
 @dataclass(frozen=True)
-class TranscriptRequest(ReadRequest, Generic[TranscriptResult]):
+class TranscriptRequest(ReadRequest, Generic[ResultT]):
     """One bounded transcript page and the witness it was read under.
 
     Without ``read_identity`` the source is captured now; with it, the page is
@@ -337,7 +346,7 @@ class TranscriptRequest(ReadRequest, Generic[TranscriptResult]):
     read_identity: TranscriptReadIdentity | None = None
     historical_source: str | None = None
 
-    def read(self, comms: Comms) -> TranscriptResult:
+    def read(self, comms: Comms) -> ResultT:
         try:
             transcripts = comms.transcripts
             window = dict(before=self.before, after=self.after, through=self.through)
@@ -356,7 +365,7 @@ class TranscriptRequest(ReadRequest, Generic[TranscriptResult]):
             raise UnreadableHistory.capture(error) from error
 
     @abstractmethod
-    def result(self, read: TranscriptRead) -> TranscriptResult: ...
+    def result(self, read: TranscriptRead) -> ResultT: ...
 
 
 @dataclass(frozen=True)
@@ -478,7 +487,6 @@ class ReadInputDelivery(OwnerRead):
     include_history: bool = False
 
     async def read(self, owner: RuntimeConnection) -> InputDelivery:
-        from agent_comms.ui_model.delivery import InputDelivery
 
         return InputDelivery.from_wire(
             await owner.request("input_dispositions", include_history=self.include_history))
@@ -496,7 +504,6 @@ class ObserveSidebar(InterestRequest):
     def _answer(
         self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str
     ) -> SidebarResult:
-        from agent_comms.ui_model.sidebar import SidebarModel
 
         try:
             snapshot = read(
@@ -528,19 +535,15 @@ class RosterSidebarRead(SidebarReadStage):
         return request._answer(revision, comms.views.presentation.roster, viewer)
 
     def next(self) -> SidebarReadStage:
-        return CompleteSidebarRead()
-
-
-class CompleteSidebarRead(SidebarReadStage):
-    pass
+        return SidebarReadStage()
 
 
 class SidebarReading(Observation[ObserveSidebar]):
     def __init__(self, request: ObserveSidebar):
         super().__init__(request)
         self.stage: SidebarReadStage = RosterSidebarRead()
-        self.sent: NoSidebarSent = NoSidebarSent()
-        self.published: NoSidebarResult = NoSidebarResult()
+        self.sent: SendState = NoSidebarSent()
+        self.published: PublishState[SidebarResult] = NoSidebarResult()
         self.reply_completion: Future[ReplyIndexBatch] = IdleReplyPreparation.future
 
     def after_read(self, service: ObservationService) -> None:
@@ -553,7 +556,7 @@ class SidebarReading(Observation[ObserveSidebar]):
     def prepared(self, service: ObservationService) -> None:
         service.interest.prepared(self, service)
 
-    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | ObservationPending]:
         while True:
             key = SidebarSent(revision.expiry_period, type(self.stage), revision)
             if not self.sent.changed_since(key):
@@ -564,7 +567,7 @@ class SidebarReading(Observation[ObserveSidebar]):
             except RouteIndexRebuilding:
                 # Continue bounded preparation, letting the service accept and
                 # serve foreground requests between every bounded unit.
-                yield None
+                yield ObservationPending()
                 continue
             yield from result.finish_read(self, key)
             if self.stage is stage:
@@ -578,13 +581,16 @@ class SidebarReading(Observation[ObserveSidebar]):
             yield result
 
 
-class NoSidebarSent:
+class SendState:
     def changed_since(self, current: SidebarSent) -> bool:
         return True
 
 
+class NoSidebarSent(SendState): pass
+
+
 @dataclass(frozen=True)
-class SidebarSent(NoSidebarSent):
+class SidebarSent(SendState):
     expiry_period: int
     stage: type[SidebarReadStage]
     revision: WireRevision = field(compare=False)
@@ -639,9 +645,9 @@ class ObserveNotifications(InterestRequest):
 class NotificationReading(Observation[ObserveNotifications]):
     def __init__(self, request: ObserveNotifications):
         super().__init__(request)
-        self.read_states: dict[ReadNotifications, NoRevision] = {}
+        self.read_states: dict[ReadNotifications, ReadState] = {}
 
-    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | ObservationPending]:
         for request in self.request.reads:
             if not self.read_states.get(request, NoRevision()).notification_read_changed(request, revision):
                 continue
@@ -649,7 +655,7 @@ class NotificationReading(Observation[ObserveNotifications]):
                 request.require_root(comms)
                 outcomes = request.read(comms)
             except UnreadableHistory.DEFERRED_READS:
-                yield None  # Keep the interest pending until its source can be read.
+                yield ObservationPending()  # Keep the interest pending until its source can be read.
                 continue
             except (StoredHistoryUnreadable, RelationViolationError, ValueError) as error:
                 result = NotificationsUnreadable(revision, request, UnreadableHistory.capture(error))
@@ -670,7 +676,7 @@ class ThreadReading(Observation[ObserveThreads]):
         self.initial = self.request.names - previous.request.names
         return self
 
-    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | ObservationPending]:
         previous = self.observed
         results: dict[str, ThreadReadResult] = {}
         activity = {}
@@ -697,7 +703,7 @@ class ThreadReading(Observation[ObserveThreads]):
                     results[name] = ThreadBusy()
                 except StoredHistoryUnreadable as error:
                     results[name] = ThreadUnavailable(UnreadableHistory.capture(error))
-                yield None
+                yield ObservationPending()
         results.update((name, value) for name, value in previous.results.items()
                        if name in self.request.names and name not in names)
         observed = ThreadsObserved(revision, results, frozenset(), activity)
@@ -712,9 +718,9 @@ class ThreadReading(Observation[ObserveThreads]):
 class ViewReading(Observation[ObserveViews]):
     def __init__(self, request: ObserveViews):
         super().__init__(request)
-        self.revision: NoRevision = NoRevision()
+        self.revision: ReadState = NoRevision()
 
-    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | ObservationPending]:
         if not self.revision.registrations_changed_since(revision):
             return
         retired = comms.views.retired_views(self.request.threads, self.request.channels)
@@ -731,10 +737,13 @@ class ServiceResult(ABC):
 
 
 @dataclass(frozen=True)
-class Observed(ServiceResult):
+class Observed(ObservationStep, ServiceResult):
     """A result, as of one revision of Core's stores."""
 
     revision: WireRevision
+
+    def publish(self, service: ObservationService) -> None:
+        service.send(self)
 
     def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
         observed.append(self)
@@ -785,13 +794,16 @@ class RevisionObserved(Observed):
     """Core's stores changed; consumers that only need to know react to this."""
 
 
-class NoSidebarResult:
-    def same_observation(self, current: SidebarResult) -> bool:
-        return False
+class PublishState(Generic[ResultT]):
+    def same_observation(self, current: ResultT) -> bool:
+        return self == current
+
+
+class NoSidebarResult(PublishState["SidebarResult"]): pass
 
 
 @dataclass(frozen=True)
-class SidebarResult(NoSidebarResult, Observed):
+class SidebarResult(PublishState["SidebarResult"], Observed):
     request: ObserveSidebar
 
     def same_observation(self, previous: SidebarResult) -> bool:
@@ -831,11 +843,8 @@ class SidebarUnreadable(SidebarResult):
     error: UnreadableHistory
 
 
-class ThreadReadResult(ABC):
+class ThreadReadResult(PublishState["ThreadReadResult"], ABC):
     """One thread's last read, including how to compare and display its answer."""
-
-    @abstractmethod
-    def same_observation(self, previous: ThreadReadResult) -> bool: ...
 
     @abstractmethod
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel: ...
@@ -856,7 +865,6 @@ class ThreadPresented(ThreadReadResult):
             self.presentation is previous.presentation or self.presentation.same_observation(previous.presentation))
 
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
-        from agent_comms.ui_model.status import ThreadStatusModel
         return ThreadStatusModel.known(name, self.presentation)
 
     def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
@@ -868,11 +876,7 @@ class ThreadPresented(ThreadReadResult):
 
 @dataclass(frozen=True)
 class ThreadMissing(ThreadReadResult):
-    def same_observation(self, previous: ThreadReadResult) -> bool:
-        return isinstance(previous, ThreadMissing)
-
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
-        from agent_comms.ui_model.status import ThreadStatusModel
         return ThreadStatusModel.retired(name)
 
 
@@ -880,19 +884,12 @@ class ThreadMissing(ThreadReadResult):
 class ThreadUnavailable(ThreadReadResult):
     error: UnreadableHistory
 
-    def same_observation(self, previous: ThreadReadResult) -> bool:
-        return isinstance(previous, ThreadUnavailable) and self.error == previous.error
-
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
-        from agent_comms.ui_model.status import ThreadStatusModel
         return ThreadStatusModel.unreadable(name, self.error)
 
 
 @dataclass(frozen=True)
 class ThreadBusy(ThreadReadResult):
-    def same_observation(self, previous: ThreadReadResult) -> bool:
-        return isinstance(previous, ThreadBusy)
-
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
         return owner.open(name)
 
@@ -969,7 +966,7 @@ class ObservationService:
         self.connection = connection
         self.interest: ObservationInterest = LiveObservationInterest()
         self.changed = asyncio.Event()
-        self.revision: NoRevision = NoRevision()
+        self.revision: ReadState = NoRevision()
         self.observe_due = True
         # Store reads the UI awaits, in arrival order, until served or cancelled.
         self.pending: dict[int, ReadRequest] = {}
@@ -1008,14 +1005,12 @@ class ObservationService:
                 return
             request.receive(self)
 
-    def store_names(self) -> frozenset[bytes]:
-        return frozenset(os.fsencode(path.name) for group in WireRevision.source_paths(self.comms.views).values()
-                         for path in group if path.parent == self.comms.root)
-
     async def watch(self) -> None:
         from agent_comms.wire_watch import ModifiedWatchSource, WireWatch
 
-        source = ModifiedWatchSource(self.comms.root, self.store_names())
+        source = ModifiedWatchSource(self.comms.root, frozenset(
+            os.fsencode(path.name) for group in WireRevision.source_paths(self.comms.views).values()
+            for path in group if path.parent == self.comms.root))
         async for _ in WireWatch.observations(source):
             self.observe_again()
 
