@@ -175,12 +175,7 @@ class CertifiedSourceRead:
                 digest = _SEED
                 self.stream.seek(0)
                 with os.fdopen(fd, "wb") as output:
-                    while raw := self.stream.readline(WireRecord.max_row_bytes + 1):
-                        WireRecord.require_row_size(
-                            raw, message="Carried source has an invalid row boundary",
-                        )
-                        if not raw.endswith(b"\n"):
-                            raise RelationViolationError("Carried source has an invalid row boundary")
+                    for _, raw in WireRecord.rows(self.stream):
                         output.write(raw)
                         digest = _chain(digest, raw)
                     output.flush()
