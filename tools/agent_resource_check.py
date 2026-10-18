@@ -2,7 +2,6 @@
 """Check desktop headroom before agent work and notify on sustained pressure."""
 
 import argparse
-from dataclasses import dataclass
 import json
 import os
 import re
@@ -10,7 +9,10 @@ import shlex
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import TextIO
 
 from agent_comms.storage_rules import StorageRule
 
@@ -89,6 +91,23 @@ class ProcessIdentity:
         return self.state not in (b"Z", b"X") and not self.flags & 0x00200000
 
 
+@dataclass
+class DirectoryUse:
+    """One process observation; paths are derived from its interface matches."""
+
+    pid: int
+    start_time: int | None = None
+    matches: dict[str, list[str]] = field(default_factory=dict)
+    unreadable: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def paths(self) -> list[str]:
+        return sorted({path for paths in self.matches.values() for path in paths})
+
+    def emit(self, stream: TextIO) -> None:
+        print(json.dumps({**asdict(self), "paths": self.paths}, sort_keys=True), file=stream)
+
+
 class DirectoryUsers:
     """Inspect all requested paths in one /proc pass, excluding this checker."""
 
@@ -96,7 +115,7 @@ class DirectoryUsers:
     shell_boundaries = frozenset((b";", b"&&", b"||", b"|", b"&", b"(", b")", b">", b">>", b"<", b"<<", b">&", b"<&"))
 
     @staticmethod
-    def kinds():
+    def kinds() -> tuple[type["DirectoryUsers"], ...]:
         return (DirectoryUsers, *DirectoryUsers.__subclasses__())
 
     def __init__(self, paths):
@@ -166,51 +185,52 @@ class DirectoryUsers:
             arguments[index] = b" ".join(self.without_query(tokens))
         return b"\x00".join(self.without_query(arguments))
 
-    def still_userspace(self, proc, before, result):
+    def still_userspace(self, proc: Path, before: ProcessIdentity, result: DirectoryUse) -> bool:
         """Discard a departed process, never an unreadable live one."""
         try:
             after = ProcessIdentity.read(proc)
         except (FileNotFoundError, ProcessLookupError):
             return False
         except (PermissionError, ValueError, IndexError) as error:
-            result["unreadable"]["stat"] = str(error)
+            result.unreadable["stat"] = str(error)
             return True
         if not after.userspace:
             return False
         if after.key != before.key:
-            result["unreadable"]["stat"] = "PID changed during inspection"
+            result.unreadable["stat"] = "PID changed during inspection"
         return True
 
-    def read_interface(self, proc, before, name, read, result):
+    def read_interface(self, proc: Path, before: ProcessIdentity, name: str,
+                       read: Callable[[], bytes | Path], result: DirectoryUse) -> bool:
         try:
             data = os.fsencode(read())
         except (FileNotFoundError, ProcessLookupError) as error:
             if not self.still_userspace(proc, before, result):
                 return False
             if not name.startswith("fd/"):
-                result["unreadable"][name] = str(error)
+                result.unreadable[name] = str(error)
         except PermissionError as error:
-            result["unreadable"][name] = str(error)
+            result.unreadable[name] = str(error)
         else:
             if name == "cmdline" and before.key in self.ancestors:
                 data = self.command_line(data)
             paths = set().union(*(self.path_matches[match.group()] for match in self.pattern.finditer(data)))
             if paths:
-                result["matches"][name] = sorted(paths)
+                result.matches[name] = sorted(paths)
         return True
 
     def inspect(self, proc):
-        result = {"pid": int(proc.name), "matches": {}, "unreadable": {}}
+        result = DirectoryUse(int(proc.name))
         try:
             before = ProcessIdentity.read(proc)
         except (FileNotFoundError, ProcessLookupError):
             return None
         except (PermissionError, ValueError, IndexError) as error:
-            result["unreadable"]["stat"] = str(error)
+            result.unreadable["stat"] = str(error)
             return result
         if not before.userspace:
             return None
-        result["start_time"] = before.start_time
+        result.start_time = before.start_time
         readers = (
             ("exe", (proc / "exe").readlink),
             ("cwd", (proc / "cwd").readlink),
@@ -228,12 +248,12 @@ class DirectoryUsers:
         except (FileNotFoundError, ProcessLookupError) as error:
             if not self.still_userspace(proc, before, result):
                 return None
-            result["unreadable"]["fd"] = str(error)
+            result.unreadable["fd"] = str(error)
         except PermissionError as error:
-            result["unreadable"]["fd"] = str(error)
+            result.unreadable["fd"] = str(error)
         if not self.still_userspace(proc, before, result):
             return None
-        return result if result["matches"] or result["unreadable"] else None
+        return result if result.matches or result.unreadable else None
 
     def __iter__(self):
         for proc in sorted(Path("/proc").iterdir(), key=lambda entry: int(entry.name) if entry.name.isdecimal() else -1):
@@ -241,13 +261,12 @@ class DirectoryUsers:
                 continue
             result = self.inspect(proc)
             if result is not None:
-                result["paths"] = sorted({path for paths in result["matches"].values() for path in paths})
                 yield result
 
-    def report(self):
+    def report(self) -> int:
         found = False
         for process in self:
-            print(json.dumps(process, sort_keys=True))
+            process.emit(sys.stdout)
             found = True
         return int(found)
 
@@ -257,14 +276,14 @@ class FreeDirectories(DirectoryUsers):
 
     option = "--free"
 
-    def report(self):
+    def report(self) -> int:
         processes = tuple(self)
-        unreadable = tuple(process for process in processes if process["unreadable"])
+        unreadable = tuple(process for process in processes if process.unreadable)
         if unreadable:
             for process in unreadable:
-                print(json.dumps(process, sort_keys=True), file=sys.stderr)
+                process.emit(sys.stderr)
             return 1
-        used = set().union(*(process["paths"] for process in processes))
+        used = set().union(*(process.paths for process in processes))
         for path in self.paths:
             if str(path) not in used:
                 print(path)
