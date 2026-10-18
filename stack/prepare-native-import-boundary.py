@@ -202,7 +202,7 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
 
 
 def prepare_mcp_dependencies(extension: Path, destination: Path, environment: dict[str, str]) -> None:
-    with tempfile.TemporaryDirectory(prefix="pr95-mcp-deps-", dir="/var/tmp") as scratch:
+    with tempfile.TemporaryDirectory(prefix="pr95-mcp-deps-") as scratch:
         staging = Path(scratch)
         for name in ("package.json", "package-lock.json"):
             shutil.copyfile(extension / name, staging / name)
