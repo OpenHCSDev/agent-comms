@@ -102,8 +102,9 @@ def test_native_1012_with_empty_thinking_reaches_provider_feedback():
     event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
     assert event.message.stop_reason is ErrorStopReason
     failure = ACPFailure.from_error(
-        RequestError(-32603, event.message.error_message, {"inputStatus": "started"}),
-        diagnostics=event.message.diagnostics,
+        RequestError(-32603, event.message.error_message, {
+            "inputStatus": "started", "diagnostics": message["diagnostics"],
+        }),
     )
     assert isinstance(failure, ProviderConnectionFailure)
     assert failure.input_state is StartedInput

@@ -171,17 +171,13 @@ class ACPFailure(DeliveryFailure):
         """Display classification only; input state comes from structured facts."""
 
     @classmethod
-    def from_error(
-        cls, error: RequestError, *, diagnostics: tuple[PiDiagnostic, ...] = (),
-    ) -> ACPFailure:
-        return cls.request_from_error(error, diagnostics=diagnostics).failure
+    def from_error(cls, error: RequestError) -> ACPFailure:
+        return cls.request_from_error(error).failure
 
     @classmethod
-    def request_from_error(
-        cls, error: RequestError, *, diagnostics: tuple[PiDiagnostic, ...] = (),
-    ) -> RequestFailure:
+    def request_from_error(cls, error: RequestError) -> RequestFailure:
         return FieldCodec.decode(ErrorValue, error.data).original_root().request_failure(
-            error.code, str(error), diagnostics=diagnostics
+            error.code, str(error)
         )
 
     @classmethod
@@ -388,8 +384,8 @@ class ErrorValue(DeclaredFamily, JsonShapeFamily, affix="ErrorValue"):
             code, self.detail or message, diagnostics=diagnostics
         )
 
-    def request_failure(self, code, message, *, diagnostics=()) -> RequestFailure:
-        return RequestFailure(self.failure(code, message, diagnostics=diagnostics), False)
+    def request_failure(self, code, message) -> RequestFailure:
+        return RequestFailure(self.failure(code, message), False)
 
     def encoded_reason(self, original: str) -> ErrorValue:
         # JSON scalars inside provider text remain the original plain text.
@@ -575,7 +571,7 @@ class PublishedErrorValue(ErrorValue):
     def failure(self, code, message, *, diagnostics=()) -> ACPFailure:
         return self.reported_failure.failure
 
-    def request_failure(self, code, message, *, diagnostics=()) -> RequestFailure:
+    def request_failure(self, code, message) -> RequestFailure:
         return self.reported_failure
 
     def to_wire(self):
