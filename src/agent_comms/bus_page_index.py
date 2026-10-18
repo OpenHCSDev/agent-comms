@@ -140,14 +140,13 @@ class BusPageIndex:
 
     @contextmanager
     def prepared(self, opened: WireSnapshot):
-        with _store_lock(self.bus_path, mode=SharedLock()):
+        with self.snapshot():
             if self.covers(opened):
-                with self.snapshot():
-                    yield
+                yield
                 return
         opened.metadata.access.require_append()
-        self.sync()
-        with _store_lock(self.bus_path, mode=SharedLock()), self.snapshot():
+        self.prepare(opened)
+        with self.snapshot():
             if not self.covers(opened):
                 raise StaleBusPageIndexError("Page index does not cover its opened source")
             yield
@@ -168,7 +167,7 @@ class BusPageIndex:
         """Prepare a freshly opened source; incomplete source is an error."""
         from .wire_log import CurrentSnapshotOpening, WireLog
 
-        with WireLog(self.bus_path).opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source, _store_lock(self.bus_path):
+        with WireLog(self.bus_path).opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
             self.prepare(source)
         return True
 
