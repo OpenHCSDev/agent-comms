@@ -28,7 +28,7 @@ from .threads import Thread
 from .typed_table import Column, TypedStore, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
 from .change_report import FileLine
-from .goals import OrderCheck, ProblemGoalOrder
+from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .child_process import BoundedRun, ExitedOutcome
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
@@ -51,10 +51,12 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
-    async def verified(self, check):
-        await self.require_source(check)
-        result = await BoundedRun.run(("bash", "-c", check.command), cwd=check.directory, timeout=120)
-        check.result.require(result)
+    async def verified(self, check, deletes: OrderDeletion):
+        """The order's check and every count its deletion declares run on the delivered source."""
+        for each in (check, *deletes.checks):
+            await self.require_source(each)
+            result = await BoundedRun.run(("bash", "-c", each.command), cwd=each.directory, timeout=120)
+            each.result.require(result)
         return replace(self, at=await self.delivery_time(check))
 
     @abstractmethod
@@ -541,6 +543,50 @@ class ApplicationOrderRun(OrderRun):
         return (f"{self.label} {self.text}",)
 
 
+class OrderDeletion(DeclaredFamily, affix="Deletion"):
+    """The decision family an order deletes, read once from its Deletes: line."""
+
+    label: ClassVar[str] = "Deletes:"
+    LINE: ClassVar[re.Pattern] = re.compile(r"(.+?)\s+at\s+(\S+):(\d+)\s*::\s*(\S+)\s*::\s*(.+)")
+    checks: ClassVar[tuple[OrderCheck, ...]] = ()
+
+    @staticmethod
+    def parse(line: str | None) -> OrderDeletion:
+        if line is None:
+            return NoOrderDeletion()
+        if not (found := OrderDeletion.LINE.fullmatch(line.strip())):
+            raise ValueError(f"Write {OrderDeletion.label} <decision family> at PATH:LINE :: <repo> :: "
+                             "<family-wide scanner count>.")
+        return FamilyDeletion(found[1], FileLine(found[2], int(found[3])),
+                              OrderCheck(found[4], found[5], CountCheckResult(0)))
+
+    def instructions(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class NoOrderDeletion(OrderDeletion):
+    pass
+
+
+@dataclass(frozen=True)
+class FamilyDeletion(OrderDeletion):
+    """Completion counts the whole family on the delivered commit, so a site renamed or wrapped
+    instead of deleted still counts, and only zero passes."""
+
+    family: str
+    site: FileLine
+    count: OrderCheck
+
+    @property
+    def checks(self) -> tuple[OrderCheck, ...]:
+        return (self.count,)
+
+    def instructions(self) -> tuple[str, ...]:
+        return (f"{self.label} {self.family} at {self.site.to_wire()} :: {self.count.directory} :: "
+                f"{self.count.command}",)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """One checked order lives on its Todo, independently of the unit's Goal."""
@@ -557,6 +603,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
     run: OrderRun
+    deletes: OrderDeletion = field(default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
     def __post_init__(self):
@@ -582,6 +629,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", f"Order: {self.id}",
             f"Owner: {self.owner.to_wire()}",
             f"Check: {self.check.directory} :: {self.check.command}",
+            *self.deletes.instructions(),
             *self.run.instructions(),
             f"Deadline: {FieldCodec.encode(todo.deadline)}",
             *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
@@ -1045,7 +1093,7 @@ class DeliverTodo(TodoOperation):
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        return replace(self, delivery=asyncio.run(self.delivery.verified(current.order.check)))
+        return replace(self, delivery=asyncio.run(self.delivery.verified(current.order.check, current.order.deletes)))
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
