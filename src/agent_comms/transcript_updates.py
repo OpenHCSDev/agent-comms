@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from functools import cached_property, partial
 from typing import Any
 
-from acp import Client
 from acp.schema import AgentMessageChunk, TextContentBlock
 
 from .acp_extension import (
@@ -20,7 +19,7 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .runtime import RuntimeServer, SocketClient
 from .turn_lease import TurnState
-from .ui_model.observation import ObservationProcess, ReadTranscript
+from .ui_model.observation import ObservationProcess, ReadTranscript, SubscribeTranscript
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -50,24 +49,22 @@ class TranscriptReplay:
 
     @cached_property
     def reads(self):
+        # Replay and subscription share this process and its request/wait lifetime.
         return self.runtime._resources.enter_context(
             ObservationProcess.awaited(self.comms.route)
         )
 
-    async def replay(self, session_id: str, name: str, client: Any = None) -> None:
+    async def replay(self, session_id: str, name: str, client: SocketClient | None = None) -> None:
         snapshot = await self.reads.read(ReadTranscript(str(self.comms.root), name))
         await self._publish(session_id, snapshot, client)
 
     async def subscribe(self, session_id: str, name: str, client: SocketClient) -> None:
-        # A socket handshake returns its read refusal, preserving its cause;
-        # only the UI replay waits for a later source change.
-        read = ReadTranscript(str(self.comms.root), name)
-        snapshot = await Coordination.run_worker(partial(read.read, self.comms))
+        snapshot = await self.reads.read(SubscribeTranscript(str(self.comms.root), name))
         await self._publish(session_id, snapshot, client)
 
     async def _publish(
         self, session_id: str, snapshot: TranscriptSnapshotUpdate,
-        client: Client | SocketClient | RuntimeServer | None,
+        client: SocketClient | None,
     ) -> None:
         destination = client or self.runtime
         metadata = await Coordination.run_worker(partial(encode_updates, snapshot))
