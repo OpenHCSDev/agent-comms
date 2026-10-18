@@ -7,7 +7,6 @@ command catalog. Existing CLI spellings belong to the store_files.
 from __future__ import annotations
 
 import argparse
-from abc import abstractmethod
 import json
 import asyncio
 import os
@@ -1526,7 +1525,7 @@ class ContextCliCommand(CliCommand):
     help = "Inspect original context contributors without sending an input"
     thread: str = option("thread")
     @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
+    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         super().add_parser(subparsers)
         parser = subparsers.choices[cls.declared_name]
         parser.add_argument("--turn", type=int, default=argparse.SUPPRESS)
@@ -1599,7 +1598,7 @@ class ContextCliCommand(CliCommand):
 
 class ContextOptionCliCommand(ContextCliCommand):
     @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
+    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         """These commands are selected by the context parser's options."""
 
     @abstractmethod

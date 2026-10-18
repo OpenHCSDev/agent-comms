@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import agent_comms
+from agent_comms.cli_commands import ContextCliCommand
 from stored_inputs import stored_inputs
 from agent_comms.goal_waits import NoGoalWait
 
@@ -82,7 +83,7 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
     from agent_comms.turn_context import ContextSourceText, NativeProvenance
 
     service = owner._comms
-    manifest, = (value for value in service.bus.log.context_manifests(thread.name, service.registry)
+    manifest, = (value for value in ContextCliCommand(thread=thread.name).manifests(service)
                   if value.turn.identity.value == original_input.turn_id)
     request_id = manifest.require_request_id()
     proof = NativeContextProof.read_evidence(Path(thread.require_saved_session()), original_input.native_id)
@@ -314,7 +315,7 @@ async def run_configured(options):
         terminal_replies = tuple(entry for entry in entries[entries.index(user) + 1:]
             if entry.final_reply)
         assert terminal_replies[-1].message.authoritative_text.strip() == token
-        manifests = service.bus.log.context_manifests(thread.name, service.registry)
+        manifests = tuple(reversed(tuple(ContextCliCommand(thread=thread.name).manifests(service))))
         assert manifests
         historical = await query('--turn', str(manifests[-1].turn.occurrence.generation))
         (output / 'recorded-context.json').write_text(json.dumps(historical))
@@ -407,7 +408,7 @@ def complete_goal_controls(root):
         assert all(durable.lookup(item.key) == item for item in originals)
         compare = DiffContextCliCommand(thread=source.name)
         difference = compare.encode_result(compare.apply(service))
-        manifests = service.bus.log.context_manifests(source.name, service.registry)
+        manifests = tuple(reversed(tuple(ContextCliCommand(thread=source.name).manifests(service))))
         assert difference['turn'] != difference['previous_turn']
         command = TurnContextCliCommand(thread=source.name,
             turn=manifests[-1].turn.occurrence.generation)
@@ -493,7 +494,7 @@ def complete_history_controls(root):
     assert query('history-original', '--diff') == future.changed_since(continuation)
     assert 'No preceding recorded turn' in query('history-renamed', '--turn', '1', '--diff', accepted=False)['error']
     reopened = Comms(wire)
-    assert reopened.bus.log.context_manifests('history-original', reopened.registry) == expected
+    assert tuple(reversed(tuple(ContextCliCommand(thread='history-original').manifests(reopened)))) == expected
     service.registry.unregister('history-renamed')
     service.registry.remove('history-renamed')
     service.registry.register(replace(renamed, created_at=19002.0))
