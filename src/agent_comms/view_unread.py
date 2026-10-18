@@ -6,6 +6,7 @@ import json
 import multiprocessing
 import os
 import sqlite3
+from abc import ABC, abstractmethod
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import ExitStack, closing, contextmanager
@@ -125,6 +126,45 @@ class TranscriptReply(ReplyIndexTable, TypedTable):
 @dataclass(frozen=True)
 class _IndexTable(TypedRow):
     name: str
+
+
+class FileReplyCount(ABC):
+    """One file's completed count or unfinished indexing, including addition."""
+
+    @abstractmethod
+    def __add__(self, other: FileReplyCount) -> FileReplyCount: ...
+
+    @abstractmethod
+    def added(self, total: int) -> FileReplyCount: ...
+
+    @abstractmethod
+    def record(self, name: str, counts: dict[str, int], pending: set[str]) -> None: ...
+
+
+@dataclass(frozen=True)
+class Counted(FileReplyCount):
+    total: int
+
+    def __add__(self, other: FileReplyCount) -> FileReplyCount:
+        return other.added(self.total)
+
+    def added(self, total: int) -> FileReplyCount:
+        return Counted(self.total + total)
+
+    def record(self, name: str, counts: dict[str, int], pending: set[str]) -> None:
+        counts[name] = self.total
+
+
+@dataclass(frozen=True)
+class Indexing(FileReplyCount):
+    def __add__(self, other: FileReplyCount) -> FileReplyCount:
+        return self
+
+    def added(self, total: int) -> FileReplyCount:
+        return self
+
+    def record(self, name: str, counts: dict[str, int], pending: set[str]) -> None:
+        pending.add(name)
 
 
 @dataclass(frozen=True)
@@ -435,17 +475,16 @@ class TranscriptReadState(ThreadOwnedState):
             source: FileRevision.capture(Path(source))
             for source in dict.fromkeys(source for keys in sources.values() for source in keys)
         }
-        source_counts: dict[str, int] = {}
-        pending_sources: set[str] = set()
+        per_file: dict[str, FileReplyCount] = {}
         with self._indexed_sources(revisions) as (database, indexes):
             ends: dict[str, int] = {}
             completed: dict[str, ReplyIndex] = {}
             for source, revision in revisions.items():
                 index = indexes[source]
                 if revision is None:
-                    source_counts[source] = 0
+                    per_file[source] = Counted(0)
                 elif not index.covers(revision):
-                    pending_sources.add(source)
+                    per_file[source] = Indexing()
                 else:
                     completed[source] = index
                     seen = self.reads.transcript_seen(
@@ -457,14 +496,12 @@ class TranscriptReadState(ThreadOwnedState):
             replies = TranscriptReply.preceding(database, ends)
             for source, index in completed.items():
                 last = replies.get(source)
-                source_counts[source] = index.total - (last.ordinal if last is not None else 0)
+                per_file[source] = Counted(index.total - (last.ordinal if last is not None else 0))
         result: dict[str, int] = {}
         pending: set[str] = set()
         for name, keys in sources.items():
-            if pending_sources.isdisjoint(keys):
-                result[name] = sum(source_counts[source] for source in keys)
-            else:
-                pending.add(name)
+            total = sum((per_file[source] for source in keys), Counted(0))
+            total.record(name, result, pending)
         return TranscriptUnread(result, frozenset(pending))
 
     def mark_read(self, viewer: str, source: str, through: int) -> None:
