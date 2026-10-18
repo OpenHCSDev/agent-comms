@@ -1,5 +1,6 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
 from agent_comms.native_package import pinned_native_package
+from agent_comms.native_arguments import SelectedModel
 
 import asyncio
 import json
@@ -75,7 +76,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
             }))
         launch = await Coordination.run_worker(partial(execution.tracked_launch,
             package, worktree=native.project, session=session,
-            provider="response-local", model="fixture", thinking_level="off"))
+            model=SelectedModel("response-local", "fixture"), thinking_level="off"))
         authentication = launch.configuration.auth_revision()
         launches.append((launch, authentication))
         child = await PiSessionChild.start((launch, authentication), session.attestation())
@@ -95,7 +96,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
         await Coordination.run_worker(partial(execution.tracked_launch,
             package.parent,
             worktree=native.project, session=session,
-            provider="response-local", model="fixture"))
+            model=SelectedModel("response-local", "fixture")))
     malformed = native.project / "malformed.jsonl"
     malformed.write_text("{}\n")
     wrong = SavedSelectedSession(malformed.parent,
@@ -103,11 +104,11 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     with pytest.raises((ValueError, native_pi.NativePiUnavailable)):
         await Coordination.run_worker(partial(execution.tracked_launch,
             package, worktree=native.project, session=wrong,
-            provider="response-local", model="fixture"))
+            model=SelectedModel("response-local", "fixture")))
     # Independent new acquisition still verifies the real artifact.
     await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
         package, worktree=native.project, session=session,
-        provider="response-local", model="fixture"))
+        model=SelectedModel("response-local", "fixture")))
     assert len(verifications) == 2 and native.provider.posts == 0
 
     # The same installed worker joins a borrowed, actual SDK-source descriptor.
