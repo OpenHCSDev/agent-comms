@@ -26,7 +26,7 @@ from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .bus_display_index import DisplayMetricScope, DisplayMetrics
-    from .wire_log import OpenedWireSnapshot, WireSnapshot
+    from .wire_log import WireSnapshot
 
 
 class StaleBusPageIndexError(ValueError):
@@ -47,17 +47,10 @@ class BusPageSource(PageIndexTable, TypedTable):
     tail: str
     singleton: Literal[1] = field(default=1, metadata={"sql": Column(primary_key=True)})
 
-    def covers(self, snapshot: OpenedWireSnapshot) -> bool:
-        """A later append index may lend offsets within this original cut."""
-        stream = snapshot.stream
-        source = replace(snapshot.revision, size=snapshot.complete_boundary)
-        opened = FileRevision.from_file(stream)
-        return (
-            source.holds_cut(opened, source.size)
-            and snapshot.same_file(self.revision.identity)
-            and source.size <= self.revision.size <= opened.size
-            and self.tail == AppendCheckpoint.fingerprint(stream, self.revision.size)
-        )
+    def covers(self, snapshot: WireSnapshot) -> bool:
+        return (snapshot.same_file(self.revision.identity)
+                and snapshot.complete_boundary <= self.revision.size
+                and snapshot.fingerprint(self.revision.size) == self.tail)
 
 
 @dataclass(frozen=True)
@@ -115,14 +108,20 @@ class BusPageIndex:
             return db
 
     @staticmethod
-    def _schema(db):
+    def _schema(db, *, writer: bool = False):
         actual = SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
         ))
         expected = {name: sql for table in TypedTable.members_with(PageIndexTable)
                     for name, sql in table.schema_objects().items()}
         if actual and SQLiteSchemaObject.differences(actual, expected):
-            raise StaleBusPageIndexError("Bus page index requires the quiet runtime reset")
+            if not writer:
+                raise StaleBusPageIndexError("Bus page index schema is not its declaration")
+            # Offsets derive from the bus: the writer discards a schema other
+            # than the declaration and rebuilds it under its lock.
+            for table in TypedTable.members_with(PageIndexTable):
+                table.drop(db)
+            actual = ()
         return actual, expected
 
     def __enter__(self) -> BusPageIndex:
@@ -132,15 +131,13 @@ class BusPageIndex:
         self._resources.close()
 
     def covers(self, opened: WireSnapshot) -> bool:
-        return opened.read(self._covers, absent=lambda: False)
-
-    def _covers(self, opened: OpenedWireSnapshot) -> bool:
         if not self.path.exists():
             return False
         with self.snapshot():
             actual, _ = self._schema(self.connection)
             saved = BusPageSource.one(self.connection, singleton=1) if actual else None
             return saved is not None and saved.covers(opened)
+
 
     @contextmanager
     def prepared(self, opened: WireSnapshot):
@@ -170,16 +167,16 @@ class BusPageIndex:
 
     def sync(self) -> bool:
         """Prepare a freshly opened source; incomplete source is an error."""
-        from .wire_log import WireLog
+        from .wire_log import CurrentSnapshotOpening, WireLog
 
-        with WireLog(self.bus_path)._opened_wire_snapshot(need_sequence=False) as source, _store_lock(self.bus_path):
+        with WireLog(self.bus_path)._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source, _store_lock(self.bus_path):
             self.prepare(source)
         return True
 
     def prepare(self, opened: WireSnapshot) -> None:
         """Bring this disposable index up to the caller's original source cut."""
-        while True:
-            saved, source, offset, rows = self._prepare(opened.opened)
+        while opened.complete_boundary:
+            saved, source, offset, rows = self._prepare(opened)
             if saved == source:
                 return
             with self._writing() as db:
@@ -189,7 +186,7 @@ class BusPageIndex:
                     row.insert(db)
                 source.upsert(db)
 
-    def _prepare(self, opened: OpenedWireSnapshot) -> tuple[BusPageSource | None, BusPageSource, int, tuple[BusPageRow, ...]]:
+    def _prepare(self, opened: WireSnapshot) -> tuple[BusPageSource | None, BusPageSource, int, tuple[BusPageRow, ...]]:
         """Read and decode the source before taking the SQLite writer lock."""
         saved, last_rows = None, ()
         if self.path.exists():
@@ -199,7 +196,7 @@ class BusPageIndex:
                     saved = BusPageSource.one(self.connection, singleton=1)
                     last_rows = BusPageRow.select(self.connection, order_by=("seq",),
                                                   descending=True, limit=1)
-        stream, revision = opened.stream, opened.revision
+        revision = opened.revision
         size = opened.complete_boundary
         if saved is not None and saved.covers(opened):
             return saved, saved, saved.revision.size, ()
@@ -207,27 +204,14 @@ class BusPageIndex:
         valid = (
             saved is not None
             and saved.revision.holds_cut(revision, offset)
-            and saved.tail == AppendCheckpoint.fingerprint(stream, offset)
+            and saved.tail == opened.fingerprint(offset)
         )
         if not valid:
             offset = 0
         rows: list[BusPageRow] = []
         last_sequence = last_rows[0].seq if valid and last_rows else None
-        stream.seek(offset)
-        while stream.tell() < size and stream.tell() - offset < self.batch_bytes:
-            row_offset = stream.tell()
-            raw = stream.readline(min(WireRecord.max_row_bytes + 1, size - row_offset))
-            WireRecord.require_row_size(
-                raw, error_type=RelationViolationError,
-                message="Bus row exceeds its declared byte limit",
-            )
-            if not raw.endswith(b"\n"):
-                raise RelationViolationError("Cannot prepare a page index from an incomplete wire cut")
-            if not raw.strip():
-                continue
-            record = json.loads(raw)
-            if not isinstance(record, Mapping):
-                raise ValueError("JSONL bus row must be an object.")
+        through = offset
+        for record, row_offset, through in opened.rows(offset, min(size, offset + self.batch_bytes)):
             for message in opened.messages(record):
                 if last_sequence is not None and message.seq <= last_sequence:
                     raise RelationViolationError("Wire sequences are not increasing.")
@@ -235,8 +219,8 @@ class BusPageIndex:
                                        message.timestamp, ReadLedger.human(message.sender_role),
                                        tuple(mention.thread for mention in message.mentions)))
                 last_sequence = message.seq
-        through = stream.tell()
-        source = BusPageSource(replace(revision, size=through), AppendCheckpoint.fingerprint(stream, through))
+        through = opened.position
+        source = BusPageSource(replace(revision, size=through), opened.fingerprint(through))
         return saved, source, offset, tuple(rows)
 
     def invalidate(self) -> None:
@@ -249,7 +233,7 @@ class BusPageIndex:
         with closing(CoordinationStore.writer(self.path)) as db, db:
             db.execute("PRAGMA synchronous=FULL")
             db.execute("BEGIN IMMEDIATE")
-            actual, expected = self._schema(db)
+            actual, expected = self._schema(db, writer=True)
             if not actual:
                 for statement in expected.values():
                     db.execute(statement)
@@ -323,3 +307,16 @@ class BusPageIndex:
                 parameters=(seen.high_water, json.dumps(seen.exceptions), json.dumps(names), before_offset, *parameters))
             clocks[scope.channel], counts[scope.channel] = (row.last, row.human), row.count
         return clocks, counts
+
+
+class EmptyBusPageIndex(BusPageIndex):
+    """The query result of a zero-byte cut; no SQL or file is fabricated."""
+
+    def __init__(self):
+        pass
+
+    def _offsets(self, *args, **kwargs):
+        yield from ()
+
+    def display_metrics(self, semantics, boundary):
+        return semantics.empty_metrics

@@ -19,7 +19,7 @@ def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_pa
         "role": "assistant", "content": [{"type": "text", "text": "one reply"}],
     }}) + "\n")
     state = TranscriptReadState(tmp_path / "read_ledger.json")
-    assert state.counts("viewer", {"worker": str(source)}, document=state.reads.read()).pending == {"worker"}
+    assert state.counts("viewer", {"worker": (str(source),)}, document=state.reads.read()).pending == {"worker"}
     state.preparation.future.result(timeout=10)
     workers = tuple(state._pool._processes.values())
     database, cancelled = state._connection, state._cancelled
@@ -38,6 +38,10 @@ def test_database_without_worker_is_closed_when_reader_dies(tmp_path):
     database = state._database()
     idle = state.preparation
     assert idle is state._idle
+    idle.cancel()
+    idle.retire((str(tmp_path / "missing.jsonl"),))
+    idle.commit(database, ())
+    assert not idle.pending
     assert idle.future.done() and idle.future.result().updates == ()
     assert not state._pool._processes  # Constructed, but no worker started without a submit.
     reference = weakref.ref(state)

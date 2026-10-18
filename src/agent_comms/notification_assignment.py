@@ -352,14 +352,16 @@ class NotificationAssignment(NotificationSource):
         """Capture assignment evidence through the single observing connection owner."""
         from .coordination_database import CoordinationStore
 
-        database = cls.database_path(root)
-        failure = CoordinationStore.observation_failure(database)
-        if failure == "missing":
-            return NotificationAssignmentRead(tuple(sources), ())
-        if failure:
-            raise ValueError(f"Channel notification status unavailable: {failure}")
-        with CoordinationStore.observing(database) as connection:
-            return cls.capture(connection, sources)
+        with CoordinationStore.observed(cls.database_path(root)).observing(cls, sources) as result:
+            return result
+
+    @classmethod
+    def missing_store(cls, store, sources):
+        return NotificationAssignmentRead(tuple(sources), ())
+
+    @classmethod
+    def invalid_store(cls, store, sources):
+        raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
 
     @property
     def recipient(self) -> FrozenRecipient:

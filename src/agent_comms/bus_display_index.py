@@ -13,7 +13,7 @@ from .read_basis import ChannelDisplayScope, ReadCursor
 from .read_ledger import ReadLedger
 
 if TYPE_CHECKING:
-    from .wire_log import OpenedWireSnapshot, WireSnapshot
+    from .wire_log import WireSnapshot
 
 DisplayMetrics = tuple[dict[str, tuple[float, float]], dict[str, int]]
 
@@ -47,21 +47,20 @@ class DisplayMetricScope:
 
 
 @dataclass(frozen=True)
-class EmptyDisplaySnapshot:
-    """A captured absent bus has no messages, not an unavailable index answer."""
+class DisplaySnapshot:
+    """Computed metrics, including zero rows, independent of a saved checkpoint."""
 
-    semantics: DisplayMetricScope
-
-    @property
-    def metrics(self) -> DisplayMetrics:
-        return self.semantics.empty_metrics
-
-
-@dataclass(frozen=True)
-class DisplayCheckpoint(AppendCheckpoint):
     semantics: DisplayMetricScope
     activity: dict[str, tuple[float, float]]
     counts: dict[str, int]
+
+    @property
+    def metrics(self) -> DisplayMetrics:
+        return self.activity, self.counts
+
+
+@dataclass(frozen=True)
+class DisplayCheckpoint(DisplaySnapshot, AppendCheckpoint):
     schema: Literal[4] = field(default=4, kw_only=True)
 
     def __post_init__(self) -> None:
@@ -72,9 +71,6 @@ class DisplayCheckpoint(AppendCheckpoint):
         if self.activity.keys() != expected or self.counts.keys() != expected:
             raise ValueError("Projection metrics differ from the captured channel scope")
 
-    @property
-    def metrics(self) -> DisplayMetrics:
-        return self.activity, self.counts
 
     def current_for(self, revision: FileRevision, semantics: DisplayMetricScope) -> bool:
         return (self.source, self.semantics) == (revision, semantics)
@@ -87,33 +83,26 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
         path = bus_path.with_name(f"bus_display_{self.record_type.schema}_{digest}.json")
         super().__init__(bus_path, path)
 
-    def snapshot(self, opened: WireSnapshot,
-                 semantics: DisplayMetricScope) -> DisplayCheckpoint | EmptyDisplaySnapshot:
-        return opened.read(lambda source: self._snapshot(source, semantics),
-                           absent=lambda: EmptyDisplaySnapshot(semantics))
-
-    def _snapshot(self, opened: OpenedWireSnapshot,
-                  semantics: DisplayMetricScope) -> DisplayCheckpoint:
+    def snapshot(self, opened: WireSnapshot, semantics: DisplayMetricScope) -> DisplaySnapshot:
         boundary = opened.complete_boundary
-        source, stream = opened.revision, opened.stream
         checkpoint = opened.append_checkpoint(self)
-        if checkpoint is not None and checkpoint.current_for(source, semantics):
+        if checkpoint is not None and not opened.changed_since(checkpoint.source) and checkpoint.semantics == semantics:
             return checkpoint
         if checkpoint is None or checkpoint.semantics != semantics:
-            metrics = opened.query_page_index(
-                lambda index: index.display_metrics(semantics, boundary), empty=semantics.empty_metrics)
+            metrics = opened.query_page_index(lambda index: index.display_metrics(semantics, boundary))
             offset = boundary
         else:
             metrics, offset = (dict(checkpoint.activity), dict(checkpoint.counts)), checkpoint.offset
         rows = opened.query_page_index(lambda index: tuple(index.offsets(
             lower=None, upper=None, targets=None, after_offset=offset,
-            descending=False, before_offset=boundary)), empty=())
+            descending=False, before_offset=boundary)))
         for message, _ in opened.indexed_records(rows, before_offset=boundary):
             semantics.observe(message, metrics)
-        projected = DisplayCheckpoint(source, boundary,
-                     AppendCheckpoint.fingerprint(stream, boundary),
-                     semantics, *metrics)
-        if checkpoint is None or checkpoint.semantics != semantics or offset != boundary:
-            self.write(projected)
-        opened.remember_append_checkpoint(self, projected)
-        return projected
+        result = DisplaySnapshot(semantics, *metrics)
+        if boundary:
+            projected = DisplayCheckpoint(opened.revision, boundary, opened.fingerprint(boundary), semantics, *metrics)
+            if checkpoint is None or checkpoint.semantics != semantics or offset != boundary:
+                self.write(projected)
+            opened.remember_append_checkpoint(self, projected)
+            return projected
+        return result

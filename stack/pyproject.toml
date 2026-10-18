@@ -4,17 +4,17 @@ version = "0.1.0"
 description = "Main-checkout agent-comms with main-branch UI packages"
 requires-python = ">=3.14"
 dependencies = [
-    "agent-comms[acp]",
-    "batrachian-toad==0.6.20",
-    "textual[syntax]==8.2.8",
+    "agent-comms",
+    "batrachian-toad",
+    "textual[syntax]",
 ]
 
 [tool.uv]
 package = false
 # This stack owns source selection, including Toad's transitive requirements.
 override-dependencies = [
-    "agent-comms[acp]",
-    "textual[syntax]==8.2.8",
+    "agent-comms",
+    "textual[syntax]",
     "ui-theme",
 ]
 

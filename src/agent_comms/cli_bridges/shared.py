@@ -13,7 +13,7 @@ import sys
 import traceback
 from abc import ABC, abstractmethod
 from contextlib import closing, contextmanager
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
@@ -47,6 +47,7 @@ from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, Too
 from agent_comms.typed_table import Column, TypedTable
 
 if TYPE_CHECKING:
+    from agent_comms.importing import ImportBuffer
     from .claude_protocol import ClaudeReaderPhase
 
 
@@ -263,6 +264,9 @@ class TranscriptUpdate(ABC):
         """Whether this update still needs publication before later updates."""
         return True
 
+    def add_to(self, history: ImportBuffer) -> None:
+        """What this update contributes to an imported conversation; activity contributes nothing."""
+
     @staticmethod
     def coalesced(updates: list[TranscriptUpdate]) -> list[TranscriptUpdate]:
         later: set[tuple[str, str]] = set()
@@ -320,6 +324,73 @@ class FinishedItem(TranscriptUpdate):
     def retain_before(self, later: set[tuple[str, str]]) -> bool:
         later.add((self.turn_id, self.item_id))
         return True
+
+    def add_to(self, history: ImportBuffer) -> None:
+        history.add(self.events)
+
+
+@dataclass(frozen=True)
+class HiddenItem(TranscriptUpdate):
+    """Conversation the live view does not show, because the thread shows it another way
+    (a bus delivery) or because only the person's own prompts are shown; history keeps it."""
+    events: tuple[TranscriptEvent, ...]
+
+    def publish(self, output: ThreadOutput) -> None:
+        pass
+
+    def add_to(self, history: ImportBuffer) -> None:
+        history.add(self.events)
+
+
+@dataclass(frozen=True)
+class Summarized(TranscriptUpdate):
+    """The harness replaced everything before this point with a summary (compaction)."""
+    text: str
+
+    def publish(self, output: ThreadOutput) -> None:
+        pass
+
+    def add_to(self, history: ImportBuffer) -> None:
+        history.summarize(self.text)
+
+
+@dataclass(frozen=True)
+class SessionFacts(TranscriptUpdate):
+    """Which session this is, where it ran and its title; a later fact replaces an earlier one."""
+    source_id: str = ''
+    project: str = ''
+    title: str = ''
+
+    def publish(self, output: ThreadOutput) -> None:
+        pass
+
+    def add_to(self, history: ImportBuffer) -> None:
+        history.describe(self)
+
+
+@dataclass(frozen=True)
+class EarlierRequest(TranscriptUpdate):
+    """The newest request before the selected history, looked up only if that history has none."""
+    find: Callable[[], str] = field(compare=False)
+
+    def publish(self, output: ThreadOutput) -> None:
+        pass
+
+    def add_to(self, history: ImportBuffer) -> None:
+        if not history.latest_request:
+            history.latest_request = self.find()[: history.limits.per_message]
+
+
+@dataclass(frozen=True)
+class HistoryNotice(TranscriptUpdate):
+    """Something about the source that an imported conversation should say it left out."""
+    text: str
+
+    def publish(self, output: ThreadOutput) -> None:
+        pass
+
+    def add_to(self, history: ImportBuffer) -> None:
+        history.notices.add(self.text)
 
 
 @dataclass(frozen=True)
@@ -698,24 +769,26 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
         await asyncio.to_thread(output.transcript.end_turn)
         # Each CLI reports its own initial state. Disk writes never stop the
         # event reader from receiving a newer whole draft of the same item.
-        queue: asyncio.Queue[TranscriptUpdate | None] = asyncio.Queue()
+        queue: asyncio.Queue[TranscriptUpdate] = asyncio.Queue()
 
         async def read() -> None:
-            async for update in self.transcript():
-                await update.observed(self)
-                queue.put_nowait(update)
-            queue.put_nowait(None)
+            try:
+                async for update in self.transcript():
+                    await update.observed(self)
+                    queue.put_nowait(update)
+            finally:
+                queue.shutdown()
 
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(read())
-            ended = False
-            while not ended:
-                pending = [await queue.get()]
+            while True:
+                try:
+                    pending = [await queue.get()]
+                except asyncio.QueueShutDown:
+                    break
                 while not queue.empty():
                     pending.append(queue.get_nowait())
-                ended = pending[-1] is None
-                updates = pending[:-1] if ended else pending
-                await asyncio.to_thread(output.publish_batch, updates)
+                await asyncio.to_thread(output.publish_batch, pending)
 
 class MonitorFrame(TaggedWire, ABC):
     """Our line protocol inside the harness's task-notification envelope."""

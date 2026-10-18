@@ -214,6 +214,19 @@ def test_installed_resource_lookup_never_guesses_adjacent_stack(tmp_path, includ
     assert namespace["MANIFEST"] == resources / "pi-native.sha256"
 
 
+def test_checkout_resources_remain_owned_by_stack_when_build_artifacts_exist(tmp_path):
+    source = tmp_path / "src/agent_comms"
+    source.mkdir(parents=True)
+    module = source / "native_package.py"
+    shutil.copy2(native_package.__file__, module)
+    artifacts = source / "_native"
+    artifacts.mkdir()
+    (artifacts / "core_stamp.py").write_text("# unrelated build metadata\n")
+    namespace = runpy.run_path(str(module))
+    assert namespace["MANIFEST"] == tmp_path / "stack/pi-native.sha256"
+    assert namespace["OWNER_INSTRUCTIONS"] == tmp_path / "stack/APPEND_SYSTEM.md"
+
+
 @pytest.fixture
 def launcher(tmp_path):
     repo = Path(__file__).resolve().parents[1]

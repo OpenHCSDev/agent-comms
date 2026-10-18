@@ -6,6 +6,7 @@ import json
 import multiprocessing
 import os
 import sqlite3
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import ExitStack, closing, contextmanager
@@ -127,6 +128,43 @@ class _IndexTable(TypedRow):
     name: str
 
 
+class FileReplyCount(ABC):
+    @abstractmethod
+    def __add__(self, other: FileReplyCount) -> FileReplyCount: ...
+
+    @abstractmethod
+    def added(self, total: int) -> FileReplyCount: ...
+
+    @abstractmethod
+    def record(self, name: str, counts: dict[str, int], pending: set[str]) -> None: ...
+
+
+@dataclass(frozen=True)
+class Counted(FileReplyCount):
+    total: int
+
+    def __add__(self, other: FileReplyCount) -> FileReplyCount:
+        return other.added(self.total)
+
+    def added(self, total: int) -> FileReplyCount:
+        return Counted(self.total + total)
+
+    def record(self, name: str, counts: dict[str, int], pending: set[str]) -> None:
+        counts[name] = self.total
+
+
+@dataclass(frozen=True)
+class Indexing(FileReplyCount):
+    def __add__(self, other: FileReplyCount) -> FileReplyCount:
+        return self
+
+    def added(self, total: int) -> FileReplyCount:
+        return self
+
+    def record(self, name: str, counts: dict[str, int], pending: set[str]) -> None:
+        pending.add(name)
+
+
 @dataclass(frozen=True)
 class TranscriptUnread:
     """Counts for completed indexes only; pending names have no exact count yet."""
@@ -228,6 +266,13 @@ class ReplyPreparation:
 
     future: Future[ReplyIndexBatch]
 
+    @property
+    def pending(self) -> bool:
+        return not self.future.done()
+
+    def commit(self, database: sqlite3.Connection, wanted: Collection[str]) -> str | None:
+        return None
+
     def cancel(self) -> None:
         pass
 
@@ -248,14 +293,14 @@ class ReplyPreparation:
 
     def read_counts(
         self, state: TranscriptReadState, viewer: str,
-        sources: Mapping[str, str], document: ReadDocument,
+        sources: Mapping[str, tuple[str, ...]], document: ReadDocument,
     ) -> TranscriptUnread:
         return state._counts_locked(viewer, sources, document)
 
     def watch(
-        self, previous: Future[ReplyIndexBatch] | None,
+        self, previous: Future[ReplyIndexBatch],
         on_done: Callable[[Future[ReplyIndexBatch]], None],
-    ) -> Future[ReplyIndexBatch] | None:
+    ) -> Future[ReplyIndexBatch]:
         return previous
 
 
@@ -284,7 +329,7 @@ class IdleReplyPreparation(ReplyPreparation):
 
     def read_counts(
         self, state: TranscriptReadState, viewer: str,
-        sources: Mapping[str, str], document: ReadDocument,
+        sources: Mapping[str, tuple[str, ...]], document: ReadDocument,
     ) -> TranscriptUnread:
         if not sources:
             return TranscriptUnread({}, frozenset())
@@ -311,7 +356,7 @@ class NativeReplyPreparation(ReplyPreparation):
         self, state: TranscriptReadState, database: sqlite3.Connection,
         wanted: Collection[str],
     ) -> ReplyPreparation:
-        if not self.future.done():
+        if self.pending:
             return self
         # A busy writer retains this exact work; it does not invalidate other
         # sources. The wire lock orders publication against source deletion.
@@ -323,9 +368,9 @@ class NativeReplyPreparation(ReplyPreparation):
         return state._idle
 
     def watch(
-        self, previous: Future[ReplyIndexBatch] | None,
+        self, previous: Future[ReplyIndexBatch],
         on_done: Callable[[Future[ReplyIndexBatch]], None],
-    ) -> Future[ReplyIndexBatch] | None:
+    ) -> Future[ReplyIndexBatch]:
         if self.future is not previous:
             self.future.add_done_callback(on_done)
         return self.future
@@ -482,7 +527,7 @@ class TranscriptReadState(ThreadOwnedState):
         self._preparation = self._preparation.started(self, needed)
 
     def counts(
-        self, viewer: str, sources: Mapping[str, str], *, document: ReadDocument
+        self, viewer: str, sources: Mapping[str, tuple[str, ...]], *, document: ReadDocument
     ) -> TranscriptUnread:
         # Counts never wait for native decoding or another in-process reader.
         if not self._lock.acquire(blocking=False):
@@ -501,26 +546,24 @@ class TranscriptReadState(ThreadOwnedState):
             self._lock.release()
 
     def _counts_locked(
-        self, viewer: str, sources: Mapping[str, str], document: ReadDocument
+        self, viewer: str, sources: Mapping[str, tuple[str, ...]], document: ReadDocument
     ) -> TranscriptUnread:
         revisions = {
             source: FileRevision.capture(Path(source))
-            for source in dict.fromkeys(sources.values())
+            for source in dict.fromkeys(source for keys in sources.values() for source in keys)
         }
-        result: dict[str, int] = {}
-        pending: set[str] = set()
+        per_file: dict[str, FileReplyCount] = {}
         with self._indexed_sources(revisions) as (database, indexes):
             ends: dict[str, int] = {}
             completed: dict[str, ReplyIndex] = {}
-            for name, source in sources.items():
-                revision = revisions[source]
+            for source, revision in revisions.items():
                 index = indexes[source]
                 if revision is None:
-                    result[name] = 0
+                    per_file[source] = Counted(0)
                 elif not index.covers(revision):
-                    pending.add(name)
+                    per_file[source] = Indexing()
                 else:
-                    completed[name] = index
+                    completed[source] = index
                     seen = self.reads.transcript_seen(
                         viewer, source, revision.identity.inode, document=document
                     )
@@ -528,9 +571,14 @@ class TranscriptReadState(ThreadOwnedState):
                         seen = 0  # Only truncation invalidates a cursor beyond the indexed prefix.
                     ends[source] = seen
             replies = TranscriptReply.preceding(database, ends)
-            for name, index in completed.items():
-                last = replies.get(index.source)
-                result[name] = index.total - (last.ordinal if last is not None else 0)
+            for source, index in completed.items():
+                last = replies.get(source)
+                per_file[source] = Counted(index.total - (last.ordinal if last is not None else 0))
+        result: dict[str, int] = {}
+        pending: set[str] = set()
+        for name, keys in sources.items():
+            total = sum((per_file[source] for source in keys), Counted(0))
+            total.record(name, result, pending)
         return TranscriptUnread(result, frozenset(pending))
 
     def mark_read(self, viewer: str, source: str, through: int) -> None:
