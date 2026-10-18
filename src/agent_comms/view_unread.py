@@ -220,18 +220,17 @@ class ReplyIndexResult(ABC):
     def collect(self, updates: list[ReplyIndexUpdate]) -> None: ...
 
 
-class BudgetSpent(ReplyIndexResult):
+class NoReplyUpdate(ReplyIndexResult):
+    def collect(self, updates: list[ReplyIndexUpdate]) -> None:
+        pass
+
+
+class BudgetSpent(NoReplyUpdate):
     """No slice remains; leave the stored prefix for the next batch."""
 
-    def collect(self, updates: list[ReplyIndexUpdate]) -> None:
-        pass
 
-
-class RevisionMoved(ReplyIndexResult):
+class RevisionMoved(NoReplyUpdate):
     """The opened file no longer matches the cut; observe a fresh revision."""
-
-    def collect(self, updates: list[ReplyIndexUpdate]) -> None:
-        pass
 
 
 @dataclass(frozen=True)
