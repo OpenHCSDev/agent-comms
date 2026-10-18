@@ -11,8 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
-from .native_package import NativePackageError, VerifiedNativePackage, pinned_native_package, verify_native_package
-from .private_path import PrivateDirectoryRole, TrustedAncestorRole
+from .native_package import NativePackageError, VerifiedNativePackage, pinned_native_package
 from .native_pi import _private_session_dir
 from .wire_log import WireLog
 
@@ -42,28 +41,12 @@ class PrivateNkLaunch:
     def installed(cls, root: Path, wire_root_id: str) -> PrivateNkLaunch:
         """A private root's launch with this installation's pinned native package."""
         try:
-            package = cls.acquire_package(pinned_native_package())
+            package = VerifiedNativePackage.acquire(pinned_native_package())
         except NativePackageError as error:
             raise PublicationActivationBlocked(
                 "private owner launch needs this installation's prepared native package"
             ) from error
         return cls(root, wire_root_id, package)
-
-    @staticmethod
-    def acquire_package(root: Path) -> VerifiedNativePackage:
-        """Acquire the pinned artifact only through safe private launch ancestry."""
-        root = root.absolute()  # Do not resolve away symlink components.
-        if ".." in root.parts:
-            raise NativePackageError("Pinned native Pi package path is not lexical")
-        if root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent"):
-            raise NativePackageError("Canonical native Pi package layout is required")
-        for ancestor in (root, *root.parents):
-            failed = TrustedAncestorRole.violation(ancestor.lstat())
-            if failed is not None:
-                raise NativePackageError(f"Native Pi package has unsafe ancestor: {failed.declared_name}")
-        if PrivateDirectoryRole.violation(root.parents[2].lstat()) is not None:
-            raise NativePackageError("Disposable native Pi root must be owner-only")
-        return verify_native_package(root)
 
     def validate(self) -> VerifiedNativePackage:
         """Recheck the root, retaining this process's acquired immutable package.

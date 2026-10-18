@@ -477,7 +477,7 @@ class NativePiRpcLaunch:
         if route is not None:
             package = route.validate()
         elif Path(shutil.which(command) or command).resolve() == (MANIFEST.parent / "bin/pi-native").resolve():
-            package = PrivateNkLaunch.acquire_package(pinned_native_package())
+            package = VerifiedNativePackage.acquire(pinned_native_package())
         else:
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         cls._command_selection(command, runtime, package)

@@ -20,6 +20,11 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+# Preparation executes this file directly before Core dependencies exist.
+# Only imported launch consumers need Core's filesystem roles.
+if __package__:
+    from .private_path import PrivateDirectoryRole, TrustedAncestorRole
+
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
 MAX_ENTRIES = 30_000
 MAX_BYTES = 512 * 1024**2
@@ -373,6 +378,22 @@ class VerifiedNativePackage:
     @property
     def cli(self) -> Path:
         return self.path / "dist/cli.js"
+
+    @classmethod
+    def acquire(cls, root: Path) -> VerifiedNativePackage:
+        """Acquire the pinned artifact only through safe private launch ancestry."""
+        root = root.absolute()  # Do not resolve away symlink components.
+        if ".." in root.parts:
+            raise NativePackageError("Pinned native Pi package path is not lexical")
+        if root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent"):
+            raise NativePackageError("Canonical native Pi package layout is required")
+        for ancestor in (root, *root.parents):
+            failed = TrustedAncestorRole.violation(ancestor.lstat())
+            if failed is not None:
+                raise NativePackageError(f"Native Pi package has unsafe ancestor: {failed.declared_name}")
+        if PrivateDirectoryRole.violation(root.parents[2].lstat()) is not None:
+            raise NativePackageError("Disposable native Pi root must be owner-only")
+        return verify_native_package(root)
 
 def verify_native_package(root: Path) -> VerifiedNativePackage:
     """Verify the entire copied package against the repository-owned commitment."""

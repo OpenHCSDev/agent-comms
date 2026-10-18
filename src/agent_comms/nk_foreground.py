@@ -32,7 +32,6 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
 from .native_pi import _private_session_dir
 from .native_package import VerifiedNativePackage
-from .private_nk_entrypoint import PrivateNkLaunch
 from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
 from .threads import Thread
@@ -171,7 +170,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             name=args.name,
             task=args.task,
             tags=frozenset(tag.strip() for tag in args.tags.split(",") if tag.strip()),
-            native_package=PrivateNkLaunch.acquire_package(args.native_package),
+            native_package=VerifiedNativePackage.acquire(args.native_package),
             opt_in=args.private_opt_in and args.native_model_opt_in,
         )
         _emit({"status": "ready", "name": owner.name, "pid": os.getpid()})
