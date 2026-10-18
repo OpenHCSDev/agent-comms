@@ -11,12 +11,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation
 
 from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
 from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
 from .private_path import FileRevision
+from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .transcript_sources import TranscriptSource
 
 
@@ -72,20 +74,17 @@ class RecordsCut(DeclaredFamily, affix="Cut"):
 class SessionCut(RecordsCut):
     """The saved session's actual file state, including one not written yet."""
 
-    @classmethod
-    def capture(cls, path: Path) -> SessionCut:
-        revision = FileRevision.capture(path)
-        return MissingSessionCut() if revision is None else PresentSessionCut(revision)
-
     def draft_current(self, current: RecordsCut) -> bool:
         # Native drafts belong to the ACP stream, not this saved-record reader.
         return self.holds(current, self.offset)
 
     @abstractmethod
-    def mark_read(self, reads, viewer: str, source: str, through: int) -> None: ...
+    def mark_read(self, reads: ReadLedger, viewer: str, source: str, through: int) -> None: ...
 
     @abstractmethod
-    def publication_revision(self, root, reader, recipient): ...
+    def publication_revision(
+        self, root: Path, reader: NativeTranscript, recipient: RecordedThreadIncarnation
+    ) -> PublishedReplyRevision: ...
 
 
 @dataclass(frozen=True)
@@ -95,13 +94,13 @@ class MissingSessionCut(SessionCut):
     def contains(self, current: SessionCut, through: int) -> bool:
         return through == 0
 
-    def mark_read(self, reads, viewer: str, source: str, through: int) -> None:
+    def mark_read(self, reads: ReadLedger, viewer: str, source: str, through: int) -> None:
         # No file means no written transcript, just as unread counts return zero.
         pass
 
-    def publication_revision(self, root, reader, recipient):
-        from .native_runtime_input import PublishedReplyRevision
-
+    def publication_revision(
+        self, root: Path, reader: NativeTranscript, recipient: RecordedThreadIncarnation
+    ) -> PublishedReplyRevision:
         return PublishedReplyRevision(0, 0)
 
 
@@ -117,15 +116,15 @@ class PresentSessionCut(SessionCut):
         # A session is append-only within one inode; replacement changes the cut.
         return self.revision.holds_cut(current.revision, through)
 
-    def mark_read(self, reads, viewer: str, source: str, through: int) -> None:
+    def mark_read(self, reads: ReadLedger, viewer: str, source: str, through: int) -> None:
         if not 0 <= through <= self.offset:
             raise TranscriptChanged()
         reads.mark_transcript(viewer, source, self.revision.identity.inode,
                               through, self.revision.size)
 
-    def publication_revision(self, root, reader, recipient):
-        from .native_runtime_input import NativeRuntimeInput
-
+    def publication_revision(
+        self, root: Path, reader: NativeTranscript, recipient: RecordedThreadIncarnation
+    ) -> PublishedReplyRevision:
         return NativeRuntimeInput.publication_revision(root, reader, recipient.lookup)
 
 
@@ -214,7 +213,8 @@ class NativeTranscript(TranscriptSource):
         return tuple(sources)
 
     def cut(self) -> SessionCut:
-        return SessionCut.capture(self.path)
+        revision = FileRevision.capture(self.path)
+        return MissingSessionCut() if revision is None else PresentSessionCut(revision)
 
     def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
         return self.cut().publication_revision(root, self, recipient)
