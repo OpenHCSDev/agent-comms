@@ -33,7 +33,7 @@ from .peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
-from .presentation import ThreadView
+from . import presentation
 from .wire_record import WireRecord
 from .messages import Message
 from .private_path import FileRevision
@@ -103,7 +103,7 @@ class MutualThreadRelation(ABC):
     def entry_goal_contacts(self) -> tuple[GoalDerivedContact, ...]:
         return ()
 
-    def entry(self, identity: ThreadIncarnation, person: ThreadView | None,
+    def entry(self, identity: ThreadIncarnation, person: presentation.ThreadView | None,
               available: bool, current: RelationshipEntry | None) -> RelationshipEntry:
         return RelationshipEntry(
             identity.name, "thread", person if available else None,
@@ -245,7 +245,7 @@ class GoalMentionDiagnostic:
 class RelationshipEntry:
     target: str
     kind: str
-    person: ThreadView | None = None
+    person: presentation.ThreadView | None = None
     sequence: int = 0
     timestamp: float = 0
     detail: str = ""
@@ -414,7 +414,7 @@ class CollaboratingRelationshipGroup(SortableRelationshipGroup):
 class RelationshipContext:
     registry: RegistrySnapshot
     thread: Thread
-    people: dict[str, ThreadView]
+    people: dict[str, presentation.ThreadView]
     messages: tuple[Message, ...]
     delivery: DeliveryScope
     edges: tuple[Collaboration, ...]
