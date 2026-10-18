@@ -296,17 +296,22 @@ class TranscriptRead:
     @classmethod
     @contextmanager
     def publication_source(cls, root):
-        database = root / "coordination.sqlite3"
-        failure = CoordinationStore.observation_failure(database)
-        if failure == "missing":
-            yield None
-            return
-        if failure:
-            raise RelationViolationError("Native reply source has an invalid coordinator")
-        with CoordinationStore.observing(database) as db:
-            assert_native_runtime_schema(db)
-            _assert_response_schema(db)
+        with CoordinationStore.observed(root / "coordination.sqlite3").observing(cls) as db:
             yield db
+
+    @classmethod
+    def capture(cls, db):
+        assert_native_runtime_schema(db)
+        _assert_response_schema(db)
+        return db
+
+    @classmethod
+    def missing_store(cls, store):
+        return None
+
+    @classmethod
+    def invalid_store(cls, store):
+        raise RelationViolationError("Native reply source has an invalid coordinator")
 
     def current(self) -> bool:
         return self.identity == self.current_identity()

@@ -32,7 +32,6 @@ async def test_cancelled_turn_unlinks_tool_socket_before_native_retirement(tmp_p
     turn.startup = SimpleNamespace(measurements=_Measurements())
     turn.selected_tool_mode = SelectedToolMode(lambda _request: None)
     turn.launch = SimpleNamespace(session=SimpleNamespace(directory=sessions), env={})
-    turn.tool_socket = None
     turn.watchdog = SimpleNamespace(reading=lambda: None)
     turn.observe_event = None
     turn.finished = False

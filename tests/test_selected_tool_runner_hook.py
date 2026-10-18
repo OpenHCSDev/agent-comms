@@ -163,7 +163,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
         result = await fake(*args, **kwargs)
         mode = kwargs["selected_tool_mode"]
         mode.action(SelectedToolRequest("call_1", SelectedWriteArguments("notes.txt", "after")))
-        return replace(result, selected_tool_call_id="call_1")
+        return result
 
     monkeypatch.setattr(TrackedTurnSession, "execute", selected_model)
     result = await runtime.SelectedExecution(
@@ -274,7 +274,7 @@ async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nomin
         selected_tool_intent=intent_type(),
     ).run()
     assert len(calls) == len(kwargs_seen) == 1
-    assert kwargs_seen[0]["selected_tool_mode"] is None
+    assert kwargs_seen[0]["selected_tool_mode"].launch_arguments(private_root) == ("--no-tools",)
     assert "selected_claimed_write" not in calls[0][1]
     assert not bound
 

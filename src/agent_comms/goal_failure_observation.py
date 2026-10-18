@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Literal
 
 from .diagnostics import FailureReason
 from .coordination_database import CoordinationStore
-from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goals import Goal
@@ -185,6 +184,48 @@ class FailedTurnProjection:
         # acknowledgement bodies, canRetry, grants, or control actions.
         return {"schema": 1, **FieldCodec.encode(self)}
 
+    @classmethod
+    def missing_store(cls, store, goal, owner, claim_scope):
+        return cls("unavailable", store.failure_reason)
+
+    @classmethod
+    def invalid_store(cls, store, goal, owner, claim_scope):
+        return cls("unavailable", store.failure_reason)
+
+    @classmethod
+    def capture(cls, conn, goal, owner, claim_scope):
+        from .goal_attempts import (
+            AttemptRecord,
+            Generation,
+            StorageUncertainError,
+            assert_goal_attempt_schema,
+        )
+
+        try:
+            assert_goal_attempt_schema(conn)
+        except StorageUncertainError:
+            return cls("unavailable", "unsupported_schema")
+        generation = Generation.one(conn, goal_id=goal.id)
+        if generation is None:
+            return cls("unavailable", "missing_binding")
+        try:
+            expected = generation.failure_identity()
+            attempt = AttemptRecord.one(conn, attempt_id=expected.attempt_id)
+            if attempt is None:
+                return cls("unavailable", "missing_binding")
+            attempt.phase.require_failure()
+        except FailureNotObserved as error:
+            return cls("unavailable", str(error))
+        row = FailedTurnEvidence.one(conn, attempt_id=expected.attempt_id)
+        if row is None:
+            return cls("unavailable", "missing_binding")
+        if row.identity != expected or attempt.reservation.identity != expected:
+            return cls("unavailable", "missing_binding")
+        if not row.matches_owner(owner, claim_scope):
+            return cls("unavailable", "owner_or_goal_changed")
+        state, explanation = goal.state.failure_projection(row.reason.value)
+        return cls(state, explanation)
+
 
 def read_failed_turn_projection(
     path: Path,
@@ -214,42 +255,7 @@ def read_failed_turn_projection(
         return unavailable(str(error))
     if type(claim_scope) is not int or claim_scope <= 0:
         return unavailable("owner_or_goal_changed")
-    if failure := CoordinationStore.observation_failure(path):
-        return unavailable(failure)
-    try:
-        with CoordinationStore.observing(path) as conn:
-            from .goal_attempts import (
-                AttemptRecord,
-                Generation,
-                StorageUncertainError,
-                assert_goal_attempt_schema,
-            )
-
-            try:
-                assert_goal_attempt_schema(conn)
-            except StorageUncertainError:
-                return unavailable("unsupported_schema")
-            generation = Generation.one(conn, goal_id=goal.id)
-            if generation is None:
-                return unavailable("missing_binding")
-            expected = generation.failure_identity()
-            attempt = AttemptRecord.one(conn, attempt_id=expected.attempt_id)
-            if attempt is None:
-                return unavailable("missing_binding")
-            attempt.phase.require_failure()
-            row = FailedTurnEvidence.one(conn, attempt_id=expected.attempt_id)
-            if row is None:
-                return unavailable("missing_binding")
-            if row.identity != expected or attempt.reservation.identity != expected:
-                return unavailable("missing_binding")
-            if not row.matches_owner(owner, claim_scope):
-                return unavailable("owner_or_goal_changed")
-            reason = row.reason.value
-    except FailureNotObserved as error:
-        return unavailable(str(error))
-    except CoordinationReadUnavailable:
-        return unavailable("busy")
-    except (sqlite3.Error, OSError, ValueError, TypeError):
-        return unavailable("invalid_store")
-    state, explanation = goal.state.failure_projection(reason)
-    return FailedTurnProjection(state, explanation)
+    with CoordinationStore.observed(path).observing(
+        FailedTurnProjection, goal, owner, claim_scope
+    ) as result:
+        return result

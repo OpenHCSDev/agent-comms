@@ -40,6 +40,8 @@ from .native_tool_call import (
     CoordinationBusy,
     DuplicateToolCallIdentity,
     NativeToolCall,
+    NativeToolMode,
+    ToolTransport,
     SelectedToolDenied,
 )
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
@@ -82,18 +84,6 @@ class SelectedToolIntent(SelectedAction):
         )
 
 
-class NativeToolMode(ABC):
-    """Owner-bound native tool policy shared by selected and normal coding turns."""
-
-    @abstractmethod
-    def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        """Return the native tool selection and reviewed extension."""
-
-    @abstractmethod
-    def socket(self, directory: Path, token: str) -> OwnerToolSocket:
-        """Create the existing authenticated owner transport for this policy."""
-
-
 @dataclass(frozen=True, slots=True)
 class SelectedToolMode(NativeToolMode):
     """Trusted owner callback, never parsed from a model call or injected text."""
@@ -113,8 +103,8 @@ class SelectedToolMode(NativeToolMode):
             str(selected_extension(package)),
         )
 
-    def socket(self, directory: Path, token: str) -> OwnerToolSocket:
-        return SelectedToolSocket(directory, token, self.action)
+    async def open_transport(self, turn, ownership) -> ToolTransport:
+        return await SelectedToolSocket.open(turn, ownership, self.action)
 
 
 @dataclass(frozen=True)
@@ -483,18 +473,34 @@ class NativeToolCallTable(Generic[Call]):
     def values(self) -> ValuesView[Call]:
         return self._calls.values()
 
-    @property
-    def first_call_id(self) -> str | None:
-        """The selected call, or None when a selected-mode turn used no tool."""
-        if not self.rounds:
-            return None
-        return self.rounds[0].declared[0].call_id
 
 
-class OwnerToolSocket(ABC, Generic[Call]):
+class OwnerToolSocket(ToolTransport, Generic[Call]):
     """Authenticated native child transport; the policy decides which requests may run."""
 
     max_request = _MAX_REQUEST
+
+    @property
+    def retainable(self) -> bool:
+        return False
+
+    @classmethod
+    async def open(cls, turn, ownership, policy):
+        transport = cls(turn.launch.session.directory, os.urandom(32).hex(), policy)
+        ownership.push_async_callback(transport.close)
+        await transport.start()
+        turn.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(transport.address)
+        turn.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = transport.token
+        return transport
+
+    def bind_process(self, pid: int) -> None:
+        self.expected_pid = pid
+
+    def accept_round(self, turn, content) -> bool:
+        self.announce(content)
+        turn.text_parts.clear()
+        turn.terminal = turn.terminal.tool_round()
+        return True
 
     def __init__(self, directory: Path, token: str) -> None:
         if type(token) is not str or not _TOKEN.fullmatch(token):
@@ -553,10 +559,6 @@ class OwnerToolSocket(ABC, Generic[Call]):
         return {
             call.call_id for call in self.calls.values() if call.observation.executing
         }
-
-    @property
-    def selected_call_id(self) -> str | None:
-        return None
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         call = self.calls.call_for(self.decode_request(raw))
@@ -685,7 +687,3 @@ class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
 
     async def allow(self, round_number: int, call: SelectedToolRequest) -> None:
         await Coordination.run_worker(partial(self.action, call))
-
-    @property
-    def selected_call_id(self) -> str | None:
-        return self.calls.first_call_id

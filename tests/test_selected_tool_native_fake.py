@@ -119,7 +119,6 @@ send({'type':'agent_settled'})
     if variant == "success":
         result = await operation
         assert result.text == "Done"
-        assert result.selected_tool_call_id == "call_1"
         assert observed == ["call_1"]
     else:
         with pytest.raises(native.NativePiUnavailable):
