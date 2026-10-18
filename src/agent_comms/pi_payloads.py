@@ -1331,8 +1331,7 @@ class McpLiveAcknowledgement:
         return acknowledgement if acknowledgement.input_id == input_id else None
 
     def __post_init__(self):
-        if Id128Text.spelling.fullmatch(self.input_id) is None:
-            raise ValueError("Invalid external MCP input identity")
+        Id128Text.from_text(self.input_id)
         if len(self.servers) > 32 or len({server.id for server in self.servers}) != len(
             self.servers
         ):

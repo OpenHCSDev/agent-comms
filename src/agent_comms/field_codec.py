@@ -408,6 +408,10 @@ class SpelledText(TextRepresentation):
     spelling: ClassVar[re.Pattern[str]]
 
     @classmethod
+    def encode(cls, value: object) -> object:
+        return cls.decode(value)
+
+    @classmethod
     def from_text(cls, value: str) -> object:
         if cls.spelling.fullmatch(value) is None:
             raise MalformedRecord(f"{cls.__name__} is spelled {cls.spelling.pattern}")
@@ -442,21 +446,7 @@ class TimestampText(TextRepresentation):
         return datetime.fromisoformat(value)
 
 
-class LowerHexText(SpelledText):
-    """Lowercase hex text; each member declares its spelling, checked when written and read."""
-
-    @classmethod
-    def encode(cls, value: object) -> str:
-        return cls.decode(value)
-
-    @classmethod
-    def decode(cls, value: object) -> str:
-        text = FieldCodec.decode(str, value)
-        cls.from_text(text)
-        return text
-
-
-class Id128Text(LowerHexText):
+class Id128Text(SpelledText):
     """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
 
     spelling = re.compile("[0-9a-f]{32}")
@@ -466,7 +456,7 @@ class Id128Text(LowerHexText):
         return uuid4().hex
 
 
-class Hex256Text(LowerHexText):
+class Hex256Text(SpelledText):
     """256 bits written as 64 lowercase hex digits."""
 
     spelling = re.compile("[0-9a-f]{64}")
@@ -480,7 +470,7 @@ class Token256Text(Hex256Text):
     """A random 256-bit secret token."""
 
 
-class GitCommitText(LowerHexText):
+class GitCommitText(SpelledText):
     """A git commit, abbreviated to no fewer than seven digits."""
 
     spelling = re.compile("[0-9a-f]{7,40}")
