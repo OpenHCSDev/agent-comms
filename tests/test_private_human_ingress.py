@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.bus_publication import HumanOrigin
+from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
@@ -86,22 +86,40 @@ def test_explicit_root_override_preserves_private_user_receipt(
     assert selected.bus.log.read_delivery_cohort(root_id, sent.seq).message == sent
 
 
-def test_private_user_requires_typed_origin_and_exact_registered_identity(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("origin_of", "speaker", "refused", "lost"),
+    [
+        (lambda user: AgentOrigin(), "alice", "executable", OSError),
+        (
+            lambda user: HumanOrigin(user.name, user.created_at, user.worktree),
+            None,
+            "USER origin",
+            HumanInitialUnknownError,
+        ),
+    ],
+    ids=["agent", "human"],
+)
+def test_initial_origin_owns_sender_check_and_append_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, origin_of, speaker, refused, lost
+) -> None:
     comms, _, _, _ = _root(tmp_path)
     user = comms.messaging.user_identity(str(tmp_path))
-    message = Message(user.name, "alice", "untrusted", InfoKind)
-    with pytest.raises(RelationViolationError, match="executable"):
-        comms.bus.publisher.publish_initial_cohort(message)
-    with pytest.raises(RelationViolationError, match="executable"):
-        comms.bus.publisher.publish_ordinary(message)
-    with pytest.raises(RelationViolationError, match="USER origin"):
-        comms.bus.publisher.publish_ordinary(
-            message,
-            _human_origin=HumanOrigin(user.name, user.created_at + 1, user.worktree),
-        )
-    with pytest.raises(RelationViolationError, match="Human messages"):
-        comms.messaging.send_message(user.name, "alice", "agent impersonation")
+    origin = origin_of(user)
+    accepted = speaker or user.name
+    other = user.name if speaker else "alice"
+    with pytest.raises(RelationViolationError, match=refused):
+        comms.bus.publisher.publish_ordinary(Message(other, "bob", "refused", InfoKind), origin=origin)
     assert comms.bus.log.latest_sequence() == 0
+    original = comms.bus.log.append_private_unlocked
+
+    def fail_after_append(metadata, row):
+        original(metadata, row)
+        raise OSError("simulated lost acknowledgement after durable append")
+
+    monkeypatch.setattr(comms.bus.log, "append_private_unlocked", fail_after_append)
+    with pytest.raises(lost):
+        comms.bus.publisher.publish_ordinary(Message(accepted, "bob", "uncertain", InfoKind), origin=origin)
+    assert len(list(comms.bus.full_history_page().messages)) == 1
 
 
 def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
@@ -109,9 +127,9 @@ def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
     user = comms.messaging.user_identity(str(tmp_path))
     message = Message(user.name, "alice", "one input", InfoKind, timestamp=123456.0)
     origin = HumanOrigin(user.name, user.created_at, user.worktree)
-    first = comms.bus.publisher.publish_ordinary(message, _human_origin=origin)
+    first = comms.bus.publisher.publish_ordinary(message, origin=origin)
     with pytest.raises(RelationViolationError, match="already exists"):
-        comms.bus.publisher.publish_ordinary(message, _human_origin=origin)
+        comms.bus.publisher.publish_ordinary(message, origin=origin)
     assert [row.message_id for row in list(comms.bus.full_history_page().messages)] == [first.message_id]
 
 
@@ -149,7 +167,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
     with pytest.raises(RelationViolationError, match="already exists"):
         comms.bus.publisher.publish_ordinary(
             same_input,
-            _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
+            origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
     assert len(list(comms.bus.full_history_page().messages)) == 1
 
@@ -186,7 +204,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
         second.bus.publisher.publish_ordinary(
             same,
-            _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
+            origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
     assert list(second.bus.full_history_page().messages) == []
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
@@ -224,6 +242,9 @@ def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None
         comms.messaging.send_user_message("#any", "wrong route", worktree=str(tmp_path))
     with pytest.raises(UnregisteredThreadError, match="not a registered thread"):
         comms.messaging.send_user_message("unregistered", "wrong peer", worktree=str(tmp_path))
+    user = comms.messaging.user_identity(str(tmp_path))
+    with pytest.raises(RelationViolationError, match="Human messages"):
+        comms.messaging.send_message(user.name, "alice", "agent impersonation")
     assert comms.bus.log.latest_sequence() == 0
 
 
