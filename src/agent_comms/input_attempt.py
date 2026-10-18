@@ -5,12 +5,10 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar
-from uuid import UUID, uuid4
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, TextRepresentation
-from .native_input_record import NativeInputIdText
+from .field_codec import FieldCodec, Id128Text
 from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
 from .input_origin import InputOrigin, InputProvenance, UnattributedInputOrigin
@@ -21,22 +19,6 @@ if TYPE_CHECKING:
     from .turn_lease import TurnLeaseFence
 
 
-class ACPInputIdText(TextRepresentation):
-    """One original submission ID, independent of its later native input ID."""
-
-    @classmethod
-    def new(cls) -> str:
-        return uuid4().hex
-
-    @classmethod
-    def encode(cls, value):
-        return cls.decode(value)
-
-    @classmethod
-    def from_text(cls, value: str) -> str:
-        if UUID(hex=value).hex != value:
-            raise ValueError("ACP submission requires a canonical UUID hex identity")
-        return value
 
 class InputAlreadyCleared(RelationViolationError):
     """A positively cleared input cannot acquire another native write."""
@@ -303,7 +285,7 @@ class SentInput(StoredInput):
             from .thread_identity import TurnId
 
             TurnId.for_registration(self.turn_id)
-            NativeInputIdText.decode(self.native_id)
+            Id128Text.decode(self.native_id)
         except ValueError as error:
             raise ValueError("Invalid native input attempt") from error
 

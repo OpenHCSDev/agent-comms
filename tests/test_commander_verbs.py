@@ -23,6 +23,7 @@ DOCUMENTED = [
      {"text": "the text", "to": "worker", "due": "23:59", "order": "order.txt", "request": "r1"}),
     ("order", "unstrike P1 --why 'recorded in error' --at 12:46",
      {"pid": "P1", "why": "recorded in error", "at": "12:46"}),
+    ("order", "fire worker --why 'late twice'", {"unit": "worker", "why": "late twice"}),
     ("order", "close P1 --works seen --artifact seen.png", {"pid": "P1", "works": "seen", "artifact": "seen.png"}),
     ("order", "hunt a.py:1 --why why --sent abc", {"where": "a.py:1", "why": "why", "sent": "abc", "clean": False}),
     ("order", "hunt a.py:1 --why why --clean", {"where": "a.py:1", "why": "why", "sent": None, "clean": True}),

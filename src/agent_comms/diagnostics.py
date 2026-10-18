@@ -6,7 +6,6 @@ import hashlib
 import json
 import logging
 import os
-import re
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -17,7 +16,7 @@ from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from .store_files import _atomic_write_text
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 
 _LOG = logging.getLogger(__name__)
 
@@ -162,8 +161,7 @@ def record_terminal_failure(
     source_error: BaseException | None = None,
 ) -> Path:
     """Persist before publishing the failure notice; this record grants no retry authority."""
-    if not re.fullmatch(r"[0-9a-f]{32}", turn_id):
-        raise ValueError("Invalid diagnostic turn identity")
+    Id128Text.decode(turn_id)
     measurements = event.get("diagnostic", {})
     if not isinstance(measurements, dict):
         measurements = {}

@@ -6,7 +6,6 @@ FieldCodec. Each member answers what its reader does with it.
 from __future__ import annotations
 
 import json
-import re
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self, cast
@@ -16,7 +15,7 @@ from acp.schema import DeniedOutcome, RequestPermissionResponse
 from pydantic import BaseModel
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, TextRepresentation
+from .field_codec import FieldCodec, MalformedRecord, Token256Text
 from .package_stamp import STAMP
 
 if TYPE_CHECKING:
@@ -72,18 +71,8 @@ class OwnerAnnouncement(OwnerLine):
             )
 
 
-class ControllerTokenText(TextRepresentation):
+class ControllerTokenText(Token256Text):
     """The owner issues each attachment a 32-byte hex controller token."""
-
-    @classmethod
-    def encode(cls, value: object) -> object:
-        return cls.decode(value)
-
-    @classmethod
-    def from_text(cls, value: str) -> str:
-        if re.fullmatch(r"[0-9a-f]{64}", value) is None:
-            raise MalformedRecord("Owner subscription ready requires a valid controllerToken.")
-        return value
 
 
 @dataclass(frozen=True, kw_only=True)

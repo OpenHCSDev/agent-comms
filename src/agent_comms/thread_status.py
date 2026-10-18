@@ -198,7 +198,7 @@ class DeletingThreadStatus(ThreadStatus):
         raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")
 
 
-class ThreadStatusName(TextRepresentation):
+class ThreadStatusName(TextRepresentation[ThreadStatus]):
     @classmethod
     def encode(cls, value: object) -> object:
         return FieldCodec.encode(type(value))

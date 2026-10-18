@@ -7,13 +7,13 @@ its Pi command when it writes it to the running child.
 from __future__ import annotations
 
 import asyncio
-import secrets
 from dataclasses import dataclass, field, replace
 from uuid import uuid4
 from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import pi_commands as commands
+from .field_codec import Id128Text
 from .maintenance_barrier import MaintenanceBarrier
 from .agent_backend import ClearQueue, InputId, InputRequest, SendNow, UseSettings, WhenBusy, TurnInbox, TurnInboxItem
 
@@ -137,7 +137,7 @@ class InputForwarding:
 
     async def place(self, session: TurnSession, item: InputRequest) -> bool:
         public_id = item.input_id.value
-        native_id = secrets.token_hex(16)
+        native_id = Id128Text.mint()
         text = item.content.text
         command = commands.Prompt(
             id=public_id,
