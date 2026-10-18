@@ -287,9 +287,9 @@ class CleanChangedLines(OccurrenceMeasure):
         """The first changed line of each occurrence written on a changed line."""
         sites = []
         for node in cls.sites(source.tree):
-            if count := cls.occurrences(node):
-                if touched := source.lines.intersection(cls.site_lines(node)):
-                    sites.extend([min(touched)] * count)
+            if ((count := cls.occurrences(node))
+                    and (touched := source.lines.intersection(cls.site_lines(node)))):
+                sites.extend([min(touched)] * count)
         return sites
 
 
@@ -365,14 +365,16 @@ class NoneSpelling(MroDispatch):
     def identity(self, node: ast.Compare) -> None:
         left = node.left
         for operator, right in zip(node.ops, node.comparators, strict=True):
-            identity = isinstance(operator, (ast.Is, ast.IsNot))
-            self.found += identity and (self.absent(left) or self.absent(right))
+            match operator:
+                case ast.Is() | ast.IsNot():
+                    self.found += self.absent(left) or self.absent(right)
             left = right
 
     @handles(ast.BinOp)
     def union(self, node: ast.BinOp) -> None:
-        union = isinstance(node.op, ast.BitOr)
-        self.found += union and (self.absent(node.left) or self.absent(node.right))
+        match node:
+            case ast.BinOp(op=ast.BitOr(), left=left, right=right):
+                self.found += self.absent(left) or self.absent(right)
 
     @handles(ast.Subscript)
     def typing_spelling(self, node: ast.Subscript) -> None:
@@ -384,7 +386,9 @@ class NoneSpelling(MroDispatch):
 
     @handles(ast.keyword)
     def default(self, node: ast.keyword) -> None:
-        self.found += node.arg == "default" and self.absent(node.value)
+        match node:
+            case ast.keyword(arg="default", value=value):
+                self.found += self.absent(value)
 
 
 class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
