@@ -49,7 +49,10 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .importing import ImportFormat, ImportLimits
+from .cli_bridges.claude import ClaudeTranscript
+from .cli_bridges.history import History, OfflineHistory, OnlineHistory
+from .harness_install import Harness
+from .importing import ImportLimits
 from .historical_views import HistoryCursor
 from .launch_runtime import RestartEnvironment
 from .turn_context import ContextSegment
@@ -678,14 +681,8 @@ class ToolsCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
-    help = "Import an OpenCode/Codex context snapshot"
-    format: ImportFormat = option("--format", editor=ChoiceTargetField)
-    source: str = option("--source", help="OpenCode export JSON/database or Codex rollout JSONL")
-    session_id: str | None = option(
-        "--session-id", help="Required for OpenCode database imports", default=None
-    )
-    name: str = option("--name", help="New agent-comms thread name")
+class ImportingCliCommand(CliCommand):
+    """Where an imported thread works and how much of its source conversation it keeps."""
     worktree: str | None = option(
         "--worktree", help="Override the source project directory", default=None
     )
@@ -701,20 +698,53 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
     max_characters: int = option("--max-characters", default=120000)
     max_message_characters: int = option("--max-message-characters", default=12000)
 
-    def apply(self, ctx: Comms) -> Any:
-        acknowledgement = ctx.threads.import_thread(
-            self.source,
-            self.format,
-            name=self.name,
-            session_id=self.session_id,
-            worktree=self.worktree,
-            model=self.model,
-            tags=self.tags,
-            limits=ImportLimits(
-                self.max_messages, self.max_characters, self.max_message_characters
-            ),
-        )
-        return acknowledgement.to_wire()
+    def imported(self, ctx: Comms, history: History, name: str) -> dict[str, object]:
+        return ctx.threads.import_thread(
+            history, name=name, worktree=self.worktree, model=self.model, tags=self.tags,
+            limits=ImportLimits(self.max_messages, self.max_characters, self.max_message_characters),
+        ).to_wire()
+
+
+@dataclass(frozen=True, kw_only=True)
+class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread"):
+    help = "Import a stored Claude Code, Codex or OpenCode session as a stopped thread"
+    harness: type[Harness] = option("--harness", editor=ChoiceTargetField)
+    source: Annotated[Path, PathText] = option(
+        "--source", help="Claude Code or Codex session JSONL, OpenCode export JSON or opencode.db")
+    session_id: str | None = option(
+        "--session-id", help="Required for OpenCode database imports", default=None
+    )
+    name: str = option("--name", help="New agent-comms thread name")
+
+    def apply(self, ctx: Comms) -> dict[str, object]:
+        return self.imported(ctx, OfflineHistory.of(
+            self.harness, self.source.expanduser().resolve(), self.session_id), self.name)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ImportRunningThreadCliCommand(ImportingCliCommand, declared_name="import-running-thread"):
+    help = "Import a session a running Claude Code, Codex or OpenCode holds, as a stopped thread"
+    harness: type[Harness] = option("--harness", editor=ChoiceTargetField)
+    thread: str = option("--thread", help="The harness's own session or thread id")
+    address: str | None = option(
+        "--address", help="Codex app-server socket, or OpenCode server URL", default=None)
+    name: str = option("--name", help="New agent-comms thread name")
+
+    def apply(self, ctx: Comms) -> dict[str, object]:
+        directory = Path(self.worktree).expanduser() if self.worktree else Path.cwd()
+        return self.imported(ctx, OnlineHistory.of(self.harness, self.thread, self.address, directory), self.name)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subagents"):
+    help = "Import every subagent of a stored Claude Code session, each as a stopped thread"
+    session: Annotated[Path, PathText] = option("--session", help="The Claude Code session JSONL")
+    prefix: str = option("--prefix", default="", help="Prepended to each subagent id to name its thread")
+
+    def apply(self, ctx: Comms) -> dict[str, object]:
+        return {"imported": [
+            self.imported(ctx, ClaudeTranscript(path), self.prefix + path.stem.removeprefix("agent-"))
+            for path in ClaudeTranscript.subagents(self.session.expanduser().resolve())]}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1151,7 +1181,6 @@ class RegisterCliCommand(CliCommand):
                                             parser_default=FieldCodec.encode(ExternalThreadExecution))
 
     def apply(self, ctx: Comms) -> Any:
-        from .threads import Thread
 
         thread = ctx.registry.new_thread(
             name=self.name,
@@ -1176,8 +1205,6 @@ class InstallCliCommand(CliCommand):
     def apply(self, ctx: Comms) -> Any:
         from .commander.config import CommanderConfig, Repo
         from importlib.resources import files
-
-        from .harness_install import Harness
 
         home = Path.home()
         project = self.project.resolve()

@@ -35,6 +35,7 @@ from .shared import (
     CompletedItem,
     DraftAccumulator,
     FinishedTurn,
+    HiddenItem,
     ParagraphDraft,
     StartedItem,
     TextDraft,
@@ -215,6 +216,7 @@ class ActiveStatus(ThreadStatus):
 
 class ResumedThreadState(WireModel):
     status: ThreadStatus.declared_union()
+    cwd: str = ''
 
 
 class ResumedThread(WireModel):
@@ -290,6 +292,9 @@ class Item(TaggedWire, ABC):
     def events(self) -> tuple[TranscriptEvent, ...]:
         """The finished item's presentation."""
 
+    def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> TranscriptUpdate:
+        return CompletedItem(turn_id, self.id, events)
+
     def accumulator(self, started_at: EventTime) -> DraftAccumulator:
         return DraftAccumulator(started_at)
 
@@ -336,10 +341,13 @@ class UserItem(Item):
     clientId: str | None = None
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        # Bus inputs already appear in Core's inbox. Do not echo them as new input.
-        if BusInput.identifies(self.clientId):
-            return ()
         return (UserTranscript('\n'.join(part.display for part in self.content)),)
+
+    def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> TranscriptUpdate:
+        # Bus inputs already appear in Core's inbox; the live view does not echo them as new input.
+        if BusInput.identifies(self.clientId):
+            return HiddenItem(events)
+        return super().completed(turn_id, events)
 
 
 class ToolItem(Item, ABC):
@@ -721,11 +729,11 @@ class ItemEntry(WireModel):
     def completed(self) -> bool:
         return self.completedAtMs is not None
 
-    def publication(self) -> CompletedItem:
+    def publication(self) -> TranscriptUpdate:
         if self.completedAtMs is None:
             raise ValueError(f'Item {self.item.id} has not finished')
         event_time = self.started_at.continued_from(self.completedAtMs / 1000)
-        return CompletedItem(self.turnId, self.item.id, tuple(
+        return self.item.completed(self.turnId, tuple(
             event_time.stamp(event) for event in self.item.events()))
 
 
