@@ -30,6 +30,7 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -314,15 +315,17 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     before_stop(root, pending, staged, revisions)
     maintenance = MaintenanceBarrier(root / "registry.json")
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
-    for name in running:
-        installed.cli(root, "stop", "--name", name)
     lock = checkout / "stack/uv.lock"
     try:
+        for name in running:
+            installed.cli(root, "stop", "--name", name)
         route_readers()
         backup = Backup.take(root, ROUTE)
-    except BaseException:
+    except BaseException as error:
         maintenance.clear(held)
         start(installed, root, running)
+        print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
+              f"maintenance cleared and {running} restarted", file=sys.stderr)
         raise
     shutil.copy2(lock, backup.path / "uv.lock") if lock.exists() else None
     try:
@@ -332,7 +335,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         steps = carry_all(root, pending, staged, revisions)
         files = carried(root, backup.files(), steps)
         read = installed.verify(root)
-    except BaseException:
+    except BaseException as error:
         backup.restore()
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
         if (backup.path / "uv.lock").exists():
@@ -341,6 +344,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         installed.prepare_native()
         maintenance.clear(held)
         start(installed, root, running)
+        print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); bus restored, "
+              f"maintenance cleared and {running} restarted", file=sys.stderr)
         raise
     maintenance.clear(held)
     start(installed, root, running)
@@ -353,6 +358,13 @@ def start(stack: Stack, root: Path, names: list[str]) -> None:
         stack.cli(root, "start", "--name", name)
 
 
+def stopped(signum: int, frame: object) -> None:
+    """A stop signal runs the same abort as a failure; a second one cannot cut that abort short."""
+    for each in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(each, signal.SIG_IGN)
+    raise SystemExit(f"upgrade-bus: stopped by {signal.Signals(signum).name}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkout", type=lambda value: Path(value).expanduser().resolve(), default=REPO)
@@ -361,6 +373,8 @@ def main() -> None:
     parser.add_argument("--to", default="origin/main")
     parser.add_argument("--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing")
     args = parser.parse_args()
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(signum, stopped)
     try:
         print(json.dumps(upgrade(args.checkout, args.root, args.to, args.rehearse), indent=2))
     except UpgradeRefused as error:
