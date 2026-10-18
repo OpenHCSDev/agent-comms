@@ -19,10 +19,10 @@ from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .registry_document import RegistryDocument, RegistryEntry
 from .routing import TurnRouting
+from .store_files import SharedLock
 from .thread_identity import TurnIdentity
 from .threads import Thread
 from .turn_lease import ActiveTurn, StoredTurnRecord
-from .store_files import SharedLock
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,19 +77,26 @@ class RegistryEdit:
     original: RegistryDocument
 
     def lease_turn(
-        self, current: Thread, turn_id: str, routing: TurnRouting | None,
+        self,
+        current: Thread,
+        turn_id: str,
+        routing: TurnRouting | None,
     ) -> tuple[Thread, int]:
         """Allocate the original record under this bound registry transaction."""
         if current.turn_generation >= (1 << 63) - 1:
             raise RelationViolationError("Turn generation exhausted")
         identity = TurnIdentity(current.incarnation, current.turn_generation + 1)
         turn = ActiveTurn(
-            turn_id, current.require_process().pid, routing=routing,
+            turn_id,
+            current.require_process().pid,
+            routing=routing,
             claimed_generation=self.document.claims.generations[current.name],
             turn_generation=identity.generation,
         )
         leased = replace(
-            current, turn_generation=identity.generation, last_finished_turn_id=None,
+            current,
+            turn_generation=identity.generation,
+            last_finished_turn_id=None,
             project_resume_due=False,
             turn_record=StoredTurnRecord.begin(self.store.path, identity, turn),
         )

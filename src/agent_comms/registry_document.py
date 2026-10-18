@@ -534,8 +534,8 @@ class RegistryDocument(RegistryPresence):
             return False, None
         if TurnIdentity(current.incarnation, current.turn_generation) != canonical_lease.identity:
             return False, None
-        turn = record.read()
-        if not canonical_lease.may_release(turn):
+        turn = record.read().require_active()
+        if not turn.may_release(canonical_lease):
             return False, None
         attested = canonical_lease.can_attest(self.claims.generations[name])
         attested = attested and turn.claimed_generation is not None and self.statuses[name].active

@@ -7,13 +7,13 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
-from .routing import TurnRouting
 from .field_codec import FieldCodec, NullMember, PathText, SubclassUnion
 from .locked_store import JsonDocument
+from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
@@ -62,9 +62,6 @@ class TurnDeclaration(SubclassUnion):
     def without_claim(self) -> TurnDeclaration: ...
 
     @abstractmethod
-    def lease(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> TurnLeaseFence | None: ...
-
-    @abstractmethod
     def observed_id(self, finished: str | None) -> str | None: ...
 
     @abstractmethod
@@ -105,9 +102,6 @@ class NoTurn(NullMember, TurnDeclaration):
 
     def without_claim(self) -> NoTurn:
         return self
-
-    def lease(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> TurnLeaseFence | None:
-        return None
 
     def observed_id(self, finished: str | None) -> str | None:
         return finished
@@ -169,7 +163,18 @@ class ActiveTurn(TurnDeclaration):
     def without_claim(self) -> ActiveTurn:
         return replace(self, claimed_generation=None)
 
-    def lease(self, incarnation: ThreadIncarnation, record: StoredTurnRecord) -> TurnLeaseFence | None:
+    def held_by(self, lease: TurnLeaseFence) -> bool:
+        return self.id == lease.turn_id and self.current(
+            lease.claimed_generation, lease.identity.generation)
+
+    def may_release(self, lease: TurnLeaseFence) -> bool:
+        return self.held_by(lease) or (
+            self.claimed_generation is None
+            and replace(self, claimed_generation=lease.claimed_generation).held_by(lease))
+
+    def lease(
+        self, incarnation: ThreadIncarnation, record: StoredTurnRecord,
+    ) -> TurnLeaseFence | None:
         if self.claimed_generation is None or self.turn_generation is None:
             return None
         return TurnLeaseFence(TurnIdentity(incarnation, self.turn_generation),
@@ -243,7 +248,7 @@ class TurnFence:
     turn_id: str
     claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
 
-    def renamed(self, name: str) -> TurnFence:
+    def renamed(self, name: str) -> Self:
         """Registry alias resolution changes the name, never incarnation or epochs."""
         return replace(self, identity=replace(
             self.identity, incarnation=replace(self.identity.incarnation, name=name)
@@ -267,15 +272,6 @@ class TurnLeaseFence(TurnFence):
     """Exact local begin-turn lease and its original record."""
 
     record: StoredTurnRecord = field(kw_only=True)
-
-    def holds(self, active: ActiveTurn) -> bool:
-        return active.id == self.turn_id and active.current(
-            self.claimed_generation, self.identity.generation)
-
-    def may_release(self, active: ActiveTurn) -> bool:
-        return self.holds(active) or (
-            active.claimed_generation is None
-            and self.holds(replace(active, claimed_generation=self.claimed_generation)))
 
 
 class TurnRecord(SubclassUnion):
@@ -322,7 +318,7 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
 
     @classmethod
-    def from_wire(cls, data: Mapping) -> StoredTurnRecord:
+    def from_wire(cls, data: object) -> StoredTurnRecord:
         return FieldCodec.decode_record(cls, data)
 
     @classmethod
@@ -339,7 +335,9 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
         return cls(registry_path.parent / "turns" / name, registry_path)
 
     @classmethod
-    def begin(cls, registry_path: Path, identity: TurnIdentity, turn: ActiveTurn) -> StoredTurnRecord:
+    def begin(
+        cls, registry_path: Path, identity: TurnIdentity, turn: ActiveTurn,
+    ) -> StoredTurnRecord:
         record = cls.for_identity(registry_path, identity)
         record.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         record._publish_unlocked(turn)
@@ -359,7 +357,7 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
     ) -> tuple[TurnState, ...]:
         with _store_lock(self.registry_path):
             active = self.read()
-            if not lease.holds(active):
+            if not active.held_by(lease):
                 return ()
             effects = tuple(observe(TurnState(active)))
             for state in effects:
