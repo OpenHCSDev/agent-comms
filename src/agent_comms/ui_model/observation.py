@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar, final
 
 from acp import RequestError
 
-from agent_comms.acp_extension import TranscriptSnapshotUpdate
+from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_route_counts import RouteIndexRebuilding
@@ -372,6 +372,36 @@ class SubscribeTranscript(ReadTranscript):
         error for error in ReadTranscript.deferred_reads
         if not issubclass(error, CoordinationReadUnavailable)
     )
+
+
+class TranscriptPublicationState(ABC):
+    @abstractmethod
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate: ...
+
+
+class NotPublished(TranscriptPublicationState):
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
+        return TranscriptSnapshotUpdate.from_read(read)
+
+
+@dataclass(frozen=True)
+class Published(TranscriptPublicationState):
+    identity: TranscriptReadIdentity
+
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
+        if self.identity.same_snapshot(read.identity):
+            return TranscriptDraftUpdate(read.identity, read.current_draft())
+        return TranscriptSnapshotUpdate.from_read(read)
+
+
+@dataclass(frozen=True)
+class ReadTranscriptUpdate(TranscriptRequest[TranscriptSnapshotUpdate | TranscriptDraftUpdate]):
+    """The publication state decides whether this read needs a page or its draft."""
+
+    previous: TranscriptPublicationState = field(default_factory=NotPublished)
+
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
+        return self.previous.result(read)
 
 
 @dataclass(frozen=True)
