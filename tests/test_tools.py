@@ -48,8 +48,7 @@ class TestToolCatalog:
         with pytest.raises(
             ValueError,
             match=r"\A" + re.escape(
-                "Invalid comms_collaboration arguments: Invalid RelationshipEdit name: "
-                "Unknown RelationshipEdit name: 'start'"
+                "Invalid comms_collaboration arguments: Unknown RelationshipEdit name: 'start'"
             ) + r"\Z",
         ):
             invoke_tool(comms, "comms_collaboration", {"action": "start", "peer": "b"}, caller=NoThreadCaller())

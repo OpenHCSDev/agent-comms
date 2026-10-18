@@ -11,14 +11,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
 
-from . import turn_phase as phases
-from .native_turn_context import NativeContextData
 from . import agent_events as events
+from . import turn_phase as phases
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
-from .turn_context import InputContributionCoordinates, SegmentManifest
 from .native_session_reopen import NativeSessionIdentity
+from .native_turn_context import NativeContextData
 from .pi_payloads import (
     CompactionData,
     EmptyData,
@@ -26,11 +25,12 @@ from .pi_payloads import (
     PiResponseData,
     QueueClearedData,
     SessionStatsData,
-    StateData,
     SessionSwitchData,
+    StateData,
     ThinkingLevelsData,
     UnknownData,
 )
+from .turn_context import InputContributionCoordinates, SegmentManifest
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -454,5 +454,5 @@ class AgentCommsInspectContextSegment(NativeQuery):
 
     @classmethod
     def for_manifest(cls, expected: SegmentManifest):
-        return cls(identity=expected.native_identity(), entries=expected.journal_entries(),
+        return cls(identity=expected.sources.native_identity(), entries=expected.sources.journal_entries(),
                    expected=expected, parts=expected.requested_parts())

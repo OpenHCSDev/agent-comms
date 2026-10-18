@@ -78,6 +78,32 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
         assert list(document.threads) == list(raw["threads"])
 
 
+def test_sender_bindings_are_lazy_immutable_and_owned_by_the_snapshot(tmp_path):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.routing import DeliveryScope
+
+    registry = Registration(tmp_path / "registry.json")
+    registry.register(registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    snapshot = registry.snapshot()
+    historical = RegistryProvenance.capture(snapshot)
+    encoded = FieldCodec.encode(historical)
+    for namespace in (snapshot, historical):
+        with patch.object(DeliveryScope, "sender_lookups", wraps=DeliveryScope.sender_lookups) as lookups:
+            assert "sender_bindings" not in namespace.__dict__
+            first = namespace.sender_bindings
+            assert namespace.sender_bindings is first
+            assert lookups.call_count == len(tuple(namespace.named_members()))
+        with pytest.raises(TypeError):
+            first["senders"] = "{}"
+        assert FieldCodec.encode(historical) == encoded
+        assert json.loads(first["unrecorded"]) == []
+    newer = registry.snapshot()
+    assert "sender_bindings" not in newer.__dict__
+    assert newer.sender_bindings == snapshot.sender_bindings
+    assert newer.sender_bindings is not snapshot.sender_bindings
+
+
 def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
     from agent_comms.errors import RelationViolationError
 
