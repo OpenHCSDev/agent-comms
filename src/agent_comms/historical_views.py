@@ -18,8 +18,12 @@ from .field_codec import FieldCodec
 from .message_page import (
     ConversationMessagePageRequest,
     MessagePage,
+    NEWEST_PAGE,
+    HistoryCursor,
     MessagePageRequest,
-    PageTraversal,
+    NewerTraversal,
+    OlderTraversal,
+    PageBounds,
 )
 from .message_reference import MessageReference
 from .messages import Message
@@ -51,18 +55,18 @@ class HistoryView(ABC):
     viewer: DisplayViewer = AnonymousViewer()
 
     @abstractmethod
-    def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
+    def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         """Each view owns its current-source interpretation as well as retained capture."""
 
-    def page(self, presentation: BusPresentation, **paging) -> MessagePage:
-        return presentation.bus.history.integrated_page(self, presentation, **paging)
+    def page(self, presentation: BusPresentation, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
+        return presentation.bus.history.integrated_page(self, presentation, bounds)
 
     @abstractmethod
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
         """Retain the source's aliases/membership without borrowing live identity."""
 
-    def page_request(self, scope, traversal, limit, max_bytes) -> MessagePageRequest:
-        return MessagePageRequest(scope, traversal, limit, max_bytes)
+    def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
+        return MessagePageRequest(scope, bounds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,8 +111,8 @@ class ConversationHistoryView:
                    viewer: str, target: str, worktree: str,
                    history_revision: FileRevision | None) -> DisplaySelection: ...
 
-    def page_request(self, scope, traversal, limit, max_bytes) -> MessagePageRequest:
-        return ConversationMessagePageRequest(scope, traversal, limit, max_bytes)
+    def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
+        return ConversationMessagePageRequest(scope, bounds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,8 +120,8 @@ class ChannelHistory(HistoryView):
     target: str
     targets: frozenset[str] | None
 
-    def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
-        return presentation.bus.channel_history_page(ChannelTarget(self.target), **paging)
+    def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
+        return presentation.bus.channel_history_page(ChannelTarget(self.target), bounds)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return ChannelDisplayScope(self.target, self.targets)
@@ -139,8 +143,8 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
             scope=ChannelDisplayScope.capture(channel, snapshot), history_revision=history_revision,
         )
 
-    def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
-        return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
+    def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
+        return presentation.channel_page(self.channel.name, viewer=self.viewer, bounds=bounds)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return ChannelDisplayScope.capture(self.channel, snapshot)
@@ -151,8 +155,8 @@ class DMHistory(HistoryView):
     first: str
     second: str
 
-    def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
-        return presentation.bus.dm_history_page(self.first, self.second, **paging)
+    def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
+        return presentation.bus.dm_history_page(self.first, self.second, bounds)
 
     def capture(self, snapshot: RegistryProvenance) -> DMDisplayScope:
         return DMDisplayScope.capture(self.first, self.second, snapshot)
@@ -183,7 +187,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
     def viewer(self) -> NamedViewer:
         return NamedViewer(self.first)
 
-    def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
+    def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         from .read_basis import DMDisplayBasis
 
         bus = presentation.bus
@@ -196,14 +200,8 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
             self.first,
             self.second,
             worktree=self.worktree,
-            **paging,
+            bounds=bounds,
         )
-
-
-@dataclass(frozen=True, slots=True)
-class HistoryCursor:
-    source: str
-    sequence: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -483,28 +481,21 @@ class HistoryArchive(RootFile):
                 shutil.rmtree(stage)
                 raise
 
-    def page(
-        self, view: HistoryView, *, before=None, after=None, limit=100, max_bytes=256 * 1024
-    ) -> MessagePage:
-        traversal = PageTraversal.capture(
-            before.sequence if before is not None else None,
-            after.sequence if after is not None else None,
-        )
+    def page(self, view: HistoryView, bounds: PageBounds) -> MessagePage:
+        traversal = bounds.traversal
         sources = self.sources()
-        cursor = before or after
         start = next(
-            (i for i, source in enumerate(sources) if cursor and source.key == cursor.source),
-            len(sources) - 1 if cursor is None else -1,
+            (i for i, source in enumerate(sources) if source.key == traversal.source),
+            -1 if traversal.historical else len(sources) - 1,
         )
-        if cursor is not None and start < 0:
+        if traversal.historical and start < 0:
             raise ValueError("Historical source detached; reload history")
         for index in traversal.source_indexes(start, len(sources)):
             source = sources[index]
             source.validate()
             snapshot = source.provenance
-            request = view.page_request(
-                view.capture(snapshot), traversal.for_source(index == start), limit, max_bytes
-            )
+            current = replace(bounds, traversal=traversal.for_source(index == start))
+            request = view.page_request(view.capture(snapshot), current)
             page = request.read(WireLog(Path(source.root) / "bus.jsonl"))
             page = replace(
                 page,
@@ -522,53 +513,35 @@ class HistoryArchive(RootFile):
         return MessagePage((), False, False)
 
     def integrated_page(
-        self,
-        view: HistoryView,
-        presentation: BusPresentation,
-        *,
-        before=None,
-        after=None,
-        limit=100,
-        max_bytes=256 * 1024,
-    ):
-        if not self.sources() and not isinstance(before or after, HistoryCursor):
-            return view.live_page(
-                presentation, before=before, after=after, limit=limit, max_bytes=max_bytes
-            )
+        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
+    ) -> MessagePage:
+        historical = bounds.traversal.historical
+        if not self.sources() and not historical:
+            return view.live_page(presentation, bounds)
         history_revision = FileRevision.capture(self.path)
-        if before is not None and after is not None:
-            raise ValueError("Choose one history paging direction")
-        cursor = before if before is not None else after
-        historical = isinstance(cursor, HistoryCursor)
         if not historical:
-            page = view.live_page(
-                presentation, before=before, after=after, limit=limit, max_bytes=max_bytes
-            )
-            if page.messages or after is not None:
+            page = view.live_page(presentation, bounds)
+            if page.messages or isinstance(bounds.traversal, NewerTraversal):
                 return replace(
                     page,
                     has_older=page.has_older or bool(self.sources()),
                     history_revision=history_revision,
                 )
         history = self.page(
-            view,
-            before=before if historical and before is not None else None,
-            after=after if historical and after is not None else None,
-            limit=limit,
-            max_bytes=max_bytes,
+            view, bounds if historical else replace(bounds, traversal=OlderTraversal())
         )
         if history.messages:
             display = view.viewer.display_evidence(history, presentation)
-            latest = view.live_page(presentation, limit=1)
+            latest = view.live_page(presentation, PageBounds(limit=1))
             return replace(
                 history,
                 historical_display=display,
                 history_revision=history_revision,
                 has_newer=history.has_newer or bool(latest.messages),
             )
-        if historical and after is not None:
+        if historical and isinstance(bounds.traversal, NewerTraversal):
             return replace(
-                view.live_page(presentation, after=0, limit=limit, max_bytes=max_bytes),
+                view.live_page(presentation, replace(bounds, traversal=NewerTraversal())),
                 history_revision=history_revision,
             )
         return replace(history if historical else page, history_revision=history_revision)

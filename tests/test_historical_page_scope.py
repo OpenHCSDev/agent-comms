@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import Comms
-from agent_comms.historical_views import HistoryCursor
+from agent_comms.message_page import HistoryCursor, PageBounds, PageTraversal
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
@@ -83,17 +83,17 @@ def selected(kind, message):
 def reader(live, kind):
     if kind in ("dm", "dm-alias"):
         name = "alice-old" if kind == "dm-alias" else "alice"
-        return lambda **kwargs: live.views.dm_history_page(name, "carol", **kwargs)
+        return lambda bounds: live.views.dm_history_page(name, "carol", bounds)
     if kind == "any-mode":
         live.channels.set_channel_any_mode("#api", True)
-        return lambda **kwargs: live.views.channel_display_page("#api", **kwargs)
+        return lambda bounds: live.views.channel_display_page("#api", bounds=bounds)
     target = {
         "channel": "#api",
         "any": "#any",
         "all": "#all",
         "none": "#none",
     }[kind]
-    return lambda **kwargs: live.views.channel_history_page(target, **kwargs)
+    return lambda bounds: live.views.channel_history_page(target, bounds)
 
 
 @pytest.mark.parametrize(
@@ -103,12 +103,12 @@ def test_complete_forward_and_reverse_traversal_preserves_membership(history, ki
     live, source, rows = history
     read = reader(live, kind)
     expected = [message.to_wire() for message, _ in rows if selected(kind, message)]
-    page = read(limit=2, max_bytes=600)
+    page = read(PageBounds(limit=2, max_bytes=600))
     backward = [message.to_wire() for message in page.messages]
     for _ in range(len(rows) + 1):
         if not page.has_older:
             break
-        page = read(before=page.oldest_cursor, limit=2, max_bytes=600)
+        page = read(PageBounds(PageTraversal.capture(before=page.oldest_cursor), 2, 600))
         backward[0:0] = [message.to_wire() for message in page.messages]
     else:
         raise AssertionError("reverse history cursor did not terminate")
@@ -116,7 +116,7 @@ def test_complete_forward_and_reverse_traversal_preserves_membership(history, ki
     cursor = HistoryCursor(source.key, 0)
     forward = []
     for _ in range(len(rows) + 1):
-        page = read(after=cursor, limit=2, max_bytes=600)
+        page = read(PageBounds(PageTraversal.capture(after=cursor), 2, 600))
         forward.extend(message.to_wire() for message in page.messages)
         if not page.has_newer:
             break
