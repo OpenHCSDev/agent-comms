@@ -555,16 +555,10 @@ class ChannelView(WireValue, ToolResult):
     registered_agents: int = 0
 
     @classmethod
-    def roster(
-        cls,
-        snapshot: RegistrySnapshot,
-        channels: Iterable[Channel],
-        pins: Mapping[str, frozenset[str]],
-        order: type[ChannelSort],
-        activity: Mapping[str, ObservedActivity],
-        sent: Mapping[str, float],
-        messages: Mapping[str, ChannelActivity],
-        visibility: RosterVisibility,
+    def roster(cls, snapshot: RegistrySnapshot, channels: Iterable[Channel],
+        pins: Mapping[str, frozenset[str]], order: type[ChannelSort],
+        activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
+        messages: Mapping[str, ChannelActivity], visibility: RosterVisibility,
     ) -> tuple[ChannelView, ...]:
         index = ChannelMemberIndex(snapshot.threads.values())
         return tuple(sorted((cls.capture(
@@ -576,8 +570,8 @@ class ChannelView(WireValue, ToolResult):
     @classmethod
     def capture(
         cls, channel: Channel, registered: tuple[Thread, ...], snapshot: RegistrySnapshot,
-        pins: frozenset[str], activity: Mapping[str, ObservedActivity],
-        sent: Mapping[str, float], history: ChannelActivity, visibility: RosterVisibility,
+        pins: frozenset[str], activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
+        history: ChannelActivity, visibility: RosterVisibility,
     ) -> ChannelView:
         people = {thread.name: thread for thread in registered
                   if snapshot.statuses[thread.name].in_view(visibility)}

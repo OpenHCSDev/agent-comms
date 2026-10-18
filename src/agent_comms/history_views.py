@@ -303,22 +303,20 @@ class HistoryViews:
                 visibility,
             )
 
-    def channel_view(
-        self, name: str, visibility: RosterVisibility = DEFAULT_ROSTER,
-    ) -> ChannelView:
+    def channel_view(self, name: str, visibility: RosterVisibility = DEFAULT_ROSTER) -> ChannelView:
         """Read one channel; observe and order only its own members."""
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
         channel = catalog.require_channel(name, snapshot.threads)
         registered = channel.members(ChannelMemberIndex(snapshot.threads.values()))
-        visible = tuple(snapshot.visible_threads(visibility, names=(thread.name for thread in registered)))
         with self.bus.opened_activity() as clocks:
             sent = self.last_sent_timestamps(
-                clocks.sent, registry=snapshot, names=(thread.name for thread in visible))
-            history = ChannelActivity.for_views({channel.name: channel}, clocks.channels)[channel.name]
+                clocks.sent, registry=snapshot, names=(thread.name for thread in registered))
+            history = ChannelActivity.for_views(
+                {channel.name: channel}, clocks.channels)[channel.name]
             return ChannelView.capture(
                 channel, registered, snapshot, catalog.pinned_threads(channel.name),
-                self.agents.all_activity(visible, snapshot=snapshot), sent, history, visibility,
+                self.agents.all_activity(registered, snapshot=snapshot), sent, history, visibility,
             )
 
     def thread_views(
