@@ -463,7 +463,10 @@ class OpenedRouteCounts(BusRouteCounts):
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
     def _acquire(self) -> OpenedRouteCounts:
-        self._preparation = self.sync(self.source, self._decode, blocking=self.blocking)
+        while True:
+            self._preparation = self.sync(self.source, self._decode, blocking=self.blocking)
+            if not self.blocking or self._preparation.complete:
+                break
         super()._acquire()
         try:
             self._appended = self._appended_deliveries()
@@ -628,11 +631,3 @@ class WaitingRouteCounts(OpenedRouteCounts):
     """A stream waits for its projection writer, without replacing the stream."""
 
     blocking = True
-
-    def _sync_source(self) -> RouteIndexState:
-        state = super()._sync_source()
-        # Each step commits the next bounded chunk; lock acquisition itself
-        # waits for a writer. Read failures propagate, never restart this read.
-        while not state.complete:
-            state = super()._sync_source()
-        return state
