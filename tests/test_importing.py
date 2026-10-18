@@ -20,12 +20,11 @@ from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.cli_bridges.opencode_store import OpenCodeDatabase, OpenCodeExport
 from agent_comms.field_codec import FieldCodec
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, OpenCodeHarness
-from agent_comms.importing import (
-    ImportBuffer, ImportReceipt, ImportSnapshot, ImportedReply, ImportedRequest, ImportedSessionMetadata,
-)
+from agent_comms.importing import ImportBuffer, ImportReceipt, ImportSnapshot, ImportedSessionMetadata
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.thread_identity import ThreadProvenance
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.transcript_events import ImportedReply, ImportedRequest
 from agent_comms.turn_context import CodexRolloutProvenance
 
 

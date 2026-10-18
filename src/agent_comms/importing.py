@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from .field_codec import FieldCodec
+from .transcript_events import TRUNCATED, ImportedInput, ImportedMessage, ImportedRequest
 from .harness_install import Harness
 from .turn_context import CodexRolloutProvenance
 
@@ -33,53 +33,6 @@ class ImportLimits:
     def __post_init__(self) -> None:
         if min(self.messages, self.characters, self.per_message) <= 0:
             raise ValueError("Import budgets must be positive.")
-
-
-TRUNCATED = "\n[Import excerpt truncated]"
-
-
-@dataclass(frozen=True, slots=True)
-class ImportedMessage(ABC):
-    """One transcript event as portable text in the imported Pi session."""
-
-    body: str
-    truncated: bool = False
-
-    def bounded(self, limits: ImportLimits) -> ImportedMessage:
-        cap = min(limits.per_message, limits.characters)
-        if len(self.body) <= cap:
-            return self
-        return replace(self, body=self.body[: max(0, cap - len(TRUNCATED))] + TRUNCATED[:cap], truncated=True)
-
-    def remember(self, buffer: ImportBuffer) -> None:
-        """Only a request is the source session's latest request."""
-
-    @abstractmethod
-    def pi_message(self, timestamp: int) -> dict[str, object]: ...
-
-
-class ImportedInput(ImportedMessage):
-    """Text the source session's model received: tool calls, results and context."""
-
-    def pi_message(self, timestamp: int) -> dict[str, object]:
-        return {"role": "user", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp}
-
-
-class ImportedRequest(ImportedInput):
-    """A person's or a commanding agent's prompt."""
-
-    def remember(self, buffer: ImportBuffer) -> None:
-        buffer.latest_request = self.body[: buffer.limits.per_message]
-
-
-class ImportedReply(ImportedMessage):
-    def pi_message(self, timestamp: int) -> dict[str, object]:
-        zero = {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0}
-        return {
-            "role": "assistant", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp,
-            "api": "openai-responses", "provider": "imported", "model": "historical-context", "stopReason": "stop",
-            "usage": {**zero, "totalTokens": 0, "cost": {**zero, "total": 0}},
-        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,7 +152,7 @@ class ImportBuffer:
     latest_request: str = ""
     source_id: str = ""
     project: str = ""
-    title: str | None = None
+    title: str = ""
     instructions: set[CodexRolloutProvenance] = field(default_factory=set)
 
     def add(self, events: Iterable[TranscriptEvent]) -> None:
@@ -227,7 +180,7 @@ class ImportBuffer:
     def describe(self, facts: SessionFacts) -> None:
         self.source_id = facts.source_id or self.source_id
         self.project = facts.project or self.project
-        self.title = facts.title if facts.title is not None else self.title
+        self.title = facts.title or self.title
 
     def snapshot(self, harness: type[Harness]) -> ImportSnapshot:
         if not self.messages and not self.summary:
@@ -235,7 +188,7 @@ class ImportBuffer:
         if self.instructions:
             self.notices.add("Historical developer/system sources are retained as references, not current instructions.")
         return ImportSnapshot(
-            harness, self.source_id, self.project, self.title, tuple(self.messages), self.summary,
+            harness, self.source_id, self.project, self.title or None, tuple(self.messages), self.summary,
             self.seen, self.truncated, tuple(sorted(self.notices)), self.latest_request,
             tuple(sorted(self.instructions, key=lambda value: (value.offset, value.instruction))),
         )

@@ -16,7 +16,7 @@ from typing import BinaryIO, ClassVar, Self
 from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
-from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
+from agent_comms.cli_protocol import OpenWire, WireHeader, WireModel
 from agent_comms.harness_install import CodexHarness
 from agent_comms.transcript_events import AssistantTranscript, ToolEndTranscript, ToolStartTranscript, UserTranscript
 from agent_comms.turn_context import CodexRolloutProvenance
@@ -25,28 +25,15 @@ from .history import JsonLinesFile
 from .shared import FinishedItem, HistoryNotice, SessionFacts, Summarized, TranscriptUpdate
 
 
-def declared(family: type[TaggedWire], tag: str) -> str:
-    """A tag this family declares, or its foreign member: Codex adds record kinds freely."""
-    return tag if tag in family.__registry_config__.registry_dict else 'foreign'
-
-
 @dataclass
 class RolloutState:
     """Tool names by call id: a result names only its call."""
     tools: dict[str, str] = field(default_factory=dict)
 
 
-class ContentPartHeader(WireHeader):
-    @model_validator(mode='before')
-    @classmethod
-    def known(cls, value: dict) -> dict:
-        return {'type': declared(ContentPart, value.get('type'))}
-
-
-class ContentPart(TaggedWire, ABC):
+class ContentPart(OpenWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
-    header = ContentPartHeader
 
     def readable(self) -> str:
         return ''
@@ -79,15 +66,12 @@ class ForeignPart(ContentPart):
 class RolloutItemHeader(WireHeader):
     @model_validator(mode='before')
     @classmethod
-    def known(cls, value: dict) -> dict:
+    def role(cls, value: dict) -> dict:
         # A message's role selects its member: the role is the item kind that matters.
-        tag = value.get('type')
-        if tag == 'message':
-            tag = f'message/{value.get("role")}'
-        return {'type': declared(RolloutItem, tag)}
+        return {'type': '/'.join(part for part in (value.get('type'), value.get('role')) if part)}
 
 
-class RolloutItem(TaggedWire, ABC):
+class RolloutItem(OpenWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     header = RolloutItemHeader
@@ -195,17 +179,9 @@ class CustomToolCallOutputItem(FunctionCallOutputItem):
     wire_tag = 'custom_tool_call_output'
 
 
-class RolloutRecordHeader(WireHeader):
-    @model_validator(mode='before')
-    @classmethod
-    def known(cls, value: dict) -> dict:
-        return {'type': declared(RolloutRecord, value.get('type'))}
-
-
-class RolloutRecord(TaggedWire, ABC):
+class RolloutRecord(OpenWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
-    header = RolloutRecordHeader
 
     def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
         return ()
@@ -320,14 +296,11 @@ class CodexRollout(JsonLinesFile):
     """`~/.codex/sessions/.../rollout-*.jsonl`: Codex's stored session, which it appends to while it runs."""
 
     harness = CodexHarness
+    suffixes = frozenset({'.jsonl'})
 
     def __init__(self, source: Path, session_id: str | None) -> None:
         self.source = source
         self.session_id = session_id
-
-    @classmethod
-    def reads(cls, source: Path) -> bool:
-        return source.suffix == '.jsonl'
 
     @classmethod
     def opened(cls, source: Path, session_id: str | None) -> Self:

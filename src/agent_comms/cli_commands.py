@@ -49,6 +49,8 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
+from .cli_bridges.claude import ClaudeTranscript
+from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .harness_install import Harness
 from .importing import ImportLimits
 from .historical_views import HistoryCursor
@@ -696,7 +698,7 @@ class ImportingCliCommand(CliCommand):
     max_characters: int = option("--max-characters", default=120000)
     max_message_characters: int = option("--max-message-characters", default=12000)
 
-    def imported(self, ctx: Comms, history, name: str) -> dict[str, object]:
+    def imported(self, ctx: Comms, history: History, name: str) -> dict[str, object]:
         return ctx.threads.import_thread(
             history, name=name, worktree=self.worktree, model=self.model, tags=self.tags,
             limits=ImportLimits(self.max_messages, self.max_characters, self.max_message_characters),
@@ -714,9 +716,7 @@ class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread")
     )
     name: str = option("--name", help="New agent-comms thread name")
 
-    def apply(self, ctx: Comms) -> Any:
-        from .cli_bridges.history import OfflineHistory
-
+    def apply(self, ctx: Comms) -> dict[str, object]:
         return self.imported(ctx, OfflineHistory.of(
             self.harness, self.source.expanduser().resolve(), self.session_id), self.name)
 
@@ -730,9 +730,7 @@ class ImportRunningThreadCliCommand(ImportingCliCommand, declared_name="import-r
         "--address", help="Codex app-server socket, or OpenCode server URL", default=None)
     name: str = option("--name", help="New agent-comms thread name")
 
-    def apply(self, ctx: Comms) -> Any:
-        from .cli_bridges.history import OnlineHistory
-
+    def apply(self, ctx: Comms) -> dict[str, object]:
         directory = Path(self.worktree).expanduser() if self.worktree else Path.cwd()
         return self.imported(ctx, OnlineHistory.of(self.harness, self.thread, self.address, directory), self.name)
 
@@ -743,9 +741,7 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
     session: Annotated[Path, PathText] = option("--session", help="The Claude Code session JSONL")
     prefix: str = option("--prefix", default="", help="Prepended to each subagent id to name its thread")
 
-    def apply(self, ctx: Comms) -> Any:
-        from .cli_bridges.claude import ClaudeTranscript
-
+    def apply(self, ctx: Comms) -> dict[str, object]:
         return {"imported": [
             self.imported(ctx, ClaudeTranscript(path), self.prefix + path.stem.removeprefix("agent-"))
             for path in ClaudeTranscript.subagents(self.session.expanduser().resolve())]}
@@ -1210,8 +1206,6 @@ class InstallCliCommand(CliCommand):
     def apply(self, ctx: Comms) -> Any:
         from .commander.config import CommanderConfig, Repo
         from importlib.resources import files
-
-        from .harness_install import Harness
 
         home = Path.home()
         project = self.project.resolve()

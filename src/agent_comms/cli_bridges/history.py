@@ -38,10 +38,11 @@ class History(DeclaredFamily, affix="History", discovery_package="agent_comms.cl
 class OfflineHistory(History):
     """Reads the files a harness stores; the harness need not be running."""
 
+    suffixes: ClassVar[frozenset[str]]
+
     @classmethod
-    @abstractmethod
     def reads(cls, source: Path) -> bool:
-        """Whether this reader understands this stored file."""
+        return source.suffix in cls.suffixes
 
     @classmethod
     @abstractmethod

@@ -359,7 +359,7 @@ class SessionFacts(TranscriptUpdate):
     """Which session this is, where it ran and its title; a later fact replaces an earlier one."""
     source_id: str = ''
     project: str = ''
-    title: str | None = None
+    title: str = ''
 
     def publish(self, output: ThreadOutput) -> None:
         pass

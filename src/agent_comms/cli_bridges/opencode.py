@@ -186,7 +186,7 @@ class OpenCodeServer(OnlineHistory):
 
     async def seen(self, connection: OpenCodeConnection, stream: OpenCodeStream) -> AsyncIterator[TranscriptUpdate]:
         yield SessionFacts(source_id=connection.session, project=connection.info.directory,
-                           title=connection.info.title)
+                           title=connection.info.title or '')
         for saved in await connection.messages(self.query):
             for update in stream.snapshot(saved):
                 yield update

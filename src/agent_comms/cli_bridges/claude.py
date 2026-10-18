@@ -1,13 +1,13 @@
 """Claude Code sessions: their stored transcripts, and the live bridge that follows one."""
 from __future__ import annotations
 
-import json
 from collections.abc import Iterator
 from contextlib import aclosing
 from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, BinaryIO, Self
 
+from agent_comms.cli_protocol import WireModel
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.harness_install import ClaudeCodeHarness
 from agent_comms.private_path import FileRevision
@@ -20,11 +20,16 @@ from .shared import (
 )
 
 
+class SubagentMeta(WireModel):
+    description: str
+
+
 class ClaudeTranscript(JsonLinesFile):
     """Claude Code writes one transcript file per session (`<id>.jsonl`) and per subagent
     (`<id>/subagents/agent-<id>.jsonl`), under ~/.claude/projects."""
 
     harness = ClaudeCodeHarness
+    suffixes = frozenset({'.jsonl'})
 
     def decode_line(self, raw: bytes) -> ClaudeRecord:
         return CLAUDE_RECORD.validate_json(raw)
@@ -44,15 +49,11 @@ class ClaudeTranscript(JsonLinesFile):
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[TranscriptUpdate]:
         """A subagent's task description is beside its transcript, not in it."""
         meta = self.source.with_suffix('.meta.json')
-        title = json.loads(meta.read_text())['description'] if meta.is_file() else None
+        title = SubagentMeta.model_validate_json(meta.read_bytes()).description if meta.is_file() else ''
         yield SessionFacts(source_id=self.source.stem, title=title)
 
     def __init__(self, source: Path) -> None:
         self.source = source
-
-    @classmethod
-    def reads(cls, source: Path) -> bool:
-        return source.suffix == '.jsonl'
 
     @classmethod
     def opened(cls, source: Path, session_id: str | None) -> Self:

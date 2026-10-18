@@ -9,8 +9,9 @@ from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import dataclass
+from itertools import takewhile
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import Self
 
 from pydantic import Field
 
@@ -25,15 +26,19 @@ from .shared import SessionFacts, TranscriptUpdate
 
 
 class Revert(WireModel):
-    """The message a user reverted to; it and everything after it were undone."""
-    messageID: str
+    """The message a user reverted to; it and everything after it were undone. A session
+    nobody reverted undid nothing."""
+    messageID: str = ''
+
+    def kept(self, messages: Iterator[SavedMessage]) -> Iterator[SavedMessage]:
+        return takewhile(lambda saved: saved.info.id != self.messageID, messages)
 
 
 class StoredSession(WireModel):
     id: str
     directory: str
-    title: str | None = None
-    revert: Revert | None = None
+    title: str = ''
+    revert: Revert = Field(default_factory=Revert)
 
 
 class OpenCodeStore(OfflineHistory):
@@ -53,10 +58,7 @@ class OpenCodeStore(OfflineHistory):
     def read(self) -> Iterator[TranscriptUpdate]:
         session, messages = self.load()
         yield SessionFacts(source_id=session.id, project=session.directory, title=session.title)
-        undone = session.revert.messageID if session.revert is not None else None
-        for saved in messages:
-            if saved.info.id == undone:
-                return
+        for saved in session.revert.kept(messages):
             yield from saved.publications()
 
 
@@ -68,9 +70,7 @@ class ExportFile(WireModel):
 class OpenCodeExport(OpenCodeStore):
     """What `opencode export` writes."""
 
-    @classmethod
-    def reads(cls, source: Path) -> bool:
-        return source.suffix == '.json'
+    suffixes = frozenset({'.json'})
 
     def load(self) -> tuple[StoredSession, Iterator[SavedMessage]]:
         export = ExportFile.model_validate_json(self.source.read_bytes())
@@ -102,11 +102,7 @@ class OpenCodeDatabase(OpenCodeStore):
     """OpenCode's own `opencode.db`, read from a snapshot so the running OpenCode is not disturbed.
     Its rows keep ids in columns that the server puts inside each message and part."""
 
-    suffixes: ClassVar[frozenset[str]] = frozenset({'.db', '.sqlite', '.sqlite3'})
-
-    @classmethod
-    def reads(cls, source: Path) -> bool:
-        return source.suffix in cls.suffixes
+    suffixes = frozenset({'.db', '.sqlite', '.sqlite3'})
 
     def load(self) -> tuple[StoredSession, Iterator[SavedMessage]]:
         if not self.session_id:
@@ -124,7 +120,7 @@ class OpenCodeDatabase(OpenCodeStore):
                     (self.session_id,))) == [LinkedHistory(True)]:
                 raise ValueError('This OpenCode database uses linked history; import an opencode export JSON instead.')
             session = StoredSession(id=row.id, directory=row.directory, title=row.title,
-                                    revert=Revert.model_validate_json(row.revert) if row.revert else None)
+                                    revert=Revert.model_validate_json(row.revert or '{}'))
             return session, iter(tuple(self.messages(db)))
 
     def messages(self, db) -> Iterator[SavedMessage]:
