@@ -8,7 +8,7 @@ from enum import StrEnum
 
 from .errors import RelationViolationError, UnregisteredThreadError
 from .response_policy import CollectivePolicy, DirectPolicy, InformationalPolicy, MentionedOnlyPolicy
-from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
+from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
     from .channels import Channel
@@ -267,7 +267,7 @@ class ChannelTarget(NamedTarget):
 
     def wake_policy(self, recipient, mentions):
         if mentions:
-            return FullWake() if recipient.canonical_thread in mentions else None
+            return FullWake() if recipient.canonical_thread in mentions else UnmentionedWake()
         return BoundedTriageWake()
 
     def require_publication(self, message, snapshot, catalog):

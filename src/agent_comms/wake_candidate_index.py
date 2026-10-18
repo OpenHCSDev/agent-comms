@@ -26,7 +26,6 @@ from .delivery_policy import KeyedResponseAcknowledgement
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
-from .wake import NoWakeDecision, WakeDecision
 from .wake_policy import WakePolicy
 from .wire_log import OpenedWireSnapshot, WireLog
 from .wire_metadata import WireRootIdText
@@ -219,8 +218,6 @@ class WakeCandidateIndex(TypedStore):
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
             ):
-                if type(decision) not in {WakeDecision, NoWakeDecision}:
-                    raise ProjectionUnavailableError("unknown candidate wake decision")
                 rows.append(
                     Candidate(
                         message.seq,
@@ -228,9 +225,7 @@ class WakeCandidateIndex(TypedStore):
                         recipient.recipient_lookup,
                         message.sender,
                         message.target,
-                        type(decision.wake_mode)
-                        if type(decision) is WakeDecision
-                        else None,
+                        decision.candidate_wake_mode(),
                     )
                 )
         return _ParsedRow(sequence, tuple(rows), verified.acknowledgement)

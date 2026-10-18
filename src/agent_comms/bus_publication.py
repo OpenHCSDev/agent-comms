@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest, KeyedResponseAcknowledgement
     from .messages import Message
-    from .wake import NoWakeDecision, WakeDecision
+    from .wake_policy import RecipientDecision
 
 
 PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
@@ -87,22 +87,8 @@ def reject_private_wire_fields(record: Mapping[str, object]) -> None:
         raise ValueError("Bus-private wire fields cannot be exported.")
 
 
-def _decision_wire(decision: WakeDecision | NoWakeDecision) -> dict[str, str]:
-    from .wake import NoWakeDecision, WakeDecision
-
-    if type(decision) is NoWakeDecision:
-        return {"recipient_lookup": decision.recipient, "no_wake": decision.reason.value}
-    if type(decision) is WakeDecision:
-        return {
-            "recipient_lookup": decision.recipient,
-            "audience": decision.audience.value,
-            "wake_mode": decision.wake_mode.declared_name,
-        }
-    raise TypeError("Only typed, pure full-cohort decisions may be committed.")
-
-
-def decisions_wire(decisions: tuple[WakeDecision | NoWakeDecision, ...]) -> list[dict[str, str]]:
-    return [_decision_wire(decision) for decision in decisions]
+def decisions_wire(decisions: tuple[RecipientDecision, ...]) -> list[dict[str, str]]:
+    return [decision.to_wire() for decision in decisions]
 
 
 def decisions_digest(decisions: list[dict[str, str]]) -> str:
@@ -121,7 +107,7 @@ class CommittedDelivery(MessageWireRecord):
     wire_root_id: str
     message: Message
     audience: FrozenAudience
-    decisions: tuple[WakeDecision | NoWakeDecision, ...]
+    decisions: tuple[RecipientDecision, ...]
     decisions_digest: str
     control: str
     resolver_version: str
@@ -243,7 +229,7 @@ def initial_sideband(
     wire_root_id: str,
     message: Message,
     audience: FrozenAudience,
-    decisions: tuple[WakeDecision | NoWakeDecision, ...],
+    decisions: tuple[RecipientDecision, ...],
     *,
     control: str,
 ) -> DeliveryManifest:
