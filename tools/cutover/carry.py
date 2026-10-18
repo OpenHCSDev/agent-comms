@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import inspect
 import json
 import os
 import sqlite3
@@ -29,7 +30,7 @@ import subprocess
 import sys
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -94,8 +95,12 @@ class Carry(ABC):
     after: ClassVar[str | None]
 
     @classmethod
+    def module(cls) -> Path:
+        return Path(inspect.getfile(cls)).resolve()
+
+    @classmethod
     def name(cls) -> str:
-        return Path(sys.modules[cls.__module__].__file__).stem
+        return cls.module().stem
 
     @classmethod
     @abstractmethod
@@ -118,6 +123,13 @@ class Carry(ABC):
         parser.add_argument("--before-stop", action="store_true")
         args = parser.parse_args()
         with _store_lock(args.root / "wire"):
+            if args.apply and not args.before_stop:
+                applied = CarryLedger(args.root).applied() or ()
+                checkout = git(cls.module().parent, "rev-parse", "--show-toplevel").decode().strip()
+                try:
+                    CarryChain.at(Path(checkout), "HEAD").require_next(cls.name(), applied)
+                except ValueError as error:
+                    raise SystemExit(f"{cls.name()}: {error}") from None
             if args.before_stop:
                 result = cls.before_stop(args.root, apply=args.apply)
             else:
@@ -222,16 +234,19 @@ class CarryChain:
                 step = Step.declared(name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
                 if step is not None:
                     known[name] = step
-        for path in git(repo, "log", "--no-renames", "--format=", "--name-only", "--diff-filter=A", revision,
-                        "--", str(STEPS)).decode().split():
-            name = Path(path).stem
-            if name.startswith("carry_") and path.endswith(".py") and Path(path).name not in tree:
+        # Oldest first: the order every step reached this revision along its first parents.
+        added = git(repo, "log", "--first-parent", "-m", "--no-renames", "--format=", "--name-only",
+                    "--diff-filter=A", revision, "--", str(STEPS)).decode().split()
+        entered = [Path(path).stem for path in reversed(added)
+                   if Path(path).name.startswith("carry_") and path.endswith(".py")]
+        for name in entered:
+            if f"{name}.py" not in tree:
                 step = cls.deleted(repo, revision, name)
                 if step is not None:
                     known[name] = step
         if not known:
             return cls(())
-        known = cls.spliced(known, revision)
+        known = cls.spliced(known, revision, entered.index)
         followed = {step.after for step in known.values()}
         heads = [step for step in known.values() if step.name not in followed]
         if len(heads) != 1:
@@ -252,26 +267,29 @@ class CarryChain:
         return cls(tuple(reversed(steps)))
 
     @staticmethod
-    def spliced(known: dict[str, Step], revision: str) -> dict[str, Step]:
-        """Deleted steps that forked off the chain run after the head of the other line,
-        whether or not a kept step later followed them, so no kept step moves."""
-        parents = [step.after for step in known.values()]
-        lines = []
-        for head in (step for step in known.values() if step.name not in parents):
-            line = [head]
-            # Walk back to the fork: the first step whose parent another step also follows.
-            while line[-1].after in known and parents.count(line[-1].after) == 1:
-                line.append(known[line[-1].after])
-            lines.append(line)
-        kept = [line for line in lines if line[-1].revision == revision]
-        if len(kept) != 1:
+    def spliced(
+        known: dict[str, Step], revision: str, entered: Callable[[str], int]
+    ) -> dict[str, Step]:
+        """Each step runs after the step it names, and of the steps ready to run, the one
+        that entered history first runs first: a bus ran steps in the order they reached
+        it, so a step added after a deleted line runs after that line instead of stranding
+        every bus that ran it. Two steps in the tree that name one step are a fork in the
+        tree, and stay refused."""
+        named = [step.after for step in known.values() if step.revision == revision]
+        if len(named) != len(set(named)):
             return known
-        tail = kept[0][0].name
-        for line in lines:
-            if line is not kept[0]:
-                known = {**known, line[-1].name: replace(line[-1], after=tail)}
-                tail = line[0].name
-        return known
+        waiting = sorted(known.values(), key=lambda step: entered(step.name))
+        ordered: dict[str, Step] = {}
+        tail = None
+        while waiting:
+            ready = next((step for step in waiting
+                          if step.after == tail or step.after in ordered), None)
+            if ready is None:
+                return known
+            waiting.remove(ready)
+            ordered[ready.name] = replace(ready, after=tail)
+            tail = ready.name
+        return ordered
 
     @staticmethod
     def deleted(repo: Path, revision: str, name: str) -> Step | None:
@@ -281,6 +299,17 @@ class CarryChain:
         deletion = git(repo, "log", "--no-renames", "-1", "--format=%H", "--diff-filter=D", revision, "--", path).decode().strip()
         holder = git(repo, "rev-parse", f"{deletion}^").decode().strip()
         return Step.declared(name, git(repo, "show", f"{holder}:{path}"), holder)
+
+    def require_next(self, name: str, applied: tuple[str, ...]) -> None:
+        """A step applies to a bus that already records it or whose next pending step it is.
+        Otherwise the bus first runs the pending steps through this one, as
+        ``tools/upgrade_bus.py`` does; a ledger that pending() refuses stays refused."""
+        if name in applied:
+            return
+        pending = [step.name for step in self.pending(applied)]
+        if pending[:1] != [name]:
+            ahead = pending[: pending.index(name) + 1] if name in pending else pending
+            raise ValueError(f"the bus must first run {ahead}; run tools/upgrade_bus.py")
 
     def pending(self, applied: tuple[str, ...]) -> tuple[Step, ...]:
         """The steps a bus still needs. A bus recording a later step but not an
