@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -183,6 +184,8 @@ def freeze_audience(
         raise MalformedRecord("only exact stored routable targets may be frozen")
     if type(prepared_message.seq) is not int or not 0 < prepared_message.seq <= MAX_WIRE_SEQ:
         raise MalformedRecord("the prepared message must have an assigned wire sequence")
+    if not math.isfinite(prepared_message.timestamp):
+        raise MalformedRecord("audience data cannot be canonically encoded: non-finite timestamp")
     wire = _canonical_json(prepared_message.to_wire(), limit=MAX_WIRE_ENVELOPE_BYTES)
     recipients = tuple(
         sorted(externally_captured_recipients, key=lambda item: item.recipient_lookup)

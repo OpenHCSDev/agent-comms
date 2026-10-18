@@ -150,7 +150,7 @@ def test_bounded_id_count_and_envelope_bytes_fail_closed():
 
 
 def test_nonfinite_wire_timestamp_cannot_be_hashed():
-    with pytest.raises(ValueError, match="timestamp must be finite"):
+    with pytest.raises(ValueError, match="canonically encoded"):
         freeze(message(timestamp=float("nan")))
 
 
