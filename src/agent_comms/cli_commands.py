@@ -24,6 +24,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_ty
 from acp.exceptions import RequestError
 from acp.schema import SessionConfigSelectOption
 
+from .active_route import ActiveRoute, replace_unreadable_active_route
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .change_report import ChangeReport
@@ -95,6 +96,7 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
+from .wire_log import WireLog
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 
@@ -2075,3 +2077,19 @@ class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
     def apply(self, ctx: Comms) -> ThreadPinnedResult:
         ctx.channels.set_thread_pinned(self.channel, self.name, self.pinned)
         return ThreadPinnedResult(self.name, self.pinned)
+
+
+@dataclass(frozen=True)
+class RouteReplacedResult(CliResult):
+    root: str
+    backup: str
+
+
+class ReplaceRouteCliCommand(CliCommand, declared_name=ActiveRoute.repair_command):
+    help = ("Replace an old-version or unreadable active route file with a route to --root; "
+            "the old file is kept beside it")
+
+    def apply(self, ctx: Comms) -> CliResult:
+        marker = WireLog(ctx.root / "bus.jsonl").private_marker_unlocked()
+        route = ActiveRoute(ctx.root, marker.root_id)
+        return RouteReplacedResult(str(ctx.root), str(replace_unreadable_active_route(route)))

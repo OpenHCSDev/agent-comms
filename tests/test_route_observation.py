@@ -10,7 +10,6 @@ import pytest
 from agent_comms.active_route import ActiveRoute, LocalRoute, read_active_route, resolve_comms_route
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
 from agent_comms import private_nk_entrypoint
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.registration import Registration
@@ -113,7 +112,7 @@ def test_route_record_retains_the_external_format_and_private_marker(tmp_path):
     root.mkdir(mode=0o700)
     root_id = Comms(root).messaging.initialize_private_initial_protocol()
     selected = ActiveRoute(root, root_id)
-    encoded = FieldCodec.encode(selected)
+    encoded = selected.to_record()
     assert encoded == {"version": 2, "root": str(root), "wire_root_id": root_id}
     route_file = tmp_path / "active-route.json"
     route_file.write_text(json.dumps(encoded))
@@ -132,7 +131,7 @@ def test_route_record_retains_the_external_format_and_private_marker(tmp_path):
 def test_malformed_route_identity_is_denied_at_the_real_file_boundary(tmp_path, change):
     tmp_path.chmod(0o700)
     route_file = tmp_path / "active-route.json"
-    value = FieldCodec.encode(ActiveRoute(tmp_path, "a" * 32))
+    value = ActiveRoute(tmp_path, "a" * 32).to_record()
     value.update(change)
     route_file.write_text(json.dumps(value))
     route_file.chmod(0o600)
@@ -143,7 +142,7 @@ def test_malformed_route_identity_is_denied_at_the_real_file_boundary(tmp_path, 
 
 @pytest.mark.parametrize("missing", ["version", "root", "wire_root_id"])
 def test_route_fields_remain_required_even_with_constructor_defaults(tmp_path, missing):
-    value = FieldCodec.encode(ActiveRoute(tmp_path, "a" * 32))
+    value = ActiveRoute(tmp_path, "a" * 32).to_record()
     value.pop(missing)
     with pytest.raises(ValueError):
-        ActiveRoute.from_record(value)
+        ActiveRoute.from_record(value, tmp_path / "active-route.json")
