@@ -97,7 +97,13 @@ class TrackedTerminal(ABC):
     """Relate completed assistant responses to their streamed text."""
 
     def append(self, text: str) -> TrackedTerminal:
-        return CompletedTrackedTerminal(text) if text else EmptyAnswerTrackedTerminal()
+        return self.answered(text) if text else self.empty_answer()
+
+    def answered(self, text: str) -> TrackedTerminal:
+        return CompletedTrackedTerminal(text)
+
+    def empty_answer(self) -> TrackedTerminal:
+        return EmptyAnswerTrackedTerminal()
 
     def tool_round(self) -> TrackedTerminal:
         return PendingTrackedTerminal()
@@ -139,7 +145,10 @@ class PendingTrackedTerminal(TrackedTerminal):
 class CompletedTrackedTerminal(TrackedTerminal):
     text: str
 
-    def append(self, text):
+    def answered(self, text: str) -> TrackedTerminal:
+        return AmbiguousTrackedTerminal()
+
+    def empty_answer(self) -> TrackedTerminal:
         return AmbiguousTrackedTerminal()
 
     def later_input(self, parts):
@@ -160,8 +169,8 @@ class AnsweredTrackedTerminal(TrackedTerminal):
 
     text: str
 
-    def append(self, text):
-        return CompletedTrackedTerminal(text) if text else self
+    def empty_answer(self) -> TrackedTerminal:
+        return self
 
     def tool_round(self):
         return self
@@ -179,7 +188,10 @@ class AnsweredTrackedTerminal(TrackedTerminal):
 class NotificationTrackedTerminal(TrackedTerminal):
     """Notice handling cannot answer or revise the original requested task."""
 
-    def append(self, text):
+    def answered(self, text: str) -> TrackedTerminal:
+        return self
+
+    def empty_answer(self) -> TrackedTerminal:
         return self
 
     def tool_round(self):
@@ -195,12 +207,15 @@ class NotifiedTrackedTerminal(NotificationTrackedTerminal, AnsweredTrackedTermin
 
 
 class UnansweredNotifiedTrackedTerminal(NotificationTrackedTerminal, PendingTrackedTerminal):
-    def append(self, text: str) -> TrackedTerminal:
-        return self if text else EmptyAnswerTrackedTerminal()
+    def empty_answer(self) -> TrackedTerminal:
+        return EmptyAnswerTrackedTerminal()
 
 
 class AmbiguousTrackedTerminal(PendingTrackedTerminal):
-    def append(self, text):
+    def answered(self, text: str) -> TrackedTerminal:
+        return self
+
+    def empty_answer(self) -> TrackedTerminal:
         return self
 
 
