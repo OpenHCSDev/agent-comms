@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSeri
 
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
-from .maintenance_barrier import MaintenanceHeld
+from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .external_transcript import RequestedEarlierPage
 
@@ -158,11 +158,11 @@ class UnavailableCoreError(CoreError):
 class HeldCoreError(CoreError):
     """The bus went into maintenance: the child has closed, and the bridge resumes it."""
     wire_tag = 'held'
-    exception_type = MaintenanceHeld
+    exception_type = MaintenanceHeldError
 
     async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
         await child.wait()
-        raise MaintenanceHeld(self.error)
+        raise MaintenanceHeldError(self.error)
 
 
 class FailedCoreError(CoreError):

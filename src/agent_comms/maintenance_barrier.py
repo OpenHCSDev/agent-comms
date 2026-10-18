@@ -33,7 +33,7 @@ from .store_files import (
 )
 
 
-class MaintenanceHeld(RelationViolationError):
+class MaintenanceHeldError(RelationViolationError):
     """The bus is in maintenance: its readers close and wait for READY."""
 
 
@@ -48,7 +48,7 @@ class HeldSends:
 
     @staticmethod
     def require_open():
-        raise MaintenanceHeld("Maintenance ingress requires READY")
+        raise MaintenanceHeldError("Maintenance ingress requires READY")
 
 
 class GrantedSends:

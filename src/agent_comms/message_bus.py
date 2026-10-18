@@ -168,7 +168,8 @@ class MessageBus[Writes: Publisher]:
     async def resumed(self) -> None:
         """Return once maintenance has cleared; each change to its state wakes the check."""
         maintenance = MaintenanceBarrier(self._registry.store.path)
-        async with aclosing(WireWatch.observations(WatchSource.file(maintenance.state_path))) as changes:
+        watched = WatchSource.file(maintenance.state_path)
+        async with aclosing(WireWatch.observations(watched)) as changes:
             async for _ in changes:
                 if not maintenance.read().turn_pending:
                     return
