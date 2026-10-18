@@ -30,11 +30,11 @@ from .jsonl_stream import unique_fields
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from .native_tool_call import NativeToolMode, NoNativeTools
 
 if TYPE_CHECKING:
     from . import pi_events as pi
     from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
-    from .selected_tool_broker import NativeToolMode
     from .selected_session import SelectedSession
     from .turn_failure import TurnFailure
 
@@ -381,7 +381,6 @@ class NativeTurnResult:
 
     text: str
     context: NativeContextProof
-    selected_tool_call_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -585,7 +584,7 @@ class NativePiRpcLaunch:
         model: SelectedModel,
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
-        selected_tool_mode: NativeToolMode | None = None,
+        selected_tool_mode: NativeToolMode = NoNativeTools(),
     ) -> NativePiRpcLaunch:
         """Construct a complete launch through its acquired immutable artifact.
 
@@ -595,11 +594,6 @@ class NativePiRpcLaunch:
         and model-delivery proofs remain separate per-attempt observations.
         """
         session_dir, session_file = session.directory, session.path
-        if selected_tool_mode is not None:
-            from .selected_tool_broker import NativeToolMode
-
-            if not isinstance(selected_tool_mode, NativeToolMode):
-                raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
         worktree = Path(worktree).absolute()
         session_dir = Path(session_dir).absolute()
         _durable_private_session_dir(session_dir)
@@ -609,11 +603,7 @@ class NativePiRpcLaunch:
         # policy. This directory isolates writable resources, not policy copies.
         agent_dir = session_dir / ".native-pi-agent"
         _durable_private_session_dir(agent_dir)
-        tool_arguments = (
-            selected_tool_mode.launch_arguments(package)
-            if selected_tool_mode is not None
-            else ("--no-tools",)
-        )
+        tool_arguments = selected_tool_mode.launch_arguments(package)
         arguments = [
             "--mode",
             "rpc",
