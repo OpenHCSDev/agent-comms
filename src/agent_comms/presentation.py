@@ -50,7 +50,7 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
     from .comms import Comms
-    from .ui_model.observation import ThreadsObserved
+    from .ui_model.observation import ReadNotifications, ThreadsObserved
     from .bus_publication import CommittedDelivery
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -751,21 +751,26 @@ def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]]):
 class ReadState:
     __slots__ = ()
 
-    def _changed_since(self, *_captured: object) -> bool:
+    def _changed_since(self, earlier: WireRevision) -> bool:
         return True
 
     bus_source_changed_since = _changed_since
-    registrations_changed_since = _changed_since
     _registrations_changed_from = _changed_since
     stores_changed_since = _changed_since
     status_changed_since = _changed_since
     sidebar_changed_since = _changed_since
     external_transcripts_changed_since = _changed_since
     notifications_changed_since = _changed_since
-    notification_read_changed = _changed_since
+
+    def registrations_changed_since(self, earlier: ReadState) -> bool:
+        return True
+
+    def notification_read_changed(self, request: ReadNotifications, current: WireRevision) -> bool:
+        return True
 
 
-class NoRevision(ReadState): __slots__ = ()
+class NoRevision(ReadState):
+    __slots__ = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -899,7 +904,7 @@ class WireRevision(ReadState):
         """CLI drafts and finished items changed, independently of coordination status."""
         return self.external_transcripts != earlier.external_transcripts
 
-    def notification_read_changed(self, request, current: WireRevision) -> bool:
+    def notification_read_changed(self, request: ReadNotifications, current: WireRevision) -> bool:
         return request.changed_since(current, self)
 
     def notifications_changed_since(self, earlier: WireRevision) -> bool:

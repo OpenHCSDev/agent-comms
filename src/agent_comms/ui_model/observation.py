@@ -26,9 +26,9 @@ import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar, final
+from typing import TYPE_CHECKING, ClassVar, Self, final
 
 from acp import RequestError
 
@@ -149,15 +149,13 @@ class LiveObservationInterest(ObservationInterest):
                 observation.after_read(service)
 
 
-InterestT = TypeVar("InterestT", bound=InterestRequest)
-
-
 class ObservationLifetime:
     def for_interest(self, requested: Observation) -> Observation:
         return requested
 
 
-class NotObserved(ObservationLifetime): pass
+class NotObserved(ObservationLifetime):
+    pass
 
 
 class ObservationStep:
@@ -165,10 +163,11 @@ class ObservationStep:
         pass
 
 
-class ObservationPending(ObservationStep): pass
+class ObservationPending(ObservationStep):
+    pass
 
 
-class Observation(ObservationLifetime, Generic[InterestT]):
+class Observation[InterestT: InterestRequest](ObservationLifetime):
     """A requested view owns its read state and yields between store operations."""
 
     def __init__(self, request: InterestT):
@@ -182,7 +181,7 @@ class Observation(ObservationLifetime, Generic[InterestT]):
         return self
 
     @abstractmethod
-    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | ObservationPending]: ...
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[ObservationStep]: ...
 
     def after_read(self, service: ObservationService) -> None:
         """Subscribe to completion when this observation has unfinished preparation."""
@@ -328,11 +327,8 @@ class CancelRead(ObservationRequest):
             asking.cancel()
 
 
-ResultT = TypeVar("ResultT")
-
-
 @dataclass(frozen=True)
-class TranscriptRequest(ReadRequest, Generic[ResultT]):
+class TranscriptRequest[ResultT](ReadRequest):
     """One bounded transcript page and the witness it was read under.
 
     Without ``read_identity`` the source is captured now; with it, the page is
@@ -556,7 +552,7 @@ class SidebarReading(Observation[ObserveSidebar]):
     def prepared(self, service: ObservationService) -> None:
         service.interest.prepared(self, service)
 
-    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | ObservationPending]:
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[ObservationStep]:
         while True:
             key = SidebarSent(revision.expiry_period, type(self.stage), revision)
             if not self.sent.changed_since(key):
@@ -586,7 +582,8 @@ class SendState:
         return True
 
 
-class NoSidebarSent(SendState): pass
+class NoSidebarSent(SendState):
+    pass
 
 
 @dataclass(frozen=True)
@@ -647,7 +644,7 @@ class NotificationReading(Observation[ObserveNotifications]):
         super().__init__(request)
         self.read_states: dict[ReadNotifications, ReadState] = {}
 
-    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | ObservationPending]:
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[ObservationStep]:
         for request in self.request.reads:
             if not self.read_states.get(request, NoRevision()).notification_read_changed(request, revision):
                 continue
@@ -676,7 +673,7 @@ class ThreadReading(Observation[ObserveThreads]):
         self.initial = self.request.names - previous.request.names
         return self
 
-    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | ObservationPending]:
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[ObservationStep]:
         previous = self.observed
         results: dict[str, ThreadReadResult] = {}
         activity = {}
@@ -720,7 +717,7 @@ class ViewReading(Observation[ObserveViews]):
         super().__init__(request)
         self.revision: ReadState = NoRevision()
 
-    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | ObservationPending]:
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[ObservationStep]:
         if not self.revision.registrations_changed_since(revision):
             return
         retired = comms.views.retired_views(self.request.threads, self.request.channels)
@@ -799,7 +796,8 @@ class PublishState:
         return self == current
 
 
-class NoSidebarResult(PublishState): pass
+class NoSidebarResult(PublishState):
+    pass
 
 
 @dataclass(frozen=True)
