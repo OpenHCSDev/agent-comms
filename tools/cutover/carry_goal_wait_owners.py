@@ -24,14 +24,14 @@ def carry_rows(raw: dict, snapshot: RegistrySnapshot) -> dict[str, RecordedGoalW
     carried = {goal: FieldCodec.decode(RecordedGoalWait, row)
                for goal, row in raw.items() if "owner" in row}
     for thread in snapshot.threads.values():
-        goal = thread.goal
-        if goal is None or goal.id not in pending:
+        goal = thread.goal.reported_id()
+        if goal not in pending:
             continue
-        row = dict(pending.pop(goal.id))
-        if row.pop("owner_created_at") != thread.created_at or row["goal_id"] != goal.id:
-            raise ValueError(f"Wait {goal.id} does not belong to its recorded owner")
+        row = dict(pending.pop(goal))
+        if row.pop("owner_created_at") != thread.created_at or row["goal_id"] != goal:
+            raise ValueError(f"Wait {goal} does not belong to its recorded owner")
         row["owner"] = thread.incarnation.require_recorded().to_wire()
-        carried[goal.id] = FieldCodec.decode(RecordedGoalWait, row)
+        carried[goal] = FieldCodec.decode(RecordedGoalWait, row)
     if pending:
         raise ValueError(f"Unresolved wait owners; nothing published: {sorted(pending)}")
     return carried

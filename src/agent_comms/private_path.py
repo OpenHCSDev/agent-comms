@@ -45,6 +45,8 @@ class FileIdentity:
 
 
 class ObservedPath(ABC):
+    absent: ClassVar[bool] = False
+
     @staticmethod
     def at(path: Path) -> ObservedPath:
         try:
@@ -59,6 +61,8 @@ class ObservedPath(ABC):
 
 @dataclass(frozen=True, slots=True)
 class AbsentPath(ObservedPath):
+    absent: ClassVar[bool] = True
+
     def same_file(self, identity: FileIdentity) -> bool:
         return False
 

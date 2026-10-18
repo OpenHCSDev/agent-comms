@@ -16,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from io import DEFAULT_BUFFER_SIZE
 from pathlib import Path
-from typing import BinaryIO, TYPE_CHECKING
+from typing import TYPE_CHECKING, BinaryIO, ClassVar
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -69,6 +69,7 @@ def _notify_candidates(log: WireLog, through_bytes: int) -> None:
 class WireSnapshot(ABC):
     """One fixed bus cut; its concrete source owns availability and reading."""
 
+    absent: ClassVar[bool] = False
     metadata: WireMetadata
     through: int
     _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | NoCheckpoint] = field(
@@ -178,6 +179,7 @@ class WireSnapshot(ABC):
 class AbsentWireSnapshot(WireSnapshot):
     """No descriptor existed at acquisition; later appends stay outside this cut."""
 
+    absent: ClassVar[bool] = True
     complete_prefix = EmptyWirePrefix()
     boundary = position = 0
 
