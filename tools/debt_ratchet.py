@@ -19,6 +19,7 @@ from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
 from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 from agent_comms.declared_family import DeclaredFamily
+from cutover.carry import STEPS, Step
 from agent_comms.field_codec import FieldCodec, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
@@ -898,6 +899,33 @@ class AnyAnnotation(PerFileMeasure):
     def count(cls, source: bytes, filename: str) -> int:
         return len(cls.uses(source, filename))
 
+
+
+class EditedCarry(Measure):
+    """Carry steps edited, renamed, or added under a deleted step's name.
+
+    A bus that already ran a step never runs its edit, and a bus that had not
+    yet run the original loses it; a deleted step's name still names that step
+    in every ledger that recorded it. A different change is a new step.
+    """
+
+    @classmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        fields = iter(git(repo, "diff", "--name-status", "--find-renames=50%", "-z",
+                          base, head, "--", str(STEPS)).decode().split("\0")[:-1])
+        edited = 0
+        for status in fields:
+            path = next(fields)
+            if status[0] in "RC":
+                next(fields)
+            name = Path(path).stem
+            if not (name.startswith("carry_") and path.endswith(".py")):
+                continue
+            if status[0] in "MRC" or status == "T":
+                edited += Step.declared(name, git(repo, "show", f"{base}:{path}"), base) is not None
+            elif status == "A":
+                edited += bool(git(repo, "log", "-1", "--format=%H", "--diff-filter=D", base, "--", path).strip())
+        return {cls.__name__: 0}, {cls.__name__: edited}
 
 def git(repo: Path, *args: str, input: bytes = b"") -> bytes:
     return subprocess.check_output(["git", "-C", str(repo), *args], input=input, timeout=20)

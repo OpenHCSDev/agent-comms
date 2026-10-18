@@ -17,6 +17,7 @@ from agent_comms.execution_states import FailedExecution
 from agent_comms.obligation_states import FailedResponse
 from agent_comms.owner_fence import OwnerFence
 from test_claim_bus_read import selected_turn
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 @pytest.mark.parametrize("outcome", ["failure", "unknown"])
@@ -116,10 +117,10 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
         comms = Comms(native.root)
         comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(native.project), session_file=str(native.session), model='response-local/fixture'))
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
-        comms.owners.pin_private_nk_launch(
+        comms.owners.pin_private_nk_launch(PrivateNkLaunch(
             native.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
             pinned_native_package(),
-        )
+        ))
         original_chunks = native.provider.response_chunks
         gate = asyncio.Event()
 

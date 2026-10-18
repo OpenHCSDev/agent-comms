@@ -12,6 +12,7 @@ from agent_comms.comms import wire
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
@@ -49,7 +50,7 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, tmp_path))
     owner = CommsAgent(
         comms,
         agent_bin="pi",

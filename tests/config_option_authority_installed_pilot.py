@@ -21,6 +21,7 @@ from agent_comms.comms import Comms
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def thinking(options):
@@ -103,7 +104,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     project.mkdir()
     service = Comms(stage / 'wire')
     root_id = service.messaging.initialize_private_initial_protocol()
-    service.owners.pin_private_nk_launch(service.root, root_id, package)
+    service.owners.pin_private_nk_launch(PrivateNkLaunch(service.root, root_id, package))
     environment = dict(os.environ)
     environment.update(
         AGENT_COMMS_ROOT=str(service.root), AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,

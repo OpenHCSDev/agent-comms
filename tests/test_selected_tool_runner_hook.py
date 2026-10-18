@@ -29,6 +29,7 @@ from agent_comms.selected_tool_broker import (
 )
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 @pytest.fixture
@@ -88,7 +89,7 @@ def test_owner_configuration_requires_nominal_intent_and_private_binding(
     with pytest.raises(PublicationActivationBlocked, match="private bus root"):
         CommsAgent(comms, private_selected_tool_intent=intent_type())
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, private_root)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, private_root))
     agent = CommsAgent(comms, private_selected_tool_intent=intent_type())
     assert type(agent._private_selected_tool_intent) is intent_type
 

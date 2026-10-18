@@ -8,6 +8,7 @@ from agent_comms import invoke_tool
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def test_attachment_does_not_implicitly_start_a_stopped_or_archived_thread(tmp_path, monkeypatch):
@@ -38,9 +39,9 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     source.touch()
     comms = wire(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(
         comms.root, root_id, pinned_native_package()
-    )
+    ))
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(source)))
     comms.registry.unregister("worker")
     try:

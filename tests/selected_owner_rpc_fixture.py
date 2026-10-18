@@ -13,6 +13,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.native_package import pinned_native_package
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 @pytest.fixture
@@ -48,7 +49,7 @@ async def scripted_owner(tmp_path, selected_model, monkeypatch):
         owner = comms.registry.require('beta')
         store.participants.register(RecordedThreadIncarnation('fixture', owner.created_at).lookup,
                                     'beta', 'beta', committed=True)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
     agent = CommsAgent(comms, runtime_enabled=True,
                        private_nk_verified_cli=cli)
     agent.sessions.bindings['beta'] = 'beta'

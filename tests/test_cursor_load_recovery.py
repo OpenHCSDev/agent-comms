@@ -16,6 +16,7 @@ from agent_comms.cursor_publication import CursorPublication
 from agent_comms.runtime import SocketClient
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monkeypatch):
@@ -30,7 +31,7 @@ async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monke
         return None
 
     monkeypatch.setattr("agent_comms.cursor_publication.NativeSourceCursor.read_async", read_cursor)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, tmp_path))
     publication = CursorPublication(comms, object())
     await publication.observe(owner.name, owner.name)
     await publication.observe(owner.name, owner.name)
@@ -49,7 +50,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, owner.name, owner.name, committed=True
         )
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path / "unused-native-package")
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, tmp_path / "unused-native-package"))
     agent = CommsAgent(
         comms,
         auto_wake=False,

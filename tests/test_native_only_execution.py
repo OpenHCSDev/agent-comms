@@ -178,7 +178,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             registered = comms.registry.require("headless")
             assert registered.pid == child.pid
             assert registered.worktree == str(project)
-            comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
+            comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, Path(package)))
             client = CommsClient(comms)
             try:
                 loaded = await client.load_session(str(project), "headless")

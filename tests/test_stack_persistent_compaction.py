@@ -28,6 +28,7 @@ from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import ManualCompactionReason
 from agent_comms.runtime import socket_path
 from delivery_owner_fixture import canonical_agent
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def _history(session: Path, project: Path) -> None:
@@ -227,9 +228,9 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
 
         owner.on_connect(Client())
-        comms.owners.pin_private_nk_launch(
+        comms.owners.pin_private_nk_launch(PrivateNkLaunch(
             comms.root, owner.configured_root_id, owner.private_nk_native_package
-        )
+        ))
         attachment = CommsClient(
             comms,
             agent_bin=native,

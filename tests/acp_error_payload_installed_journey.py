@@ -32,6 +32,7 @@ from agent_comms.threads import Thread
 
 from native_context_budget_installed_journey import ReceiptSubscriber
 from stored_inputs import stored_inputs
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 REASON = "Controlled provider usage limit has been reached; original input not retried"
@@ -121,7 +122,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
     }))
     comms = Comms(root)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(root, root_id, package)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(root, root_id, package))
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)
     comms.registry.declare(comms.registry.new_thread('error-native', frozenset(), str(project), session_file=str(fresh.path), model='error-local/error-fixture', thinking_level='off'))
     environment = {key: value for key, value in os.environ.items()

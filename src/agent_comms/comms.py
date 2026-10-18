@@ -73,7 +73,5 @@ def wire(root: CommsRoute | Path | str | None = None) -> Comms:
     comms = Comms(route)
     if launch is not None:
         # Service binding retains the bus-locked durable verification.
-        comms.owners.pin_private_nk_launch(
-            launch.validated_root, launch.wire_root_id, launch.native_package
-        )
+        comms.owners.pin_private_nk_launch(launch)
     return comms

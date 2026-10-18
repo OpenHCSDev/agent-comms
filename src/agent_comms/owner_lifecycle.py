@@ -233,9 +233,7 @@ class OwnerLifecycle:
         with _store_lock(self._wire_lock_path) as lock:
             yield lock.descriptor
 
-    def pin_private_nk_launch(
-        self, validated_root: Path, wire_root_id: str, native_package: Path
-    ) -> None:
+    def pin_private_nk_launch(self, launch: PrivateNkLaunch) -> None:
         """Bind a launch handed down by a parent owner, or a published route.
 
         Recheck the root marker before retaining the exact lexical absolute
@@ -243,18 +241,18 @@ class OwnerLifecycle:
         Without a pin, a private root derives its own (see launch_authority).
         """
         if (
-            not isinstance(validated_root, Path)
-            or not validated_root.is_absolute()
-            or validated_root != self.root
-            or not isinstance(native_package, Path)
-            or not native_package.is_absolute()
+            not isinstance(launch.validated_root, Path)
+            or not launch.validated_root.is_absolute()
+            or launch.validated_root != self.root
+            or not isinstance(launch.native_package, Path)
+            or not launch.native_package.is_absolute()
         ):
             raise ValueError("private owner launch requires the validated absolute root/package")
         with self.bus.log.certified_read() as source:
             marker = source.marker
-            if marker.root_id != wire_root_id:
+            if marker.root_id != launch.wire_root_id:
                 raise RelationViolationError("private owner launch root ID changed")
-        self._private_nk_launch = PrivateNkLaunch(validated_root, wire_root_id, native_package)
+        self._private_nk_launch = launch
 
     def acquire_thread(self, name: str, *, owner_pid: int) -> Thread:
         """Bind only this calling process; stored birth time is signal authority."""
@@ -324,8 +322,7 @@ class OwnerLifecycle:
             metadata = self.bus.log.read_metadata_unlocked()
             if not metadata.private:
                 return None
-            launch = PrivateNkLaunch.installed(self.root, metadata.wire_root_id)
-            self.pin_private_nk_launch(launch.validated_root, launch.wire_root_id, launch.native_package)
+            self.pin_private_nk_launch(PrivateNkLaunch.installed(self.root, metadata.wire_root_id))
         return self._private_nk_launch
 
     def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:

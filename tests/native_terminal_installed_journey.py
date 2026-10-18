@@ -16,6 +16,7 @@ from agent_comms.comms import Comms
 from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.threads import Thread
 from agent_comms.wire_record import WireRecord
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 class Client:
@@ -36,7 +37,7 @@ async def main(output, package, launcher, provider, model, thinking):
         'AGENT_COMMS_ROOT': str(comms.root), ROOT_ID_ENV: root_id,
         PACKAGE_ENV: str(package),
     })
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
     agent = CommsAgent(
         comms, runtime_enabled=True, auto_wake=False,
 

@@ -40,6 +40,7 @@ from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
 from agent_comms.private_sidecar import sidecar_connection
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
@@ -77,7 +78,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
             root_id = service.bus.log._private_marker_unlocked().root_id
     else:
         root_id = service.messaging.initialize_private_initial_protocol()
-    service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
+    service.owners.pin_private_nk_launch(PrivateNkLaunch(service.root, root_id, arguments.package))
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
@@ -167,7 +168,7 @@ async def configured_pure_channel(arguments):
                 if isinstance(item, CompactionChangedUpdate):
                     compaction_events.append({'elapsed_seconds': time.perf_counter()-begun,
                         'phase': item.event.phase})
-    service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
+    service.owners.pin_private_nk_launch(PrivateNkLaunch(service.root, root_id, arguments.package))
     attachment = CommsClient(service, runtime_enabled=True,
         )
     attachment.on_connect(Observation())
@@ -485,7 +486,7 @@ async def configured_mixed_routes(arguments):
     class Observation:
         async def session_update(self, **kwargs):
             packets.append(kwargs)
-    service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
+    service.owners.pin_private_nk_launch(PrivateNkLaunch(service.root, root_id, arguments.package))
     attachment = CommsClient(service,runtime_enabled=True,
         )
     attachment.on_connect(Observation())
@@ -606,7 +607,7 @@ async def retained_owner():
     launch.validate()
     service = Comms(launch.validated_root)
     name = os.environ['AGENT_COMMS_THREAD']
-    service.owners.pin_private_nk_launch(service.root, launch.wire_root_id, launch.native_package)
+    service.owners.pin_private_nk_launch(PrivateNkLaunch(service.root, launch.wire_root_id, launch.native_package))
     agent = CommsAgent(service, runtime_enabled=True,
         )
     # This receiving case supplies the original saved-session capability to
@@ -793,7 +794,7 @@ async def run(arguments):
         'retry':{'enabled':False,'maxRetries':0,'provider':{'maxRetries':0}}}))
     service = Comms(stage/'wire', private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
-    service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
+    service.owners.pin_private_nk_launch(PrivateNkLaunch(service.root, root_id, arguments.package))
     env = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
         AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(arguments.package),
@@ -834,7 +835,7 @@ async def run(arguments):
     class Observation:
         async def session_update(self, **kwargs):
             packets.append(kwargs)
-    service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
+    service.owners.pin_private_nk_launch(PrivateNkLaunch(service.root, root_id, arguments.package))
     attachment = CommsClient(service, runtime_enabled=True,
         )
     attachment.on_connect(Observation())

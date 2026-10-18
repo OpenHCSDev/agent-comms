@@ -556,7 +556,7 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
     root, root_id, _, _, _ = _root(tmp_path)
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     comms = Comms(root)
-    comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(root, root_id, tmp_path))
     other = tmp_path / "other"
     other.mkdir()
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(other))
@@ -581,7 +581,7 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
 def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_path, monkeypatch):
     root, root_id, comms, _, _ = _root(tmp_path)
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(root, root_id, tmp_path))
     comms.registry.declare(comms.registry.new_thread('late-owner', frozenset(), str(tmp_path)))
     late = comms.registry.require("late-owner")
     lookup = RecordedThreadIncarnation("fixture", late.created_at).lookup

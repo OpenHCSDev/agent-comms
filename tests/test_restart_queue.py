@@ -25,6 +25,7 @@ from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
 from agent_comms.wire_watch import DirectoryWatchSource, WatchSource, open_wire_watcher
 from explicit_private_owner_installed_journey import Subscriber
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux watcher")
@@ -52,9 +53,9 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
 ):
     fixture = native_backend
     comms = Comms(fixture.root)
-    comms.owners.pin_private_nk_launch(
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(
         comms.root, os.environ[ROOT_ID_ENV], pinned_native_package()
-    )
+    ))
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(fixture.project)))
     # This test queues work, but deliberately never admits an actual restart.
     watchers = []
@@ -137,9 +138,9 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             "Set QUEUE_SOURCE_RUNTIME and QUEUE_SOURCE_PACKAGE to retained reviewed source pins"
         )
     comms = Comms(fixture.root)
-    comms.owners.pin_private_nk_launch(
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(
         comms.root, os.environ[ROOT_ID_ENV], pinned_native_package()
-    )
+    ))
     comms.registry.declare(
         comms.registry.new_thread('worker', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')
     )

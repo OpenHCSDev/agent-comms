@@ -9,6 +9,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.notification_progress import SentProgress
 from agent_comms.wake_policy import BoundedTriageWake
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  # noqa: F811
@@ -92,7 +93,7 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
 
     package = str(pinned_native_package())
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, Path(package)))
     agent = CommsAgent(
         comms,
         agent_bin="pi",

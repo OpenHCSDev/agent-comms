@@ -4,6 +4,7 @@ from agent_comms.native_package import pinned_native_package
 from contextlib import asynccontextmanager
 
 from agent_comms.acp import CommsAgent
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def native_model(*, decision="FULL", fail_on=None):
@@ -19,7 +20,7 @@ async def canonical_delivery_owner(root, *, direct=False):
     from test_coordinated_runtime import _root
 
     _path, root_id, comms, initial, people = _root(root, direct=direct)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, root)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, root))
     owner = CommsAgent(
         comms,
         runtime_enabled=True,
@@ -44,7 +45,7 @@ def canonical_agent(comms, **options):
         else comms.messaging.initialize_private_initial_protocol()
     )
     package = pinned_native_package()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
     return CommsAgent(
         comms,
         **options,

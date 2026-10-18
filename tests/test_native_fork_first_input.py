@@ -29,6 +29,7 @@ from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from stored_inputs import stored_inputs
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 tmp_path = private_root_fixture
 
@@ -184,8 +185,8 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     )
     package = pinned_native_package()
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
     attachment = CommsClient(
         comms,
         runtime_enabled=True,

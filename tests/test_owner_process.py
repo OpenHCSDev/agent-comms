@@ -25,13 +25,14 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import ActiveTurn
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> None:
     comms = Comms(tmp_path)
     package = pinned_native_package()
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(tmp_path, root_id, package))
     declared = comms.registry.new_thread('worker', frozenset(), str(tmp_path), task='retained task')
     comms.registry.declare(declared)
     first = comms.owners.start(
@@ -51,7 +52,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         from agent_comms.owner_cutover import StoppedOwnerInstallation
 
         mismatched = Comms(tmp_path)
-        mismatched.owners.pin_private_nk_launch(tmp_path, root_id, tmp_path / "other-package")
+        mismatched.owners.pin_private_nk_launch(PrivateNkLaunch(tmp_path, root_id, tmp_path / "other-package"))
         before = comms.registry.snapshot()
         with pytest.raises(NativePiUnavailable, match="Canonical native Pi package layout"):
             mismatched.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
@@ -78,7 +79,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
                 assert not replacement.process_alive
 
             def bind_target_launch(self, lifecycle):
-                lifecycle.pin_private_nk_launch(tmp_path, root_id, package)
+                lifecycle.pin_private_nk_launch(PrivateNkLaunch(tmp_path, root_id, package))
 
         (installed,) = unpinned.owners.restart_owners(
             ["worker"], agent_bin="pi", agent_args=[], cutover=BindInstalledLaunch()
@@ -201,7 +202,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     comms = Comms(tmp_path)
     package = pinned_native_package()
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(tmp_path, root_id, package))
 
     async def thinking_options():
         async with AsyncExitStack() as lifetime:

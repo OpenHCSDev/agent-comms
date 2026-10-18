@@ -16,6 +16,7 @@ from agent_comms.private_bus_checkpoint import PrefixWitness, verify_private_bus
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.threads import Thread
 from test_private_human_ingress import _root
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def source_witness(bus):
@@ -110,7 +111,7 @@ async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tm
     comms = Comms(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     package = Path(os.environ["AC_NATIVE_COPIED_PACKAGE"])
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
     agent = CommsAgent(
         comms,
         auto_wake=False,

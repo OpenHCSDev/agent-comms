@@ -89,9 +89,7 @@ class AbsoluteRoutePathText(PathText):
 
 @dataclass(frozen=True, slots=True)
 class ActiveRoute(CommsRoute):
-    """The default private root. The native package is not part of it: each
-    installation launches its own pinned package, so a rebuild never strands it."""
-
+    """The default private root; each installation launches its own pinned native package."""
     root: Annotated[Path, AbsoluteRoutePathText]
     wire_root_id: Annotated[str, WireRootIdText]
     version: Literal[2] = field(default=2, kw_only=True, metadata={"wire_required": True})

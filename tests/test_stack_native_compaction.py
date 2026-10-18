@@ -27,6 +27,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 from stored_inputs import stored_inputs
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
@@ -300,7 +301,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
     owner = CommsAgent(
         comms, agent_bin=native_bin, agent_args=native_args, runtime_enabled=True,
         auto_wake=False,

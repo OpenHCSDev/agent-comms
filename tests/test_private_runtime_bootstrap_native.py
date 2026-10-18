@@ -14,6 +14,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 # The native package executes against only the loopback model declared below.
 tmp_path = private_root_fixture
@@ -115,7 +116,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
             (comms.root / name).unlink()
         with Coordination(str(comms.root / "coordination.sqlite3")):
             pass
-    comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, Path(package)))
 
     def until(predicate):
         deadline = time.monotonic() + 40

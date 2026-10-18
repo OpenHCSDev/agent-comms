@@ -42,6 +42,7 @@ from delivery_owner_fixture import drain_diagnostic, reply_turn_finished
 from test_coordinated_runtime import _fake_model, tmp_path as private_root_fixture
 from test_native_prompt_binding import _fake_model as separate_session_fake
 from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 tmp_path = private_root_fixture
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
@@ -61,7 +62,7 @@ def _session(tmp_path, *, package=True):
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
     if package:
-        comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
+        comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, tmp_path))
     agent = CommsAgent(comms, runtime_enabled=True)
     agent.sessions.bindings["beta"] = "beta"
     agent.sessions.titles["beta"] = "beta"
@@ -91,7 +92,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, tmp_path))
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
@@ -647,13 +648,13 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
 
 async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, monkeypatch):
     """An unpinned private root derives this installation's package; none prepared refuses."""
-    from agent_comms import owner_lifecycle
+    from agent_comms import private_nk_entrypoint
     from agent_comms.native_package import NativePackageError
 
     def missing():
         raise NativePackageError("Pinned native package directory is missing")
 
-    monkeypatch.setattr(owner_lifecycle, "pinned_native_package", missing)
+    monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", missing)
     comms, agent, root_id = _session(tmp_path, package=False)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
@@ -740,7 +741,7 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
 
 async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
     comms, first, root_id = _session(tmp_path)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
+    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, tmp_path))
     second = CommsAgent(
         comms,
         runtime_enabled=True,
