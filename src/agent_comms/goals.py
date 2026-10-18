@@ -319,6 +319,8 @@ class RequestGoalOrder(GoalOrder):
 class ProblemGoalOrder(GoalOrder):
     """A unit's one Goal groups its canonical Todo assignments, not copied orders."""
 
+    StrikeLimit: ClassVar[int] = 2  # live strikes the commanded unit may take on one problem
+
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         raise ValueError("Complete each problem with its checked delivered commit.")
 

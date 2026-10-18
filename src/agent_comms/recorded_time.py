@@ -24,6 +24,10 @@ class EventTime(DeclaredFamily, affix="EventTime"):
     def require_recorded(self, label: str) -> None:
         raise ValueError(f"{label} requires a recorded time.")
 
+    def recorded_at(self, label: str) -> float:
+        """The recorded instant; an unrecorded time refuses like ``require_recorded``."""
+        raise ValueError(f"{label} requires a recorded time.")
+
     def require_deadline(self) -> None:
         self.require_recorded("An order deadline")
 
@@ -56,6 +60,9 @@ class RecordedEventTime(EventTime):
 
     def require_recorded(self, label: str) -> None:
         pass
+
+    def recorded_at(self, label: str) -> float:
+        return self.at
 
     def stamp(self, event: Event) -> Event:
         return replace(event, timestamp=self.at)

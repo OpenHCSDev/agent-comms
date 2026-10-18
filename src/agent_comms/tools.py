@@ -56,11 +56,13 @@ from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as e
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
-from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, Todo, TodoOperation
+from .todos import (CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, OrderProgress,
+                    PullRequests, StrikeReason, Todo, TodoOperation)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing, ToolCatalogResult
+from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
+from .cli_result import ToolCatalogResult
 from .tool_result import ToolResult
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
@@ -154,6 +156,7 @@ class TodoChanged(ToolResult):
 @dataclass(frozen=True)
 class TodoList(ToolResult):
     todos: tuple[Todo, ...]
+    progress: dict[str, OrderProgress] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -274,6 +277,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool
 ):
     description: ClassVar[str]
+    bus_effect: ClassVar[str] = "Changes the bus; call it only when the owner says to."
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
     action_order: ClassVar[int] = 0
@@ -335,9 +339,10 @@ class LiveOwnerTool:
 
 
 class ReadTool:
-    """A tool whose apply changes nothing on the bus; the claude.ai connector lists only these."""
+    """A tool whose apply changes nothing on the bus."""
 
     __slots__ = ()
+    bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -743,13 +748,28 @@ class CommsTodoTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsFireTool(ThreadToolRequest):
+    label = "Fire unit"
+    description = ("Release every open problem the unit holds in one operation, recording one "
+                   "plain reason on each; only their commander may invoke this tool.")
+    unit: str = tool_field("Unit thread to fire")
+    reason: StrikeReason = tool_field("What the unit did, plainly")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
+        return TodoList(comms.goals.fire(self.unit, self.reason, caller.name))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsTodoListTool(ThreadReadTool):
     label = "Read problems"
     description = "Read the commander's canonical Todo orders, deadlines, strikes and hunts."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
-        return TodoList(tuple(comms.goals.todos.for_commander(actor)))
+        listed = tuple(comms.goals.todos.for_commander(actor))
+        pulls, storage = PullRequests(), comms.registry.storage_rule
+        return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
+                                 for todo in listed if todo.state.open and todo.holder})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1181,7 +1201,7 @@ class ToolsCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
         caller = ToolCaller.from_actor(self.name)
-        return caller.catalog(ctx, tuple(tool_catalog()))
+        return caller.catalog(ctx, tuple(NativeRequestTools.catalog()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1204,10 +1224,6 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         json.dump(self.apply(ctx), output, indent=2)
         output.write("\n")
         return 0
-
-
-def tool_catalog() -> list[dict[str, object]]:
-    return [tool.schema() for tool in ToolRequest.members_with(ToolRequest)]
 
 
 def context_tool_catalog(context: str) -> list[dict[str, object]]:

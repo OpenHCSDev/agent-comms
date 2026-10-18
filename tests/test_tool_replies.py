@@ -1,5 +1,6 @@
 """Every declared tool's reply is the encoding of its declared result record."""
 import os
+from dataclasses import replace
 from typing import get_type_hints
 
 from agent_comms.change_report import FileLine
@@ -16,7 +17,7 @@ from agent_comms.tools import (
     CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
     CommsEditGoalTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
-    CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsPinChannelTool, CommsPinThreadTool,
+    CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsPinChannelTool, CommsPinThreadTool,
     CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
     CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool,
@@ -88,6 +89,11 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsProblemCloseTool, {
         "problem": "P1", "works": "The installed application now keeps the order across returns.",
         "artifact": str(comms.root / "installed-evidence")}, lead
+    yield CommsTodoCreateTool, {"owner": "worker", "order": FieldCodec.encode(CreateProblemGoalAction(
+        problem="P2", order=replace(order, id="order-P2"), request="request", deadline=RecordedEventTime(4000),
+        commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P2"))}, lead
+    yield CommsFireTool, {"unit": "worker",
+                          "reason": "The unit broke the release path twice and missed both of its deadlines."}, lead
     yield CommsTurnsTool, {"thread": "worker"}, lead
     yield CommsThreadsTool, {}, lead
     yield CommsThreadsTool, {}, nobody

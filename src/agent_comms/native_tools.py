@@ -32,13 +32,16 @@ class NativeExecutableTool(ToolDeclaration):
 
     @classmethod
     def from_call(cls, name: str, arguments: object, *, call_id: str):
-        cls._member_declarations()
         decoded = FieldCodec.decode(dict[str, object], arguments)
         return cls.field_value(name).create_call(call_id, decoded)
 
 
 class NativeRequestTools:
     """Core's existing CLI decodes and executes its declared request fields."""
+
+    @classmethod
+    def catalog(cls) -> list[dict[str, object]]:
+        return [tool.schema() for tool in ToolDeclaration.members_with(cls)]
 
     @classmethod
     def create_call(cls, call_id: str, arguments: dict[str, object]):

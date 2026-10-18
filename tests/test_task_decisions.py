@@ -16,7 +16,8 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.task_sources import Decision
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
-from agent_comms.tools import invoke_tool, tool_catalog
+from agent_comms.tools import invoke_tool
+from agent_comms.native_tools import NativeRequestTools
 from agent_comms.tool_caller import ThreadCaller
 from functools import partial
 
@@ -261,7 +262,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     from agent_comms.comms import Comms
 
     assert list(Comms(comms.root).bus.full_history_page().messages) == rows
-    schema = next(tool for tool in tool_catalog() if tool["name"] == "comms_decision")
+    schema = next(tool for tool in NativeRequestTools.catalog() if tool["name"] == "comms_decision")
     assert set(schema["parameters"]["required"]) == {"chosen", "rejected", "to"}
     assert "author" not in schema["parameters"]["properties"]
 
