@@ -1,4 +1,5 @@
 """Cursor identity and exclusive traversal, independent of message persistence."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -94,10 +95,14 @@ class PageTraversal(ABC):
         return self if current else type(self)()
 
     @abstractmethod
-    def offsets(self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int) -> PageOffsets: ...
+    def offsets(
+        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
+    ) -> PageOffsets: ...
 
     @abstractmethod
-    def opposite_offsets(self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int) -> PageOffsets: ...
+    def opposite_offsets(
+        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
+    ) -> PageOffsets: ...
 
     @staticmethod
     @abstractmethod
@@ -115,14 +120,20 @@ class OlderTraversal(PageTraversal):
     def source_indexes(self, start: int, count: int) -> range:
         return range(start, -1, -1)
 
-    def offsets(self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int) -> PageOffsets:
-        yield from scope.offsets(index, lower=None, upper=self.cursor, descending=True,
-                             before_offset=boundary)
+    def offsets(
+        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
+    ) -> PageOffsets:
+        yield from scope.offsets(
+            index, lower=None, upper=self.cursor, descending=True, before_offset=boundary
+        )
 
-    def opposite_offsets(self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int) -> PageOffsets:
+    def opposite_offsets(
+        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
+    ) -> PageOffsets:
         if self.cursor is not None:
-            yield from scope.offsets(index, lower=self.cursor - 1, upper=None,
-                                     descending=True, before_offset=boundary)
+            yield from scope.offsets(
+                index, lower=self.cursor - 1, upper=None, descending=True, before_offset=boundary
+            )
 
     append = staticmethod(deque["MessagePageRow"].appendleft)
 
@@ -138,11 +149,16 @@ class NewerTraversal(PageTraversal):
     def source_indexes(self, start: int, count: int) -> range:
         return range(start, count)
 
-    def offsets(self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int) -> PageOffsets:
-        yield from scope.offsets(index, lower=self.cursor, upper=None, descending=False,
-                             before_offset=boundary)
+    def offsets(
+        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
+    ) -> PageOffsets:
+        yield from scope.offsets(
+            index, lower=self.cursor, upper=None, descending=False, before_offset=boundary
+        )
 
-    def opposite_offsets(self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int) -> PageOffsets:
+    def opposite_offsets(
+        self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
+    ) -> PageOffsets:
         return OlderTraversal(self.cursor + 1).offsets(index, scope, boundary)
 
     append = staticmethod(deque["MessagePageRow"].append)
