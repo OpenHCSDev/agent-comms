@@ -11,7 +11,6 @@ implementation modules (``backend``, ``pi_commands``, ``pi_events``,
 
 from __future__ import annotations
 
-from .field_codec import FieldCodec
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -36,6 +35,7 @@ from .agent_backend import (
     TurnDelivery,
 )
 from .unstarted_runtime import UnstartedRuntime
+from .field_codec import FieldCodec
 from .native_pi import NativePiRpcLaunch
 from .native_transcript import NativeTranscript
 from .native_session_files import NativeSessionFiles
@@ -257,8 +257,6 @@ class PiNativeBackend(
 
     def arguments(self, thread: Thread) -> tuple[str, ...]:
         """Pi's command-line arguments for this thread's model and thinking level."""
-        from .pi_vocabulary import ThinkingLevel
-
         return self.agent_args.with_model(thread.model).with_thinking(
             thread.thinking_level
         ).argv
@@ -280,6 +278,7 @@ class PiNativeBackend(
             self.agent_bin,
             self.arguments(thread),
             worktree=thread.worktree,
+            root=self.comms.root,
             environment=environment,
             session_file=thread.runtime.read_key,
             observe=partial(self.observe, thread),

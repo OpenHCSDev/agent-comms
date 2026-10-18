@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
+from agent_comms.message_page import MessagePageRequest, OlderTraversal, PageBounds
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.read_basis import NamedViewer, ReadCursor
@@ -75,7 +76,7 @@ def test_bounded_page_marks_only_shown_messages(tmp_path):
     comms = prepared(tmp_path)
     for i in range(5):
         comms.messaging.send("alice", "#team", f"message {i}")
-    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name), limit=2)
+    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name), bounds=PageBounds(limit=2))
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path), mark=ReadThrough(page.newest_seq, page.display_scope)
     )
@@ -214,8 +215,9 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
         page = comms.views.channel_display_page(
             rng.choice(["#team", "#any"]),
             viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name),
-            limit=rng.randrange(1, 8),
-            before=rng.choice([None, 6, 10]),
+            bounds=PageBounds(
+                limit=rng.randrange(1, 8), traversal=OlderTraversal(rng.choice([None, 6, 10]))
+            ),
         )
         if page.messages:
             through = rng.choice(page.messages).seq
@@ -245,7 +247,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     for i in range(6):
         comms.messaging.send("alice", "#team", str(i))
     scope = AlternateMessages("alternating", None)
-    page = comms.bus.display_page(scope)
+    page = MessagePageRequest(scope).read(comms.bus.log)
     basis = comms.bus.reads.capture(
         viewer, page.messages, comms.registry.snapshot(), comms.bus.log.path
     )
@@ -273,7 +275,7 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
     comms = prepared(tmp_path)
     messages = [comms.messaging.send_message("alice", "#team", f"row {i}") for i in range(5)]
-    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name), limit=3)
+    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name), bounds=PageBounds(limit=3))
     scope = page.display_scope
     assert scope is not None and scope.displayed is not None
     # Requested sequences outside the original page cannot become read facts.
@@ -338,13 +340,13 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
             comms.channels.set_channel_any_mode("#team", rng.choice([True, False]))
         elif operation == "display":
             if rng.choice([True, False]):
-                page = comms.views.dm_display_page("alice", worktree=str(tmp_path), limit=3)
+                page = comms.views.dm_display_page("alice", worktree=str(tmp_path), bounds=PageBounds(limit=3))
                 basis = page.display_basis.displayed
                 kind, target = "dm", "alice"
                 proof = page.display_basis
             else:
                 target = rng.choice(["#team", "#any"])
-                page = comms.views.channel_display_page(target, viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name), limit=3)
+                page = comms.views.channel_display_page(target, viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name), bounds=PageBounds(limit=3))
                 basis = page.display_scope.displayed
                 kind, proof = "channel", page.display_scope
             selected = {m.seq for m in page.messages if rng.choice([True, False])}

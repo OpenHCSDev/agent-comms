@@ -416,7 +416,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
         assert reconnect_cursor.observation.cursor == current.observation.cursor
         assert await agent.inputs.drain_inbox(sid) == 0
     assert native.provider.posts == calls
-    assert agent.inputs.pending_turns == {}
+    assert not any(state.pending_turns for state in agent.inputs.drained.values())
     assert not (comms.root / "acks.json").exists()
 
 
@@ -454,7 +454,7 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(agent.sessions.config, "options", no_options)
     assert await agent.inputs.drain_inbox("beta") == 1
-    reply_turn = agent.inputs.wake_tasks["beta"]
+    reply_turn = agent.inputs.state("beta").wake_task
     await asyncio.wait_for(entered.wait(), timeout=5)
     comms.registry.unregister("beta")
     comms.registry.heartbeat("beta")
@@ -641,8 +641,8 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         async with asyncio.timeout(30):
             while (
                 native.provider.posts != 1
-                or agent.turns.turn_state(session).busy
-                or agent.inputs.backend_inboxes  # the reply turn retires its inbox after it stops being busy
+                or agent.turns.turn_state(session).active.phase.busy
+                or any(state.inbox for state in agent.inputs.drained.values())  # the reply turn retires its inbox after it stops being busy
             ):
                 await asyncio.sleep(0.01)
         assert native.provider.posts == 1
@@ -653,7 +653,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
             assert original.stage is FullNativeExecution
             assert original.require_context_proof().input_id == original.input_id
         assert comms.bus.log.messages_for_references((sent.reference,)) == (sent,)
-        assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes
+        assert not agent.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in agent.inputs.drained.values())
 
 
 async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, monkeypatch):
@@ -678,7 +678,7 @@ async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, m
             ).fetchone()[0]
             == 0
         )
-    assert agent.inputs.pending_turns == {}
+    assert not any(state.pending_turns for state in agent.inputs.drained.values())
 
 
 async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, monkeypatch):
@@ -739,7 +739,7 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     assert len(calls) == 1
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 1
-    assert agent.inputs.pending_turns == {}
+    assert not any(state.pending_turns for state in agent.inputs.drained.values())
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         rows = NativeRuntimeInput.select(store.session._connection)
         assert (

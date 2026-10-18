@@ -203,7 +203,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         data = await GetAvailableThinkingLevels().discover(
             self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root
         )
-        levels = [member.declared_name for member in data.levels]
+        levels = [member.require_name() for member in data.levels]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
 
     async def apply(

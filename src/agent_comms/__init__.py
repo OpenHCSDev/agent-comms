@@ -13,9 +13,9 @@ from .exporting import (
 from .historical_views import (
     HistoricalMessage,
     HistoricalThread,
-    HistoryCursor,
     HistorySource,
 )
+from .message_page import HistoryCursor
 from .importing import ImportLimits, ThreadImported, ImportSnapshot
 from .mentions import MentionQuery
 from .read_basis import Conversation, DisplayedConversation, HistoricalDisplay

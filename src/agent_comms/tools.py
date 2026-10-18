@@ -45,7 +45,7 @@ from .goal_actions import (
 from .goal_history import RecordedGoalRevision
 from .goal_waits import StandbyReview, StandbyReviewSummary
 from .input_attempt import UnresolvedInput
-from .goal_presentation import ThreadGoalExecution
+from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
 from .goals import Goal, OrderCheck
 from .message_reference import MessageReference
@@ -132,9 +132,8 @@ class GoalSet(ToolResult):
 
 
 @dataclass(frozen=True)
-class GoalProgress(ToolResult):
-    goal: Goal | None
-    goal_execution: ThreadGoalExecution
+class GoalProgress(ToolResult, GoalSnapshot):
+    execution: ThreadGoalExecution = field(metadata={"wire_name": "goal_execution"})
 
 
 @dataclass(frozen=True)
@@ -655,7 +654,7 @@ class CommsGoalTool(ThreadToolRequest):
             expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
         )
         comms.goals.update_goal(name, command, actor=ModelInvocable)
-        return GoalProgress(*comms.goals.goal_snapshot(name))
+        return GoalProgress.from_snapshot(comms.goals.goal_snapshot(name))
 
 
 @dataclass(frozen=True, kw_only=True)

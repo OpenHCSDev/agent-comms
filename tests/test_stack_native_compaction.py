@@ -313,8 +313,8 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
 
     owner.on_connect(Client())
     await owner.new_session(str(project))
-    owner.inputs.drain_tasks["project"].cancel()
-    await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
+    owner.inputs.state("project").drain_task.cancel()
+    await asyncio.gather(owner.inputs.state("project").drain_task, return_exceptions=True)
     comms.threads.attach_session((attachment_owner := comms.registry.require("project")), str(session), process=attachment_owner.process_identity)
     turn = asyncio.create_task(InitialInput.run(owner.inputs, "project", "project", "Reply OK."))
     try:

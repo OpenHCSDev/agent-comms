@@ -11,22 +11,48 @@ import pytest
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.messages import QuestionKind
-from agent_comms.launch_runtime import CallingThreadUnavailable, RestartEnvironment
+from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.thread_management import ForkSpec
+from agent_comms.thread_management import ForkSpec, NewThreadSpec
 from agent_comms.threads import Thread
+from agent_comms.message_page import PageBounds
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
-    assert RestartEnvironment.calling_thread(
-        {"AGENT_COMMS_THREAD": "owner"}
-    ) == "owner"
+    assert ThreadLaunch.current({"AGENT_COMMS_THREAD": "owner"}).name == "owner"
     with pytest.raises(CallingThreadUnavailable, match="AGENT_COMMS_THREAD"):
-        RestartEnvironment.calling_thread({})
-    assert not RestartEnvironment.called_by("owner", lambda caller: caller, environment={})
+        ThreadLaunch.current({})
+    assert not ThreadLaunch.called_by("owner", lambda caller: caller, environment={})
+
+
+@pytest.mark.parametrize("task", ["", "first input"])
+def test_owner_launch_carries_startup_input_exactly_when_given_and_worker_takes_it_once(
+    comms, tmp_path, monkeypatch, task
+):
+    launched = []
+    launch = ParentedProcess.launch
+
+    def record(command, *, env, **kwargs):
+        launched.append(dict(env))
+        return launch((sys.executable, "-c", ""), env=env, **kwargs)
+
+    monkeypatch.setattr(ParentedProcess, "launch", record)
+    # An inherited key belongs to another launch and never reaches this child.
+    monkeypatch.setenv("AGENT_COMMS_STARTUP_INPUT_KEY", "inherited")
+    comms.threads.create(NewThreadSpec.from_task(
+        name="child", project=str(tmp_path), model="test/model",
+        thinking_level=HighThinkingLevel, task=task,
+    ))
+    child, = launched
+    key = ThreadLaunch.current(child).startup_input
+    assert ("AGENT_COMMS_STARTUP_INPUT_KEY" in child) == bool(task)
+    assert key != "inherited" and (key is not None) == bool(task)
+    assert ThreadLaunch.take_startup_input(child) == key
+    assert "AGENT_COMMS_STARTUP_INPUT_KEY" not in child
+    assert ThreadLaunch.take_startup_input(child) is None
 
 
 class TestMessaging:
@@ -93,7 +119,7 @@ class TestMessaging:
         for index in range(5):
             wired.messaging.send("PR111", "#all", f"m{index}")
 
-        page = wired.views.channel_history_page("#all", limit=2)
+        page = wired.views.channel_history_page("#all", PageBounds(limit=2))
         assert [message.body for message in page.messages] == ["m3", "m4"]
         assert page.has_older
         assert wired.bus.log.latest_sequence() == 5

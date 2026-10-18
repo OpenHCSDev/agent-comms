@@ -50,7 +50,7 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
 async def test_queue_exact_ids_restore_snapshot_and_claim_change(tmp_path, monkeypatch):
     comms, agent, created, generation = _owner(tmp_path)
     first, second = "a" * 32, "b" * 32
-    agent.inputs.queued_inputs["beta"] = {
+    agent.inputs.state("beta").queued = {
         key: QueuedInput(
             "same text",
             True,
@@ -73,7 +73,7 @@ async def test_queue_exact_ids_restore_snapshot_and_claim_change(tmp_path, monke
         updates.extend(decode_updates(update.field_meta))
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
-    item = agent.inputs.queued_inputs["beta"][first]
+    item = agent.inputs.state("beta").queued[first]
     with ExitStack() as ownership:
         agent.inputs.dispositions.reserve_originals(ReservedInput(
             item.key, None, "beta", generation, "beta", item.text,
@@ -96,7 +96,7 @@ async def test_queue_exact_ids_restore_snapshot_and_claim_change(tmp_path, monke
     queued = updates[-1]
     assert queued.revision > started.revision
     assert queued.projection.items == (QueueItem(second, "same text"),)
-    agent.inputs.restored_inputs["beta"] = {second: agent.inputs.queued_inputs["beta"].pop(second)}
+    agent.inputs.state("beta").restored = {second: agent.inputs.state("beta").queued.pop(second)}
     await agent.inputs.emit_queue_state("beta")
     restored = updates[-1]
     assert restored.projection.items == ()
@@ -110,13 +110,13 @@ async def test_queue_exact_ids_restore_snapshot_and_claim_change(tmp_path, monke
     current = await agent.inputs.queue_state("beta")
     assert current.scope.claimed_generation > generation
     assert current.projection.items == current.projection.restored == ()
-    assert second in agent.inputs.restored_inputs["beta"]
+    assert second in agent.inputs.state("beta").restored
 
 
 async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
     comms, agent, _, _ = _owner(tmp_path)
     comms.agents.begin_turn("beta", "active", "Held native fixture")
-    inbox = agent.inputs.backend_inboxes["beta"] = asyncio.Queue()
+    inbox = agent.inputs.state("beta").inbox = asyncio.Queue()
     response = await agent.prompt(
         "beta",
         [{"type": "text", "text": "valid task"}],
@@ -126,7 +126,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     assert any(
         isinstance(f, InputDeliveryChangedUpdate) for f in decode_updates(response.field_meta)
     )
-    assert exact in agent.inputs.queued_inputs["beta"]
+    assert exact in agent.inputs.state("beta").queued
     assert stored_inputs(agent.inputs.dispositions.root).rows["acp:" + exact].declared_name == "reserved"
     state = next(
         f
@@ -135,13 +135,13 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     )
     assert state.scope.claim_scope.incarnation.name == "beta"
     assert isinstance(state.projection, UnavailableQueueProjection)
-    assert exact in agent.inputs.queued_inputs["beta"]
+    assert exact in agent.inputs.state("beta").queued
 
 
 async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_replay(tmp_path):
     comms, agent, _, _ = _owner(tmp_path)
     comms.agents.begin_turn("beta", "active", "Held native fixture")
-    inbox = agent.inputs.backend_inboxes["beta"] = asyncio.Queue()
+    inbox = agent.inputs.state("beta").inbox = asyncio.Queue()
     requests = [QueuePromptRequest("same"), SteerPromptRequest("same")]
     for request in requests:
         response = await agent.prompt(
@@ -166,7 +166,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     cleared = receipts.transition(tuple(sources), lambda row: row.clear_unbound())
     assert all(row.public_status == "cleared" for row in cleared.rows.values())
     await agent.inputs.clear_queued_inputs("beta")
-    assert not agent.inputs.queued_inputs["beta"]
+    assert not agent.inputs.state("beta").queued
     assert agent.inputs.input_keys("beta") == sources
     assert stored_inputs(agent.inputs.dispositions.root) == cleared
     await agent.inputs.input_refused("beta", requests[0].input_id)
@@ -178,14 +178,14 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
 async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tmp_path, user_text):
     comms, agent, _, _ = _owner(tmp_path)
     comms.agents.begin_turn("beta", "active", "Held native fixture")
-    inbox = agent.inputs.backend_inboxes["beta"] = asyncio.Queue()
+    inbox = agent.inputs.state("beta").inbox = asyncio.Queue()
     metadata = encode_request(QueuePromptRequest("valid", True))
     metadata["agentComms"]["request"]["user_text"] = user_text
     with pytest.raises(RequestError) as error:
         await agent.prompt("beta", [{"type": "text", "text": "valid task"}], field_meta=metadata)
     assert error.value.code == -32602
     assert inbox.empty()
-    assert not agent.inputs.queued_inputs.get("beta")
+    assert not agent.inputs.state("beta").queued
     assert not stored_inputs(agent.inputs.dispositions.root).rows
 
 
@@ -198,7 +198,7 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
 )
 async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path, rows):
     _, agent, created, generation = _owner(tmp_path)
-    agent.inputs.queued_inputs["beta"] = {
+    agent.inputs.state("beta").queued = {
         key: QueuedInput(
             text,
             True,
@@ -211,7 +211,7 @@ async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path
     state = await agent.inputs.queue_state("beta")
     assert state.scope.matches_session("beta")
     assert isinstance(state.projection, UnavailableQueueProjection)
-    assert set(agent.inputs.queued_inputs["beta"]) == set(rows)
+    assert set(agent.inputs.state("beta").queued) == set(rows)
 
 
 async def test_alias_maps_only_attachment_session_id(tmp_path):
@@ -239,3 +239,16 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
         assert scope.relation(replace(scope, claim_scope=replace(original, claimed_generation=6))).older
     assert scopes[1].relation(replace(scopes[1], wire_root_id="b" * 32)).foreign
     assert original != renamed  # Routing identity equality is deliberately unchanged.
+
+
+async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
+    comms, agent, _created, _generation = _owner(tmp_path)
+    await agent.inputs.queue_state("beta")
+    agent.inputs.bind_native_turn("beta", comms.registry.require("beta"))
+    agent.inputs.ensure_live_drain("beta")
+    drained = agent.inputs.drained["beta"]
+    drain = drained.drain_task
+    assert drained.queue_revision == 1 and drained.inbox is not None and drain is not None
+    await agent.shutdown()
+    assert "beta" not in agent.inputs.drained
+    assert drain.done()

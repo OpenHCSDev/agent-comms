@@ -9,15 +9,18 @@ from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .launch_runtime import LaunchRuntime
-
-if TYPE_CHECKING:
-    from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import (
+    NoThinkingOverride,
+    ThinkingLevel,
+    ThinkingLevelField,
+    ThinkingLevelValue,
+)
 
 
 @dataclass(frozen=True)
@@ -51,21 +54,31 @@ class OptionArgument(NativeArgument):
     def consume(cls, inline: str | None, arguments: Iterator[str]) -> OptionArgument: ...
 
 
-class NamedOption:
+class NamedOption(OptionArgument):
     @classmethod
     def flag(cls) -> str:
-        return "--" + cls.declared_name.replace("_", "-")
+        return "--" + cls.require_name().replace("_", "-")
 
 
-@dataclass(frozen=True)
-class ValueArgument(OptionArgument):
-    value: str
-
+class ValueOption(OptionArgument):
     @classmethod
-    def consume(cls, inline: str | None, arguments: Iterator[str]) -> ValueArgument:
+    def consume(cls, inline: str | None, arguments: Iterator[str]) -> ValueOption:
         value = inline if inline is not None else next(arguments, None)
         if value is None:
             raise ValueError(f"{cls.flag()} requires a value")
+        return cls.from_text(value)
+
+    @classmethod
+    @abstractmethod
+    def from_text(cls, value: str) -> ValueOption: ...
+
+
+@dataclass(frozen=True)
+class ValueArgument(ValueOption):
+    value: str
+
+    @classmethod
+    def from_text(cls, value: str) -> ValueArgument:
         return cls(value)
 
     @property
@@ -114,8 +127,17 @@ class SelectedModel:
         return tuple(token for argument in self.arguments for token in argument.argv)
 
 
-class ThinkingArgument(NamedOption, ValueArgument):
-    pass
+@dataclass(frozen=True)
+class ThinkingArgument(NamedOption, ValueOption):
+    level: ThinkingLevelField
+
+    @classmethod
+    def from_text(cls, value: str) -> ThinkingArgument:
+        return cls(ThinkingLevelValue.decode(value))
+
+    @property
+    def argv(self) -> tuple[str, ...]:
+        return self.flag(), ThinkingLevelValue.encode(self.level)
 
 
 class SessionSelectionArgument:
@@ -260,8 +282,9 @@ class NativeArguments:
         return SelectedModel(provider, selected.removeprefix(provider + "/")).qualified
 
     @property
-    def thinking(self) -> str | None:
-        return self.value(ThinkingArgument)
+    def thinking(self) -> type[ThinkingLevel]:
+        return next((entry.level for entry in reversed(self.entries)
+                     if isinstance(entry, ThinkingArgument)), NoThinkingOverride)
 
     def replace(self, member: type[NativeArgument], *entries: NativeArgument) -> NativeArguments:
         return NativeArguments(
@@ -276,7 +299,7 @@ class NativeArguments:
         )
 
     def with_thinking(self, selected: type[ThinkingLevel]) -> NativeArguments:
-        return self.replace(ThinkingArgument, *selected.native_arguments())
+        return self.replace(ThinkingArgument, *selected.native_arguments(ThinkingArgument))
 
     def rpc(self) -> tuple[str, ...]:
         for entry in self.entries:

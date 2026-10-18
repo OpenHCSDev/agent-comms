@@ -4,6 +4,8 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.turn_lease import NoTurn
+
 from agent_comms import agent_events as ae
 from agent_comms import ordinary_turn_rules as rules
 from agent_comms.reservation_rules import ReservationViolationError
@@ -57,7 +59,7 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
             rules.OrdinaryWorktreeRule: changed(
                 replace(current, worktree=str(tmp_path / "different"))
             ),
-            rules.OrdinaryTurnRule: changed(replace(current, active_turn=None)),
+            rules.OrdinaryTurnRule: changed(replace(current, active_turn=NoTurn())),
         }
         for declaration, invalid in cases.items():
             with pytest.raises(ReservationViolationError) as error:

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channel_targets import CommandTarget
+from .coordination_errors import DMScopeChanged
 from .locked_store import LockedStore, RootFile
 from .private_path import FileIdentity, FileRevision, ObservedPath
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation, ReadCursor
@@ -100,9 +101,9 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
     def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:
         if displayed.bus_identity != self.bus_identity(self.path.with_name("bus.jsonl")):
-            raise ValueError("Display bus changed; refresh the displayed page.")
+            raise DMScopeChanged("Display bus changed; refresh the displayed page.")
         if viewer != displayed.viewer:
-            raise ValueError("Display belongs to a different viewer.")
+            raise DMScopeChanged("Display belongs to a different viewer.")
 
         def advance(document: ReadDocument) -> ReadDocument:
             messages = (

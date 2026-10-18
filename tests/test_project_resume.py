@@ -21,6 +21,7 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from agent_comms.turn_phase import CancellingPhase
 from agent_comms.schedule_rules import ProjectResumeCheck, WakeScheduleCheck
+from agent_comms.input_drain import DrainedSession
 from native_backend_fixture import native_backend_fixture
 
 
@@ -75,28 +76,33 @@ async def test_selected_wake_queues_resume_before_retiring_its_task(tmp_path):
             work.close()
             return current
 
+    drained = DrainedSession(wake_task=current)
+
     class Inputs:
         closing = False
         background_wakes_disabled = False
-        backend_inboxes = {}
-        pending_turns = {}
-        wake_tasks = {"owner": current}
         sessions = SimpleNamespace(require=lambda _session: "owner")
         runtime = Runtime()
 
         async def _own_entry(self, _session):
             return comms.registry.entry("owner")
 
+        def state(self, _session):
+            return drained
+
+        def register_wake(self, _session, task):
+            drained.wake_task = task
+
     inputs = Inputs()
     turns = SimpleNamespace(turn_tasks={})
     await ProjectResumeCheck(
         session_id="owner", inputs=inputs, turns=turns,
     ).schedule()
-    assert len(inputs.pending_turns["owner"]) == 1
-    assert str(new) in inputs.pending_turns["owner"][0].prompt
+    assert len(inputs.state("owner").pending_turns) == 1
+    assert str(new) in inputs.state("owner").pending_turns[0].prompt
     assert not launched  # The selected wake still owns this session.
 
-    inputs.wake_tasks.pop("owner")
+    drained.wake_task = None
     WakeScheduleCheck(session_id="owner", inputs=inputs).schedule()
     assert len(launched) == 1
 
@@ -157,7 +163,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
 
                 async def wait(self):
                     if self.changed is None:
-                        assert comms.registry.require(session).executing
+                        assert comms.registry.require(session).active_turn.executing
                         self.changed = await Coordination.run_worker(change_project_and_send_again)
                     else:
                         native.provider.text = reply(sent[1])
@@ -169,13 +175,13 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
             try:
                 await agent.inputs.drain_inbox(session)
                 async with asyncio.timeout(60):
-                    while native.provider.posts < 2 or agent.turns.turn_state(session).busy:
+                    while native.provider.posts < 2 or agent.turns.turn_state(session).active.phase.busy:
                         await asyncio.sleep(0.01)
             finally:
                 native.provider.response_gate = None
             assert gate.changed.changed
             thread = comms.registry.require(session)
-            assert thread.worktree == str(second) and not thread.executing
+            assert thread.worktree == str(second) and not thread.active_turn.executing
             # The turn that changed project recorded its result: this owner's
             # coordination pointer is free, so later messages can start turns.
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:

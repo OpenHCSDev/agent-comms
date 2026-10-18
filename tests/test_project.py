@@ -157,7 +157,7 @@ async def test_saved_native_identity_changes_publish_one_complete_update(tmp_pat
                 assert agent.sessions.worktrees[session_id] == str(new)
                 assert await agent.sessions.sync_identity(session_id) == renamed
                 assert len(sender.updates) == 1
-                assert agent._comms.registry.require(session_id).active_turn is None
+                assert not agent._comms.registry.require(session_id).active_turn.executing
             finally:
                 await proxy.close()
                 await attached.shutdown()
@@ -189,7 +189,7 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
         await agent.cancel(session)
         assert (await prompt).stop_reason == "cancelled"
         assert comms.registry.require(session).worktree == str(new)
-        assert not agent.inputs.pending_turns.get(session)
+        assert not agent.inputs.state(session).pending_turns
     finally:
         await agent.shutdown()
 

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldRepresentation
-from .native_arguments import ThinkingArgument
 
 if TYPE_CHECKING:
     from .backend import TurnSession
+    from .native_arguments import ThinkingArgument
 
 
 class PiStopReason(DeclaredFamily, affix="StopReason"):
@@ -203,19 +203,15 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
 
     @classmethod
-    def native_arguments(cls):
-        return (ThinkingArgument(FieldCodec.encode(cls)),)
+    def native_arguments(cls, argument: type[ThinkingArgument]) -> tuple[ThinkingArgument, ...]:
+        return (argument(cls),)
 
     @classmethod
-    def launch_arguments(cls):
-        return tuple(token for argument in cls.native_arguments() for token in argument.argv)
-
-    @classmethod
-    def applied(cls, current):
+    def applied(cls, current: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return cls
 
     @classmethod
-    def observed(cls, level):
+    def observed(cls, level: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return cls
 
 
@@ -223,15 +219,15 @@ class NoThinkingOverride(ThinkingLevel):
     declared_name = None
 
     @classmethod
-    def native_arguments(cls):
+    def native_arguments(cls, argument: type[ThinkingArgument]) -> tuple[ThinkingArgument, ...]:
         return ()
 
     @classmethod
-    def applied(cls, current):
+    def applied(cls, current: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return current
 
     @classmethod
-    def observed(cls, level):
+    def observed(cls, level: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return level
 
 
@@ -239,15 +235,17 @@ class ThinkingLevelValue(FieldRepresentation):
     accepts_null = True
 
     @classmethod
-    def decode(cls, value):
-        return NoThinkingOverride if value is None else ThinkingLevel.decode(FieldCodec.decode(str, value))
+    def decode(cls, value: object) -> type[ThinkingLevel]:
+        if value is None:
+            return NoThinkingOverride
+        return ThinkingLevel.decode(FieldCodec.decode(str, value))
 
     @classmethod
-    def encode(cls, value):
+    def encode(cls, value: object) -> object:
         return FieldCodec.encode(value)
 
     @classmethod
-    def schema(cls):
+    def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(type[ThinkingLevel] | None)
 
 

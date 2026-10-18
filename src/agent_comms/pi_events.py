@@ -7,7 +7,6 @@ from collections.abc import Callable
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
-from pydantic import JsonValue
 
 from . import agent_events as events
 from . import turn_phase as phases
@@ -64,7 +63,7 @@ class PiEvent(PiPayload, DeclaredFamily):
     @classmethod
     def wire_kind(cls) -> str:
         """The Pi ``type`` this member converts."""
-        return cls.declared_name
+        return cls.require_name()
 
     @classmethod
     def normalize_field(cls, target, key, value, record):
@@ -502,7 +501,7 @@ class ExtensionUiRequest(NativePiEvent):
 
     @classmethod
     def wire_kind(cls) -> str:
-        return ExtensionUiRequest.declared_name
+        return ExtensionUiRequest.require_name()
 
     @classmethod
     def wire_case(cls, wire):
@@ -875,7 +874,7 @@ class ToolExecutionEnd(NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPha
 class ToolExecutionStart(NativePiEvent, DurablePiEvent, starts=phases.ToolRunningPhase):
     accepts_prompt = True
 
-    args: dict[str, JsonValue] = field(default_factory=dict, metadata={"wire_name": "args", "wire_nonnull": True})
+    args: object = field(default_factory=dict, metadata={"wire_name": "args"})
     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 

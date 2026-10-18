@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -50,7 +50,7 @@ class TurnWait(DeclaredFamily, affix="Wait"):
         return max(0.0, self.budget - self.elapsed)
 
     @contextmanager
-    def charge(self, clock: Callable[[], float]):
+    def charge(self, clock: Callable[[], float]) -> Iterator[None]:
         started_at = clock()
         remaining = max(0.0, self.budget - self.elapsed)
         try:
@@ -153,11 +153,14 @@ class ModelWait(TurnWait):
             yield event
 
 
+DEFAULT_MODEL_WAIT = ModelWait()
+
+
 class UnchargedWait:
     """Polling and unbounded operations do not consume a progress budget."""
 
     @contextmanager
-    def charge(self, clock: Callable[[], float]):
+    def charge(self, clock: Callable[[], float]) -> Iterator[None]:
         yield
 
 

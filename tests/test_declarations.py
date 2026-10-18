@@ -24,6 +24,7 @@ from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread, current_thread
+from agent_comms.message_page import OlderTraversal, PageBounds
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -202,7 +203,7 @@ class TestRegistration:
             registry.lease_live_turn_with_generation(
                 expected, "new-turn", expected_owner_generation=claimed_generation
             )
-        assert registry.require("a").active_turn is None
+        assert not registry.require("a").active_turn.executing
 
     def test_owner_claim_survives_session_metadata_and_rotates_on_restart(
         self, tmp_path: Path
@@ -248,7 +249,7 @@ class TestRegistration:
         assert reopened.require("pr17").name == "agent-comms-ux"
         assert reopened.require("agent-comms-ux").created_at == original.created_at
         assert reopened.require("agent-comms-ux").goal == original.goal
-        assert reopened.require("agent-comms-ux").active_turn is not None
+        assert reopened.require("agent-comms-ux").active_turn.executing
         assert reopened.require("agent-comms-ux").active_turn.id == "goal-turn"
         assert reopened.require("child").parent == "agent-comms-ux"
         assert snapshot.claimed_generations["agent-comms-ux"] == claim_scope
@@ -274,7 +275,7 @@ class TestRegistration:
         turn, _ = registry.lease_live_turn_with_generation(
             owner, "mine", expected_owner_generation=claimed_generation
         )
-        assert turn.active_turn is not None and turn.active_turn.id == "mine"
+        assert turn.active_turn.executing and turn.active_turn.id == "mine"
         assert registry.release_turn(turn.turn_lease)[0]
         assert not registry.release_turn(turn.turn_lease)[0]
         assert "owner_epoch" not in owner.to_wire()
@@ -317,7 +318,7 @@ class TestRegistration:
         with pytest.raises(RelationViolationError, match="stopped or unavailable"):
             comms.agents.begin_turn("a", "revived")
         assert comms.registry.status("a") == StoppedThreadStatus()
-        assert comms.registry.require("a").active_turn is None
+        assert not comms.registry.require("a").active_turn.executing
 
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
@@ -533,9 +534,9 @@ class TestRegistration:
         )
         registry.rename("b", "c")
         assert not registry.release_turn(replace(leased.turn_lease, turn_id="other"))[0]
-        assert registry.require("c").active_turn is not None
+        assert registry.require("c").active_turn.executing
         assert registry.release_turn(leased.turn_lease)[0]
-        assert registry.require("c").active_turn is None
+        assert not registry.require("c").active_turn.executing
 
 
     def test_deleting_thread_cannot_be_revived(self, tmp_path: Path):
@@ -607,9 +608,9 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
     assert list(reopened.views.full_history_page().messages) == messages
     reopened.registry.rename("a", "renamed")
     monkeypatch.setattr(reopened.bus.log, "full_history_snapshot", lambda: pytest.fail("full scan"))
-    newest = reopened.bus.dm_history_page("renamed", "b", limit=1)
+    newest = reopened.bus.dm_history_page("renamed", "b", PageBounds(limit=1))
     assert [row.seq for row in newest.messages] == [2]
-    older = reopened.bus.dm_history_page("renamed", "b", before=2, max_bytes=1)
+    older = reopened.bus.dm_history_page("renamed", "b", PageBounds(OlderTraversal(2), max_bytes=1))
     assert [row.seq for row in older.messages] == [1]
     assert [row.seq for row in reopened.bus.inbox("b")] == [1, 3]
     unread = reopened.bus.inbox("b")

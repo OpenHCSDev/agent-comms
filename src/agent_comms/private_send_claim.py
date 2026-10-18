@@ -6,12 +6,9 @@ or commit never becomes a fresh send attempt.
 
 from __future__ import annotations
 
-from .native_arguments import SelectedModel
-
 import asyncio
-import sqlite3
 import threading
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import partial
@@ -21,28 +18,36 @@ from typing import TYPE_CHECKING
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
-from .diagnostics import PublicationMeasurements, record_acquisition_progress, record_request_progress
+from .diagnostics import (
+    PublicationMeasurements,
+    record_acquisition_progress,
+    record_request_progress,
+)
+from .following_inputs import FollowingInputs
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
+from .native_arguments import SelectedModel
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptBoundary, send_fenced_prompt
-from .native_startup import NativeStartup
-from .pi_vocabulary import ThinkingLevel
 from .native_session_reopen import NativeSessionIdentity
+from .native_startup import NativeStartup
+from .native_tool_call import NativeToolMode
 from .text_digest import TextDigest
-from .following_inputs import FollowingInputs
-from .tracked_turn import NativeObserver, NoObserver, TrackedTurnSession
-from .native_tool_call import NativeToolMode, NoNativeTools
+from .tracked_turn import (
+    NO_FOLLOWING_INPUTS,
+    NO_NATIVE_OBSERVER,
+    NO_NATIVE_TOOLS,
+    NativeObserver,
+    TrackedTurnSession,
+)
 from .turn_context import RenderedInput
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent
-    from .native_attestation import ObservedAttestation
-    from .pi_events import PiEvent
-    from .selected_session import SelectedSession
+    from .coordinated_runtime import SelectedExecution
     from .selected_participant import SelectedParticipant
+    from .selected_session import SelectedSession
 from .private_registry_guard import _require_no_private_owner_rename
 from .private_send_stage import NativeSendStage
 
@@ -136,12 +141,12 @@ class PrivateSendClaim(PromptBoundary):
 
     async def execute(
         self,
-        execution,
+        execution: SelectedExecution,
         *,
         model: SelectedModel,
-        selected_tool_mode: NativeToolMode = NoNativeTools(),
-        observe_event: NativeObserver = NoObserver(),
-        following: FollowingInputs = FollowingInputs(),
+        selected_tool_mode: NativeToolMode = NO_NATIVE_TOOLS,
+        observe_event: NativeObserver = NO_NATIVE_OBSERVER,
+        following: FollowingInputs = NO_FOLLOWING_INPUTS,
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
 
@@ -177,11 +182,11 @@ class PrivateSendClaim(PromptBoundary):
                 following=following,
             )
         except NativePiTerminalFailure as error:
-            def settle(store):
-                self.verify(store, error.context)
+            def settle(store: Coordination, terminal: NativePiTerminalFailure = error):
+                self.verify(store, terminal.context)
                 return self.stage.fail_terminal(
                     store, self.participant, self.input_id, self.token_digest,
-                    error.context, error.failure,
+                    terminal.context, terminal.failure,
                 )
 
             settlement = await Coordination.run_async(self.store_path, settle)
@@ -257,10 +262,12 @@ class PrivateSendClaim(PromptBoundary):
             # records. No payload byte is
             # eligible until all of that retirement has returned successfully.
 
-    async def send_prompt(self, turn) -> None:
+    async def send_prompt(self, turn: TrackedTurnSession) -> None:
+        stdin = turn.native.proc.stdin
+        assert stdin is not None
         with turn.startup.measurements.operation("prompt_writer_join"):
             await send_fenced_prompt(
-                turn.native.proc.stdin, turn.native.reader.encode(turn.command),
+                stdin, turn.native.reader.encode(turn.command),
                 partial(self.prompt_boundary, turn), measurements=turn.startup.measurements,
             )
 

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from .channel_targets import CommandTarget
+from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .private_path import FileRevision
@@ -221,11 +222,11 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 if TYPE_CHECKING:
     from .historical_views import HistoryArchive, HistorySource
     from .presentation import BusPresentation
-    from .bus_page_index import BusPageRow
     from .channels import Channel
     from .message_bus import MessageBus
-    from .message_page import MessagePage
+    from .message_page import MessagePage, PageBounds
     from .messages import Message
+    from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
@@ -329,11 +330,11 @@ class DisplayBasis:
             or bus_identity != self.bus_identity
             or any(not item.conversation.current(snapshot) for item in self.conversations)
         ):
-            raise ValueError("Display incarnation changed; refresh the displayed page.")
+            raise DMScopeChanged("Display incarnation changed; refresh the displayed page.")
 
 
 @dataclass(frozen=True, slots=True)
-class DMDisplayBasis:
+class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
     """Immutable identity/scope witness for one fetched human DM page.
 
     A page fetch is not proof that a UI painted it. The client must supply
@@ -349,8 +350,6 @@ class DMDisplayBasis:
     peer_identity: ThreadIncarnation
     peer_names: frozenset[str]
     bus_identity: tuple[int, int] | None
-    newest_seq: int | None
-    older_unread: bool
     displayed: DisplayBasis
 
     @classmethod
@@ -363,10 +362,7 @@ class DMDisplayBasis:
         peer: str,
         *,
         worktree: str,
-        before: int | None = None,
-        after: int | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
+        bounds: PageBounds,
     ) -> MessagePage:
         """Fetch a bounded human DM page and its immutable identity/read basis.
 
@@ -385,21 +381,12 @@ class DMDisplayBasis:
             bus_identity = bus.reads.bus_identity(bus.log.path)
         # Native input writes use this same wire lock. Scoped page/read queries
         # use opened source snapshots, not live input permission.
-        page = bus.conversation_page(
-            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
-        )
-        older_unread = False
-        if page.has_older and page.messages:
-            seen = bus.reads.cursor(viewer_name, snapshot)
-            older_unread = bus.conversation_older_unread(
-                scope, before=page.messages[0].seq, seen=seen
-            )
+        page = bounds.conversation(scope).read(bus.log)
         with _store_lock(root / "wire", mode=SharedLock()), registry.store.reading() as document:
-            # Read progress is not page identity. It only adds seen messages
-            # while these incarnations live; an older-unread result can become
-            # conservative, but another view cannot invalidate this page.
+            displayed = bus.reads.capture(viewer_name, page.messages, snapshot, bus.log.path)
+            kind = CoveredDMDisplayBasis if displayed.message_count else EmptyDMDisplayBasis
             root_info = root.stat()
-            basis = cls(
+            basis = kind(
                 root=str(root.resolve()),
                 root_identity=(root_info.st_dev, root_info.st_ino),
                 worktree=str(Path(worktree).resolve()),
@@ -409,9 +396,7 @@ class DMDisplayBasis:
                 peer_identity=peer_thread.incarnation,
                 peer_names=peer_names,
                 bus_identity=bus_identity,
-                newest_seq=page.newest_seq,
-                older_unread=older_unread,
-                displayed=bus.reads.capture(viewer_name, page.messages, snapshot, bus.log.path),
+                displayed=displayed,
             )
             basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))
             return replace(page, display_basis=basis)
@@ -469,14 +454,13 @@ class DMDisplayBasis:
                 snapshot,
                 bus.reads.bus_identity(bus.log.path),
             )
-            bus.reads.mark_displayed(self.viewer, self.displayed.through(through))
+            self.mark(bus.reads, through)
 
-    def accepts_tail(self, through: int) -> bool:
-        return (
-            self.newest_seq is not None
-            and not self.older_unread
-            and 0 <= through <= self.newest_seq
-        )
+    @abstractmethod
+    def mark(self, reads: ReadLedger, through: int) -> None: ...
+
+    @abstractmethod
+    def validate_tail(self, through: int) -> None: ...
 
     def validate_for(
         self,
@@ -491,11 +475,12 @@ class DMDisplayBasis:
             str(root.resolve()),
             str(Path(worktree).resolve()),
             peer,
-        ) or not self.accepts_tail(through):
-            raise ValueError("Painted DM read does not match a contiguous displayed page.")
+        ):
+            raise DMScopeChanged("Painted DM read belongs to a different root, worktree or peer.")
+        self.validate_tail(through)
         info = root.stat()
         if (info.st_dev, info.st_ino) != self.root_identity:
-            raise ValueError("DM root was replaced; refresh the page.")
+            raise DMScopeChanged("DM root was replaced; refresh the page.")
         self.validate_identity(snapshot, bus_identity)
 
     def validate_identity(
@@ -513,17 +498,41 @@ class DMDisplayBasis:
             target = snapshot.participant(self.requested_peer)
             scope = DMDisplayScope.capture_human(self.viewer, self.requested_peer, snapshot)
         except (KeyError, StopIteration, ValueError, UnregisteredThreadError) as error:
-            raise ValueError("DM viewer/peer incarnation changed; refresh the page.") from error
+            raise DMScopeChanged("DM viewer/peer incarnation changed; refresh the page.") from error
         if (
             selected.incarnation != self.viewer_identity
             or (viewer.incarnation, target.incarnation)
             != (self.viewer_identity, self.peer_identity)
             or scope != DMDisplayScope(self.viewer_names, self.peer_names)
         ):
-            raise ValueError("DM viewer/peer incarnation changed; refresh the page.")
+            raise DMScopeChanged("DM viewer/peer incarnation changed; refresh the page.")
         if bus_identity != self.bus_identity:
-            raise ValueError("DM bus was replaced; refresh the page.")
+            raise DMScopeChanged("DM bus was replaced; refresh the page.")
         self.displayed.validate(self.viewer, snapshot, bus_identity)
+
+
+class CoveredDMDisplayBasis(DMDisplayBasis):
+    """Only fetched references become read; omitted older messages stay unread."""
+
+    def validate_tail(self, through: int) -> None:
+        newest = max(
+            sequence for item in self.displayed.conversations for sequence in item.sequences
+        )
+        if through > newest:
+            raise DMPaintedBoundChanged()
+
+    def mark(self, reads: ReadLedger, through: int) -> None:
+        reads.mark_displayed(self.viewer, self.displayed.through(through))
+
+
+class EmptyDMDisplayBasis(DMDisplayBasis):
+    """An empty range validates its identity but acknowledges nothing."""
+
+    def validate_tail(self, through: int) -> None:
+        pass
+
+    def mark(self, reads: ReadLedger, through: int) -> None:
+        pass
 
 
 class MessageDisplayScope(ABC):
@@ -563,12 +572,6 @@ class DMDisplayScope(MessageDisplayScope):
         if first.incarnation == second.incarnation:
             raise ValueError("DM display identity changed; refresh the page.")
         return cls.capture(first.name, second.name, snapshot)
-
-    def inbound(self, message: Message | BusPageRow) -> bool:
-        return message.sender in self.second_names and message.target in self.first_names
-
-    def unread_before(self, message: Message | BusPageRow, before: int, seen: ReadCursor) -> bool:
-        return message.seq < before and message.seq not in seen and self.inbound(message)
 
     def offsets(self, index, *, lower, upper, descending, before_offset):
         return index.conversation_offsets(

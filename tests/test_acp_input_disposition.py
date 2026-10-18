@@ -72,7 +72,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
         rows = stored_inputs(owner.inputs.dispositions.root).unknown(frozenset({session}))
         assert len(rows) == 1 and not rows[0].has_native_binding
         assert rows[0].public_status == "not_sent"
-        assert not owner.inputs.pending_turns and not owner.turns.turn_state(session).busy
+        assert not any(state.pending_turns for state in owner.inputs.drained.values()) and not owner.turns.turn_state(session).active.phase.busy
         assert any(isinstance(fact, InputDeliveryChangedUpdate)
                    for update in updates.rows for fact in decode_updates(update.get("_meta")))
         assert Comms(native.root).goals.unresolved_inputs(session) == tuple(UnresolvedInput.of(row) for row in rows)
@@ -169,11 +169,11 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             assert {k: replace(v, notice_dismissed=False) for k, v in reopened.items()} == final
             before = (native.session.read_bytes(), native.provider.posts)
             assert await owner.inputs.drain_inbox(session) == 0
-            assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
+            assert not any(state.pending_turns for state in owner.inputs.drained.values()) and not any(state.wake_task for state in owner.inputs.drained.values())
             assert stored_inputs(owner.inputs.dispositions.root).rows == reopened
             assert (native.session.read_bytes(), native.provider.posts) == before
             assert native.session.read_bytes().startswith(saved)
-            assert not owner.turns.turn_state(session).busy and not owner.inputs.backend_inboxes
+            assert not owner.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in owner.inputs.drained.values())
         finally:
             native.provider.response_gate.set()
             turn.cancel()
@@ -216,7 +216,7 @@ async def test_native_steer_keeps_original_input_and_turn_cleanup(native_backend
             assert len({row.native_id for row in rows.values()}) == 2
             assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
             assert native.session.read_bytes().startswith(saved)
-            assert not owner.turns.turn_state(session).busy and not owner.inputs.backend_inboxes
+            assert not owner.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in owner.inputs.drained.values())
         finally:
             original_response.set()
             turn.cancel()
@@ -358,7 +358,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 Comms(native.root).messaging.send_message,
                 "sender", session, "deliver as soon as following input opens",
             ))
-            await wait_for(lambda: session in owner.inputs._idle_private_revisions)
+            await wait_for(lambda: owner.inputs.state(session).idle_revision is not None)
             key = message.seq, message.message_id
             pending, = comms.views.message_notifications_for_references((message.reference,))[key]
             assert pending.label == "Sent" and not pending.state.working
@@ -376,7 +376,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 for row in stored_inputs(owner.inputs.dispositions.root).rows.values()
                 if row.has_native_binding
             ))
-            await wait_for(lambda: not owner.turns.turn_state(session).busy)
+            await wait_for(lambda: not owner.turns.turn_state(session).active.phase.busy)
 
             with Coordination(str(native.root / "coordination.sqlite3")) as store:
                 assignments = sealed_cohort_assignments(store, lookup)
@@ -509,7 +509,7 @@ asyncio.run(main())
     try:
         await owner.sessions.bind_owned(thread, session)
         assert await owner.inputs.drain_inbox(session) == 0
-        assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
+        assert not any(state.pending_turns for state in owner.inputs.drained.values()) and not any(state.wake_task for state in owner.inputs.drained.values())
         assert ledger.path.read_bytes() == before
         assert native.session.read_bytes() == saved and native.provider.posts == 0
     finally:
@@ -552,7 +552,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             first = comms.messaging.send_message("sender", session, "which parser is slow?")
             await owner.inputs.drain_inbox(session)
             await wait_for(lambda: native.provider.posts == 1)
-            reply_turn = owner.inputs.wake_tasks[session]
+            reply_turn = owner.inputs.state(session).wake_task
             known = len(stored_inputs(owner.inputs.dispositions.root).rows)
             assert native.provider.requests[0]["model"] == "fixture"
             elsewhere = Comms(native.root)
@@ -593,7 +593,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             assert "the yaml one, I mean" not in json.dumps(native.provider.requests[0]["messages"])
             assert len({row.turn_id for row in stored_inputs(owner.inputs.dispositions.root).rows.values()}) == 1
             # Nothing is left to start another turn for, and the sender got one answer.
-            await wait_for(lambda: session not in owner.inputs.wake_tasks)
+            await wait_for(lambda: owner.inputs.state(session).wake_task is None)
             assert native.provider.posts == 2
             assert len([m for m in list(comms.views.full_history_page().messages) if m.sender == session]) == 1
         finally:
@@ -629,7 +629,7 @@ async def test_model_change_stored_by_another_process_reaches_the_running_turn(n
             await wait_for(
                 lambda: owner.sessions.config.settings_in_use[session].model
                 == "response-local/fixture-second"
-                and owner.inputs.backend_inboxes[session].empty()
+                and owner.inputs.state(session).inbox.empty()
             )
             await Coordination.run_worker(partial(
                 elsewhere.messaging.send_message, "sender", session, "still there?"

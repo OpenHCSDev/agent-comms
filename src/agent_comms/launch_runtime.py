@@ -91,10 +91,13 @@ class EnvironmentRecord:
         return {name: environment[name] for name in names if name in environment}
 
     @classmethod
-    def strip[Environment: MutableMapping[str, str]](cls, environment: Environment) -> Environment:
-        """Remove every variable this record declares."""
+    def strip[Environment: MutableMapping[str, str]](
+        cls, environment: Environment, *names: str
+    ) -> Environment:
+        """Remove the named fields' variables, or every variable this record declares."""
         for declaration in fields(cls):
-            environment.pop(FieldCodec.wire_key(declaration), None)
+            if not names or declaration.name in names:
+                environment.pop(FieldCodec.wire_key(declaration), None)
         return environment
 
     def encode(self) -> dict[str, str]:
@@ -140,29 +143,6 @@ class RestartEnvironment(EnvironmentRecord):
         default=default_agent_directory,
         metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True},
     )
-    owner_key: ClassVar[str] = "AGENT_COMMS_THREAD"
-    initial_input_key: ClassVar[str] = "AGENT_COMMS_STARTUP_INPUT_KEY"
-
-    @classmethod
-    def calling_thread(cls, environment: Mapping[str, str] = os.environ) -> str:
-        caller = environment.get(cls.owner_key)
-        if not caller:
-            raise CallingThreadUnavailable(
-                f"Calling thread requires {cls.owner_key}."
-            )
-        return caller
-
-    @classmethod
-    def called_by(
-        cls,
-        name: str,
-        canonicalize: Callable[[str], str],
-        *,
-        environment: Mapping[str, str] = os.environ,
-    ) -> bool:
-        caller = environment.get(cls.owner_key)
-        return caller is not None and canonicalize(caller) == name
-
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.absolute(self.native_config))
         object.__setattr__(self, "agent_directory", self.absolute(self.agent_directory))
@@ -253,7 +233,7 @@ class ThreadLaunch(EnvironmentRecord):
     the record and readers decode it.
     """
 
-    name: str = field(metadata={"wire_name": RestartEnvironment.owner_key})
+    name: str = field(metadata={"wire_name": "AGENT_COMMS_THREAD"})
     worktree: str = field(metadata={"wire_name": "PI_WORKTREE"})
     tags: Annotated[frozenset[str], TagListText] = field(
         default=frozenset(), metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_TAGS"}
@@ -267,6 +247,10 @@ class ThreadLaunch(EnvironmentRecord):
     managed: Annotated[bool, FlagText] = field(
         default=False, metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_MANAGED"}
     )
+    startup_input: str | None = field(
+        default=None,
+        metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_STARTUP_INPUT_KEY"},
+    )
 
     @classmethod
     def current(cls, environment: Mapping[str, str] = os.environ) -> ThreadLaunch:
@@ -276,6 +260,22 @@ class ThreadLaunch(EnvironmentRecord):
             raise CallingThreadUnavailable(f"Calling thread requires {cls.variable('name')}.")
         values.setdefault(cls.variable("worktree"), os.getcwd())
         return FieldCodec.decode(cls, values)
+
+    @classmethod
+    def called_by(cls, name: str, canonicalize: Callable[[str], str], *,
+                  environment: Mapping[str, str] = os.environ) -> bool:
+        try:
+            caller = cls.current(environment).name
+        except CallingThreadUnavailable:
+            return False
+        return canonicalize(caller) == name
+
+    @classmethod
+    def take_startup_input(cls, environment: MutableMapping[str, str] = os.environ) -> str | None:
+        """This launch's startup input, removed so no reread or child process sees it."""
+        startup_input = cls.current(environment).startup_input
+        cls.strip(environment, "startup_input")
+        return startup_input
 
     def apply(self, environment: dict[str, str]) -> dict[str, str]:
         """Replace any inherited launch with this one."""

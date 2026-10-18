@@ -40,7 +40,7 @@ async def configured_terminal(owner, thread, output, acknowledgement, marker):
         pending = asyncio.create_task(connection.prompt(thread.name,
             [TextContentBlock(type='text', text=text)]))
         async with asyncio.timeout(300):
-            while not service.registry.require(thread.name).executing:
+            while not service.registry.require(thread.name).active_turn.executing:
                 if pending.done():
                     await pending
                     raise AssertionError('Original turn completed before waiter ownership capture')
@@ -57,7 +57,7 @@ async def configured_terminal(owner, thread, output, acknowledgement, marker):
             waiter_goal = await Coordination.run_worker(wait_on_original)
             response = await pending
         state = service.registry.require(thread.name).turn_state
-        assert not state.busy and state.finished_turn_id == lease.turn_id
+        assert not state.active.phase.busy and state.finished_turn_id == lease.turn_id
         assert isinstance(service.goals.goal_wait('terminal-waiter'), NoGoalWait)
         assert service.registry.require('terminal-waiter').goal.state.active
         assert response.stop_reason == 'end_turn'

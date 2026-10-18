@@ -160,7 +160,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 await asyncio.wait_for(turn, 20)
             elif case != "reopen":
                 schedule_wake(WakeScheduleCheck(session_id="worker", inputs=agent.inputs))
-                await asyncio.wait_for(agent.inputs.wake_tasks["worker"], 20)
+                await asyncio.wait_for(agent.inputs.state("worker").wake_task, 20)
             success = case in {"deliver", "batch", "steer", "rename", "batch_rename"}
             assert len(requests) == (2 if success else 1)
             if case == "deliver":
@@ -172,7 +172,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             assert stored_inputs(agent.inputs.dispositions.root).rows[key].declared_name == (
                 "started" if success else "unknown"
             )
-            assert not agent.inputs.pending_turns.get("worker")
+            assert not agent.inputs.state("worker").pending_turns
             rows = [
                 json.loads(line)
                 for line in Path(comms.registry.require("worker").session_file)
