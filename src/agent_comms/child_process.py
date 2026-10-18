@@ -23,7 +23,6 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
-from functools import singledispatchmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
@@ -88,6 +87,9 @@ class ProcessState(WireValue):
     @abstractmethod
     def registration_change(self, previous, change, incarnation): ...
 
+    @abstractmethod
+    def restarted_registration(self, change, incarnation): ...
+
     def offline(self) -> bool:
         return not self.alive()
 
@@ -149,6 +151,9 @@ class NoProcess(ProcessState):
         return False
 
     def registration_change(self, previous, change, incarnation):
+        return change
+
+    def restarted_registration(self, change, incarnation):
         return change
 
     def offline(self):
@@ -227,13 +232,11 @@ class ProcessIdentity(ProcessState):
     def pid_fields(self) -> dict[str, int]:
         return {"pid": self.pid}
 
-    @singledispatchmethod
     def registration_change(self, previous: ProcessState, change, incarnation):
-        return change.restarted() if incarnation != change.previous.incarnation else change
+        return previous.restarted_registration(change, incarnation)
 
-    @registration_change.register
-    def _(self, previous: NoProcess, change, incarnation):
-        return change
+    def restarted_registration(self, change, incarnation):
+        return change.restarted() if incarnation != change.previous.incarnation else change
 
 
 class ProcessGroups(ABC):
