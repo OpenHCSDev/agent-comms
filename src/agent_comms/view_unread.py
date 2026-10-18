@@ -408,7 +408,7 @@ class TranscriptReadState(ThreadOwnedState):
             )
 
     def counts(
-        self, viewer: str, sources: Mapping[str, str], *, document: ReadDocument | None = None
+        self, viewer: str, sources: Mapping[str, str], *, document: ReadDocument
     ) -> TranscriptUnread:
         # Counts never wait for native decoding or another in-process reader.
         if not self._lock.acquire(blocking=False):
@@ -416,7 +416,6 @@ class TranscriptReadState(ThreadOwnedState):
         try:
             if not self._cleanup.alive:
                 raise RuntimeError("Transcript reader is closed")
-            document = self.reads.read() if document is None else document
             try:
                 return self._counts_locked(viewer, sources, document)
             except sqlite3.DatabaseError as error:
@@ -430,10 +429,10 @@ class TranscriptReadState(ThreadOwnedState):
     def _counts_locked(
         self, viewer: str, sources: Mapping[str, str], document: ReadDocument
     ) -> TranscriptUnread:
-        if not any(sources.values()) and self._preparation is None:
-            return TranscriptUnread(dict.fromkeys(sources, 0), frozenset())
+        if not sources and self._preparation is None:
+            return TranscriptUnread({}, frozenset())
         revisions = {
-            source: FileRevision.capture(Path(source)) if source else None
+            source: FileRevision.capture(Path(source))
             for source in dict.fromkeys(sources.values())
         }
         result: dict[str, int] = {}
@@ -463,7 +462,7 @@ class TranscriptReadState(ThreadOwnedState):
         return TranscriptUnread(result, frozenset(pending))
 
     def mark_read(self, viewer: str, source: str, through: int) -> None:
-        revision = FileRevision.capture(Path(source)) if source else None
+        revision = FileRevision.capture(Path(source))
         if revision is None or not 0 <= through <= revision.size:
             raise ValueError("Transcript changed; refresh before marking it read.")
         self.reads.mark_transcript(
