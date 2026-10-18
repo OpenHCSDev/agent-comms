@@ -44,9 +44,9 @@ class RecipientDecision(ABC):
     @abstractmethod
     def to_wire(self) -> dict[str, str]: ...
 
-    def initial_notification(self, recipient, *, observation):
+    def initial_notification(self, recipient, sender_lookup, *, observation):
         return self.wake_policy().initial_state()().notification(
-            recipient, observation=observation)
+            recipient, sender_lookup, observation=observation)
 
 
 @dataclass(frozen=True, slots=True)
