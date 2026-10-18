@@ -143,7 +143,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         await ctx.send(FieldCodec.encode(OwnerAnnouncement()))
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
-        await agent.sessions.transcript.replay(
+        await agent.sessions.transcript.subscribe(
             ctx.session_id,
             ctx.name,
             client=ctx.client,
