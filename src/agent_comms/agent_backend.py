@@ -32,6 +32,7 @@ from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
+    from .extension_ui import UiRequest
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
     from .launch_runtime import LaunchRuntime
@@ -298,7 +299,7 @@ class TurnDelivery:
     interrupt_boundary: SendBoundary
     input_started: Callable[..., bool]
     request_progress: Callable[..., None]
-    ui_request: Callable[..., Awaitable[Any]] | None
+    ui_request: UiRequest
     selected_tool_mode: NativeToolMode = field(default_factory=NoNativeTools)
 
     def native_events(self, backend: Any, thread: Thread,

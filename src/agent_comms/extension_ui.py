@@ -16,9 +16,17 @@ if TYPE_CHECKING:
     from .backend import TurnSession
 
 
+UiRequest = Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]
+
+
+class NoUiRequest:
+    async def __call__(self, request: DialogUiRequest) -> ExtensionUiChoice:
+        return CancelledUiChoice()
+
+
 @dataclass
 class ExtensionUiSession:
-    controller: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]] | None
+    controller: UiRequest
     seen: set[str] = field(default_factory=set, init=False)
     acknowledgement: McpLiveAcknowledgement | None = field(default=None, init=False)
 
@@ -32,8 +40,6 @@ class ExtensionUiSession:
     async def choose(self, request: DialogUiRequest, session: TurnSession) -> ExtensionUiChoice:
         key = request.require_id()
         if not session.prompt_state.permits_extension_ui(session):
-            return CancelledUiChoice()
-        if self.controller is None:
             return CancelledUiChoice()
         if key in self.seen or len(self.seen) >= 64:
             return CancelledUiChoice()

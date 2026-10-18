@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.extension_ui import NoUiRequest
+
 import asyncio
 import json
 import os
@@ -364,7 +366,7 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         send_boundary=None, interrupt_boundary=None,
         input_started=lambda public_id, native_id, text: starts.append(text) or True,
         request_progress=lambda progress, process: None,
-        ui_request=None,
+        ui_request=NoUiRequest(),
     )
     events = []
     try:

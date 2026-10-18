@@ -41,7 +41,7 @@ from .agent_backend import TurnInbox
 from .child_process import TimedOutOutcome
 from .coordinator import Coordination
 from .diagnostics import FailureReason
-from .extension_ui import ExtensionUiSession
+from .extension_ui import ExtensionUiSession, NoUiRequest, UiRequest
 from .field_codec import MalformedRecord
 from .image_inputs import ImageInput
 from .native_attestation import AttestationError
@@ -112,7 +112,7 @@ async def stream_agent_events(
     *,
     persistent_session: PersistentPiSession,
     root: Path,
-    ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
+    ui_request: UiRequest = NoUiRequest(),
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
     request_observer: RequestObserver = NO_REQUEST_OBSERVER,
 ) -> AsyncIterator[events.AgentEvent]:
@@ -190,7 +190,7 @@ class TurnSession:
         native_start: Callable[[str | None, str, str], bool] | None = None,
         persistent_session: PersistentPiSession | None = None,
         native_session: PersistentPiSession | None = None,
-        ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
+        ui_request: UiRequest = NoUiRequest(),
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
         *, startup: NativeStartup,

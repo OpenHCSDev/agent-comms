@@ -17,6 +17,7 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.field_codec import FieldCodec
+from agent_comms.extension_ui import NoUiRequest
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import McpLiveAcknowledgement
 from agent_comms.owner_protocol import OwnerLine, OwnerPermissionRequest
@@ -135,7 +136,7 @@ send({{"type": "agent_settled"}})
         return choice
 
     events = await asyncio.wait_for(
-        collect_backend(program, tmp_path, controller if choice is not None else None), timeout=6
+        collect_backend(program, tmp_path, controller if choice is not None else NoUiRequest()), timeout=6
     )
     assert marker.exists()
     assert json.loads(marker.read_text()) == {

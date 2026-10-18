@@ -15,6 +15,7 @@ from .agent_events import AgentEvent, Done
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .diagnostics import record_request_progress
+from .extension_ui import NoUiRequest
 from .following_inputs import FollowingInputs
 from .native_arguments import SelectedModel
 from .native_pi import NativePiUnavailable, NativeTurnResult
@@ -107,7 +108,7 @@ class SelectedTurnDelivery(TurnDelivery):
                 claim.bus.log.path.parent,
                 claim.owner.thread.require_turn_lease(),
             ),
-            ui_request=None,
+            ui_request=NoUiRequest(),
             selected_tool_mode=selected_tool_mode,
         )
         result: NoSelectedAnswer | NativeTurnResult = NoSelectedAnswer()
