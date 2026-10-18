@@ -21,6 +21,7 @@ from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, Historic
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .private_path import FileRevision
+from .recorded_bus import RecordedBusIdentity
 from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
@@ -135,14 +136,14 @@ class NoDisplaySelection(DisplaySelection):
 
 @dataclass(frozen=True, slots=True)
 class ChannelSelection(SelectedDisplay):
-    bus_identity: tuple[int, int] | None
+    bus_identity: RecordedBusIdentity
     scope: ChannelDisplayScope
 
 
 @dataclass(frozen=True, slots=True)
 class DMSelection(SelectedDisplay):
     root_identity: tuple[int, int]
-    bus_identity: tuple[int, int] | None
+    bus_identity: RecordedBusIdentity
     worktree: str
     requested_peer: str
     peer: ThreadIncarnation
@@ -283,7 +284,7 @@ class DisplayBasis:
     viewer: str
     viewer_created_at: float
     conversations: tuple[DisplayedConversation, ...]
-    bus_identity: tuple[int, int] | None
+    bus_identity: RecordedBusIdentity
 
     @property
     def viewer_identity(self) -> ThreadIncarnation:
@@ -324,14 +325,14 @@ class DisplayBasis:
         )
 
     def validate(
-        self, viewer: str, snapshot: RegistrySnapshot, bus_identity: tuple[int, int] | None
+        self, viewer: str, snapshot: RegistrySnapshot, bus_identity: RecordedBusIdentity
     ) -> None:
         thread = snapshot.threads.get(viewer)
         if (
             viewer != self.viewer
             or thread is None
             or thread.incarnation != self.viewer_identity
-            or bus_identity != self.bus_identity
+            or not self.bus_identity.matches(bus_identity)
             or any(not item.conversation.current(snapshot) for item in self.conversations)
         ):
             raise DMScopeChanged("Display incarnation changed; refresh the displayed page.")
@@ -353,7 +354,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
     viewer_names: frozenset[str]
     peer_identity: ThreadIncarnation
     peer_names: frozenset[str]
-    bus_identity: tuple[int, int] | None
+    bus_identity: RecordedBusIdentity
     displayed: DisplayBasis
 
     @classmethod
@@ -382,7 +383,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             viewer_thread = snapshot.threads[viewer_name]
             peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
-            bus_identity = bus.reads.bus_identity(bus.log.path)
+            bus_identity = RecordedBusIdentity.capture(bus.log.path)
         # Native input writes use this same wire lock. Scoped page/read queries
         # use opened source snapshots, not live input permission.
         page = bounds.conversation(scope).read(bus.log)
@@ -402,7 +403,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
                 bus_identity=bus_identity,
                 displayed=displayed,
             )
-            basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))
+            basis.validate_identity(document.snapshot(), RecordedBusIdentity.capture(bus.log.path))
             return replace(page, display_basis=basis)
 
     def selection(self, history_revision: FileRevision | None) -> SelectedDisplay:
@@ -456,7 +457,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
                 peer,
                 through,
                 snapshot,
-                bus.reads.bus_identity(bus.log.path),
+                RecordedBusIdentity.capture(bus.log.path),
             )
             self.mark(bus.reads, through)
 
@@ -473,7 +474,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
         peer: str,
         through: int,
         snapshot: RegistrySnapshot,
-        bus_identity: tuple[int, int] | None,
+        bus_identity: RecordedBusIdentity,
     ) -> None:
         if (self.root, self.worktree, self.requested_peer) != (
             str(root.resolve()),
@@ -488,7 +489,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
         self.validate_identity(snapshot, bus_identity)
 
     def validate_identity(
-        self, snapshot: RegistrySnapshot, bus_identity: tuple[int, int] | None
+        self, snapshot: RegistrySnapshot, bus_identity: RecordedBusIdentity
     ) -> None:
         """Fetch and painted acknowledgement share actual identity/scope validation.
 
@@ -510,7 +511,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             or scope != DMDisplayScope(self.viewer_names, self.peer_names)
         ):
             raise DMScopeChanged("DM viewer/peer incarnation changed; refresh the page.")
-        if bus_identity != self.bus_identity:
+        if not self.bus_identity.matches(bus_identity):
             raise DMScopeChanged("DM bus was replaced; refresh the page.")
         self.displayed.validate(self.viewer, snapshot, bus_identity)
 
