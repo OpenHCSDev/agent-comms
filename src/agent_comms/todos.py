@@ -31,6 +31,7 @@ from .change_report import FileLine
 from .goals import OrderCheck, ProblemGoalOrder
 from .child_process import BoundedRun, ExitedOutcome
 from .storage_rules import StorageRule
+from .plan_phases import OrderPhase, UnplannedPhase
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -545,6 +546,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
     run: OrderRun
+    serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -922,6 +924,19 @@ class CorrectCheckTodo(TodoOperation):
         current.require_commander(self.actor)
         _text(self.reason, "Check correction reason", 2000)
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class ServeTodo(TodoOperation):
+    """The commander names the plan phase an open order serves; it keeps its id and holder."""
+    actor: ThreadIncarnation
+    serves: type[OrderPhase]
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        return replace(current, order=replace(current.order, serves=self.serves),
+                       revision=current.revision + 1)
 
 
 @dataclass(frozen=True)

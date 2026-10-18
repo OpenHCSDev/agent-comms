@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 
 from . import capacity, judge, order, request, rules
+from ..standing_rules import StandingRule
 from ..todos import Todo
 from .config import CommanderConfig
 
@@ -32,6 +33,7 @@ def broken_rules(owed):
         lines.append(f'UNJUDGED {total} edits -> judge or fork a judge slice')
     if why := rules.stale():
         lines.append(f'RULES DUE ({why}) -> agent-comms-commander rules review and answer the drawn rules before any order')
+    lines.extend(rule.line() for rule in StandingRule.broken(order.todos()))
     return lines
 
 
