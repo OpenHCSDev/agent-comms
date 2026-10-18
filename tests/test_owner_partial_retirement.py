@@ -133,11 +133,8 @@ def test_partial_retirement_transfers_original_input_and_refuses_launch(mode, mo
         assert phase.retired == ()
         assert [x[0].name for x in phase.unconfirmed] == ['first', 'second']
         assert not any(lifecycle.alive.values())
-        assert lifecycle.active_wire_contexts == 1
     with pytest.raises(RelationViolationError, match='complete validated stopped handoff'):
         failure.recover()
     assert operation.complete_calls == operation.recover_calls == 0
-    assert lifecycle.launches == []
-    failure.abandon()
     assert lifecycle.active_wire_contexts == 0
     assert lifecycle.launches == []

@@ -196,7 +196,7 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner):
             "agent_comms.cli",
             "--root",
             str(comms.root),
-            "invoke",
+            "tool",
             "--from",
             "worker",
             "--tool",

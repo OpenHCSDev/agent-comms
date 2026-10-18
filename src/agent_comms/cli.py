@@ -19,7 +19,6 @@ from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import wire
 from .coordination_errors import CoordinationError
-from .owner_restart import StoppedOwnerFailure
 
 
 def _fail(error: BaseException) -> int:
@@ -61,10 +60,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130
-    except StoppedOwnerFailure as exc:
-        # Do not ignore a failure after starting to stop an owner.
-        exc.abandon()
-        return _fail(exc)
     except (ValueError, OSError, CoordinationError) as exc:
         return _fail(exc)
     return 0
