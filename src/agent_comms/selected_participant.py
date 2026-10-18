@@ -29,7 +29,7 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
-from .presentation import MessageNotification, SentMessageOutcome
+from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
 from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
@@ -171,7 +171,8 @@ class SelectedParticipant(MroDispatch):
     ) -> tuple[SentMessageOutcome, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""
         notifications = MessageNotification.for_sources(
-            comms.root, comms.registry, owner, sources, assignment_read=assignment_read,
+            comms.root, comms.registry, OwnerOutcomes.of(owner), sources,
+            assignment_read=assignment_read,
         )
         return tuple(
             outcome

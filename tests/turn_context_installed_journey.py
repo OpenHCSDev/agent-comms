@@ -218,8 +218,6 @@ async def run_configured(options):
         root_id = service.messaging.initialize_private_initial_protocol()
         runtime = Path(sys.executable).parent
         environment.update(AGENT_COMMS_ROOT=str(service.root),
-            AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
-            AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
             AGENT_COMMS_AGENT_BIN=str(runtime / 'pi-comms-native'),
             PATH=str(runtime) + os.pathsep + environment.get('PATH', os.defpath),
             XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),

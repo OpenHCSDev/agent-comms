@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.registry_document import RosterVisibility
 from agent_comms.relationships import (
     ChildrenRelationshipGroup, CollaboratingRelationshipGroup, InboundRelationshipGroup,
     OutboundRelationshipGroup, ParentRelationshipGroup, RelationshipEdit,
@@ -320,7 +321,7 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
     retained = comms.registry.require("renamed-peer")
     assert retained.incarnation.current(comms.registry.snapshot())
     assert retained.name not in {
-        view.thread.name for view in comms.views.thread_views(show_stopped=True, show_archived=True)
+        view.thread.name for view in comms.views.thread_views(RosterVisibility(archived=True))
     }
     unavailable = collaboration_rows(comms)[0]
     assert unavailable.target == "renamed-peer"

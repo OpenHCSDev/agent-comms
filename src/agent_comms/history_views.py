@@ -13,12 +13,16 @@ from typing import TYPE_CHECKING
 from .catalog_store import ChannelCatalog
 from .goal_waits import GoalWaits
 from .registration import Registration
+from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .thread_identity import ThreadIncarnation
+from .thread_execution import ConversationPreparation
+from .transcript_sources import AssignedSourceIdentity
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalThread, HistoryCursor, HistorySource
     from .read_basis import HistoricalDisplay
     from .registry_document import RegistrySnapshot
+    from .threads import Thread
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
@@ -57,6 +61,33 @@ from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ThreadViewRead(ConversationPreparation):
+    views: HistoryViews
+    thread: Thread
+    viewer: Thread
+    through: TranscriptCursor
+
+    def native(self):
+        if self.through.session_file != self.thread.runtime.read_key:
+            raise ValueError("Transcript changed; refresh before marking it read.")
+        for key in self.thread.runtime.read_keys():
+            self.views.transcript_reads.mark_read(self.viewer.name, key, self.through.offset)
+
+    def external(self):
+        self.through.wire.require_source(AssignedSourceIdentity(str(self.views.root), self.thread.incarnation))
+        page = DMDisplayBasis.fetch_page(
+            self.views.bus, self.views.registry, self.views.root, self.viewer.name,
+            self.thread.name, worktree=self.viewer.worktree,
+            before=self.through.wire.sequence + 1,
+        )
+        if page.messages:
+            self.views.mark_dm_view_read(
+                self.thread.name, worktree=self.viewer.worktree,
+                through=page.messages[-1].seq, expected_display_basis=page.display_basis,
+            )
 
 
 @dataclass(frozen=True)
@@ -287,7 +318,7 @@ class HistoryViews:
             ).export(selected, Path(destination).expanduser(), overwrite=overwrite)
 
     def channel_views(
-        self, *, show_stopped: bool = True, show_archived: bool = False
+        self, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> tuple[ChannelView, ...]:
         """Channel declarations and current members; clients never infer membership."""
         snapshot = self.registry.snapshot()
@@ -296,28 +327,22 @@ class HistoryViews:
         with self.bus.opened_activity() as clocks:
             return ChannelView.roster(
                 snapshot,
-                channels.visible(show_archived),
+                channels.visible(visibility),
                 catalog.pinned_members(),
                 catalog.list_order,
                 self.agents.all_activity(
-                    snapshot.visible_threads(
-                        show_stopped=show_stopped, show_archived=show_archived
-                    ), snapshot=snapshot,
+                    snapshot.visible_threads(visibility), snapshot=snapshot,
                 ),
                 self.last_sent_timestamps(clocks.sent, registry=snapshot),
                 ChannelActivity.for_views(channels, clocks.channels),
-                show_stopped=show_stopped,
-                show_archived=show_archived,
+                visibility,
             )
 
     def thread_views(
-        self, *, show_stopped: bool = True, show_archived: bool = False
+        self, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> tuple[ThreadView, ...]:
         snapshot = self.registry.snapshot()
-        return ThreadView.roster(
-            snapshot, self.agents, GoalWaits.at(self.root),
-            show_stopped=show_stopped, show_archived=show_archived,
-        )
+        return ThreadView.roster(snapshot, self.agents, GoalWaits.at(self.root), visibility)
 
     def retired_views(self, threads: Iterable[ThreadIncarnation], channels: Iterable[str]) -> RetiredViews:
         """Which of these thread incarnations and channel views no longer exist.
@@ -348,14 +373,14 @@ class HistoryViews:
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
             snapshot, self.agents, GoalWaits.at(self.root),
-            names=names, show_stopped=True, show_archived=False,
+            DEFAULT_ROSTER, names=names,
         )
         return ThreadPresentations(
             snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
         )
 
     def viewer_snapshot(
-        self, worktree: str, *, show_stopped: bool = True, show_archived: bool = False
+        self, worktree: str, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> CoordinationSnapshot:
         """Local presentation scope, independent of agent delivery cursors."""
         with self.presentation.snapshot(viewer=self.display_viewer(worktree)) as (basis, source):
@@ -366,8 +391,7 @@ class HistoryViews:
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(clocks.sent, registry=basis.registry), display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
-                show_stopped=show_stopped, show_archived=show_archived,
-                read_marker_notice=basis.document.notice,
+                visibility=visibility, read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
         sources = {
@@ -378,13 +402,11 @@ class HistoryViews:
         return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
-        """Acknowledge only the native transcript boundary actually displayed."""
-        viewer = self.messaging.user_identity(worktree).name
+        """Acknowledge the displayed position through the thread's receiving contract."""
         thread = self.registry.require(name)
-        if through.session_file != thread.runtime.read_key:
-            raise ValueError("Transcript changed; refresh before marking it read.")
-        for key in thread.runtime.read_keys():
-            self.transcript_reads.mark_read(viewer, key, through.offset)
+        thread.execution.prepare_conversation(ThreadViewRead(
+            self, thread, self.messaging.user_identity(worktree), through,
+        ))
 
     def mark_channel_view_read(
         self,
@@ -422,17 +444,13 @@ class HistoryViews:
 
     def mark_thread_user_read(self, target: str, *, worktree: str) -> None:
         viewer = self.messaging.user_identity(worktree).name
-        with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(target)
-            checkpoint = self.transcripts.transcript_checkpoint(thread.name)
-            for key in thread.runtime.read_keys():
-                self.transcript_reads.mark_read(viewer, key, checkpoint.offset)
-            messages = self.bus.inbox(viewer, thread.name)
-            self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
-
-    def revision_paths(self) -> dict[str, tuple[Path, ...]]:
-        """The revision owner's declarations supply both stat and watch paths."""
-        return WireRevision.source_paths(self)
+        thread = self.registry.require(target)
+        checkpoint = self.transcripts.transcript_checkpoint(thread.name)
+        thread.execution.prepare_conversation(ThreadViewRead(
+            self, thread, self.registry.require(viewer), checkpoint,
+        ))
+        messages = self.bus.inbox(viewer, thread.name)
+        self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 
     def latest_sequence(self) -> int:
         """The sequence number of the newest message on the bus, whoever it was sent to."""

@@ -22,7 +22,7 @@ async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monke
     comms = Comms(tmp_path / "wire")
     owner = comms.registry.new_thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_initial_protocol()
     seen = []
 
     async def read_cursor(_bus, *, source_reads, **_kwargs):
@@ -30,7 +30,6 @@ async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monke
         return None
 
     monkeypatch.setattr("agent_comms.cursor_publication.NativeSourceCursor.read_async", read_cursor)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
     publication = CursorPublication(comms, object())
     await publication.observe(owner.name, owner.name)
     await publication.observe(owner.name, owner.name)
@@ -44,12 +43,11 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
     comms = Comms(tmp_path / "wire")
     owner = comms.registry.new_thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, owner.name, owner.name, committed=True
         )
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path / "unused-native-package")
     agent = CommsAgent(
         comms,
         auto_wake=False,

@@ -772,8 +772,8 @@ class TypedStore(RootFile):
     """One owner-only SQLite file whose schema its TypedTable rows declare.
 
     Members name the file and their rows. A transaction installs an absent
-    store, so members answer reads of an absent store without opening one; a
-    store whose schema differs from its declaration raises.
+    store; a snapshot reads it as an empty in-memory schema without creating
+    storage. An existing store whose schema differs from its declaration raises.
     """
 
     rows: ClassVar[tuple[type[TypedTable], ...]]
@@ -853,12 +853,20 @@ class TypedStore(RootFile):
 
     @contextmanager
     def snapshot(self) -> Iterator[sqlite3.Connection]:
-        """Read an existing committed store without taking its SQL writer lock."""
+        """Read a committed store, or its declared empty schema before its first write."""
         from .coordination_database import CoordinationStore, StoreBusy
 
-        with self._attached(
-            lambda: CoordinationStore.observing(self.path, StoreBusy())
-        ) as connection:
+        with ExitStack() as lifetime:
+            if self.path.exists():
+                connection = lifetime.enter_context(self._attached(
+                    lambda: CoordinationStore.observing(self.path, StoreBusy())))
+            else:
+                connection = lifetime.enter_context(closing(
+                    sqlite3.connect(":memory:", isolation_level=None)))
+                for row in self.rows:
+                    row.create(connection)
+                CoordinationStore._configure_reader(connection)
+                CoordinationStore.begin_snapshot(connection)
             self.require_schema(self._schema(connection))
             yield connection
 
