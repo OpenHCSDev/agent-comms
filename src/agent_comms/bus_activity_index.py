@@ -39,7 +39,7 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
     fsync_parent = True
 
     def __init__(self, bus_path: Path):
-        super().__init__(bus_path, bus_path.with_name("bus_activity_latest.json"))
+        super().__init__(bus_path, bus_path.with_name(f"bus_activity_{self.record_type.schema}.json"))
 
     def snapshot(self, opened: WireSnapshot) -> ActivityClocks:
         boundary = opened.complete_prefix.boundary

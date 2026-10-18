@@ -284,7 +284,7 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
     wired.messaging.send("fixer", "#base", "second")
     assert set(wired.views.viewer_snapshot(str(wired.root)).last_sent) == {"PR111", "fixer"}
 
-    checkpoint = wired.root / "bus_activity_latest.json"
+    checkpoint = wired.bus.activity_index.path
     checkpoint.write_text("{damaged")
     assert set(wire(wired.root).views.viewer_snapshot(str(wired.root)).last_sent) == {"PR111", "fixer"}
 
