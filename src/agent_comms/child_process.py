@@ -25,22 +25,21 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
-from .field_codec import FieldCodec, WireValue, compile_decoder
+from .field_codec import FieldCodec, UnionDecoder, ValueDecoder, WireValue
 from .errors import RelationViolationError
 from .sealed import Sealed
 
 if TYPE_CHECKING:
-    from .activity import ObservedActivity
     from .registration_change import RegistrationChange, UpdatedRegistration
     from .store_files import LockMode
     from .thread_identity import ThreadIncarnation, ThreadRole
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
     from .thread_status import ThreadStatus
-    from .turn_lease import ActiveTurn, TurnState
+    from .turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -66,14 +65,20 @@ class ProcessState(WireValue):
 
     accepts_null = True
     external_json_shape = True
+    _decoder: ClassVar[UnionDecoder[ProcessState]]
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        if ProcessState in cls.__bases__:
+            ProcessState._decoder = ValueDecoder.for_members(tuple(ProcessState.__subclasses__()))
 
     @classmethod
     def from_wire(cls, data: object) -> ProcessState:
-        return cast(ProcessState, compile_decoder(NoProcess | ProcessIdentity).decode(data))
+        return cls._decoder.decode(data)
 
     @classmethod
     def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(NoProcess | ProcessIdentity)
+        return FieldCodec.value_schema(cls._decoder.target)
 
     def to_wire(self) -> object:
         return FieldCodec.encode_record(self)
@@ -100,17 +105,15 @@ class ProcessState(WireValue):
     ) -> RegistrationChange: ...
 
     @abstractmethod
-    def offline(self) -> bool: ...
-    @abstractmethod
     def native_presentation(
         self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
     ) -> ThreadPresentation: ...
-    @abstractmethod
-    def project_activity(
-        self, turn_state: TurnState, activity: ObservedActivity,
-    ) -> ObservedActivity: ...
+
     @abstractmethod
     def attachment_process(self, previous: ProcessState) -> ProcessState: ...
+
+    @abstractmethod
+    def offline(self) -> bool: ...
 
     @abstractmethod
     def require(self, message: str = "No worker process has started") -> ProcessIdentity: ...
@@ -172,21 +175,16 @@ class NoProcess(ProcessState):
     ) -> RegistrationChange:
         return change
 
-    def offline(self) -> bool:
-        return False
-
     def native_presentation(
         self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
     ) -> ThreadPresentation:
         return ordinary
 
-    def project_activity(
-        self, turn_state: TurnState, activity: ObservedActivity,
-    ) -> ObservedActivity:
-        return activity
-
     def attachment_process(self, previous: ProcessState) -> ProcessState:
         return previous
+
+    def offline(self) -> bool:
+        return False
 
     def require(self, message: str = "No worker process has started") -> ProcessIdentity:
         raise RelationViolationError(message)
@@ -258,11 +256,6 @@ class ProcessIdentity(ProcessState):
         self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
     ) -> ThreadPresentation:
         return binding.native_presentation(ordinary)
-
-    def project_activity(
-        self, turn_state: TurnState, activity: ObservedActivity,
-    ) -> ObservedActivity:
-        return turn_state.project_activity(activity)
 
     def attachment_process(self, previous: ProcessState) -> ProcessState:
         return self

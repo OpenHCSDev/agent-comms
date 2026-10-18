@@ -153,7 +153,7 @@ class NativeThreadExecution(ThreadExecution):
     @classmethod
     def project_activity(cls, thread: Thread, activity):
         """A running native owner displays its current turn phase."""
-        return thread.process_identity.project_activity(thread.turn_state, activity)
+        return thread.turn_state.project_activity(activity)
 
 
 class ExternalThreadExecution(ThreadExecution):
