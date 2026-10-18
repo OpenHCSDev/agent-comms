@@ -56,10 +56,6 @@ class GoalDisplay(DeclaredFamily):
     def action_failure(self, error: Exception) -> str:
         return str(error)
 
-    @staticmethod
-    def current(goal: GoalDeclaration) -> "GoalDisplay":
-        return goal.display()
-
 
 @dataclass(frozen=True)
 class NoGoal(GoalDisplay):
