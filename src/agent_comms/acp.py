@@ -145,7 +145,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self._selected_write_controllers: dict[tuple[str, int], tuple[str, object]] = {}
 
     def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy:
-        return RuntimeProxy(self, session_id, socket_path(self._comms.root, thread.pid))
+        return RuntimeProxy(
+            self, session_id, socket_path(self._comms.root, thread.require_process().pid),
+        )
 
     # Private attachment ABI consumed by runtime/compaction. State exists only
     # on its component; in-process consumers use that owner directly.
@@ -321,11 +323,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
     @property
-    def private_nk_native_package(self) -> Path | None:
-        launch = self._comms.owners.launch_authority
-        return None if launch is None else launch.native_package
-
-    @property
     def configured_root_id(self) -> str:
         """The bus root ID the launch pinned; the bus reader checks it against the marker."""
         return self._comms.owners.require_private_launch().wire_root_id
@@ -379,7 +376,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # acceptance/selection, instead of verifying history before it too.
             await self.cursors.publish(session_id, thread_name)
             return 0
-        if owner.pid != os.getpid():
+        if not owner.process_identity.runs_here():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
         bus = MessageBus(
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True

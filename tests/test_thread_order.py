@@ -3,6 +3,7 @@
 
 import os
 
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
@@ -18,12 +19,12 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     comms.bus.publisher.publish_ordinary(
         Message(
             sender="alpha", target="beta", body="outgoing", type=InfoKind, timestamp=400
-        )
+        ), origin=AgentOrigin()
     ).message_id
     comms.bus.publisher.publish_ordinary(
         Message(
             sender="beta", target="alpha", body="incoming", type=InfoKind, timestamp=500
-        )
+        ), origin=AgentOrigin()
     ).message_id
     with comms.bus.opened_activity() as clocks:
         assert comms.views.last_sent_timestamps(clocks.sent, registry=comms.registry.snapshot()) == {"alpha": 400, "beta": 500}

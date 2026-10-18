@@ -7,6 +7,7 @@ from contextlib import suppress
 import json
 import os
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -22,7 +23,7 @@ from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_protocol import OwnerAnnouncement
-from agent_comms.runtime import RuntimeProxy, present_session, socket_path
+from agent_comms.runtime import RuntimeProxy, RuntimeServer, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
@@ -495,7 +496,7 @@ async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
         )
         + "\n"
     )
-    comms.threads.attach_session(response.session_id, str(transcript))
+    comms.threads.attach_session((attachment_owner := comms.registry.require(response.session_id)), str(transcript), process=attachment_owner.process_identity)
     proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
     try:
         await proxy.subscribe()
@@ -589,3 +590,30 @@ async def test_subscriber_leaving_mid_transcript_is_not_a_failed_request(
             await task
         await client.shutdown()
         await owner.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_background_failure_is_reported(tmp_path, caplog):
+    """Owner work nobody awaits logs its failure once; cancellation logs nothing."""
+    runtime = RuntimeServer(SimpleNamespace(_comms=SimpleNamespace(root=tmp_path)))
+
+    async def failing_owner_work():
+        raise ValueError("owner work broke")
+
+    async def idle_owner_work():
+        await asyncio.Event().wait()
+
+    caplog.set_level(logging.ERROR, logger="agent_comms.runtime")
+    failed = runtime.background(failing_owner_work())
+    with pytest.raises(ValueError, match="owner work broke"):
+        await failed
+    cancelled = runtime.background(idle_owner_work())
+    await asyncio.sleep(0)
+    cancelled.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled
+    await asyncio.sleep(0)
+    [record] = caplog.records
+    assert "failing_owner_work" in record.getMessage()
+    assert record.exc_info[1] is failed.exception()
+    assert 'raise ValueError("owner work broke")' in caplog.text

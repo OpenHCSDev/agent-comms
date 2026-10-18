@@ -51,7 +51,7 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
         saved_row("a" * 32, "assistant reply", role="assistant"),
     ]
     session.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    comms.threads.attach_session(comms.registry.require("worker"), str(session))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(session), process=attachment_owner.process_identity)
     reopened = wire(comms.root)
     events = reopened.transcripts.thread_transcript_page("worker").events
     assert [event.text for event in events if event.declared_name == "context"] == [

@@ -62,7 +62,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
         drain.cancel()
         await asyncio.gather(drain, return_exceptions=True)
         comms.registry.register(replace(comms.registry.require(child), auto_title_pending=False))
-        comms.threads.attach_session(comms.registry.require(child), str(native.session))
+        comms.threads.attach_session((attachment_owner := comms.registry.require(child)), str(native.session), process=attachment_owner.process_identity)
         yield native, comms, agent, child
     finally:
         await agent.shutdown()

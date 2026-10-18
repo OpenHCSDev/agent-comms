@@ -26,7 +26,7 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
     comms.channels.update_tags("worker", add=frozenset({"test"}))
     session = tmp_path / "session.jsonl"
     session.write_text('{"type":"session","id":"session","version":3}\n')
-    comms.threads.attach_session("worker", str(session))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(session), process=attachment_owner.process_identity)
     updates = []
 
     class Client:
@@ -122,7 +122,7 @@ async def test_native_user_dm_reply_ignores_earlier_channel_route(
     agent.sessions.client = Client()
     session_file = tmp_path / "session.jsonl"
     session_file.touch()
-    comms.threads.attach_session(comms.registry.require("worker"), str(session_file))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(session_file), process=attachment_owner.process_identity)
     comms.channels.update_tags("worker", add=frozenset({"test"}))
     human = comms.messaging.user_identity(str(project))
     origin = HumanInputOrigin.capture(

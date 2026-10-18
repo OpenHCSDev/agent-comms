@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from abc import abstractmethod
 from functools import partial
 from .coordinator import Coordination
@@ -72,7 +71,7 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
 
     def require_owner(self, entry):
         owner = entry.thread
-        if owner.pid != os.getpid() or not entry.status.running:
+        if not owner.process_identity.runs_here() or not entry.status.running:
             raise RuntimeError("This process no longer owns the thread.")
         return owner
 

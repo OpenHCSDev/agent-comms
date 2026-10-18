@@ -1,5 +1,6 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
 import asyncio
 import json
@@ -485,7 +486,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     def append_before_open(*args, **kwargs):
         # _display_snapshot already holds the wire lock at this boundary.
         appended.append(comms.bus.publisher.publish_ordinary(
-            Message("bob", "#team", "raced append", InfoKind)
+            Message("bob", "#team", "raced append", InfoKind), origin=AgentOrigin()
         ))
         with original(*args, **kwargs) as boundary:
             yield boundary

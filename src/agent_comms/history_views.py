@@ -51,6 +51,7 @@ from .presentation import (
     ChannelView,
     CoordinationSnapshot,
     MessageNotification,
+    ThreadRecord,
     ThreadView,
     WireRevision,
 )
@@ -465,7 +466,7 @@ class HistoryViews:
         views = self._presence_views()
         # One bus snapshot for every thread, not one per thread.
         pending = self.bus.pending_counts_all(tuple(view.thread.name for view in views))
-        return [{**view.to_wire(), "pending": pending[view.thread.name]} for view in views]
+        return [replace(view, pending=pending[view.thread.name]).to_wire() for view in views]
 
     def presence(self) -> Sequence[Mapping]:
         """Presence without viewer-specific unread scans."""
@@ -477,42 +478,18 @@ class HistoryViews:
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
         snapshot = self.registry.snapshot()
-        threads = {
-            name: thread
-            for name, thread in snapshot.threads.items()
-            if not active_only or snapshot.statuses[name].active
-        }
-        activities = self.agents.all_activity(
-            (thread for name, thread in threads.items() if snapshot.statuses[name].active),
-            snapshot=snapshot,
-        )
-        pending = self.bus.pending_counts_all(tuple(threads))
-        waits = GoalWaits.at(self.root).read()
-        return [
-            {
-                **t.to_wire(),
-                "status": snapshot.statuses[name].declared_name,
-                "is_fork": t.is_fork,
-                "pending": pending[name],
-                "goal_execution": GoalWaits.execution(t.goal, waits, snapshot, self.agents).to_wire(),
-                "activity": activities[name].state.value if name in activities else "idle",
-                "activity_detail": activities[name].detail if name in activities else "",
-            }
-            for name, t in sorted(threads.items())
-        ]
+        threads = tuple(thread for name, thread in sorted(snapshot.threads.items())
+                        if not active_only or snapshot.statuses[name].active)
+        pending = self.bus.pending_counts_all(tuple(thread.name for thread in threads))
+        return [record.to_wire() for record in ThreadRecord.read(
+            snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)]
 
     def thread_detail(self, name: str, *, include_pending: bool = True) -> Mapping[str, object]:
-        t = self.registry.require(name)
-        detail = {
-            **t.to_wire(),
-            "status": self.registry.status(name).declared_name,
-            "is_fork": t.is_fork,
-        }
-        execution = self.goals.goal_execution(name)
-        detail["goal_execution"] = execution.to_wire()
-        if include_pending:
-            detail["pending"] = self.bus.pending_count(name)
-        return detail
+        thread = self.registry.require(name)
+        pending = self.bus.pending_counts_all((thread.name,)) if include_pending else None
+        record, = ThreadRecord.read(self.registry.snapshot(), self.agents,
+                                    GoalWaits.at(self.root).read(), (thread,), pending)
+        return record.to_wire()
 
     def poll(self, name: str | None = None) -> Mapping:
         """One-shot status snapshot: self state plus inbox."""

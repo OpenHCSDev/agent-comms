@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 from functools import partial
 from http.client import HTTPException
@@ -17,8 +16,6 @@ from .working_memory_labels import QuestionVersion
 from .working_memory_policy import AnnotationPolicy
 from .working_memory_questions import KindQuestion
 from .working_memory_requests import AnnotationBudgetExhausted, DisclosureRequest, FailedAnnotationOutcome
-
-_LOG = logging.getLogger(__name__)
 
 
 class AnnotationWorker:
@@ -40,8 +37,6 @@ class AnnotationWorker:
 
     def retired(self, task):
         self.tasks.discard(task)
-        if not task.cancelled() and (error := task.exception()) is not None:
-            _LOG.error("Annotation worker stopped", exc_info=error)
 
     async def close(self):
         tasks = tuple(self.tasks)
