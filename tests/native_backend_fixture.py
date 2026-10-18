@@ -183,7 +183,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
 
 @asynccontextmanager
 async def native_backend_fixture(tmp_path):
-    package = pinned_native_package()
+    package = pinned_native_package().resolve()
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
     project.mkdir(mode=0o700)
     config.mkdir(mode=0o700)

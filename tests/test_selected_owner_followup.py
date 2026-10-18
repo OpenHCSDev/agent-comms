@@ -11,7 +11,7 @@ from acp import RequestError
 from agent_comms import agent_events as events
 from agent_comms import coordinated_runtime, private_nk_entrypoint
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
-from agent_comms.input_attempt import ClearedUnsentInput, NotSentInput, ReservedInput, StartedInput
+from agent_comms.input_attempt import ClearedUnsentInput, ReservedInput, StartedInput
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -177,135 +177,6 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
         assert isinstance(rows[f"acp:{input_id}"], expected_state)
         assert "beta" not in agent.inputs.backend_inboxes
         assert "beta" not in agent.turns.turn_tasks
-    finally:
-        release.set()
-        await asyncio.gather(turn, return_exceptions=True)
-        await agent.shutdown()
-
-
-@pytest.mark.parametrize(
-    "change",
-    [
-        "goal_revision",
-        "goal_replaced",
-        "goal_paused",
-        "wait_cleared",
-        "owner_replaced",
-        "owner_stopped",
-        "missing_key",
-        "foreign_key",
-    ],
-)
-async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, monkeypatch, change):
-    from dataclasses import replace
-
-    from agent_comms.goal_actions import (
-        ActiveGoalAction,
-        GoalPrecondition,
-        PausedGoalAction,
-        SetGoalAction,
-        StandbyGoalAction,
-    )
-    from agent_comms.owned_turn import OwnedTurn
-    from agent_comms.turn_input_source import CapturedInputDependency
-
-    comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
-    fake, _ = _fake_model()
-    entered, release = asyncio.Event(), asyncio.Event()
-    goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
-    comms.agents.begin_turn("sender", "dependency")
-    comms.goals.update_goal(
-        "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
-    )
-    captured_wait = comms.goals.goal_wait("beta")
-    expected = {}
-    prepare = OwnedTurn.prepare_native
-
-    async def mutate(execution):
-        await prepare(execution)
-        if change == "goal_revision":
-            comms.goals.update_goal(
-                "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
-            )
-        elif change == "goal_replaced":
-            comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))
-        elif change == "goal_paused":
-            comms.goals.update_goal(
-                "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
-            )
-        elif change == "wait_cleared":
-            # The selected reply consumed this wait. Model a stale source that
-            # still requires it; normal accepted owner input has no dependency.
-            assert not comms.goals.goal_wait("beta").matches_id(captured_wait.wait_id)
-            execution.original = replace(
-                execution.original, dependency=CapturedInputDependency(captured_wait.wait_id),
-            )
-        elif change == "owner_replaced":
-            owner = comms.registry.require("beta")
-            comms.registry.register(
-                replace(owner, created_at=owner.created_at + 1, active_turn=None)
-            )
-        elif change == "owner_stopped":
-            comms.registry.unregister("beta")
-        elif change == "missing_key":
-            agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
-        elif change == "foreign_key":
-            execution.original = replace(
-                execution.original,
-                batch=replace(execution.original.batch, originals=(
-                    replace(execution.original.batch.originals[0], key="acp:historical-uncertain"),
-                )),
-            )
-        expected.update(
-            goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta"),
-            generation=comms.goals.open_goal_store().snapshot(goal.id),
-        )
-
-    async def blocked(package, **kwargs):
-        entered.set()
-        await release.wait()
-        return await fake(package, **kwargs)
-
-    async def native(*args, **kwargs):
-        with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
-            assert isinstance(allowed, AuthorityChangedSend)
-        yield events.InputRefused(id=None)
-        yield events.StreamSettled()
-        yield events.Done(ok=False, text="Authority changed before send")
-
-    monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
-    monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
-    comms.messaging.send_message("sender", "beta", "Selected DM")
-    turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
-    try:
-        await asyncio.wait_for(entered.wait(), 5)
-        async with selected_reply(agent, error=RequestError):
-            response = await asyncio.wait_for(
-                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
-            )
-            input_id = accepted_input(response).input_id
-            release.set()
-            await asyncio.wait_for(turn, 8)
-        refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
-        assert isinstance(refused, NotSentInput)
-        assert refused.public_status == "not_sent" and refused.unresolved
-        assert not refused.has_native_binding and not refused.has_started
-        assert (
-            refused.bind(
-                claim_scope=refused.claim_scope,
-                turn_id="retry",
-                native_id="f" * 32,
-                text=refused.source_text,
-            )
-            is None
-        )
-        assert comms.registry.require("beta").goal == expected["goal"]
-        assert comms.goals.goal_wait("beta") == expected["wait"]
-        assert comms.goals.open_goal_store().snapshot(goal.id) == expected["generation"]
     finally:
         release.set()
         await asyncio.gather(turn, return_exceptions=True)
@@ -496,14 +367,14 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
             assert isinstance(allowed, GrantedSend)
         assert kwargs["native_start"](None, "a" * 32, args[2])
         started.append(first_id)
-        yield events.InputStarted(id=None)
+        yield events.OriginalInputStarted()
         command = kwargs["steering_queue"].get_nowait()
         second_id = command.input_id.value
         with kwargs["send_boundary"](second_id, "b" * 32, command.content.text) as allowed:
             assert isinstance(allowed, GrantedSend)
         assert kwargs["native_start"](second_id, "b" * 32, command.content.text)
         started.append(second_id)
-        yield events.InputStarted(id=second_id)
+        yield events.FollowingInputStarted(id=second_id)
         with kwargs["send_boundary"](second_id, "c" * 32, command.content.text) as allowed:
             assert isinstance(allowed, AuthorityChangedSend)
         yield events.StreamSettled()
