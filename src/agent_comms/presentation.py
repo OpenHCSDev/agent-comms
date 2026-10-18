@@ -567,44 +567,33 @@ class ChannelView(WireValue, ToolResult):
         visibility: RosterVisibility,
     ) -> tuple[ChannelView, ...]:
         index = ChannelMemberIndex(snapshot.threads.values())
-        people = {thread.name: thread for thread in snapshot.visible_threads(visibility)}
-        views: list[ChannelView] = []
-        for channel in channels:
-            pinned_members = pins.get(channel.name, frozenset())
-            registered = tuple(thread.name for thread in channel.members(index))
-            members = tuple(
-                sorted(
-                    (name for name in registered if name in people),
-                    key=lambda name: (
-                        name not in pinned_members,
-                        channel.order.key(
-                            name,
-                            people[name].created_at,
-                            activity[name].timestamp if name in activity else 0,
-                            sent.get(name, 0),
-                        ),
-                    ),
-                )
-            )
-            history = messages.get(channel.name, ChannelActivity())
-            views.append(
-                cls(
-                    channel,
-                    members,
-                    max(
-                        history.last_message,
-                        max(
-                            (activity[name].timestamp for name in members if name in activity),
-                            default=0,
-                        ),
-                    ),
-                    history.last_user_input,
-                    pinned_members & frozenset(members),
-                    sum(snapshot.statuses[name].active for name in registered),
-                    len(registered),
-                )
-            )
-        return tuple(sorted(views, key=order.key))
+        return tuple(sorted((cls.capture(
+            channel, channel.members(index), snapshot,
+            pins.get(channel.name, frozenset()), activity, sent,
+            messages.get(channel.name, ChannelActivity()), visibility,
+        ) for channel in channels), key=order.key))
+
+    @classmethod
+    def capture(
+        cls, channel: Channel, registered: tuple[Thread, ...], snapshot: RegistrySnapshot,
+        pins: frozenset[str], activity: Mapping[str, ObservedActivity],
+        sent: Mapping[str, float], history: ChannelActivity, visibility: RosterVisibility,
+    ) -> ChannelView:
+        people = {thread.name: thread for thread in registered
+                  if snapshot.statuses[thread.name].in_view(visibility)}
+        members = tuple(sorted(people, key=lambda name: (
+            name not in pins,
+            channel.order.key(name, people[name].created_at,
+                              activity[name].timestamp if name in activity else 0,
+                              sent.get(name, 0)),
+        )))
+        return cls(
+            channel, members,
+            max(history.last_message,
+                max((activity[name].timestamp for name in members if name in activity), default=0)),
+            history.last_user_input, pins & frozenset(members),
+            sum(snapshot.statuses[thread.name].active for thread in registered), len(registered),
+        )
 
     def to_wire(self) -> dict[str, object]:
         return {
