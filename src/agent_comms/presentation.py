@@ -37,7 +37,8 @@ from .message_reference import MessageReference
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .messages import Message
 from .private_path import FileRevision
-from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
+from .read_basis import (AnonymousViewer, ChannelDisplayScope, Conversation, DisplayBasis,
+                         DisplayedConversation, DisplayViewer, NamedViewer, ReadCursor)
 from .read_ledger import ReadLedger
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .runtime_info import RuntimeInfo
@@ -425,11 +426,20 @@ class ReadAll(ChannelReadMark):
                 NamedViewer(viewer),
             ) as basis:
                 scope = basis.scope(target)
-            # Page preparation takes the bus lock, so release registry first.
-            page = MessagePageRequest.every(scope).read_opened(source)
-            yield presentation.bus.reads.capture(
-                basis.require_viewer(), page.messages, basis.registry, presentation.bus.log.path,
-            )
+            def capture(index):
+                if scope.any_mode or scope.targets is None:
+                    return presentation.bus.reads.capture_indexed(
+                        basis.require_viewer(), index.scope_rows(scope, source.boundary),
+                        basis.registry, source, index,
+                    )
+                return DisplayBasis(
+                    basis.require_viewer(), basis.registry.require(basis.require_viewer()).created_at,
+                    tuple(DisplayedConversation(Conversation(target), (), row.seq)
+                          for target in scope.targets
+                          if (row := index.latest_target(target, source.boundary)) is not None),
+                    source.bus_identity,
+                )
+            yield source.query_page_index(capture)
 
 
 @dataclass(frozen=True, slots=True)

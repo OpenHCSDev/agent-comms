@@ -416,5 +416,11 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
             assert child.returncode == 9, child.stderr.decode()
             comms = wire(tmp_path)
         seen = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
-        assert ReadCursor.union((seen, current_cursor(painted))) == current_cursor(painted), (seed, index, operation)
-        assert seen == current_cursor(acknowledged), (seed, index, operation)
+        painted_cursor, acknowledged_cursor = current_cursor(painted), current_cursor(acknowledged)
+        snapshot = comms.registry.snapshot()
+        with comms.bus.log.full_history_snapshot() as (_, messages):
+            for message in messages:
+                key = ReadLedger.conversation(message, snapshot)
+                read = message.seq in seen.for_conversation(key)
+                assert not read or message.seq in painted_cursor.for_conversation(key), (seed, index, operation, message.seq)
+                assert read == (message.seq in acknowledged_cursor.for_conversation(key)), (seed, index, operation, message.seq)

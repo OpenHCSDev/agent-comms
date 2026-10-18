@@ -275,6 +275,13 @@ class ReadCursor:
 
     conversations: dict[Conversation, ConversationCursor] = field(default_factory=dict)
 
+    def lower_bound(self, scope: ChannelDisplayScope, snapshot: RegistryProvenance) -> int:
+        targets = scope.index_targets
+        if targets is None:
+            return 0
+        return min((self.for_conversation(Conversation(target)).high_water
+                    for target in targets), default=0)
+
     @classmethod
     def union(cls, cursors: Iterable[ReadCursor]) -> ReadCursor:
         grouped: dict[Conversation, list[ConversationCursor]] = {}
@@ -290,11 +297,12 @@ class ReadCursor:
         conversations = dict(self.conversations)
         for item in displayed:
             previous = conversations.get(item.conversation, ConversationCursor())
-            conversations[item.conversation] = previous.add(item.sequences)
+            conversations[item.conversation] = previous.through(item.prefix_through).add(item.sequences)
         return type(self)(conversations)
 
     def current(self, snapshot: RegistryProvenance) -> ReadCursor:
-        return type(self)({key: value for key, value in self.conversations.items() if key.current(snapshot)})
+        return type(self).union(type(self)({key.resolved(snapshot): value})
+            for key, value in self.conversations.items() if key.current(snapshot))
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,7 +313,13 @@ class Conversation:
     def current(self, snapshot: RegistryProvenance) -> bool:
         return all(participant.current(snapshot) for participant in self.participants)
 
-    def scope(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
+    def resolved(self, snapshot: RegistryProvenance) -> Conversation:
+        return type(self)(self.target, tuple(sorted(
+            (participant.resolved(snapshot) for participant in self.participants),
+            key=lambda participant: participant.name,
+        )))
+
+    def scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope | DMDisplayScope:
         if self.target:
             return ChannelDisplayScope(self.target, frozenset((self.target,)))
         first, second = self.participants
@@ -316,6 +330,16 @@ class Conversation:
 class DisplayedConversation:
     conversation: Conversation
     sequences: tuple[int, ...]
+    prefix_through: int = 0
+
+    def select(self, selected: Collection[int]) -> DisplayedConversation:
+        omitted = min((n for n in self.sequences if n not in selected), default=self.prefix_through + 1)
+        return type(self)(self.conversation, tuple(n for n in self.sequences if n in selected),
+                          min(self.prefix_through, omitted - 1))
+
+    def through(self, sequence: int) -> DisplayedConversation:
+        return type(self)(self.conversation, tuple(n for n in self.sequences if n <= sequence),
+                          min(self.prefix_through, sequence))
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,9 +364,7 @@ class DisplayBasis:
             self.viewer,
             self.viewer_created_at,
             tuple(
-                DisplayedConversation(
-                    item.conversation, tuple(n for n in item.sequences if n in selected)
-                )
+                item.select(selected)
                 for item in self.conversations
             ),
             self.bus_identity,
@@ -355,9 +377,7 @@ class DisplayBasis:
             self.viewer,
             self.viewer_created_at,
             tuple(
-                DisplayedConversation(
-                    item.conversation, tuple(n for n in item.sequences if n <= sequence)
-                )
+                item.through(sequence)
                 for item in self.conversations
             ),
             self.bus_identity,
@@ -426,7 +446,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
         # Native input writes use this same wire lock. Scoped page/read queries
         # use opened source snapshots, not live input permission.
         page = bounds.conversation(scope).read(bus.log)
-        with _store_lock(root / "wire", mode=SharedLock()), registry.store.reading() as document:
+        with _store_lock(root / "wire", mode=SharedLock()):
             displayed = bus.reads.capture(viewer_name, page.messages, snapshot, bus.log.path)
             kind = CoveredDMDisplayBasis if displayed.message_count else EmptyDMDisplayBasis
             root_info = root.stat()
@@ -442,7 +462,8 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
                 bus_identity=bus_identity,
                 displayed=displayed,
             )
-            basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))
+            with registry.store.reading() as document:
+                basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))
             return replace(page, display_basis=basis)
 
     def selection(self, history_revision: FileRevision | None) -> DMSelection:

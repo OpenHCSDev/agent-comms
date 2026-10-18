@@ -17,6 +17,7 @@ from .coordination_errors import DMScopeChanged
 from .locked_store import LockedStore, RootFile
 from .private_path import FileIdentity, FileRevision, ObservedPath
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation, ReadCursor
+from .wire_log import WireLog
 from .sealed import Sealed
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
@@ -83,19 +84,29 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         *,
         conversation_snapshot: RegistryProvenance | None = None,
     ) -> DisplayBasis:
+        messages = tuple(messages)
+        with WireLog(bus_path).opened_wire_snapshot() as source:
+            return source.query_page_index(lambda index: self.capture_indexed(
+                viewer, messages, snapshot, source, index,
+                conversation_snapshot=conversation_snapshot,
+            ))
+
+    def capture_indexed(self, viewer, messages, snapshot, source, index, *, conversation_snapshot=None):
         viewer = snapshot.canonical_name(viewer)
-        grouped: dict[Conversation, list[int]] = {}
+        provenance = conversation_snapshot or snapshot
+        grouped: dict[Conversation, set[int]] = {}
         for message in messages:
-            conversation = self.conversation(message, conversation_snapshot or snapshot)
-            grouped.setdefault(conversation, []).append(message.seq)
+            conversation = self.conversation(message, provenance)
+            grouped.setdefault(conversation, set()).add(message.seq)
+        seen = self.cursor(viewer, snapshot)
         return DisplayBasis(
-            viewer,
-            snapshot.threads[viewer].created_at,
-            tuple(
-                DisplayedConversation(conversation, tuple(sorted(set(sequences))))
-                for conversation, sequences in grouped.items()
-            ),
-            self.bus_identity(bus_path),
+            viewer, snapshot.threads[viewer].created_at,
+            tuple(DisplayedConversation(
+                conversation, sequences := tuple(sorted(members)),
+                index.proved_read_prefix(conversation.scope(provenance),
+                    seen.for_conversation(conversation), sequences, source.boundary),
+            ) for conversation, members in grouped.items()),
+            source.bus_identity,
         )
 
     def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:

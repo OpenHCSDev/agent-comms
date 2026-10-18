@@ -15,15 +15,14 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
-from .field_codec import MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import DisplaySnapshot
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, ReadCursor
+from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, ReadCursor
 from .store_files import SharedLock, _store_lock
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
 from .wire_record import WireRecord
@@ -318,6 +317,29 @@ class BusPageIndex:
             snapshot.activity[scope.channel] = ChannelActivity(row.last, row.human)
         return snapshot
 
+    def latest_target(self, target: str, before_offset: int) -> BusPageRow | None:
+        rows = BusPageRow.select(self.connection, where="target=? AND offset<?",
+                                 parameters=(target, before_offset), order_by=("seq",),
+                                 descending=True, limit=1)
+        return rows[0] if rows else None
+
+    def scope_rows(self, scope: ChannelDisplayScope, before_offset: int):
+        predicate, parameters = scope.index_predicate
+        return BusPageRow.select(self.connection, where=f"offset<? AND ({predicate})",
+                                 parameters=(before_offset, *parameters), order_by=("seq",))
+
+    def proved_read_prefix(self, scope: ChannelDisplayScope | DMDisplayScope, previous: ConversationCursor,
+                           sequences: tuple[int, ...], before_offset: int) -> int:
+        through = max((*sequences, *previous.exceptions, previous.high_water))
+        predicate, parameters = scope.index_predicate
+        missing, = self.connection.execute(
+            f'SELECT MIN(seq) FROM "{BusPageRow.declared_name}" WHERE offset<? AND ({predicate}) '
+            'AND seq>? AND seq<=? AND seq NOT IN (SELECT value FROM json_each(?))',
+            (before_offset, *parameters, previous.high_water, through,
+             json.dumps((*sequences, *previous.exceptions))),
+        ).fetchone()
+        return through if missing is None else missing - 1
+
     def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
                        seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
         counts = {}
@@ -351,6 +373,12 @@ class EmptyBusPageIndex(BusPageIndex):
 
     def _offsets(self, *args, **kwargs):
         yield from ()
+
+    def latest_target(self, target, before_offset):
+        return None
+
+    def scope_rows(self, scope, before_offset):
+        return ()
 
     def display_snapshot(self, scopes, boundary):
         return DisplaySnapshot.empty(scopes)

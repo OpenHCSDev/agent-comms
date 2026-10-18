@@ -97,6 +97,11 @@ class WireSnapshot(ABC):
     if TYPE_CHECKING:
         revision: FileRevision
 
+    @property
+    def bus_identity(self) -> tuple[int, int] | None:
+        identity = self.revision.identity
+        return identity.device, identity.inode
+
     @abstractmethod
     def rows(self, after_offset: int = 0, before_offset: int | None = None): ...
 
@@ -179,6 +184,10 @@ class AbsentWireSnapshot(WireSnapshot):
 
     complete_prefix = EmptyWirePrefix()
     boundary = position = 0
+
+    @property
+    def bus_identity(self) -> None:
+        return None
 
     def same_file(self, identity: FileIdentity) -> bool:
         return False

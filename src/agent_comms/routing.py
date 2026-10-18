@@ -10,7 +10,7 @@ from .channel_targets import BuiltinChannel, CommandTarget
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .messages import Message
-from .read_basis import ChannelDisplayScope, Conversation, DMDisplayScope, MessageDisplayScope, ReadCursor
+from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope, ReadCursor
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
@@ -230,7 +230,7 @@ class DeliveryScope(MessageDisplayScope):
         self, delivery: DeliveryMessage, snapshot: RegistryProvenance, seen: ReadCursor
     ) -> bool:
         message = delivery.message
-        if message.seq in seen.for_conversation(self.read_key(message.sender, message.target, snapshot)):
+        if self.has_read(seen, message, snapshot):
             return False
         since = self.minimum_timestamp(
             message.sender, message.target, delivery.sender_lookup, snapshot
@@ -239,7 +239,3 @@ class DeliveryScope(MessageDisplayScope):
 
     def conversation(self, sender: str, target: str) -> str:
         return CommandTarget.named(target).conversation(sender, self.actor, self.canonical)
-
-    def read_key(self, sender: str, target: str, snapshot: RegistryProvenance) -> Conversation:
-        selected = CommandTarget.named(self.conversation(sender, target))
-        return selected.conversation_key(self.actor, snapshot, Conversation)

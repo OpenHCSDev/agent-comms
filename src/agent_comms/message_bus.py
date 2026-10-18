@@ -217,8 +217,8 @@ class MessageBus[Writes: Publisher]:
         seen = self.reads.cursor(delivery.actor, snapshot)
         messages = self.log.messages_for_references(references)
         return self.reads.capture(
-            name, tuple(message for message in messages if delivery.includes(message) and message.seq not in
-                        seen.for_conversation(delivery.read_key(message.sender, message.target, snapshot))),
+            name, tuple(message for message in messages
+                        if delivery.includes(message) and not delivery.has_read(seen, message, snapshot)),
             snapshot, self.log.path,
         )
 
@@ -231,7 +231,7 @@ class MessageBus[Writes: Publisher]:
         return basis.message_count
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
-        """Advance a thread's global inbox cursor without loading messages."""
+        """Mark delivered inbox messages through the requested source sequence."""
         snapshot = self._registry.snapshot()
         canonical = snapshot.require(name).name
         if sequence < 0:
