@@ -2,9 +2,12 @@
 
 import json
 import os
+
+import pytest
 from dataclasses import replace
 from shutil import copytree
 
+from agent_comms.errors import RelationViolationError
 from agent_comms.registry_store import RegistryStore
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -88,6 +91,11 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
     assert entry.turn_record.path == copied / 'turns' / original.path.name
     assert moved.read().threads['worker'].turn_record.path == entry.turn_record.path
     assert moved.read().threads['worker'].turn_record.registry_path == copied / 'registry.json'
+
+    forged = json.loads((copied / 'registry.json').read_text())
+    forged['threads']['worker']['turn_record']['lookup'] = 'wrong-identity'
+    with pytest.raises(RelationViolationError, match='identity differs'):
+        moved._decode(forged)
 
 
 def test_unclaimed_record_still_publishes(tmp_path, monkeypatch):
