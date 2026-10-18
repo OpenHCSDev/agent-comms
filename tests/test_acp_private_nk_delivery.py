@@ -25,7 +25,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import PublicationActivationBlocked, StaleFence
+from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
@@ -209,6 +209,18 @@ def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tm
     assert comms.registry.require("beta").name == "beta"
     assert "gamma" not in comms.registry
     assert comms.bus.log.latest_sequence() == 0
+
+
+def test_private_rename_of_unregistered_participant_takes_the_plain_path(tmp_path):
+    comms, _, _ = _session(tmp_path)
+    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("sender").created_at).lookup
+    renamed = comms.threads._rename_thread("sender", "courier")
+    assert (renamed.previous, renamed.current) == ("sender", "courier")
+    assert comms.registry.require("sender").name == "courier"
+    assert not (comms.root / ".private-owner-rename.pending").exists()
+    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+        with pytest.raises(ParticipantNotRegistered):
+            store.participants.get(lookup)
 
 
 @pytest.mark.asyncio
