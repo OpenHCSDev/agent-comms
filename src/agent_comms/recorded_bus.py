@@ -9,7 +9,7 @@ from .field_codec import FieldCodec, MalformedRecord, NullMember, SubclassUnion
 from .private_path import AbsentPath, FileIdentity, ObservedPath, PresentPath
 
 
-class RecordedBusIdentity(SubclassUnion, ObservedPath):
+class RecordedBusIdentity(SubclassUnion, ObservedPath, affix=""):
     @staticmethod
     def capture(path: Path) -> RecordedBusIdentity:
         try:
