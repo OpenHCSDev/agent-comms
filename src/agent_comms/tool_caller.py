@@ -90,7 +90,7 @@ class ThreadCaller(ToolCaller):
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
         return ThreadListing(threads, presentation.sent_notifications)
 
-    def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ThreadToolCatalogResult:
+    def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ThreadToolCatalogResult(tools, comms.registry.require(self.name).service_tier)
 
     def subject(self, named: str) -> str:
