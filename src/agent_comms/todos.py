@@ -1093,7 +1093,8 @@ class WordingCorrection(TodoOperation):
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        return replace(current, corrections=(*current.corrections, self), revision=current.revision + 1)
+        corrections = (*current.corrections, self)
+        return replace(current, corrections=corrections, revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -1470,13 +1471,14 @@ class TodoStore(TypedStore):
             return self._current(db, todo_id)
 
     def correct(self, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
-        """Record a correction on every open order the unit holds when its published text uses jargon."""
+        """Correct every open order the unit holds when its published text uses jargon."""
         if not (words := tuple(PlainText.found(text))) or not self.path.exists():
             return ()
         with self.writing() as db:
             held = (todo for todo in self._rows(db, "json_extract(assignment,'$.owner')=?", (unit,))
                     if todo.state.open)
-            corrected = tuple(WordingCorrection(todo.revision, message_id, words).apply(todo) for todo in held)
+            corrected = tuple(WordingCorrection(todo.revision, message_id, words).apply(todo)
+                              for todo in held)
             for todo in corrected:
                 todo.upsert(db)
             return corrected
