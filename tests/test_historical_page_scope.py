@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import Comms
-from agent_comms.message_page import HistoryCursor, PageBounds, PageTraversal
+from agent_comms.message_page import HistoryCursor, NewerTraversal, OlderTraversal, PageBounds
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
@@ -108,7 +108,10 @@ def test_complete_forward_and_reverse_traversal_preserves_membership(history, ki
     for _ in range(len(rows) + 1):
         if not page.has_older:
             break
-        page = read(PageBounds(PageTraversal.capture(before=page.oldest_cursor), 2, 600))
+        cursor = page.oldest_cursor
+        traversal = (OlderTraversal(cursor.sequence, cursor.source)
+                     if isinstance(cursor, HistoryCursor) else OlderTraversal(cursor))
+        page = read(PageBounds(traversal, 2, 600))
         backward[0:0] = [message.to_wire() for message in page.messages]
     else:
         raise AssertionError("reverse history cursor did not terminate")
@@ -116,7 +119,9 @@ def test_complete_forward_and_reverse_traversal_preserves_membership(history, ki
     cursor = HistoryCursor(source.key, 0)
     forward = []
     for _ in range(len(rows) + 1):
-        page = read(PageBounds(PageTraversal.capture(after=cursor), 2, 600))
+        traversal = (NewerTraversal(cursor.sequence, cursor.source)
+                     if isinstance(cursor, HistoryCursor) else NewerTraversal(cursor))
+        page = read(PageBounds(traversal, 2, 600))
         forward.extend(message.to_wire() for message in page.messages)
         if not page.has_newer:
             break

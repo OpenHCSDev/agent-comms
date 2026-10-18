@@ -95,20 +95,6 @@ class PageTraversal(ABC):
     cursor: int | None
     source: str | None
 
-    @staticmethod
-    def capture(
-        before: int | HistoryCursor | None = None, after: int | HistoryCursor | None = None
-    ) -> PageTraversal:
-        if before is not None and after is not None:
-            raise ValueError("History pages accept either before or after, not both.")
-        if isinstance(after, HistoryCursor):
-            return NewerTraversal(after.sequence, after.source)
-        if after is not None:
-            return NewerTraversal(after)
-        if isinstance(before, HistoryCursor):
-            return OlderTraversal(before.sequence, before.source)
-        return OlderTraversal(before)
-
     @property
     def historical(self) -> bool:
         return self.source is not None
