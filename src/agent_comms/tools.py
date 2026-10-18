@@ -638,10 +638,10 @@ class CommsGoalTool(ThreadToolRequest):
     goal_id: str = tool_field("Goal identity provided in the turn context")
     status: type[TransitionGoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
     progress: str = tool_field("Progress summary; blocked requires a nonempty explicit reason")
-    wait_for: list[str] | None = tool_field(
+    wait_for: tuple[str, ...] | None = tool_field(
         "Explicit thread names or @names; required for standby", default=None
     )
-    reviewed_inputs: list[str] | None = tool_field(
+    reviewed_inputs: tuple[str, ...] | None = tool_field(
         "Exact unresolved inputId keys inspected and handled for this goal; standby only",
         default=None,
     )
@@ -651,7 +651,7 @@ class CommsGoalTool(ThreadToolRequest):
         command = replace(
             self.status(progress=self.progress),
             expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
-            **{key: tuple(value) for key, value in (
+            **{key: value for key, value in (
                 ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
             ) if value},
         )
