@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from abc import ABC, abstractmethod
 from dataclasses import field, dataclass, replace
 from contextlib import aclosing
 from functools import partial
@@ -161,8 +162,65 @@ class ExecutionWaitingObservation(PrivateObservation):
         return 0
 
 
+class TickState(ABC):
+    @abstractmethod
+    async def next(
+        self, observation: InputObservation, session_id: str, revision: TickRevision,
+    ) -> SettledTick | FullTick: ...
+
+
+class UnsettledTick(TickState):
+    async def next(
+        self, observation: InputObservation, session_id: str, revision: TickRevision,
+    ) -> FullTick:
+        read = await observation._own_entry(session_id)
+        return FullTick(replace(revision, registry=read.revision), read.entry)
+
+
 @dataclass(frozen=True, slots=True)
-class SettledTick:
+class FullTick:
+    revision: TickRevision
+    entry: RegistryEntry
+
+    async def apply(self, observation: InputObservation, session_id: str, watcher: WireWatch) -> TickState:
+        thread = observation.sessions.require(session_id)
+        owner = self.entry.owner_identity
+        try:
+            async with drain_failures(observation.comms, thread, owner):
+                # Configuration changes precede messages handed over by this tick.
+                await observation.sessions.config.sync_thread(session_id)
+                drained = await observation.drain_inbox(session_id)
+                if observation.effects.turns.goals.in_standby(session_id):
+                    await Coordination.run_worker(partial(
+                        observation.comms.goals.recover_closed_goal_wait, session_id,
+                    ))
+                await ProjectResumeCheck(
+                    session_id=session_id, inputs=observation, turns=observation.effects.turns,
+                ).schedule()
+                await observation.effects.turns.goals.schedule_goal(session_id)
+                current = await Coordination.run_worker(partial(observation.comms.registry.require, thread))
+                if (
+                    current.executing
+                    or session_id in observation.effects.turns.turn_tasks
+                    or session_id in observation.backend_inboxes
+                ):
+                    return UnsettledTick()
+                if observation._quiescent(session_id):
+                    marker = await Coordination.run_worker(observation._bus_marker)
+                    return SettledTick(
+                        self.revision, self.entry, marker.claimed_after_seq, marker.last_seq,
+                    )
+                if observation._repeat_observation_ready(session_id, drained):
+                    watcher.notify()
+                elif observation.effects.cursors.delivery(session_id).needs_refresh:
+                    watcher.notify()
+        except DEFERRED_DRAIN_ERRORS:
+            pass
+        return UnsettledTick()
+
+
+@dataclass(frozen=True, slots=True)
+class SettledTick(TickState):
     """The revision a settled tick started from, and this owner's registry entry then.
 
     Read the owner's accepted-input floor from the stored marker when
@@ -171,8 +229,35 @@ class SettledTick:
 
     revision: TickRevision
     entry: RegistryEntry
-    claimed_after_seq: int | None = None
-    through_seq: int = 0
+    claimed_after_seq: int | None
+    through_seq: int
+
+    async def next(
+        self, observation: InputObservation, session_id: str, revision: TickRevision,
+    ) -> SettledTick | FullTick:
+        if revision.other != self.revision.other or not observation._quiescent(session_id):
+            return await UnsettledTick().next(observation, session_id, revision)
+        if revision.registry != self.revision.registry:
+            # A standby's wait graph also depends on other threads' entries.
+            if observation.effects.turns.goals.in_standby(session_id):
+                return await UnsettledTick().next(observation, session_id, revision)
+            step = await UnsettledTick().next(observation, session_id, revision)
+            if step.entry != self.entry:
+                return step
+        else:
+            step = FullTick(revision, self.entry)
+        if (
+            step.revision.bus == self.revision.bus
+            and step.revision.checkpoint == self.revision.checkpoint
+            and step.revision.coordination == self.revision.coordination
+        ):
+            return SettledTick(step.revision, step.entry, self.claimed_after_seq, self.through_seq)
+        return await observation._shared_changes_concern_other_owners(
+            session_id, self, step.revision, step.entry,
+        )
+
+    async def apply(self, observation: InputObservation, session_id: str, watcher: WireWatch) -> TickState:
+        return self
 
 
 class InputObservation:
@@ -286,107 +371,16 @@ class InputObservation:
         )
 
     async def observe(self, session_id: str) -> None:
-        settled: SettledTick | None = None
+        state: TickState = UnsettledTick()
         paths = self._tick_paths()
         async with aclosing(WireWatch.observations(*paths.watch_sources)) as observations:
             async for watcher in observations:
                 self._observation_watchers[session_id] = watcher
-                # A tick whose stores and inputs are unchanged since a settled
-                # tick has nothing new to observe; any change runs it in full.
-                # Another owner's registry or coordination change is not this
-                # owner's: its own entry and private observation are what it
-                # last settled.
                 revision = await Coordination.run_worker(
                     partial(self._tick_revision, session_id)
                 )
-                idle = (
-                    settled is not None
-                    and revision.other == settled.revision.other
-                    and self._quiescent(session_id)
-                )
-                # The settled entry is still current only while the registry is unchanged.
-                entry = settled.entry if idle else None
-                entry_current = idle and revision.registry == settled.revision.registry
-                if idle and not entry_current:
-                    # A standby's wait graph reads other threads' entries.
-                    idle = not self.effects.turns.goals.in_standby(session_id)
-                    if idle:
-                        read = await self._own_entry(session_id)
-                        # Settle at the revision the entry was read from, not
-                        # at the stat taken while the write was in flight.
-                        revision = replace(revision, registry=read.revision)
-                        entry, entry_current = read.entry, True
-                        idle = entry == settled.entry
-                shared_unchanged = (
-                    settled is not None
-                    and revision.bus == settled.revision.bus
-                    and revision.checkpoint == settled.revision.checkpoint
-                    and revision.coordination == settled.revision.coordination
-                )
-                if idle and shared_unchanged:
-                    settled = SettledTick(
-                        revision, entry, settled.claimed_after_seq, settled.through_seq,
-                    )
-                    continue
-                if idle and not shared_unchanged:
-                    # Only shared stores grew (every publisher's appends change
-                    # them); each shared store answers per owner before any row
-                    # is decoded for this owner. Standby owners resolve the same
-                    # per-owner answers: their wait graph needs a full tick only
-                    # when their own part (addressed rows, floor or coordination
-                    # rows) changed.
-                    outcome = await self._shared_changes_concern_other_owners(
-                        session_id, settled, revision, entry,
-                    )
-                    if outcome is not None:
-                        settled = outcome
-                        continue
-                settled = None
-                thread = self.sessions.require(session_id)
-                if not entry_current:
-                    # Read after the revision: the tick observes at least this entry.
-                    read = await self._own_entry(session_id)
-                    revision = replace(revision, registry=read.revision)
-                    entry = read.entry
-                owner = entry.owner_identity
-                try:
-                    async with drain_failures(self.comms, thread, owner):
-                        # A stored model change precedes the messages the same tick hands over.
-                        await self.sessions.config.sync_thread(session_id)
-                        drained = await self.drain_inbox(session_id)
-                        if self.effects.turns.goals.in_standby(session_id):
-                            # Recovery reads only stores in the revision, so it runs
-                            # when one of them changed, not on a clock.
-                            await Coordination.run_worker(partial(
-                                self.comms.goals.recover_closed_goal_wait, session_id,
-                            ))
-                        await ProjectResumeCheck(
-                            session_id=session_id, inputs=self, turns=self.effects.turns,
-                        ).schedule()
-                        await self.effects.turns.goals.schedule_goal(session_id)
-                        current = await Coordination.run_worker(partial(self.comms.registry.require, thread))
-                        if (
-                            current.executing
-                            or session_id in self.effects.turns.turn_tasks
-                            or session_id in self.backend_inboxes
-                        ):
-                            continue
-                        if self._quiescent(session_id):
-                            marker = await Coordination.run_worker(self._bus_marker)
-                            settled = SettledTick(
-                                revision, entry, marker.claimed_after_seq, marker.last_seq,
-                            )
-                        elif self._repeat_observation_ready(session_id, drained):
-                            # The first empty private observation may advance its
-                            # own durable cursor. Re-read that transition now;
-                            # healthy file notification remains event-driven.
-                            watcher.notify()
-                        elif self.effects.cursors.delivery(session_id).needs_refresh:
-                            # Cursor publication has process-local work even when
-                            # no wake task exists to produce another file change.
-                            watcher.notify()
-                except DEFERRED_DRAIN_ERRORS:
-                    continue
+                step = await state.next(self, session_id, revision)
+                state = await step.apply(self, session_id, watcher)
 
     def _bus_marker(self):
         return self.comms.bus.log._private_marker_unlocked()
@@ -394,7 +388,7 @@ class InputObservation:
     async def _shared_changes_concern_other_owners(
         self, session_id: str, settled: SettledTick, revision: TickRevision,
         entry: RegistryEntry,
-    ) -> SettledTick | None:
+    ) -> SettledTick | FullTick:
         """Resolve shared-store changes per owner before any row is decoded.
 
         Every publisher's append changes the shared bus log, its marker, the
@@ -419,13 +413,13 @@ class InputObservation:
                     entry.thread.incarnation.lookup,
                 ))
                 if marker.claimed_after_seq != settled.claimed_after_seq or addressed:
-                    return None
+                    return FullTick(revision, entry)
                 claimed_after_seq, through_seq = marker.claimed_after_seq, marker.last_seq
             if revision.coordination != settled.revision.coordination:
                 if not await self._own_coordination_unchanged(session_id, entry):
-                    return None
+                    return FullTick(revision, entry)
         except UNAVAILABLE_DRAIN_ERRORS:
-            return None
+            return FullTick(revision, entry)
         return SettledTick(revision, entry, claimed_after_seq, through_seq)
 
     def _private_observation_revision(
