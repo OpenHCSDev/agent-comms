@@ -486,9 +486,8 @@ class Thread(ThreadProvenance):
 
 def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""
-    from .launch_runtime import RestartEnvironment, ThreadLaunch
+    from .launch_runtime import ThreadLaunch
 
-    RestartEnvironment.calling_thread()
     launch = ThreadLaunch.current()
     return registry.new_thread(
         name=launch.name,

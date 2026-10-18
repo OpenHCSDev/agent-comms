@@ -484,8 +484,6 @@ class Platform(DeclaredFamily, affix="Platform"):
         for member in self.group_members(leader):
             try:
                 self.send(member, signum)
-            except IdentityMismatchError:
-                raise
             except ProcessLookupError:
                 continue
             signalled += 1
