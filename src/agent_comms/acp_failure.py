@@ -172,13 +172,7 @@ class ACPFailure(DeliveryFailure):
 
     @classmethod
     def from_error(cls, error: RequestError) -> ACPFailure:
-        return cls.request_from_error(error).failure
-
-    @classmethod
-    def request_from_error(cls, error: RequestError) -> RequestFailure:
-        return FieldCodec.decode(ErrorValue, error.data).original_root().request_failure(
-            error.code, str(error)
-        )
+        return RequestFailure.from_error(error).failure
 
     @classmethod
     def from_detail(cls, code, detail, *, diagnostics=()):
@@ -210,7 +204,9 @@ class RequestFailure:
 
     @classmethod
     def from_error(cls, error: RequestError):
-        return ACPFailure.request_from_error(error)
+        return FieldCodec.decode(ErrorValue, error.data).original_root().request_failure(
+            error.code, str(error)
+        )
 
 
 class NativeTurnOutcome(ABC):
