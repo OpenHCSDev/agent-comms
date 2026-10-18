@@ -1,0 +1,12 @@
+original-root/
+original-active-route.json
+original-native-manifest
+reviewed-main-commit
+receipt.json
+verification.json
+operation.log
+failure.txt
+*.pid
+rehearsal-root/
+__pycache__/
+operation/__pycache__/

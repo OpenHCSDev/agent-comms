@@ -32,11 +32,13 @@ class NativePackageError(ValueError):
 
 def _resource_root() -> Path:
     module = Path(__file__).resolve()
+    # A checkout owns its resources in stack/, even if build artifacts exist
+    # beside the source. Only an installed package owns _native resources.
+    if module.parent.name == "agent_comms" and module.parent.parent.name == "src":
+        return module.parents[2] / "stack"
     packaged = module.with_name("_native")
     if packaged.is_dir():
         return packaged
-    if module.parent.name == "agent_comms" and module.parent.parent.name == "src":
-        return module.parents[2] / "stack"
     raise NativePackageError("Installed native package resources are unavailable")
 
 

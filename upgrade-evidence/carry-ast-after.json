@@ -1,0 +1,67 @@
+[
+  {
+    "path": "tools/cutover/carry_storage_roots.py",
+    "functions": [
+      [
+        "carry_locked",
+        20
+      ],
+      [
+        "main",
+        49
+      ]
+    ],
+    "wire_locks": [
+      [
+        54,
+        "_store_lock(args.root / 'wire')"
+      ]
+    ]
+  },
+  {
+    "path": "tools/cutover/carry_goal_publications.py",
+    "functions": [
+      [
+        "carry_locked",
+        24
+      ],
+      [
+        "main",
+        74
+      ]
+    ],
+    "wire_locks": [
+      [
+        28,
+        "_store_lock(registry)"
+      ],
+      [
+        79,
+        "_store_lock(args.root / 'wire')"
+      ]
+    ]
+  },
+  {
+    "path": "tools/cutover/carry_goal_wait_owners.py",
+    "functions": [
+      [
+        "carry_rows",
+        19
+      ],
+      [
+        "carry_locked",
+        37
+      ],
+      [
+        "main",
+        48
+      ]
+    ],
+    "wire_locks": [
+      [
+        53,
+        "_store_lock(args.root / 'wire')"
+      ]
+    ]
+  }
+]

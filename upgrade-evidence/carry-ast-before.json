@@ -1,0 +1,1037 @@
+[
+  {
+    "path": "tools/cutover/carry_storage_roots.py",
+    "sites": [
+      {
+        "line": 8,
+        "node": "ImportFrom",
+        "source": "from __future__ import annotations"
+      },
+      {
+        "line": 10,
+        "node": "Import",
+        "source": "import argparse"
+      },
+      {
+        "line": 11,
+        "node": "Import",
+        "source": "import json"
+      },
+      {
+        "line": 12,
+        "node": "ImportFrom",
+        "source": "from pathlib import Path"
+      },
+      {
+        "line": 14,
+        "node": "ImportFrom",
+        "source": "from agent_comms.field_codec import FieldCodec"
+      },
+      {
+        "line": 15,
+        "node": "ImportFrom",
+        "source": "from agent_comms.registry_store import RegistryStore"
+      },
+      {
+        "line": 16,
+        "node": "ImportFrom",
+        "source": "from agent_comms.storage_rules import StorageRoots, StorageRule"
+      },
+      {
+        "line": 17,
+        "node": "ImportFrom",
+        "source": "from agent_comms.store_files import _store_lock"
+      },
+      {
+        "line": 20,
+        "node": "FunctionDef",
+        "source": "def carry(root: Path, *, apply: bool=False) -> dict:\n    store = RegistryStore(root / 'registry.json')\n    with _store_lock(root / 'wire'), store.locked():\n        store.private_guard_unlocked()\n        document = json.loads(store.path.read_text())\n        rul"
+      },
+      {
+        "line": 21,
+        "node": "Assign",
+        "source": "store = RegistryStore(root / 'registry.json')"
+      },
+      {
+        "line": 21,
+        "node": "Call",
+        "source": "RegistryStore(root / 'registry.json')"
+      },
+      {
+        "line": 22,
+        "node": "With",
+        "source": "with _store_lock(root / 'wire'), store.locked():\n    store.private_guard_unlocked()\n    document = json.loads(store.path.read_text())\n    rule = StorageRule.load(root)\n    changed = 0\n    for name, row in document['threads'].items():\n        old = dict(row)\n  "
+      },
+      {
+        "line": 22,
+        "node": "Call",
+        "source": "_store_lock(root / 'wire')"
+      },
+      {
+        "line": 22,
+        "node": "Call",
+        "source": "store.locked()"
+      },
+      {
+        "line": 23,
+        "node": "Call",
+        "source": "store.private_guard_unlocked()"
+      },
+      {
+        "line": 24,
+        "node": "Assign",
+        "source": "document = json.loads(store.path.read_text())"
+      },
+      {
+        "line": 24,
+        "node": "Call",
+        "source": "json.loads(store.path.read_text())"
+      },
+      {
+        "line": 24,
+        "node": "Call",
+        "source": "store.path.read_text()"
+      },
+      {
+        "line": 25,
+        "node": "Assign",
+        "source": "rule = StorageRule.load(root)"
+      },
+      {
+        "line": 25,
+        "node": "Call",
+        "source": "StorageRule.load(root)"
+      },
+      {
+        "line": 26,
+        "node": "Assign",
+        "source": "changed = 0"
+      },
+      {
+        "line": 27,
+        "node": "Call",
+        "source": "document['threads'].items()"
+      },
+      {
+        "line": 28,
+        "node": "Assign",
+        "source": "old = dict(row)"
+      },
+      {
+        "line": 28,
+        "node": "Call",
+        "source": "dict(row)"
+      },
+      {
+        "line": 29,
+        "node": "Assign",
+        "source": "paths = [*row.get('previous_worktrees', ()), row['worktree']]"
+      },
+      {
+        "line": 29,
+        "node": "Call",
+        "source": "row.get('previous_worktrees', ())"
+      },
+      {
+        "line": 30,
+        "node": "Assign",
+        "source": "paths = tuple(dict.fromkeys((Path(path).expanduser() for path in paths)))"
+      },
+      {
+        "line": 30,
+        "node": "Call",
+        "source": "tuple(dict.fromkeys((Path(path).expanduser() for path in paths)))"
+      },
+      {
+        "line": 30,
+        "node": "Call",
+        "source": "dict.fromkeys((Path(path).expanduser() for path in paths))"
+      },
+      {
+        "line": 30,
+        "node": "Call",
+        "source": "Path(path).expanduser()"
+      },
+      {
+        "line": 30,
+        "node": "Call",
+        "source": "Path(path)"
+      },
+      {
+        "line": 31,
+        "node": "If",
+        "source": "if any((not path.is_absolute() for path in paths)):\n    raise ValueError(f'{name}: legacy project path must be absolute')"
+      },
+      {
+        "line": 31,
+        "node": "Call",
+        "source": "any((not path.is_absolute() for path in paths))"
+      },
+      {
+        "line": 31,
+        "node": "Call",
+        "source": "path.is_absolute()"
+      },
+      {
+        "line": 32,
+        "node": "Call",
+        "source": "ValueError(f'{name}: legacy project path must be absolute')"
+      },
+      {
+        "line": 33,
+        "node": "Assign",
+        "source": "stored = row.get('storage_roots')"
+      },
+      {
+        "line": 33,
+        "node": "Call",
+        "source": "row.get('storage_roots')"
+      },
+      {
+        "line": 34,
+        "node": "Assign",
+        "source": "roots = FieldCodec.decode(StorageRoots, stored) if stored is not None else rule.initial_roots(name, str(paths[0]))"
+      },
+      {
+        "line": 34,
+        "node": "Call",
+        "source": "FieldCodec.decode(StorageRoots, stored)"
+      },
+      {
+        "line": 35,
+        "node": "Call",
+        "source": "rule.initial_roots(name, str(paths[0]))"
+      },
+      {
+        "line": 35,
+        "node": "Call",
+        "source": "str(paths[0])"
+      },
+      {
+        "line": 37,
+        "node": "Assign",
+        "source": "roots = roots.adding(path.resolve())"
+      },
+      {
+        "line": 37,
+        "node": "Call",
+        "source": "roots.adding(path.resolve())"
+      },
+      {
+        "line": 37,
+        "node": "Call",
+        "source": "path.resolve()"
+      },
+      {
+        "line": 38,
+        "node": "Assign",
+        "source": "row['storage_roots'] = FieldCodec.encode(roots)"
+      },
+      {
+        "line": 38,
+        "node": "Call",
+        "source": "FieldCodec.encode(roots)"
+      },
+      {
+        "line": 39,
+        "node": "Call",
+        "source": "row.pop('previous_worktrees', None)"
+      },
+      {
+        "line": 41,
+        "node": "If",
+        "source": "if apply and changed:\n    store._write_unlocked(json.dumps(document, indent=2))"
+      },
+      {
+        "line": 44,
+        "node": "Call",
+        "source": "store._write_unlocked(json.dumps(document, indent=2))"
+      },
+      {
+        "line": 44,
+        "node": "Call",
+        "source": "json.dumps(document, indent=2)"
+      },
+      {
+        "line": 45,
+        "node": "Call",
+        "source": "len(document['threads'])"
+      },
+      {
+        "line": 48,
+        "node": "FunctionDef",
+        "source": "def main() -> None:\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('root', type=lambda text: Path(text).resolve())\n    parser.add_argument('--apply', action='store_true')\n    args = parser.parse_args()\n    print(json.dumps(ca"
+      },
+      {
+        "line": 49,
+        "node": "Assign",
+        "source": "parser = argparse.ArgumentParser(description=__doc__)"
+      },
+      {
+        "line": 49,
+        "node": "Call",
+        "source": "argparse.ArgumentParser(description=__doc__)"
+      },
+      {
+        "line": 50,
+        "node": "Call",
+        "source": "parser.add_argument('root', type=lambda text: Path(text).resolve())"
+      },
+      {
+        "line": 50,
+        "node": "Call",
+        "source": "Path(text).resolve()"
+      },
+      {
+        "line": 50,
+        "node": "Call",
+        "source": "Path(text)"
+      },
+      {
+        "line": 51,
+        "node": "Call",
+        "source": "parser.add_argument('--apply', action='store_true')"
+      },
+      {
+        "line": 52,
+        "node": "Assign",
+        "source": "args = parser.parse_args()"
+      },
+      {
+        "line": 52,
+        "node": "Call",
+        "source": "parser.parse_args()"
+      },
+      {
+        "line": 53,
+        "node": "Call",
+        "source": "print(json.dumps(carry(args.root, apply=args.apply)))"
+      },
+      {
+        "line": 53,
+        "node": "Call",
+        "source": "json.dumps(carry(args.root, apply=args.apply))"
+      },
+      {
+        "line": 53,
+        "node": "Call",
+        "source": "carry(args.root, apply=args.apply)"
+      },
+      {
+        "line": 56,
+        "node": "If",
+        "source": "if __name__ == '__main__':\n    main()"
+      },
+      {
+        "line": 57,
+        "node": "Call",
+        "source": "main()"
+      }
+    ]
+  },
+  {
+    "path": "tools/cutover/carry_goal_publications.py",
+    "sites": [
+      {
+        "line": 7,
+        "node": "ImportFrom",
+        "source": "from __future__ import annotations"
+      },
+      {
+        "line": 9,
+        "node": "Import",
+        "source": "import argparse"
+      },
+      {
+        "line": 10,
+        "node": "Import",
+        "source": "import json"
+      },
+      {
+        "line": 11,
+        "node": "Import",
+        "source": "import sqlite3"
+      },
+      {
+        "line": 12,
+        "node": "ImportFrom",
+        "source": "from contextlib import closing, nullcontext"
+      },
+      {
+        "line": 13,
+        "node": "ImportFrom",
+        "source": "from pathlib import Path"
+      },
+      {
+        "line": 15,
+        "node": "ImportFrom",
+        "source": "from agent_comms.field_codec import FieldCodec"
+      },
+      {
+        "line": 16,
+        "node": "ImportFrom",
+        "source": "from agent_comms.goal_history import GoalHistoryEntry"
+      },
+      {
+        "line": 17,
+        "node": "ImportFrom",
+        "source": "from agent_comms.goals import Goal"
+      },
+      {
+        "line": 18,
+        "node": "ImportFrom",
+        "source": "from agent_comms.registry_document import RegistryDocument"
+      },
+      {
+        "line": 19,
+        "node": "ImportFrom",
+        "source": "from agent_comms.registry_store import RegistryStore"
+      },
+      {
+        "line": 20,
+        "node": "ImportFrom",
+        "source": "from agent_comms.store_files import _store_lock"
+      },
+      {
+        "line": 21,
+        "node": "ImportFrom",
+        "source": "from agent_comms.wire_log import WireLog"
+      },
+      {
+        "line": 24,
+        "node": "FunctionDef",
+        "source": "def carry(root: Path, *, apply: bool=False) -> dict:\n    registry = root / 'registry.json'\n    history = root / 'goal_history.sqlite3'\n    with _store_lock(root / 'wire'), _store_lock(registry):\n        with WireLog(root / 'bus.jsonl').certified_read() as sour"
+      },
+      {
+        "line": 25,
+        "node": "Assign",
+        "source": "registry = root / 'registry.json'"
+      },
+      {
+        "line": 26,
+        "node": "Assign",
+        "source": "history = root / 'goal_history.sqlite3'"
+      },
+      {
+        "line": 27,
+        "node": "With",
+        "source": "with _store_lock(root / 'wire'), _store_lock(registry):\n    with WireLog(root / 'bus.jsonl').certified_read() as source:\n        head = source.committed_sequence()\n    store = RegistryStore(registry)\n    store.private_guard_unlocked()\n    document = json.loads"
+      },
+      {
+        "line": 27,
+        "node": "Call",
+        "source": "_store_lock(root / 'wire')"
+      },
+      {
+        "line": 27,
+        "node": "Call",
+        "source": "_store_lock(registry)"
+      },
+      {
+        "line": 28,
+        "node": "With",
+        "source": "with WireLog(root / 'bus.jsonl').certified_read() as source:\n    head = source.committed_sequence()"
+      },
+      {
+        "line": 28,
+        "node": "Call",
+        "source": "WireLog(root / 'bus.jsonl').certified_read()"
+      },
+      {
+        "line": 28,
+        "node": "Call",
+        "source": "WireLog(root / 'bus.jsonl')"
+      },
+      {
+        "line": 29,
+        "node": "Assign",
+        "source": "head = source.committed_sequence()"
+      },
+      {
+        "line": 29,
+        "node": "Call",
+        "source": "source.committed_sequence()"
+      },
+      {
+        "line": 30,
+        "node": "Assign",
+        "source": "store = RegistryStore(registry)"
+      },
+      {
+        "line": 30,
+        "node": "Call",
+        "source": "RegistryStore(registry)"
+      },
+      {
+        "line": 31,
+        "node": "Call",
+        "source": "store.private_guard_unlocked()"
+      },
+      {
+        "line": 32,
+        "node": "Assign",
+        "source": "document = json.loads(registry.read_text())"
+      },
+      {
+        "line": 32,
+        "node": "Call",
+        "source": "json.loads(registry.read_text())"
+      },
+      {
+        "line": 32,
+        "node": "Call",
+        "source": "registry.read_text()"
+      },
+      {
+        "line": 33,
+        "node": "Assign",
+        "source": "goals = [thread['goal'] for thread in document['threads'].values() if thread['goal'] is not None]"
+      },
+      {
+        "line": 33,
+        "node": "Call",
+        "source": "document['threads'].values()"
+      },
+      {
+        "line": 35,
+        "node": "Assign",
+        "source": "connection = sqlite3.connect(f'{history.as_uri()}?mode=rw', uri=True) if history.exists() else None"
+      },
+      {
+        "line": 35,
+        "node": "Call",
+        "source": "history.exists()"
+      },
+      {
+        "line": 35,
+        "node": "Call",
+        "source": "sqlite3.connect(f'{history.as_uri()}?mode=rw', uri=True)"
+      },
+      {
+        "line": 35,
+        "node": "Call",
+        "source": "history.as_uri()"
+      },
+      {
+        "line": 36,
+        "node": "With",
+        "source": "with closing(connection) if connection is not None else nullcontext():\n    rows = []\n    if connection is not None:\n        connection.execute('PRAGMA synchronous=EXTRA')\n        for sequence, before, after in connection.execute(f'SELECT sequence,\"before\",\"aft"
+      },
+      {
+        "line": 36,
+        "node": "Call",
+        "source": "closing(connection)"
+      },
+      {
+        "line": 36,
+        "node": "Call",
+        "source": "nullcontext()"
+      },
+      {
+        "line": 37,
+        "node": "Assign",
+        "source": "rows = []"
+      },
+      {
+        "line": 38,
+        "node": "If",
+        "source": "if connection is not None:\n    connection.execute('PRAGMA synchronous=EXTRA')\n    for sequence, before, after in connection.execute(f'SELECT sequence,\"before\",\"after\" FROM {GoalHistoryEntry.declared_name}'):\n        pair = [json.loads(value) if value is not No"
+      },
+      {
+        "line": 39,
+        "node": "Call",
+        "source": "connection.execute('PRAGMA synchronous=EXTRA')"
+      },
+      {
+        "line": 40,
+        "node": "Call",
+        "source": "connection.execute(f'SELECT sequence,\"before\",\"after\" FROM {GoalHistoryEntry.declared_name}')"
+      },
+      {
+        "line": 43,
+        "node": "Assign",
+        "source": "pair = [json.loads(value) if value is not None else None for value in (before, after)]"
+      },
+      {
+        "line": 43,
+        "node": "Call",
+        "source": "json.loads(value)"
+      },
+      {
+        "line": 44,
+        "node": "Call",
+        "source": "rows.append((sequence, pair))"
+      },
+      {
+        "line": 45,
+        "node": "Call",
+        "source": "goals.extend((goal for goal in pair if goal is not None))"
+      },
+      {
+        "line": 48,
+        "node": "Assign",
+        "source": "published = {}"
+      },
+      {
+        "line": 50,
+        "node": "If",
+        "source": "if 'published_seq' in goal:\n    previous = published.setdefault(goal['id'], goal['published_seq'])\n    if previous != goal['published_seq']:\n        raise ValueError('Conflicting publication sequences for one goal')"
+      },
+      {
+        "line": 51,
+        "node": "Assign",
+        "source": "previous = published.setdefault(goal['id'], goal['published_seq'])"
+      },
+      {
+        "line": 51,
+        "node": "Call",
+        "source": "published.setdefault(goal['id'], goal['published_seq'])"
+      },
+      {
+        "line": 52,
+        "node": "If",
+        "source": "if previous != goal['published_seq']:\n    raise ValueError('Conflicting publication sequences for one goal')"
+      },
+      {
+        "line": 53,
+        "node": "Call",
+        "source": "ValueError('Conflicting publication sequences for one goal')"
+      },
+      {
+        "line": 54,
+        "node": "Assign",
+        "source": "changed = 0"
+      },
+      {
+        "line": 56,
+        "node": "If",
+        "source": "if 'published_seq' not in goal:\n    goal['published_seq'] = published.setdefault(goal['id'], head)\n    changed += 1"
+      },
+      {
+        "line": 57,
+        "node": "Assign",
+        "source": "goal['published_seq'] = published.setdefault(goal['id'], head)"
+      },
+      {
+        "line": 57,
+        "node": "Call",
+        "source": "published.setdefault(goal['id'], head)"
+      },
+      {
+        "line": 59,
+        "node": "Call",
+        "source": "FieldCodec.decode(Goal, goal)"
+      },
+      {
+        "line": 60,
+        "node": "Assign",
+        "source": "decoded = FieldCodec.decode(RegistryDocument, document)"
+      },
+      {
+        "line": 60,
+        "node": "Call",
+        "source": "FieldCodec.decode(RegistryDocument, document)"
+      },
+      {
+        "line": 61,
+        "node": "If",
+        "source": "if apply and changed:\n    with connection if connection is not None else nullcontext():\n        if connection is not None:\n            for sequence, pair in rows:\n                connection.execute(f'UPDATE {GoalHistoryEntry.declared_name} SET \"before\"=?,\"afte"
+      },
+      {
+        "line": 62,
+        "node": "With",
+        "source": "with connection if connection is not None else nullcontext():\n    if connection is not None:\n        for sequence, pair in rows:\n            connection.execute(f'UPDATE {GoalHistoryEntry.declared_name} SET \"before\"=?,\"after\"=? WHERE sequence=?', (*[json.dumps("
+      },
+      {
+        "line": 62,
+        "node": "Call",
+        "source": "nullcontext()"
+      },
+      {
+        "line": 63,
+        "node": "If",
+        "source": "if connection is not None:\n    for sequence, pair in rows:\n        connection.execute(f'UPDATE {GoalHistoryEntry.declared_name} SET \"before\"=?,\"after\"=? WHERE sequence=?', (*[json.dumps(goal) if goal is not None else None for goal in pair], sequence))"
+      },
+      {
+        "line": 65,
+        "node": "Call",
+        "source": "connection.execute(f'UPDATE {GoalHistoryEntry.declared_name} SET \"before\"=?,\"after\"=? WHERE sequence=?', (*[json.dumps(goal) if goal is not None else None for goal in pair], sequence))"
+      },
+      {
+        "line": 67,
+        "node": "Call",
+        "source": "json.dumps(goal)"
+      },
+      {
+        "line": 69,
+        "node": "Call",
+        "source": "store.save_unlocked(decoded)"
+      },
+      {
+        "line": 70,
+        "node": "Call",
+        "source": "len(goals)"
+      },
+      {
+        "line": 73,
+        "node": "FunctionDef",
+        "source": "def main() -> None:\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('root', type=lambda value: Path(value).resolve())\n    parser.add_argument('--apply', action='store_true')\n    args = parser.parse_args()\n    print(json.dumps("
+      },
+      {
+        "line": 74,
+        "node": "Assign",
+        "source": "parser = argparse.ArgumentParser(description=__doc__)"
+      },
+      {
+        "line": 74,
+        "node": "Call",
+        "source": "argparse.ArgumentParser(description=__doc__)"
+      },
+      {
+        "line": 75,
+        "node": "Call",
+        "source": "parser.add_argument('root', type=lambda value: Path(value).resolve())"
+      },
+      {
+        "line": 75,
+        "node": "Call",
+        "source": "Path(value).resolve()"
+      },
+      {
+        "line": 75,
+        "node": "Call",
+        "source": "Path(value)"
+      },
+      {
+        "line": 76,
+        "node": "Call",
+        "source": "parser.add_argument('--apply', action='store_true')"
+      },
+      {
+        "line": 77,
+        "node": "Assign",
+        "source": "args = parser.parse_args()"
+      },
+      {
+        "line": 77,
+        "node": "Call",
+        "source": "parser.parse_args()"
+      },
+      {
+        "line": 78,
+        "node": "Call",
+        "source": "print(json.dumps(carry(args.root, apply=args.apply)))"
+      },
+      {
+        "line": 78,
+        "node": "Call",
+        "source": "json.dumps(carry(args.root, apply=args.apply))"
+      },
+      {
+        "line": 78,
+        "node": "Call",
+        "source": "carry(args.root, apply=args.apply)"
+      },
+      {
+        "line": 81,
+        "node": "If",
+        "source": "if __name__ == '__main__':\n    main()"
+      },
+      {
+        "line": 82,
+        "node": "Call",
+        "source": "main()"
+      }
+    ]
+  },
+  {
+    "path": "tools/cutover/carry_goal_wait_owners.py",
+    "sites": [
+      {
+        "line": 6,
+        "node": "ImportFrom",
+        "source": "from __future__ import annotations"
+      },
+      {
+        "line": 8,
+        "node": "Import",
+        "source": "import argparse"
+      },
+      {
+        "line": 9,
+        "node": "Import",
+        "source": "import json"
+      },
+      {
+        "line": 10,
+        "node": "ImportFrom",
+        "source": "from pathlib import Path"
+      },
+      {
+        "line": 12,
+        "node": "ImportFrom",
+        "source": "from agent_comms.field_codec import FieldCodec"
+      },
+      {
+        "line": 13,
+        "node": "ImportFrom",
+        "source": "from agent_comms.goal_waits import GoalWaits, RecordedGoalWait"
+      },
+      {
+        "line": 14,
+        "node": "ImportFrom",
+        "source": "from agent_comms.registration import Registration"
+      },
+      {
+        "line": 15,
+        "node": "ImportFrom",
+        "source": "from agent_comms.registry_document import RegistrySnapshot"
+      },
+      {
+        "line": 16,
+        "node": "ImportFrom",
+        "source": "from agent_comms.store_files import _store_lock"
+      },
+      {
+        "line": 19,
+        "node": "FunctionDef",
+        "source": "def carry_rows(raw: dict, snapshot: RegistrySnapshot) -> dict[str, RecordedGoalWait]:\n    \"\"\"Resolve old date-only rows once at cutover, never on the runtime path.\"\"\"\n    pending = dict(raw)\n    carried = {}\n    for thread in snapshot.threads.values():\n       "
+      },
+      {
+        "line": 21,
+        "node": "Assign",
+        "source": "pending = dict(raw)"
+      },
+      {
+        "line": 21,
+        "node": "Call",
+        "source": "dict(raw)"
+      },
+      {
+        "line": 22,
+        "node": "Assign",
+        "source": "carried = {}"
+      },
+      {
+        "line": 23,
+        "node": "Call",
+        "source": "snapshot.threads.values()"
+      },
+      {
+        "line": 24,
+        "node": "Assign",
+        "source": "goal = thread.goal"
+      },
+      {
+        "line": 25,
+        "node": "If",
+        "source": "if goal is None or goal.id not in pending:\n    continue"
+      },
+      {
+        "line": 27,
+        "node": "Assign",
+        "source": "row = dict(pending.pop(goal.id))"
+      },
+      {
+        "line": 27,
+        "node": "Call",
+        "source": "dict(pending.pop(goal.id))"
+      },
+      {
+        "line": 27,
+        "node": "Call",
+        "source": "pending.pop(goal.id)"
+      },
+      {
+        "line": 28,
+        "node": "If",
+        "source": "if row.pop('owner_created_at') != thread.created_at or row['goal_id'] != goal.id:\n    raise ValueError(f'Wait {goal.id} does not belong to its recorded owner')"
+      },
+      {
+        "line": 28,
+        "node": "Call",
+        "source": "row.pop('owner_created_at')"
+      },
+      {
+        "line": 29,
+        "node": "Call",
+        "source": "ValueError(f'Wait {goal.id} does not belong to its recorded owner')"
+      },
+      {
+        "line": 30,
+        "node": "Assign",
+        "source": "row['owner'] = thread.incarnation.require_recorded().to_wire()"
+      },
+      {
+        "line": 30,
+        "node": "Call",
+        "source": "thread.incarnation.require_recorded().to_wire()"
+      },
+      {
+        "line": 30,
+        "node": "Call",
+        "source": "thread.incarnation.require_recorded()"
+      },
+      {
+        "line": 31,
+        "node": "Assign",
+        "source": "carried[goal.id] = FieldCodec.decode(RecordedGoalWait, row)"
+      },
+      {
+        "line": 31,
+        "node": "Call",
+        "source": "FieldCodec.decode(RecordedGoalWait, row)"
+      },
+      {
+        "line": 32,
+        "node": "If",
+        "source": "if pending:\n    raise ValueError(f'Unresolved wait owners; nothing published: {sorted(pending)}')"
+      },
+      {
+        "line": 33,
+        "node": "Call",
+        "source": "ValueError(f'Unresolved wait owners; nothing published: {sorted(pending)}')"
+      },
+      {
+        "line": 33,
+        "node": "Call",
+        "source": "sorted(pending)"
+      },
+      {
+        "line": 37,
+        "node": "FunctionDef",
+        "source": "def main() -> None:\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument('root', type=Path)\n    parser.add_argument('--apply', action='store_true', help='Publish only after old readers/writers stop')\n    args = parser.parse_args()\n"
+      },
+      {
+        "line": 38,
+        "node": "Assign",
+        "source": "parser = argparse.ArgumentParser(description=__doc__)"
+      },
+      {
+        "line": 38,
+        "node": "Call",
+        "source": "argparse.ArgumentParser(description=__doc__)"
+      },
+      {
+        "line": 39,
+        "node": "Call",
+        "source": "parser.add_argument('root', type=Path)"
+      },
+      {
+        "line": 40,
+        "node": "Call",
+        "source": "parser.add_argument('--apply', action='store_true', help='Publish only after old readers/writers stop')"
+      },
+      {
+        "line": 41,
+        "node": "Assign",
+        "source": "args = parser.parse_args()"
+      },
+      {
+        "line": 41,
+        "node": "Call",
+        "source": "parser.parse_args()"
+      },
+      {
+        "line": 42,
+        "node": "Assign",
+        "source": "waits = GoalWaits.at(args.root)"
+      },
+      {
+        "line": 42,
+        "node": "Call",
+        "source": "GoalWaits.at(args.root)"
+      },
+      {
+        "line": 43,
+        "node": "With",
+        "source": "with _store_lock(args.root / 'wire'):\n    registry = Registration(args.root / 'registry.json')\n    raw = json.loads(waits.path.read_text()) if waits.path.exists() else {}\n    carried = carry_rows(raw, registry.snapshot())\n    if args.apply:\n        waits.repla"
+      },
+      {
+        "line": 43,
+        "node": "Call",
+        "source": "_store_lock(args.root / 'wire')"
+      },
+      {
+        "line": 44,
+        "node": "Assign",
+        "source": "registry = Registration(args.root / 'registry.json')"
+      },
+      {
+        "line": 44,
+        "node": "Call",
+        "source": "Registration(args.root / 'registry.json')"
+      },
+      {
+        "line": 45,
+        "node": "Assign",
+        "source": "raw = json.loads(waits.path.read_text()) if waits.path.exists() else {}"
+      },
+      {
+        "line": 45,
+        "node": "Call",
+        "source": "waits.path.exists()"
+      },
+      {
+        "line": 45,
+        "node": "Call",
+        "source": "json.loads(waits.path.read_text())"
+      },
+      {
+        "line": 45,
+        "node": "Call",
+        "source": "waits.path.read_text()"
+      },
+      {
+        "line": 46,
+        "node": "Assign",
+        "source": "carried = carry_rows(raw, registry.snapshot())"
+      },
+      {
+        "line": 46,
+        "node": "Call",
+        "source": "carry_rows(raw, registry.snapshot())"
+      },
+      {
+        "line": 46,
+        "node": "Call",
+        "source": "registry.snapshot()"
+      },
+      {
+        "line": 47,
+        "node": "If",
+        "source": "if args.apply:\n    waits.replace(carried)"
+      },
+      {
+        "line": 48,
+        "node": "Call",
+        "source": "waits.replace(carried)"
+      },
+      {
+        "line": 49,
+        "node": "Call",
+        "source": "print(json.dumps({'waits': len(carried), 'applied': args.apply}))"
+      },
+      {
+        "line": 49,
+        "node": "Call",
+        "source": "json.dumps({'waits': len(carried), 'applied': args.apply})"
+      },
+      {
+        "line": 49,
+        "node": "Call",
+        "source": "len(carried)"
+      },
+      {
+        "line": 52,
+        "node": "If",
+        "source": "if __name__ == '__main__':\n    main()"
+      },
+      {
+        "line": 53,
+        "node": "Call",
+        "source": "main()"
+      }
+    ]
+  }
+]
