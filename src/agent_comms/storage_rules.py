@@ -181,7 +181,8 @@ class CheckoutStorageEffect(AllocateStorageEffect):
     def check(self, rule, thread):
         rule.require_path(thread, self.path)
         if not rule.owns_checkout(thread, self.path):
-            rule.deny(f'checkout destination must be {rule.order_checkout(thread.name, "P<number>")}')
+            destination = rule.order_checkout(thread.name, "P<number>")
+            rule.deny(f'checkout destination must be {destination}')
         rule.require_allocation(thread, self.path)
 
 
