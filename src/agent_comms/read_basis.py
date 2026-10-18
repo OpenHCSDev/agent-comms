@@ -11,10 +11,10 @@ import asyncio
 from abc import ABC, abstractmethod
 from bisect import bisect_left
 from collections.abc import Callable, Collection, Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import InitVar, dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, TextIO
+from typing import TYPE_CHECKING, TextIO
 
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
@@ -26,11 +26,9 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 class DisplayViewer(ABC):
     """The reader owns read evidence, aliases and cursor selection."""
 
-    name: str | None
-
-    @classmethod
-    def named_or_anonymous(cls, name: str | None) -> DisplayViewer:
-        return AnonymousViewer() if name is None else NamedViewer(name)
+    @property
+    @abstractmethod
+    def history_name(self) -> str | None: ...
 
     @abstractmethod
     def cursor(self, reads, snapshot, document) -> ReadCursor: ...
@@ -47,7 +45,9 @@ class DisplayViewer(ABC):
 
 @dataclass(frozen=True, slots=True)
 class AnonymousViewer(DisplayViewer):
-    name: ClassVar[None] = None
+    @property
+    def history_name(self) -> None:
+        return None
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
         return ReadCursor()
@@ -65,6 +65,14 @@ class AnonymousViewer(DisplayViewer):
 @dataclass(frozen=True, slots=True)
 class NamedViewer(DisplayViewer):
     name: str
+    namespace: InitVar[RegistryProvenance]
+
+    def __post_init__(self, namespace) -> None:
+        object.__setattr__(self, "name", namespace.canonical_name(self.name))
+
+    @property
+    def history_name(self) -> str:
+        return self.name
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
         return reads.cursor(self.name, snapshot, document=document)

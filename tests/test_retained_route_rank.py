@@ -1,5 +1,6 @@
 """A retained original cut is independent of later routes and timestamp history."""
 
+from agent_comms.read_basis import NamedViewer
 from unittest.mock import patch
 
 from agent_comms.bus_route_counts import BusRouteCounts, OpenedRouteCounts, RouteSourceRow
@@ -30,11 +31,11 @@ def test_original_empty_cut_cannot_clear_a_later_index(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    with comms.bus.snapshot(viewer=viewer) as (basis, source):
+    with comms.bus.snapshot(viewer=NamedViewer(viewer, comms.registry.snapshot())) as (basis, source):
         assert source.through == 0
         message = comms.messaging.send_message('sender', viewer, 'after empty capture')
         observer = wire(tmp_path)
-        with observer.bus.snapshot(viewer=viewer) as (pending_basis, pending_source):
+        with observer.bus.snapshot(viewer=NamedViewer(viewer, observer.registry.snapshot())) as (pending_basis, pending_source):
             assert observer.bus.pending_counts_opened(pending_source, pending_basis) == {'sender': 1}
         with BusRouteCounts(comms.bus.log.path) as index:
             before = RouteSourceRow.select(index.connection)
@@ -55,7 +56,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
     comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
         viewer, (originals[0],), comms.registry.snapshot(), comms.bus.log.path,
     ))
-    with comms.bus.snapshot(viewer=viewer) as (basis, source):
+    with comms.bus.snapshot(viewer=NamedViewer(viewer, comms.registry.snapshot())) as (basis, source):
         delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
 
         def retained():
@@ -88,7 +89,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
                 comms.registry.declare(comms.registry.new_thread(sender, frozenset(), str(tmp_path)))
                 comms.messaging.send_message(sender, viewer, 'a route absent at capture')
             observer = wire(tmp_path)
-            with observer.bus.snapshot(viewer=viewer) as (pending_basis, pending_source):
+            with observer.bus.snapshot(viewer=NamedViewer(viewer, observer.registry.snapshot())) as (pending_basis, pending_source):
                 observer.bus.pending_counts_opened(pending_source, pending_basis)  # Real independent catchup.
             after = retained()
             assert after[1] == initial[1]  # No future route eligibility calls.

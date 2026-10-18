@@ -41,14 +41,15 @@ from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
 from .presentation import (
+    ChannelReadMark,
+    ReadAll,
     ChannelView,
     CoordinationSnapshot,
     MessageNotification,
     ThreadView,
     WireRevision,
 )
-from .read_basis import DisplayViewer, DMDisplayBasis
-from .presentation import ChannelReadMark, ReadAll
+from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
 from .store_files import _store_lock
 from .thread_presentation import ThreadPresentation
 from .threads import current_thread
@@ -184,15 +185,14 @@ class HistoryViews:
         self,
         target: str,
         *,
-        worktree: str | None = None,
+        viewer: DisplayViewer = AnonymousViewer(),
         before: int | HistoryCursor | None = None,
         after: int | HistoryCursor | None = None,
         limit: int = 100,
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
-        viewer = self.messaging.user_identity(worktree).name if worktree is not None else None
         channel = self.channels.catalog.read().require_channel(target, self.registry.snapshot().threads)
-        return ChannelDisplayHistory(channel, DisplayViewer.named_or_anonymous(viewer)).page(
+        return ChannelDisplayHistory(channel, viewer).page(
             self.presentation,
             before=before,
             after=after,
@@ -363,7 +363,7 @@ class HistoryViews:
     ) -> CoordinationSnapshot:
         """Local presentation scope, independent of agent delivery cursors."""
         viewer = self.messaging.user_identity(worktree).name
-        with self.presentation.snapshot(viewer=viewer) as (basis, source):
+        with self.presentation.snapshot(viewer=NamedViewer(viewer, self.registry.snapshot())) as (basis, source):
             captured_viewer = basis.require_viewer()
             display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
             clocks = self.bus.activity_clocks(source)

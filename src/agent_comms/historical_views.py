@@ -146,7 +146,7 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 
     @property
     def viewer(self) -> str | None:
-        return self.reader.name
+        return self.reader.history_name
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,

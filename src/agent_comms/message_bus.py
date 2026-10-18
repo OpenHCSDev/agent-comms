@@ -21,6 +21,8 @@ from .message_page import (
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
+    AnonymousViewer,
+    DisplayViewer,
     ChannelDisplayScope,
     DMDisplayScope,
     ListedDeliveries,
@@ -100,7 +102,7 @@ class MessageBus:
 
     @contextmanager
     def snapshot(
-        self, viewer: str | None = None
+        self, viewer: DisplayViewer = AnonymousViewer()
     ) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
         """Keep a fixed bus, namespace and read snapshot after releasing its locks.
 
@@ -109,7 +111,6 @@ class MessageBus:
         of reconstructing it from independently sampled path revisions.
         """
         from .presentation import DisplaySelection
-        from .read_basis import DisplayViewer
 
         prepared = self.log.prepare_append_indexes()
         with ExitStack() as stack:
@@ -118,7 +119,7 @@ class MessageBus:
                     prepared_indexes=prepared,
                 ))
                 with DisplaySelection.reading(
-                    self._registry, self._channels, self.reads, DisplayViewer.named_or_anonymous(viewer)
+                    self._registry, self._channels, self.reads, viewer
                 ) as basis:
                     pass
             yield basis, source

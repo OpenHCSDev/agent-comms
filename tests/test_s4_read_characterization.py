@@ -1,5 +1,6 @@
 """Current S4 Part B: authority lifetime and disposable-index recovery."""
 
+from agent_comms.read_basis import NamedViewer
 from agent_comms.presentation import ReadThrough
 from dataclasses import replace
 
@@ -17,7 +18,7 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
     comms.registry.declare(comms.registry.new_thread('worker', frozenset({'team'}), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send_message("worker", "#team", "painted")
-    page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
+    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name, comms.registry.snapshot()))
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path),
         mark=ReadThrough(page.newest_seq, page.display_scope),
@@ -33,7 +34,7 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
             "#team", worktree=str(tmp_path),
             mark=ReadThrough(page.newest_seq, page.display_scope),
         )
-    refreshed = comms.views.channel_display_page("#team", worktree=str(tmp_path))
+    refreshed = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name, comms.registry.snapshot()))
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path),
         mark=ReadThrough(refreshed.newest_seq, refreshed.display_scope),
@@ -51,7 +52,7 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     shown = comms.transcripts.transcript_checkpoint("worker")
     append(source, content="unpainted reply")
     message = comms.messaging.send_message("worker", "#team", "unpainted bus row")
-    page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
+    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name, comms.registry.snapshot()))
     assert message.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     comms.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=shown)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 1

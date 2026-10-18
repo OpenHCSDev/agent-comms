@@ -1,3 +1,4 @@
+from agent_comms.read_basis import NamedViewer
 import os
 import subprocess
 import sys
@@ -80,7 +81,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
     comms.channels.set_channel_any_mode("#team", True)
     comms.messaging.send_message("carol", "dave", "hidden old DM")
     comms.messaging.send_message("alice", "bob", "painted DM")
-    painted = comms.views.channel_display_page("#team", worktree=str(tmp_path))
+    painted = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name, comms.registry.snapshot()))
     assert [message.seq for message in painted.messages] == [2]
 
     comms.channels.update_tags("carol", add=frozenset({"team"}))

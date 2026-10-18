@@ -380,7 +380,8 @@ class ReadAll(ChannelReadMark):
     def reading(self, presentation, target, viewer):
         with presentation.bus.log._opened_wire_snapshot() as source:
             with DisplaySelection.reading(
-                presentation.registry, presentation.catalog, presentation.bus.reads, NamedViewer(viewer),
+                presentation.registry, presentation.catalog, presentation.bus.reads,
+                NamedViewer(viewer, presentation.registry.snapshot()),
             ) as basis:
                 scope = basis.scope(target)
             # Page preparation takes the bus lock, so release registry first.
@@ -398,7 +399,8 @@ class ReadThrough(ChannelReadMark):
     @contextmanager
     def reading(self, presentation, target, viewer):
         with DisplaySelection.reading(
-            presentation.registry, presentation.catalog, presentation.bus.reads, NamedViewer(viewer),
+            presentation.registry, presentation.catalog, presentation.bus.reads,
+            NamedViewer(viewer, presentation.registry.snapshot()),
         ) as basis:
             displayed = self.expected_scope.require_displayed()
             if basis.scope(target) != self.expected_scope:
@@ -430,9 +432,9 @@ class BusPresentation:
         return index
 
     @contextmanager
-    def snapshot(self, viewer: str) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
+    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
         """Admit the display index before borrowing the bus-owned source cut."""
-        self.display_index(viewer)
+        self.display_index(viewer.name)
         with self.bus.snapshot(viewer) as selected:
             yield selected
 
@@ -441,7 +443,7 @@ class BusPresentation:
     ) -> CoordinationSnapshot:
         """Current sidebar rows without advancing whole-bus derived indexes."""
         with DisplaySelection.reading(
-            self.registry, self.catalog, self.bus.reads, NamedViewer(viewer)
+            self.registry, self.catalog, self.bus.reads, NamedViewer(viewer, self.registry.snapshot())
         ) as basis:
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
