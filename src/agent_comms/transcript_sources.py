@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
-    from .turn_digests import TurnBound
     from .transcript_events import TranscriptEvent
+    from .turn_digests import TurnBound
 
 from .field_codec import MalformedRecord
 from .bus_publication import CommittedDelivery
@@ -330,7 +330,7 @@ class TranscriptSource:
                         turn = TurnDigest(record.entry.require_entry_id(), tuple(
                             event for original in reversed(pending) for event in original.events))
                         pending.clear()
-                        if not bound.admits(turn):
+                        if not bound.includes(turn):
                             break
                         turns.append(turn)
                         if bound.full(len(turns)):

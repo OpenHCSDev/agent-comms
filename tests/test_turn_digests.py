@@ -26,7 +26,7 @@ def prepared(tmp_path):
 def endpoint(comms, name, last):
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(('AGENT_COMMS_', 'PI_SESSION_', 'OPENCODE_SERVER_'))}
-    command = [sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root), 'invoke',
+    command = [sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root), 'tool',
                '--tool', 'comms_turns', '--arguments', json.dumps(dict(thread=name, last=last))]
     result = subprocess.run(command, env=environment, text=True, capture_output=True,
                             timeout=15, check=True)

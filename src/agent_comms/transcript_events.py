@@ -306,7 +306,7 @@ class ToolStartTranscript(ToolTranscript):
 
     @property
     def digest(self) -> str:
-        """The call in one line: its record's digest, or its raw arguments when Core decodes none."""
+        """The call in one line: its record's digest, or its raw arguments with no record."""
         if self.tool is not None:
             return self.tool.digest()
         return f"{self.tool_name} {tool_declaration.one_line(json.dumps(self.raw_input), 260)}"

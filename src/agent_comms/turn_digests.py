@@ -27,7 +27,7 @@ class TurnBound(ABC):
     """Which of a unit's turns, read newest first, a reader returns."""
 
     @abstractmethod
-    def admits(self, turn: TurnDigest) -> bool:
+    def includes(self, turn: TurnDigest) -> bool:
         """Whether this turn belongs; the first turn refused ends the read."""
 
     @abstractmethod
@@ -43,7 +43,7 @@ class LastTurns(TurnBound):
         if self.count < 1:
             raise ValueError("last must be positive")
 
-    def admits(self, turn: TurnDigest) -> bool:
+    def includes(self, turn: TurnDigest) -> bool:
         return True
 
     def full(self, taken: int) -> bool:
@@ -54,7 +54,7 @@ class LastTurns(TurnBound):
 class TurnsSince(TurnBound):
     at: float
 
-    def admits(self, turn: TurnDigest) -> bool:
+    def includes(self, turn: TurnDigest) -> bool:
         return not turn.before(self.at)
 
     def full(self, taken: int) -> bool:

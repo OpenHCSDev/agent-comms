@@ -284,7 +284,7 @@ class StoreRead(TranscriptSource):
                         self.connection, thread=self.transcript.lookup, turn_id=turn_id,
                         order_by=("seq",))
                     for event in row.events))
-                if not bound.admits(turn):
+                if not bound.includes(turn):
                     break
                 turns.append(turn)
                 if bound.full(len(turns)):

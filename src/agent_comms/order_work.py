@@ -17,8 +17,9 @@ class OrderWork(ToolResult):
     calls: tuple[OrderCall, ...]
 
     @classmethod
-    def read(cls, problem: str, thread: ThreadIncarnation, since: float,
-             turns: tuple[TurnDigest, ...]) -> OrderWork:
+    def read(
+        cls, problem: str, thread: ThreadIncarnation, since: float, turns: tuple[TurnDigest, ...]
+    ) -> OrderWork:
         """Each call once by tool_call_id, newest first."""
         calls: dict[str, OrderCall] = {}
         for turn in reversed(turns):
