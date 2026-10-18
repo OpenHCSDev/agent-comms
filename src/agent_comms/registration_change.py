@@ -66,7 +66,7 @@ class InitialRegistration(RegistrationChange):
 
     @property
     def needs_maintenance_claim(self) -> bool:
-        return self.thread.role.executable and self.thread.has_process and self.status.active
+        return self.thread.process_identity.needs_maintenance_claim(self.thread.role, self.status)
 
     def restarted(self) -> RegistrationChange:
         return InitialOwnerRegistration(thread=self.thread, status=self.status)
@@ -82,7 +82,7 @@ class UpdatedRegistration(RegistrationChange):
         if self.previous.executing:
             if requested.execution is not self.previous.execution:
                 raise RelationViolationError("Cannot replace receiving capability during its active turn.")
-            if requested.process_identity not in {None, self.previous.process_identity}:
+            if requested.process_identity.conflicts_with(self.previous.process_identity):
                 raise RelationViolationError("Cannot replace an executor during its active turn.")
             return replace(
                 self,
@@ -94,13 +94,9 @@ class UpdatedRegistration(RegistrationChange):
                     last_finished_turn_id=self.previous.last_finished_turn_id,
                 ),
             )
-        if (
-            self.previous.has_process
-            and requested.has_process
-            and requested.incarnation != self.previous.incarnation
-        ):
-            return self.restarted()
-        return self
+        return requested.process_identity.registration_change(
+            self.previous.process_identity, self, requested.incarnation
+        )
 
     @property
     def prior_goal(self) -> Goal | None:

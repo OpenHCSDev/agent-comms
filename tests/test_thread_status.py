@@ -130,17 +130,18 @@ def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_pat
 def test_roster_and_controls_keep_archived_threads_dormant():
     from agent_comms.tools import CommsStartTool, ToolRequest
     from agent_comms.thread_execution import OwnerLifecycleControl
+    from agent_comms.child_process import NoProcess
 
     archived = ArchivedThreadStatus()
     assert archived.restored() == archived
     for command in ToolRequest.members_with(OwnerLifecycleControl):
-        assert not command.available_for(archived, owner_pid=123)
+        assert not command.available_for(archived, process=ProcessIdentity(123, 1))
     stopped = StoppedThreadStatus()
-    assert CommsStartTool.available_for(stopped, owner_pid=123)
+    assert CommsStartTool.available_for(stopped, process=ProcessIdentity(123, 1))
     for live in (RunningThreadStatus(), IdleThreadStatus()):
         assert live.restored() == stopped
-        assert not CommsStartTool.available_for(live, owner_pid=123)
-        assert CommsStartTool.available_for(live, owner_pid=0)
+        assert not CommsStartTool.available_for(live, process=ProcessIdentity(123, 1))
+        assert CommsStartTool.available_for(live, process=NoProcess())
 
 
 def test_batch_source_rename_keeps_the_original_registry_fence(comms):

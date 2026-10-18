@@ -306,7 +306,7 @@ class SqlValue:
 
     annotation: object
     storage: type[SqlStorage]
-    value: ValueDecoder
+    value: ValueDecoder[object]
 
     @classmethod
     def for_annotation(cls, annotation: object) -> SqlValue:

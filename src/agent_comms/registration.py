@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .catalog_store import ChannelCatalog
-from .child_process import ProcessIdentity
+from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
@@ -68,7 +68,7 @@ class Registration:
                 entry = edit.document.entry_if_present(owner.incarnation.name)
                 if entry is not None and entry.owned_by(owner, process):
                     self._commit_registration(edit, edit.document.prepare_registration(
-                        replace(entry.thread, process_identity=None), NoBridgeThreadStatus(),
+                        replace(entry.thread, process_identity=NoProcess()), NoBridgeThreadStatus(),
                         new_owner=False))
 
     def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:

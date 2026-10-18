@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from .child_process import ProcessIdentity
+from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .registration_change import (
@@ -299,7 +299,7 @@ class RegistryDocument(RegistryPresence):
             if name in self.aliases or thread.created_at in identities:
                 raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
             identities[thread.created_at] = name
-            additions.append(replace(thread, process_identity=None, active_turn=None))
+            additions.append(replace(thread, process_identity=NoProcess(), active_turn=None))
         restored = {thread.name: thread for thread in additions}
         available = self.threads | restored
         aliases = source.restorable_aliases(available, self.aliases)
@@ -470,7 +470,7 @@ class RegistryDocument(RegistryPresence):
             project_resume_due=False,
             active_turn=ActiveTurn(
                 turn_id,
-                current.pid,
+                current.require_process().pid,
                 routing=routing,
                 claimed_generation=self.claims.generations[current.name],
                 turn_generation=current.turn_generation + 1,
