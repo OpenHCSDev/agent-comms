@@ -611,6 +611,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
 
 def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, thread_registration):
     from agent_comms.turn_context import RecordedContextManifest
+    from agent_comms.message_reference import MessageReference
     from agent_comms.wire_log import OpenedWireSnapshot, WireLog
     from agent_comms.wire_record import (
         ObservationWireRecord,
@@ -635,7 +636,7 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, t
         with pytest.raises((ValueError, TypeError, KeyError)):
             list(source.public_records())
         with pytest.raises((ValueError, TypeError, KeyError)):
-            list(source.public_records_for(frozenset({1}), before_offset=source.boundary))
+            source.messages_for_references((MessageReference(1, '0' * 32),))
 
 
 def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
