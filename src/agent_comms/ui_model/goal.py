@@ -1,82 +1,46 @@
-"""Display a current goal declaration or the failure to read one."""
+"""Display behavior composed by goal declarations and unavailable observations."""
 
 from __future__ import annotations
 
-from abc import abstractmethod
-from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from agent_comms import goals
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.goal_presentation import ThreadGoalExecution
-from agent_comms.goals import GoalDeclaration
-from agent_comms.thread_presentation import ThreadPresentation
+if TYPE_CHECKING:
+    from agent_comms.goal_presentation import ThreadGoalExecution
+    from agent_comms.goals import GoalDeclaration
 
 
-class GoalDisplay(DeclaredFamily):
-    @classmethod
-    def current(cls, goal: GoalDeclaration) -> CurrentGoal:
-        return CurrentGoal(goal)
-
+class GoalDisplay(ABC):
     @property
-    def can_control(self) -> bool:
-        return True
+    @abstractmethod
+    def can_control(self) -> bool: ...
 
     @property
     @abstractmethod
     def snapshot(self) -> GoalDeclaration: ...
 
     @property
-    def visible(self) -> bool:
-        return True
+    @abstractmethod
+    def visible(self) -> bool: ...
 
     @abstractmethod
     def heading(self, execution: ThreadGoalExecution) -> str: ...
 
     def details_heading(self, execution: ThreadGoalExecution) -> str:
-        return self.heading(execution)
-
-    def standby(self, execution: ThreadGoalExecution) -> bool:
-        return False
-
-    def action_failure(self, error: Exception) -> str:
-        return str(error)
-
-
-@dataclass(frozen=True)
-class CurrentGoal(GoalDisplay):
-    goal: GoalDeclaration
-
-    @property
-    def snapshot(self) -> GoalDeclaration:
-        return self.goal
-
-    @property
-    def can_control(self) -> bool:
-        return self.goal.control_available()
-
-    @property
-    def visible(self) -> bool:
-        return self.goal.panel_visible()
-
-    def standby(self, execution: ThreadGoalExecution) -> bool:
-        return self.goal.display_standby(execution)
-
-    def heading(self, execution: ThreadGoalExecution) -> str:
-        return self.goal.display_heading(execution)
-
-    def details_heading(self, execution: ThreadGoalExecution) -> str:
         heading = self.heading(execution)
-        if self.standby(execution):
-            heading += f" · {execution.waiting_presentation(ThreadPresentation('', '', '')).summary}"
-        return heading
+        return execution.details_heading(heading) if self.standby(execution) else heading
 
-    def action_failure(self, error: Exception) -> str:
-        return self.goal.control_failure(error)
+    @abstractmethod
+    def standby(self, execution: ThreadGoalExecution) -> bool: ...
+
+    @abstractmethod
+    def action_failure(self, error: Exception) -> str: ...
 
 
 @dataclass(frozen=True)
 class GoalUnavailable(GoalDisplay):
-    last_confirmed: GoalDeclaration = field(default_factory=goals.NoGoal)
+    last_confirmed: GoalDeclaration
 
     @property
     def can_control(self) -> bool:
@@ -85,6 +49,16 @@ class GoalUnavailable(GoalDisplay):
     @property
     def snapshot(self) -> GoalDeclaration:
         return self.last_confirmed
+
+    @property
+    def visible(self) -> bool:
+        return True
+
+    def standby(self, execution: ThreadGoalExecution) -> bool:
+        return False
+
+    def action_failure(self, error: Exception) -> str:
+        return str(error)
 
     def heading(self, execution: ThreadGoalExecution) -> str:
         return self.last_confirmed.unavailable_heading()

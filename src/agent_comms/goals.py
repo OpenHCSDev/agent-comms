@@ -15,6 +15,7 @@ from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, 
 from .goal_states import ActiveGoal, GoalState
 from .registration_inheritance import RegistrationInheritance
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
     from .goal_presentation import ThreadGoalExecution
@@ -303,7 +304,7 @@ class ProblemGoalOrder(GoalOrder):
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
 
-class GoalDeclaration(SubclassUnion, RegistrationInheritance["GoalDeclaration"]):
+class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalDeclaration"]):
     """The recorded goal state, including a thread with no goal."""
 
     @classmethod
@@ -328,20 +329,9 @@ class GoalDeclaration(SubclassUnion, RegistrationInheritance["GoalDeclaration"])
     def detail_contents(self) -> tuple[str, str]:
         return "", ""
 
-    @abstractmethod
-    def control_available(self) -> bool: ...
-
-    @abstractmethod
-    def panel_visible(self) -> bool: ...
-
-    @abstractmethod
-    def display_standby(self, execution: ThreadGoalExecution) -> bool: ...
-
-    @abstractmethod
-    def display_heading(self, execution: ThreadGoalExecution) -> str: ...
-
-    @abstractmethod
-    def control_failure(self, error: Exception) -> str: ...
+    @property
+    def snapshot(self) -> GoalDeclaration:
+        return self
 
     def unavailable_heading(self) -> str:
         return "Goal state unavailable"
@@ -431,19 +421,21 @@ class NoGoal(NullMember, GoalDeclaration):
     def clear_wait(self, waits) -> bool:
         return False
 
-    def control_available(self) -> bool:
+    @property
+    def can_control(self) -> bool:
         return False
 
-    def panel_visible(self) -> bool:
+    @property
+    def visible(self) -> bool:
         return False
 
-    def display_standby(self, execution: ThreadGoalExecution) -> bool:
+    def standby(self, execution: ThreadGoalExecution) -> bool:
         return False
 
-    def display_heading(self, execution: ThreadGoalExecution) -> str:
+    def heading(self, execution: ThreadGoalExecution) -> str:
         return "No current goal"
 
-    def control_failure(self, error: Exception) -> str:
+    def action_failure(self, error: Exception) -> str:
         return "This goal has been cleared."
 
 
@@ -480,20 +472,22 @@ class Goal(RecordMember, GoalDeclaration):
     def detail_contents(self) -> tuple[str, str]:
         return self.text, self.progress
 
-    def control_available(self) -> bool:
+    @property
+    def can_control(self) -> bool:
         return True
 
-    def panel_visible(self) -> bool:
+    @property
+    def visible(self) -> bool:
         return True
 
-    def display_standby(self, execution: ThreadGoalExecution) -> bool:
+    def standby(self, execution: ThreadGoalExecution) -> bool:
         return execution.waiting_for(self)
 
-    def display_heading(self, execution: ThreadGoalExecution) -> str:
-        status = "Standby" if self.display_standby(execution) else self.state.declared_name
+    def heading(self, execution: ThreadGoalExecution) -> str:
+        status = "Standby" if self.standby(execution) else self.state.declared_name
         return f"Goal · {status} · rev {self.revision}"
 
-    def control_failure(self, error: Exception) -> str:
+    def action_failure(self, error: Exception) -> str:
         return str(error)
 
     def unavailable_heading(self) -> str:

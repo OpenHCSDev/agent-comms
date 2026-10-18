@@ -41,6 +41,9 @@ class ExecutionPresentation(ABC):
     def waiting_presentation(self, execution: GoalExecution, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary
 
+    def details_heading(self, execution: GoalExecution, heading: str) -> str:
+        return heading
+
 
 @dataclass(frozen=True)
 class StateExecutionPresentation(ExecutionPresentation):
@@ -57,6 +60,9 @@ class StateExecutionPresentation(ExecutionPresentation):
 
 class StandbyExecutionPresentation(ExecutionPresentation):
     waiting = True
+
+    def details_heading(self, execution: GoalExecution, heading: str) -> str:
+        return f"{heading} · {self.render(execution)[1]}"
 
     def waiting_presentation(self, execution: GoalExecution, ordinary: ThreadPresentation) -> ThreadPresentation:
         return execution.presentation(ordinary.title)
@@ -117,6 +123,10 @@ class ThreadGoalExecution(SubclassUnion):
     """The execution contract, including absence, consumed by thread views."""
 
     __slots__ = ()
+
+    def details_heading(self, heading: str) -> str:
+        return heading
+
     @abstractmethod
     def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation: ...
 
@@ -141,6 +151,9 @@ class GoalExecution(RecordMember, ThreadGoalExecution):
     def presentation(self, title: str) -> ThreadPresentation:
         glyph, summary = self.state.view.render(self)
         return ThreadPresentation(title, glyph, summary)
+
+    def details_heading(self, heading: str) -> str:
+        return self.state.view.details_heading(self, heading)
 
     def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return self.state.view.waiting_presentation(self, ordinary)
