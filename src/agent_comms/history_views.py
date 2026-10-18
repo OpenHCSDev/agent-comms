@@ -54,7 +54,7 @@ from .presentation import (
     WireRevision,
 )
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .thread_presentation import ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
@@ -304,7 +304,7 @@ class HistoryViews:
         """Export one fixed, non-mutating snapshot of authoritative wire rows."""
         started_at = time.time() if export_started_at is None else export_started_at
         with ExitStack() as stack:
-            with _store_lock(self._wire_lock_path, shared=True):
+            with _store_lock(self._wire_lock_path, mode=SharedLock()):
                 resolved = scope.resolve(self.channels.catalog, self.registry)
                 through, messages = stack.enter_context(self.bus.log.full_history_snapshot())
 

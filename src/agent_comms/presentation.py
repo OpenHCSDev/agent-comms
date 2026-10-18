@@ -35,7 +35,7 @@ from .private_path import FileRevision
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
 from .read_ledger import ReadLedger
 from .runtime_info import RuntimeInfo
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .wire_log import WireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
 from .display_references import DisplayReferences
@@ -394,7 +394,7 @@ class ChannelReadMark(ABC):
     """A read request carries its own source cut and displayed-message selection."""
 
     def apply(self, presentation: BusPresentation, target: str, viewer: str) -> None:
-        with _store_lock(presentation._wire_lock_path, shared=True):
+        with _store_lock(presentation._wire_lock_path, mode=SharedLock()):
             with self.reading(presentation, target, viewer) as displayed:
                 presentation.bus.reads.mark_displayed(displayed.viewer, displayed)
 
@@ -496,7 +496,7 @@ class BusPresentation:
         """Local display projection; underlying channel history remains target-owned."""
         target = CommandTarget.named(target).require_channel()
         with ExitStack() as resources:
-            with _store_lock(self._wire_lock_path, shared=True):
+            with _store_lock(self._wire_lock_path, mode=SharedLock()):
                 source = resources.enter_context(self.bus.log._opened_wire_snapshot())
                 with DisplaySelection.reading(
                     self.registry, self.catalog, self.bus.reads, viewer
@@ -809,7 +809,7 @@ class WireRevision(ReadState):
     def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
         """Every source is a group; missing files contribute no revision."""
         paths = cls.source_paths(views)
-        with views.bus.log.locked(shared=True) as source:
+        with views.bus.log.locked(mode=SharedLock()) as source:
             through_seq = views.bus.log._committed_sequence_unlocked(source)
             captured = {
                 name: tuple(revision for path in group

@@ -104,6 +104,9 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["agent_comms.store_files.ExclusiveLock"]
+
 [tool.mypy]
 warn_return_any = true
 warn_unused_configs = true

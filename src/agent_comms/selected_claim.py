@@ -32,7 +32,7 @@ from .errors import RelationViolationError
 from .messages import ClaimNoticeKind, Message
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
-from .store_files import StoreLock, _store_lock
+from .store_files import SharedLock, StoreLock, _store_lock
 from .threads import Thread
 
 
@@ -46,7 +46,7 @@ def verify_selected_wake(
         raise IdentityConflict("Wake claim_scope is not typed")
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
-    with _store_lock(comms._wire_lock_path, shared=True):
+    with _store_lock(comms._wire_lock_path, mode=SharedLock()):
         _require_no_private_owner_rename(comms.root)
         try:
             with comms.bus.log.certified_read() as source:

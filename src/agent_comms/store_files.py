@@ -9,8 +9,9 @@ import os
 import stat
 import tempfile
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
-from contextlib import ExitStack, asynccontextmanager, contextmanager
+from contextlib import ExitStack, asynccontextmanager, contextmanager, suppress
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,11 +20,79 @@ from typing import BinaryIO, ClassVar, TYPE_CHECKING
 from .errors import RelationViolationError
 from .private_path import PrivateFileRole
 
+with suppress(ModuleNotFoundError):  # Windows; Win32Platform never asks a mode for its flock.
+    import fcntl
+
 if TYPE_CHECKING:
-    from .private_bus_checkpoint import CertifiedSourceRead
+    import sqlite3
+
+    from .private_bus_checkpoint import (
+        CertifiedSourceRead,
+        CheckpointNeedsRepair,
+        PrefixWitness,
+        WritableCheckpoint,
+    )
     from .wire_log import WireLog
     from .wire_metadata import WireMetadata
     from .child_process import Platform
+
+
+class LockMode(ABC):
+    """Whether a store lock lets other holders in, and what its holder may do."""
+
+    @abstractmethod
+    def flock(self) -> int:
+        """This mode's POSIX flock operation."""
+
+    @abstractmethod
+    def open_checkpoint(self, checkpoint: WritableCheckpoint) -> sqlite3.Connection:
+        """Open a writable bus checkpoint as this lock's holder may."""
+
+    @abstractmethod
+    def verify_checkpoint(self, checkpoint: WritableCheckpoint, bus: WireLog,
+                          marker: WireMetadata, db: sqlite3.Connection,
+                          stream: BinaryIO) -> PrefixWitness:
+        """Verify a writable bus checkpoint as this lock's holder may."""
+
+    @abstractmethod
+    def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
+        """The mode that may repair what this holder could only name."""
+
+
+class SharedLock(LockMode):
+    """Concurrent readers; the checkpoint is only checked, never repaired."""
+
+    def flock(self) -> int:
+        return fcntl.LOCK_SH
+
+    def open_checkpoint(self, checkpoint: WritableCheckpoint) -> sqlite3.Connection:
+        return checkpoint.open_read_only()
+
+    def verify_checkpoint(self, checkpoint: WritableCheckpoint, bus: WireLog,
+                          marker: WireMetadata, db: sqlite3.Connection,
+                          stream: BinaryIO) -> PrefixWitness:
+        return checkpoint.check_final(bus, marker, db, stream)
+
+    def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
+        return ExclusiveLock()
+
+
+class ExclusiveLock(LockMode):
+    """One holder, which may repair the checkpoint it verifies."""
+
+    def flock(self) -> int:
+        return fcntl.LOCK_EX
+
+    def open_checkpoint(self, checkpoint: WritableCheckpoint) -> sqlite3.Connection:
+        return checkpoint.open_for_repair()
+
+    def verify_checkpoint(self, checkpoint: WritableCheckpoint, bus: WireLog,
+                          marker: WireMetadata, db: sqlite3.Connection,
+                          stream: BinaryIO) -> PrefixWitness:
+        return checkpoint.verify_with_repair(bus, marker, db, stream)
+
+    def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
+        raise error
 
 
 @dataclass(slots=True)
@@ -36,12 +105,12 @@ class StoreLockContention:
 
     remaining: float
 
-    def waits(self, descriptor: int, platform: Platform, *, shared: bool) -> Iterator[float]:
+    def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
         """One physical acquisition algorithm; drivers own sync/async waiting."""
         while True:
             begun = time.monotonic()
             try:
-                platform.try_store_lock(descriptor, shared=shared)
+                platform.try_store_lock(descriptor, mode=mode)
             except BlockingIOError:
                 self.remaining -= time.monotonic() - begun
                 if self.remaining <= 0:
@@ -54,12 +123,12 @@ class StoreLockContention:
             else:
                 return
 
-    def acquire(self, descriptor: int, platform: Platform, *, shared: bool) -> None:
-        for delay in self.waits(descriptor, platform, shared=shared):
+    def acquire(self, descriptor: int, platform: Platform, *, mode: LockMode) -> None:
+        for delay in self.waits(descriptor, platform, mode=mode):
             time.sleep(delay)
 
-    async def acquire_async(self, descriptor: int, platform: Platform, *, shared: bool) -> None:
-        for delay in self.waits(descriptor, platform, shared=shared):
+    async def acquire_async(self, descriptor: int, platform: Platform, *, mode: LockMode) -> None:
+        for delay in self.waits(descriptor, platform, mode=mode):
             await asyncio.sleep(delay)
 
 
@@ -102,7 +171,7 @@ class StoreLock:
         """Acquire store owners by their declared rank, never their filenames."""
         with ExitStack() as resources:
             yield {owner: resources.enter_context(_store_lock(owner.path,
-                shared=requests[owner], blocking=blocking, contention=contention))
+                mode=requests[owner], blocking=blocking, contention=contention))
                 for owner in sorted(requests, key=lambda owner: (owner.lock_rank, str(owner.path)))}
 
     @classmethod
@@ -189,7 +258,7 @@ def _store_lock_file(store_path: Path):
 
 
 @contextmanager
-def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, shared=False):
+def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, mode):
     """Check durability after locking; release the lock if the check refuses access."""
     try:
         if max_bus_bytes is not None:
@@ -201,7 +270,7 @@ def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, shared
                     raise RelationViolationError("Bus exceeds bounded read budget.")
         from .wire_log import WireLog
 
-        with WireLog(store_path).verify_before_read_unlocked(shared=shared) as source:
+        with WireLog(store_path).verify_before_read_unlocked(mode=mode) as source:
             yield StoreLock(lock_file.fileno(), source)
     finally:
         platform.release_store_lock(lock_file.fileno())
@@ -213,7 +282,7 @@ def _store_lock(
     *,
     blocking: bool = True,
     max_bus_bytes: int | None = None,
-    shared: bool = False,
+    mode: LockMode = ExclusiveLock(),
     contention: StoreLockContention | None = None,
 ) -> Iterator[StoreLock]:
     """Acquire a store lock synchronously; inherited POSIX locks end at last close."""
@@ -222,20 +291,18 @@ def _store_lock(
 
     platform = Platform.current()
     with _store_lock_file(store_path) as lock_file, ExitStack() as resources:
-        def acquire(shared):
+        def acquire(mode):
             if contention is None:
-                platform.acquire_store_lock(lock_file.fileno(), shared=shared, blocking=blocking)
+                platform.acquire_store_lock(lock_file.fileno(), mode=mode, blocking=blocking)
             else:
-                contention.acquire(lock_file.fileno(), platform, shared=shared)
+                contention.acquire(lock_file.fileno(), platform, mode=mode)
             return resources.enter_context(_held_store_source(
-                store_path, lock_file, platform, max_bus_bytes, shared=shared))
+                store_path, lock_file, platform, max_bus_bytes, mode=mode))
 
         try:
-            lock = acquire(shared)
-        except CheckpointNeedsRepair:
-            if not shared:
-                raise
-            lock = acquire(False)
+            lock = acquire(mode)
+        except CheckpointNeedsRepair as error:
+            lock = acquire(mode.after_repair_needed(error))
         yield lock
 
 
@@ -245,7 +312,7 @@ async def _async_store_lock(
     *,
     blocking: bool = True,
     max_bus_bytes: int | None = None,
-    shared: bool = False,
+    mode: LockMode = ExclusiveLock(),
     contention: StoreLockContention | None = None,
 ):
     """Borrow the same physical resource without blocking its owner event loop.
@@ -259,9 +326,9 @@ async def _async_store_lock(
     platform = Platform.current()
     wait = contention if contention is not None else StoreLockContention(math.inf if blocking else 0)
     with _store_lock_file(store_path) as lock_file:
-        await wait.acquire_async(lock_file.fileno(), platform, shared=shared)
+        await wait.acquire_async(lock_file.fileno(), platform, mode=mode)
         with _held_store_source(store_path, lock_file, platform, max_bus_bytes,
-                                shared=shared) as lock:
+                                mode=mode) as lock:
             yield lock
 
 

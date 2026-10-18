@@ -25,12 +25,15 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
 from .field_codec import FieldCodec
 from .sealed import Sealed
+
+if TYPE_CHECKING:
+    from .store_files import LockMode
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -177,14 +180,14 @@ class Platform(DeclaredFamily, affix="Platform"):
         return cls.decode(sys.platform)()
 
     @abstractmethod
-    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+    def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         """One nonblocking native attempt; busy is BlockingIOError."""
 
-    def acquire_store_lock(self, descriptor: int, *, shared: bool, blocking: bool) -> None:
+    def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
         """Use the common physical wait driver when the platform needs polling."""
         from .store_files import StoreLockContention
 
-        StoreLockContention(math.inf if blocking else 0).acquire(descriptor, self, shared=shared)
+        StoreLockContention(math.inf if blocking else 0).acquire(descriptor, self, mode=mode)
 
     def release_store_lock(self, descriptor: int) -> None:
         """POSIX locks end at last close, including inherited descriptors."""
@@ -226,17 +229,15 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(ProcessGroups, Platform):
-    def acquire_store_lock(self, descriptor: int, *, shared: bool, blocking: bool) -> None:
+    def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
         import fcntl
 
-        mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
-        fcntl.flock(descriptor, mode | (0 if blocking else fcntl.LOCK_NB))
+        fcntl.flock(descriptor, mode.flock() | (0 if blocking else fcntl.LOCK_NB))
 
-    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+    def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         import fcntl
 
-        mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
-        fcntl.flock(descriptor, mode | fcntl.LOCK_NB)
+        fcntl.flock(descriptor, mode.flock() | fcntl.LOCK_NB)
 
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
         return PosixLaunch(command, pass_fds)
@@ -395,13 +396,14 @@ class Win32Platform(ProcessGroups, Platform):
 
     store_lock_interval = 0.01
 
-    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+    def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         import errno
         import msvcrt
 
         os.lseek(descriptor, 0, os.SEEK_SET)
         try:
-            msvcrt.locking(descriptor, msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK, 1)
+            # The Windows runtime has no shared lock: LK_NBRLCK is LK_NBLCK.
+            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
         except OSError as error:
             if error.errno not in {errno.EACCES, errno.EDEADLK}:
                 raise

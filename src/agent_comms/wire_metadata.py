@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from typing import BinaryIO
 
     from .private_bus_checkpoint import PrefixWitness
+    from .store_files import LockMode
     from .wire_log import WireLog
 
 
@@ -41,11 +42,11 @@ class WireAccess(DeclaredFamily, affix="Access"):
     def require_append(self) -> None: ...
 
     @abstractmethod
-    def open_checkpoint(self, path: Path, *, shared: bool) -> sqlite3.Connection: ...
+    def open_checkpoint(self, path: Path, *, mode: LockMode) -> sqlite3.Connection: ...
 
     @abstractmethod
     def verify_checkpoint(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
-                          stream: BinaryIO, path: Path, *, shared: bool) -> PrefixWitness: ...
+                          stream: BinaryIO, path: Path, *, mode: LockMode) -> PrefixWitness: ...
 
 
 @dataclass(frozen=True)
@@ -53,20 +54,15 @@ class WritableAccess(WireAccess):
     def require_append(self) -> None:
         pass
 
-    def open_checkpoint(self, path, *, shared):
-        from .private_bus_checkpoint import _connect
+    def open_checkpoint(self, path, *, mode):
+        from .private_bus_checkpoint import WritableCheckpoint
 
-        return _connect(path, readonly=shared)
+        return mode.open_checkpoint(WritableCheckpoint(path))
 
-    def verify_checkpoint(self, bus, marker, db, stream, path, *, shared):
-        from .private_bus_checkpoint import (
-            _verify_open_checkpoint_unlocked,
-            _check_final_checkpoint_read_only,
-        )
+    def verify_checkpoint(self, bus, marker, db, stream, path, *, mode):
+        from .private_bus_checkpoint import WritableCheckpoint
 
-        if shared:
-            return _check_final_checkpoint_read_only(bus, marker, db, stream, path)
-        return _verify_open_checkpoint_unlocked(bus, marker, db, stream, path)
+        return mode.verify_checkpoint(WritableCheckpoint(path), bus, marker, db, stream)
 
 
 @dataclass(frozen=True)
@@ -74,12 +70,12 @@ class ArchivedAccess(WireAccess):
     def require_append(self) -> None:
         raise RelationViolationError("Archived history is read-only.")
 
-    def open_checkpoint(self, path, *, shared):
+    def open_checkpoint(self, path, *, mode):
         from .private_bus_checkpoint import _connect
 
         return _connect(path, readonly=True)
 
-    def verify_checkpoint(self, bus, marker, db, stream, path, *, shared):
+    def verify_checkpoint(self, bus, marker, db, stream, path, *, mode):
         from .private_bus_checkpoint import CertifiedSourceRead, PrefixCertificate, _tail
 
         # The immutable certificate binds the original bytes and sidecar, not

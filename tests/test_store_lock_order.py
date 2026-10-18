@@ -8,13 +8,13 @@ from agent_comms.comms import wire
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.historical_views import DMDisplayHistory
-from agent_comms.store_files import StoreLock
+from agent_comms.store_files import SharedLock, StoreLock
 from agent_comms.threads import Thread
 
 
 def test_undeclared_store_rank_is_rejected_before_acquisition():
     with pytest.raises(AttributeError, match="lock_rank"):
-        with StoreLock.ordered({object(): True}):
+        with StoreLock.ordered({object(): SharedLock()}):
             pytest.fail("Unranked owner was authorized")
 
 
@@ -43,7 +43,7 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
             writer_at_bus.set()
         if event != "return":
             return
-        events.append((actor, path, frame.f_locals["shared"]))
+        events.append((actor, path, frame.f_locals["mode"]))
         # Select the retained conversation cut, not user_identity's earlier read.
         parent = frame.f_back
         while parent is not None:
@@ -83,6 +83,6 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
     assert not reader.is_alive() and not writer.is_alive()
     assert not failures, failures
     assert reader_has_bus.is_set() and writer_at_bus.is_set()
-    native = [path for actor, path, shared in events if actor == "native"]
+    native = [path for actor, path, _mode in events if actor == "native"]
     assert native.index(str(comms.root / ".wire.lock")) < native.index(str(comms.root / ".bus.jsonl.lock"))
     assert native.index(str(comms.root / ".bus.jsonl.lock")) < native.index(str(comms.root / ".registry.json.lock"))

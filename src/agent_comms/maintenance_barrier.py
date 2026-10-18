@@ -25,7 +25,13 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, TextRepresentation
 from .lifecycle import LifecycleState
 from .send_outcome import GrantedSend, HeldSend
-from .store_files import _async_store_lock, _atomic_write_text, _store_lock, store_lock_path
+from .store_files import (
+    SharedLock,
+    _async_store_lock,
+    _atomic_write_text,
+    _store_lock,
+    store_lock_path,
+)
 
 
 class HeldSends:
@@ -252,7 +258,7 @@ class MaintenanceBarrier:
         return hold
 
     def read(self) -> MaintenanceStatus:
-        with _store_lock(self.wire_path, shared=True):
+        with _store_lock(self.wire_path, mode=SharedLock()):
             return self.current_unlocked()
 
     def _write_unlocked(self, hold: MaintenanceState) -> None:
@@ -330,7 +336,7 @@ class MaintenanceBarrier:
         inputs share this gate; their registry, input and journal owners retain
         their own determining locks.
         """
-        with _store_lock(self.wire_path, shared=True, blocking=blocking):
+        with _store_lock(self.wire_path, mode=SharedLock(), blocking=blocking):
             yield self.assert_open_unlocked()
 
     @asynccontextmanager
@@ -340,5 +346,5 @@ class MaintenanceBarrier:
         The borrower writes synchronously, then releases before waiting for
         pipe drain or a native response.
         """
-        async with _async_store_lock(self.wire_path, shared=True):
+        async with _async_store_lock(self.wire_path, mode=SharedLock()):
             yield self.current_unlocked()
