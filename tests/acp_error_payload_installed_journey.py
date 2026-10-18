@@ -159,7 +159,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
                     await client.prompt(session_id="error-native", prompt=[
                         TextContentBlock(type="text", text="One private provider failure input")])
                 except RequestError as error:
-                    request_failure = RequestFailure.from_error(error.code, str(error), error.data)
+                    request_failure = RequestFailure.from_error(error)
                 else:
                     raise AssertionError("Real provider refusal did not reach SDK RequestError")
                 assert request_failure.notification_published

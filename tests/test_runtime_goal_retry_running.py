@@ -178,7 +178,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
             if outcome in {"exception", "error"}:
                 with pytest.raises(RequestError) as caught:
                     await turn
-                request_failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
+                request_failure = RequestFailure.from_error(caught.value)
                 assert request_failure.notification_published and request_failure.failure.input_state.public_status == "started"
             else:
                 assert (await turn)["stopReason"] == "end_turn"
