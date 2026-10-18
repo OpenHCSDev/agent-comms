@@ -766,7 +766,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     saved.chmod(0o600)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     monkeypatch.setattr(
-        "agent_comms.selected_session.SessionIdentityHelper.locate",
+        "agent_comms.native_session_reopen.SessionIdentityHelper.locate",
         lambda _package, session_file: NativeSessionIdentity("isolated-session", session_file),
     )
     _base, calls = _fake_model(fail_on=1)

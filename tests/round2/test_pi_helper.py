@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.pi_helper import PiHelper, PiHelperError
+from agent_comms.pi_helper import PiHelper, PiHelperError, PiHelperFailed
 
 
 @dataclass(frozen=True)
@@ -38,5 +38,7 @@ async def test_new_helper_inherits_real_runner_and_strict_result(tmp_path):
 
 
 async def test_helper_cannot_run_without_native_import_fence(tmp_path):
-    with pytest.raises(PiHelperError, match="failed"):
+    with pytest.raises(PiHelperFailed, match=r"agent-comms-import-fence\.mjs") as error:
         await NewCaseHelper.run(UpperRequest(str(tmp_path), "declared" + " " * 200_000), cwd=tmp_path)
+    assert not error.value.result.outcome.successful
+    assert b"ERR_MODULE_NOT_FOUND" in error.value.result.stderr

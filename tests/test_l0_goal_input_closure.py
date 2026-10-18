@@ -2,7 +2,6 @@
 
 import os
 import sqlite3
-from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
 
@@ -28,7 +27,6 @@ from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.queued_input import QueuedInput
 from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 
@@ -150,11 +148,11 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     assert store.started(second_key, turn_id="native-turn", native_id="a" * 32, text=second.body)
     comms.goals.update_goal("owner", action)
     wait = comms.goals.goal_wait("owner")
-    assert wait.owner_created_at == comms.registry.require("owner").created_at
+    assert wait.owner == comms.registry.require("owner").incarnation
     assert wait.report_turn_id is None and wait.report_turn_generation is None
     saved = FieldCodec.encode(wait)
     for missing in (
-        "owner_created_at",
+        "owner",
         "target_turn_generations",
         "report_turn_id",
         "report_turn_generation",
@@ -188,13 +186,13 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     try:
         ledger = owner.inputs.dispositions
         claim_scope = comms.registry.snapshot().claimed_generations[session]
-        with _store_lock(comms._wire_lock_path), ExitStack() as ownership:
-            queued, _, _receipt = QueuedInput.capture(
-                owner.inputs, session, text="queued", prompt="queued", echo=True,
-                images=(), controller=None, ownership=ownership,
-            )
+        async with QueuedInput.reserve(
+            owner.inputs, session, session, text="queued", prompt="queued", echo=True,
+            images=(), controller=None,
+        ) as reservation:
+            queued = reservation.item
             owner.inputs.following_sources[session] = {queued.input_id: queued.source()}
-            ownership.pop_all()
+            reservation.release()
         ledger.record(
             "acp:uncertain", seq=None, owner=session, claim_scope=claim_scope,
             target=session, text="uncertain",

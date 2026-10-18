@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .native_session_reopen import NativeSessionIdentity
-from .native_pi import _session_location
+from .native_pi import NativePiUnavailable, _session_location
+from .private_path import PrivateFileRole
 from .launch_runtime import RestartEnvironment
 
 if TYPE_CHECKING:
@@ -134,12 +135,20 @@ class SavedSelectedSession(SelectedSession):
         self.identity.require_same_session(identity)
         return self.path
 
+    def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
+        try:
+            self.verify_start(self.identity)
+        except IdentityConflict as error:
+            raise NativePiUnavailable(str(error)) from error
+        return super().launch_arguments(thinking_level)
+
     def verify_start(self, actual: NativeSessionIdentity) -> Path:
         self.identity.require_same_session(actual)
         try:
-            if self.path.resolve(strict=True) != self.path or not self.path.is_file():
-                raise IdentityConflict("native start requires the exact saved session")
-        except OSError as error:
+            if self.path.resolve(strict=True) != self.path:
+                raise ValueError("redirected saved session")
+            PrivateFileRole.require(self.path.lstat())
+        except (OSError, ValueError) as error:
             raise IdentityConflict("native start requires the exact saved session") from error
         return self.path
 

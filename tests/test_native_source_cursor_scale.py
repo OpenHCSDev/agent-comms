@@ -21,7 +21,11 @@ from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
-from test_native_prompt_binding import _fake_model, _root
+from test_native_prompt_binding import (
+    _fake_model,
+    _root,
+    fake_native_package_acquisition,
+)
 
 
 @pytest.fixture
@@ -37,7 +41,6 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
     tmp_path, monkeypatch, recipients
 ):
     root, root_id, comms, initial, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first = await runtime.SelectedExecution(
@@ -98,7 +101,6 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
 
 async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_path, monkeypatch):
     root, root_id, comms, _first, _people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     comms.registry.declare(
@@ -129,7 +131,6 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
 
 async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path, monkeypatch):
     root, root_id, comms, _first, _people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     bad, _ = _fake_model(decision="IGNORE", digest_override="b" * 64)
     monkeypatch.setattr(TrackedTurnSession, "execute", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
@@ -161,7 +162,6 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
     tmp_path, monkeypatch
 ):
     root, root_id, comms, _first, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first = await runtime.SelectedExecution(
@@ -227,7 +227,6 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
 
 async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monkeypatch):
     root, root_id, comms, _first, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await runtime.SelectedExecution(
@@ -264,7 +263,6 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
 
 async def test_replaced_bus_between_coverage_and_commit_omits_cursor(tmp_path, monkeypatch):
     root, root_id, comms, _first, _people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     original = SourceCoverage.prefix

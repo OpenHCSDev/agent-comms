@@ -43,7 +43,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
             # subscription must refuse its transcript read before ready.
             holder.execute("BEGIN EXCLUSIVE")
             try:
-                with pytest.raises(RuntimeError, match="^The original database read is busy$"):
+                with pytest.raises(RuntimeError, match="^The database read is busy$"):
                     await proxy.subscribe()
             finally:
                 holder.execute("ROLLBACK")
