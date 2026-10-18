@@ -13,6 +13,7 @@ from pathlib import Path
 from .active_route import guard_original_root_write
 from .channel_targets import ChannelTarget, Tag
 from .channels import Channel, SavedView
+from .cli_result import CliResult
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
 from .messages import InfoKind, Message, MembershipConversationRole
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class TagChangeResult:
+class TagChangeResult(CliResult):
     tag: str
     removed_tag: bool
     removed_threads: tuple[ThreadIncarnation, ...] = ()

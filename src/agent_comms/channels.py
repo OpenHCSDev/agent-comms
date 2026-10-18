@@ -11,6 +11,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from .channel_targets import BuiltinChannel, ChannelTarget, Tag
+from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
@@ -43,7 +44,7 @@ class ChannelMemberIndex(dict[str, tuple[Thread, ...]]):
 
 
 @dataclass(frozen=True, slots=True)
-class Channel(DeclaredFamily, affix="Channel"):
+class Channel(DeclaredFamily, CliResult, affix="Channel"):
     """A captured channel presentation with behavior supplied by its declaration."""
 
     name: str

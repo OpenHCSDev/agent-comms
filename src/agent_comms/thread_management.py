@@ -19,6 +19,7 @@ from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 from agent_comms.coordination_errors import CoordinationError, IdentityConflict
 
 from .child_process import ProcessIdentity
+from .cli_result import CliResult
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
 
@@ -107,7 +108,7 @@ class ForkSpec(NewThreadSpec):
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadDeleted:
+class ThreadDeleted(CliResult):
     deleted: str
     session_bytes_freed: int
     detached_children: tuple[str, ...]

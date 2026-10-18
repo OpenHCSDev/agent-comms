@@ -7,6 +7,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar, Literal
 
+from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .thread_identity import ThreadIncarnation
@@ -124,7 +125,7 @@ class ModelLabel(SpanLabel):
 
 
 @dataclass(frozen=True)
-class HumanLabel(ModelLabel):
+class HumanLabel(ModelLabel, CliResult):
     author: ThreadIncarnation
 
     @classmethod
@@ -176,7 +177,7 @@ class ProbabilityFrequency:
 
 
 @dataclass(frozen=True)
-class CalibrationReport:
+class CalibrationReport(CliResult):
     question: QuestionVersion
     classifier: ClassifierVersion
     cases: tuple[CalibrationCase, ...]
