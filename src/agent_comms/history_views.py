@@ -77,7 +77,7 @@ class ThreadPoll(CliResult):
     peers: tuple[ThreadView, ...]
 
     def encoded(self) -> object:
-        return FieldCodec.encode(self, view="presence")
+        return FieldCodec.project(self, "presence")
 
 
 @dataclass(frozen=True)
@@ -421,11 +421,11 @@ class HistoryViews:
         # One bus snapshot for every thread, not one per thread.
         pending = self.bus.pending_counts_all(tuple(view.thread.name for view in views))
         counted = (replace(view, pending=pending[view.thread.name]) for view in views)
-        return [FieldCodec.encode(view, view="presence") for view in counted]
+        return [FieldCodec.project(view, "presence") for view in counted]
 
     def presence(self) -> Sequence[Mapping]:
         """Presence without viewer-specific unread scans."""
-        return [FieldCodec.encode(view, view="presence") for view in self._presence_views()]
+        return [FieldCodec.project(view, "presence") for view in self._presence_views()]
 
     def _presence_views(self):
         return sorted(self.thread_views(), key=lambda view: view.thread.name)
@@ -436,7 +436,7 @@ class HistoryViews:
         threads = tuple(thread for name, thread in sorted(snapshot.threads.items())
                         if not active_only or snapshot.statuses[name].active)
         pending = self.bus.pending_counts_all(tuple(thread.name for thread in threads))
-        return [FieldCodec.encode(record, view="presence") for record in ThreadRecord.read(
+        return [FieldCodec.project(record, "presence") for record in ThreadRecord.read(
             snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)]
 
     def thread_detail(self, name: str, *, include_pending: bool = True) -> ThreadRecord:

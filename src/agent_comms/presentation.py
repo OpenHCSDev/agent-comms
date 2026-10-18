@@ -636,7 +636,7 @@ class ThreadRecord(CliResult):
         ) for thread in threads)
 
     def encoded(self) -> object:
-        return FieldCodec.encode(self, view="presence")
+        return FieldCodec.project(self, "presence")
 
     @projected(view="presence")
     def is_fork(self) -> bool:

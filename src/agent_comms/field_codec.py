@@ -365,8 +365,7 @@ class FieldCodec(Sealed):
     projected values are derived again on decode. ClassVars are not stored.
     ``wire_nonnull`` rejects an explicit null while allowing an omitted default.
     ``wire_inline`` writes a nested record's keys into its parent's object (a clash is a
-    TypeError); ``encode(..., view=...)`` leaves out ``{view}_exclude`` fields and adds that
-    view's projected properties.
+    TypeError).
     Annotated field representations add scalar/capture behavior while retaining
     the single record codec and declaration-derived schema.
     """
@@ -449,10 +448,10 @@ class FieldCodec(Sealed):
 
     @overload
     @classmethod
-    def encode(cls, value: object, annotation: object = None, *, view: str = "wire") -> Any: ...
+    def encode(cls, value: object, annotation: object = None) -> Any: ...
 
     @classmethod
-    def encode(cls, value: object, annotation: object = None, *, view: str = "wire") -> Any:
+    def encode(cls, value: object, annotation: object = None) -> Any:
         representation = cls._value_representation(value, annotation)
         if representation is not None and value is not None:
             return representation.encode(value)
@@ -464,7 +463,7 @@ class FieldCodec(Sealed):
         if kind is float and math.isfinite(value):
             return value
         if is_dataclass(value) and not isinstance(value, type):
-            return cls.encode_record(value, view)
+            return cls.encode_record(value)
         if isinstance(value, type) and issubclass(value, DeclaredFamily):
             return value.declared_name
         if isinstance(value, Enum):
@@ -474,15 +473,14 @@ class FieldCodec(Sealed):
             arguments = get_args(target)
             items = sorted(value) if isinstance(value, frozenset) else value
             if get_origin(target) is tuple and arguments and arguments[-1] is not Ellipsis:
-                return [cls.encode(item, expected, view=view)
-                        for item, expected in zip(items, arguments, strict=True)]
+                return [cls.encode(item, expected) for item, expected in zip(items, arguments, strict=True)]
             element = arguments[0] if arguments else None
-            return [cls.encode(item, element, view=view) for item in items]
+            return [cls.encode(item, element) for item in items]
         if isinstance(value, dict):
             target, _ = cls._representation(annotation)
             key_type, value_type = get_args(target) if get_origin(target) is dict else (None, None)
             if key_type is str or (key_type is None and all(type(key) is str for key in value)):
-                return {key: cls.encode(item, value_type, view=view) for key, item in value.items()}
+                return {key: cls.encode(item, value_type) for key, item in value.items()}
             return [[cls.encode(key, key_type), cls.encode(item, value_type)] for key, item in value.items()]
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
@@ -510,38 +508,39 @@ class FieldCodec(Sealed):
         return cast(T, {key: decoder.decode(item) for key, item in data.items()})
 
     @classmethod
-    def encode_record(cls, value: object, view: str = "wire") -> dict[str, Any]:
+    def encode_record(cls, value: object) -> dict[str, Any]:
         """Encode a record: its family tag, then its declared fields."""
-        tag = (
-            {value.family_discriminator: value.declared_name}
-            if isinstance(value, DeclaredFamily) else {}
-        )
-        return {**tag, **cls.encode_fields(value, view)}
+        return {**cls._tag(value), **cls.encode_fields(value)}
+
+    @staticmethod
+    def _tag(value: object) -> dict[str, object]:
+        if isinstance(value, DeclaredFamily):
+            return {value.family_discriminator: value.declared_name}
+        return {}
 
     @classmethod
-    def encode_fields(cls, value: object, view: str = "wire") -> dict[str, object]:
-        """Encode declared fields; another view drops its ``{view}_exclude`` fields and adds
-        its projected properties to the wire's."""
+    def encode_fields(cls, value: object) -> dict[str, object]:
+        """Encode declared fields, except ``wire_exclude`` ones, including inside a custom wire
+        representation."""
         hints = cls._types(type(value))
         result: dict[str, object] = {}
         plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
         for field, key in cls.record_fields(type(value)):
             current = getattr(value, field.name)
-            default = field.default if field.default is not MISSING else (
-                field.default_factory() if field.default_factory is not MISSING else MISSING
-            )
-            if not field.metadata.get(f"{view}_exclude") and not (
-                field.metadata.get("wire_omit_default") and current == default
-            ):
-                result.update(plans[field.name].encoded(
-                    cls.encode(current, hints[field.name], view=view)))
-        record = type(value)
-        projections = {**cls._projections(record, "wire"), **cls._projections(record, view)}
+            if not field.metadata.get("wire_exclude") and not cls._omitted(field, current):
+                result.update(plans[field.name].encoded(cls.encode(current, hints[field.name])))
         result.update(
-            (member.wire_name, cls.encode(getattr(value, name), view=view))
-            for name, member in projections.items()
+            (member.wire_name, cls.encode(getattr(value, name)))
+            for name, member in cls._projections(type(value), "wire").items()
         )
         return result
+
+    @staticmethod
+    def _omitted(field: Field[object], current: object) -> bool:
+        default = field.default if field.default is not MISSING else (
+            field.default_factory() if field.default_factory is not MISSING else MISSING
+        )
+        return bool(field.metadata.get("wire_omit_default")) and current == default
 
     @classmethod
     def decode_record(cls, target: type[T], data: object) -> T:
@@ -628,6 +627,8 @@ class FieldCodec(Sealed):
     def project(cls, value: object, view: str, annotation: object = None) -> Any:
         """Encode a redacted view using field exclusions and owned properties.
 
+        A family record carries its tag at every depth, as in its wire form.
+
         Projection is deliberately one way. Excluded secrets cannot be rebuilt
         from a read-only view, and a view never serves as a persistence record.
         """
@@ -636,11 +637,12 @@ class FieldCodec(Sealed):
             return cls.encode(value, annotation)
         if is_dataclass(value) and not isinstance(value, type):
             hints = cls._types(type(value))
-            result = {}
+            result = cls._tag(value)
             plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
             for field, key in cls.record_fields(type(value)):
-                if not field.metadata.get(f"{view}_exclude"):
-                    encoded = cls.project(getattr(value, field.name), view, hints[field.name])
+                current = getattr(value, field.name)
+                if not field.metadata.get(f"{view}_exclude") and not cls._omitted(field, current):
+                    encoded = cls.project(current, view, hints[field.name])
                     result.update(plans[field.name].encoded(
                         encoded, key=field.metadata.get(f"{view}_name", key)
                     ))
@@ -651,7 +653,8 @@ class FieldCodec(Sealed):
             )
             return result
         if isinstance(value, (tuple, list)):
-            return [cls.project(item, view) for item in value]
+            arguments = get_args(cls._representation(annotation)[0])
+            return [cls.project(item, view, arguments[0] if arguments else None) for item in value]
         return cls.encode(value)
 
     @dataclass(frozen=True)
