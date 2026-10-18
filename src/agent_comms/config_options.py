@@ -170,7 +170,9 @@ class ModelConfigOption(CatalogConfigOption):
         if not values:
             from .pi_commands import GetAvailableModels
 
-            data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv, self.configuration.root)
+            data = await GetAvailableModels().discover(
+                self.agent_bin, self.agent_args.argv, self.configuration.root
+            )
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
             SessionConfigSelectOption(value=value, name=value) for value in dict.fromkeys(values)
@@ -267,7 +269,9 @@ class SessionConfigOptions(ConfigOptions):
         effects: SessionEffects,
     ):
         super().__init__(
-            agent_bin, agent_args, replace(RestartEnvironment.inherit(os.environ), root=str(comms.root))
+            agent_bin,
+            agent_args,
+            replace(RestartEnvironment.inherit(os.environ), root=str(comms.root)),
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()

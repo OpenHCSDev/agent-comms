@@ -340,7 +340,8 @@ class SettingCommand(CatalogQuery):
         """
         from .native_pi import NativePiUnavailable
 
-        async with self.catalog(agent_bin, arguments, worktree=worktree, root=root) as (channel, writer):
+        catalog = self.catalog(agent_bin, arguments, worktree=worktree, root=root)
+        async with catalog as (channel, writer):
             response = await self.exchange(channel, writer)
             if response.success is not True:
                 raise NativePiUnavailable(response.error or self.error_message)

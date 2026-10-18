@@ -13,6 +13,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText
 
+
 class CallingThreadUnavailable(RelationViolationError):
     """The process environment does not declare its owner thread."""
 
