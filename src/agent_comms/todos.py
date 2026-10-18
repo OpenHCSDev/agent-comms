@@ -237,8 +237,11 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def line(self) -> str: ...
 
     def stalled(self, ordered: float, now: float) -> bool:
+        return (since := self.stalled_since(ordered)) is not None and now > since
+
+    def stalled_since(self, ordered: float) -> float | None:
         """Work stalls 15 minutes after ``moved`` with no commit, push or PR change."""
-        return self.moved is not None and now - self.moved > 900
+        return None if self.moved is None else self.moved + 900
 
     @property
     def moved(self) -> float | None:
@@ -261,9 +264,9 @@ class NoCommitProgress(OrderProgress):
     def line(self) -> str:
         return "no commit since the order"
 
-    def stalled(self, ordered: float, now: float) -> bool:
+    def stalled_since(self, ordered: float) -> float | None:
         """No first commit within 10 minutes of the order."""
-        return now - ordered > 600
+        return ordered + 600
 
 
 @dataclass(frozen=True)

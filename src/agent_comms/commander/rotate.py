@@ -13,9 +13,9 @@ def unjudged(unit=None):
     return sum(1 for e in judge.unjudged() if unit in (None, e['thread']))
 
 
-def broken_rules():
-    """Every standing rule broken now, as Core's StandingRule family derives it."""
-    read: StandingRulesRead = order.call(CommsStandingRulesTool())
+def broken_rules(after=0.0):
+    """Every standing rule that broke after ``after``, as Core's StandingRule family derives it."""
+    read: StandingRulesRead = order.call(CommsStandingRulesTool(after=after))
     return read.broken
 
 
@@ -37,8 +37,9 @@ def detached(owed: dict[str, list[Todo]]) -> list[str]:
 
 
 def main(a):
-    turn = 0
+    turn, since = 0, 0.0  # since: the previous wake; a rule that stays broken is said once
     while True:
+        now = time.time()
         owed = owed_orders()
         units = sorted(owed)
         if units:
@@ -52,6 +53,7 @@ def main(a):
             print(line, flush=True)
         for line in request.stalled():
             print(line, flush=True)
-        for line in broken_rules():
+        for line in broken_rules(since):
             print(f"  RULE {line}", flush=True)
+        since = now
         time.sleep(60)

@@ -61,6 +61,14 @@ def stale(who: str = ME) -> str | None:
     return None
 
 
+def stale_since(who: str = ME) -> float:
+    """When the refusal began: the last review, or its expiry once it is older than MAX_AGE."""
+    review, _ = last(who)
+    if review is None:
+        return 0.0
+    return review['at'] + (MAX_AGE if time.time() - review['at'] > MAX_AGE else 0)
+
+
 def require(who: str = ME):
     if why := stale(who):
         flag = '' if who == ME else f' --as {who}'
