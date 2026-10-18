@@ -200,7 +200,7 @@ class MessageBus[Writes: Publisher]:
         with self.projection(
             self.log.path, source, selection.registry, {actor: delivery}
         ) as index:
-            return index.unseen_counts({actor: selection.seen})[actor]
+            return index.unseen_counts({actor: selection.seen(source)})[actor]
 
     def delivered(
         self, name: str, references: Sequence[MessageReference]

@@ -37,7 +37,7 @@ class DisplayViewer(ABC):
     def display_evidence(self, page, presentation, source, index, document, snapshot) -> HistoricalDisplay | None: ...
 
     @abstractmethod
-    def cursor(self, reads, snapshot, document) -> ReadCursor: ...
+    def cursor(self, reads, snapshot, document, source) -> ReadCursor: ...
 
     @abstractmethod
     def names(self, snapshot) -> frozenset[str]: ...
@@ -57,7 +57,7 @@ class AnonymousViewer(DisplayViewer):
     def display_evidence(self, page, presentation, source, index, document, snapshot) -> None:
         return None
 
-    def cursor(self, reads, snapshot, document) -> ReadCursor:
+    def cursor(self, reads, snapshot, document, source) -> ReadCursor:
         return ReadCursor()
 
     def names(self, snapshot) -> frozenset[str]:
@@ -84,8 +84,8 @@ class NamedViewer(DisplayViewer):
             self.resolve(snapshot).name, page.messages, snapshot, source, index,
             conversation_snapshot=historical.provenance, document=document))
 
-    def cursor(self, reads, snapshot, document) -> ReadCursor:
-        return reads.cursor(self.name, snapshot, document=document)
+    def cursor(self, reads, snapshot, document, source) -> ReadCursor:
+        return document.cursor(self.name, snapshot, source)
 
     def names(self, snapshot) -> frozenset[str]:
         return snapshot.names_for(self.name)

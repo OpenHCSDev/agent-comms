@@ -355,9 +355,8 @@ class DisplaySelection:
     reads: ReadLedger
     document: ReadDocument
 
-    @property
-    def seen(self) -> ReadCursor:
-        return self.viewer.cursor(self.reads, self.registry, self.document)
+    def seen(self, source) -> ReadCursor:
+        return self.viewer.cursor(self.reads, self.registry, self.document, source)
 
     @classmethod
     def capture(
@@ -542,7 +541,7 @@ class BusPresentation:
         """
         snapshot = self.display_index(basis.require_viewer()).snapshot(source, basis.scopes)
         unread = source.query_page_index(lambda page: page.display_unread(
-            basis.scopes, basis.viewer_names, basis.seen, source.complete_prefix.boundary, basis.registry))
+            basis.scopes, basis.viewer_names, basis.seen(source), source.complete_prefix.boundary, basis.registry))
         return snapshot.activity, unread
 
 
