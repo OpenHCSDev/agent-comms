@@ -694,9 +694,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal.matching(goal_id)
-        if not current.is_set():
-            raise ValueError("This goal cannot be resumed; refresh its state.")
+        current = comms.registry.require(name).goal.require_id(goal_id)
         current.state.require_model_resume()
         progress = self.progress
         goal = comms.goals.update_goal(
@@ -709,7 +707,8 @@ class CommsResumeGoalTool(ThreadToolRequest):
                 progress=progress,
             ),
         )
-        if not goal.is_set() or not goal.state.active or goal.progress != progress:
+        goal = goal.require()
+        if not goal.state.active or goal.progress != progress:
             raise ValueError("Goal changed during resume; refresh its state.")
         return GoalRead(goal)
 

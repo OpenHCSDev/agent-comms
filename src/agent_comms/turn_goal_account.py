@@ -126,7 +126,7 @@ class TurnGoalAccount:
 
     def provider_usage(self, event: events.ProviderUsage) -> None:
         goal = self.comms.registry.require(self.thread_name).goal
-        goal_id = goal.id if goal.is_set() else None
+        goal_id = goal.active().reported_id()
         permit = self.originated.get(goal_id)
         if (
             permit is None

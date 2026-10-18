@@ -43,6 +43,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.ui_model.delivery import InputDelivery
@@ -62,7 +63,7 @@ if TYPE_CHECKING:
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
-    from agent_comms.ui_model.goal import OwnerGoalSnapshot
+    from agent_comms.acp_extension import GoalSnapshotReply
     from agent_comms.view_unread import ReplyIndexBatch
 
 
@@ -554,10 +555,10 @@ class ReadRecordedNotifications(ReadNotifications):
 class ReadOwnerGoal(OwnerRead):
     """The owner's goal snapshot and the turn it read with it."""
 
-    async def read(self, owner: RuntimeConnection) -> OwnerGoalSnapshot:
-        from agent_comms.ui_model.goal import OwnerGoalSnapshot
+    async def read(self, owner: RuntimeConnection) -> GoalSnapshotReply:
+        from agent_comms.acp_extension import GoalSnapshotReply
 
-        return OwnerGoalSnapshot.from_owner(await owner.request("goal_snapshot"))
+        return FieldCodec.decode(GoalSnapshotReply, await owner.request("goal_snapshot"))
 
 
 @dataclass(frozen=True)

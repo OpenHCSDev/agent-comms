@@ -1,41 +1,25 @@
-"""What a goal shows: current, absent or unavailable, as one declared family.
+"""Display a current goal declaration or the failure to read one."""
 
-The owner's goal snapshot reaches the UI already decoded, with the turn
-settlement the owner read alongside it.
-"""
+from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import ClassVar
 
 from agent_comms import goals
-from agent_comms.acp_extension import AgentCommsUpdate, decode_updates
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_presentation import GoalSnapshot, ThreadGoalExecution
-from agent_comms.goals import Goal, GoalDeclaration
-
-
-@dataclass(frozen=True)
-class OwnerGoalSnapshot(GoalSnapshot):
-    """The live owner's answer to a goal read: the snapshot and the turn it read with it."""
-
-    updates: tuple[AgentCommsUpdate, ...]
-
-    @classmethod
-    def from_owner(cls, result: Mapping) -> "OwnerGoalSnapshot":
-        """Decode the owner's ``goal_snapshot`` reply once, at the socket boundary."""
-        raw_goal, raw_execution = result["goal"], result["goalExecution"]
-        return cls(
-            FieldCodec.decode(GoalDeclaration, raw_goal),
-            FieldCodec.decode(ThreadGoalExecution, raw_execution),
-            decode_updates(result["_meta"]),
-        )
+from agent_comms.goal_presentation import ThreadGoalExecution
+from agent_comms.goals import GoalDeclaration
+from agent_comms.thread_presentation import ThreadPresentation
 
 
 class GoalDisplay(DeclaredFamily):
-    can_control: ClassVar[bool] = True
+    @classmethod
+    def current(cls, goal: GoalDeclaration) -> CurrentGoal:
+        return CurrentGoal(goal)
+
+    @property
+    def can_control(self) -> bool:
+        return True
 
     @property
     @abstractmethod
@@ -59,59 +43,48 @@ class GoalDisplay(DeclaredFamily):
 
 
 @dataclass(frozen=True)
-class NoGoal(GoalDisplay):
-    can_control: ClassVar[bool] = False
-
-    @property
-    def visible(self) -> bool:
-        return False
+class CurrentGoal(GoalDisplay):
+    goal: GoalDeclaration
 
     @property
     def snapshot(self) -> GoalDeclaration:
-        return goals.NoGoal()
-
-    def heading(self, execution: ThreadGoalExecution) -> str:
-        return "No current goal"
-
-    def action_failure(self, error: Exception) -> str:
-        return "This goal has been cleared."
-
-
-@dataclass(frozen=True)
-class ShowingGoal(GoalDisplay):
-    goal: Goal
-
-    @property
-    def snapshot(self) -> Goal:
         return self.goal
 
+    @property
+    def can_control(self) -> bool:
+        return self.goal.control_available()
+
+    @property
+    def visible(self) -> bool:
+        return self.goal.panel_visible()
+
     def standby(self, execution: ThreadGoalExecution) -> bool:
-        return execution.waiting_for(self.goal)
+        return self.goal.display_standby(execution)
 
     def heading(self, execution: ThreadGoalExecution) -> str:
-        status = "Standby" if self.standby(execution) else self.goal.state.declared_name
-        return f"Goal · {status} · rev {self.goal.revision}"
+        return self.goal.display_heading(execution)
 
     def details_heading(self, execution: ThreadGoalExecution) -> str:
         heading = self.heading(execution)
         if self.standby(execution):
-            heading += f" · {execution.presentation('').summary}"
+            heading += f" · {execution.waiting_presentation(ThreadPresentation('', '', '')).summary}"
         return heading
+
+    def action_failure(self, error: Exception) -> str:
+        return self.goal.control_failure(error)
 
 
 @dataclass(frozen=True)
 class GoalUnavailable(GoalDisplay):
     last_confirmed: GoalDeclaration = field(default_factory=goals.NoGoal)
-    can_control: ClassVar[bool] = False
+
+    @property
+    def can_control(self) -> bool:
+        return False
 
     @property
     def snapshot(self) -> GoalDeclaration:
         return self.last_confirmed
 
-    @property
-    def visible(self) -> bool:
-        return True
-
     def heading(self, execution: ThreadGoalExecution) -> str:
-        # A failed read says nothing about why; the session's own state explains it.
         return self.last_confirmed.unavailable_heading()

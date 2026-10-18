@@ -66,13 +66,8 @@ class GoalPrecondition:
         self.expected_goal.check_expected(goal)
         if self.goal_id is not None:
             thread.goal.require_id(self.goal_id)
-        if self.expected_state is not None and (
-            not goal.is_set() or goal.state != self.expected_state
-        ):
-            raise ValueError(
-                goal.state.activity_refusal() if goal.is_set()
-                else "This goal is no longer active; refresh its state."
-            )
+        if self.expected_state is not None:
+            goal.require_state(self.expected_state)
 
 
 @dataclass(frozen=True)
@@ -108,9 +103,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         invoke: Callable[..., Awaitable[dict]],
         text: str = "",
     ) -> dict:
-        goal = (await observe()).goal
-        if not goal.is_set():
-            raise ValueError("The goal changed; refresh its state.")
+        goal = (await observe()).goal.require()
         return await cls.submit_checkpoint(invoke, goal)
 
     @classmethod
@@ -149,8 +142,8 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             ),
             ctx.goals.registry.status(ctx.thread.name),
         )
-        if not self.preserve_wait and ctx.thread.goal.is_set():
-            ctx.goals.waits.clear(ctx.thread.goal.id)
+        if not self.preserve_wait:
+            ctx.thread.goal.clear_wait(ctx.goals.waits)
         return goal
 
     @abstractmethod

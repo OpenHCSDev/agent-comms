@@ -8,7 +8,7 @@ from dataclasses import dataclass, fields
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import FieldCodec, WireValue, RecordMember
+from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion, WireValue
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
@@ -113,15 +113,10 @@ class GoalWaitTarget(WireValue):
         return RecordedThreadIncarnation.schema()
 
 
-class ThreadGoalExecution(WireValue):
+class ThreadGoalExecution(SubclassUnion):
     """The execution contract, including absence, consumed by thread views."""
 
     __slots__ = ()
-    accepts_null = True
-
-    @abstractmethod
-    def to_wire(self) -> dict | None: ...
-
     @abstractmethod
     def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation: ...
 
@@ -134,16 +129,8 @@ class ThreadGoalExecution(WireValue):
     @abstractmethod
     def validate_goal(self, goal: GoalCheckpoint) -> None: ...
 
-    @classmethod
-    def from_wire(cls, data) -> ThreadGoalExecution:
-        return IdleGoalExecution() if data is None else FieldCodec.decode_record(GoalExecution, data)
 
-    @classmethod
-    def schema(cls) -> dict:
-        return {"oneOf": [FieldCodec.record_schema(GoalExecution), {"type": "null"}]}
-
-
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class GoalExecution(RecordMember, ThreadGoalExecution):
     state: GoalExecutionState
     goal_id: str
@@ -168,22 +155,9 @@ class GoalExecution(RecordMember, ThreadGoalExecution):
         goal.require_identity(self.goal_id)
 
 
-@dataclass(frozen=True, slots=True)
-class IdleGoalExecution(ThreadGoalExecution):
+@dataclass(frozen=True)
+class IdleGoalExecution(NullMember, ThreadGoalExecution):
     """No goal execution has been projected."""
-
-    def to_wire(self) -> None:
-        return None
-
-    @classmethod
-    def from_wire(cls, data) -> IdleGoalExecution:
-        if data is not None:
-            raise ValueError("An idle goal execution is null on the wire")
-        return cls()
-
-    @classmethod
-    def schema(cls) -> dict:
-        return {"type": "null"}
 
     def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary

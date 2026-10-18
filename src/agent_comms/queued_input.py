@@ -75,7 +75,7 @@ class QueuedInputContext:
 
     @property
     def active_goal_id(self) -> str | None:
-        return self.goal.id if self.goal.is_set() and self.goal.state.active else None
+        return self.goal.active().reported_id()
 
 
 @dataclass(frozen=True, slots=True)

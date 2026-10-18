@@ -202,7 +202,7 @@ class Goals:
 
     def goal_wait(self, name: str) -> GoalWait:
         goal = self.registry.require(name).goal
-        return self.waits.for_goal(goal, self.waits.read()) if goal.is_set() else NoGoalWait()
+        return goal.wait(self.waits)
 
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
         """Release one stranded standby without replaying a dependency input.

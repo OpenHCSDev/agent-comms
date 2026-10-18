@@ -6,7 +6,7 @@ import re
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .child_process import ExitedOutcome
 from .declared_family import DeclaredFamily
@@ -15,6 +15,9 @@ from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, 
 from .goal_states import ActiveGoal, GoalState
 from .registration_inheritance import RegistrationInheritance
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+
+if TYPE_CHECKING:
+    from .goal_presentation import ThreadGoalExecution
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -325,9 +328,20 @@ class GoalDeclaration(SubclassUnion, RegistrationInheritance["GoalDeclaration"])
     def detail_contents(self) -> tuple[str, str]:
         return "", ""
 
-    def goal_display(self):
-        from .ui_model import goal
-        return goal.NoGoal()
+    @abstractmethod
+    def control_available(self) -> bool: ...
+
+    @abstractmethod
+    def panel_visible(self) -> bool: ...
+
+    @abstractmethod
+    def display_standby(self, execution: ThreadGoalExecution) -> bool: ...
+
+    @abstractmethod
+    def display_heading(self, execution: ThreadGoalExecution) -> str: ...
+
+    @abstractmethod
+    def control_failure(self, error: Exception) -> str: ...
 
     def unavailable_heading(self) -> str:
         return "Goal state unavailable"
@@ -357,11 +371,20 @@ class GoalDeclaration(SubclassUnion, RegistrationInheritance["GoalDeclaration"])
     def require(self) -> Goal:
         raise RelationViolationError("No goal is set for this thread.")
 
-    def require_id(self, goal_id: str) -> Goal:
-        selected = self.matching(goal_id)
-        if not selected.is_set():
-            raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
-        return selected.require()
+    @abstractmethod
+    def require_id(self, goal_id: str) -> Goal: ...
+
+    @abstractmethod
+    def reported_id(self) -> str | None: ...
+
+    @abstractmethod
+    def require_state(self, expected: GoalState) -> None: ...
+
+    @abstractmethod
+    def wait(self, waits): ...
+
+    @abstractmethod
+    def clear_wait(self, waits) -> bool: ...
 
     def require_active(self) -> Goal:
         goal = self.require()
@@ -392,7 +415,36 @@ class GoalDeclaration(SubclassUnion, RegistrationInheritance["GoalDeclaration"])
 
 @dataclass(frozen=True)
 class NoGoal(NullMember, GoalDeclaration):
-    pass
+    def require_id(self, goal_id: str) -> Goal:
+        raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
+
+    def reported_id(self) -> None:
+        return None
+
+    def require_state(self, expected: GoalState) -> None:
+        raise ValueError("This goal is no longer active; refresh its state.")
+
+    def wait(self, waits):
+        from .goal_waits import NoGoalWait
+        return NoGoalWait()
+
+    def clear_wait(self, waits) -> bool:
+        return False
+
+    def control_available(self) -> bool:
+        return False
+
+    def panel_visible(self) -> bool:
+        return False
+
+    def display_standby(self, execution: ThreadGoalExecution) -> bool:
+        return False
+
+    def display_heading(self, execution: ThreadGoalExecution) -> str:
+        return "No current goal"
+
+    def control_failure(self, error: Exception) -> str:
+        return "This goal has been cleared."
 
 
 @dataclass(frozen=True)
@@ -428,9 +480,21 @@ class Goal(RecordMember, GoalDeclaration):
     def detail_contents(self) -> tuple[str, str]:
         return self.text, self.progress
 
-    def goal_display(self):
-        from .ui_model.goal import ShowingGoal
-        return ShowingGoal(self)
+    def control_available(self) -> bool:
+        return True
+
+    def panel_visible(self) -> bool:
+        return True
+
+    def display_standby(self, execution: ThreadGoalExecution) -> bool:
+        return execution.waiting_for(self)
+
+    def display_heading(self, execution: ThreadGoalExecution) -> str:
+        status = "Standby" if self.display_standby(execution) else self.state.declared_name
+        return f"Goal · {status} · rev {self.revision}"
+
+    def control_failure(self, error: Exception) -> str:
+        return str(error)
 
     def unavailable_heading(self) -> str:
         return "Goal state unavailable · last confirmed snapshot"
@@ -459,6 +523,24 @@ class Goal(RecordMember, GoalDeclaration):
 
     def require(self) -> Goal:
         return self
+
+    def require_id(self, goal_id: str) -> Goal:
+        if self.id != goal_id:
+            raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
+        return self
+
+    def reported_id(self) -> str:
+        return self.id
+
+    def require_state(self, expected: GoalState) -> None:
+        if self.state != expected:
+            raise ValueError(self.state.activity_refusal())
+
+    def wait(self, waits):
+        return waits.for_goal(self, waits.read())
+
+    def clear_wait(self, waits) -> bool:
+        return waits.clear(self.id)
 
     def matching(self, goal_id: str) -> GoalDeclaration:
         return self if self.id == goal_id else NoGoal()

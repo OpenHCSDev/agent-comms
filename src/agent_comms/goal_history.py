@@ -279,8 +279,8 @@ class GoalHistoryStore:
                 goal_id is None
                 or goal_id
                 in {
-                    row.before.require().id if row.before.is_set() else None,
-                    row.after.require().id if row.after.is_set() else None,
+                    row.before.reported_id(),
+                    row.after.reported_id(),
                 }
             )
         )
