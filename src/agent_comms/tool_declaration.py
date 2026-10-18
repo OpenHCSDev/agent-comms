@@ -48,7 +48,8 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     def record(cls, name: str, arguments: object) -> ToolDeclaration | None:
         """The call decoded once as Core's tool record, or None when Core does not decode it."""
         try:
-            return cls.for_name(name).parse_arguments(FieldCodec.decode(dict[str, object], arguments))
+            decoded = FieldCodec.decode(dict[str, object], arguments)
+            return cls.for_name(name).parse_arguments(decoded)
         except (TypeError, ValueError):
             return None
 

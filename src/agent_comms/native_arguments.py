@@ -15,7 +15,12 @@ from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .launch_runtime import LaunchRuntime
-from .pi_vocabulary import NoThinkingOverride, ThinkingLevel, ThinkingLevelField
+from .pi_vocabulary import (
+    NoThinkingOverride,
+    ThinkingLevel,
+    ThinkingLevelField,
+    ThinkingLevelValue,
+)
 
 
 @dataclass(frozen=True)
@@ -128,11 +133,11 @@ class ThinkingArgument(NamedOption, ValueOption):
 
     @classmethod
     def from_text(cls, value: str) -> ThinkingArgument:
-        return cls(FieldCodec.decode(ThinkingLevelField, value))
+        return cls(ThinkingLevelValue.decode(value))
 
     @property
     def argv(self) -> tuple[str, ...]:
-        return self.flag(), FieldCodec.encode(self.level)
+        return self.flag(), ThinkingLevelValue.encode(self.level)
 
 
 class SessionSelectionArgument:
