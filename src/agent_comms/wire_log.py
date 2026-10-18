@@ -77,13 +77,11 @@ class WireSnapshot(ABC):
     @abstractmethod
     def boundary(self) -> int: ...
 
-    @property
     @abstractmethod
-    def identity(self) -> FileIdentity | None: ...
+    def same_file(self, identity: FileIdentity) -> bool: ...
 
-    @property
     @abstractmethod
-    def revision_key(self) -> tuple: ...
+    def changed_since(self, revision) -> bool: ...
 
     @property
     @abstractmethod
@@ -175,8 +173,12 @@ class AbsentWireSnapshot(WireSnapshot):
     """No descriptor existed at acquisition; later appends stay outside this cut."""
 
     complete_boundary = boundary = 0
-    identity = None
-    revision_key = (None,)
+
+    def same_file(self, identity: FileIdentity) -> bool:
+        return False
+
+    def changed_since(self, revision) -> bool:
+        return revision is not None
 
     @property
     def opened(self) -> OpenedWireSnapshot:
@@ -220,13 +222,11 @@ class OpenedWireSnapshot(WireSnapshot):
     stream: BinaryIO
     revision: FileRevision
 
-    @property
-    def identity(self) -> FileIdentity:
-        return self.revision.identity
+    def same_file(self, identity: FileIdentity) -> bool:
+        return self.revision.identity == identity
 
-    @property
-    def revision_key(self) -> tuple[FileRevision]:
-        return (self.revision,)
+    def changed_since(self, revision) -> bool:
+        return self.revision != revision
 
     @property
     def opened(self) -> OpenedWireSnapshot:
@@ -303,7 +303,7 @@ class OpenedWireSnapshot(WireSnapshot):
 
     def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
         """Validate the captured candidate only when a consumer reads this cut."""
-        record = index.capture(self._append_checkpoints.get(index), self.stream, self.revision)
+        record = index.capture(self._append_checkpoints.get(index), self)
         self._append_checkpoints[index] = record
         return record
 
@@ -329,7 +329,7 @@ class OpenedWireSnapshot(WireSnapshot):
     def appended_records(self, previous: FileRevision,
                          previous_sequence: int) -> tuple[WireRecord, ...]:
         """Decode only bytes appended to the same opened source inode."""
-        if previous.identity != self.revision.identity or previous.size > self.revision.size:
+        if not self.same_file(previous.identity) or previous.size > self.revision.size:
             raise RelationViolationError("Wire tail does not extend the settled source")
         self.stream.seek(previous.size)
         scan = WireScan(self.metadata, previous_sequence=previous_sequence)

@@ -774,7 +774,7 @@ class WireRevision:
         if self.through_seq > earlier.through_seq:
             snapshot = comms.registry.snapshot()
             with comms.bus.log._opened_wire_snapshot() as source:
-                if source.revision_key != self.bus_log:
+                if source.changed_since(self.bus_log[0]):
                     raise StaleRevision("Wire source changed before route attribution")
                 with OpenedRouteCounts(comms.bus.log.path, source, snapshot, {}) as routes:
                     actors = routes.participants_between(earlier.through_seq, self.through_seq)

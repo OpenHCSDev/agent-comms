@@ -215,8 +215,9 @@ class MessageBus:
             for actor in set(actors.values())
         }
         seen = {
-            actor: basis.document.cursor(
-                actor, basis.registry, source.identity
+            actor: source.read(
+                lambda opened: basis.document.cursor(actor, basis.registry, opened.revision.identity),
+                absent=lambda: basis.document.cursor(actor, basis.registry),
             ) for actor in deliveries
         }
         with OpenedRouteCounts(self.log.path, source, basis.registry, deliveries) as index:
