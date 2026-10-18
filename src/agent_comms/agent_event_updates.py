@@ -55,7 +55,7 @@ class AcpEventConsumer(MroDispatch):
             session_id=self.session_id,
             update=SessionInfoUpdate(
                 session_update="session_info_update",
-                field_meta=encode_updates(GoalChangedUpdate(event.goal, event.execution)),
+                field_meta=encode_updates(GoalChangedUpdate(event.snapshot.goal, event.snapshot.execution)),
             ),
         )
 

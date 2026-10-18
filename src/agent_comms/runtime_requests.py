@@ -343,10 +343,10 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> GoalSnapshotReply:
         from .acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
         await self.change(ctx)
-        goal, execution = await Coordination.run_worker(partial(
+        snapshot = await Coordination.run_worker(partial(
             ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
         ))
-        return GoalSnapshotReply(goal, execution, UpdateMetadata.of(TurnChangedUpdate(
+        return GoalSnapshotReply(snapshot.goal, snapshot.execution, UpdateMetadata.of(TurnChangedUpdate(
             await Coordination.run_worker(partial(
                 ctx.server.agent.turns.turn_state, ctx.session_id,
             )))))
