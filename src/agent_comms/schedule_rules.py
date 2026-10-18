@@ -1,18 +1,17 @@
 """Independent owner-local scheduling barriers, using the shared rule family."""
 
 import asyncio
+from dataclasses import dataclass
 from functools import partial
-from .coordinator import Coordination
+from typing import TYPE_CHECKING
 
 from acp import RequestError
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
+from .coordinator import Coordination
 from .drain_failures import drain_failures
-from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
-from .routing import ScheduledTurn
 from .errors import RelationViolationError
+from .reservation_rules import ReservationRule, ReservationViolationError, RuleCheck
+from .routing import ScheduledTurn
 
 if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
@@ -93,7 +92,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                 state = inputs.state(session_id)
                 pending, state.pending_turns = state.pending_turns, []
                 goal = owner.goal.active()
-                if goal:
+                if goal.is_set():
                     pending = [turn for turn in pending if turn.goal_id == goal.id]
                 if not pending:
                     continue
@@ -111,7 +110,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         dependency_wait_id=pending[0].goal_wait_id,
                     )
                 except RequestError as error:
-                    if not goal:
+                    if not goal.is_set():
                         raise
                     pending[0].require_dependency_wake(error)
                     await Coordination.run_worker(partial(inputs.comms.goals.block_goal_after_failed_turn,

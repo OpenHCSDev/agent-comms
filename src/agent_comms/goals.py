@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
+import re
+from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar, Literal
 
-from abc import abstractmethod
-import re
-
 from .child_process import ExitedOutcome
-
 from .declared_family import DeclaredFamily
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-
-from .field_codec import FieldCodec, MalformedRecord, WireValue
 from .errors import RelationViolationError
+from .field_codec import FieldCodec, MalformedRecord, WireValue
 from .goal_states import ActiveGoal, GoalState
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -262,25 +259,6 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_completion(self) -> None:
         pass
 
-    def __bool__(self) -> bool:
-        return True
-
-    def require(self) -> Goal:
-        return self
-
-    def matching(self, goal_id: str) -> GoalDeclaration:
-        return self if self.id == goal_id else NoGoal()
-
-    def active(self) -> GoalDeclaration:
-        return self if self.state.active else NoGoal()
-
-    def reports_turn(self, turn_id: str) -> bool:
-        return self.reported_turn == turn_id
-
-    @property
-    def captured(self) -> GoalCheckpoint:
-        return PresentGoalCheckpoint(self.checkpoint)
-
     def instructions(self, todos) -> str:
         return ""
 
@@ -338,7 +316,7 @@ class GoalDeclaration(WireValue):
     def schema(cls):
         return {"anyOf": [{"type": "null"}, FieldCodec.record_schema(Goal)]}
 
-    def __bool__(self) -> bool:
+    def is_set(self) -> bool:
         return False
 
     def require(self) -> Goal:
@@ -346,7 +324,7 @@ class GoalDeclaration(WireValue):
 
     def require_id(self, goal_id: str) -> Goal:
         selected = self.matching(goal_id)
-        if not selected:
+        if not selected.is_set():
             raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
         return selected.require()
 
@@ -399,7 +377,7 @@ class Goal(GoalDeclaration):
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
 
-    def __bool__(self) -> bool:
+    def is_set(self) -> bool:
         return True
 
     def require(self) -> Goal:

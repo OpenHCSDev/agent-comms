@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
-from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
+from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
@@ -307,7 +307,7 @@ class ClaimedOwnerBatch:
             launches = tuple(RetainedOwnerLaunch.capture(
                 thread, snapshot, interpreter=request.source_interpreter,
             ) for thread, _ in captured)
-            if captured:
+            if captured.is_set():
                 cutover.require_launch(lifecycle)
             authorized = cls(lifecycle, tuple(captured), launches, request, runtime)
             fenced = authorized.fence()

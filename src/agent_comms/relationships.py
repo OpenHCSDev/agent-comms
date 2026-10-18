@@ -7,8 +7,6 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
-from .wire_log import CurrentSnapshotOpening
-
 import json
 import time
 from abc import ABC, abstractmethod
@@ -19,6 +17,7 @@ from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, ClassVar, Literal
 
+from . import presentation
 from .channel_targets import CommandTarget
 from .command import Command
 from .declared_family import DeclaredFamily
@@ -26,6 +25,7 @@ from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
 from .goals import GoalMentionBinding
 from .locked_store import LockedStore, RootFile
+from .messages import Message
 from .peer_relevance import (
     ChannelmateRelevance,
     CollaboratorRelevance,
@@ -33,9 +33,6 @@ from .peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
-from . import presentation
-from .wire_record import WireRecord
-from .messages import Message
 from .private_path import FileRevision
 from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
@@ -43,6 +40,8 @@ from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
+from .wire_log import CurrentSnapshotOpening
+from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .history_views import HistoryViews
@@ -724,7 +723,7 @@ class ThreadRelationships:
             for executor in thread.role.executor(thread)
         ):
             goal = owner.goal.active()
-            if not goal:
+            if not goal.is_set():
                 continue
             source = goal.mention_source
             # Missing historical evidence grants no contact or current-name binding.

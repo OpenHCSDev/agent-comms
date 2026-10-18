@@ -8,9 +8,15 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
-from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
-from .goals import GoalDeclaration, NoGoal, Goal
 from .declared_family import DeclaredFamily
+from .goal_presentation import (
+    GoalExecution,
+    GoalExecutionState,
+    GoalWaitTarget,
+    IdleGoalExecution,
+    ThreadGoalExecution,
+)
+from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import LockedStore, RootFile
 from .registry_document import RegistrySnapshot
@@ -309,7 +315,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
         agents: AgentActivity,
     ) -> ThreadGoalExecution:
         """Resolve absence once beside the goal/wait acquisition."""
-        if not goal:
+        if not goal.is_set():
             return IdleGoalExecution()
         return cls.for_goal(goal, rows).project(goal, snapshot, agents)
 
@@ -337,9 +343,9 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
             seen.add(name)
             thread = snapshot.threads[name]
             goal = thread.goal.active()
-            wait = rows.get(goal.id) if goal else None
+            wait = rows.get(goal.id) if goal.is_set() else None
             if wait is not None and (
-                not goal
+                not goal.is_set()
                 or not wait.current_for(goal, thread.incarnation.require_recorded())
             ):
                 wait = None
@@ -355,11 +361,11 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 peer_goal = peer.goal.active()
                 peer_wait = (
                     rows.get(peer_goal.id)
-                    if peer_goal
+                    if peer_goal.is_set()
                     else None
                 )
                 if peer_wait is not None and (
-                    not peer_goal
+                    not peer_goal.is_set()
                     or not peer_wait.current_for(peer_goal, peer.incarnation.require_recorded())
                 ):
                     peer_wait = None

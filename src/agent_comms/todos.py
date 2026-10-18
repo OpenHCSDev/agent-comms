@@ -7,27 +7,25 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import sqlite3
 import time
-import asyncio
-from collections.abc import Iterator
-from contextlib import contextmanager
+from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from abc import abstractmethod
 from typing import ClassVar
 
-from .field_codec import FieldCodec
+from .change_report import FileLine
+from .child_process import BoundedRun, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, NullMember, SubclassUnion
+from .goals import OrderCheck
+from .recorded_time import EventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, TypedStore, TypedTable
-from .recorded_time import EventTime, UnrecordedEventTime
-from .change_report import FileLine
-from .goals import OrderCheck
-from .child_process import BoundedRun, ExitedOutcome
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -398,13 +396,28 @@ class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
         super().__init__(f"Todo {current.id} changed (revision {current.revision}, owner {owner}).")
 
 
-@dataclass(frozen=True, slots=True)
-class GoalRef:
+class GoalReference(SubclassUnion):
+    def require_reference(self) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class NoGoalReference(NullMember, GoalReference):
+    pass
+
+
+@dataclass(frozen=True)
+class GoalRef(GoalReference):
+    accepts_null = False
+
     owner: str
     owner_created: float
     goal_id: str
 
     def __post_init__(self) -> None:
+        self.require_reference()
+
+    def require_reference(self) -> None:
         _text(self.owner, "Thread name", 128)
         try:
             self.incarnation.require_recorded()
@@ -415,6 +428,17 @@ class GoalRef:
     @property
     def incarnation(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.owner, self.owner_created)
+
+    @classmethod
+    def from_wire(cls, value: object) -> GoalRef:
+        return FieldCodec.decode_record(cls, value)
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.record_schema(cls)
+
+    def to_wire(self):
+        return FieldCodec.encode_record(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -649,7 +673,7 @@ class Todo(TypedTable):
     creator_created: float
     state: type[TodoState]
     revision: int = field(metadata={"sql": Column(check="revision>0")})
-    goal: GoalRef | None
+    goal: GoalReference
     assignment: Assignment | None
     order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
@@ -811,15 +835,14 @@ class TodoStore(TypedStore):
         generation: str,
         deadline: EventTime,
         order: PendingProblemOrder,
-        goal: GoalRef | None = None,
+        goal: GoalReference = NoGoalReference(),
     ) -> Todo:
         _text(todo_id, "Todo ID", 128)
         _text(text, "Todo text", 2000)
         repo_id = _repo(repo)
         identity, assignee = _participant(creator), _thread(owner)
         deadline.require_deadline()
-        if type(goal) not in (GoalRef, type(None)):
-            raise TodoError("Goal reference must be a typed GoalRef.")
+        goal.require_reference()
         proposed = Todo(
             id=todo_id,
             repo=repo_id,

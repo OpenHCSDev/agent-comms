@@ -9,43 +9,42 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
+from dataclasses import dataclass, field, replace
 from functools import partial
-from dataclasses import field, dataclass, replace
 from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
 
 from acp import RequestError
 
-from .child_process import ProcessIdentity
-from .errors import RelationViolationError
-from .goals import GoalDeclaration, NoGoal, Goal
-from .image_inputs import ImageInput
 from .assignment_states import DeferredAssignment, DeliveredAssignment
+from .child_process import ProcessIdentity
 from .coordination_cohort import pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleRevision
+from .coordination_session import ReadNativeCoordinationSession
+from .coordinator import Coordination
+from .errors import RelationViolationError
+from .goals import GoalDeclaration, NoGoal
+from .image_inputs import ImageInput
 from .input_attempt import ACPInputIdText, InputAttempt, ReservedInput
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .store_files import _store_lock
-from .coordinator import Coordination
-from .coordination_session import ReadNativeCoordinationSession
-from .turn_goal_permission import AcceptedGoalPermission
-from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
+from .turn_goal_permission import AcceptedGoalPermission
+from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 
 if TYPE_CHECKING:
-    from asyncio import Queue
+    from .acp_extension import QueueItem, QueueScope
     from .agent_backend import InputContent, TurnInbox
     from .bus_publication import CommittedDelivery
-    from .message_bus import MessageBus
-    from .coordination_tables.assignments import WakeAssignment
-    from .messages import Message
-    from .acp_extension import QueueItem, QueueScope
-    from .registry_document import RegistrySnapshot
-    from .input_drain import InputDrain
-    from .turn_runner import TurnRunner
-    from .turn_input_source import TurnInputSource
     from .comms import Comms
+    from .coordination_tables.assignments import WakeAssignment
+    from .input_drain import InputDrain
+    from .message_bus import MessageBus
+    from .messages import Message
+    from .registry_document import RegistrySnapshot
+    from .turn_input_source import TurnInputSource
+    from .turn_runner import TurnRunner
 
 
 class InputHandoffRefused(RelationViolationError):
@@ -76,7 +75,7 @@ class QueuedInputContext:
 
     @property
     def active_goal_id(self) -> str | None:
-        return self.goal.id if self.goal and self.goal.state.active else None
+        return self.goal.id if self.goal.is_set() and self.goal.state.active else None
 
 
 @dataclass(frozen=True, slots=True)

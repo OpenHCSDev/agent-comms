@@ -12,8 +12,8 @@ from typing import ClassVar
 from agent_comms.acp_extension import AgentCommsUpdate, decode_updates
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goals import GoalDeclaration, NoGoal, Goal
-from agent_comms.goal_presentation import ThreadGoalExecution, GoalSnapshot
+from agent_comms.goal_presentation import GoalSnapshot, ThreadGoalExecution
+from agent_comms.goals import Goal, GoalDeclaration
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ class GoalDisplay(DeclaredFamily):
 
     @property
     @abstractmethod
-    def snapshot(self) -> GoalDeclaration: ...
+    def snapshot(self) -> Goal | None: ...
 
     @property
     def visible(self) -> bool:
@@ -58,7 +58,7 @@ class GoalDisplay(DeclaredFamily):
 
     @staticmethod
     def current(goal: GoalDeclaration) -> "GoalDisplay":
-        return NoGoal() if not goal else ShowingGoal(goal)
+        return NoGoal() if not goal.is_set() else ShowingGoal(goal)
 
 
 @dataclass(frozen=True)
@@ -103,7 +103,7 @@ class GoalUnavailable(GoalDisplay):
     can_control: ClassVar[bool] = False
 
     @property
-    def snapshot(self) -> GoalDeclaration:
+    def snapshot(self) -> Goal | None:
         return self.last_confirmed
 
     @property
@@ -112,4 +112,4 @@ class GoalUnavailable(GoalDisplay):
 
     def heading(self, execution: ThreadGoalExecution) -> str:
         # A failed read says nothing about why; the session's own state explains it.
-        return "Goal state unavailable · last confirmed snapshot" if self.last_confirmed else "Goal state unavailable"
+        return "Goal state unavailable · last confirmed snapshot" if self.last_confirmed is not None else "Goal state unavailable"

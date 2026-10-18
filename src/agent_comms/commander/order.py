@@ -11,7 +11,15 @@ Incompetence is not tolerated: a unit is fired from a task, not berated about it
 Two strikes on one task: the task is taken away and reassigned (`fire`). Nothing here judges
 code; it refuses orders that leave a unit room to interpret, and refuses to let a deadline lapse silently.
 """
-import argparse, asyncio, calendar, json, os, re, subprocess, sys, time
+import argparse
+import asyncio
+import calendar
+import json
+import os
+import re
+import subprocess
+import sys
+import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,18 +28,37 @@ from uuid import uuid4
 from ..change_report import FileLine
 from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
-from ..declared_family import DeclaredFamily
 from ..comms import Comms
+from ..declared_family import DeclaredFamily
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CountCheckResult, OrderCheck
 from ..native_tool_call import SelectedToolDenied
 from ..recorded_time import RecordedEventTime
+from ..todos import (
+    BluntText,
+    CleanHunt,
+    CommitDelivery,
+    FairText,
+    HierarchyText,
+    NotifiedFirstCallEvent,
+    ObservedFirstCallEvent,
+    OperationDelivery,
+    OrderedHunt,
+    PendingProblemOrder,
+    PlainText,
+    RecordFirstCallTodo,
+    RecordHuntTodo,
+    StrikeTodo,
+)
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
-                     CommsTodoCreateTool, CommsTodoTool)
-from ..todos import (BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
-                     OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     RecordHuntTodo, StrikeTodo)
+from ..tools import (
+    CommsOrderCheckTool,
+    CommsOrderDoneTool,
+    CommsOrderTool,
+    CommsProblemCloseTool,
+    CommsTodoCreateTool,
+    CommsTodoTool,
+)
 from . import capacity, rules, storage
 from .config import CommanderConfig, Repo
 
@@ -275,7 +302,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
     goal = COMMS.registry.require(unit).goal
-    common = dict(order=order, goal_id=goal.id if goal else uuid4().hex, deadline=deadline(due), commander=ME)
+    common = dict(order=order, goal_id=goal.id if goal.is_set() else uuid4().hex, deadline=deadline(due), commander=ME)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
             problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))

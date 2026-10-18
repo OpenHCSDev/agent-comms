@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from .goals import GoalDeclaration, Goal
+from .goals import Goal, GoalDeclaration
 
 
 class TurnGoalPermission(ABC):
@@ -24,7 +24,7 @@ class ContinuationGoalPermission(TurnGoalPermission):
     goal: Goal
 
     def allows(self, current: GoalDeclaration) -> bool:
-        return bool(current.active().matching(self.goal.id))
+        return current.active().matching(self.goal.id).is_set()
 
 
 class InactiveGoalPermission(TurnGoalPermission):

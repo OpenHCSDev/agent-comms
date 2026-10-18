@@ -4,27 +4,38 @@ from __future__ import annotations
 
 import os
 import time
-from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .thread_execution import ThreadExecution, NativeThreadExecution
-from .pi_vocabulary import (
-    SERVICE_TIER_ENVIRONMENT, NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField,
-)
 from .goals import (
-    GoalDeclaration, NoGoal,
-    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
+    Goal,
+    GoalDeclaration,
+    GoalRevision,
+    NoGoal,
 )
-from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious, InheritThinkingLevel
+from .pi_vocabulary import (
+    SERVICE_TIER_ENVIRONMENT,
+    NoThinkingOverride,
+    ServiceTier,
+    ThinkingLevel,
+    ThinkingLevelField,
+)
+from .registration_inheritance import (
+    InheritEmpty,
+    InheritMissing,
+    InheritPrevious,
+    InheritThinkingLevel,
+)
 from .storage_rules import StoragePath, StorageRoots, StorageRule
+from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
-    ThreadProvenance,
     AgentThreadRole,
+    ThreadProvenance,
     ThreadRole,
     TurnId,
     TurnIdentity,
@@ -261,14 +272,14 @@ class Thread(ThreadProvenance):
 
         goal = self.goal.active()
         return (GoalTaskScope(project=self.worktree, goal=goal.checkpoint)
-                if goal else TurnTaskScope(project=self.worktree))
+                if goal.is_set() else TurnTaskScope(project=self.worktree))
 
     def context_goal_segments(self, goals):
         """Project this declaration's active goal without a second goal state."""
         from .turn_context import GoalSegment
 
         goal = self.goal.active()
-        return (GoalSegment.capture(self, goal, goals),) if goal else ()
+        return (GoalSegment.capture(self, goal, goals),) if goal.is_set() else ()
 
     def wake_context(self) -> dict[str, object]:
         """This captured thread owns its selected-wake work and goal projection."""
@@ -276,7 +287,7 @@ class Thread(ThreadProvenance):
         return {
             "name": self.name, "title": self.title, "tags": sorted(self.tags),
             "original_assignment": self.task,
-            "current_goal": (None if not goal else {
+            "current_goal": (None if not goal.is_set() else {
                 "text": goal.text, "status": goal.state.declared_name,
                 "progress": goal.progress,
             }),
@@ -285,23 +296,23 @@ class Thread(ThreadProvenance):
     def retained_task_facts(self):
         from .retained_task_facts import GoalTaskFact
 
-        return (GoalTaskFact(self.goal),) if self.goal else ()
+        return (GoalTaskFact(self.goal),) if self.goal.is_set() else ()
 
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
         """The current active goal still belongs to this captured project/goal."""
         if self.worktree != original.worktree:
             return NoGoal()
         goal, captured = self.goal.active(), original.goal.active()
-        if not goal or not captured:
+        if not goal.is_set() or not captured.is_set():
             return NoGoal()
         return goal.matching(captured.require().id)
 
     def require_goal_replacement(self, goals) -> None:
-        if self.goal:
+        if self.goal.is_set():
             self.goal.require_replacement(goals, self.incarnation)
 
     def require_order_slot(self, goal_id: str, problem: str) -> None:
-        if self.goal:
+        if self.goal.is_set():
             self.goal.order.require_slot(self.goal, goal_id, problem)
 
     def same_launch(self, other: Thread) -> bool:
@@ -404,7 +415,7 @@ class Thread(ThreadProvenance):
         return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
 
     def has_goal_revision(self, goal_id: str, minimum_revision: int) -> bool:
-        return bool(self.goal) and self.goal.accepts_observation(goal_id, minimum_revision)
+        return self.goal.accepts_observation(goal_id, minimum_revision)
 
     @property
     def is_fork(self) -> bool:

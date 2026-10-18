@@ -15,12 +15,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .diagnostics import FailureReason
 from .coordination_database import CoordinationStore
+from .diagnostics import FailureReason
 from .field_codec import FieldCodec
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goals import Goal
-from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnIdentity
+from .thread_identity import (
+    ClaimedIdentity,
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+    TurnIdentity,
+)
 from .thread_status import ThreadStatus
 from .threads import Thread
 from .turn_lease import TurnFence, TurnLeaseFence
@@ -245,7 +250,7 @@ def read_failed_turn_projection(
         return FailedTurnProjection("unavailable", reason)
 
     goal = owner.goal
-    if not goal or not owner.process_identity.allows_goal_observation(owner_status):
+    if not goal.is_set() or not owner.process_identity.allows_goal_observation(owner_status):
         return unavailable("owner_or_goal_changed")
     try:
         # Resolve lifecycle eligibility before reading the ledger; active goals

@@ -17,7 +17,11 @@ from .goal_states import (
     PausedGoal,
     UnrecordedBlockGoal,
 )
-from .goals import GoalDeclaration, NoGoal, Goal, GoalCheckpoint, AbsentGoalCheckpoint, PresentGoalCheckpoint
+from .goals import (
+    Goal,
+    GoalCheckpoint,
+    GoalDeclaration,
+)
 from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
@@ -222,6 +226,4 @@ class GoalSnapshot:
         return cls(*(getattr(snapshot, item.name) for item in fields(GoalSnapshot)), *extra)
 
     def __post_init__(self) -> None:
-        checkpoint = (AbsentGoalCheckpoint() if not self.goal
-                      else PresentGoalCheckpoint(self.goal.checkpoint))
-        self.execution.validate_goal(checkpoint)
+        self.execution.validate_goal(self.goal.captured)

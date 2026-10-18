@@ -23,7 +23,7 @@ from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .goals import GoalDeclaration, NoGoal, Goal
+    from .goals import Goal, GoalDeclaration
     from .pi_payloads import PiUsage
     from .thread_identity import TurnId
     from .threads import Thread
@@ -126,7 +126,7 @@ class TurnGoalAccount:
 
     def provider_usage(self, event: events.ProviderUsage) -> None:
         goal = self.comms.registry.require(self.thread_name).goal
-        goal_id = goal.id if goal else None
+        goal_id = goal.id if goal.is_set() else None
         permit = self.originated.get(goal_id)
         if (
             permit is None
@@ -149,7 +149,7 @@ class TurnGoalAccount:
         with _store_lock(self.comms._wire_lock_path):
             owner = self.comms.registry.snapshot().require(self.owner.name)
             goal = owner.goal
-            if not goal or goal.id in self.originated:
+            if not goal.is_set() or goal.id in self.originated:
                 return
             store = self.comms.goals.open_goal_store()
             self.originated[goal.id] = None
@@ -201,7 +201,7 @@ class TurnGoalAccount:
         store = self.comms.goals.open_goal_store()
         current = self.comms.registry.require(self.thread_name).goal.matching(self.owner.goal.id)
         if terminal is not None and terminal.ok:
-            if current:
+            if current.is_set():
                 result = VerifiedGoalSettlement(store, self.permit, current, self.turn)
                 result.dispatch_sync(current.state)
         if self.permit.has_verified_progress(store):
@@ -226,7 +226,7 @@ class TurnGoalAccount:
                 "Goal turn ended without verified terminal progress.",
                 observation=observation,
             )
-        if current:
+        if current.is_set():
             self.block_current("Goal turn ended without verified terminal progress.")
 
     def finish(self, terminal: events.Done | None) -> None:
@@ -236,7 +236,7 @@ class TurnGoalAccount:
             current = self.comms.registry.require(self.thread_name).goal.matching(goal_id)
             store = self.comms.goals.open_goal_store()
             if terminal is not None and terminal.ok:
-                if current:
+                if current.is_set():
                     result = OriginGoalSettlement(store, permit, current, self.turn)
                     result.dispatch_sync(current.state)
             if permit is None or not permit.has_verified_progress(store):
@@ -253,7 +253,7 @@ class TurnGoalAccount:
                             expected_generation=generation.number,
                             attempt_id=generation.attempt_id,
                         )
-                if current:
+                if current.is_set():
                     FailedGoalOrigin(self.comms, self.thread_name, current).dispatch_sync(
                         current.state
                     )

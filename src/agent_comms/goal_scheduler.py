@@ -29,7 +29,7 @@ from .goal_attempts import (
     UnresolvedAttemptError,
 )
 from .goal_presentation import GoalSnapshot
-from .goals import GoalDeclaration, NoGoal, Goal, GoalRevision
+from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
@@ -89,7 +89,7 @@ class GoalScheduler:
                 except RelationViolationError:
                     return
                 goal = thread.goal.active()
-                if not goal:
+                if not goal.is_set():
                     return
                 if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
                     return

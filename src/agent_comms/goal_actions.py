@@ -23,14 +23,14 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import GoalDeclaration, NoGoal, Goal, GoalOrder, ProblemGoalOrder, UnorderedGoalOrder
-from .threads import Thread
+from .goals import Goal, GoalDeclaration, GoalOrder, NoGoal, ProblemGoalOrder, UnorderedGoalOrder
 from .recorded_time import EventTime
+from .threads import Thread
 from .todos import DeliverTodo, PendingProblemOrder
 
 if TYPE_CHECKING:
-    from .goal_presentation import GoalSnapshot
     from .goal_management import Goals
+    from .goal_presentation import GoalSnapshot
 
 
 class ModelInvocable:
@@ -63,15 +63,15 @@ class GoalPrecondition:
             or not ctx.goals.registry.status(thread.name).running
         ):
             raise ValueError("The goal owner changed; refresh its state.")
-        if self.expected_goal and goal != self.expected_goal:
+        if self.expected_goal is not None and goal != self.expected_goal:
             raise ValueError("Goal changed during resume; refresh its state.")
         if self.goal_id is not None:
             thread.goal.require_id(self.goal_id)
         if self.expected_state is not None and (
-            not goal or goal.state != self.expected_state
+            not goal.is_set() or goal.state != self.expected_state
         ):
             raise ValueError(
-                goal.state.activity_refusal() if goal
+                goal.state.activity_refusal() if goal.is_set()
                 else "This goal is no longer active; refresh its state."
             )
 
@@ -110,7 +110,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         text: str = "",
     ) -> dict:
         goal = (await observe()).goal
-        if not goal:
+        if not goal.is_set():
             raise ValueError("The goal changed; refresh its state.")
         return await cls.submit_checkpoint(invoke, goal)
 
@@ -150,7 +150,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             ),
             ctx.goals.registry.status(ctx.thread.name),
         )
-        if not self.preserve_wait and ctx.thread.goal:
+        if not self.preserve_wait and ctx.thread.goal.is_set():
             ctx.goals.waits.clear(ctx.thread.goal.id)
         return goal
 
@@ -388,7 +388,7 @@ class PausedGoalAction(
 class ReplacementGoalAction(GoalAction):
     def before_publish(self, goal: GoalDeclaration, ctx: GoalActionContext) -> None:
         goal = ctx.thread.goal
-        if goal:
+        if goal.is_set():
             # Revoke a protected goal before removing or replacing its
             # registry identity. If the registry write then fails, the
             # remaining visible goal is safely unlaunchable.
@@ -417,7 +417,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         current = ctx.thread.goal.matching(self.goal_id)
-        if current:
+        if current.is_set():
             if (current.text, current.order) != (self.text.strip(), self.order):
                 raise ValueError("Goal identity already has different instructions.")
             return ctx.thread.goal.require()
@@ -454,7 +454,7 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
         self.order.check.require_directory()
         todo = self.reserve(ctx)
         current = ctx.thread.goal.matching(self.goal_id)
-        if current:
+        if current.is_set():
             return replace(current, order=ProblemGoalOrder(), revision=current.revision + 1)
         return SetGoalAction(text="Complete the assigned problems.", goal_id=self.goal_id, order=ProblemGoalOrder()).change(ctx)
 

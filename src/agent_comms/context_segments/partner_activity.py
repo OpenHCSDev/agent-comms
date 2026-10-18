@@ -11,8 +11,8 @@ from typing import ClassVar
 
 from ..field_codec import FieldCodec
 from ..goal_history import GoalHistoryEntry
-from ..goals import GoalRevision
 from ..goal_states import GoalState
+from ..goals import GoalRevision
 from ..peer_relevance import Informed
 from ..turn_context import InstructionSegment, OwnerProvenance
 
@@ -34,7 +34,7 @@ class PartnerGoalChange:
             return None
         entry = history[-1]
         goal = entry.after
-        if not goal:
+        if not goal.is_set():
             return cls(peer, entry.observed_at, None, None, "")
         return cls(peer, entry.observed_at, goal.checkpoint, type(goal.state), goal.progress)
 
