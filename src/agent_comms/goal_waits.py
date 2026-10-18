@@ -331,7 +331,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 continue
             seen.add(name)
             thread = snapshot.threads[name]
-            wait = thread.goal.current_wait(rows, thread.incarnation.require_recorded())
+            wait = thread.goal.wait(rows).for_current(thread.goal, thread.incarnation.require_recorded())
             dependencies = targets if name == owner else wait.dependency_targets()
             for target in dependencies:
                 canonical = snapshot.canonical_name(target.incarnation.name)
@@ -341,7 +341,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 if canonical == owner:
                     pending.append(owner)
                     continue
-                peer_wait = peer.goal.current_wait(rows, peer.incarnation.require_recorded())
+                peer_wait = peer.goal.wait(rows).for_current(peer.goal, peer.incarnation.require_recorded())
                 if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before

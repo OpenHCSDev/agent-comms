@@ -447,7 +447,7 @@ class GoalDeclaration(WireValue):
     async def pause_for_cancel(self, runner, name):
         pass
 
-    def admit_turn(self, turn, permits) -> bool:
+    def prepare_turn(self, turn, permits) -> bool:
         return not turn.autonomous_goal
 
     def filter_scheduled(self, pending):
@@ -473,9 +473,6 @@ class GoalDeclaration(WireValue):
 
     def append_progress(self, note: str) -> GoalDeclaration:
         return self
-
-    def current_wait(self, rows, owner):
-        return self.wait(rows)
 
     def block_after_failed(self, goals, owner, diagnostic: str):
         return owner.goal
@@ -625,7 +622,7 @@ class Goal(GoalDeclaration):
             PausedGoalAction(expect=GoalPrecondition(goal_id=self.id)), actor=OwnerInvocable,
         ))
 
-    def admit_turn(self, turn, permits) -> bool:
+    def prepare_turn(self, turn, permits) -> bool:
         from .turn_goal_account import TurnGoalAccount
         turn.goal_permit = TurnGoalAccount.reserve(
             goal=self, owner=turn.thread, comms=turn.runner.comms,
@@ -667,9 +664,6 @@ class Goal(GoalDeclaration):
         return replace(self, progress=f"{self.progress}\n\n{note}" if self.progress else note,
                        revision=self.revision + 1)
 
-    def current_wait(self, rows, owner):
-        return self.wait(rows).for_current(self, owner)
-
     def block_after_failed(self, goals, owner, diagnostic: str):
         blocked = self.after_failed_turn(diagnostic)
         if blocked is not self:
@@ -706,11 +700,7 @@ class Goal(GoalDeclaration):
         return waits.clear(self.id, wait_id=wait_id)
 
     def retire_attempt(self, goals):
-        attempts = goals.open_goal_store()
-        generation = attempts.snapshot(self.id)
-        if generation is not None and not generation.lifecycle.terminal:
-            attempts.retire_goal(self.id, expected_generation=generation.number,
-                                 attempt_id=generation.attempt_id)
+        goals.retire_goal_attempt(self.id)
 
     def recorded_wait(self, rows):
         from .goal_waits import NoGoalWait

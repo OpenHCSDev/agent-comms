@@ -134,7 +134,7 @@ class OwnedTurn:
             self.lease_cleanup, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
-        if not self.input_type.admit_goal(self, permits):
+        if not self.input_type.prepare_goal(self, permits):
             return False
         self.input_cleanup = AsyncExitStack()
         resources.push_async_callback(self.input_cleanup.aclose)

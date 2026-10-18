@@ -122,8 +122,8 @@ class OriginalTurnInput(TurnInputSource):
         pass
 
     @classmethod
-    def admit_goal(cls, turn, permits) -> bool:
-        return turn.thread.goal.active().admit_turn(turn, permits)
+    def prepare_goal(cls, turn, permits) -> bool:
+        return turn.thread.goal.active().prepare_turn(turn, permits)
 
     @classmethod
     def permission(cls, turn):
@@ -191,7 +191,7 @@ class OwnerOriginalInput(OriginalTurnInput, DirectInput):
             raise RequestError.invalid_params({"reason": "input_authority_changed"})
 
     @classmethod
-    def admit_goal(cls, turn, permits) -> bool:
+    def prepare_goal(cls, turn, permits) -> bool:
         return True
 
     @classmethod
