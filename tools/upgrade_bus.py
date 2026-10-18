@@ -37,6 +37,7 @@ import sys
 import tarfile
 import tempfile
 import time
+from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -76,10 +77,8 @@ def bus_files(root: Path) -> dict[str, str]:
     """Every regular file under the bus but its lock files and the runtime files no carry
     writes, by content hash. A SQLite store counts once, under its database's name, by the
     rows SQLite reads from it, so companion files that appear or vanish change nothing."""
-    runtime = RuntimeFile.paths_in(root)
-    paths = [path for path in sorted(root.rglob("*"))
-             if path.is_file() and not path.is_symlink() and not path.name.endswith(".lock")
-             and path not in runtime]
+    paths = [path for path in sorted(set(root.rglob("*")) - RuntimeFile.paths_in(root))
+             if path.is_file() and not path.is_symlink() and not path.name.endswith(".lock")]
     stores = {path for path in paths if CoordinationStore.is_database(path)}
     companions = {companion for store in stores for companion in CoordinationStore.files(store)[1:]}
     return {str(path.relative_to(root)): CoordinationStore.digest(path) if path in stores
@@ -88,7 +87,7 @@ def bus_files(root: Path) -> dict[str, str]:
 
 
 @contextmanager
-def transcripts_held(root: Path):
+def transcripts_held(root: Path) -> Iterator[None]:
     """Bridges publish their CLI's items outside Core's maintenance refusal, so the operator
     holds the transcript store's writer: a bridge's write waits, then fails busy and is
     republished when its watch starts. A carry that needs this store fails the same way in
