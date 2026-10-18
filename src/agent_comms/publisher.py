@@ -55,12 +55,7 @@ from .wire_metadata import WireMetadata
 class Publisher:
     """Reads and validates publications; each private write is a capability below."""
 
-    def __init__(
-        self,
-        log: WireLog,
-        registry: Registration,
-        channels: ChannelCatalog,
-    ):
+    def __init__(self, log: WireLog, registry: Registration, channels: ChannelCatalog):
         self.log = log
         self._registry = registry
         self._channels = channels
@@ -117,7 +112,6 @@ class Publisher:
             sender_role=snapshot.threads[sender].role,
             mentions=ThreadMention.find(message.body, resolve_mention),
         )
-
 
 
 class PrivateWrites(Publisher):
@@ -216,7 +210,6 @@ class ClaimWrites(PrivateWrites):
                     "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
                 ) from error
             return stored
-
 
 
 class InitialWrites(PrivateWrites):
@@ -411,7 +404,6 @@ class InitialWrites(PrivateWrites):
                     store.participants.register(lookup, thread.name, thread.name, committed=True)
             origin.append(self.log, metadata, row, stored)
             return stored
-
 
 
 class ResponseWrites(PrivateWrites):
