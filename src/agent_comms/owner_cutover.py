@@ -58,13 +58,13 @@ class OwnerCutover(ABC):
         raise RelationViolationError('This operation has not certified original-unchanged recovery')
 
     def failed(self, failure: StoppedOwnerFailure) -> NoReturn:
-        """Pass responsibility for held resources to the caller, or release them here.
+        """The operation releases its held resources before the failure leaves it.
 
-        A one-shot process member must make its disposition before it exits.
-        Recovery of unchanged owners is distinct from retrying installation or
-        input; the original exception remains the result in either case.
+        A member that can certify unchanged owners calls restore_unchanged
+        instead. Recovery is distinct from retrying installation or input; the
+        original exception remains the result in either case.
         """
-        raise failure
+        self.leave_stopped(failure)
 
     def leave_stopped(self, failure: StoppedOwnerFailure) -> NoReturn:
         """A one-shot operation explicitly releases its failed-launch resources."""

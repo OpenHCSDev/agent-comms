@@ -359,10 +359,7 @@ def step(comms: Comms) -> None:
         except RestartRefusal as refusal:
             record = record.transition(refusal.queue_state())
         except StoppedOwnerFailure as exc:
-            # An attempted restart remains uncertain. This watcher cannot keep
-            # credentials or authorize installation/input replay in its queue.
-            exc.abandon()
-            record = record.transition(UncertainRestart(reason=f'{exc}: {exc.__cause__}'))
+            record = record.transition(UncertainRestart(reason=str(exc)))
         except (OSError, ValueError) as exc:
             record = record.transition(UncertainRestart(reason=f"{type(exc).__name__}: {exc}"))
         else:
