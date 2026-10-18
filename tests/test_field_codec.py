@@ -107,7 +107,7 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
     assert FieldCodec.decode(Scalars, encoded) == value
     assert FieldCodec.project(value, "status") == encoded
     assert FieldCodec.value_schema(Annotated[Path | None, PathText]) == {
-        "anyOf": [{"type": "string"}, {"type": "null"}]
+        "anyOf": [{"type": "string", "description": "agent_comms.field_codec.PathText text"}, {"type": "null"}]
     }
     assert FieldCodec.decode(Scalars, {**encoded, "path": None}).path is None
     for key in encoded:

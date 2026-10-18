@@ -129,24 +129,30 @@ def test_a_deleted_step_name_is_never_reused(tmp_path):
 def record_source(version: int, fields: str) -> str:
     return ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
             "from agent_comms.wire_metadata import WireRootIdText\n\n"
+            "class RootId(WireRootIdText):\n    \"\"\"Another representation of the same spelling.\"\"\"\n\n"
             f"@dataclass(frozen=True)\nclass Record:\n    version: ClassVar[int] = {version}\n{fields}")
 
 
+PLAIN = "    root: str\n"
+SPELLED = "    root: Annotated[str, WireRootIdText]\n"
+
+
 @pytest.mark.refactor_guard
-@pytest.mark.parametrize("version, fields, step, uncarried", [
-    (1, "    root: str\n    label: str\n", {}, 1),
-    (2, "    root: str\n    label: str\n", {}, 1),
-    (2, "    root: str\n    label: str\n", {"carry_record": step_source(None)}, 0),
-    (1, "    root: str\n    kind: ClassVar[str] = 'x'\n", {}, 0),
-    (1, "    root: Annotated[str, WireRootIdText]\n", {}, 0),
+@pytest.mark.parametrize("before, version, fields, step, uncarried", [
+    (PLAIN, 1, PLAIN + "    label: str\n", {}, 1),
+    (PLAIN, 2, PLAIN + "    label: str\n", {}, 1),
+    (PLAIN, 2, PLAIN + "    label: str\n", {"carry_record": step_source(None)}, 0),
+    (PLAIN, 1, PLAIN + "    kind: ClassVar[str] = 'x'\n", {}, 0),
+    (SPELLED, 1, "    root: Annotated[str, RootId]\n", {}, 0),
+    (PLAIN, 1, SPELLED, {}, 1),
 ])
 def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
-        tmp_path, version, fields, step, uncarried):
+        tmp_path, before, version, fields, step, uncarried):
     repo = Repository(tmp_path)
     package = git(REPO, "archive", "HEAD", "--", "src/agent_comms")
     subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=package, check=True, timeout=60)
     record = tmp_path / "src" / "agent_comms" / "record.py"
-    record.write_text(record_source(1, "    root: str\n"))
+    record.write_text(record_source(1, before))
     base = repo.commit({})
     record.write_text(record_source(version, fields))
     head = repo.commit(step)

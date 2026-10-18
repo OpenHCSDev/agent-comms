@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 import json
 import types
 from abc import ABC, abstractmethod
@@ -326,7 +327,11 @@ class JsonShapeFamily(WireValue):
 
 
 class TextRepresentation(FieldRepresentation):
-    """External text scalars share strict decoding at the canonical boundary."""
+    """External text scalars share strict decoding at the canonical boundary.
+
+    Its schema names the representation, so text with no declared spelling never shares a stored
+    form with plain ``str`` or with another representation; SpelledText declares one.
+    """
 
     @classmethod
     def decode(cls, value: object) -> object:
@@ -339,7 +344,23 @@ class TextRepresentation(FieldRepresentation):
 
     @classmethod
     def schema(cls) -> dict[str, Any]:
-        return FieldCodec.value_schema(str)
+        return {"type": "string", "description": f"{cls.__module__}.{cls.__qualname__} text"}
+
+
+class SpelledText(TextRepresentation):
+    """Text with one declared spelling: what decoding accepts and what its schema reports."""
+
+    spelling: ClassVar[re.Pattern[str]]
+
+    @classmethod
+    def from_text(cls, value: str) -> object:
+        if cls.spelling.fullmatch(value) is None:
+            raise MalformedRecord(f"{cls.__name__} is spelled {cls.spelling.pattern}")
+        return value
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return {"type": "string", "pattern": f"^(?:{cls.spelling.pattern})$"}
 
 
 class PathText(TextRepresentation):
