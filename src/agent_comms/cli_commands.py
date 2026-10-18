@@ -16,7 +16,7 @@ import shlex
 import time
 import types
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import aclosing
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
@@ -59,7 +59,7 @@ from .harness_install import Harness
 from .importing import ImportLimits, ImportedSessionMetadata
 from .historical_views import HistoryCursor
 from .tool_caller import ToolCaller
-from .turn_context import ContextSegment, NextContextTurn, TurnContext
+from .turn_context import ContextManifest, ContextSegment, NextContextTurn, TurnContext
 from .native_turn_context import NativeContextData
 from .runtime import RuntimeConnection, socket_path
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
@@ -637,7 +637,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package=
                              snapshot=snapshot, catalog=catalog)
 
     @classmethod
-    def add_parser(cls, subparsers: Any) -> argparse.ArgumentParser:
+    def add_parser(cls, subparsers: Any) -> None:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls)
@@ -689,10 +689,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package=
             else:
                 options.pop("required", None)
             owner.add_argument(*metadata["flags"], **options)
-        return parser
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> Self:
+    def from_namespace(cls, args: argparse.Namespace) -> CliCommand:
         payload = {"kind": cls.declared_name}
         hints = get_type_hints(cls)
         for declared in fields(cls):
@@ -1527,25 +1526,25 @@ class ContextCliCommand(CliCommand):
     help = "Inspect original context contributors without sending an input"
     thread: str = option("thread")
     @classmethod
-    def add_parser(cls, subparsers):
-        parser = super().add_parser(subparsers)
-        parser.add_argument("--turn", type=int, default=None)
+    def add_parser(cls, subparsers: Any) -> None:
+        super().add_parser(subparsers)
+        parser = subparsers.choices[cls.declared_name]
+        parser.add_argument("--turn", type=int, default=argparse.SUPPRESS)
         parser.add_argument("--diff", action="store_true")
         parser.add_argument("--imported", action="store_true")
-        return parser
 
     @classmethod
-    def from_namespace(cls, args):
+    def from_namespace(cls, args: argparse.Namespace) -> ContextCliCommand:
         if args.imported:
-            if args.turn is not None or args.diff:
+            if "turn" in vars(args) or args.diff:
                 raise ValueError("--imported cannot be combined with --turn or --diff")
             return ImportedContextCliCommand(thread=args.thread)
-        if args.turn is not None:
+        if "turn" in vars(args):
             command = TurnDiffContextCliCommand if args.diff else TurnContextCliCommand
             return command(thread=args.thread, turn=args.turn)
         return (DiffContextCliCommand if args.diff else cls)(thread=args.thread)
 
-    def manifests(self, ctx):
+    def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
         cursor = None
         while True:
             page = ctx.bus.log.context_manifest_page(self.thread, ctx.registry, cursor=cursor)
@@ -1600,16 +1599,16 @@ class ContextCliCommand(CliCommand):
 
 class ContextOptionCliCommand(ContextCliCommand):
     @classmethod
-    def add_parser(cls, subparsers):
+    def add_parser(cls, subparsers: Any) -> None:
         """These commands are selected by the context parser's options."""
 
     @abstractmethod
-    def apply(self, ctx):
+    def apply(self, ctx: Comms) -> object:
         """Inspect the context selected at the CLI boundary."""
 
 
 class ImportedContextCliCommand(ContextOptionCliCommand):
-    def apply(self, ctx):
+    def apply(self, ctx: Comms) -> dict[str, object]:
         owner = ctx.registry.require(self.thread)
         return {"scope": "historical-imported-instructions; not current or recorded native context",
                 "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)}
@@ -1619,13 +1618,13 @@ class ImportedContextCliCommand(ContextOptionCliCommand):
 class SelectedContextCliCommand(ContextOptionCliCommand):
     turn: int = option("--turn")
 
-    def manifests(self, ctx):
+    def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
         return dropwhile(lambda manifest: not manifest.turn.matches_generation(self.turn),
                          super().manifests(ctx))
 
 
 class TurnContextCliCommand(SelectedContextCliCommand):
-    def apply(self, ctx):
+    def apply(self, ctx: Comms) -> dict[str, object]:
         selected = tuple(takewhile(lambda manifest: manifest.turn.matches_generation(self.turn),
                                    self.manifests(ctx)))
         if not selected:
@@ -1635,7 +1634,7 @@ class TurnContextCliCommand(SelectedContextCliCommand):
 
 
 class DiffContextCliCommand(ContextOptionCliCommand):
-    def apply(self, ctx):
+    def apply(self, ctx: Comms) -> dict[str, object]:
         manifests = iter(self.manifests(ctx))
         try:
             current = next(manifests)
