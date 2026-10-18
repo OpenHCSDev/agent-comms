@@ -16,7 +16,7 @@ from agent_comms.read_ledger import ReadLedger
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
-from tools.debt_ratchet import EditedCarry
+from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat
 from tools.upgrade_bus import bus_files, carried
 
 REPO = Path(__file__).resolve().parents[1]
@@ -124,6 +124,30 @@ def test_a_deleted_step_name_is_never_reused(tmp_path):
     deleted = repo.commit({"carry_a": None})
     readded = repo.commit({"carry_a": step_source(None)})
     assert EditedCarry.compare(tmp_path, deleted, readded, set(), "src")[1] == {"EditedCarry": 1}
+
+
+def record_source(version: int, fields: str) -> str:
+    return f"class Record:\n    version: ClassVar[int] = {version}\n{fields}"
+
+
+@pytest.mark.refactor_guard
+@pytest.mark.parametrize("version, fields, step, uncarried", [
+    (1, "    root: str\n    label: str\n", {}, 1),
+    (2, "    root: str\n    label: str\n", {}, 1),
+    (2, "    root: str\n    label: str\n", {"carry_record": step_source(None)}, 0),
+    (1, "    root: str\n    kind: ClassVar[str] = 'x'\n", {}, 0),
+])
+def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
+        tmp_path, version, fields, step, uncarried):
+    repo = Repository(tmp_path)
+    record = tmp_path / "src" / "record.py"
+    record.parent.mkdir()
+    record.write_text(record_source(1, "    root: str\n"))
+    base = repo.commit({})
+    record.write_text(record_source(version, fields))
+    head = repo.commit(step)
+    assert UncarriedRecordFormat.compare(tmp_path, base, head, {"src/record.py"}, "src") == (
+        {"UncarriedRecordFormat": 0}, {"UncarriedRecordFormat": uncarried})
 
 
 def run_step(name: str, root: Path, *flags: str) -> dict:

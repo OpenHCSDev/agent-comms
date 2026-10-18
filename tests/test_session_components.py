@@ -132,7 +132,8 @@ async def test_native_observation_only_initializes_unset_configuration(owner, tm
     environment = observed.native_environment(
         owner._comms.root, owner._comms.registry.snapshot(), observed.worktree
     )
-    assert environment["AGENT_COMMS_SERVICE_TIER"] == "priority"
+    assert "AGENT_COMMS_SERVICE_TIER" not in environment
+    assert owner._comms.views.thread_detail(thread.name, include_pending=False).to_wire()["service_tier"] == "priority"
     owner._comms.threads.set_thread_configuration(owner._comms.registry.require(thread.name), thinking_level=OffThinkingLevel)
     before = (owner._comms.root / "registry.json").read_bytes()
     await owner.sessions.observe_native_configuration(

@@ -467,7 +467,7 @@ class ThreadManagement:
     def create(self, spec: NewThreadSpec) -> Thread:
         """Prepare the session, then register and launch the thread with its task as first input."""
         resolved_bin = NativeArguments.configured_binary()
-        runtime = LaunchRuntime.current()
+        runtime = LaunchRuntime.running()
         with spec.prepared(self, resolved_bin, runtime) as child:
             child = self.registry._declare_unlocked(child)
             try:

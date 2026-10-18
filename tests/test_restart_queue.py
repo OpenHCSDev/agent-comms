@@ -63,8 +63,8 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         snapshot = comms.registry.snapshot()
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
-        target = queue.RestartTarget.capture(comms, launch.environment, LaunchRuntime.current())
-        old_runtime = LaunchRuntime.running()
+        target = queue.RestartTarget.capture(comms, launch.environment, LaunchRuntime.running())
+        old_runtime = LaunchRuntime(Path('/retained-old/bin/python'))
         old_target = queue.RestartTarget.capture(comms, launch.environment, old_runtime)
         assert old_target.launch_runtime == old_runtime
         assert old_target.agent_bin == comms.owners.restart_entrypoint(launch.binary, old_runtime)
@@ -85,7 +85,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
             return read(self, path)
 
         monkeypatch.setattr(queue.RestartQueue, 'read', counted_read)
-        request = queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.current())
+        request = queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.running())
         assert len(reads) == 1
         assert request.state.pending and request.id != old.id
         await asyncio.wait_for(queue.run(comms), 5)
@@ -95,7 +95,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         assert old.target.interpreter in states[old.id].reason
         assert isinstance(states[request.id], queue.PendingRestart)
         assert len(list(store.active_directory.glob('*.json'))) == 1
-        assert queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.current()) == request
+        assert queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.running()) == request
 
         # A changed selection, not just a changed target, is superseded too.
         changed = replace(request, selection=replace(
@@ -103,7 +103,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         ))
         with store.locked():
             store.save(changed)
-        replacement = queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.current())
+        replacement = queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.running())
         assert replacement.id != request.id and replacement.state.pending
         assert isinstance(store.read(store.settled_path(changed)).state, queue.StaleRestart)
 
@@ -112,7 +112,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
             store.save(attempting)
         started = len(watchers)
         with pytest.raises(queue.RestartAlreadyAttemptingError):
-            queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.current())
+            queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.running())
         assert len(watchers) == started
         assert queue.cancel(comms, owner.name) == []
         assert store.read(store.active_path(owner.incarnation.require_recorded())) == attempting
