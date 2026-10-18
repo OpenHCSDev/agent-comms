@@ -37,11 +37,23 @@ def cli(capsys):
 
 
 class TestCliSuccess:
-    def test_tool_catalog_and_generic_invocation(self, cli, tmp_path):
+    def test_tool_catalog_and_generic_invocation(self, cli, tmp_path, monkeypatch):
+        from agent_comms.comms import Comms
+        from agent_comms.pi_vocabulary import ServiceTier
+
+        monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
         code, out = cli(tmp_path, "tools")
         assert code == 0
+        assert "service_tier" not in out
         assert "comms_archive" in {tool["name"] for tool in out["tools"]}
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt", "--execution", "native")
+        comms = Comms(tmp_path)
+        for tier in ServiceTier:
+            comms.threads.set_thread_configuration(comms.registry.require("a"), service_tier=tier)
+            code, catalog = cli(tmp_path, "tools", "--name", "a")
+            assert code == 0
+            code, detail = cli(tmp_path, "thread", "--name", "a", "--no-pending")
+            assert code == 0 and catalog["service_tier"] == detail["service_tier"] == tier.value
         code, out = cli(
             tmp_path,
             "tool",
@@ -302,7 +314,8 @@ class TestSelectedTargetActions:
         from agent_comms.cli_commands import CliCommand, RestartCliCommand, StopCliCommand
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-        from agent_comms.turn_lease import ActiveTurn
+        from agent_comms.thread_identity import TurnIdentity
+        from agent_comms.turn_lease import ActiveTurn, StoredTurnRecord
 
         comms = self.declared(tmp_path)
         # Observe an authentic other process; this check never signals or restarts it.
@@ -336,8 +349,13 @@ class TestSelectedTargetActions:
             action.bound[0].edited({'all': True})
         assert StopCliCommand.help == 'Stop process'
         assert not RestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
+        busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
+        record = StoredTurnRecord.begin(
+            comms.registry.store.path, busy,
+            ActiveTurn('busy', owner.require_process().pid, turn_generation=busy.generation),
+        )
         assert not RestartCliCommand.thread_bindings(comms,
-            replace(owner, active_turn=ActiveTurn('busy', owner.pid)), status)
+            replace(owner, turn_record=record, turn_generation=busy.generation), status)
         assert not RestartCliCommand.thread_bindings(comms,
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status)
         assert not RestartCliCommand.thread_bindings(comms,
@@ -462,6 +480,7 @@ class TestSelectedTargetActions:
         assert not result.reconnect_targets()
 
     def test_channel_start_uses_native_visible_roster_without_launching(self, tmp_path):
+        from agent_comms.child_process import NoProcess
         from agent_comms.cli_commands import StartCliCommand
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_identity import UserThreadRole
@@ -483,7 +502,7 @@ class TestSelectedTargetActions:
             comms, target, snapshot=snapshot, catalog=catalog,
             resolved=target.resolve(snapshot, catalog))
         assert tuple(command.name for command in commands) == ("alpha",)
-        assert all(comms.registry.require(name).process_identity is None
+        assert all(comms.registry.require(name).process_identity == NoProcess()
                    for name in ("alpha", "external", "archived", "human"))
 
     def test_mixed_pins_keep_each_rows_original_channel(self, tmp_path):

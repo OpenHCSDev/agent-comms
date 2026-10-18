@@ -313,10 +313,7 @@ class NoTurnRecord(NullMember, TurnRecord):
 
 @dataclass(frozen=True)
 class StoredTurnReference(TurnRecord):
-    """Wire identity only; a registry binds it before any turn file can be read."""
-
-    lookup: str
-    generation: int
+    """Wire presence only; the registry's thread supplies the turn identity."""
 
     @classmethod
     def from_wire(cls, data: object) -> StoredTurnReference:
@@ -330,10 +327,7 @@ class StoredTurnReference(TurnRecord):
         return FieldCodec.encode_record(self)
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        record = StoredTurnRecord.for_identity(registry_path, identity)
-        if (self.lookup, self.generation) != (record.lookup, record.generation):
-            raise RelationViolationError("Turn record identity differs from its registry owner")
-        return record
+        return StoredTurnRecord.for_identity(registry_path, identity)
 
     def read(self) -> TurnDeclaration:
         raise RelationViolationError("Turn reference must be bound by its registry")
@@ -343,44 +337,35 @@ class StoredTurnReference(TurnRecord):
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLeaseFence | None:
-        self.read()
-        return None
+        raise RelationViolationError("Turn reference must be bound by its registry")
 
 
 @dataclass(frozen=True)
 class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference):
     """Turn file bound to the registry that decoded its wire reference."""
 
+    identity: TurnIdentity = field(metadata={"wire_transient": True})
     registry_path: Path = field(repr=False, compare=False, metadata={"wire_transient": True})
 
     record_type = ActiveTurn
 
     @property
     def path(self) -> Path:  # type: ignore[override]  # Derived from its registry.
-        return self.registry_path.parent / "turns" / f"{self.lookup}-{self.generation}.json"
+        identity = self.identity
+        name = f"{identity.incarnation.require_recorded().lookup}-{identity.generation}.json"
+        return self.registry_path.parent / "turns" / name
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         record = super().bound_to(registry_path, identity)
-        return self if self.registry_path == record.registry_path else record
+        return (self if (self.registry_path, self.identity) ==
+                (record.registry_path, record.identity) else record)
 
     def empty(self) -> ActiveTurn:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
 
     @classmethod
-    def from_wire(cls, data: object) -> StoredTurnRecord:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.record_schema(cls)
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode_record(self)
-
-    @classmethod
     def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        return cls(identity.incarnation.require_recorded().lookup, identity.generation,
-                   registry_path.resolve())
+        return cls(identity, registry_path.resolve())
 
     @classmethod
     def begin(

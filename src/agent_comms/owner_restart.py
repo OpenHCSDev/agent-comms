@@ -36,7 +36,7 @@ class OwnerRestartRequest:
     expected: OwnerRestartSelection | None = None
     runtime: RestartEnvironment | None = None
     source_interpreter: str | None = None
-    launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.current, kw_only=True)
+    launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.running, kw_only=True)
 
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
         if self.names is None:

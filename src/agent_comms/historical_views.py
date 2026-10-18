@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
@@ -87,10 +88,6 @@ class ConversationHistoryView:
     def same_display(cls, page: MessagePage, earlier: MessagePage) -> bool:
         """Read-scope safety uses the original pages, never a client identity copy."""
         return page.selection == earlier.selection
-
-    @classmethod
-    def has_display_evidence(cls, page: MessagePage) -> bool:
-        return page.selection.has_evidence
 
     @classmethod
     def revision(cls, views: HistoryViews, target: str, *, worktree: str) -> ConversationRevision:
@@ -512,6 +509,22 @@ class HistoryArchive(RootFile):
         return MessagePage((), False, False)
 
     def integrated_page(
+        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
+    ) -> MessagePage:
+        page = self._source_page(view, presentation, bounds)
+        pages = deque((page,))
+        while (following := bounds.after(page)) is not None:
+            part = self._source_page(view, presentation, following)
+            if part.history_revision != page.history_revision:
+                raise HistoricalSourceChanged("Historical sources changed; reload history")
+            if not bounds.fits(len(page.messages) + len(part.messages),
+                                 page.bytes_read + part.bytes_read):
+                break
+            bounds.traversal.append(pages, part)
+            page = MessagePage.combine(tuple(pages))
+        return page
+
+    def _source_page(
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
     ) -> MessagePage:
         historical = bounds.traversal.historical

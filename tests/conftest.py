@@ -188,13 +188,16 @@ def comms(root: Path) -> Comms:
 
 @pytest.fixture
 def commander(comms: Comms, tmp_path: Path):
-    """A commander thread "lead" and a unit "worker" holding an ordinary goal, called as lead."""
+    """A commander thread "lead" holding the owner request "request" and a unit "worker" holding an
+    ordinary goal, called as lead."""
     from agent_comms.goal_actions import SetGoalAction
+    from agent_comms.goals import RequestGoalOrder
     from agent_comms.tool_caller import ThreadCaller
 
     for created, name in enumerate(("lead", "worker"), 1):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=float(created)))
     comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
+    comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
     return comms, ThreadCaller("lead")
 
 

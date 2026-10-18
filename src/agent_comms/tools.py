@@ -18,7 +18,6 @@ from .cli_commands import (
     ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand,
     _json_object, option,
 )
-from .cli_result import CliResult
 from .thread_execution import (
     ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl,
     StartOwnerControl, ThreadCommandAvailability,
@@ -61,7 +60,7 @@ from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, To
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
+from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing, ToolCatalogResult
 from .tool_result import ToolResult
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
@@ -405,12 +404,8 @@ class CommsPinThreadTool(ToolRequest):
     pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ChannelView:
-        channel = self.channel
-        PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
-        canonical = ChannelTarget.normalize_name(channel)
-        return next(
-            view for view in comms.views.channel_views() if view.channel.name == canonical
-        )
+        PinThreadCliCommand(channel=self.channel, name=self.name, pinned=self.pinned).apply(comms)
+        return comms.views.channel_view(ChannelTarget.normalize_name(self.channel))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -750,7 +745,7 @@ class CommsTodoListTool(ThreadToolRequest):
 class CommsOrderTool(ThreadToolRequest):
     label = "Assign problem order"
     description = "Reserve a Todo assignment and publish its Goal with a deadline; does not replay input."
-    order: OrderGoalAction = tool_field("Problem, goal_id, expected_revision, deadline and required commander")
+    order: OrderGoalAction = tool_field("Problem, request, expected_revision, deadline, commander")
     owner: str = tool_field("Assignee thread")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
@@ -1124,7 +1119,7 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
     description = (
         "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
         "turn. A changed owner or uncertain attempt is never retried automatically. "
-        "Restarts in the current installed runtime; does not deploy another runtime."
+        "Restarts in the calling process's runtime; does not deploy another runtime."
     )
     context = "thread"
     action_label = "Queue idle restart"
@@ -1133,7 +1128,7 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
         return RestartQueued(
-            enqueue_restart(comms, self.name, launch_runtime=LaunchRuntime.current()))
+            enqueue_restart(comms, self.name, launch_runtime=LaunchRuntime.running()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1169,17 +1164,14 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
         return ArchiveCliCommand(name=self.name).apply(comms)
 
 
-@dataclass(frozen=True)
-class ToolCatalogResult(CliResult):
-    tools: tuple[dict[str, object], ...]
-
-
 @dataclass(frozen=True, kw_only=True)
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
+    name: str | None = option("--name", default=None, help="Calling thread")
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
-        return ToolCatalogResult(tuple(tool_catalog()))
+        caller = ToolCaller.from_actor(self.name)
+        return caller.catalog(ctx, tuple(tool_catalog()))
 
 
 @dataclass(frozen=True, kw_only=True)

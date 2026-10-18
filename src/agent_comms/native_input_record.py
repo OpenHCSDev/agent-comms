@@ -177,7 +177,7 @@ class FullNativeExecution(NativeInputExecution):
         })
 
     def binding_fields(self):
-        return FieldCodec.project(self, "binding")
+        return FieldCodec.encode_fields(self)
 
     def require_attempt(self) -> FullNativeExecution:
         return self

@@ -6,6 +6,7 @@ No root, writer, child, native package or process launch is acquired here.
 from dataclasses import replace
 import os
 from pathlib import Path
+import sys
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
@@ -21,22 +22,18 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
-def test_selected_runtime_stays_pinned_when_current_changes(tmp_path, monkeypatch):
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
-    pointer = LaunchRuntime.current_pointer()
-    pointer.parent.mkdir(parents=True)
+def test_selected_runtime_stays_pinned_to_the_calling_interpreter(tmp_path, monkeypatch):
     first, second = tmp_path / "first", tmp_path / "second"
     first.mkdir()
     second.mkdir()
     for prefix in (first, second):
         (prefix / "bin").mkdir()
         (prefix / "bin/python").symlink_to(LaunchRuntime.running().interpreter)
-    pointer.symlink_to(first)
-    selected = LaunchRuntime.current()
-    pointer.unlink()
-    pointer.symlink_to(second)
+    monkeypatch.setattr(sys, "executable", str(first / "bin/python"))
+    selected = LaunchRuntime.running()
+    monkeypatch.setattr(sys, "executable", str(second / "bin/python"))
     assert selected.interpreter == first / "bin/python"
-    assert LaunchRuntime.current().interpreter == second / "bin/python"
+    assert LaunchRuntime.running().interpreter == second / "bin/python"
     original = {"PATH": "/old/bin:/usr/bin", "VIRTUAL_ENV": "/old",
                 "PYTHONPATH": "/old/source", "AUTHORED_CREDENTIAL": "kept"}
     projected = selected.environment(original)

@@ -27,7 +27,7 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
         ), origin=AgentOrigin()
     ).message_id
     with comms.bus.opened_activity() as clocks:
-        assert comms.views.last_sent_timestamps(clocks.sent, registry=comms.registry.snapshot()) == {"alpha": 400, "beta": 500}
+        assert comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot()) == {"alpha": 400, "beta": 500}
     comms.owners.acquire_thread("alpha", owner_pid=os.getpid())
     comms.threads.heartbeat("alpha")
     comms.registry.declare(comms.registry.new_thread(name='alpha', tags=frozenset(), worktree=str(tmp_path)))
@@ -40,5 +40,5 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     comms.threads.rename_self("renamed", caller=ThreadCaller("alpha"))
     assert comms.registry.require("renamed").created_at == 100
     with comms.bus.opened_activity() as clocks:
-        assert comms.views.last_sent_timestamps(clocks.sent, registry=comms.registry.snapshot()) == {"renamed": 400, "beta": 500}
+        assert comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot()) == {"renamed": 400, "beta": 500}
     assert wire(tmp_path).registry.require("alpha").created_at == 100

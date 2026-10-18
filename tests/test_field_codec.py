@@ -107,7 +107,7 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
     assert FieldCodec.decode(Scalars, encoded) == value
     assert FieldCodec.project(value, "status") == encoded
     assert FieldCodec.value_schema(Annotated[Path | None, PathText]) == {
-        "anyOf": [{"type": "string"}, {"type": "null"}]
+        "anyOf": [{"type": "string", "description": "agent_comms.field_codec.PathText text"}, {"type": "null"}]
     }
     assert FieldCodec.decode(Scalars, {**encoded, "path": None}).path is None
     for key in encoded:
@@ -134,6 +134,18 @@ class Choice(DeclaredFamily, affix="Choice"):
 @dataclass(frozen=True, slots=True)
 class CountChoice(Choice):
     value: int
+
+
+@pytest.mark.parametrize("annotation,data", [
+    (type[Choice], "absent"),
+    (Choice, {"kind": "absent"}),
+])
+def test_family_refusal_keeps_its_own_message_once(annotation, data):
+    with pytest.raises(MalformedRecord) as refused:
+        FieldCodec.decode(annotation, data)
+    assert str(refused.value) == "Unknown Choice name: 'absent'"
+    assert type(refused.value.__cause__) is ValueError
+    assert str(refused.value.__cause__) == str(refused.value)
 
 
 @dataclass(frozen=True)
@@ -437,29 +449,57 @@ class InlinePair(InlineRecord):
 
 
 @dataclass(frozen=True)
+class Pair:
+    number: int
+    text: str
+
+
+@dataclass(frozen=True)
 class InlineContainer:
     pair: InlinePair
 
 
-def test_inline_representation_owns_keys_for_encode_decode_schema_and_projection():
-    value = InlineContainer(InlinePair(7, "seven"))
-    wire = {"number": 7, "text": "seven"}
+@dataclass(frozen=True)
+class FieldInlineContainer:
+    pair: Pair = field(metadata={"wire_inline": True})
+
+
+@pytest.mark.parametrize("value", [InlineContainer(InlinePair(7, "seven")),
+                                   FieldInlineContainer(Pair(7, "seven"))])
+def test_inline_record_owns_keys_for_encode_decode_schema_and_projection(value):
+    container, wire = type(value), {"number": 7, "text": "seven"}
     assert FieldCodec.encode(value) == wire
-    assert FieldCodec.decode(InlineContainer, wire) == value
+    assert FieldCodec.decode(container, wire) == value
     assert FieldCodec.project(value, "report") == wire
-    assert set(FieldCodec.record_schema(InlineContainer)["required"]) == wire.keys()
-    with pytest.raises(MalformedRecord, match="Missing required fields for InlineContainer: number"):
-        FieldCodec.decode(InlineContainer, {"text": "seven"})
+    assert set(FieldCodec.record_schema(container)["required"]) == wire.keys()
+    with pytest.raises(MalformedRecord, match=f"Missing required fields for {container.__name__}: number"):
+        FieldCodec.decode(container, {"text": "seven"})
     with pytest.raises(ValueError):
-        FieldCodec.decode(InlineContainer, {**wire, "other": 1})
+        FieldCodec.decode(container, {**wire, "other": 1})
 
-    @dataclass(frozen=True)
-    class Collision:
-        pair: InlinePair
-        number: int
 
+@dataclass(frozen=True)
+class TypeInlineClash:
+    pair: InlinePair
+    number: int
+
+
+@dataclass(frozen=True)
+class FieldInlineClash:
+    text: str
+    pair: Pair = field(metadata={"wire_inline": True})
+
+
+@dataclass(frozen=True)
+class FamilyInlineClash:
+    choice: Choice = field(metadata={"wire_inline": True})
+    kind: str
+
+
+@pytest.mark.parametrize("declaration", [TypeInlineClash, FieldInlineClash, FamilyInlineClash])
+def test_inlined_key_clash_refuses_the_declaration(declaration):
     with pytest.raises(TypeError, match="Conflicting"):
-        FieldCodec.encode(Collision(value.pair, 8))
+        FieldCodec.record_schema(declaration)
 
 
 @pytest.mark.parametrize("wire,expected", [

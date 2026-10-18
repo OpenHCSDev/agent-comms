@@ -15,7 +15,7 @@ from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    Assignment, ChangeTodoState, DoneTodoState, GoalRef, PendingProblemOrder,
+    Assignment, ChangeTodoState, DoneTodoState, GoalRef, MechanicalOrderRun, PendingProblemOrder,
     TodoConflict, TodoError, TodoState, TodoStore,
 )
 
@@ -26,7 +26,7 @@ def thread(name: str, root: Path, created: float) -> Thread:
 
 
 def order(root: Path):
-    return PendingProblemOrder(id="checked-order", owner=FileLine(__file__, 1),
+    return PendingProblemOrder(id="checked-order", owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
         check=OrderCheck(str(root), "true"), edits=("Fix the problem",),
         banned=("No extra store",), report="Report the delivered commit",
         at=RecordedEventTime(10.0), first_call_deadline=RecordedEventTime(130.0))
@@ -39,7 +39,8 @@ def _assign_process(root: str, name: str, created: float, gate) -> tuple[str, st
         row = store.assign(
             "todo-1", expected_revision=1,
             owner=thread(name, Path(root), created), parent=thread("lead", Path(root), 1.0),
-            generation=f"generation-{name}", deadline=RecordedEventTime(1000.0), order=order(Path(root)),
+            generation=f"generation-{name}", goal=GoalRef("lead", 1.0, "goal-1"),
+            deadline=RecordedEventTime(1000.0), order=order(Path(root)),
         )
         return "won", row.assignment.owner
     except TodoConflict as error:
@@ -66,7 +67,7 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
     )
     with pytest.raises(TodoConflict):
         store.create(
-            "todo-1", "openhcsdev/agent-comms", "A different task", creator=lead,
+            "todo-1", "openhcsdev/agent-comms", "A different task", creator=lead, goal=goal,
             owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
         )
     assert TodoStore(tmp_path).list("openhcsdev/agent-comms") == (original,)
@@ -81,7 +82,7 @@ def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Pa
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
     store.create(
-        "todo-1", "OpenHCSDev/agent-comms", "One implementation", creator=lead,
+        "todo-1", "OpenHCSDev/agent-comms", "One implementation", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
     )
     with Manager() as manager, ProcessPoolExecutor(max_workers=2) as pool:
@@ -106,13 +107,13 @@ def test_validation_rejects_ambiguous_identity_and_bad_state(tmp_path: Path) -> 
     for index, repo in enumerate(("org/repo/branch", "../repo", "org/", "org/repo name")):
         with pytest.raises(TodoError):
             store.create(
-                f"invalid-{index}", repo, "task", creator=lead,
+                f"invalid-{index}", repo, "task", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
                 owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
             )
     with pytest.raises(TodoError):
         GoalRef("lead", float("nan"), "goal-1")
     store.create(
-        "todo-1", "org/repo", "task", creator=lead,
+        "todo-1", "org/repo", "task", creator=lead, goal=GoalRef("lead", 1.0, "goal-1"),
         owner=lead, generation="initial", deadline=RecordedEventTime(1000.0), order=order(tmp_path),
     )
     with pytest.raises(ValueError):

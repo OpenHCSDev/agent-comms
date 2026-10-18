@@ -39,9 +39,10 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     assert invoke.arguments == {}
     send = parse(["send", "--from", "a", "--to", "b", "--body", "hello"])
     assert send.type is InfoKind
-    configured = parse(["configure", "--name", "a", "--service-tier", "standard"])
-    assert configured.service_tier is ServiceTier.STANDARD
-    with pytest.raises(SystemExit):
+    for tier in ServiceTier:
+        configured = parse(["configure", "--name", "a", "--service-tier", tier.value])
+        assert configured.service_tier is tier
+    with pytest.raises(ValueError, match="invalid choice: 'fast'"):
         parser.parse_args(["configure", "--name", "a", "--service-tier", "fast"])
     restart = parse(["restart", "--all"])
     assert restart.all_ is True

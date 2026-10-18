@@ -2,7 +2,7 @@
 import subprocess, time
 from datetime import datetime
 
-from . import capacity, judge, order, rules
+from . import capacity, judge, order, request, rules
 from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
@@ -47,6 +47,8 @@ def main(a):
             turn += 1
             orders = ', '.join(f"{t.id} due {order.hhmm(t.deadline)}" for t in owed[unit])
             print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {unjudged(unit)} -> read its git state and newest turn, judge, push or hunt", flush=True)
+        for line in request.stalled():
+            print(line, flush=True)
         for line in broken_rules(owed):
             print(f"  RULE {line}", flush=True)
         time.sleep(60)

@@ -20,7 +20,6 @@ from .goals import (
     PresentGoalCheckpoint,
 )
 from .pi_vocabulary import (
-    SERVICE_TIER_ENVIRONMENT,
     NoThinkingOverride,
     ServiceTier,
     ThinkingChoice,
@@ -160,7 +159,6 @@ class Thread(ThreadProvenance):
         return {
             **replace(self.launch(), worktree=worktree, managed=True).encode(),
             "AGENT_COMMS_ROOT": str(root),
-            SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
             **project.environment(root),
         }
 
@@ -330,10 +328,6 @@ class Thread(ThreadProvenance):
     def require_goal_replacement(self, goals) -> None:
         if self.goal is not None:
             self.goal.require_replacement(goals, self.incarnation)
-
-    def require_order_slot(self, goal_id: str, problem: str) -> None:
-        if self.goal is not None:
-            self.goal.order.require_slot(self.goal, goal_id, problem)
 
     def require_goal(self, goal_id: str | None = None) -> Goal:
         if goal_id is None:
