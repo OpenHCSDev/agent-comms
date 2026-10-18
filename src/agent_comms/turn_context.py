@@ -21,9 +21,9 @@ from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from .private_bus_checkpoint import CapturedWireSource
     from .input_attempt import StoredInput
     from .presentation import ThreadView
+    from .private_bus_checkpoint import CapturedWireSource
     from .relationships import PeerRelation
     from .threads import Thread
 
@@ -392,14 +392,16 @@ class RecordedSegmentManifest:
             raise ValueError("Context predecessor is not an earlier record")
         return (self.previous,)
 
-    def text_reference(self, offset: int | None) -> int:
-        if offset is None:
-            raise ValueError("Recorded text requires its original offset")
-        if self.manifest.captured_text:
-            return offset
-        if self.previous is None:
-            raise ValueError("Recorded text predecessor is missing")
-        return self.previous
+    def record_text(
+        self, original: SegmentManifest, previous_value: SegmentManifest, offset: int | None,
+    ) -> RecordedSegmentManifest:
+        if (original.sha256 == previous_value.sha256
+                and original.captured_text and previous_value.captured_text):
+            reference = offset if self.manifest.captured_text else self.previous
+            if reference is None:
+                raise ValueError("Recorded text predecessor is missing")
+            return RecordedSegmentManifest(replace(original, captured_text=()), previous=reference)
+        return RecordedSegmentManifest(original)
 
     def restore(self, entries: dict[ContextEntryReference, SegmentManifest],
                 predecessors: dict[int, ContextManifest] | None = None,
@@ -474,13 +476,10 @@ class ContextSegment(
         cls, original: SegmentManifest, previous: RecordedSegmentManifest | None = None,
         previous_value: SegmentManifest | None = None, previous_offset: int | None = None,
     ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
-        reference = None
-        if (previous is not None and previous_value is not None
-                and original.sha256 == previous_value.sha256
-                and original.captured_text and previous_value.captured_text):
-            reference = previous.text_reference(previous_offset)
-            original = replace(original, captured_text=())
-        return RecordedSegmentManifest(original, previous=reference), ()
+        recorded = RecordedSegmentManifest(original)
+        if previous is not None and previous_value is not None:
+            recorded = previous.record_text(original, previous_value, previous_offset)
+        return recorded, ()
 
     def public_text(self) -> str:
         return self.text()
