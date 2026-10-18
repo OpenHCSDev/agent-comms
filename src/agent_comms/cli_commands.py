@@ -1181,7 +1181,6 @@ class RegisterCliCommand(CliCommand):
                                             parser_default=FieldCodec.encode(ExternalThreadExecution))
 
     def apply(self, ctx: Comms) -> Any:
-        from .threads import Thread
 
         thread = ctx.registry.new_thread(
             name=self.name,

@@ -31,36 +31,9 @@ class RolloutState:
     tools: dict[str, str] = field(default_factory=dict)
 
 
-class ContentPart(OpenWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
-
-    def readable(self) -> str:
-        return ''
-
-
-class TextPart(ContentPart, ABC):
-    text: str
-
-    def readable(self) -> str:
-        return self.text
-
-
-class InputText(TextPart):
-    wire_tag = 'input_text'
-
-
-class OutputText(TextPart):
-    wire_tag = 'output_text'
-
-
-class PlainText(TextPart):
-    wire_tag = 'text'
-
-
-class ForeignPart(ContentPart):
-    """Images, audio and anything else Codex sends that is not text."""
-    wire_tag = 'foreign'
+class ContentPart(WireModel):
+    """Text parts carry `text`; images, audio and refusals carry none and add nothing."""
+    text: str = ''
 
 
 class RolloutItemHeader(WireHeader):
@@ -93,16 +66,16 @@ class ForeignItem(RolloutItem):
 
 class MessageItem(RolloutItem, ABC):
     id: str = ''
-    content: list[ContentPart.declared_union()]
+    content: list[ContentPart]
 
     @field_validator('content', mode='before')
     @classmethod
     def parts(cls, value: str | list) -> list:
-        return [{'type': PlainText.wire_tag, 'text': value}] if isinstance(value, str) else value
+        return [{'text': value}] if isinstance(value, str) else value
 
     @property
     def text(self) -> str:
-        return '\n'.join(text for part in self.content if (text := part.readable()))
+        return '\n'.join(part.text for part in self.content if part.text)
 
 
 class UserMessageItem(MessageItem):
@@ -180,20 +153,28 @@ class CustomToolCallOutputItem(FunctionCallOutputItem):
 
 
 class RolloutRecord(OpenWire, ABC):
+    """One rollout line. Conversation is in the items a record carries; the record adds what
+    it says about the session."""
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
+    def entries(self) -> tuple[RolloutItem, ...]:
         return ()
 
-    def instructions(self) -> tuple[InstructionMessage, ...]:
+    def own_updates(self) -> tuple[TranscriptUpdate, ...]:
         return ()
+
+    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
+        return (*self.own_updates(), *(update for item in self.entries() for update in item.updates(state)))
+
+    def instructions(self) -> tuple[InstructionMessage, ...]:
+        return tuple(instruction for item in self.entries() for instruction in item.instructions())
+
+    def request(self) -> str:
+        return next((text for item in reversed(self.entries()) if (text := item.request())), '')
 
     def begins_history(self) -> bool:
         return False
-
-    def request(self) -> str:
-        return ''
 
     @property
     def session(self) -> SessionMeta:
@@ -218,7 +199,7 @@ class SessionMetaRecord(RolloutRecord):
     def session(self) -> SessionMeta:
         return self.payload
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
+    def own_updates(self) -> tuple[TranscriptUpdate, ...]:
         return (SessionFacts(source_id=self.payload.id, project=self.payload.cwd),)
 
 
@@ -230,7 +211,7 @@ class TurnContextRecord(RolloutRecord):
     wire_tag = 'turn_context'
     payload: TurnContext
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
+    def own_updates(self) -> tuple[TranscriptUpdate, ...]:
         return (SessionFacts(project=self.payload.cwd),)
 
 
@@ -249,32 +230,21 @@ class CompactedRecord(RolloutRecord):
     def begins_history(self) -> bool:
         return True
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
-        kept = tuple(update for item in self.payload.replacement_history for update in item.updates(state))
+    def entries(self) -> tuple[RolloutItem, ...]:
+        return tuple(self.payload.replacement_history)
+
+    def own_updates(self) -> tuple[TranscriptUpdate, ...]:
         private = (HistoryNotice('Codex guardian history is source-private and was not imported.'),
                    ) if self.payload.guardian_history else ()
-        return (Summarized(self.payload.message or self.payload.summary), *kept, *private)
-
-    def instructions(self) -> tuple[InstructionMessage, ...]:
-        return tuple(instruction for item in self.payload.replacement_history
-                     for instruction in item.instructions())
-
-    def request(self) -> str:
-        return next((text for item in reversed(self.payload.replacement_history) if (text := item.request())), '')
+        return (Summarized(self.payload.message or self.payload.summary), *private)
 
 
 class ResponseItemRecord(RolloutRecord):
     wire_tag = 'response_item'
     payload: RolloutItem.declared_union()
 
-    def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
-        return self.payload.updates(state)
-
-    def instructions(self) -> tuple[InstructionMessage, ...]:
-        return self.payload.instructions()
-
-    def request(self) -> str:
-        return self.payload.request()
+    def entries(self) -> tuple[RolloutItem, ...]:
+        return (self.payload,)
 
 
 ROLLOUT_RECORD = TypeAdapter(RolloutRecord.declared_union())
