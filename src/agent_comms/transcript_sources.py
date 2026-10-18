@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
+    from .native_transcript import NativeRecord
     from .transcript_events import TranscriptEvent
     from .turn_digests import TurnBound
 
@@ -316,7 +317,7 @@ class TranscriptSource:
     async def watch_requests(self, emit) -> None:
         """Sources without a harness continuation have no bridge requests."""
 
-    def turns(self, bound: TurnBound):
+    def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
         """Read input-bounded turns under one original record-source cut."""
         with self.reading() as reader:
             cut = reader.cut()
@@ -329,8 +330,8 @@ class TranscriptSource:
         return turns
 
     @staticmethod
-    def _newest_turns(records):
-        pending = []
+    def _newest_turns(records: Iterator[NativeRecord]) -> Iterator[TurnDigest]:
+        pending: list[NativeRecord] = []
         for record in records:
             pending.append(record)
             if record.project(lambda original: original.entry.input_boundary):
