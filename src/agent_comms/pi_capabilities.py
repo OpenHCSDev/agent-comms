@@ -6,6 +6,12 @@ from .agent_backend import Compacts, ConfiguresModel, ContextUsage, FailedCompac
 
 
 class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
+    @staticmethod
+    async def configure_tools(child, mode, transport):
+        from .pi_commands import ConfigureTools
+
+        await child.request(ConfigureTools(tools=mode.tool_names, broker=transport.host_binding()))
+
     @abstractmethod
     async def inspect(self, thread, command): ...
 

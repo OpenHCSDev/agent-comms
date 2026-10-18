@@ -212,12 +212,6 @@ class OpenHistory(HostQuery):
     path: str
 
 
-@dataclass(frozen=True)
-class ConfigureTools(HostQuery):
-    tools: tuple[str, ...]
-    brokers: tuple[dict[str, str], ...]
-
-
 class DurableRequestProgress(ModelRequestProgress, DurablePiEvent):
     wire_kind = ModelRequestProgress.wire_kind
 
@@ -493,7 +487,7 @@ class PiDurableBackend(PiCapabilities, AgentBackend, Steers):
             mode = delivery.selected_tool_mode
             turn.tool_socket = await mode.open_transport(turn, resources)
             turn.tool_socket.bind_process(child.proc.pid)
-            await child.request(ConfigureTools(mode.tool_names, turn.tool_socket.host_bindings()))
+            await self.configure_tools(child, mode, turn.tool_socket)
             identity = await child.request(GetIdentity())
             await delivery.prepare_identity(NativeSessionIdentity(identity.session_id, str(child.location.session)))
             async for event in self._stream_turn(thread, content, turn):

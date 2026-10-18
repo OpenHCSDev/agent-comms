@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { requestOwnerTool } from './owner_tool_socket.mjs';
+import { configureOwnerTools, requestConfiguredTool } from './owner_tool_socket.mjs';
 import { BACKGROUND_CONTEXT as context } from '@earendil-works/chord/context';
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
@@ -21,18 +21,13 @@ const { estimateContext } = await import(new URL('./harness/compaction.js', impo
 const Recovery = defineDoc({ kind: 'core.recovery', version: 1, scope: 'session', initial: () => ({ decisions: {} }) });
 let harness, root, turn, models, registry;
 const comms = args => JSON.parse(execFileSync('agent-comms', args, { encoding: 'utf8', timeout: 30000 }));
-function ownerGuard(tool, broker) {
+function ownerGuard(tool) {
   return wrapTool(tool.name, original => ({ ...original,
     async execute(args, api, context) {
-      const { path, token } = broker;
-      {
-        const request = Buffer.from(JSON.stringify({ token,
-          call_id: api.callId, name: tool.name, arguments: args }) + '\n');
-        if (request.length > 1024 * 1024) throw new Error('Core tool request exceeds the record bound');
-        const response = await requestOwnerTool(path, request, 16384,
-          'Tool claim outcome UNKNOWN; inspect before retrying.');
-        if (response.ok !== true) throw new Error(response.error ?? 'Core owner refused this tool');
-      }
+      const response = await requestConfiguredTool(
+        { call_id: api.callId, name: tool.name, arguments: args }, 16384,
+        'Tool claim outcome UNKNOWN; inspect before retrying.');
+      if (response.ok !== true) throw new Error(response.error ?? 'Core owner refused this tool');
       return original.execute(args, api, context);
     },
   }));
@@ -237,17 +232,12 @@ const handlers = {
       },
     })) });
     registry.install(commands);
-    const extensions = [CodingTools, CoreContext, commands];
-    for (const broker of request.brokers) {
-      if (!broker.path || !/^[0-9a-f]{64}$/.test(broker.token)) {
-        throw new Error('Brokered Durable tools require an authenticated owner endpoint');
-      }
-      const owner = defineExtension({ name: 'core-tools', wraps:
-        [...CodingTools.tools, ...commands.tools].map(tool => ownerGuard(tool, broker)) });
-      registry.install(owner);
-      extensions.push(owner);
-    }
-    await root.configure({ extensions, tools: request.tools }, context);
+    configureOwnerTools(request.broker);
+    const owner = defineExtension({ name: 'core-tools', wraps:
+      [...CodingTools.tools, ...commands.tools].map(tool => ownerGuard(tool)) });
+    registry.install(owner);
+    await root.configure({ extensions: [CodingTools, CoreContext, commands, owner],
+      tools: request.tools }, context);
     const actual = new Set((await root.agent(context)).callable.map(tool => tool.name));
     for (const name of request.tools) if (!actual.has(name)) throw new Error(`Durable tool is unavailable: ${name}`);
     return ack;

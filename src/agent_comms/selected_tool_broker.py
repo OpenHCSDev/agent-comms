@@ -487,12 +487,10 @@ class OwnerToolSocket(ToolTransport, Generic[Call]):
         await transport.start()
         return transport
 
-    def host_bindings(self) -> tuple[dict[str, str], ...]:
-        return ({"path": str(self.address), "token": self.token},)
+    def host_binding(self):
+        from .native_tool_call import SocketToolBroker
 
-    def native_environment(self) -> dict[str, str]:
-        return {"AGENT_COMMS_SELECTED_TOOL_SOCKET": str(self.address),
-                "AGENT_COMMS_SELECTED_TOOL_TOKEN": self.token}
+        return SocketToolBroker(path=str(self.address), token=self.token)
 
     def bind_process(self, pid: int) -> None:
         self.expected_pid = pid

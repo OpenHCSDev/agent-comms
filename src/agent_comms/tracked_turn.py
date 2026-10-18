@@ -344,6 +344,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     ownership.push_async_callback(self.retain_or_close)
                     await ownership.enter_async_context(self.native.failures())
                     self.tool_socket.bind_process(self.native.proc.pid)
+                    from .pi_capabilities import PiCapabilities
+
+                    await PiCapabilities.configure_tools(self.native, self.selected_tool_mode, self.tool_socket)
                     self.watchdog.reading()
                     try:
                         try:
@@ -381,7 +384,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def open_transport(self, ownership: AsyncExitStack) -> None:
         self.tool_socket = await self.selected_tool_mode.open_transport(self, ownership)
-        self.tool_environment.update(self.tool_socket.native_environment())
 
     @property
     def active_tools(self):

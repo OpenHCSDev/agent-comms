@@ -11,14 +11,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
 
-from . import turn_phase as phases
-from .native_turn_context import NativeContextData
 from . import agent_events as events
+from . import turn_phase as phases
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
-from .turn_context import InputContributionCoordinates, SegmentManifest
 from .native_session_reopen import NativeSessionIdentity
+from .native_tool_call import ToolBrokerBinding
+from .native_turn_context import NativeContextData
 from .pi_payloads import (
     CompactionData,
     EmptyData,
@@ -26,11 +26,12 @@ from .pi_payloads import (
     PiResponseData,
     QueueClearedData,
     SessionStatsData,
-    StateData,
     SessionSwitchData,
+    StateData,
     ThinkingLevelsData,
     UnknownData,
 )
+from .turn_context import InputContributionCoordinates, SegmentManifest
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -288,6 +289,13 @@ class CatalogQuery(NativeQuery):
             if response.success is True:
                 return response.data.require_payload()
             raise NativePiUnavailable(response.error or "Native catalog query was refused")
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConfigureTools(PiCommand):
+    strict_response = True
+    tools: tuple[str, ...]
+    broker: ToolBrokerBinding
 
 
 @dataclass(frozen=True, kw_only=True)

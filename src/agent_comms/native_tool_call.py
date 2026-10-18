@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from .declared_family import DeclaredFamily
+
 if TYPE_CHECKING:
     from .pi_events import ToolExecutionEnd, ToolExecutionStart
 
@@ -259,12 +261,24 @@ class NativeToolCall(ABC):
     def claim_failed(self) -> None: ...
 
 
-class ToolTransport:
-    def host_bindings(self) -> tuple[dict[str, str], ...]:
-        return ()
+class ToolBrokerBinding(DeclaredFamily):
+    """The host protocol carries either no owner or one authenticated socket."""
 
-    def native_environment(self) -> dict[str, str]:
-        return {}
+
+@dataclass(frozen=True)
+class NoToolBroker(ToolBrokerBinding, declared_name="none"):
+    pass
+
+
+@dataclass(frozen=True)
+class SocketToolBroker(ToolBrokerBinding, declared_name="socket"):
+    path: str
+    token: str
+
+
+class ToolTransport:
+    def host_binding(self) -> ToolBrokerBinding:
+        return NoToolBroker()
 
     def announce(self, content):
         if any(part.tool_calls() for part in content):

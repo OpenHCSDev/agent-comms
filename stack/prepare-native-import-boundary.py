@@ -53,6 +53,28 @@ def patch_loader(path: Path) -> None:
     path.write_text(text)
 
 
+def patch_tool_configuration(path: Path) -> None:
+    """Both Pi hosts receive the owner binding over the command stream."""
+    source = path.read_text()
+    anchor = '            case "abort": {'
+    if source.count(anchor) != 1:
+        raise SystemExit("Native tool configuration RPC anchor changed")
+    source = (
+        'import { configureOwnerTools } from "../../owner_tool_socket.mjs";\n'
+        + source.replace(anchor, '''            case "configure_tools": {
+                if (!Array.isArray(command.tools) ||
+                    command.tools.some(tool => typeof tool !== "string")) {
+                    throw new Error("Invalid tool selection");
+                }
+                configureOwnerTools(command.broker);
+                session.setActiveToolsByName(command.tools);
+                return success(command.id, command.type, {});
+            }
+''' + anchor, 1)
+    )
+    path.write_text(source)
+
+
 def patch_package_manager(path: Path) -> None:
     raw = path.read_bytes()
     expected = "26aa8adf255f7b1ebf9b00732d2e9a1648e38b76a10eedcd443131e3708b6e88"
@@ -157,6 +179,7 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         raise SystemExit("Import-boundary destination already exists; never repair in place")
     patch_loader(package / "dist/core/extensions/loader.js")
     patch_package_manager(package / "dist/core/package-manager.js")
+    patch_tool_configuration(package / "dist/modes/rpc/rpc-mode.js")
     environment = dict(os.environ)
     environment.pop("NODE_OPTIONS", None)
     environment.pop("NODE_PATH", None)

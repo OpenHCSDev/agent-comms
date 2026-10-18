@@ -51,8 +51,6 @@ class SelectedSession:
 
     def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
         environment = ThreadLaunch.strip(dict(os.environ))
-        environment.pop("AGENT_COMMS_SELECTED_TOOL_SOCKET", None)
-        environment.pop("AGENT_COMMS_SELECTED_TOOL_TOKEN", None)
         environment.update(original or {})
         configuration = RestartEnvironment.inherit(environment).for_agent(agent_dir)
         environment["PI_OFFLINE"] = "1"
