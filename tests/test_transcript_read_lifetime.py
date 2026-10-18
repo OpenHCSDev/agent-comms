@@ -19,7 +19,7 @@ def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_pa
         "role": "assistant", "content": [{"type": "text", "text": "one reply"}],
     }}) + "\n")
     state = TranscriptReadState(tmp_path / "read_ledger.json")
-    assert state.counts("viewer", {"worker": str(source)}).pending == {"worker"}
+    assert state.counts("viewer", {"worker": str(source)}, document=state.reads.read()).pending == {"worker"}
     state.preparation.result(timeout=10)
     workers = tuple(state._pool._processes.values())
     database, cancelled = state._connection, state._cancelled
@@ -51,7 +51,7 @@ def test_explicit_close_is_idempotent_and_factory_replaces_closed_unused_reader(
     state.close()
     state.close()
     with pytest.raises(RuntimeError, match="closed"):
-        state.counts("viewer", {})
+        state.counts("viewer", {}, document=state.reads.read())
     fresh = transcript_read_state(path)
     assert fresh is not state
     fresh.close()
