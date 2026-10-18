@@ -353,7 +353,7 @@ def complete_goal_controls(root):
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.goals import AbsentGoalCheckpoint, PresentGoalCheckpoint
     from agent_comms.goal_actions import ClearGoalAction, SetGoalAction, StandbyGoalAction, GoalPrecondition, RuntimeInvocable
-    from agent_comms.cli_commands import ContextCliCommand
+    from agent_comms.cli_commands import TurnContextCliCommand, DiffContextCliCommand
 
     started = time.monotonic()
     service = Comms(root / 'wire')
@@ -405,11 +405,11 @@ def complete_goal_controls(root):
             raise AssertionError('Standby accepted a completed, non-active dependency')
         durable = stored_inputs(dispositions.root)
         assert all(durable.lookup(item.key) == item for item in originals)
-        compare = ContextCliCommand(thread=source.name, diff=True)
+        compare = DiffContextCliCommand(thread=source.name)
         difference = compare.encode_result(compare.apply(service))
         manifests = service.bus.log.context_manifests(source.name, service.registry)
         assert difference['turn'] != difference['previous_turn']
-        command = ContextCliCommand(thread=source.name,
+        command = TurnContextCliCommand(thread=source.name,
             turn=manifests[-1].turn.occurrence.generation)
         recorded = command.encode_result(command.apply(service))
         assert recorded['text_recorded'] is False

@@ -9,7 +9,7 @@ from agent_comms.turn_context import ContextManifest, RecordedContextManifest, R
 from agent_comms.pi_commands import Prompt
 from agent_comms.image_inputs import ImageInput
 from agent_comms.wire_record import WireRecord, ObservationWireRecord, RecordedContextManifestWireObservation
-from agent_comms.cli_commands import ContextCliCommand
+from agent_comms.cli_commands import TurnContextCliCommand, DiffContextCliCommand
 from agent_comms.comms import Comms
 from test_private_bus_checkpoint import _root, _page
 
@@ -86,9 +86,9 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     recent, limited = reopened.relationships._recent_messages()
     assert recent == (first, second) and not limited
     assert reopened.bus.pending_counts_all(['Alice','Bob'])['Alice']==2
-    recorded = ContextCliCommand(thread='Alice',turn=1)
+    recorded = TurnContextCliCommand(thread='Alice',turn=1)
     assert len(recorded.encode_result(recorded.apply(reopened))['manifests'])==1
-    difference = ContextCliCommand(thread='Alice',diff=True)
+    difference = DiffContextCliCommand(thread='Alice')
     assert difference.encode_result(difference.apply(reopened))['turn']['occurrence']['generation']==2
 
 

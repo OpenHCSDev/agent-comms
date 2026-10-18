@@ -20,10 +20,12 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import aclosing
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
+from itertools import dropwhile, takewhile
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
 
 from acp.schema import SessionConfigSelectOption
+from acp.exceptions import RequestError
 
 from .activity import ActivityState
 from .channels import Channel
@@ -54,10 +56,12 @@ from .exporting import (
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .harness_install import Harness
-from .importing import ImportLimits
+from .importing import ImportLimits, ImportedSessionMetadata
 from .historical_views import HistoryCursor
 from .tool_caller import ToolCaller
-from .turn_context import ContextSegment
+from .turn_context import ContextSegment, NextContextTurn, TurnContext
+from .native_turn_context import NativeContextData
+from .runtime import RuntimeConnection, socket_path
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
@@ -633,7 +637,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package=
                              snapshot=snapshot, catalog=catalog)
 
     @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
+    def add_parser(cls, subparsers: Any) -> argparse.ArgumentParser:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls)
@@ -685,13 +689,13 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package=
             else:
                 options.pop("required", None)
             owner.add_argument(*metadata["flags"], **options)
+        return parser
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
-        member = cls.decode(args.command)
-        payload = {"kind": member.declared_name}
-        hints = get_type_hints(member)
-        for declared in fields(member):
+        payload = {"kind": cls.declared_name}
+        hints = get_type_hints(cls)
+        for declared in fields(cls):
             key = declared.metadata.get("wire_name", declared.name)
             value = getattr(args, key)
             normalize = declared.metadata["normalize"]
@@ -702,7 +706,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package=
             ):
                 value = {"kind": value}
             payload[key] = value
-        return member.from_payload(payload)
+        return cls.from_payload(payload)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1522,47 +1526,35 @@ class PollCliCommand(CliCommand):
 class ContextCliCommand(CliCommand):
     help = "Inspect original context contributors without sending an input"
     thread: str = option("thread")
-    turn: int | None = option("--turn", default=None, help="Original authorized turn generation")
-    diff: bool = option("--diff", default=False, action="store_true")
-    imported: bool = option("--imported", default=False, action="store_true",
-                            help="Original imported instruction references, not current context")
+    @classmethod
+    def add_parser(cls, subparsers):
+        parser = super().add_parser(subparsers)
+        parser.add_argument("--turn", type=int, default=None)
+        parser.add_argument("--diff", action="store_true")
+        parser.add_argument("--imported", action="store_true")
+        return parser
+
+    @classmethod
+    def from_namespace(cls, args):
+        if args.imported:
+            if args.turn is not None or args.diff:
+                raise ValueError("--imported cannot be combined with --turn or --diff")
+            return ImportedContextCliCommand(thread=args.thread)
+        if args.turn is not None:
+            command = TurnDiffContextCliCommand if args.diff else TurnContextCliCommand
+            return command(thread=args.thread, turn=args.turn)
+        return (DiffContextCliCommand if args.diff else cls)(thread=args.thread)
+
+    def manifests(self, ctx):
+        cursor = None
+        while True:
+            page = ctx.bus.log.context_manifest_page(self.thread, ctx.registry, cursor=cursor)
+            yield from (resource.value for resource in reversed(page.resources))
+            if not page.has_older():
+                return
+            cursor = page.older
 
     def apply(self, ctx: Comms) -> Any:
-        from .importing import ImportedSessionMetadata
-
-        if self.imported:
-            if self.turn is not None or self.diff:
-                raise ValueError("Imported source references are not recorded native turns")
-            owner = ctx.registry.require(self.thread)
-            return {"scope": "historical-imported-instructions; not current or recorded native context",
-                    "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)}
-        if self.turn is not None or self.diff:
-            selected = []
-            cursor = None
-            while True:
-                page = ctx.bus.log.context_manifest_page(self.thread, ctx.registry, cursor=cursor)
-                for resource in reversed(page.resources):
-                    manifest = resource.value
-                    if self.diff and selected:
-                        if not selected[0].turn.same_recording(manifest.turn):
-                            return selected[0].changed_since(manifest)
-                    elif self.turn is None or manifest.turn.matches_generation(self.turn):
-                        selected.append(manifest)
-                if not page.has_older():
-                    break
-                cursor = page.older
-            if not selected:
-                raise ValueError("No original context manifest exists for the requested turn")
-            if self.diff:
-                raise ValueError("No preceding recorded turn exists for comparison")
-            return {"manifests": tuple(reversed(selected)),
-                    "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
-        from .field_codec import FieldCodec
-        from .native_turn_context import NativeContextData
-        from .runtime import RuntimeConnection, socket_path
-        from .turn_context import NextContextTurn, TurnContext
-        from acp.exceptions import RequestError
-
         owner = ctx.registry.require(self.thread)
         connection = RuntimeConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
 
@@ -1604,6 +1596,59 @@ class ContextCliCommand(CliCommand):
                 for position, segment in enumerate(native.segments)
             ],
         }
+
+
+class ContextOptionCliCommand(ContextCliCommand):
+    @classmethod
+    def add_parser(cls, subparsers):
+        """These commands are selected by the context parser's options."""
+
+    @abstractmethod
+    def apply(self, ctx):
+        """Inspect the context selected at the CLI boundary."""
+
+
+class ImportedContextCliCommand(ContextOptionCliCommand):
+    def apply(self, ctx):
+        owner = ctx.registry.require(self.thread)
+        return {"scope": "historical-imported-instructions; not current or recorded native context",
+                "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectedContextCliCommand(ContextOptionCliCommand):
+    turn: int = option("--turn")
+
+    def manifests(self, ctx):
+        return dropwhile(lambda manifest: not manifest.turn.matches_generation(self.turn),
+                         super().manifests(ctx))
+
+
+class TurnContextCliCommand(SelectedContextCliCommand):
+    def apply(self, ctx):
+        selected = tuple(takewhile(lambda manifest: manifest.turn.matches_generation(self.turn),
+                                   self.manifests(ctx)))
+        if not selected:
+            raise ValueError("No original context manifest exists for the requested turn")
+        return {"manifests": tuple(reversed(selected)),
+                "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
+
+
+class DiffContextCliCommand(ContextOptionCliCommand):
+    def apply(self, ctx):
+        manifests = iter(self.manifests(ctx))
+        try:
+            current = next(manifests)
+        except StopIteration:
+            raise ValueError("No original context manifest exists for the requested turn") from None
+        for previous in manifests:
+            if not current.turn.same_recording(previous.turn):
+                return current.changed_since(previous)
+        raise ValueError("No preceding recorded turn exists for comparison")
+
+
+class TurnDiffContextCliCommand(SelectedContextCliCommand, DiffContextCliCommand):
+    """Start the shared diff walk at the requested turn."""
 
 
 @dataclass(frozen=True, kw_only=True)
