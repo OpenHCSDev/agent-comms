@@ -271,7 +271,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
     async def native(*args, **kwargs):
         with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
             assert isinstance(allowed, AuthorityChangedSend)
-        yield events.InputRefused(id=None)
+        yield events.OriginalInputRefused()
         yield events.StreamSettled()
         yield events.Done(ok=False, text="Authority changed before send")
 
@@ -494,14 +494,14 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
             assert isinstance(allowed, GrantedSend)
         assert kwargs["native_start"](None, "a" * 32, args[2])
         started.append(first_id)
-        yield events.InputStarted(id=None)
+        yield events.OriginalInputStarted()
         command = kwargs["steering_queue"].get_nowait()
         second_id = command.input_id.value
         with kwargs["send_boundary"](second_id, "b" * 32, command.content.text) as allowed:
             assert isinstance(allowed, GrantedSend)
         assert kwargs["native_start"](second_id, "b" * 32, command.content.text)
         started.append(second_id)
-        yield events.InputStarted(id=second_id)
+        yield events.FollowingInputStarted(id=second_id)
         with kwargs["send_boundary"](second_id, "c" * 32, command.content.text) as allowed:
             assert isinstance(allowed, AuthorityChangedSend)
         yield events.StreamSettled()

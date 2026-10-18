@@ -157,7 +157,11 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     assert not agent.inputs.queued_inputs["beta"]
     assert agent.inputs.input_keys("beta") == sources
     assert stored_inputs(agent.inputs.dispositions.root) == cleared
-    await agent.inputs.input_refused("beta", requests[0].input_id)
+    from agent_comms.started_input import FollowingStartedInput
+
+    await agent.inputs.input_refused(
+        "beta", FollowingStartedInput.capture(agent.inputs, "beta", requests[0].input_id),
+    )
     assert agent.inputs.input_keys("beta") == frozenset((f"acp:{requests[1].input_id}",))
     assert stored_inputs(agent.inputs.dispositions.root) == cleared
 

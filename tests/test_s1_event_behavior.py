@@ -183,7 +183,7 @@ async def start_owned_input(execution, progress):
     with claim_scope(None, native_id, execution.original.prompt):
         pass
     assert claim_scope.native_start(None, native_id, execution.original.prompt)
-    await progress.consume(ae.InputStarted(None))
+    await progress.consume(ae.OriginalInputStarted())
 
 
 def waiting_owner(execution):

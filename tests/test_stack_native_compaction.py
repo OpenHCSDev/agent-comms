@@ -258,7 +258,9 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
             assert ends[0].reason is ThresholdCompactionReason
             assert len(prompts) == 1
             kinds = [type(event) for event in events]
-            assert kinds.index(ae.CompactionEnd) < kinds.index(ae.InputStarted)
+            assert kinds.index(ae.CompactionEnd) < next(
+                index for index, kind in enumerate(kinds) if issubclass(kind, ae.InputStarted)
+            )
             if case == "cap_disabled":
                 final_assistant = next(
                     row["message"] for row in reversed(saved)
