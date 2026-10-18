@@ -13,7 +13,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.store_files import _store_lock
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
 
 
@@ -122,7 +122,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
         )
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
-    comms.registry.declare(comms.registry.new_thread(viewer, frozenset(), str(tmp_path), role=ThreadRole.USER))
+    comms.registry.declare(comms.registry.new_thread(viewer, frozenset(), str(tmp_path), role=UserThreadRole))
     comms.messaging.send("peer", viewer, "new viewer unseen")
     before = comms.bus.pending_count(viewer, "peer")
     assert before == 1
@@ -138,7 +138,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     comms.messaging.send("peer", old_viewer, "old viewer painted")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert page.display_basis is not None and page.display_basis.viewer == old_viewer
-    comms.registry.declare(comms.registry.new_thread('new_user', frozenset(), str(tmp_path), role=ThreadRole.USER))
+    comms.registry.declare(comms.registry.new_thread('new_user', frozenset(), str(tmp_path), role=UserThreadRole))
     # Normal registry rename retains the old human declaration but moves its
     # insertion position behind new_user. user_identity now selects new_user.
     comms.registry.rename(old_viewer, "old_user")

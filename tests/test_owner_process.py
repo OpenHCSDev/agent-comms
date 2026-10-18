@@ -220,7 +220,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         def require_selection(self, snapshot, owners):
             live = {
                 thread.name for thread in snapshot.threads.values()
-                if thread.role.executable and snapshot.statuses[thread.name].active
+                if thread.role.executes(snapshot.statuses[thread.name].active)
                 and thread.process_alive
             }
             if {thread.name for thread in owners} != live:
@@ -337,7 +337,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
 
     finally:
         for owner in comms.registry.snapshot().threads.values():
-            if owner.role.executable and owner.process_alive:
+            if owner.role.executes(owner.process_alive):
                 comms.owners.stop(owner.name)
         assert all(not owner.process_alive for owner in originals)
 

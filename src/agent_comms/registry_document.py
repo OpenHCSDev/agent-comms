@@ -50,9 +50,6 @@ class RosterVisibility:
     stopped: bool = True
     archived: bool = False
 
-    def shows(self, thread: Thread, status: ThreadStatus) -> bool:
-        return thread.role.executable and status.in_view(self)
-
 
 DEFAULT_ROSTER = RosterVisibility()
 
@@ -88,8 +85,9 @@ class RegistryPresence(RegistryNames[Thread]):
     ) -> Iterator[Thread]:
         selected = (self.threads.values() if names is None else
                     (self.threads.get(name) for name in {self.canonical_name(name) for name in names}))
-        return (thread for thread in selected
-                if thread is not None and visibility.shows(thread, self.statuses[thread.name]))
+        return (executor for thread in selected
+                if thread is not None and self.statuses[thread.name].in_view(visibility)
+                for executor in thread.role.executor(thread))
 
     def channel_audience(self) -> Iterator[Thread]:
         """A channel reaches the default roster: stopped owners receive, archived do not."""
@@ -665,9 +663,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         )
 
     def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
-        if not reads.human(thread.role):
-            return ()
-        return super().displayed_recipient_effect(reads, message, thread, document=document)
+        return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 
     def recipient(
         self, recipient: FrozenRecipient, original: CommittedDelivery
@@ -726,8 +722,8 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             raise RelationViolationError("Stopping owner was removed") from error
         if current.incarnation != expected.incarnation:
             raise RelationViolationError("Stopping owner incarnation changed")
-        expected.role.require_executable()
-        current.role.require_executable()
+        expected.role.require_executable(RelationViolationError("Stopping owner was not an agent"))
+        current.role.require_executable(RelationViolationError("Stopping owner is not an agent"))
         if current.process_identity != expected.process_identity:
             raise RelationViolationError("Stopping owner process changed")
         if self.claimed_generations[expected.name] != claim_scope:

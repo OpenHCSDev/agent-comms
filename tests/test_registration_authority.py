@@ -9,7 +9,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
 
 
@@ -43,7 +43,7 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path):
 
 
 @pytest.mark.parametrize('mutation', [
-    {'created_at': 200.0}, {'worktree': '/different'}, {'role': ThreadRole.USER},
+    {'created_at': 200.0}, {'worktree': '/different'},
     {'goal': Goal('replacement', 'other', published_seq=0)},
 ])
 def test_raw_registry_writer_cannot_cross_captured_claim_identity(tmp_path, mutation):
@@ -57,6 +57,13 @@ def test_raw_registry_writer_cannot_cross_captured_claim_identity(tmp_path, muta
     with pytest.raises(RelationViolationError):
         registry.lease_live_turn_with_claim(captured, 'denied', expected_generation=claim_scope)
     assert registry.store.path.read_bytes() == before
+
+
+def test_a_live_owner_cannot_be_declared_human(tmp_path):
+    registry = registered(tmp_path)
+    captured, _ = registry.live_owner_with_claim('owner')
+    with pytest.raises(RelationViolationError, match='cannot hold an owner process'):
+        replace(captured, role=UserThreadRole)
 
 
 def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):

@@ -9,7 +9,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.annotations import SpanAnnotationsRow
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registration import Registration
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
 from agent_comms.turn_context import (
     ContextSpan, ContributionCoordinates, FileProvenance, SystemLayerSegment,
@@ -53,7 +53,7 @@ def test_original_answers_human_correction_and_readonly_calibration(tmp_path, mo
         (AnswerProbability(RuleSpan, .7), AnswerProbability(CommitmentSpan, .2),
          AnswerProbability(OtherSpan, .1)), .8, "local-controlled-answer", classifier.pin)
     registry = Registration(tmp_path / "registry.json")
-    user = registry.declare(registry.new_thread('human', frozenset(), str(tmp_path), role=ThreadRole.USER))
+    user = registry.declare(registry.new_thread('human', frozenset(), str(tmp_path), role=UserThreadRole))
     with Coordination(str(path)) as store:
         with store.session.transaction() as db:
             SpanAnnotationsRow(label=original, created_at_ms=1).insert(db)

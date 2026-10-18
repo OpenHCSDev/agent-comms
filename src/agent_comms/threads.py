@@ -23,6 +23,7 @@ from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevi
 from .storage_rules import StoragePath, StorageRoots, StorageRule
 from .thread_identity import (
     ThreadProvenance,
+    AgentThreadRole,
     ThreadRole,
     TurnId,
     TurnIdentity,
@@ -83,7 +84,7 @@ class Thread(ThreadProvenance):
     )
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
-    role: ThreadRole = ThreadRole.AGENT
+    role: type[ThreadRole] = AgentThreadRole
     execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
                                             metadata={"wire_omit_default": True})
     backend: type[AgentBackend] = field(
@@ -163,7 +164,7 @@ class Thread(ThreadProvenance):
             object.__setattr__(self, "created_at", float(self.created_at))
         super(Thread, self).__post_init__()
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
-        object.__setattr__(self, "role", ThreadRole(self.role))
+        self.process_identity.require_held_by(self.role)
         if self.active_turn is not None:
             if not self.process_identity.owns_turn(self.active_turn):
                 raise RelationViolationError("A turn must belong to the registered executor.")
@@ -237,15 +238,17 @@ class Thread(ThreadProvenance):
             raise ValueError("live owner requires an exact thread declaration")
 
     def same_local_process(self, process: ProcessIdentity) -> bool:
-        return self.role.executable and self.process_identity == process
+        return self.process_identity == process
 
     def require_local_process(self, process: ProcessIdentity) -> None:
-        self.role.require_executable()
+        self.role.require_executable(RelationViolationError("A human thread owns no local process"))
         if not self.same_local_process(process):
             raise RelationViolationError("live owner is not the current process incarnation")
 
     def require_process(self) -> ProcessIdentity:
-        self.role.require_executable()
+        self.role.require_executable(
+            RelationViolationError(f"Thread {self.name!r} is human; it owns no process")
+        )
         return self.process_identity.require(f"Thread {self.name!r} has no owner process")
 
 

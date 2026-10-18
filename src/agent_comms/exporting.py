@@ -80,7 +80,7 @@ class TextFormat(SelectableWireExportFormat):
             f"seq={message.seq}",
             f"id={message.message_id}",
             f"type={message.type.declared_name}",
-            f"role={message.sender_role.value}",
+            f"role={FieldCodec.encode(message.sender_role)}",
         ]
         attributes.extend(message.role.export_attributes())
         if message.mentions:
