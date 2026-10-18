@@ -18,7 +18,9 @@ from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.store_files import StoreLock, _async_store_lock, _store_lock
-from agent_comms.wake_candidate_index import WakeCandidateIndex
+from agent_comms.wake_candidate_index import (
+    WakeCandidateIndex, RebuildIndex,
+)
 from test_claim_bus_read import record_context, selected_turn
 from test_coordination_response import _ready
 from test_optional_awareness_projection import _root, _accepted, _owner, _projection
@@ -99,7 +101,7 @@ def test_response_catches_up_and_supplies_recipient_awareness(tmp_path, notifica
     case = _ready(tmp_path, direct=True)
     try:
         index = WakeCandidateIndex(case.bus.log)
-        assert index.maintain(rebuild=True)
+        assert index.maintain(start=RebuildIndex())
         calls, finished = notifications(case.comms)
         prepare_fenced_response(case.store, case.bus, case.fence, "Answer",
                                 exact_target=case.reply_target, owner_witness=case.witness)
@@ -242,7 +244,7 @@ def test_retiring_worker_does_not_delete_successor_notification(tmp_path, monkey
     comms, store, index, root_id = _root(tmp_path, recipients=1)
     try:
         comms.messaging.send_initial_cohort("sender", "member000", "first")
-        assert index.maintain(rebuild=True)
+        assert index.maintain(start=RebuildIndex())
         root = index.log.path.parent
         candidate_maintenance._pending[root] = (index.log, index.log.path.stat().st_size)
         original_guard = candidate_maintenance._guard

@@ -25,10 +25,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
 from agent_comms.typed_table import TypedTable
 from agent_comms.wake_candidate_index import (
-    CandidateTable,
-    ProjectionRebuildRequiredError,
-    ProjectionUnavailableError,
-    WakeCandidateIndex,
+    CandidateTable, ProjectionRebuildRequiredError, ProjectionUnavailableError, WakeCandidateIndex, FirstBuild, RebuildIndex, ResumeIndex,
 )
 from agent_comms.wake_policy import FullWake
 
@@ -51,7 +48,7 @@ def _maintain_in_process(root: str, root_id: str, through_bytes: int, start, res
         index = WakeCandidateIndex(Comms(Path(root)).bus.log)
         outcome = index.catch_up_committed_append(
             index.notify_committed_append(root_id=root_id, through_bytes=through_bytes),
-            bootstrap_new=True, max_rows=256, max_bytes=8 * 1024 * 1024,
+            start=FirstBuild(), max_rows=256, max_bytes=8 * 1024 * 1024,
         )
     except BaseException as error:
         results.put(("error", type(error).__name__, str(error)))
@@ -116,7 +113,7 @@ def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path):
     comms, root_id, lookup = _private(tmp_path)
     message = comms.messaging.send_initial_cohort('sender', 'Alice', 'fixture')
     index = WakeCandidateIndex(comms.bus.log)
-    assert index.maintain(bootstrap_new=True)
+    assert index.maintain(start=FirstBuild())
     with sqlite3.connect(index.path) as db:
         # Deliberate index corruption, not a normal writer: STRICT protects
         # storage types and the version CHECK must be bypassed to inject it.
@@ -134,7 +131,7 @@ def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path):
 def test_existing_candidate_schema_reopens_in_wal_through_the_store_owner(tmp_path):
     comms, _root_id, _lookup = _private(tmp_path)
     index = WakeCandidateIndex(comms.bus.log)
-    assert index.maintain(bootstrap_new=True)
+    assert index.maintain(start=FirstBuild())
     with sqlite3.connect(index.path) as db:
         assert db.execute("PRAGMA journal_mode=DELETE").fetchone()[0] == "delete"
     assert index.maintain()
@@ -158,7 +155,7 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
         )
     with pytest.raises(ProjectionRebuildRequiredError):
         index.maintain()  # Initial rebuild must be an explicit maintenance choice.
-    assert index.maintain(rebuild=True)
+    assert index.maintain(start=RebuildIndex())
     with sqlite3.connect(index.path) as db:
         assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert db.execute("SELECT version FROM candidate_checkpoint").fetchone()[0] == 3
@@ -235,7 +232,7 @@ def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path
     first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
     second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
     index = WakeCandidateIndex(comms.bus.log)
-    assert not index.maintain(rebuild=True, max_rows=1)
+    assert not index.maintain(start=RebuildIndex(), max_rows=1)
     with pytest.raises(ProjectionUnavailableError, match="stale"):
         index.page(
             root_id=root_id,
@@ -289,7 +286,7 @@ def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None
     index = WakeCandidateIndex(comms.bus.log)
     # A batch budget smaller than the next record admits that one record
     # alone; it never publishes a partial candidate.
-    assert index.maintain(rebuild=True, max_bytes=128)
+    assert index.maintain(start=RebuildIndex(), max_bytes=128)
     assert (
         len(
             index.page(
@@ -332,7 +329,7 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus.log)
     with pytest.raises(ProjectionUnavailableError, match="candidate index maintenance unavailable"):
-        index.maintain(rebuild=True)
+        index.maintain(start=RebuildIndex())
     with pytest.raises(ProjectionUnavailableError):
         index.page(
             root_id=root_id,
@@ -369,7 +366,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus.log)
     with pytest.raises(ProjectionUnavailableError) as failure:
-        index.maintain(rebuild=True)
+        index.maintain(start=RebuildIndex())
     assert isinstance(failure.value.__cause__, RelationViolationError)
     # The source owner refuses the rewritten cut before candidate decoding.
     # Exercise the candidate decoder's separate record invariant directly.
@@ -421,7 +418,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             ):
                 index._commit_batch(
                     db, first_batch, stat, root_id,
-                    index._source_end(stream, first_batch.next_offset), rebuild=True,
+                    index._source_end(stream, first_batch.next_offset), start=RebuildIndex(),
                 )
             with index.snapshot() as db:
                 assert db.execute("SELECT count(*) FROM candidate").fetchone()[0] == 0
@@ -429,7 +426,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             with index.writing() as db:
                 index._commit_batch(
                     db, first_batch, stat, root_id,
-                    index._source_end(stream, first_batch.next_offset), rebuild=True,
+                    index._source_end(stream, first_batch.next_offset), start=RebuildIndex(),
                 )
             first = index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
                                after_seq=0, required_through_seq=messages[1].seq)
@@ -462,7 +459,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
                    after_seq=0, required_through_seq=messages[3].seq)
     # Even explicit index rebuilding cannot authorize this rewritten source.
     with pytest.raises(ProjectionUnavailableError):
-        index.maintain(rebuild=True)
+        index.maintain(start=RebuildIndex())
     with pytest.raises(RelationViolationError):
         comms.bus.log.read_delivery_cohort(root_id, messages[3].seq)
 
@@ -480,11 +477,11 @@ def test_candidate_decode_releases_writer_and_discards_a_losing_batch(tmp_path, 
             races.append(True)
             # This is a real second SQL writer, authorized while the outer
             # operation decodes. Its committed checkpoint must win intact.
-            assert not index.maintain(bootstrap_new=True, max_rows=1)
+            assert not index.maintain(start=FirstBuild(), max_rows=1)
         return replay(source, *args, **kwargs)
 
     monkeypatch.setattr(WakeCandidateIndex, "_replay_prefix", classmethod(another_writer))
-    assert not index.maintain(rebuild=True)
+    assert not index.maintain(start=RebuildIndex())
     assert index._verified_checkpoint(root_id).last_seq == messages[0].seq
     first = index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
                        after_seq=0, required_through_seq=messages[0].seq)
@@ -509,7 +506,7 @@ def test_maintenance_replays_its_captured_cut_not_a_later_partial_append(tmp_pat
         return replay(source, *args, **kwargs)
 
     monkeypatch.setattr(WakeCandidateIndex, "_replay_prefix", classmethod(interrupted_append))
-    assert index.maintain(rebuild=True)
+    assert index.maintain(start=RebuildIndex())
     assert index._verified_checkpoint(root_id).byte_offset == cuts[0]
     assert [entry.source_seq for entry in index.page(
         root_id=root_id, recipient_lookup=lookup["Alice"], after_seq=0,
@@ -521,7 +518,7 @@ def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_p
     comms, root_id, lookup = _private(tmp_path)
     message = comms.messaging.send_initial_cohort("sender", "Alice", "first")
     index = WakeCandidateIndex(comms.bus.log)
-    assert index.maintain(rebuild=True)
+    assert index.maintain(start=RebuildIndex())
     source = comms.bus.log.path
     with source.open("ab") as output:
         output.write(b'{"partial":')
@@ -550,9 +547,9 @@ def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_p
             after_seq=0,
             required_through_seq=message.seq,
         )
-    for rebuild in (False, True):
+    for start in (ResumeIndex(), RebuildIndex()):
         with pytest.raises(ProjectionUnavailableError):
-            index.maintain(rebuild=rebuild)
+            index.maintain(start=start)
     # Rebuilding a disposable index cannot certify a replaced canonical bus.
 
 
