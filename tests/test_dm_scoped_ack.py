@@ -5,6 +5,7 @@ from agent_comms.registration import Registration
 
 import os
 import stat
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,7 +14,7 @@ import pytest
 from agent_comms import locked_store
 from agent_comms.comms import wire
 from agent_comms.read_basis import DMDisplayBasis, EmptyDMDisplayBasis
-from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged
+from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged, TranscriptChanged
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.message_page import PageBounds
@@ -137,6 +138,37 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
                 expected_display_basis=page.display_basis,
             )
     assert first.bus.pending_count(first.messaging.user_identity(str(first.root)).name, "peer") == 1
+
+
+def test_painted_bound_uses_existing_transcript_refresh_error(tmp_path: Path):
+    comms = wire(tmp_path)
+    comms.registry.declare(_thread(tmp_path, "peer"))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    comms.messaging.send("peer", viewer, "painted")
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    with pytest.raises(TranscriptChanged):
+        comms.views.mark_dm_view_read(
+            "peer", worktree=str(tmp_path), through=page.newest_seq + 1,
+            expected_display_basis=page.display_basis,
+        )
+    assert comms.bus.pending_count(viewer, "peer") == 1
+
+
+def test_root_replaced_after_fetch_rejects_mark_without_reading_new_root(tmp_path: Path):
+    comms = wire(tmp_path)
+    comms.registry.declare(_thread(tmp_path, "peer"))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    comms.messaging.send("peer", viewer, "painted in original root")
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    previous = tmp_path.with_name(tmp_path.name + "-previous")
+    tmp_path.rename(previous)
+    shutil.copytree(previous, tmp_path, symlinks=True)
+    with pytest.raises(DMScopeChanged, match="root was replaced"):
+        comms.views.mark_dm_view_read(
+            "peer", worktree=str(tmp_path), through=page.newest_seq,
+            expected_display_basis=page.display_basis,
+        )
+    assert comms.bus.pending_count(viewer, "peer") == 1
 
 
 def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path):
