@@ -74,14 +74,6 @@ class OwnerAnnouncement(OwnerLine):
 class ControllerTokenText(Token256Text):
     """The owner issues each attachment a 32-byte hex controller token."""
 
-    @classmethod
-    def from_text(cls, value: str) -> str:
-        try:
-            return super().from_text(value)
-        except MalformedRecord as error:
-            message = "Owner subscription ready requires a valid controllerToken."
-            raise MalformedRecord(message) from error
-
 
 @dataclass(frozen=True, kw_only=True)
 class OwnerReady(OwnerLine):

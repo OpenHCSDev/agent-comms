@@ -76,9 +76,9 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
         ({}, "Missing required fields for OwnerReady: controllerToken"),
         ({"controllerToken": None}, "Expected <class 'str'>, received NoneType"),
         ({"controllerToken": 42}, "Expected <class 'str'>, received int"),
-        ({"controllerToken": ""}, "ready requires a valid controllerToken"),
-        ({"controllerToken": "a" * 63}, "ready requires a valid controllerToken"),
-        ({"controllerToken": "a" * 65}, "ready requires a valid controllerToken"),
+        ({"controllerToken": ""}, "ControllerTokenText is spelled"),
+        ({"controllerToken": "a" * 63}, "ControllerTokenText is spelled"),
+        ({"controllerToken": "a" * 65}, "ControllerTokenText is spelled"),
     ],
     ids=["missing", "null", "number", "empty", "short", "long"],
 )
