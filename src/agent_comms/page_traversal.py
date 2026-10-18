@@ -12,7 +12,7 @@ from .field_codec import FieldCodec, SubclassUnion
 
 if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
-    from .message_page import MessagePage, MessagePageRow, PageWindow
+    from .message_page import MessagePage, PageWindow
     from .read_basis import MessageDisplayScope
 
 

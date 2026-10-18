@@ -14,7 +14,7 @@ from .page_traversal import NewerTraversal, OlderTraversal, PageCursor, PageTrav
 from .private_path import FileRevision
 from .read_basis import (
     ChannelDisplayScope, DisplaySelection, DMDisplayBasis,
-    HistoricalSelection, MessageDisplayScope, NoDisplaySelection,
+    MessageDisplayScope, NoDisplaySelection,
 )
 from .wire_log import CurrentSnapshotOpening, WireSnapshot
 
@@ -65,13 +65,10 @@ class MessagePage:
         if self.historical_display is not None:
             return self.historical_display.selection(self.history_revision)
         if self.display_basis is not None:
-            selected = self.display_basis.selection(self.history_revision)
-        elif self.display_scope is not None:
-            selected = self.display_scope.selection(self.history_revision)
-        else:
-            return NoDisplaySelection()
-        return (HistoricalSelection(viewer=selected.viewer, history_revision=self.history_revision)
-                if self.history_revision is not None else selected)
+            return self.display_basis.selection(self.history_revision)
+        if self.display_scope is not None:
+            return self.display_scope.selection(self.history_revision)
+        return NoDisplaySelection()
 
     @property
     def oldest_cursor(self) -> PageCursor | None:
@@ -117,7 +114,7 @@ class PageWindow:
         return MessagePage(self.messages, has_older, has_newer, bytes_read=self.bytes)
 
     def take(self, traversal: PageTraversal, row: MessagePageRow) -> bool:
-        if not self.bounds.admits(len(self.rows) + 1, self.bytes + row.size):
+        if not self.bounds.fits(len(self.rows) + 1, self.bytes + row.size):
             return False
         traversal.append(self.rows, row)
         self.bytes += row.size
@@ -138,7 +135,7 @@ class PageBounds:
         if self.max_bytes <= 0:
             raise ValueError("History page byte budget must be positive.")
 
-    def admits(self, count: int, size: int) -> bool:
+    def fits(self, count: int, size: int) -> bool:
         return count <= self.limit and (count <= 1 or size <= self.max_bytes)
 
     def after(self, page: MessagePage) -> PageBounds | None:

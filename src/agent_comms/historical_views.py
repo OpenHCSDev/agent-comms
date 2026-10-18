@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
@@ -510,15 +511,13 @@ class HistoryArchive(RootFile):
     def integrated_page(
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
     ) -> MessagePage:
-        from collections import deque
-
         page = self._source_page(view, presentation, bounds)
         pages = deque((page,))
         while (following := bounds.after(page)) is not None:
             part = self._source_page(view, presentation, following)
             if part.history_revision != page.history_revision:
                 raise HistoricalSourceChanged("Historical sources changed; reload history")
-            if not bounds.admits(len(page.messages) + len(part.messages),
+            if not bounds.fits(len(page.messages) + len(part.messages),
                                  page.bytes_read + part.bytes_read):
                 break
             bounds.traversal.append(pages, part)
