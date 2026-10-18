@@ -55,6 +55,9 @@ class CallObservation(ABC):  # noqa: B024 - shared rejection; leaves override va
     executing = False
     complete = False
 
+    def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
+        raise SelectedToolDenied("Native tool request/event differs from the declared call")
+
     def announce(self, call: NativeToolCall) -> None:
         raise SelectedToolDenied("Native tool call announcement was repeated or invalid")
 
@@ -75,6 +78,9 @@ class CallObservation(ABC):  # noqa: B024 - shared rejection; leaves override va
 
 
 class AwaitingAnnouncement(CallObservation):
+    def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
+        call.claim_scope = refusal
+
     def announce(self, call: NativeToolCall) -> None:
         call.observation = AnnouncedCall()
 
@@ -114,6 +120,9 @@ class UncertainCall(CallObservation):
 
 
 class CallClaim(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
+    def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
+        raise SelectedToolDenied("Native tool claim was already consumed; cannot replace it")
+
     def expire(self, call: NativeToolCall) -> None:
         """An unstarted waiter cannot change a tool slot already consumed."""
 
@@ -128,6 +137,9 @@ class CallClaim(ABC):  # noqa: B024 - shared rejection; leaves override valid tr
 
 
 class AwaitingClaim(CallClaim):
+    def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
+        call.observation.refuse(call, refusal)
+
     def expire(self, call: NativeToolCall) -> None:
         call.claim_scope = UncertainClaim()
 
@@ -148,6 +160,10 @@ class AuthorizedCall(CallClaim):
 
 
 class UncertainClaim(CallClaim):
+    def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
+        # A later rejection cannot reopen a consumed or uncertain claim.
+        pass
+
     def finish(
         self, call: NativeToolCall, is_error: bool, directory: Path,
         input_id: str, round_number: int,
@@ -178,7 +194,10 @@ class NativeToolCall(ABC):
 
     def correlate(self, candidate: NativeToolCall) -> None:
         if self != candidate:
-            raise SelectedToolDenied("Native tool request/event differs from the declared call")
+            candidate.reject_correlated(self)
+
+    def reject_correlated(self, existing: NativeToolCall) -> None:
+        raise SelectedToolDenied("Native tool request/event differs from the declared call")
 
     def announce(self) -> None:
         self.observation.announce(self)

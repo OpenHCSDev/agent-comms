@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
+from .native_arguments import NativeArguments
 from .native_session_reopen import NativeSessionIdentity
 from .native_pi import NativePiUnavailable, _session_location
 from .private_path import PrivateFileRole
@@ -46,7 +47,7 @@ class SelectedSession:
         return current
 
     def launch_arguments(self, thinking_level: type[ThinkingLevel]) -> tuple[str, ...]:
-        return thinking_level.launch_arguments()
+        return NativeArguments(()).with_thinking(thinking_level).argv
 
     def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
         environment = ThreadLaunch.strip(dict(os.environ))
