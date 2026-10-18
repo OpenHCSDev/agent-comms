@@ -70,6 +70,10 @@ class DMScopeChanged(StaleRevision):
     """A DM read belongs to another root, peer or incarnation."""
 
 
+class HistoricalSourceChanged(StaleRevision):
+    """The attached archive no longer contains the displayed historical source."""
+
+
 class StaleFence(CoordinationError):  # noqa: N818 - nominal outcome name
     """The owner, generation, pointer, token or attempt is no longer current."""
 

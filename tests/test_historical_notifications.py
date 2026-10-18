@@ -14,6 +14,7 @@ from agent_comms.assignment_states import (
     EngagedAssignment,
 )
 from agent_comms.comms import Comms
+from agent_comms.coordination_errors import DMScopeChanged, HistoricalSourceChanged
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 from agent_comms.read_basis import HistoricalDisplay
 from agent_comms.read_ledger import ReadLedger
@@ -60,7 +61,7 @@ def test_recorded_notifications_do_not_decode_registry_or_acquire_activity(archi
     assert not (Path(source.root) / "coordination.sqlite3").exists()
     assert all(path.read_bytes() == original for path, original in preserved.items())
     live.bus.history.path.write_text("[]")
-    with pytest.raises(ValueError, match="detached"), live.bus.history.read_sources() as sources:
+    with pytest.raises(HistoricalSourceChanged, match="detached"), live.bus.history.read_sources() as sources:
         source.notification_references(sources, (messages[0].reference,))
 
 
@@ -81,7 +82,7 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     ledger = ReadLedger.at(source.root)
     document = ledger.read()
     reused = replace(basis, viewer_created_at=111.0)
-    with pytest.raises(ValueError, match="viewer changed"):
+    with pytest.raises(DMScopeChanged, match="viewer changed"):
         HistoricalDisplay(source, reused).acknowledge(live.bus.history, live.registry)
     assert ledger.read() == document
     newer_namespace = replace(source.provenance, threads={
