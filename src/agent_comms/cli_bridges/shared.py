@@ -698,24 +698,26 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
         await asyncio.to_thread(output.transcript.end_turn)
         # Each CLI reports its own initial state. Disk writes never stop the
         # event reader from receiving a newer whole draft of the same item.
-        queue: asyncio.Queue[TranscriptUpdate | None] = asyncio.Queue()
+        queue: asyncio.Queue[TranscriptUpdate] = asyncio.Queue()
 
         async def read() -> None:
-            async for update in self.transcript():
-                await update.observed(self)
-                queue.put_nowait(update)
-            queue.put_nowait(None)
+            try:
+                async for update in self.transcript():
+                    await update.observed(self)
+                    queue.put_nowait(update)
+            finally:
+                queue.shutdown()
 
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(read())
-            ended = False
-            while not ended:
-                pending = [await queue.get()]
+            while True:
+                try:
+                    pending = [await queue.get()]
+                except asyncio.QueueShutDown:
+                    break
                 while not queue.empty():
                     pending.append(queue.get_nowait())
-                ended = pending[-1] is None
-                updates = pending[:-1] if ended else pending
-                await asyncio.to_thread(output.publish_batch, updates)
+                await asyncio.to_thread(output.publish_batch, pending)
 
 class MonitorFrame(TaggedWire, ABC):
     """Our line protocol inside the harness's task-notification envelope."""
