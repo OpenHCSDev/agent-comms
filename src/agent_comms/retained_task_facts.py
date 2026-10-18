@@ -18,7 +18,6 @@ from .goals import Goal
 from .input_attempt import StoredInput
 from .messages import Message
 from .message_reference import MessageReference
-from .thread_identity import ThreadRole
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
@@ -56,8 +55,9 @@ class UserSourceTaskFact(ExactTaskFact):
         return (self.source,)
 
     def __post_init__(self) -> None:
-        if self.source.sender_role is not ThreadRole.USER:
-            raise RelationViolationError("A peer message is not an original user source")
+        self.source.sender_role.require_user(
+            RelationViolationError("A peer message is not an original user source")
+        )
 
 
 @dataclass(frozen=True)

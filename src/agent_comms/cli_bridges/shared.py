@@ -40,7 +40,6 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
-from agent_comms.thread_identity import ThreadRole
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent
@@ -701,7 +700,7 @@ class IncomingFrame(ABC):
 
     @property
     def text(self) -> str:
-        origin = 'human' if self.message.sender_role is ThreadRole.USER else 'external agent'
+        origin = self.message.sender_role.origin_label
         return (f'Comms in · {self.message.sender} ({origin})\n'
                 f'{self.message.body}\nMessage ID: {self.message.message_id}')
 
