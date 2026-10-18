@@ -341,7 +341,7 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
             required_through_seq=messages[2].seq,
         )
     with pytest.raises(
-        RelationViolationError, match="Private bus checkpoint (root/inode/size|prefix tail) changed"
+        RelationViolationError, match="Private bus checkpoint (root/size|prefix tail) changed"
     ):
         comms.bus.log.read_delivery_cohort(root_id, messages[2].seq)
 
@@ -383,7 +383,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
             required_through_seq=messages[2].seq,
         )
     with pytest.raises(
-        RelationViolationError, match="Private bus checkpoint (root/inode/size|prefix tail) changed"
+        RelationViolationError, match="Private bus checkpoint (root/size|prefix tail) changed"
     ):
         comms.bus.log.read_delivery_cohort(root_id, messages[2].seq)
 
