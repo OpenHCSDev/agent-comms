@@ -38,10 +38,10 @@ def test_original_empty_cut_cannot_clear_a_later_index(tmp_path):
         with observer.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
             assert observer.bus.pending_counts_opened(pending_source, pending_basis) == {'sender': 1}
         with BusRouteCounts(comms.bus.log.path) as index:
-            before = RouteSourceRow.select(index.connection)
+            before = RouteSourceRow.current(index.connection)
         assert comms.bus.pending_counts_opened(source, basis) == {}
         with BusRouteCounts(comms.bus.log.path) as index:
-            assert RouteSourceRow.select(index.connection) == before
+            assert RouteSourceRow.current(index.connection) == before
         assert [row.seq for row in comms.bus.inbox(viewer)] == [message.seq]
 
 

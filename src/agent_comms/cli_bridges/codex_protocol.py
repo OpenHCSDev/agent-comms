@@ -18,6 +18,7 @@ from pydantic import (
 )
 
 from agent_comms.activity import ActivityState
+from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.tool_results import ToolDiff
@@ -37,6 +38,8 @@ from .shared import (
     FinishedTurn,
     HiddenItem,
     ParagraphDraft,
+    PageItem,
+    PublishedPage,
     StartedItem,
     TextDraft,
     ToolCall,
@@ -741,6 +744,16 @@ class ItemsPage(WireModel):
     data: list[ItemEntry]
     nextCursor: str | None = None
 
+    def publication(self) -> PublishedPage:
+        # Codex's nullable wire value is decoded here; no reader interprets it.
+        match self.nextCursor:
+            case str() as cursor:
+                earlier = EarlierPage(cursor)
+            case None:
+                earlier = NoEarlierPage()
+        return PublishedPage(tuple(PageItem(entry.turnId, entry.item.id, entry.publication())
+                                   for entry in reversed(self.data) if entry.completed), earlier)
+
 
 class TranscriptNotification(WireModel, ABC, metaclass=RegisteredWireMeta):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
@@ -749,7 +762,7 @@ class TranscriptNotification(WireModel, ABC, metaclass=RegisteredWireMeta):
     threadId: str
 
     @abstractmethod
-    def apply(self, stream: ItemStream) -> TranscriptUpdate | None: ...
+    def apply(self, stream: ItemStream) -> TranscriptUpdate: ...
 
 
 class TurnHeader(WireModel):
@@ -825,13 +838,13 @@ class ItemStream:
     def __init__(self, thread: str):
         self.thread = thread
 
-    def receive(self, notification: RpcNotification) -> TranscriptUpdate | None:
+    def receive(self, notification: RpcNotification) -> tuple[TranscriptUpdate, ...]:
         declarations = TranscriptNotification.__registry_config__.registry_dict
         if notification.method not in declarations:
             # Usage, account, raw/private reasoning and other control
             # events are not transcript content. Known methods declare a type.
-            return None
+            return ()
         event = declarations[notification.method].model_validate(notification.params)
         if event.threadId != self.thread:
-            return None
-        return event.apply(self)
+            return ()
+        return (event.apply(self),)
