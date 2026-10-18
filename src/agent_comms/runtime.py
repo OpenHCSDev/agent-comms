@@ -44,6 +44,10 @@ ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
 _LOG = logging.getLogger(__name__)
 
 
+class SubscriberClosed(ConnectionError):
+    """The attached reader left; the normal end of a subscription, not a failed request."""
+
+
 class SocketClient:
     def __init__(self, writer: asyncio.StreamWriter):
         self.writer = writer
@@ -60,7 +64,7 @@ class SocketClient:
     async def send(self, payload: dict[str, Any]) -> None:
         """Bound this subscriber's output without borrowing the owner turn."""
         if self.writer.is_closing():
-            raise ConnectionError("Runtime subscriber is closed")
+            raise SubscriberClosed("Runtime subscriber is closed")
         record = (json.dumps(payload) + "\n").encode()
         transport = self.writer.transport
         low_water, high_water = transport.get_write_buffer_limits()
@@ -73,7 +77,9 @@ class SocketClient:
         if transport.get_write_buffer_size() > high_water:
             transport.abort()
             self.disconnected()
-            raise ConnectionError("Runtime subscriber stopped reading; attach to canonical history again")
+            raise SubscriberClosed(
+                "Runtime subscriber stopped reading; attach to canonical history again"
+            )
 
     async def permission(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         if len(self.pending) >= 4:
@@ -250,15 +256,16 @@ class RuntimeServer:
             context = await request.bind(self, reader, client)
             session_id = context.session_id
             await request.apply(context)
-        except (Exception, asyncio.CancelledError) as error:
-            if not isinstance(error, asyncio.CancelledError):
-                # The original owner launch retains stderr. Preserve the chain
-                # before the socket response deliberately reduces it to text.
-                _LOG.exception("Runtime request failed (session=%s)", session_id)
-                try:
-                    await client.send(_owner_error(error))
-                except (ConnectionError, OSError):
-                    pass
+        except SubscriberClosed:
+            pass
+        except asyncio.CancelledError:
+            pass
+        except Exception as error:
+            # The original owner launch retains stderr. Preserve the chain
+            # before the socket response deliberately reduces it to text.
+            _LOG.exception("Runtime request failed (session=%s)", session_id)
+            with suppress(SubscriberClosed):
+                await client.send(_owner_error(error))
         finally:
             if session_id is not None:
                 self.clients.get(session_id, set()).discard(client)
