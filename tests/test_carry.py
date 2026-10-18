@@ -3,8 +3,10 @@
 import importlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -17,7 +19,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
-from tools.upgrade_bus import bus_files, carried
+from tools.upgrade_bus import UpgradeRefused, bus_files, carried
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -159,6 +161,24 @@ def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
     changed = {"src/agent_comms/record.py"}
     assert UncarriedRecordFormat.compare(tmp_path, base, head, changed, "src/agent_comms") == (
         {"UncarriedRecordFormat": 0}, {"UncarriedRecordFormat": uncarried})
+
+
+def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
+    store = tmp_path / "todos.sqlite3"
+    with closing(sqlite3.connect(store)) as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("CREATE TABLE todo (id)")
+        db.execute("INSERT INTO todo VALUES (1)")
+        db.commit()
+    before = bus_files(tmp_path)
+    with closing(sqlite3.connect(store, autocommit=True)) as opened:
+        opened.execute("BEGIN IMMEDIATE")
+        opened.execute("ROLLBACK")
+        assert {"todos.sqlite3-wal", "todos.sqlite3-shm"} <= {path.name for path in tmp_path.iterdir()}
+        assert carried(tmp_path, before, [{"rewritten": []}]) == {"identical": 1, "rewritten": 0}
+        opened.execute("UPDATE todo SET id = 2")
+        with pytest.raises(UpgradeRefused, match=r"\['todos.sqlite3'\]"):
+            carried(tmp_path, before, [{"rewritten": []}])
 
 
 def run_step(name: str, root: Path, *flags: str) -> dict:
