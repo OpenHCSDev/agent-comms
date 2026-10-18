@@ -144,7 +144,7 @@ class AlarmVerb(JudgeVerb):
 @dataclass(frozen=True, kw_only=True)
 class VerdictVerb(JudgeVerb, RuledVerb):
     """Every verdict, mine or a fork's, is made after reviewing paper 1's
-    correct-maintenance results. Each member declares the facts its verdict carries as required options."""
+    correct-maintenance results. Each member's required options are the facts its verdict carries."""
     ids: tuple[str, ...] = option("ids", nargs="+", metavar="ID:CODE")
     why: str = option()
     msg: str = option(help="BUSID of my order message to the unit")
@@ -161,7 +161,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     def report(self, todos: tuple[Todo, ...]) -> None: ...
 
     def held_order(self, edit: Edit) -> Todo:
-        """Resolve an edit to the order my cited message names; never record a verdict without that Todo."""
+        """The order Todo my cited message names; no verdict is recorded without it."""
         cited = next((m for m in my_messages(edit['thread']) if m['id'] == self.msg), None)
         if cited is None:
             sys.exit(f'Refused: edit {edit["id"]}: {self.msg} is not a message from {ME} to {edit["thread"]}')
@@ -171,7 +171,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
             candidates = tuple(todo for todo in candidates if todo.id == found.group())
         if len(candidates) != 1:
             sys.exit(f'Refused: edit {edit["id"]} by {edit["thread"]} needs one open order Todo; '
-                     f'found {[todo.id for todo in candidates]}; cite the message that names its P-number')
+                     f'found {[todo.id for todo in candidates]}; cite a message naming its P-number')
         return candidates[0]
 
     def run(self) -> None:
@@ -218,11 +218,11 @@ class OkVerb(VerdictVerb):
             if added := order.forwarders_added(diff, after):
                 sys.exit(f'Refused: edit {edit["id"]} adds forwarders {added[:5]}; it goes back with judge back, never ok')
             if (extra := branches_added(edit)) > 0:
-                self.own_branches(edit, extra)
+                self.own_branches(f'Refused: edit {edit["id"]} adds {extra} branch(es)')
 
-    def own_branches(self, edit: Edit, extra: int) -> None:
-        sys.exit(f'Refused: edit {edit["id"]} adds {extra} branch(es); send it back, or judge it with ok-unowned '
-                 'and --no-owner proving no type could own them')
+    def own_branches(self, refusal: str) -> None:
+        sys.exit(refusal + '; send it back, or judge it ok-unowned with --no-owner'
+                 ' proving no type could own them')
 
     def report(self, todos: tuple[Todo, ...]) -> None:
         pass
@@ -233,11 +233,11 @@ class OkUnownedVerb(OkVerb, declared_name="ok-unowned"):
     help = "the edit serves the order and its added branches have no type that could own them"
     no_owner: str = option(help="12+ words with because and file:line")
 
-    def own_branches(self, edit: Edit, extra: int) -> None:
+    def own_branches(self, refusal: str) -> None:
         if not (len(self.no_owner.split()) >= 12 and re.search(r'\bbecause\b', self.no_owner)
                 and re.search(r'\S+\.py:\d+', self.no_owner)):
-            sys.exit(f'Refused: edit {edit["id"]} adds {extra} branch(es); --no-owner needs 12+ words, '
-                     'because and file:line proving no type could own them')
+            sys.exit(refusal + '; --no-owner needs 12+ words, because and file:line'
+                     ' proving no type could own them')
 
 
 @dataclass(frozen=True, kw_only=True)
