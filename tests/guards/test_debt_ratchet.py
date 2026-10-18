@@ -172,6 +172,9 @@ class Consumer(MroDispatch):
 '''
     base = repo.commit({"policy.py": source})
     growing = source.replace('@cases(DomainRecord)', '@cases(list, str)')
+    assert BuiltinHandlerTypeSwitch.count(source.encode(), "policy.py") == 1
+    assert BuiltinHandlerTypeSwitch.count(growing.encode(), "policy.py") == 3
+    assert BuiltinHandlerTypeSwitch.count(b"not valid Python", "field_codec.py") == 0
     head = repo.commit({"policy.py": growing})
     status, report = repo.compare(base, head)
     identity = f"BuiltinHandlerTypeSwitch:{repo.root}/policy.py"
