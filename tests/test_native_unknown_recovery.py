@@ -207,27 +207,39 @@ def test_abandon_refuses_live_native_process(released_unknown):
             child.wait(timeout=5)
 
 
-@pytest.mark.parametrize(
-    "damage", ["missing", "wrong-pid", "wrong-start-time", "wrong-identity", "wrong-epoch"]
-)
+def delete_release(db, original):
+    OwnerReleaseEvidence.delete(db, name=original.name)
+
+
+def change_release_pid(db, original):
+    process = original.require_process()
+    OwnerReleaseEvidence.update(db, where="name=?", parameters=(original.name,),
+                                process_identity=replace(process, pid=process.pid + 1))
+
+
+def change_release_start(db, original):
+    process = original.require_process()
+    OwnerReleaseEvidence.update(db, where="name=?", parameters=(original.name,),
+                                process_identity=replace(process, start_time=process.start_time + 1))
+
+
+def change_release_birth(db, original):
+    OwnerReleaseEvidence.update(db, where="name=?", parameters=(original.name,), created_at=original.created_at + 1)
+
+
+def invalidate_release_scope(db, original):
+    OwnerReleaseEvidence.update(db, where="name=?", parameters=(original.name,), after=original.before)
+
+
+@pytest.mark.parametrize("damage", [delete_release, change_release_pid, change_release_start,
+                                    change_release_birth, invalidate_release_scope])
 def test_abandon_requires_real_release(released_unknown, damage):
     process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     leave(process, exit_allowed)
     releases = Comms(root).owners.releases
     original = releases.get("beta")
     with releases.writing() as db:
-        if damage == "missing":
-            OwnerReleaseEvidence.delete(db, name="beta")
-        else:
-            if damage == "wrong-pid":
-                changes = {"process_identity": replace(original.require_process(), pid=original.require_process().pid + 1)}
-            elif damage == "wrong-start-time":
-                changes = {"process_identity": replace(original.require_process(), start_time=original.require_process().start_time + 1)}
-            elif damage == "wrong-identity":
-                changes = {"created_at": original.created_at + 1}
-            else:
-                changes = {"after": original.before}
-            OwnerReleaseEvidence.update(db, where="name=?", parameters=("beta",), **changes)
+        damage(db, original)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RecoveryBlocked):
             RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
