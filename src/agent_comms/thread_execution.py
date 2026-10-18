@@ -99,14 +99,9 @@ class NativeThreadExecution(ThreadExecution):
     def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
         from .thread_presentation import LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
 
-        try:
-            snapshot.require_active(thread.name)
-            process = thread.require_process()
-        except RelationViolationError:
+        if not snapshot.statuses[thread.name].active or not thread.process_alive:
             return UnavailableThreadOwnerBinding()
-        if not process.alive():
-            return UnavailableThreadOwnerBinding()
-        return LiveThreadOwnerBinding(snapshot.owner_identity(thread.name), process)
+        return LiveThreadOwnerBinding(snapshot.owner_identity(thread.name), thread.require_process())
 
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
