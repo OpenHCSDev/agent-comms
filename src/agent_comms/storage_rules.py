@@ -106,6 +106,12 @@ class StorageRule:
             self.deny('writes inside .artifacts are forbidden')
         if path.is_relative_to(self.scratch_base) and not path.is_relative_to(thread.storage_roots.scratch):
             self.deny(f'foreign scratch destination {path}; registered scratch is {thread.storage_roots.scratch}')
+        base = self.checkout_base.resolve()
+        if path.is_relative_to(base) and path != base:
+            checkout = base / path.relative_to(base).parts[0]
+            if not (checkout.name == thread.name or checkout.name.endswith('-check')
+                    or self.owns_checkout(thread, checkout)):
+                self.deny(f'{checkout} is not {thread.name}\'s checkout nor a shared <repo>-check')
 
     def render(self, roots):
         return (f'StorageRule: scratch {roots.scratch}; {self.unit_cap_gib:g} GiB combined cap; '
@@ -257,7 +263,14 @@ class RemovesCheckout(ShellProgram):
         return (RemoveCheckoutStorageEffect(physical_path(paths[0], cwd)),) if paths else ()
 
 
-class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout):
+class WritesWorkingTree(ShellProgram):
+    verbs = (('switch',), ('checkout',), ('commit',), ('merge',), ('reset',), ('stash',))
+
+    def decode(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
+        return (WriteStorageEffect(cwd),) if self.matches(args, self.verbs) else ()
+
+
+class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout, WritesWorkingTree):
     names = frozenset({'git'})
     forbidden = (('clone',), ('worktree', 'move'))
     reason = 'git clone and git worktree move are forbidden; add and remove worktrees instead'

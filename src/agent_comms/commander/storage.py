@@ -1,12 +1,8 @@
-"""Storage rules for fleet units, one owner for every check: units never clean up after themselves.
+"""The storage rule as the commander states it to fleet units, and the disk's free space.
 
-Each unit owns at most MAX_WORKTREES checkouts named <worktrees>/<unit> or <worktrees>/<unit>--<suffix>, and one
-scratch directory <scratch>/<unit>/. Tests run on the shared virtualenv of the <repo>-check checkout with
-PYTHONPATH=src; no per-worktree venv, no .artifacts, no clone. Below FLOOR_GB free on the configured disk nothing
-that allocates disk may run. order (send/done/overdue) enforces through this module; tool_watch through
-Core's StorageRule.
+Core's StorageRule owns every check: which checkouts a unit owns, its quota and the allocation floor.
 """
-import os, re, shutil, subprocess
+import shutil
 
 from .config import CommanderConfig
 
@@ -24,39 +20,6 @@ RULE = (f'Storage (enforced, automatic strike): your checkouts are {WT}/<you>--P
         f'{WT}/<repo>-check/.venv; never create a venv, never uv sync, never write .artifacts, never git clone. '
         f'Below {FLOOR_GB} GB free on {CONFIG.disk}, no worktree, venv, build, install or recording.')
 
-ALLOCATES = re.compile(r'\bgit\s+worktree\s+add\b|\bgit\s+clone\b|\buv\s+(venv|sync)\b|-m\s+venv\b|\bvirtualenv\b|'
-                       r'build_runtime\.py|\bpip\s+install\b|\buv\s+pip\s+install\b|py-spy\s+record|\bffmpeg\b|\brecordmydesktop\b')
-
 
 def free_gb() -> float:
     return shutil.disk_usage(CONFIG.disk).free / 2**30
-
-
-def owns(unit: str, name: str) -> bool:
-    return name == unit or name.startswith(unit + '--')
-
-
-def unit_paths(unit: str) -> tuple[list[str], list[str]]:
-    trees = [f'{WT}/{n}' for n in os.listdir(WT) if owns(unit, n) and os.path.isdir(f'{WT}/{n}')]
-    scratch = [f'{SCRATCH}/{n}' for n in os.listdir(SCRATCH) if owns(unit, n)]
-    return trees, scratch
-
-
-def usage_gb(unit: str) -> tuple[int, float]:
-    trees, scratch = unit_paths(unit)
-    paths = trees + scratch
-    if not paths:
-        return 0, 0.0
-    out = subprocess.run(['du', '-sbc', *paths], capture_output=True, text=True).stdout.splitlines()
-    total = int(out[-1].split()[0]) if out else 0
-    return len(trees), total / 2**30
-
-
-def over_quota(unit: str) -> str | None:
-    trees, gb = usage_gb(unit)
-    extra = [t for t in unit_paths(unit)[0] if os.path.basename(t) != unit]  # WT/<unit> is the worker's home checkout
-    if len(extra) > MAX_WORKTREES:
-        return f'{unit} holds {len(extra)} order checkouts in {WT} besides its home checkout (max {MAX_WORKTREES})'
-    if gb > UNIT_CAP_GB:
-        return f'{unit} uses {gb:.1f} GB of checkouts and scratch (cap {UNIT_CAP_GB} GB)'
-    return None

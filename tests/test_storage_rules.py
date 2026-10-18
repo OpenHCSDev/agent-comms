@@ -103,7 +103,8 @@ def test_allocation_floor_is_checked_before_usage_walk(tmp_path, monkeypatch):
         AllocateStorageEffect().check(rule, thread)
 
 
-@pytest.mark.parametrize('command', ['git clone remote target', 'python -m venv env', 'uv sync'])
+@pytest.mark.parametrize('command', ['git clone remote target', 'python -m venv env', 'uv sync',
+                                     'git -C ~/wt/other--P3 reset --hard'])
 def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
     rule = StorageRule()
     thread = Thread('worker', frozenset(), str(tmp_path), storage_roots=rule.initial_roots('worker'))
@@ -154,6 +155,7 @@ def test_inherited_decoder_is_collected_once_in_a_diamond(tmp_path, monkeypatch)
     ('git -C repo worktree add --detach extra origin/main', 'CheckoutStorageEffect'),
     ('git worktree remove --force extra', 'RemoveCheckoutStorageEffect'),
     ('git worktree move extra elsewhere', 'ForbiddenStorageEffect'),
+    ('git -C ../other--P3 reset --hard', 'WriteStorageEffect'),
     ('pip install --help\nmkdir target', 'WriteStorageEffect'),
     ('mkdir -p target', 'WriteStorageEffect'),
     ('cp source target', 'WriteStorageEffect'),

@@ -23,6 +23,7 @@ from ..declared_family import DeclaredFamily
 from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CountCheckResult, OrderCheck
+from ..native_tool_call import SelectedToolDenied
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
 from ..tools import CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoTool
@@ -189,18 +190,17 @@ class Slop:
                 f'{self.by} owns it, and {self.derive} derives it from there, so the copy is deleted.')
 
 
-def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, disk=False, new=None):
+def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
     body = open(body_file).read()
     problems = []
-    # Storage is a hard rule: below the floor no order may ask for work that allocates disk; tool-watch blocks the
-    # allocating calls themselves, so source edits on existing checkouts still go out. --disk passes a cleanup order.
-    if storage.free_gb() < storage.FLOOR_GB and not disk and (asked := storage.ALLOCATES.search(body)):
-        problems.append(f'{CONFIG.disk} has {storage.free_gb():.1f} GB free, under the {storage.FLOOR_GB} GB floor, and the order asks for "{asked.group()}"')
-    if quota := storage.over_quota(unit):
-        problems.append(f'{quota}: it cleans up its own checkouts and scratch before it gets new work')
+    # Below the floor Core's StorageRule denies each allocating tool call, so the order prose is not checked.
+    try:
+        COMMS.registry.storage_rule.require_quota(COMMS.registry.require(unit))
+    except SelectedToolDenied as quota:
+        problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
     Slop.from_order(body)  # calling something slop requires the fact, where it is restated, its owner and the mechanism
     if not clean and (timid := BluntText.refused(body)):  # blunt at all times unless nothing was incompetent
         problems.append(timid)
@@ -299,7 +299,7 @@ def say(units, body_file):
     print(post(units.split(','), body.rstrip()))
 
 
-def problem(text, unit, due, order_file, disk=False):
+def problem(text, unit, due, order_file):
     """A problem is born owned: Core records it with its order in one step, or not at all."""
     body = open(order_file).read()
     if 'Problem: NEW' not in body:
@@ -309,7 +309,7 @@ def problem(text, unit, due, order_file, disk=False):
     pid = f'P{max([int(t.id[1:]) for t in todos() if t.id[1:].isdigit()] + [0]) + 1}'
     open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
     try:
-        send(unit, due, order_file, disk=disk, new=(pid, text))
+        send(unit, due, order_file, new=(pid, text))
     except SystemExit:
         open(order_file, 'w').write(body)
         raise
@@ -391,11 +391,13 @@ def done(pid, sha):
         after = [subprocess.run(['git', '-C', repo, 'show', f'{sha}:{f}'], capture_output=True, text=True).stdout for f in changed]
         if added := forwarders_added(diff, after):
             sys.exit(f'Refused: {sha} adds forwarders {added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
-    trees, _ = storage.unit_paths(unit)
-    if left := [t for t in trees if pid.lower() in t.lower()]:
+    thread = COMMS.registry.require(unit)
+    if left := [str(t) for t in COMMS.registry.storage_rule.checkouts_of(thread) if pid.lower() in t.name.lower()]:
         sys.exit(f'Refused: {unit} still has the checkout {left} for this order; storage rule: it removes it before the order counts as done.')
-    if quota := storage.over_quota(unit):
-        sys.exit(f'Refused: {quota}; storage rule: it cleans up before the order counts as done.')
+    try:
+        COMMS.registry.storage_rule.require_quota(thread)
+    except SelectedToolDenied as quota:
+        sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     call(CommsOrderDoneTool(problem=pid, delivery=OperationDelivery() if operation else CommitDelivery(commit=sha)))
     delivered = COMMS.goals.todos.get(pid).order.delivery.at
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
@@ -507,9 +509,14 @@ def overdue():
             checked = time.time()
             if storage.free_gb() < storage.CLEANUP_GB:
                 print(f'DISK LOW: {CONFIG.disk} has {storage.free_gb():.1f} GB free (cleanup due under {storage.CLEANUP_GB} GB) -> put a cleanup owner on it now', flush=True)
-            heavy = [q for u in sorted({t.assignment.owner for t in open_todos()}) if (q := storage.over_quota(u))]
+            heavy = []
+            for unit in sorted({t.assignment.owner for t in open_todos()}):
+                try:
+                    COMMS.registry.storage_rule.require_quota(COMMS.registry.require(unit))
+                except SelectedToolDenied as quota:
+                    heavy.append(f'{unit}: {quota}')
             if heavy:
-                print('VIOLATION storage quota: ' + '; '.join(heavy) + ' -> order the cleanup with --disk', flush=True)
+                print('VIOLATION storage quota: ' + '; '.join(heavy) + ' -> order the cleanup', flush=True)
         if missing := first_calls():
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
                   flush=True)
@@ -616,11 +623,10 @@ class SendVerb(OrderVerb, LoadedVerb):
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     mechanical: bool = option("--mechanical", default=False)
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
-    disk: bool = option("--disk", default=False, help="a cleanup order below the disk floor")
 
     def run(self) -> None:
         send(self.unit, self.due, self.body_file, clean=self.clean, mechanical=self.mechanical,
-             reassign=self.reassign, disk=self.disk)
+             reassign=self.reassign)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -661,10 +667,9 @@ class ProblemVerb(OrderVerb, LoadedVerb):
     to: str = option("--to")
     due: str = option("--due", help="HH:MM local time")
     order: str = option("--order", help="the order body file")
-    disk: bool = option("--disk", default=False)
 
     def run(self) -> None:
-        problem(self.text, self.to, self.due, self.order, disk=self.disk)
+        problem(self.text, self.to, self.due, self.order)
 
 
 @dataclass(frozen=True, kw_only=True)
