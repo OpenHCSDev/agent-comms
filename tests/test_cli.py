@@ -37,11 +37,21 @@ def cli(capsys):
 
 
 class TestCliSuccess:
-    def test_tool_catalog_and_generic_invocation(self, cli, tmp_path):
+    def test_tool_catalog_and_generic_invocation(self, cli, tmp_path, monkeypatch):
+        from agent_comms.pi_vocabulary import ServiceTier
+
+        monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
         code, out = cli(tmp_path, "tools")
         assert code == 0
+        assert "service_tier" not in out
         assert "comms_archive" in {tool["name"] for tool in out["tools"]}
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
+        for tier in ServiceTier:
+            cli(tmp_path, "configure", "--name", "a", "--service-tier", tier.value)
+            code, catalog = cli(tmp_path, "tools")
+            code, detail = cli(tmp_path, "thread", "--name", "a", "--no-pending")
+            assert code == 0 and catalog["service_tier"] == detail["service_tier"] == tier.value
         code, out = cli(
             tmp_path,
             "tool",
