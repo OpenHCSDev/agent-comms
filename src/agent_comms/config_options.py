@@ -8,7 +8,7 @@ from dataclasses import replace
 from abc import abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from functools import cached_property, partial
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
@@ -228,22 +228,22 @@ class ConfigOptions:
         agent_bin: str,
         agent_args: NativeArguments,
         configuration: RestartEnvironment,
+        package: VerifiedNativePackage,
     ):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.configuration = configuration
+        self.package = package
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
 
     @classmethod
     def configured(cls) -> ConfigOptions:
         """Catalogs of the native binary, arguments and environment this process is configured with."""
-        return cls(NativeArguments.configured_binary(), NativeArguments.configured(),
-                   RestartEnvironment.inherit(os.environ))
-
-    @cached_property
-    def package(self) -> VerifiedNativePackage:
-        return NativePiRpcLaunch.package_for_command(
-            self.agent_bin, LaunchRuntime.running(), self.configuration.root,
+        command = NativeArguments.configured_binary()
+        configuration = RestartEnvironment.inherit(os.environ)
+        package = NativePiRpcLaunch.package_for_command(
+            command, LaunchRuntime.running(), configuration.root,
         )
+        return cls(command, NativeArguments.configured(), configuration, package)
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
@@ -282,6 +282,7 @@ class SessionConfigOptions(ConfigOptions):
             agent_bin,
             agent_args,
             replace(RestartEnvironment.inherit(os.environ), root=str(comms.root)),
+            comms.owners.require_private_launch().native_package,
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
@@ -289,10 +290,6 @@ class SessionConfigOptions(ConfigOptions):
         # The stored settings each session's owner last saw, to notice a change.
         # The model and thinking level each running turn currently uses.
         self.settings_in_use: dict[str, UseSettings] = {}
-
-    @property
-    def package(self) -> VerifiedNativePackage:
-        return self.comms.owners.require_private_launch().native_package
 
     @asynccontextmanager
     async def session_options(
