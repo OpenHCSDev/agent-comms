@@ -18,7 +18,7 @@ from .coordination_errors import StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_route_counts import OpenedRouteCounts
-from .bus_display_index import BusDisplayIndex, DisplayMetricScope
+from .bus_display_index import BusDisplayIndex
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .display_order import ChannelSort, NameChannelSort
@@ -535,10 +535,9 @@ class BusPresentation:
         membership. None is supplied independently by the metrics caller.
         The index reads the captured complete-line cut; read and write errors propagate.
         """
-        semantics = DisplayMetricScope(selection.scopes, selection.viewer_names)
-        snapshot = self.display_index(selection.require_viewer()).snapshot(source, semantics)
+        snapshot = self.display_index(selection.require_viewer()).snapshot(source, selection.scopes)
         unread = source.query_page_index(lambda page: page.display_unread(
-            semantics, selection.seen, source.complete_prefix.boundary))
+            selection.scopes, selection.viewer_names, selection.seen, source.complete_prefix.boundary))
         return snapshot.activity, unread
 
 

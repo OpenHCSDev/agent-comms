@@ -33,13 +33,13 @@ from agent_comms.ui_model.unread import IndexingUnread
 
 
 def test_display_metrics_store_only_append_facts(tmp_path):
-    from agent_comms.bus_display_index import DisplayMetricScope
+    from agent_comms.bus_display_index import DisplaySnapshot
     from agent_comms.field_codec import FieldCodec
     from agent_comms.read_basis import ChannelDisplayScope
 
     scopes = tuple(ChannelDisplayScope(f"#{n}", frozenset({f"#{n}"})) for n in range(48))
-    encoded = FieldCodec.encode(DisplayMetricScope(scopes, frozenset({"viewer"})))
-    assert set(encoded) == {"scopes", "viewer_names"}
+    encoded = FieldCodec.encode(DisplaySnapshot.empty(scopes))
+    assert set(encoded) == {"scopes", "activity"}
     index = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer")
     assert index.path.name.startswith("bus_display_6_")
 
@@ -351,7 +351,7 @@ def test_display_index_rebuilds_after_bus_replacement(tmp_path):
         comms.bus.log.path, comms.messaging.user_identity(str(tmp_path)).name
     ).path
     cached = json.loads(checkpoint.read_text())
-    cached["counts"]["#team"] = 0
+    cached["activity"]["#team"]["last_message"] = 0
     checkpoint.write_text(json.dumps(cached))
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
 
@@ -400,7 +400,7 @@ def test_display_read_progress_preserves_append_index(tmp_path):
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 99
 
 
-def test_display_high_water_and_sparse_reads_leave_inbound_totals_unchanged(tmp_path):
+def test_display_high_water_and_sparse_reads_leave_activity_unchanged(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -412,7 +412,6 @@ def test_display_high_water_and_sparse_reads_leave_inbound_totals_unchanged(tmp_
     comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
         viewer, (*messages[:4], messages[6]), comms.registry.snapshot(), comms.bus.log.path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
-    assert json.loads(saved.read_bytes())["counts"]["#team"] == 8
     assert saved.read_bytes() == stored
 
 
@@ -608,7 +607,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     checkpoint = BusDisplayIndex(comms.bus.log.path, viewer).path
     current = json.loads(checkpoint.read_text())
-    assert next(scope for scope in current['semantics']['scopes']
+    assert next(scope for scope in current['scopes']
                 if scope['channel'] == '#team')['any_mode'] is True
 
 
