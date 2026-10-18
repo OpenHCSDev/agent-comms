@@ -247,7 +247,9 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
-    assert 'Set count.txt to 1.' in judge.my_messages('worker')[0]['text']
+    sent = judge.my_messages('worker')[0]['text']
+    assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
+    assert 'Due' not in sent and due not in sent  # the deadline stays the commander's fire line
 
     script.hunt(f'{__file__}:1', 'the counter is reread per event and the order replaces it with one read', sent_back.order.id)
     assert [h.sent for h in comms.goals.todos.get('P1').hunts] == [sent_back.order.id]
