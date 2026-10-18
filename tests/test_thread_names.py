@@ -1,0 +1,35 @@
+"""One registry answer turns wanted text into a free thread name."""
+
+import os
+
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import wire
+
+
+def _declare(comms, name, worktree):
+    comms.registry.declare(comms.registry.new_thread(
+        name, frozenset(), worktree, process_identity=ProcessIdentity.capture(os.getpid())))
+
+
+def test_wanted_text_gets_one_slug_and_the_first_free_suffix(tmp_path):
+    comms = wire(tmp_path / "wire")
+    names = comms.registry.snapshot()
+    # Session folders and rename titles share one slug rule.
+    assert names.claim_name("My project!") == "My-project"
+    assert names.claim_name("_scratch_") == "_scratch_"
+    assert names.claim_name("***") == "session"
+    _declare(comms, "user", str(tmp_path))
+    _declare(comms, "user-2", str(tmp_path))
+    assert comms.registry.snapshot().claim_name("user") == "user-3"
+
+
+def test_a_permanent_alias_is_reserved_except_for_its_own_thread(tmp_path):
+    comms = wire(tmp_path / "wire")
+    _declare(comms, "worker", str(tmp_path))
+    comms.registry.rename("worker", "renamed")
+    names = comms.registry.snapshot()
+    assert names.reserves("worker") and names.reserves("renamed")
+    assert names.claim_name("worker") == "worker-2"
+    # A rename back to one of the thread's own names keeps that name.
+    assert names.claim_name("worker", owner="renamed") == "worker"
+    assert names.claim_name("renamed", owner="renamed") == "renamed"
