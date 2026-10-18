@@ -23,6 +23,7 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         affix: str | None = None,
         declared_name: str | None = None,
         discovery_package: str | None = None,
+        **class_options: Any,
     ) -> _FamilyMeta:
         roots = {
             base._family_root
@@ -67,7 +68,9 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
             if is_root or root is not None
             else None
         )
-        cls: Any = super().__new__(mcs, name, bases, namespace, registry_config=config)
+        cls: Any = super().__new__(
+            mcs, name, bases, namespace, registry_config=config, **class_options
+        )
         cls._family_root = cls if is_root else root
         return cast(_FamilyMeta, cls)
 
