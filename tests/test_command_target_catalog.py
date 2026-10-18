@@ -46,9 +46,9 @@ def test_channel_catalog_resolves_members_once_per_selected_target(comms, tmp_pa
     original = RegistrySnapshot.visible_threads
     scans = []
 
-    def visible(snapshot, **kwargs):
+    def visible(snapshot, visibility, **kwargs):
         scans.append(snapshot)
-        return original(snapshot, **kwargs)
+        return original(snapshot, visibility, **kwargs)
 
     monkeypatch.setattr(RegistrySnapshot, "visible_threads", visible)
     for name, members in (("#team", ("first", "second")), ("#both", ("first",)),

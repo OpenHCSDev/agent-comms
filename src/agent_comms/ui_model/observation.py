@@ -43,6 +43,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
+from agent_comms.registry_document import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.ui_model.delivery import InputDelivery
 from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel, ThreadRowModel
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
@@ -502,8 +503,7 @@ class ObserveSidebar(InterestRequest):
     ) -> SidebarResult:
 
         try:
-            snapshot = read(
-                subject, show_stopped=self.show_stopped, show_archived=self.show_archived)
+            snapshot = read(subject, RosterVisibility(self.show_stopped, self.show_archived))
             return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
         except RouteIndexRebuilding:
             raise  # A bounded preparation unit finished; runnable work remains.
@@ -681,7 +681,7 @@ class ThreadReading(Observation[ObserveThreads]):
         try:
             snapshot = comms.registry.snapshot()
             captured = comms.agents.all_activity(snapshot.visible_threads(
-                names=names, show_stopped=True, show_archived=False), snapshot=snapshot)
+                DEFAULT_ROSTER, names=names), snapshot=snapshot)
             activity = {name: captured[canonical] for name in names
                         if (canonical := snapshot.canonical_name(name)) in captured}
             names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names

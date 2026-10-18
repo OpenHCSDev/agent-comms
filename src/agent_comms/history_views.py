@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from .catalog_store import ChannelCatalog
 from .goal_waits import GoalWaits
 from .registration import Registration
+from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .thread_identity import ThreadIncarnation
 from .thread_execution import ConversationPreparation
 from .transcript_sources import AssignedSourceIdentity
@@ -317,7 +318,7 @@ class HistoryViews:
             ).export(selected, Path(destination).expanduser(), overwrite=overwrite)
 
     def channel_views(
-        self, *, show_stopped: bool = True, show_archived: bool = False
+        self, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> tuple[ChannelView, ...]:
         """Channel declarations and current members; clients never infer membership."""
         snapshot = self.registry.snapshot()
@@ -326,28 +327,22 @@ class HistoryViews:
         with self.bus.opened_activity() as clocks:
             return ChannelView.roster(
                 snapshot,
-                channels.visible(show_archived),
+                channels.visible(visibility),
                 catalog.pinned_members(),
                 catalog.list_order,
                 self.agents.all_activity(
-                    snapshot.visible_threads(
-                        show_stopped=show_stopped, show_archived=show_archived
-                    ), snapshot=snapshot,
+                    snapshot.visible_threads(visibility), snapshot=snapshot,
                 ),
                 self.last_sent_timestamps(clocks.sent, registry=snapshot),
                 ChannelActivity.for_views(channels, clocks.channels),
-                show_stopped=show_stopped,
-                show_archived=show_archived,
+                visibility,
             )
 
     def thread_views(
-        self, *, show_stopped: bool = True, show_archived: bool = False
+        self, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> tuple[ThreadView, ...]:
         snapshot = self.registry.snapshot()
-        return ThreadView.roster(
-            snapshot, self.agents, GoalWaits.at(self.root),
-            show_stopped=show_stopped, show_archived=show_archived,
-        )
+        return ThreadView.roster(snapshot, self.agents, GoalWaits.at(self.root), visibility)
 
     def retired_views(self, threads: Iterable[ThreadIncarnation], channels: Iterable[str]) -> RetiredViews:
         """Which of these thread incarnations and channel views no longer exist.
@@ -378,14 +373,14 @@ class HistoryViews:
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
             snapshot, self.agents, GoalWaits.at(self.root),
-            names=names, show_stopped=True, show_archived=False,
+            DEFAULT_ROSTER, names=names,
         )
         return ThreadPresentations(
             snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
         )
 
     def viewer_snapshot(
-        self, worktree: str, *, show_stopped: bool = True, show_archived: bool = False
+        self, worktree: str, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> CoordinationSnapshot:
         """Local presentation scope, independent of agent delivery cursors."""
         with self.presentation.snapshot(viewer=self.display_viewer(worktree)) as (basis, source):
@@ -396,8 +391,7 @@ class HistoryViews:
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(clocks.sent, registry=basis.registry), display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
-                show_stopped=show_stopped, show_archived=show_archived,
-                read_marker_notice=basis.document.notice,
+                visibility=visibility, read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
         sources = {

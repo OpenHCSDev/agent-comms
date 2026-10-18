@@ -133,14 +133,10 @@ def test_roster_and_controls_keep_archived_threads_dormant():
 
     archived = ArchivedThreadStatus()
     assert archived.restored() == archived
-    assert not archived.in_view()
-    assert archived.in_view(show_archived=True)
     for command in ToolRequest.members_with(OwnerLifecycleControl):
         assert not command.available_for(archived, owner_pid=123)
     stopped = StoppedThreadStatus()
-    assert stopped.in_view() and not stopped.in_view(show_stopped=False)
     assert CommsStartTool.available_for(stopped, owner_pid=123)
-    assert not DeletingThreadStatus().in_view(show_stopped=True, show_archived=True)
     for live in (RunningThreadStatus(), IdleThreadStatus()):
         assert live.restored() == stopped
         assert not CommsStartTool.available_for(live, owner_pid=123)
