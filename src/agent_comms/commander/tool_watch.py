@@ -9,7 +9,8 @@ from pathlib import Path
 from . import order
 from .config import CommanderConfig
 from ..native_tool_call import SelectedToolDenied
-from ..native_tools import CodingTool, one_line
+from ..native_tools import CodingTool
+from ..tool_declaration import one_line
 from ..registration import Registration
 
 CONFIG = CommanderConfig.installed()

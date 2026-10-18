@@ -13,7 +13,7 @@ from agent_comms.audience_manifest import (
 )
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 
 
 def message(**changes):
@@ -22,7 +22,7 @@ def message(**changes):
         target="#team",
         body="@alpha please review",
         type=InfoKind,
-        sender_role=ThreadRole.USER,
+        sender_role=UserThreadRole,
         timestamp=1234.5,
         seq=11,
         mentions=(ThreadMention("alpha", 0, 6),),
@@ -73,7 +73,7 @@ def test_full_envelope_hash_binds_body_type_role_mentions_sequence_and_target():
     alternatives = (
         message(body="@alpha please retry"),
         message(type=AlertKind),
-        message(sender_role=ThreadRole.AGENT),
+        message(sender_role=AgentThreadRole),
         message(mentions=()),
         message(seq=12),
         message(target="#other"),

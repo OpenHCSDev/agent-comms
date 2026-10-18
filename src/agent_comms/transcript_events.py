@@ -278,7 +278,7 @@ class ToolTranscript(SilentTranscript, RecordedTranscript):
 
     @property
     def title(self) -> str:
-        return tool_declaration.ToolDeclaration.caption(self.tool_name, {})
+        return tool_declaration.ToolDeclaration.caption(self.tool_name, None)
 
     @property
     def kind(self) -> str:
@@ -287,11 +287,13 @@ class ToolTranscript(SilentTranscript, RecordedTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
-    raw_input: dict[str, JsonValue] = field(default_factory=dict)
+    raw_input: dict[str, JsonValue] = field(default_factory=dict)  # as the CLI sent it, for history
+    tool: tool_declaration.ToolDeclaration | None = field(
+        default=None, metadata={"wire_omit_default": True})
 
     @property
     def title(self) -> str:
-        return tool_declaration.ToolDeclaration.caption(self.tool_name, self.raw_input)
+        return tool_declaration.ToolDeclaration.caption(self.tool_name, self.tool)
 
     def imported(self) -> ImportedMessage:
         return ImportedInput(f"[Historical tool call: {self.tool_name}]\n"

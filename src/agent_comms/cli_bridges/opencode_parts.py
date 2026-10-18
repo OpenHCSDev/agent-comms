@@ -23,6 +23,7 @@ from .shared import (
     Summarized,
     StartedItem,
     TextDraft,
+    CliToolArguments,
     ToolCall,
     TranscriptUpdate,
 )
@@ -186,8 +187,9 @@ class ToolState(TaggedWire, ABC):
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
 
     def call(self, part: ToolPart) -> ToolCall:
-        return ToolCall(part.callID, part.tool,
-                        self.input.model_dump(exclude_unset=True))
+        sent = self.input.model_dump(by_alias=True, exclude_unset=True)
+        return ToolCall(part.callID, part.tool, self.input.model_dump(exclude_unset=True),
+                        tool=CliToolArguments.record_of(part.tool, sent))
 
 
 class PendingTool(ToolState):

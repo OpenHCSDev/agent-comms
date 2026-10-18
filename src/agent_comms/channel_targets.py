@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from enum import StrEnum
 
 from .errors import RelationViolationError, UnregisteredThreadError
-from .response_policy import CollectivePolicy, DirectPolicy, InformationalPolicy, MentionedOnlyPolicy
+from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
@@ -254,7 +254,7 @@ class ChannelTarget(NamedTarget):
     def response_policy(self, message):
         if message.mentions:
             return MentionedOnlyPolicy.instance()
-        return InformationalPolicy.instance() if message.sender_role.executable else CollectivePolicy.instance()
+        return message.sender_role.channel_policy()
 
     def reply_target(self, sender):
         return self.name

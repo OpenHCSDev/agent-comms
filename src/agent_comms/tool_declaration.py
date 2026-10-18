@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from collections.abc import Mapping
+from typing import ClassVar, Self
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
+from .native_tool_call import SelectedToolDenied
+
+
+def one_line(text: str, limit: int) -> str:
+    return ' '.join(text.split())[:limit]
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
     acp_kind: ClassVar[str] = "other"
     label: ClassVar[str]
-    preview_fields: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     def _member_declarations(cls):
@@ -29,10 +35,32 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def caption(cls, name: str, arguments: dict[str, object]) -> str:
-        declaration = cls.for_name(name)
-        preview = ' '.join(word for key in declaration.preview_fields for word in str(arguments.get(key, '')).split())
-        return declaration.label + (' ' + preview if preview else '')
+    def parse_arguments(cls, arguments: Mapping[str, object]) -> Self:
+        if cls.family_discriminator in arguments:
+            raise SelectedToolDenied("Native arguments cannot contain a family selector")
+        selected = {cls.family_discriminator: cls.declared_name}
+        try:
+            return FieldCodec.decode(cls, {**selected, **arguments})
+        except (TypeError, ValueError, KeyError) as error:
+            raise SelectedToolDenied(f"Invalid {cls.declared_name} arguments: {error}") from error
+
+    @classmethod
+    def record(cls, name: str, arguments: Mapping[str, object]) -> ToolDeclaration | None:
+        """The call decoded once as Core's tool record, or None when Core does not decode it."""
+        try:
+            return cls.for_name(name).parse_arguments(arguments)
+        except SelectedToolDenied:
+            return None
+
+    def reads(self) -> str:
+        """What the call names after its label: nothing unless the tool says."""
+        return ''
+
+    @classmethod
+    def caption(cls, name: str, tool: ToolDeclaration | None) -> str:
+        """A call reads as its label, then what its record names; with no record, its label."""
+        reads = one_line(text := tool.reads(), len(text)) if tool else ''
+        return cls.for_name(name).label + (' ' + reads if reads else '')
 
     @classmethod
     def result_diff(cls, result, ok):
