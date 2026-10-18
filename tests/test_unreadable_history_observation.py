@@ -22,6 +22,10 @@ from agent_comms.threads import Thread
 from agent_comms.presentation import WireRevision
 from agent_comms.ui_model.observation import (
     ObservationProcess,
+    NotificationsObserved,
+    NotificationsUnreadable,
+    ObservationPending,
+    ObserveNotifications,
     ObserveSidebar,
     ObserveThreads,
     OwnerRead,
@@ -34,6 +38,7 @@ from agent_comms.ui_model.observation import (
     SidebarDeferred,
     SidebarReading,
     SidebarReadStage,
+    ThreadBusy,
     ThreadsObserved,
     ThreadUnavailable,
     UnreadableHistory,
@@ -137,6 +142,47 @@ async def test_owner_reply_preserves_its_own_failure_type(comms, error_type):
     assert isinstance(answer, ReadRefused)
     assert isinstance(answer.error, error_type)
     assert not isinstance(answer.error, UnreadableHistory)
+
+
+def failing(error):
+    def read(*args, **kwargs):
+        raise error
+    return read
+
+
+DEFERRED, MALFORMED = StaleRevision("source moved during the read"), ValueError("Unknown ContextSegment kind")
+
+
+@pytest.mark.parametrize("error,shown", [
+    (DEFERRED, ThreadBusy()), (MALFORMED, ThreadUnavailable(UnreadableHistory.capture(MALFORMED))),
+])
+def test_thread_pane_shows_a_deferred_read_busy_and_an_unreadable_one_with_its_cause(
+    comms, monkeypatch, error, shown
+):
+    saved_row(comms)
+    monkeypatch.setattr(comms.views, "thread_presentations", failing(error))
+    reading = ObserveThreads(frozenset({"saved"})).observation()
+    *_, observed = reading.read(comms, comms.views.revision())
+    assert observed.results == {"saved": shown}
+
+
+@pytest.mark.parametrize("error,shown", [
+    (DEFERRED, None), (MALFORMED, UnreadableHistory.capture(MALFORMED)),
+])
+def test_notification_pane_keeps_a_deferred_read_pending_and_shows_an_unreadable_one(
+    comms, monkeypatch, error, shown
+):
+    monkeypatch.setattr(comms.views, "message_notifications_for_references", failing(error))
+    request = ReadNotifications(str(comms.root), references=())
+    reading = ObserveNotifications(frozenset({request})).observation()
+    steps = list(reading.read(comms, revision := comms.views.revision()))
+    if shown is None:
+        assert [type(step) for step in steps] == [ObservationPending] and not reading.read_states
+    else:
+        assert steps == [NotificationsUnreadable(revision, request, shown)]
+    monkeypatch.undo()
+    assert list(reading.read(comms, revision)) == ([NotificationsObserved(revision, request, {})]
+                                                    if shown is None else [])
 
 
 @pytest.mark.parametrize("error_type", [CoordinationReadUnavailable, StaleRevision])

@@ -135,8 +135,9 @@ class Registration:
         return change.installed_thread
 
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
-        if change.needs_maintenance_claim:
-            MaintenanceBarrier(self.store.path).assert_open_unlocked()
+        change.thread.role.require_maintenance_open(
+            MaintenanceBarrier(self.store.path), change.claims_owner
+        )
         before = change.prior_goal
         history = None
         intent = None

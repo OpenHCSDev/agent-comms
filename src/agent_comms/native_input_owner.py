@@ -77,9 +77,9 @@ class RegistryOwner:
 
     def require_active_turn(self):
         """Return the captured executable turn if its process and input generation still match."""
+        self.thread.role.require_executable(StaleFence("registry owner is not executable"))
         try:
             turn = self.thread.active_turn.require_active()
-            self.thread.role.require_executable()
             self.thread.execution.require_native()
         except RelationViolationError as error:
             raise StaleFence("registry owner is not executable") from error
@@ -196,8 +196,8 @@ class ParticipantOwner:
             raise StaleFence("cohort participant incarnation changed")
         if self.thread.process_identity != ProcessIdentity.capture(os.getpid()):
             raise StaleFence("cohort recipient is not this live registered owner generation")
+        self.thread.role.require_executable(StaleFence("cohort participant is not executable"))
         try:
-            self.thread.role.require_executable()
             self.thread.execution.require_native()
         except RelationViolationError as error:
             raise StaleFence("cohort participant is not executable") from error

@@ -84,7 +84,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         text=unrelated.body,
     )
     scoped = comms.goals.goal_input_review("worker", goal.id, ["parent"])
-    assert scoped["reviewed_inputs"] == keys and len(scoped["excluded_inputs"]) == 2
+    assert list(scoped.reviewed_inputs) == keys and len(scoped.excluded_inputs) == 2
     with pytest.raises(ValueError, match="declared dependencies"):
         report.invoke(comms, {**args, "reviewed_inputs": [*keys, f"bus:{unrelated.seq}"]}, caller=ThreadCaller("worker"))
     assert (
@@ -92,8 +92,8 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         == "standby"
     )
     again = comms.goals.goal_input_review("worker", goal.id, ["parent"])
-    assert again["reviewed_inputs"] == []
-    assert [row["inputId"] for row in again["already_reviewed_inputs"]] == keys
+    assert again.reviewed_inputs == ()
+    assert [row.input_id for row in again.already_reviewed_inputs] == keys
     for message, key in zip(messages, keys, strict=True):
         row = stored_inputs(ledger.root).rows[key]
         assert row.unresolved and row.accepts_reservation
@@ -110,9 +110,9 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         "worker", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",))
     )
     fresh = comms.messaging.send_message("parent", "worker", "New result")
-    assert reopened.goals.goal_input_review("worker", goal.id, ["parent"])["reviewed_inputs"] == [
-        f"bus:{fresh.seq}"
-    ]
+    assert reopened.goals.goal_input_review("worker", goal.id, ["parent"]).reviewed_inputs == (
+        f"bus:{fresh.seq}",
+    )
     comms.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
     )
@@ -136,11 +136,11 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     )
     comms.agents.begin_turn("parent", "new-turn")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Current goal"))
-    assert comms.goals.goal_input_review("worker", goal.id, ["parent"])["reviewed_inputs"] == []
+    assert comms.goals.goal_input_review("worker", goal.id, ["parent"]).reviewed_inputs == ()
     action = StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",))
     comms.goals.update_goal("worker", action)
     current = comms.messaging.send_message("parent", "worker", "Current incarnation")
     comms.registry.rename("parent", "renamed-parent")
     review = comms.goals.goal_input_review("worker", goal.id, ["renamed-parent"])
-    assert review["reviewed_inputs"] == [f"bus:{current.seq}"]
+    assert review.reviewed_inputs == (f"bus:{current.seq}",)
     assert old in list(comms.views.dm_history_page("renamed-parent", "worker").messages)

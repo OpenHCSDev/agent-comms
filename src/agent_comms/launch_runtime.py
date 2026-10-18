@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText
+from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, PathText, TextRepresentation
 
 
 class CallingThreadUnavailable(RelationViolationError):
@@ -78,7 +78,32 @@ class SpecifiedImportPath(ImportPath, JsonShapeMember):
 
 
 @dataclass(frozen=True)
-class RestartEnvironment:
+class EnvironmentRecord:
+    """A record whose fields are the environment variables their wire names spell."""
+
+    @classmethod
+    def variable(cls, name: str) -> str:
+        return FieldCodec.record_key(cls, name)
+
+    @classmethod
+    def inherited(cls, environment: Mapping[str, str]) -> dict[str, str]:
+        names = (FieldCodec.wire_key(declaration) for declaration in fields(cls))
+        return {name: environment[name] for name in names if name in environment}
+
+    @classmethod
+    def strip[Environment: MutableMapping[str, str]](cls, environment: Environment) -> Environment:
+        """Remove every variable this record declares."""
+        for declaration in fields(cls):
+            environment.pop(FieldCodec.wire_key(declaration), None)
+        return environment
+
+    def encode(self) -> dict[str, str]:
+        encoded: dict[str, str] = FieldCodec.encode(self)
+        return encoded
+
+
+@dataclass(frozen=True)
+class RestartEnvironment(EnvironmentRecord):
     """Declared inheritance policy for the credential-free resident watcher.
 
     Launch variable spellings belong to this environment declaration. Owner credentials
@@ -149,10 +174,8 @@ class RestartEnvironment:
 
     @classmethod
     def inherit(cls, environment: Mapping[str, str]):
-        values = {f.metadata["wire_name"]: environment[f.metadata["wire_name"]]
-                  for f in fields(cls) if f.metadata["wire_name"] in environment}
-        native_name = cls.__dataclass_fields__["native_config"].metadata["wire_name"]
-        agent_name = cls.__dataclass_fields__["agent_directory"].metadata["wire_name"]
+        values = cls.inherited(environment)
+        native_name, agent_name = cls.variable("native_config"), cls.variable("agent_directory")
         values[native_name] = values.get(native_name) or values.get(agent_name) or str(cls.default_agent_directory)
         return FieldCodec.decode(cls, values)
 
@@ -173,8 +196,9 @@ class RestartEnvironment:
 
     def encode_native(self) -> dict[str, str]:
         encoded = self.encode()
-        return {f.metadata["wire_name"]: encoded[f.metadata["wire_name"]]
-                for f in fields(self) if f.metadata.get("native")}
+        native = (FieldCodec.wire_key(declared) for declared in fields(self)
+                  if declared.metadata.get("native"))
+        return {key: encoded[key] for key in native}
 
     def auth_revision(self) -> tuple[int, int]:
         """Observe this owner's credentials, never an ambient or fork directory."""
@@ -184,17 +208,75 @@ class RestartEnvironment:
             return 0, 0  # No credentials file yet.
         return info.st_mtime_ns, info.st_size
 
-    def encode(self) -> dict[str, str]:
-        return FieldCodec.encode(self)
-
     def apply_runtime(self, source: Mapping[str, str]) -> dict[str, str]:
         """Preserve source credentials/settings; replace the declared runtime fields."""
         result = dict(source)
         encoded = self.encode()
         for declaration in fields(self):
             if declaration.metadata.get("runtime"):
-                name = declaration.metadata.get("wire_name")
+                name = FieldCodec.wire_key(declaration)
                 result.pop(name, None)
                 if name in encoded:
                     result[name] = encoded[name]
         return result
+
+
+class TagListText(TextRepresentation):
+    @classmethod
+    def encode(cls, value: object) -> str:
+        if not isinstance(value, frozenset):
+            raise TypeError("Expected a set of tags")
+        return ",".join(sorted(value))
+
+    @classmethod
+    def from_text(cls, value: str) -> frozenset[str]:
+        return frozenset(tag.strip() for tag in value.split(",") if tag.strip())
+
+
+class FlagText(TextRepresentation):
+    @classmethod
+    def encode(cls, value: object) -> str:
+        if not isinstance(value, bool):
+            raise TypeError("Expected a flag")
+        return str(int(value))
+
+    @classmethod
+    def from_text(cls, value: str) -> bool:
+        return bool(int(value))
+
+
+@dataclass(frozen=True)
+class ThreadLaunch(EnvironmentRecord):
+    """The environment that carries one thread's launch into its processes.
+
+    Launch variable spellings for a thread belong to these fields; writers encode
+    the record and readers decode it.
+    """
+
+    name: str = field(metadata={"wire_name": RestartEnvironment.owner_key})
+    worktree: str = field(metadata={"wire_name": "PI_WORKTREE"})
+    tags: Annotated[frozenset[str], TagListText] = field(
+        default=frozenset(), metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_TAGS"}
+    )
+    parent: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "PI_PARENT_ID"}
+    )
+    task: str | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "PI_TASK"}
+    )
+    managed: Annotated[bool, FlagText] = field(
+        default=False, metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_MANAGED"}
+    )
+
+    @classmethod
+    def current(cls, environment: Mapping[str, str] = os.environ) -> ThreadLaunch:
+        """Decode this process's launch; an unset worktree is the working directory."""
+        values = cls.inherited(environment)
+        if not values.get(cls.variable("name")):
+            raise CallingThreadUnavailable(f"Calling thread requires {cls.variable('name')}.")
+        values.setdefault(cls.variable("worktree"), os.getcwd())
+        return FieldCodec.decode(cls, values)
+
+    def apply(self, environment: dict[str, str]) -> dict[str, str]:
+        """Replace any inherited launch with this one."""
+        return self.strip(environment) | self.encode()

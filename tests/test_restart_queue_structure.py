@@ -9,9 +9,10 @@ from agent_comms.restart_refusals import RestartRefusal, WaitForIdle
 
 def test_queue_uses_declared_records_environment_and_refusal_behavior():
     tree = ast.parse(inspect.getsource(launch_runtime) + "\n" + inspect.getsource(restart_queue))
-    policy = next(node for node in tree.body if isinstance(node, ast.ClassDef)
-                  and node.name == "RestartEnvironment")
-    policy_nodes = {id(node) for node in ast.walk(policy)}
+    records = [node for node in tree.body if isinstance(node, ast.ClassDef)
+               and any(isinstance(base, ast.Name) and base.id == "EnvironmentRecord" for base in node.bases)]
+    assert {record.name for record in records} == {"RestartEnvironment", "ThreadLaunch"}
+    policy_nodes = {id(node) for record in records for node in ast.walk(record)}
     for node in ast.walk(tree):
         if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
             assert not (isinstance(node.value, ast.Name) and node.value.id in {"record", "initial", "previous"})

@@ -13,9 +13,6 @@ from pydantic import Field, JsonValue, TypeAdapter, ValidationError, field_valid
 
 from agent_comms.activity import ActivityState
 from agent_comms.field_codec import FieldCodec
-from agent_comms.native_tools import BashTool, ReadTool, EditTool, WriteTool, GrepTool, GlobTool
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_results import ToolDiff
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -32,6 +29,7 @@ from .shared import (
     HistoryNotice,
     SessionFacts,
     Summarized,
+    CliToolArguments,
     ToolCall,
     TranscriptUpdate,
     StatusUpdate,
@@ -320,69 +318,6 @@ class ThinkingBlock(RedactedThinking):
             record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp),)))
 
 
-class ClaudeToolArguments(WireModel):
-    claude_names: ClassVar[tuple[str, ...]] = ()
-    declaration: ClassVar[type[ToolDeclaration]]
-    types: ClassVar[dict[str, type[ClaudeToolArguments]]] = {}
-    model_config = {'extra': 'allow'}
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        for name in cls.claude_names:
-            cls.types[name] = cls
-
-    def diff(self) -> ToolDiff | None:
-        return None
-
-
-class ClaudeCommandArguments(ClaudeToolArguments):
-    claude_names, declaration = ('Bash',), BashTool
-    command: str
-
-
-class ClaudePatternArguments(ClaudeToolArguments):
-    claude_names, declaration = ('Grep',), GrepTool
-    pattern: str
-
-
-class ClaudeGlobArguments(ClaudePatternArguments):
-    claude_names, declaration = ('Glob',), GlobTool
-
-
-class ClaudePathArguments(ClaudeToolArguments):
-    claude_names, declaration = ('Read',), ReadTool
-    path: str = Field(alias='file_path')
-
-
-class ClaudeReplacement(WireModel):
-    old_string: str
-    new_string: str
-
-
-class ClaudeEditArguments(ClaudePathArguments):
-    claude_names, declaration = ('Edit', 'MultiEdit'), EditTool
-    edits: list[ClaudeReplacement]
-
-    @model_validator(mode='before')
-    @classmethod
-    def replacements(cls, value):
-        return {key: item for key, item in value.items() if key not in ClaudeReplacement.model_fields} | {
-            'edits': value.get('edits', [value])}
-
-    def diff(self) -> ToolDiff:
-        return ToolDiff(''.join(patch.text for edit in self.edits
-            if (patch := ToolDiff.from_versions(self.path, edit.old_string, edit.new_string)) is not None))
-
-
-class ClaudeWriteArguments(ClaudePathArguments):
-    claude_names, declaration = ('Write',), WriteTool
-    content: str
-
-    def diff(self) -> ToolDiff | None:
-        return ToolDiff.from_versions(self.path, '', self.content,
-                                     before_path=self.path + ' (previous content not supplied)')
-
-
 class ToolUse(AssistantBlock):
     wire_tag = 'tool_use'
     id: str
@@ -398,14 +333,16 @@ class ToolUse(AssistantBlock):
     def call(self) -> ToolCall:
         """A call to a tool with a declared shape uses that declaration. The model can send input
         that does not fit (Claude refuses it with an error result); it is shown as sent."""
-        arguments_type = ClaudeToolArguments.types.get(self.name)
+        arguments_type = CliToolArguments.types.get(self.name)
         if arguments_type is not None:
             try:
                 arguments = arguments_type.model_validate(self.input)
-            except ValidationError:
+                tool = arguments.record()
+            except ValueError:  # pydantic's ValidationError, or a Core record refusing the values
                 pass
             else:
-                return ToolCall(self.id, FieldCodec.encode(arguments.declaration), arguments.model_dump(), arguments.diff())
+                return ToolCall(self.id, FieldCodec.encode(type(tool)),
+                                arguments.model_dump(exclude_unset=True), arguments.diff(), tool)
         return ToolCall(self.id, self.name, self.input)
 
 

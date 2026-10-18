@@ -40,14 +40,14 @@ def test_first_wait_ignores_unreserved_reply_before_goal_publication(tmp_path):
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for later work"))
     assert goal.published_seq == old.seq
     assert FieldCodec.decode(Goal, goal.to_wire()) == goal
-    assert comms.goals.goal_input_review("owner", goal.id, ["peer"])["reviewed_inputs"] == []
+    assert list(comms.goals.goal_input_review("owner", goal.id, ["peer"]).reviewed_inputs) == []
     # A recorded UNKNOWN remains reviewable even before the goal boundary.
     inputs = InputDispositions(comms.root)
     inputs.record(
         f"bus:{old.seq}", seq=old.seq, owner="owner", target="owner", text=old.body,
         claim_scope=comms.registry.snapshot().claimed_generations["owner"],
     )
-    assert comms.goals.goal_input_review("owner", goal.id, ["peer"])["reviewed_inputs"] == [
+    assert list(comms.goals.goal_input_review("owner", goal.id, ["peer"]).reviewed_inputs) == [
         f"bus:{old.seq}"
     ]
 
@@ -59,7 +59,7 @@ def test_first_wait_reviews_reply_after_goal_publication(tmp_path):
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for later work"))
     reply = comms.messaging.send_message("peer", "owner", "After this goal")
     assert reply.seq > goal.published_seq
-    assert comms.goals.goal_input_review("owner", goal.id, ["peer"])["reviewed_inputs"] == [
+    assert list(comms.goals.goal_input_review("owner", goal.id, ["peer"]).reviewed_inputs) == [
         f"bus:{reply.seq}"
     ]
 
@@ -101,7 +101,7 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     assert wait.has_reply(comms.bus.log, owner.incarnation.require_recorded())
     assert not replacement_wait.has_reply(comms.bus.log, owner.incarnation.require_recorded())
     review = comms.goals.goal_input_review("owner", goal.id, ["peer"])
-    assert review["reviewed_inputs"] == []
+    assert list(review.reviewed_inputs) == []
 
 
 def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_path):
@@ -128,9 +128,8 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     comms.registry.rename("owner", "renamed-owner")
     comms.registry.rename("peer", "renamed-peer")
     assert wait.has_reply(comms.bus.log, owner.incarnation.require_recorded())
-    assert comms.goals.goal_input_review("renamed-owner", goal.id, ["renamed-peer"])[
-        "reviewed_inputs"
-    ] == [f"bus:{reply.seq}"]
+    assert comms.goals.goal_input_review("renamed-owner", goal.id, ["renamed-peer"]).reviewed_inputs == (
+        f"bus:{reply.seq}",)
     comms.registry.unregister("renamed-owner")
     comms.registry.remove("renamed-owner")
     replacement = register(comms, "owner")

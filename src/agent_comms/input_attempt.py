@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, TextRepresentation, projected
+from .field_codec import FieldCodec, TextRepresentation
 from .native_input_record import NativeInputIdText
 from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
@@ -136,6 +136,40 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
 
 @dataclass(frozen=True)
+class UnresolvedInput:
+    """An unresolved input as a reply shows it; its owner, claim and origin stay in the store."""
+
+    sequence: int | None
+    target: str
+    text: str
+    input_id: str = field(metadata={"wire_name": "inputId"})
+    status: str
+    reviewed_for_goals: tuple[str, ...] = field(
+        default=(), metadata={"wire_name": "reviewedForGoals", "wire_omit_default": True})
+
+    @classmethod
+    def of(cls, row: StoredInput) -> UnresolvedInput:
+        return UnresolvedInput(
+            sequence=row.sequence, target=row.target, text=row.source_text,
+            input_id=row.public_id, status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)))
+
+
+@dataclass(frozen=True)
+class HistoricalInput(UnresolvedInput):
+    """An earlier notice of an unresolved input, shown with whether the owner dismissed it."""
+
+    notice_dismissed: bool = field(kw_only=True, metadata={"wire_name": "noticeDismissed"})
+
+    @classmethod
+    def notice(cls, row: StoredInput, notice_dismissed: bool) -> HistoricalInput:
+        return HistoricalInput(
+            sequence=row.sequence, target=row.target, text=row.source_text,
+            input_id=row.public_id, status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)), notice_dismissed=notice_dismissed)
+
+
+@dataclass(frozen=True)
 class StoredInput(InputAttempt):
     """The recorded owner name and input generation, without inventing a thread identity."""
 
@@ -149,22 +183,18 @@ class StoredInput(InputAttempt):
             raise RelationViolationError("Constraint lacks its original input provenance")
         self.origin.require_human()
         return self
-    key: str = field(metadata={"public_exclude": True})
+    key: str
     sequence: int | None
-    owner: str = field(metadata={"public_exclude": True})
-    claim_scope: int = field(metadata={"wire_name": 'admission', "public_exclude": True})
+    owner: str
+    claim_scope: int = field(metadata={"wire_name": 'admission'})
     target: str
-    source_text: str = field(metadata={"public_name": "text"})
+    source_text: str
     origin: InputOrigin = field(default_factory=UnattributedInputOrigin, kw_only=True,
-                               metadata={"public_exclude": True, "wire_omit_default": True})
-    notice_dismissed: bool = field(
-        default=False, metadata={"public_exclude": True, "wire_omit_default": True}, kw_only=True
-    )
+                               metadata={"wire_omit_default": True})
+    notice_dismissed: bool = field(default=False, metadata={"wire_omit_default": True},
+                                   kw_only=True)
     goal_reviews: dict[str, GoalInputDecision] = field(
-        default_factory=dict,
-        metadata={"public_exclude": True, "wire_omit_default": True},
-        kw_only=True,
-    )
+        default_factory=dict, metadata={"wire_omit_default": True}, kw_only=True)
 
     def __post_init__(self) -> None:
         try:
@@ -220,19 +250,9 @@ class StoredInput(InputAttempt):
             raise ValueError("Reviewed inputs changed; inspect them again.")
         return replace(self, goal_reviews={**self.goal_reviews, goal_id: decision})
 
-    @projected(view="public", name="inputId")
+    @property
     def public_id(self) -> str:
         return self.key.removeprefix("acp:")
-
-    @projected(view="public", name="status")
-    def public_state(self) -> str:
-        return self.public_status
-
-    def public(self) -> dict:
-        return {
-            **FieldCodec.project(self, "public"),
-            **({"reviewedForGoals": sorted(self.goal_reviews)} if self.goal_reviews else {}),
-        }
 
 
 class RecoverableUnboundInput(StoredInput):

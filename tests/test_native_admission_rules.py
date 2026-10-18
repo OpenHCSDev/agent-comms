@@ -22,7 +22,7 @@ from agent_comms.native_claim_epoch import RecordedNativeClaim
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.reservation_rules import ReservationRule, ReservationViolationError
 from agent_comms.text_digest import TextDigest
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.pi_vocabulary import ThinkingLevel
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -81,7 +81,7 @@ async def test_durable_private_claim_names_each_changed_authority(
             ),
             rules.RegistryClaimRule: replace(registry, claim_scope=generation + 1),
             rules.RegistryRoleRule: replace(
-                registry, actual=replace(current, role=ThreadRole.USER)
+                registry, actual=replace(current, role=UserThreadRole)
             ),
             rules.RegistryWorktreeRule: replace(
                 registry, actual=replace(current, worktree=str(tmp_path / "other"))

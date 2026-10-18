@@ -98,8 +98,12 @@ class PiEvent(PiPayload, DeclaredFamily):
             yield event
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if False:
-            yield
+        await self.act(session)
+        for event in self.convert():
+            yield event
+
+    async def act(self, session: TurnSession) -> None:
+        pass
 
     accepts_prompt = False
 
@@ -377,9 +381,7 @@ class ReasonedCompaction(NativePiEvent, DurablePiEvent):
             object.__setattr__(self, "reason", CompactionReason.from_external(self.reason))
 
     @abstractmethod
-    async def apply(self, session):
-        if False:
-            yield
+    def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -518,15 +520,13 @@ class ExtensionUiRequest(NativePiEvent):
             raise ValueError("Pi extension UI request lacked a bounded ID.")
         return self.id
 
-    async def apply(self, session):
+    async def act(self, session: TurnSession) -> None:
         # Unknown methods never reach a controller or acquire reply authority.
         try:
             self.require_id()
         except ValueError as error:
             await session.extension_ui.fail(str(error), session)
         session.skip = True
-        if False:
-            yield
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -559,11 +559,9 @@ class DialogUiRequest(ExtensionUiRequest):
     def choice(self, option_id: str) -> ExtensionUiChoice:
         return CancelledUiChoice()
 
-    async def apply(self, session):
+    async def act(self, session: TurnSession) -> None:
         await session.extension_ui.answer(self, session)
         session.skip = True
-        if False:
-            yield
 
 
 class PermissionUiRequest(DialogUiRequest):
@@ -680,7 +678,7 @@ class MessageEnd(NativePiEvent, DurablePiEvent):
     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        async for event in self.message.apply_end(session):
+        for event in await self.message.apply_end(session):
             yield event
 
     accepts_prompt = True
@@ -695,7 +693,7 @@ class MessageStart(NativePiEvent, DurablePiEvent):
     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        async for update in self.message.apply_start(session, self):
+        for update in await self.message.apply_start(session, self):
             yield update
 
     accepts_prompt = True
@@ -804,7 +802,7 @@ class Response(NativePiEvent, DurablePiEvent):
         owner = session.native.reader.correlate(self)
         if owner is None:
             return
-        async for event in owner.on_response(self, session):
+        for event in owner.on_response(self, session):
             yield event
 
 
@@ -816,10 +814,8 @@ class SteeringInterruptCompleted(NativePiEvent):
 
 
 class SteeringInterruptStarted(NativePiEvent):
-    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+    async def act(self, session: TurnSession) -> None:
         session.explicit_interrupt = True
-        if False:
-            yield
 
 
 class SummarizationRetryAttemptStart(RetryAttemptEvent, starts=phases.SummarizationRetryPhase):
@@ -884,11 +880,9 @@ class ToolExecutionStart(NativePiEvent, DurablePiEvent, starts=phases.ToolRunnin
     def convert(self):
         return (events.ToolStart.from_call(self.tool_id, self.tool_name or "tool", self.args),)
 
-    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+    async def act(self, session: TurnSession) -> None:
         session.watchdog.prompt_accepted = True
         session.active_tools.add(self.tool_id)
-        for event in self.convert():
-            yield event
 
     @property
     def retry_progress(self) -> bool:

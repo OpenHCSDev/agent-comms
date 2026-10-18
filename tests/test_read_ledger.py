@@ -135,10 +135,10 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
 
 
 def test_agent_sent_dm_includes_independent_human_read(tmp_path):
-    from agent_comms.thread_identity import ThreadRole
+    from agent_comms.thread_identity import UserThreadRole
 
     comms = prepared(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), role=ThreadRole.USER))
+    comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), role=UserThreadRole))
     message = comms.messaging.send_message("alice", "reader", "painted agent DM")
     snapshot = comms.registry.snapshot()
     displayed = comms.bus.reads.capture(

@@ -20,7 +20,7 @@ from .field_codec import FieldCodec, InlineRecord, NullMember, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .response_policy import InformationalPolicy, ResponseEligibility
-from .thread_identity import ThreadRole
+from .thread_identity import AgentThreadRole, ThreadRole
 from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 from .wake_policy import BoundedTriageWake, PassiveWake
 
@@ -298,8 +298,8 @@ class Message:
         default_factory=time.time, metadata={"wire_name": "ts", "wire_order": 4}
     )
     seq: int = field(default=0, metadata={"wire_order": 0, "publication_exclude": True})
-    sender_role: ThreadRole = field(
-        default=ThreadRole.AGENT, metadata={"wire_order": 7, "publication_exclude": True}
+    sender_role: Type[ThreadRole] = field(  # noqa: UP006 - the `type` field shadows the builtin
+        default=AgentThreadRole, metadata={"wire_order": 7, "publication_exclude": True}
     )
     role: MessageRole = field(default_factory=ConversationRole, metadata={"wire_order": 8})
     mentions: tuple[ThreadMention, ...] = field(
@@ -371,8 +371,7 @@ class Message:
             ClaimTaskFact,
         )
 
-        if self.sender_role is ThreadRole.USER:
-            yield from self.task.user_task_facts(self)
+        yield from self.sender_role.user_task_facts(self)
         yield from self.task.retained_task_facts(self)
         if self.claim_transition is not None:
             yield ClaimTaskFact(self)
@@ -483,4 +482,4 @@ class Message:
     @property
     def reply_target(self) -> str | None:
         """An external sender may receive an automatic live reply."""
-        return None if self.sender_role.executable else self.exact_reply_target
+        return self.sender_role.reply_target(self)

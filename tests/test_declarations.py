@@ -650,11 +650,16 @@ class TestCurrentThread:
         with pytest.raises(CallingThreadUnavailable, match="AGENT_COMMS_THREAD"):
             current_thread(None)
 
-    def test_declares_from_env(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-        monkeypatch.setenv("PI_AGENT_TAGS", "a, b")
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("PI_PARENT_ID", raising=False)
-        thread = current_thread(Comms(tmp_path).registry)
-        assert thread.name == "worker"
-        assert thread.tags == frozenset({"a", "b"})
+    def test_owner_launch_environment_declares_the_same_thread(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
+        registry = Comms(tmp_path).registry
+        launched = registry.new_thread(
+            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), parent="lead", task="Ship it"
+        )
+        for name, value in launched.launch().apply(dict(os.environ)).items():
+            monkeypatch.setenv(name, value)
+        thread = current_thread(registry)
+        assert (thread.name, thread.tags, thread.worktree, thread.parent, thread.task) == (
+            "worker", frozenset({"a", "b"}), str(tmp_path / "project"), "lead", "Ship it"
+        )

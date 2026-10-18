@@ -17,6 +17,7 @@ from agent_comms import pi_commands as commands
 from agent_comms import pi_events as pi
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp_failure import RequestFailure
+from agent_comms.input_attempt import UnresolvedInput
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, QueuePromptRequest, SteerPromptRequest, decode_updates, encode_request
 from agent_comms.child_process import BoundedRun, ExitedOutcome
 from agent_comms.assignment_states import DeliveredAssignment
@@ -74,7 +75,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
         assert not owner.inputs.pending_turns and not owner.turns.turn_state(session).active.phase.busy
         assert any(isinstance(fact, InputDeliveryChangedUpdate)
                    for update in updates.rows for fact in decode_updates(update.get("_meta")))
-        assert Comms(native.root).goals.unresolved_inputs(session) == [row.public() for row in rows]
+        assert Comms(native.root).goals.unresolved_inputs(session) == tuple(UnresolvedInput.of(row) for row in rows)
     assert native.session.read_bytes() == saved and native.provider.posts == 0
 
 

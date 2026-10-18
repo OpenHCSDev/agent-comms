@@ -102,24 +102,19 @@ class ResolvedMentionBinding(GoalMentionBinding):
         if not self.peer.current(registry):
             return (), (diagnostic,)
         peer = registry.threads[self.peer.resolved(registry).name]
-        from .errors import RelationViolationError
-
-        try:
-            peer.role.require_executable()
-        except RelationViolationError:
-            return (), (diagnostic,)
-        if peer.created_at == owner.created_at:
-            return (), (diagnostic,)
-        return (
+        contacts = tuple(
             GoalDerivedContact(
                 owner.name,
                 owner.created_at,
-                peer.name,
-                peer.created_at,
+                executor.name,
+                executor.created_at,
                 goal.id,
                 source.text_revision,
-            ),
-        ), ()
+            )
+            for executor in peer.role.executor(peer)
+            if executor.created_at != owner.created_at
+        )
+        return (contacts, ()) if contacts else ((), (diagnostic,))
 
 
 @dataclass(frozen=True, slots=True)
