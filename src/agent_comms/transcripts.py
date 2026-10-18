@@ -37,7 +37,7 @@ from .transcript_sources import (
     AssignedSourceCursor, AssignedTranscriptSource, EarlierTranscript, NoWireFrontier,
     LaterTranscript, LiveAssignedTranscriptSource, TranscriptSource, WireFrontier,
 )
-from .coordination_errors import StaleRevision, TranscriptChanged
+from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
 from .coordination_database import CoordinationStore
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_response import _assert_response_schema
@@ -560,18 +560,18 @@ class Transcripts:
         self.page_reads += 1
         thread, runtime = page.thread, page.runtime
         cursor = before or after
-        if cursor and (cursor.session_file != runtime.read_key or cursor.offset < 0):
+        if cursor and cursor.session_file != runtime.read_key:
             raise TranscriptChanged()
         source = page.projection
         with page.records.reading() as reader:
             size = reader.cut().offset
-            if cursor and cursor.offset > size:
+            if cursor and not reader.valid_offset(cursor.offset, size):
                 raise TranscriptChanged()
             if through is not None:
-                if through.session_file != runtime.read_key or not 0 <= through.offset <= size:
+                if through.session_file != runtime.read_key or not reader.valid_offset(through.offset, size):
                     raise TranscriptChanged()
                 size = through.offset
-                if cursor and cursor.offset > size:
+                if cursor and not reader.valid_offset(cursor.offset, size):
                     raise TranscriptChanged()
             frontier = through or source.frontier.cursor(runtime.read_key, size)
             source.require_cursor(frontier)
@@ -585,14 +585,18 @@ class Transcripts:
                     max_messages=max_messages, max_bytes=max_bytes,
                 )
             draft = reader.current_draft()
-        start, end = traversal.bounds(initial, consumed)
+            start, end = traversal.bounds(initial, consumed)
+            has_older = reader.has_older(start.offset) or start.wire.sequence > 0
+            requested_earlier = traversal.request_earlier(reader, start.offset)
         events = traversal.finish(records)
+        if requested_earlier and not events:
+            raise CoordinationReadUnavailable("Waiting for the bridge's earlier transcript page")
         if page.inherited and not after and (cursor is None or cursor == frontier):
             events = (*events, *self._fork_start_events(thread))
         return (
             TranscriptPage(
                 events, start, end,
-                start.offset > 0 or start.wire.sequence > 0,
+                has_older,
                 end != frontier,
             ),
             draft,
