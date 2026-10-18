@@ -121,12 +121,38 @@ def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independ
     assert type(FieldCodec.decode(First, 7)) is first
     assert type(FieldCodec.decode(Second, 8)) is second
     assert calls == [first, second]
+    assert First.members_with(First) == (first, Text, Empty)
+    assert Second.members_with(Second) == (second,)
+    assert First.decode('number') is first
+    assert FieldCodec.encode_document(Empty(), Empty) is None
+    assert FieldCodec.decode_document(Empty, None) == Empty()
+    assert FieldCodec.decode_document(dict[str, Empty], {'empty': None}) == {'empty': Empty()}
     assert FieldCodec.encode(first(7), First) == 7
     assert FieldCodec.decode(First, 'text') == Text('text')
     assert FieldCodec.decode(First, None) == Empty()
     assert FieldCodec.value_schema(First)
     with pytest.raises(MalformedRecord):
         FieldCodec.decode(Second, 'text')
+
+    @dataclass(frozen=True, slots=True)
+    class Later(First):
+        entries: tuple[int, ...]
+
+        def to_wire(self):
+            return FieldCodec.encode_record(self)
+
+        @classmethod
+        def from_wire(cls, data):
+            return FieldCodec.decode_record(cls, data)
+
+        @classmethod
+        def schema(cls):
+            return FieldCodec.record_schema(cls)
+
+    encoded = {'entries': [1, 2]}
+    assert FieldCodec.encode(Later((1, 2))) == encoded
+    assert type(FieldCodec.decode(First, encoded)) is Later
+    assert First.members_with(First) == (first, Text, Empty, Later)
 
 
 def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():

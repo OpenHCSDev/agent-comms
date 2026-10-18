@@ -254,8 +254,9 @@ class SubclassUnion(DeclaredFamily, WireValue):
     accepts_null = True
     external_json_shape = True
 
-    def record_tag(self) -> dict[str, str]:
-        return {}
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return False
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
@@ -1219,7 +1220,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
             declared = get_args(declared)[1]
         if not (isinstance(declared, type) and issubclass(declared, DeclaredFamily)):
             return None
-        if issubclass(declared, WireValue):
+        if not declared.decodes_tagged_records():
             return None
         members = declared._member_declarations()
         if declared not in members or any(

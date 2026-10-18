@@ -106,9 +106,13 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         # The metaclass consumes these declaration options before ABC creation.
         super().__init_subclass__()
 
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
+
     def record_tag(self) -> dict[str, str]:
-        """The default family wire record carries its declared selector."""
-        return {self.family_discriminator: self.declared_name}
+        """Derive the wire selector from the family's decoding behavior."""
+        return {self.family_discriminator: self.declared_name} if self.decodes_tagged_records() else {}
 
     @classmethod
     def decode(cls, name: str) -> type[Self]:
