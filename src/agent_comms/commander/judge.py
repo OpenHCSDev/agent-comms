@@ -70,7 +70,7 @@ def show(thread=None):
     for e in pending:
         by_thread.setdefault(e['thread'], []).append(e)
     for name, edits in by_thread.items():
-        orders = order.COMMS.goals.todos.held_for_commander(order.COMMS.registry.require(ME).incarnation, name)
+        orders = order.held_by(name)
         intent = '\n'.join(todo.order.instructions(todo) for todo in orders) or 'NO OPEN ORDER TODO'
         print(f'===== {name}: {len(edits)} unjudged\nCURRENT ORDERS:\n{intent}\n')
         for e in edits:
