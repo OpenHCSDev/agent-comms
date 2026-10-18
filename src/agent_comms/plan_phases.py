@@ -2,8 +2,8 @@
 
 This family is the one owner of the plan's order and dependencies;
 ``plans/commander-native-plan.md`` points here. An order names the phase it
-serves in ``ProblemOrder.serves``, and a phase is done when every order serving
-it is closed.
+serves in ``ProblemOrder.serves``; an order outside the plan serves
+``UnplannedPhase``. A phase is done when every order serving it is closed.
 """
 
 from __future__ import annotations
@@ -17,7 +17,15 @@ if TYPE_CHECKING:
     from .todos import Todo
 
 
-class PlanPhase(DeclaredFamily, affix="Phase"):
+class OrderPhase(DeclaredFamily, affix="Phase"):
+    """What an order serves: one plan phase, or nothing in the plan."""
+
+
+class UnplannedPhase(OrderPhase):
+    pass
+
+
+class PlanPhase(OrderPhase, declared_name=None):
     after: ClassVar[tuple[type[PlanPhase], ...]] = ()
 
     @classmethod
@@ -61,14 +69,12 @@ class OneOrderOwnerPhase(MergedPhase):
     delivered = "9293095d9"
 
 
-class DesignReconciledPhase(MergedPhase):
+class DesignReconciledPhase(PlanPhase):
     after = (OneOrderOwnerPhase,)
-    delivered = "64fbd8bc1"
 
 
-class RecordPlanePhase(MergedPhase):
+class RecordPlanePhase(PlanPhase):
     after = (RetainedStorePhase,)
-    delivered = "ab7048fd3"
 
 
 class ReviewQueuePhase(PlanPhase):

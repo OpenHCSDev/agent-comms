@@ -29,10 +29,10 @@ from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
-from ..plan_phases import PlanPhase
+from ..plan_phases import OrderPhase, UnplannedPhase
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
+from ..tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
@@ -225,9 +225,9 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append(str(refused))
     serves = re.search(r'(?m)^Serves:\s*(\S+)\s*$', body)
     try:
-        phase = PlanPhase.decode(serves[1]) if serves else None
+        phase = OrderPhase.decode(serves[1] if serves else UnplannedPhase.declared_name)
     except ValueError as refused:
-        problems.append(f'{refused}; Serves: names one of {", ".join(PlanPhase.names())}')
+        problems.append(f'{refused}; Serves: names one of {", ".join(OrderPhase.names())}')
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
     if not edits:
         problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
@@ -873,6 +873,17 @@ class CheckVerb(OrderVerb, RuledVerb):
 
     def run(self) -> None:
         correct_check(self.pid, self.check, self.why)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ServeVerb(OrderVerb, RuledVerb):
+    help = "name the plan phase an open order serves; keeps its id, deadline and strikes"
+    pid: str = option("pid")
+    phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
+
+    def run(self) -> None:
+        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.decode(self.phase)))
+        print(f'{self.pid} serves {self.phase}')
 
 
 @dataclass(frozen=True, kw_only=True)
