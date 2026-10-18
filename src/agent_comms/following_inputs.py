@@ -12,7 +12,6 @@ from .agent_backend import TurnInbox
 from .coordinator import Coordination
 from .owned_send import OwnedSend
 from .queued_input import DeliveredInput, InputHandoffRefused
-from .started_input import FollowingStartedInput
 from .thread_identity import ClaimedIdentity, TurnId
 from .turn_input_source import AcceptedFollowingInput, SelectedOriginalInput
 
@@ -76,7 +75,7 @@ class OwnerFollowingInputs(FollowingInputs):
                 raise InputHandoffRefused("The input was retired before its turn read it")
             await item.dispatch(turns, session_id, self.owner.name)
         except InputHandoffRefused:
-            await inputs.input_refused(session_id, FollowingStartedInput.capture(inputs, session_id, input_id))
+            await inputs.input_refused(session_id, input_id)
             return False
         return True
 
@@ -110,9 +109,7 @@ class OwnerFollowingInputs(FollowingInputs):
 
     async def started(self, input_id: str) -> AcceptedFollowingInput:
         source = self.inputs.following_sources[self.session_id][input_id]
-        await self.inputs.input_started(
-            self.session_id, FollowingStartedInput.capture(self.inputs, self.session_id, input_id), self.scope,
-        )
+        await source.started(self.inputs, self.session_id, self.scope)
         await self.ready(self.inputs, self.session_id)
         return source
 

@@ -23,9 +23,9 @@ from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .tool_results import ToolDiff
 from .tool_declaration import ToolDeclaration
 from .child_process import ProcessIdentity
-from .started_input import StartedInput, OriginalStartedInput, FollowingStartedInput
 
 if TYPE_CHECKING:
+    from .started_input import StartedInput
     from .transcript_events import SentTranscript
     from .pi_commands import PiCommand
     from .native_turn_context import NativeContextManifestData
@@ -72,8 +72,6 @@ class ContextObserved(AgentEvent):
 
 
 class InputStarted(AgentEvent):
-    id: str | None
-
     @abstractmethod
     def captured(self, inputs: InputDrain, session_id: str) -> StartedInput: ...
 
@@ -83,7 +81,7 @@ class OriginalInputStarted(InputStarted):
     id: ClassVar[None] = None
 
     def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
-        return OriginalStartedInput(inputs.first_sources[session_id])
+        return inputs.first_sources[session_id]
 
 
 @dataclass(frozen=True)
@@ -91,7 +89,7 @@ class FollowingInputStarted(InputStarted):
     id: str
 
     def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
-        return FollowingStartedInput.capture(inputs, session_id, self.id)
+        return inputs.following_sources[session_id][self.id]
 
 
 class InputRefused(AgentEvent):
@@ -104,7 +102,7 @@ class FollowingInputRefused(InputRefused):
     id: str
 
     async def apply_to(self, inputs: InputDrain, session_id: str) -> None:
-        await inputs.input_refused(session_id, FollowingStartedInput.capture(inputs, session_id, self.id))
+        await inputs.input_refused(session_id, self.id)
 
 
 @dataclass(frozen=True)

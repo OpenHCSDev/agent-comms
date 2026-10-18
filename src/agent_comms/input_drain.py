@@ -16,7 +16,6 @@ from acp.schema import PromptResponse
 from .acp_extension import (
     PromptRequest,
     InputDeliveryChangedUpdate,
-    InputStartedUpdate,
     QueueChangedUpdate,
     LiveQueueScope,
     QueueScope,
@@ -50,7 +49,6 @@ from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
-from .started_input import StartedInput, FollowingStartedInput
 from .wire_metadata import WireMetadata
 from .wire_watch import WatchSource, WireWatch
 from .goal_waits import GoalWaits
@@ -613,25 +611,6 @@ class InputDrain(InputObservation):
             update=(await self.queue_state(session_id)).acp_chunk(),
         )
 
-    async def emit_input_started(
-        self,
-        session_id: str,
-        text: str | None,
-        public_id: str | None = None,
-        source_scope: QueueScope = NoQueueScope(),
-        *,
-        native_id: str | None,
-        client: Any = None,
-    ) -> None:
-        scope = await self.queue_binding(session_id)
-        if not source_scope.current_for(scope):
-            scope = NoQueueScope()
-        revision = scope.start_revision(self, session_id)
-        await (client or self.runtime).session_update(
-            session_id=session_id,
-            update=InputStartedUpdate(public_id, text, scope, revision, native_id).acp_chunk(),
-        )
-
     async def emit_input_disposition(
         self, session_id: str, row: InputAttempt, client: Any = None
     ) -> None:
@@ -782,13 +761,14 @@ class InputDrain(InputObservation):
             self._idle_private_revisions.clear()
             self._repeat_private_observations.clear()
 
-    async def input_started(
-        self, session_id: str, started: StartedInput, source_scope: QueueScope,
-    ) -> None:
-        await started.started(self, session_id, source_scope)
-
-    async def input_refused(self, session_id: str, started: FollowingStartedInput) -> None:
-        await started.refused(self, session_id)
+    async def input_refused(self, session_id: str, input_id: str) -> None:
+        source = self.following_sources.get(session_id, {}).pop(input_id, None)
+        if source is not None:
+            await self.emit_input_delivery_changed(session_id)
+        item = self.queued_inputs.get(session_id, {}).pop(input_id, None)
+        if item is not None:
+            await item.not_started(self)
+            await self.emit_queue_state(session_id)
 
     async def input_cleared(
         self, session_id: str, input_id: str, native_id: str, text: str,
@@ -801,7 +781,7 @@ class InputDrain(InputObservation):
                         if not self.dispositions.clear_native(key, native_id, text):
                             raise RelationViolationError("Native clear differs from its original input")
             await Coordination.run_worker(record)
-        await self.input_refused(session_id, FollowingStartedInput.capture(self, session_id, input_id))
+        await self.input_refused(session_id, input_id)
 
     def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
         """The joined retirement owns the original input and its wire cut."""

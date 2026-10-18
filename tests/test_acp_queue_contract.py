@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
+from agent_comms.input_attempt import ReservedInput
 from agent_comms.comms import Comms
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
@@ -71,16 +73,26 @@ async def test_queue_exact_ids_restore_snapshot_and_claim_change(tmp_path, monke
         updates.extend(decode_updates(update.field_meta))
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
-    item = agent.inputs.queued_inputs["beta"].pop(first)
-    await agent.inputs.emit_input_started("beta", item.text, first, source_scope=initial.scope, native_id="b" * 32)
-    started = updates[-1]
+    item = agent.inputs.queued_inputs["beta"][first]
+    with ExitStack() as ownership:
+        agent.inputs.dispositions.reserve_originals(ReservedInput(
+            item.key, None, "beta", generation, "beta", item.text,
+        ), ownership=ownership)
+        ownership.pop_all()
+    assert agent.inputs.dispositions.bind(
+        item.key, claim_scope=generation, turn_id="test-turn", native_id="b" * 32, text=item.text,
+    )
+    assert agent.inputs.dispositions.started(
+        item.key, turn_id="test-turn", native_id="b" * 32, text=item.text,
+    )
+    await item.source().started(agent.inputs, "beta", initial.scope)
+    started = next(update for update in updates if isinstance(update, InputStartedUpdate))
     assert isinstance(started, InputStartedUpdate)
     assert (started.input_id, started.scope, started.revision) == (
         first,
         initial.scope,
         initial.revision + 1,
     )
-    await agent.inputs.emit_queue_state("beta")
     queued = updates[-1]
     assert queued.revision > started.revision
     assert queued.projection.items == (QueueItem(second, "same text"),)
@@ -157,11 +169,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     assert not agent.inputs.queued_inputs["beta"]
     assert agent.inputs.input_keys("beta") == sources
     assert stored_inputs(agent.inputs.dispositions.root) == cleared
-    from agent_comms.started_input import FollowingStartedInput
-
-    await agent.inputs.input_refused(
-        "beta", FollowingStartedInput.capture(agent.inputs, "beta", requests[0].input_id),
-    )
+    await agent.inputs.input_refused("beta", requests[0].input_id)
     assert agent.inputs.input_keys("beta") == frozenset((f"acp:{requests[1].input_id}",))
     assert stored_inputs(agent.inputs.dispositions.root) == cleared
 
