@@ -1,6 +1,8 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 
 import asyncio
+import logging
+from contextlib import suppress
 import json
 import os
 from dataclasses import replace
@@ -528,3 +530,61 @@ def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
     with pytest.raises(RelationViolationError, match="already exists"):
         comms.threads.create(ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level="high", task="duplicate"))
     assert comms.registry.require("child").pid == os.getpid()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
+async def test_subscriber_leaving_mid_transcript_is_not_a_failed_request(
+    tmp_path, monkeypatch, caplog, native_backend,
+):
+    """A subscriber that leaves ends its subscription quietly; a malformed request still fails."""
+    comms = Comms(tmp_path / "wire")
+    comms.messaging.initialize_private_initial_protocol()
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
+    owner = canonical_agent(
+        comms, agent_bin="pi", agent_args=native_backend.native_arguments(), runtime_enabled=True
+    )
+    client = canonical_agent(comms)
+
+    class Client:
+        async def session_update(self, session_id, update):
+            pass
+
+    client.on_connect(Client())
+    response = await owner.new_session(str(tmp_path / "project"))
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def held_transcript(*args, **kwargs):
+        entered.set()
+        await release.wait()
+
+    owner.sessions.transcript.subscribe = held_transcript
+    proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
+    caplog.set_level(logging.ERROR, logger="agent_comms.runtime")
+    task = asyncio.create_task(proxy.subscribe())
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        await proxy.close()
+        release.set()
+        with pytest.raises(RuntimeError, match="disconnected during attachment"):
+            await task
+        await until(lambda: not owner._runtime.clients.get(response.session_id), timeout=5)
+        await asyncio.sleep(0.1)
+        assert not [r for r in caplog.records if r.getMessage().startswith("Runtime request failed")]
+        reader, writer = await asyncio.open_unix_connection(proxy.path)
+        try:
+            writer.write(b"not a request\n")
+            await writer.drain()
+            assert "error" in json.loads(await reader.readline())
+        finally:
+            writer.close()
+            await writer.wait_closed()
+        failed = [r for r in caplog.records if r.getMessage().startswith("Runtime request failed")]
+        assert len(failed) == 1 and isinstance(failed[0].exc_info[1], ValueError)
+    finally:
+        release.set()
+        task.cancel()
+        with suppress(asyncio.CancelledError, RuntimeError):
+            await task
+        await client.shutdown()
+        await owner.shutdown()
