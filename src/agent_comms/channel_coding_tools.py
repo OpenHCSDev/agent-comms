@@ -10,8 +10,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from abc import abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Never
 
 from agent_comms.coordinator import Coordination
 
@@ -36,11 +39,8 @@ from .selected_tool_broker import (
 
 @dataclass
 class CodingCall(NativeToolCall):
-    tool: NativeExecutableTool
-
-    @property
-    def name(self) -> str:
-        return self.tool.declared_name
+    @abstractmethod
+    def require_tool(self) -> NativeExecutableTool | type[NativeExecutableTool]: ...
 
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int
@@ -60,13 +60,14 @@ class CodingCall(NativeToolCall):
             or not call_id
             or len(call_id) > 256
             or type(name) is not str
-            or type(arguments) is not dict
         ):
-            raise SelectedToolDenied("Malformed native coding call")
+            raise SelectedToolDenied("Malformed native coding call identity")
         try:
+            if type(arguments) is not dict:
+                raise SelectedToolDenied("Native coding arguments must be an object")
             return NativeExecutableTool.from_call(name, arguments, call_id=call_id)
         except (ValueError, TypeError, KeyError) as error:
-            raise SelectedToolDenied(f"Invalid native coding call: {error}") from error
+            return RefusedCodingCall(call_id, name, arguments, str(error))
 
     def slot(self, input_id: str, round_number: int) -> str:
         identity = f"{input_id}\0{round_number}\0{self.call_id}"
@@ -74,7 +75,49 @@ class CodingCall(NativeToolCall):
 
 
 @dataclass
-class CoordinationCall(CodingCall):
+class ExecutableCodingCall(CodingCall):
+    tool: NativeExecutableTool | type[NativeExecutableTool]
+
+    @property
+    def name(self) -> str:
+        return self.tool.declared_name
+
+    def require_tool(self) -> NativeExecutableTool | type[NativeExecutableTool]:
+        return self.tool
+
+
+@dataclass
+class RefusedCodingCall(CodingCall):
+    """Invalid arguments cannot execute, but still own real start/error events."""
+
+    tool_name: str
+    arguments: object
+    reason: str = field(compare=False)
+
+    @property
+    def name(self) -> str:
+        return self.tool_name
+
+    def require_tool(self) -> Never:
+        raise SelectedToolDenied(self.reason)
+
+    def correlate(self, candidate: NativeToolCall) -> None:
+        # Pi may normalize arguments before its socket request. This call
+        # remains refused whatever it supplies; a changed identity is not ours.
+        if (self.call_id, self.name) != (candidate.call_id, candidate.name):
+            raise SelectedToolDenied("Refused coding call identity changed")
+
+    def start(self) -> None:
+        super().start()
+        self.claim_scope.expire(self)
+
+    async def authorize(self, action: Callable[[], Awaitable[None]]) -> None:
+        await self._wait_started()
+        self.require_tool()
+
+
+@dataclass
+class CoordinationCall(ExecutableCodingCall):
     """The declaration executes through Core; raw arguments still own exact call matching."""
 
     tool: type[NativeExecutableTool]
@@ -118,13 +161,14 @@ class CodingToolOwner:
             slot = call.slot(self.input_id, round_number)
             consume_selected_slot(self.session_dir, slot, slot)
             owner = self.comms.registry.require(self.owner_name)
+            tool = call.require_tool()
             try:
-                effects = call.tool.storage_effects(Path(owner.worktree))
+                effects = tool.storage_effects(Path(owner.worktree))
                 if effects:
                     self.comms.registry.decide_storage(self.owner_name, effects)
             except SelectedToolDenied as error:
                 raise SelectedToolDenied(f'{error}\n{self.comms.registry.storage_rule.render(owner.storage_roots)}') from error
-            resource = call.tool.claim
+            resource = tool.claim
             if resource is not None:
                 canonical = resource.normalized(Path(owner.worktree))
                 prior = self.claims.get(canonical)
