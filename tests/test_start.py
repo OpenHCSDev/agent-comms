@@ -1,4 +1,3 @@
-from agent_comms.native_package import pinned_native_package
 import asyncio
 import sys
 
@@ -37,10 +36,7 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     source = tmp_path / "saved.jsonl"
     source.touch()
     comms = wire(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(
-        comms.root, root_id, pinned_native_package()
-    )
+    comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(source)))
     comms.registry.unregister("worker")
     try:

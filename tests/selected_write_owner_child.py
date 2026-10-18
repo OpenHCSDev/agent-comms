@@ -42,7 +42,7 @@ async def main(base: Path) -> None:
             else:
                 raise RuntimeError("parent did not release fixture dispatch")
             count = await self._drain_private_nk(
-                "beta", os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
+                "beta", self._comms.owners.require_private_launch().wire_root_id
             )
             print(
                 json.dumps(

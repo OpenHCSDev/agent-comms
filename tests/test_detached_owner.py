@@ -72,8 +72,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
 
     monkeypatch.setattr(ParentedProcess, "launch", logged_launch)
     comms = wire(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.messaging.initialize_private_initial_protocol()
     options = dict(
         agent_bin=str(package / "dist/cli.js"),
         agent_args=["--provider", "openrouter", "--model", "fake-compact"],

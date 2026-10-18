@@ -15,7 +15,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms import restart_queue as queue
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, PACKAGE_ENV, ROOT_ID_ENV
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.comms import Comms
@@ -52,9 +52,6 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
 ):
     fixture = native_backend
     comms = Comms(fixture.root)
-    comms.owners.pin_private_nk_launch(
-        comms.root, os.environ[ROOT_ID_ENV], pinned_native_package()
-    )
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(fixture.project)))
     # This test queues work, but deliberately never admits an actual restart.
     watchers = []
@@ -137,9 +134,6 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             "Set QUEUE_SOURCE_RUNTIME and QUEUE_SOURCE_PACKAGE to retained reviewed source pins"
         )
     comms = Comms(fixture.root)
-    comms.owners.pin_private_nk_launch(
-        comms.root, os.environ[ROOT_ID_ENV], pinned_native_package()
-    )
     comms.registry.declare(
         comms.registry.new_thread('worker', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')
     )
@@ -160,7 +154,6 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
     # Reuse the real retained historical installation, with a distinct interpreter
     # and native bundle; no substitute worker or protocol fixture.
     source_runtime = Path(os.environ["QUEUE_SOURCE_RUNTIME"])
-    source_package = Path(os.environ["QUEUE_SOURCE_PACKAGE"])
     target_interpreter = sys.executable
     target_package = pinned_native_package()
     source_environment = dict(os.environ)
@@ -168,7 +161,6 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
     source_environment.update(
         {
             "VIRTUAL_ENV": str(source_runtime),
-            PACKAGE_ENV: str(source_package),
             "QUEUE_FIXTURE_AUTH_SENTINEL": "source-auth-only",
         }
     )
@@ -205,7 +197,6 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         environment = dict(os.environ, AGENT_COMMS_ROOT=str(comms.root))
         if interpreter != target_interpreter:
             environment.pop("PYTHONPATH", None)
-            environment[PACKAGE_ENV] = str(source_package)
         async with spawn_agent_process(
             subscriber,
             interpreter,
@@ -285,7 +276,6 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         ).environment
         assert replacement_env["QUEUE_FIXTURE_AUTH_SENTINEL"] == "source-auth-only"
         assert replacement_env["PI_CODING_AGENT_DIR"] == str(fixture.config)
-        assert replacement_env[PACKAGE_ENV] == str(target_package)
         assert replacement_env[NativeArguments.binary_key] == request.target.agent_bin
         assert replacement_env.get("PYTHONPATH") == os.environ.get("PYTHONPATH")
         assert replacement_env.get("VIRTUAL_ENV") == os.environ.get("VIRTUAL_ENV")

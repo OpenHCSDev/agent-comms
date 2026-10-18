@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
+from .typed_table import TypedStore
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
@@ -275,6 +276,20 @@ class LaterTranscript(TranscriptTraversal):
         return initial, consumed
 
 
+class TranscriptDraft:
+    def end_turn(self, transcript: TypedStore) -> None:
+        """An absent draft needs no write."""
+
+    def external_row(self):
+        """The ACP draft field is null when there is no external draft."""
+        return None
+
+
+@dataclass(frozen=True)
+class NoDraft(TranscriptDraft):
+    pass
+
+
 class TranscriptSource:
     """Recorded items alone carry no assigned-wire or publication authority.
 
@@ -319,9 +334,8 @@ class TranscriptSource:
                 raise StaleRevision('Turn source changed during its read')
         return tuple(turns)
 
-    def current_draft(self):
-        """Saved records have no draft unless their reader supplies one."""
-        return None
+    def current_draft(self) -> TranscriptDraft:
+        return NoDraft()
 
     def publication_revision(self, root, recipient):
         return PublishedReplyRevision(0, 0)

@@ -3,6 +3,8 @@ from agent_comms.native_package import pinned_native_package
 
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
+import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -14,8 +16,6 @@ from native_backend_fixture import native_backend_fixture
 
 _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "AGENT_COMMS_MANAGED",
-    "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE",
-    "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID",
     "AGENT_COMMS_PROJECT_REQUEST",
     "AGENT_COMMS_PROJECT_SOCKET",
     "AGENT_COMMS_ROOT",
@@ -47,6 +47,34 @@ def _deferred_candidate_scheduler_is_explicit(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
     )
+
+
+@pytest.fixture
+def private_directory():
+    """A throwaway directory on physical /var/tmp; private N/K publication refuses /tmp."""
+    if (
+        os.name != "posix"
+        or not Path("/var/tmp").is_dir()
+        or Path("/var").is_symlink()
+        or Path("/var/tmp").is_symlink()
+    ):
+        pytest.skip("a private bus needs a physical /var/tmp")
+    with tempfile.TemporaryDirectory(prefix="ac-private-", dir="/var/tmp") as directory:
+        yield Path(directory)
+
+
+@pytest.fixture
+def private_comms(private_directory):
+    """One throwaway private bus, built as production builds one.
+
+    Its launch derives like any private root's: the marker installed here
+    gives the root ID, this installation the package.
+    """
+    root = private_directory / "wire"
+    root.mkdir(mode=0o700)
+    comms = Comms(root, private_initial_writes=True)
+    comms.messaging.initialize_private_initial_protocol()
+    return comms
 
 
 @pytest.fixture
