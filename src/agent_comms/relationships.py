@@ -866,20 +866,21 @@ class ThreadRelationships:
             if revision == self._recent_revision:
                 return self._recent, self._limited
             with self.bus.log._opened_wire_snapshot(need_sequence=False) as source:
-                revision = source.revision
+                revision, = source.revision_key
                 previous = self._recent_revision
-                extended = False
-                if previous is not None and revision is not None:
-                    extended = (previous.holds_cut(revision, previous.size)
-                                and revision.size > previous.size)
-                if extended:
-                    start = max(previous.size, source.boundary - self.RECENT_BYTES)
-                    source.stream.seek(start)
-                    data = source.stream.read(source.boundary - start)
-                    contiguous = start == previous.size
-                else:
-                    data, start = source.tail_bytes(self.RECENT_BYTES)
-                    contiguous = False
+
+                def read_tail(opened):
+                    if (previous is not None
+                            and previous.holds_cut(opened.revision, previous.size)
+                            and opened.revision.size > previous.size):
+                        start = max(previous.size, opened.boundary - self.RECENT_BYTES)
+                        opened.stream.seek(start)
+                        data = opened.stream.read(opened.boundary - start)
+                        return data, start, start == previous.size
+                    data, start = opened.tail_bytes(self.RECENT_BYTES)
+                    return data, start, False
+
+                data, start, contiguous = source.read(read_tail, absent=lambda: (b"", 0, False))
             lines = data.splitlines(keepends=True)
             if start and not contiguous and lines:
                 lines.pop(0)  # A bounded cut may begin in a partial record.

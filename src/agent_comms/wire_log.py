@@ -8,6 +8,7 @@ import os
 import sqlite3
 import stat
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
@@ -38,7 +39,7 @@ from .errors import (
 from .coordination_errors import StaleRevision
 from .field_codec import FieldCodec
 from .messages import Message
-from .private_path import FileRevision
+from .private_path import FileIdentity, FileRevision
 from .store_files import (
     StoreLock,
     StoreLockContention,
@@ -59,30 +60,201 @@ def _notify_candidates(log: WireLog, through_bytes: int) -> None:
 
 
 @dataclass(frozen=True)
-class OpenedWireSnapshot:
-    """One original descriptor and fixed cut, owned until the reader exits.
-
-    This reader owns a snapshot, not permission to append or start a live turn.
-    Uncertified cuts decode every row strictly, including silent observations.
-    """
+class WireSnapshot(ABC):
+    """One fixed bus cut; its concrete source owns availability and reading."""
 
     metadata: WireMetadata
     through: int
-    stream: BinaryIO | None
-    revision: FileRevision | None
     _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | None] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
 
     @property
+    @abstractmethod
+    def complete_boundary(self) -> int: ...
+
+    @property
+    @abstractmethod
+    def boundary(self) -> int: ...
+
+    @property
+    @abstractmethod
+    def identity(self) -> FileIdentity | None: ...
+
+    @property
+    @abstractmethod
+    def revision_key(self) -> tuple: ...
+
+    @property
+    @abstractmethod
+    def opened(self) -> OpenedWireSnapshot: ...
+
+    @abstractmethod
+    def read[T](self, present: Callable[[OpenedWireSnapshot], T], *, absent: Callable[[], T]) -> T: ...
+
+    @abstractmethod
+    def checked(self, source) -> OpenedWireSnapshot: ...
+
+    @abstractmethod
+    def records(self) -> Iterator[WireRecord]: ...
+
+    @abstractmethod
+    def query_page_index[T](self, read: Callable[[BusPageIndex], T], *, empty: T) -> T: ...
+
+    @abstractmethod
+    def indexed_records(self, rows: Iterable[BusPageRow], *, before_offset: int) -> Iterator[tuple[Message, int]]: ...
+
+    @abstractmethod
+    def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None: ...
+
+    @abstractmethod
+    def remember_append_checkpoint(self, index: BusAppendIndex[Checkpoint], record: Checkpoint) -> None: ...
+
+    @abstractmethod
+    def _tail_bytes(self, max_bytes: int) -> tuple[bytes, int]: ...
+
+    @abstractmethod
+    def appended_records(self, previous: FileRevision, previous_sequence: int) -> tuple[WireRecord, ...]: ...
+
+    @abstractmethod
+    def public_records(self, offset: int = 0, *, before_offset: int | None = None) -> Iterator[tuple[Message, int]]: ...
+
+    def capture_append_indexes(self, prepared) -> None:
+        self._append_checkpoints.update(prepared)
+
+    def tail_bytes(self, max_bytes: int) -> tuple[bytes, int]:
+        if max_bytes < 0:
+            raise ValueError("tail byte limit must be nonnegative")
+        return self._tail_bytes(max_bytes)
+
+    @staticmethod
+    def messages(record: Mapping) -> tuple[Message, ...]:
+        from .errors import StoredHistoryUnreadable
+
+        try:
+            return WireRecord.public_from_wire(record).messages()
+        except (TypeError, ValueError) as error:
+            raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
+
+    def messages_for_references(self, references):
+        """Resolve exact public identities, including rows without a wake cohort."""
+        messages = {
+            message.reference: message
+            for message, _ in self.public_records_for(
+                frozenset(reference.seq for reference in references),
+                before_offset=self.complete_boundary,
+            )
+        }
+        if any(reference not in messages for reference in references):
+            raise RelationViolationError("Notification reference is not its original source")
+        return tuple(messages[reference] for reference in references)
+
+    def public_records_for(self, sequences: frozenset[int], *, before_offset: int
+                           ) -> Iterator[tuple[Message, int]]:
+        """An unscanned cut validates every original row, including silence."""
+        if not 0 <= before_offset <= self.boundary:
+            raise ValueError("Public read exceeds its opened source cut")
+        if sequences:
+            for message, size in self.public_records(before_offset=before_offset):
+                if message.seq in sequences:
+                    yield message, size
+
+    @classmethod
+    def public_page_records(cls, record: Mapping, raw_size: int,
+                            metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
+        """Silent facts consume physical bytes, never message/display budgets."""
+        for message in cls.messages(record):
+            if has_private_wire_fields(record):
+                yield message, len(json.dumps(message.to_wire()).encode()) + 1
+            else:
+                message.require_retained_claim(metadata.claimed_after_seq)
+                yield message, raw_size
+
+
+class AbsentWireSnapshot(WireSnapshot):
+    """No descriptor existed at acquisition; later appends stay outside this cut."""
+
+    complete_boundary = boundary = 0
+    identity = None
+    revision_key = (None,)
+
+    @property
+    def opened(self) -> OpenedWireSnapshot:
+        raise RelationViolationError("Wire snapshot has no opened source")
+
+    def read[T](self, present: Callable[[OpenedWireSnapshot], T], *, absent: Callable[[], T]) -> T:
+        return absent()
+
+    def checked(self, source) -> OpenedWireSnapshot:
+        raise RelationViolationError("Opened read differs from its certified source cut")
+
+    def records(self) -> Iterator[WireRecord]:
+        return iter(())
+
+    def query_page_index[T](self, read: Callable[[BusPageIndex], T], *, empty: T) -> T:
+        return empty
+
+    def indexed_records(self, rows: Iterable[BusPageRow], *, before_offset: int) -> Iterator[tuple[Message, int]]:
+        raise RelationViolationError("Indexed read exceeds its opened wire cut")
+
+    def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
+        return None
+
+    def remember_append_checkpoint(self, index: BusAppendIndex[Checkpoint], record: Checkpoint) -> None:
+        raise ValueError("Computed append checkpoint belongs to another source cut")
+
+    def _tail_bytes(self, max_bytes: int) -> tuple[bytes, int]:
+        return b"", 0
+
+    def appended_records(self, previous: FileRevision, previous_sequence: int) -> tuple[WireRecord, ...]:
+        raise RelationViolationError("Wire tail has no opened source")
+
+    def public_records(self, offset: int = 0, *, before_offset: int | None = None) -> Iterator[tuple[Message, int]]:
+        return iter(())
+
+
+@dataclass(frozen=True)
+class OpenedWireSnapshot(WireSnapshot):
+    """One original descriptor and required revision, held until the reader exits."""
+
+    stream: BinaryIO
+    revision: FileRevision
+
+    @property
+    def identity(self) -> FileIdentity:
+        return self.revision.identity
+
+    @property
+    def revision_key(self) -> tuple[FileRevision]:
+        return (self.revision,)
+
+    @property
+    def opened(self) -> OpenedWireSnapshot:
+        return self
+
+    def read[T](self, present: Callable[[OpenedWireSnapshot], T], *, absent: Callable[[], T]) -> T:
+        return present(self)
+
+    def checked(self, source) -> OpenedWireSnapshot:
+        if (self.revision != FileRevision.from_file(source.stream)
+                or os.fstat(self.stream.fileno()).st_dev != source.witness.device
+                or self.boundary != source.witness.offset):
+            raise RelationViolationError("Opened read differs from its certified source cut")
+        return ScannedWireSnapshot(self.metadata, self.through, self.stream, self.revision)
+
+    def records(self) -> Iterator[WireRecord]:
+        scan = WireScan(self.metadata)
+        while self.stream.tell() < self.boundary:
+            raw = self.stream.readline(min(WireRecord.max_row_bytes + 1, self.boundary - self.stream.tell()))
+            if not raw:
+                break
+            yield scan.read(raw)
+
+    @property
     def complete_boundary(self) -> int:
         """Last complete line inside this fixed physical cut, without reading history."""
         stream, revision = self.stream, self.revision
-        if stream is None:
-            if revision is not None:
-                raise StaleRevision("Opened wire revision has no stream")
-            return 0
-        if revision is None or not revision.opened_by(stream):
+        if not revision.opened_by(stream):
             raise StaleRevision("Opened wire stream no longer contains its captured revision")
         position = stream.tell()
         try:
@@ -106,8 +278,6 @@ class OpenedWireSnapshot:
         self, read: Callable[[BusPageIndex], T], *, empty: T
     ) -> T:
         """Prepare/query this cut; source absence and index repair stay owned here."""
-        if self.stream is None:
-            return empty
         access = self.metadata.access
         with BusPageIndex(Path(self.stream.name)) as index:
             try:
@@ -122,7 +292,7 @@ class OpenedWireSnapshot:
     def indexed_records(self, rows: Iterable[BusPageRow], *,
                         before_offset: int) -> Iterator[tuple[Message, int]]:
         """Decode selected offsets through this original descriptor and byte cut."""
-        if self.stream is None or not 0 <= before_offset <= self.boundary:
+        if not 0 <= before_offset <= self.boundary:
             raise RelationViolationError("Indexed read exceeds its opened wire cut")
         for row in rows:
             (message, size), = self.public_page_records(
@@ -130,11 +300,6 @@ class OpenedWireSnapshot:
                 self.metadata,
             )
             yield message, size
-
-    def capture_append_indexes(
-        self, prepared: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...],
-    ) -> None:
-        self._append_checkpoints.update(prepared)
 
     def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
         """Validate the captured candidate only when a consumer reads this cut."""
@@ -153,32 +318,17 @@ class OpenedWireSnapshot:
 
     @property
     def boundary(self) -> int:
-        return self.revision.size if self.revision is not None else 0
+        return self.revision.size
 
-    def tail_bytes(self, max_bytes: int) -> tuple[bytes, int]:
+    def _tail_bytes(self, max_bytes: int) -> tuple[bytes, int]:
         """Read trailing bytes from this fixed cut's retained descriptor."""
-        if max_bytes < 0:
-            raise ValueError("tail byte limit must be nonnegative")
-        if self.stream is None:
-            return b"", 0
         start = max(0, self.boundary - max_bytes)
         self.stream.seek(start)
         return self.stream.read(self.boundary - start), start
 
-    @staticmethod
-    def messages(record: Mapping) -> tuple[Message, ...]:
-        from .errors import StoredHistoryUnreadable
-
-        try:
-            return WireRecord.public_from_wire(record).messages()
-        except (TypeError, ValueError) as error:
-            raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
-
     def appended_records(self, previous: FileRevision,
                          previous_sequence: int) -> tuple[WireRecord, ...]:
         """Decode only bytes appended to the same opened source inode."""
-        if self.stream is None or self.revision is None:
-            raise RelationViolationError("Wire tail has no opened source")
         if previous.identity != self.revision.identity or previous.size > self.revision.size:
             raise RelationViolationError("Wire tail does not extend the settled source")
         self.stream.seek(previous.size)
@@ -199,8 +349,6 @@ class OpenedWireSnapshot:
 
     def public_records(self, offset: int = 0, *, before_offset: int | None = None
                        ) -> Iterator[tuple[Message, int]]:
-        if self.stream is None:
-            return
         boundary = self.boundary if before_offset is None else before_offset
         if not 0 <= offset <= boundary <= self.boundary:
             raise ValueError("Public read exceeds its opened source cut")
@@ -210,42 +358,7 @@ class OpenedWireSnapshot:
         ):
             yield from self.public_page_records(record, raw_size, self.metadata)
 
-    def messages_for_references(self, references):
-        """Resolve exact public identities, including rows without a wake cohort."""
-        messages = {
-            message.reference: message
-            for message, _ in self.public_records_for(
-                frozenset(reference.seq for reference in references),
-                before_offset=self.complete_boundary,
-            )
-        }
-        if any(reference not in messages for reference in references):
-            raise RelationViolationError("Notification reference is not its original source")
-        return tuple(messages[reference] for reference in references)
-
-    def public_records_for(self, sequences: frozenset[int], *, before_offset: int
-                           ) -> Iterator[tuple[Message, int]]:
-        """An uncertified cut must validate every original row, including silence."""
-        if not 0 <= before_offset <= self.boundary:
-            raise ValueError("Public read exceeds its opened source cut")
-        if sequences:
-            for message, size in self.public_records(before_offset=before_offset):
-                if message.seq in sequences:
-                    yield message, size
-
-    @classmethod
-    def public_page_records(cls, record: Mapping, raw_size: int,
-                            metadata: WireMetadata) -> Iterator[tuple[Message, int]]:
-        """Silent facts consume physical bytes, never message/display budgets."""
-        for message in cls.messages(record):
-            if has_private_wire_fields(record):
-                yield message, len(json.dumps(message.to_wire()).encode()) + 1
-            else:
-                message.require_retained_claim(metadata.claimed_after_seq)
-                yield message, raw_size
-
-
-class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
+class ScannedWireSnapshot(OpenedWireSnapshot):
     """Public projection of a cut authorized by the acquired complete WireScan.
 
     Only original locked acquisition can select this implementation. Later
@@ -648,26 +761,18 @@ class WireLog:
                 try:
                     stream = resources.enter_context(self.path.open("rb"))
                 except FileNotFoundError:
-                    stream = None
-                boundary = stream.seek(0, 2) if stream is not None else 0
-                if stream is not None:
-                    stream.seek(0)
-                revision = FileRevision.from_file(stream) if stream is not None else None
-                snapshot_type = OpenedWireSnapshot
+                    opened = AbsentWireSnapshot(metadata, through)
+                else:
+                    revision = FileRevision.from_file(stream)
+                    opened = OpenedWireSnapshot(metadata, through, stream, revision)
                 if lock.source is not None:
                     source = lock.certified_read()
                     source.require_marker(metadata)
                     # A reserved but unappended sequence blocks new input,
                     # not the original committed bytes of this read-only cut.
                     source.require_open_prefix()
-                    # Bind the separate retained descriptor to the exact authorized
-                    # inode/revision while the bus locks are still held.
-                    if (stream is None or revision != FileRevision.from_file(source.stream)
-                            or os.fstat(stream.fileno()).st_dev != source.witness.device
-                            or boundary != source.witness.offset):
-                        raise RelationViolationError("Opened read differs from its certified source cut")
-                    snapshot_type = CertifiedOpenedWireSnapshot
-                opened = snapshot_type(metadata, through, stream, revision)
+                    # Bind the retained descriptor to this exact checked inode/cut.
+                    opened = opened.checked(source)
             # Transfer candidate records without reading files or hashing here.
             # Consumers validate after the caller's outer locks are released.
             opened.capture_append_indexes(prepared_indexes)
@@ -681,16 +786,7 @@ class WireLog:
         This resource is a fixed read, not permission to append or start input.
         """
         with self._opened_wire_snapshot(need_sequence=False) as opened:
-            yield self._snapshot_records(opened.metadata, opened.stream, opened.boundary)
-
-    @staticmethod
-    def _snapshot_records(metadata, stream, boundary):
-        scan = WireScan(metadata)
-        while stream is not None and stream.tell() < boundary:
-            raw = stream.readline(min(WireRecord.max_row_bytes + 1, boundary - stream.tell()))
-            if not raw:
-                break
-            yield scan.read(raw)
+            yield opened.records()
 
     @contextmanager
     def _record_snapshot(

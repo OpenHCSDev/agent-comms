@@ -131,10 +131,10 @@ class BusAppendIndex(AppendProjectionStore[Checkpoint]):
         self._held = record
 
     def capture(
-        self, prepared: Checkpoint | None, stream: BinaryIO | None,
-        revision: FileRevision | None,
+        self, prepared: Checkpoint | None, stream: BinaryIO,
+        revision: FileRevision,
     ) -> Checkpoint | None:
-        if prepared is None or stream is None or revision is None:
+        if prepared is None:
             return None
         self._held = prepared if prepared.accepts(revision, stream) else None
         return self._held

@@ -26,7 +26,7 @@ from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .bus_display_index import DisplayMetricScope, DisplayMetrics
-    from .wire_log import OpenedWireSnapshot
+    from .wire_log import OpenedWireSnapshot, WireSnapshot
 
 
 class StaleBusPageIndexError(ValueError):
@@ -129,7 +129,10 @@ class BusPageIndex:
     def __exit__(self, *_error: object) -> None:
         self._resources.close()
 
-    def covers(self, opened: OpenedWireSnapshot) -> bool:
+    def covers(self, opened: WireSnapshot) -> bool:
+        return opened.read(self._covers, absent=lambda: False)
+
+    def _covers(self, opened: OpenedWireSnapshot) -> bool:
         if not self.path.exists():
             return False
         with self.snapshot():
@@ -139,7 +142,7 @@ class BusPageIndex:
                 opened.stream, replace(opened.revision, size=opened.complete_boundary))
 
     @contextmanager
-    def prepared(self, opened: OpenedWireSnapshot):
+    def prepared(self, opened: WireSnapshot):
         with _store_lock(self.bus_path, shared=True):
             if self.covers(opened):
                 with self.snapshot():
@@ -172,10 +175,10 @@ class BusPageIndex:
             self.prepare(source)
         return True
 
-    def prepare(self, opened: OpenedWireSnapshot) -> None:
+    def prepare(self, opened: WireSnapshot) -> None:
         """Bring this disposable index up to the caller's original source cut."""
         while True:
-            prepared = self._prepare(opened)
+            prepared = opened.read(self._prepare, absent=lambda: None)
             if prepared is None:
                 raise RelationViolationError("Cannot prepare a page index from an incomplete wire cut")
             saved, source, offset, rows = prepared
@@ -199,8 +202,6 @@ class BusPageIndex:
                     last_rows = BusPageRow.select(self.connection, order_by=("seq",),
                                                   descending=True, limit=1)
         stream, revision = opened.stream, opened.revision
-        if stream is None:
-            return None
         size = opened.complete_boundary
         if saved is not None and saved.covers(stream, revision):
             return saved, saved, saved.revision.size, ()
