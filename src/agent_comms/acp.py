@@ -63,6 +63,7 @@ from .queued_input import DeliveredInput
 from .schedule_rules import SelectedWakeCheck
 from .input_effects import InputEffects
 from .message_bus import MessageBus
+from .publisher import ResponseWrites
 from .routing import MessageRoute
 from .runtime import (
     UNBOUND_CONTROLLER,
@@ -145,7 +146,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self._selected_write_controllers: dict[tuple[str, int], tuple[str, object]] = {}
 
     def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy:
-        return RuntimeProxy(self, session_id, socket_path(self._comms.root, thread.pid))
+        return RuntimeProxy(
+            self, session_id, socket_path(self._comms.root, thread.require_process().pid),
+        )
 
     # Private attachment ABI consumed by runtime/compaction. State exists only
     # on its component; in-process consumers use that owner directly.
@@ -374,11 +377,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # acceptance/selection, instead of verifying history before it too.
             await self.cursors.publish(session_id, thread_name)
             return 0
-        if owner.pid != os.getpid():
+        if not owner.process_identity.runs_here():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
-        bus = MessageBus(
-            self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
-        )
+        bus = MessageBus(self._comms.root / "bus.jsonl", self._comms.registry, ResponseWrites)
         def read_claim():
             with bus.log.certified_read() as source:
                 return source.marker.claimed_after_seq

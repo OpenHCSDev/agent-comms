@@ -48,7 +48,7 @@ async def owner(tmp_path, monkeypatch):
     await agent.new_session(str(tmp_path / "project"))
     session = tmp_path / "session.jsonl"
     session.touch()
-    comms.threads.attach_session(comms.registry.require("project"), str(session))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("project")), str(session), process=attachment_owner.process_identity)
     return agent, comms, session, updates
 
 

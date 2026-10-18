@@ -281,7 +281,7 @@ async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native
                 store.participants.register(owner.incarnation.lookup, session, session, committed=True)
 
         await Coordination.run_worker(declare_sender)
-        wire = Comms(native.root, private_initial_writes=True)
+        wire = Comms(native.root)
         try:
             await Coordination.run_worker(partial(
                 wire.messaging.send_message, "sender", session, "P71_SELECTED_ORIGINAL",

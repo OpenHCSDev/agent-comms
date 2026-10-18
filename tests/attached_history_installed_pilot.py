@@ -67,7 +67,7 @@ async def main():
         comms=wire(root/'wire')
         comms.messaging.initialize_private_initial_protocol()
         for name, parent in [('openhcs-architecture-memory',None),('openhcs-pr159-viewer-bind-owner','openhcs-architecture-memory')]:
-            comms.registry.declare(comms.registry.new_thread(name, frozenset({'openhcs', 'comms'}), str(root), parent=parent, process_identity=None))
+            comms.registry.declare(comms.registry.new_thread(name, frozenset({'openhcs', 'comms'}), str(root), parent=parent))
         originals=reference_actual_history(comms.root,live)
         sources=comms.bus.history.sources()
         assert [len(source.provenance.threads) for source in sources]==[104,7]

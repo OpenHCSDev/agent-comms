@@ -62,7 +62,7 @@ def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(
     child.write_text(json.dumps({"type": "message", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "child answer"}],
     }}) + "\n")
-    comms.threads.attach_session(comms.registry.require("child"), str(child))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("child")), str(child), process=attachment_owner.process_identity)
     with pytest.raises(StaleRevision):
         fresh.read()
     assert [event.text for event in comms.transcripts.capture_page_read("child").read().events] == ["child answer"]

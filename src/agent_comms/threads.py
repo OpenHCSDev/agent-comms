@@ -8,7 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
 
 from .agent_backend import AgentBackend
-from .child_process import ProcessIdentity
+from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .thread_execution import ThreadExecution, NativeThreadExecution
@@ -46,7 +46,7 @@ class Thread(ThreadProvenance):
     worktree: str = field(kw_only=False)
     parent: str | None = None
     task: str | None = None
-    process_identity: ProcessIdentity | None = None
+    process_identity: ProcessState = field(default_factory=NoProcess)
     session_file: str | None = field(
         default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
     )
@@ -160,7 +160,7 @@ class Thread(ThreadProvenance):
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None:
-            if self.active_turn.owner_pid != self.pid:
+            if not self.process_identity.owns_turn(self.active_turn):
                 raise RelationViolationError("A turn must belong to the registered executor.")
             if self.active_turn.turn_generation is not None and (
                 type(self.active_turn.turn_generation) is not int
@@ -223,13 +223,8 @@ class Thread(ThreadProvenance):
         )
 
     @property
-    def pid(self) -> int:
-        """Numeric OS projection of the sole stored process authority."""
-        return self.process_identity.pid if self.process_identity is not None else 0
-
-    @property
     def process_alive(self) -> bool:
-        return self.process_identity is not None and self.process_identity.alive()
+        return self.process_identity.alive()
 
     @classmethod
     def require_declaration(cls, value: Thread) -> None:
@@ -246,9 +241,7 @@ class Thread(ThreadProvenance):
 
     def require_process(self) -> ProcessIdentity:
         self.role.require_executable()
-        if self.process_identity is None:
-            raise RelationViolationError(f"Thread {self.name!r} has no owner process")
-        return self.process_identity
+        return self.process_identity.require(f"Thread {self.name!r} has no owner process")
 
 
     def require_idle(self) -> None:
@@ -351,10 +344,6 @@ class Thread(ThreadProvenance):
     def goal_checkpoint(self) -> GoalCheckpoint:
         return (PresentGoalCheckpoint(self.goal.checkpoint)
                 if self.goal is not None else AbsentGoalCheckpoint())
-
-    @property
-    def has_process(self) -> bool:
-        return self.process_identity is not None
 
     def same_launch(self, other: Thread) -> bool:
         """Whether both records describe one process serving one saved session with one model setting.

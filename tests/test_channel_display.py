@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms.bus_publication import HumanOrigin
+from agent_comms.bus_publication import HumanOrigin, AgentOrigin
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
@@ -318,7 +318,7 @@ def test_direct_retag_before_open_is_captured_with_its_source(tmp_path):
             alice = comms.registry.require("alice")
             comms.registry.register(replace(alice, tags=frozenset({"ui"})))
             comms.bus.publisher.publish_ordinary(
-                Message("alice", "bob", "late direct", InfoKind)
+                Message("alice", "bob", "late direct", InfoKind), origin=AgentOrigin()
             )
         with original(**options) as snapshot:
             yield snapshot
@@ -346,7 +346,7 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
             human = comms.registry.require("human")
             comms.bus.publisher.publish_ordinary(
                 Message("human", "#api", "owned unread", InfoKind),
-                _human_origin=HumanOrigin(human.name, human.created_at, human.worktree),
+                origin=HumanOrigin(human.name, human.created_at, human.worktree),
             )
         with original(**options) as snapshot:
             yield snapshot

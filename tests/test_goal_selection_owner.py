@@ -5,7 +5,6 @@ import os
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     ClearGoalAction,
@@ -17,7 +16,6 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.goals import Goal
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.threads import Thread
 from agent_comms.tools import CommsEditGoalTool, CommsResumeGoalTool
@@ -106,11 +104,11 @@ def test_model_edit_and_resume_use_current_goal_selection(selected_goal, monkeyp
     caller = ThreadCaller("worker")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     edited = CommsEditGoalTool(goal_id=original.id, text="Edited objective").apply(comms, caller)
-    current = FieldCodec.decode(Goal, edited["goal"])
+    current = edited.goal
     assert current.id == original.id and current.revision > original.revision
     comms.goals.update_goal("worker", PausedGoalAction())
     resumed = CommsResumeGoalTool(goal_id=original.id, progress="Explicit model resume").apply(comms, caller)
-    assert FieldCodec.decode(Goal, resumed["goal"]).id == original.id
+    assert resumed.goal.id == original.id
     assert comms.registry.require("worker").goal.state.active
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="Replacement"))
     with pytest.raises(ValueError, match="replaced or cleared"):

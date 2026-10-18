@@ -16,6 +16,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .thread_execution import ExternalThreadExecution
 
@@ -50,6 +51,14 @@ def merge_json(path: Path, merge) -> None:
 
 
 @dataclass(frozen=True)
+class HarnessInstalled:
+    """What one harness's install linked, configured and registered."""
+    links: tuple[str, ...]
+    config: tuple[str, ...]
+    registered: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Harness(DeclaredFamily, affix="Harness"):
     home: Path
 
@@ -77,15 +86,15 @@ class Harness(DeclaredFamily, affix="Harness"):
     def configure(self) -> tuple[Path, ...]:
         """Write this harness's own config in its own format; returns the files written."""
 
-    def install(self, comms: Comms, commander: str, project: Path) -> dict:
+    def install(self, comms: Comms, commander: str, project: Path) -> HarnessInstalled:
         for link, target in self.links().items():
             replace_link(link, target)
         registered = [name for name in self.bus_threads(commander) if not comms.registry.name_reserved(name)]
         for name in registered:
             comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(project),
                                                                 execution=ExternalThreadExecution))
-        return {'links': sorted(map(str, self.links())), 'config': sorted(map(str, self.configure())),
-                'registered': registered}
+        return HarnessInstalled(tuple(sorted(map(str, self.links()))),
+                                tuple(sorted(map(str, self.configure()))), tuple(registered))
 
     @classmethod
     def published_links(cls, home: Path) -> dict[Path, Path]:

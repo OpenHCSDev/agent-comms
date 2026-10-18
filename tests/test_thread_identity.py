@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -172,8 +172,8 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
     assert claim_scope.claimed_generation != registry_owner.generation
     original_binding = snapshot.owner_binding("owner")
     assert not original_binding.superseded_by(snapshot.owner_binding("owner"))
-    for scope in (LiveQueueScope("official-session", claim_scope, owner.pid),
-                  LiveCursorScope("official-session", "a" * 32, claim_scope, owner.pid)):
+    for scope in (LiveQueueScope("official-session", claim_scope, owner.require_process().pid),
+                  LiveCursorScope("official-session", "a" * 32, claim_scope, owner.require_process().pid)):
         encoded = FieldCodec.encode(scope)
         assert FieldCodec.decode(type(scope), encoded) == scope
         encoded["claim_scope"] = FieldCodec.encode(registry_owner)
@@ -249,7 +249,7 @@ def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_
 
     assert thread.same_launch(replace(thread, title="Renamed", tags=frozenset({"team"}), turn_generation=3))
     for changed in (
-        replace(thread, process_identity=None),
+        replace(thread, process_identity=NoProcess()),
         replace(thread, session_file=str(tmp_path / "b.jsonl")),
         replace(thread, model="model-b"),
         replace(thread, worktree=str(tmp_path / "elsewhere")),

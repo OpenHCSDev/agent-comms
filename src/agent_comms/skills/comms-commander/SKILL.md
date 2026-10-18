@@ -37,6 +37,7 @@ The failure this skill breaks is the mega-corp equilibrium: nobody changes anyon
 - **Units do not diagnose, plan comparisons, or choose shapes.** Read the profile, diff and code, then order the exact edits.
 - **Every order goes through `order send UNIT HH:MM BODYFILE`.** It refuses soft wording, orders without numbered edits, a report line or banned shapes, and records the deadline.
 - **Strikes, then fire.** A send-back, missed deadline, false claim or off-order edit is `order strike UNIT --why ...`. Two strikes on one task takes the task away the same tick and reassigns every board row the unit owns. `order done UNIT` only after reading the diff that meets the order.
+- **A wrong check is corrected, not worked around.** When the check you wrote cannot pass on correct work, `order check PID --check "repo :: cmd -> N" --why "..."` replaces it on the open order. The new check must already pass on main; the order keeps its id, deadline, holder and strikes, and records no strike. Never record an op for a commit or close without the check.
 - **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
 - **Judged against what the commander would have done.** If a unit action is not what you would have done given what it knew, say why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
 - **Never justify a unit's failure to the user.** Report what it failed to do and what was done about it.

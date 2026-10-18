@@ -242,7 +242,7 @@ class TestThreadOps:
         """list_threads, thread_detail and who/presence write one thread's record from one parent."""
         views = wired.views
         rows = {
-            "detail": views.thread_detail("fixer", include_pending=counted),
+            "detail": views.thread_detail("fixer", include_pending=counted).to_wire(),
             "roster": next(row for row in (views.who() if counted else views.presence())
                            if row["name"] == "fixer"),
             **({"list": next(row for row in views.list_threads() if row["name"] == "fixer")}
@@ -268,13 +268,13 @@ class TestThreadOps:
         session_file = tmp_path / "session.jsonl"
 
         attached = wired.threads.attach_session(
-            wired.registry.require("fixer"), str(session_file), pid=123
+            wired.registry.require("fixer"), str(session_file), process=ProcessIdentity.capture(os.getpid())
         )
 
         assert attached.tags == frozenset({"auth"})
         assert attached.parent == "PR111"
         assert attached.task == "fix auth"
-        assert attached.pid == 123
+        assert attached.pid == os.getpid()
         assert attached.session_file == str(session_file.resolve())
         assert wired.registry.status("fixer").declared_name == "running"
 
@@ -287,7 +287,7 @@ class TestThreadOps:
         session_file.write_text(
             json.dumps({"type": "model_change", "provider": "test", "modelId": "saved"}) + "\n"
         )
-        attached = wired.threads.attach_session(wired.registry.require("fixer"), str(session_file))
+        attached = wired.threads.attach_session((attachment_owner := wired.registry.require("fixer")), str(session_file), process=attachment_owner.process_identity)
         assert attached.model == "test/saved"
         assert wired.registry.require("fixer").model == "test/saved"
 
@@ -529,7 +529,7 @@ class TestLedgerOps:
 class TestPollAndWire:
     def test_poll_snapshot(self, wired):
         wired.messaging.send("PR111", "fixer", "hello")
-        snap = wired.views.poll("fixer")
+        snap = wired.views.poll("fixer").to_wire()
         assert snap["thread"]["name"] == "fixer"
         assert len(snap["inbox"]) == 1
         assert [peer["name"] for peer in snap["peers"]] == ["PR111"]
@@ -539,7 +539,7 @@ class TestPollAndWire:
     def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        snap = wired.views.poll()
+        snap = wired.views.poll().to_wire()
         assert snap["thread"]["name"] == "fixer"
 
     def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):

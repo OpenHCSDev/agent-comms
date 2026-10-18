@@ -22,6 +22,7 @@ from .field_codec import FieldCodec, WireValue
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
+    from .participant_store import ParticipantStore
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
 
@@ -228,11 +229,15 @@ class ThreadProvenance:
     def display_title(self) -> str:
         return self.name if self.title is None else self.title
 
+    @staticmethod
+    def require_name(name: str) -> None:
+        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+        if not name or not set(name) <= allowed:
+            raise ValueError(f"Thread name {name!r} must be alphanumeric with hyphens/underscores.")
+
     def __post_init__(self) -> None:
         self.incarnation
-        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        if not self.name or not set(self.name) <= allowed:
-            raise ValueError(f"Thread name {self.name!r} must be alphanumeric with hyphens/underscores.")
+        self.require_name(self.name)
         if not self.worktree:
             raise ValueError("Thread worktree cannot be empty.")
         for tag in self.tags:
@@ -380,6 +385,11 @@ class ThreadRole(StrEnum):
         if not self.executable:
             return replace(message, role=message.role.as_notice()), []
         return message, [target]
+
+    def register_sender(self, participants: ParticipantStore, lookup: str, name: str) -> None:
+        """An executing sender is a participant; a human sender owns no turns to wake."""
+        if self.executable:
+            participants.register(lookup, name, name, committed=True)
 
     def require_executable(self) -> None:
         if not self.executable:

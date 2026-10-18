@@ -1,4 +1,5 @@
 """SelectedExecution with pinned native Pi, local deterministic coding provider."""
+from conftest import publish_initial
 from agent_comms.pi_vocabulary import LowThinkingLevel
 from binding_reads import binding_rows
 
@@ -52,7 +53,7 @@ async def test_native_full_four_tools_publish_and_release(
             marker = comms.bus.log.private_marker_unlocked()
             marker.claimed_after_seq = marker.last_seq
             comms.bus.log.write_metadata_unlocked(marker)
-        fresh = comms.messaging.send_initial_cohort("sender", "beta", "Run the coding tools now.")
+        fresh = publish_initial(comms, "sender", "beta", "Run the coding tools now.")
         initial = comms.bus.log.read_delivery_cohort(root_id, fresh.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
@@ -84,9 +85,9 @@ async def test_native_full_four_tools_publish_and_release(
     if entrypoint := os.environ.get('AC_HEADLESS_ENTRYPOINT'):
         assert not selected_write
         inspection = (
-            'from pathlib import Path; from agent_comms.comms import Comms; '
+            'from pathlib import Path; from agent_comms.comms import Comms; from agent_comms.publisher import Publisher; '
             'from agent_comms.turn_phase import ToolRunningPhase; '
-            f'c=Comms(Path({str(root)!r}), private_initial_writes=False, private_claim_writes=False); '
+            f'c=Comms(Path({str(root)!r}), Publisher); '
             'assert isinstance(c.registry.require("beta").turn_state.phase, ToolRunningPhase); '
             'print("CANONICAL_TOOL_RUNNING")'
         )

@@ -13,19 +13,22 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
+from .cli_result import CliResult
+from .field_codec import FieldCodec, WireValue
+from .tool_result import ToolResult
 from .coordination_errors import StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_route_counts import OpenedRouteCounts
-from .bus_display_index import BusDisplayIndex, DisplayMetricScope
+from .bus_display_index import BusDisplayIndex
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .display_order import ChannelSort, NameChannelSort
 from .goal_presentation import ThreadGoalExecution
+from . import relationships
 from .goal_waits import GoalWaits
 from .external_transcript import ExternalTranscript
 from .notification_assignment import NotificationAssignment
-from .relationships import RelationshipStore
 from .mentions import MentionCandidate
 from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
@@ -526,22 +529,24 @@ class BusPresentation:
     def display_view_metrics(
         self,
         source: WireSnapshot,
-        selection: DisplaySelection,
+        basis: DisplaySelection,
     ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
 
-        The captured selection owns channel inclusion, viewer aliases and read
+        The captured basis owns channel inclusion, viewer aliases and read
         membership. None is supplied independently by the metrics caller.
         The index reads the captured complete-line cut; read and write errors propagate.
         """
-        semantics = DisplayMetricScope(selection.scopes, selection.viewer_names, selection.seen)
-        snapshot = self.display_index(selection.require_viewer()).snapshot(source, semantics)
-        return snapshot.activity, snapshot.counts
+        snapshot = self.display_index(basis.require_viewer()).snapshot(source, basis.scopes)
+        unread = source.query_page_index(lambda page: page.display_unread(
+            basis.scopes, basis.viewer_names, basis.seen, source.complete_prefix.boundary))
+        return snapshot.activity, unread
 
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelView:
+class ChannelView(WireValue, ToolResult):
+    """Wire form: the channel's own fields beside its roster; agent counts stay in process."""
     channel: Channel
     members: tuple[str, ...]
     last_activity: float = 0
@@ -611,9 +616,20 @@ class ChannelView:
             "pinned_members": sorted(self.pinned_members),
         }
 
+    @classmethod
+    def from_wire(cls, data: dict[str, object]) -> ChannelView:
+        roster = ("members", "last_activity", "last_user_input", "pinned_members")
+        declared = {key: value for key, value in data.items() if key not in roster}
+        member = Channel.decode(FieldCodec.decode(str, declared[Channel.family_discriminator]))
+        channel = FieldCodec.decode(member, declared)
+        return cls(channel, FieldCodec.decode(tuple[str, ...], data["members"]),
+                   FieldCodec.decode(float, data["last_activity"]),
+                   FieldCodec.decode(float, data["last_user_input"]),
+                   FieldCodec.decode(frozenset[str], data["pinned_members"]))
+
 
 @dataclass(frozen=True, slots=True)
-class ThreadRecord:
+class ThreadRecord(CliResult):
     """A thread's wire record; every reader of one thread writes these fields from here."""
     thread: Thread
     status: ThreadStatus
@@ -636,6 +652,9 @@ class ThreadRecord:
             GoalWaits.execution(thread.goal, waits, snapshot, agents),
             pending=None if pending is None else pending[thread.name],
         ) for thread in threads)
+
+    def encoded(self) -> object:
+        return self.to_wire()
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -809,7 +828,7 @@ class WireRevision(ReadState):
     reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,))
     native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,))
     goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: (GoalWaits.path_in(views.root),))
-    relationships: tuple[FileRevision, ...] = revision_source(lambda views: (RelationshipStore.path_in(views.root),))
+    relationships: tuple[FileRevision, ...] = revision_source(lambda views: (relationships.RelationshipStore.path_in(views.root),))
     notifications: tuple[FileRevision, ...] = revision_source(lambda views: NotificationAssignment.handling_paths(views.root))
     external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root))
     expiry_tick: int

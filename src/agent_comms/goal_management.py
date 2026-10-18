@@ -255,7 +255,7 @@ class Goals:
         `settled` event. A later turn (even already finished) invalidates the
         old fence; a rename or unrelated metadata edit does not.
         """
-        if type(fence) is not FinishedTurnFence:
+        if fence is None:
             return ()
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()

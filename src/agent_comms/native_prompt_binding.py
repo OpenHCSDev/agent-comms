@@ -41,8 +41,6 @@ if TYPE_CHECKING:
 
 def binding_store_path(store: Coordination) -> Path:
     """Sidecar store beside the private coordination database."""
-    if type(store) is not Coordination:
-        raise TypeError("prompt binding requires the actual coordinator store")
     return PromptBinding.path_in(store.session.path.parent).absolute()
 
 

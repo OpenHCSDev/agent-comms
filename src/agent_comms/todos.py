@@ -54,21 +54,53 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommitDelivery(OrderDelivery):
+class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
+    """A delivery recorded before checked and delivered commits were told apart.
+
+    Its one commit is both facts; Core refuses new deliveries of this kind."""
     commit: str
 
-    def __post_init__(self):
-        if not 7 <= len(self.commit) <= 40 or self.commit.strip("0123456789abcdef"):
-            raise ValueError("Delivery requires a commit hash.")
+    def __post_init__(self) -> None:
+        if any(not isinstance(sha, str) or not 7 <= len(sha) <= 40
+               or sha.strip("0123456789abcdef") for sha in (self.commit, self.delivered)):
+            raise ValueError("Delivery requires a checked and a delivered commit hash.")
 
-    async def require_source(self, check):
-        head = (await self.run(check, "git", "rev-parse", "HEAD", f"{self.commit}^{{commit}}")).split()
+    @property
+    def delivered(self) -> str:
+        return self.commit
+
+    async def require_source(self, check: OrderCheck) -> None:
+        raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
+
+    async def delivery_time(self, check: OrderCheck) -> EventTime:
+        return EventTime.capture(float(
+            await self.run(check, "git", "show", "-s", "--format=%ct", self.delivered)))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
+    """The check runs on ``commit``; ``delivered_commit`` is the unit's pushed ancestor of it."""
+    delivered_commit: str
+
+    @property
+    def delivered(self) -> str:
+        return self.delivered_commit
+
+    async def require_source(self, check: OrderCheck) -> None:
+        head = (await self.run(check, "git", "rev-parse", "HEAD", f"{self.commit}^{{commit}}",
+                               f"{self.delivered}^{{commit}}")).split()
         dirty = await self.run(check, "git", "status", "--porcelain", "--untracked-files=no")
-        if len(head) != 2 or head[0] != head[1] or dirty.strip():
-            raise ValueError("Run the order check on its clean delivered commit.")
-
-    async def delivery_time(self, check):
-        return EventTime.capture(float(await self.run(check, "git", "show", "-s", "--format=%ct", self.commit)))
+        if len(head) != 3 or head[0] != head[1] or dirty.strip():
+            raise ValueError("Run the order check on its clean checked commit.")
+        base = await self.run(check, "git", "merge-base", self.delivered, self.commit)
+        if base.strip() != head[2]:
+            raise ValueError(
+                f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
+        pushed = await self.run(check, "git", "branch", "--remotes", "--contains", self.delivered,
+                                "--list", "origin/*")
+        if not pushed.strip():
+            raise ValueError(
+                f"Delivered commit {self.delivered} is on no origin branch; push it first.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -239,6 +271,8 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     at: EventTime
     first_call_deadline: EventTime
     first_call: FirstCall = field(default_factory=AwaitingFirstCall)
+    check_corrections: tuple[CorrectCheckTodo, ...] = field(
+        default=(), metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -268,6 +302,12 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         delivery.at.require_delivery()
         return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
+    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
+        if correction.previous != self.check:
+            raise ValueError("The order's check changed since it was read; read it again.")
+        return replace(self, check=correction.check,
+                       check_corrections=(*self.check_corrections, correction))
+
     def installed(self, works, artifact):
         raise ValueError("Check the delivered order before recording installation.")
 
@@ -289,6 +329,9 @@ class DeliveredProblemOrder(ProblemOrder):
         if delivery != self.delivery:
             raise ValueError("The order already records a different delivery.")
         return self
+
+    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
+        raise ValueError("A delivered order keeps the check its delivery passed.")
 
     def installed(self, works, artifact):
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
@@ -508,6 +551,24 @@ class StrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class CorrectCheckTodo(TodoOperation):
+    """The commander replaces a wrong check of an open order.
+
+    The order keeps its id, holder, deadline and strikes; a correction is not a resend."""
+    actor: ThreadIncarnation
+    previous: OrderCheck
+    check: OrderCheck
+    reason: str
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        _text(self.reason, "Check correction reason", 2000)
+        return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class RecordFirstCallTodo(TodoOperation):
     actor: ThreadIncarnation
     event: type[FirstCallEvent]
@@ -663,14 +724,12 @@ def _text(value: str, label: str, limit: int) -> str:
 
 
 def _thread(thread: Thread) -> ThreadIncarnation:
-    if type(thread) is not Thread or not thread.role.executable:
+    if not thread.role.executable:
         raise TodoError("Assignments require an executable registered thread snapshot.")
     return _participant(thread)
 
 
 def _participant(thread: Thread) -> ThreadIncarnation:
-    if type(thread) is not Thread:
-        raise TodoError("Creator must be a registered thread snapshot.")
     _text(thread.name, "Thread name", 128)
     try:
         thread.incarnation.require_recorded()

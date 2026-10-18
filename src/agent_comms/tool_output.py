@@ -6,18 +6,19 @@ import hashlib
 import json
 from pathlib import Path
 
+from .field_codec import FieldCodec
 from .store_files import _atomic_write_text
 
 MAX_INLINE_OUTPUT_BYTES = 32 * 1024
 
 
-def serialize_tool_output(response: dict[str, object]) -> str:
-    """Serialize conservatively for the Pi adapter's pretty JSON text transport."""
-    return json.dumps(response, indent=2, ensure_ascii=True)
+def serialize_tool_output(response: object) -> str:
+    """Serialize a tool's result record conservatively for the Pi adapter's pretty JSON text."""
+    return json.dumps(FieldCodec.encode(response), indent=2, ensure_ascii=True)
 
 
 def materialize_oversized_output(
-    root: Path, response: dict[str, object], *, inline_limit: int = MAX_INLINE_OUTPUT_BYTES
+    root: Path, response: object, *, inline_limit: int = MAX_INLINE_OUTPUT_BYTES
 ) -> Path | None:
     """Publish a generated public-result snapshot only when its transport is oversized.
 

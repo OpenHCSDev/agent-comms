@@ -33,6 +33,7 @@ from .peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
+from . import presentation
 from .wire_record import WireRecord
 from .messages import Message
 from .private_path import FileRevision
@@ -46,7 +47,6 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .message_bus import MessageBus
-    from .presentation import ThreadView, WireRevision
     from .registration import Registration
 
 
@@ -102,7 +102,7 @@ class MutualThreadRelation(ABC):
     def entry_goal_contacts(self) -> tuple[GoalDerivedContact, ...]:
         return ()
 
-    def entry(self, identity: ThreadIncarnation, person: ThreadView | None,
+    def entry(self, identity: ThreadIncarnation, person: presentation.ThreadView | None,
               available: bool, current: RelationshipEntry | None) -> RelationshipEntry:
         return RelationshipEntry(
             identity.name, "thread", person if available else None,
@@ -244,7 +244,7 @@ class GoalMentionDiagnostic:
 class RelationshipEntry:
     target: str
     kind: str
-    person: ThreadView | None = None
+    person: presentation.ThreadView | None = None
     sequence: int = 0
     timestamp: float = 0
     detail: str = ""
@@ -413,7 +413,7 @@ class CollaboratingRelationshipGroup(SortableRelationshipGroup):
 class RelationshipContext:
     registry: RegistrySnapshot
     thread: Thread
-    people: dict[str, ThreadView]
+    people: dict[str, presentation.ThreadView]
     messages: tuple[Message, ...]
     delivery: DeliveryScope
     edges: tuple[Collaboration, ...]
@@ -698,7 +698,7 @@ class ThreadRelationships:
         self._recent: tuple[Message, ...] = ()
         self._limited = False
 
-    def revision(self) -> WireRevision:
+    def revision(self) -> presentation.WireRevision:
         """What a snapshot derives from; equal revisions show the same thing."""
         return self.views.revision()
 

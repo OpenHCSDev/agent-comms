@@ -13,7 +13,9 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from uuid import uuid4
 
-from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity
+from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity, ProcessState
+from .cli_result import CliResult
+from .tool_result import ToolResult
 from .coordination_errors import PublicationActivationBlocked
 from .diagnostics import owner_process_output
 from .errors import RelationViolationError
@@ -32,7 +34,7 @@ from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
-from .typed_table import Column, TypedStore, TypedTable
+from .typed_table import Column, JsonStorage, TypedStore, TypedTable
 
 _LOG = logging.getLogger(__name__)
 
@@ -96,10 +98,13 @@ class OwnerRestartResult:
 
 
 @dataclass(frozen=True, slots=True)
-class OwnerStartResult:
+class OwnerStartResult(CliResult, ToolResult):
     thread: str
     pid: int
     launched: bool
+
+    def reconnect_targets(self) -> tuple[str, ...]:
+        return (self.thread,) if self.launched else ()
 
 
 class OwnerRelease(ABC):
@@ -125,12 +130,12 @@ class NoRelease(OwnerRelease):
 
 @dataclass(frozen=True)
 class ReleasedOwner(ThreadIncarnationRecord):
-    process_identity: ProcessIdentity | None
+    process_identity: ProcessState = field(
+        metadata={"sql": Column(storage=JsonStorage, nullable=True)},
+    )
 
     def require_process(self) -> ProcessIdentity:
-        if self.process_identity is None:
-            raise RelationViolationError(f"Thread {self.name!r} has no released process")
-        return self.process_identity
+        return self.process_identity.require(f"Thread {self.name!r} has no released process")
 
     def matches(self, expected: Thread) -> bool:
         return self.incarnation() == expected.incarnation and self.process_identity == expected.process_identity
@@ -276,12 +281,12 @@ class OwnerLifecycle:
             if thread.process_alive:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")
-                return OwnerStartResult(thread.name, thread.pid, False)
+                return OwnerStartResult(thread.name, thread.require_process().pid, False)
             owner = self._launch_owner_unlocked(
                 thread, NativeArguments.configured_binary(agent_bin), agent_args,
                 launch_runtime=LaunchRuntime.current(),
             )
-            return OwnerStartResult(owner.name, owner.pid, True)
+            return OwnerStartResult(owner.name, owner.require_process().pid, True)
 
     @property
     def launch_authority(self) -> PrivateNkLaunch | None:
@@ -356,10 +361,13 @@ class OwnerLifecycle:
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
             if not snapshot.statuses[thread.name].active and (
-                thread.process_identity is None or thread.pid == os.getpid()
+                thread.process_identity.allows_inactive_stop()
             ):
                 return
-            if snapshot.statuses[thread.name].active and thread.pid == os.getpid():
+            if (
+                snapshot.statuses[thread.name].active
+                and thread.process_identity.runs_here()
+            ):
                 if RestartEnvironment.called_by(
                     thread.name,
                     canonicalize=lambda caller: self.registry.require(caller).name,
@@ -517,11 +525,7 @@ class OwnerLifecycle:
     def _release_current_owner_unlocked(self, canonical: str) -> None:
         snapshot = self.registry.snapshot()
         owner = snapshot.threads[canonical]
-        if (
-            owner.process_identity is not None
-            and owner.process_identity != ProcessIdentity.capture(os.getpid())
-        ):
-            raise RelationViolationError("Only the registered owner may release itself.")
+        owner.process_identity.require_release_by(ProcessIdentity.capture(os.getpid()))
         before = snapshot.claimed_generations[canonical]
         self._retire_owner_unlocked(owner, before)
 

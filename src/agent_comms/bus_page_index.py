@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Generator, Mapping
+from collections.abc import Generator, Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager
 from functools import cached_property
 from dataclasses import dataclass, field, replace
@@ -16,12 +16,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
 from .bus_activity_index import ChannelActivity
-from .bus_display_index import DisplayMetricScope, DisplaySnapshot
+from .bus_display_index import DisplaySnapshot
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
 from .read_ledger import ReadLedger
+from .read_basis import ChannelDisplayScope, ReadCursor
 from .store_files import SharedLock, _store_lock
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
 from .wire_record import WireRecord
@@ -88,7 +89,6 @@ class BusPageRow(PageIndexTable, TypedTable):
 class BusPageMetrics(TypedRow):
     last: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX({timestamp}),0))")})
     human: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")})
-    count: int = field(metadata={"sql": Column(generated="COALESCE(SUM({seq} > ? AND {seq} NOT IN (SELECT value FROM json_each(?)) AND {sender} NOT IN (SELECT value FROM json_each(?))),0)")})
 
 
 class BusPageIndex:
@@ -262,6 +262,14 @@ class BusPageIndex:
         yield from self._offsets(clauses, params, lower=lower, upper=upper,
                                  descending=descending, before_offset=before_offset)
 
+    def sequence_offsets(
+        self, sequences: frozenset[int], *, before_offset: int,
+    ) -> Iterator[BusPageRow]:
+        """Exactly the named sequences' rows, ascending."""
+        yield from self._offsets(["seq IN (" + ",".join("?" for _ in sequences) + ")"],
+                                 [*sorted(sequences)], lower=None, upper=None,
+                                 descending=False, before_offset=before_offset)
+
     def conversation_offsets(
         self, first: frozenset[str], second: frozenset[str], *,
         lower: int | None, upper: int | None, descending: bool,
@@ -298,17 +306,28 @@ class BusPageIndex:
             except (ValueError, TypeError) as error:
                 raise StaleBusPageIndexError("Indexed row has invalid fields") from error
 
-    def display_snapshot(self, semantics: DisplayMetricScope, before_offset: int) -> DisplaySnapshot:
-        snapshot = DisplaySnapshot.empty(semantics)
-        seen, names = semantics.seen, tuple(semantics.viewer_names)
-        for scope in semantics.scopes:
+    def display_snapshot(self, scopes: tuple[ChannelDisplayScope, ...], before_offset: int) -> DisplaySnapshot:
+        snapshot = DisplaySnapshot.empty(scopes)
+        for scope in scopes:
             predicate, parameters = scope.index_predicate
             row, = BusPageRow.select(self.connection, row_type=BusPageMetrics,
                 where=f"offset < ? AND ({predicate})",
-                parameters=(seen.high_water, json.dumps(seen.exceptions), json.dumps(names), before_offset, *parameters))
+                parameters=(before_offset, *parameters))
             snapshot.activity[scope.channel] = ChannelActivity(row.last, row.human)
-            snapshot.counts[scope.channel] = row.count
         return snapshot
+
+    def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
+                       seen: ReadCursor, before_offset: int) -> dict[str, int]:
+        counts = {}
+        for scope in scopes:
+            predicate, parameters = scope.index_predicate
+            counts[scope.channel] = BusPageRow.count(self.connection,
+                where=f"seq > ? AND offset < ? AND ({predicate}) "
+                      "AND sender NOT IN (SELECT value FROM json_each(?)) "
+                      "AND seq NOT IN (SELECT value FROM json_each(?))",
+                parameters=(seen.high_water, before_offset, *parameters,
+                            json.dumps(tuple(viewer_names)), json.dumps(seen.exceptions)))
+        return counts
 
 
 class EmptyBusPageIndex(BusPageIndex):
@@ -320,5 +339,9 @@ class EmptyBusPageIndex(BusPageIndex):
     def _offsets(self, *args, **kwargs):
         yield from ()
 
-    def display_snapshot(self, semantics, boundary):
-        return DisplaySnapshot.empty(semantics)
+    def display_snapshot(self, scopes, boundary):
+        return DisplaySnapshot.empty(scopes)
+
+    def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
+                       seen: ReadCursor, before_offset: int) -> dict[str, int]:
+        return dict.fromkeys((scope.channel for scope in scopes), 0)

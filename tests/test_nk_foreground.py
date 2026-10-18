@@ -5,6 +5,7 @@ These tests do not prove a provider spend ceiling, copied-Pi trust or release.
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import asyncio
 import multiprocessing
 import os
@@ -149,7 +150,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(private_comms, s
         assert duplicate.exitcode == 0
         assert comms.registry.require("beta").pid == ready[1]
 
-        message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
+        message = publish_initial(comms, "sender", "#team", "@beta Compute 17+25.")
         initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         assert len(initial.audience.recipients) == 2
         assert (
@@ -213,7 +214,7 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(priva
         comms.registry.declare(
             comms.registry.new_thread('alpha', frozenset({'team'}), str(root / 'work'), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-        message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
+        message = publish_initial(comms, "sender", "#team", "@beta Compute 17+25.")
         _accept(root, root_id, comms, message)
         failing, attempts = _fake_model(fail_on=1)
         with (
@@ -270,7 +271,7 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
         events.append(payload)
         if payload.get("status") == "ready":
             assert comms.registry.require("beta").pid == os.getpid()
-            message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
+            message = publish_initial(comms, "sender", "#team", "@beta Compute 17+25.")
             _accept(root, root_id, comms, message)
 
     monkeypatch.setattr(foreground, "_emit", emit)

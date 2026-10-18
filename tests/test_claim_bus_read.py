@@ -8,6 +8,7 @@ the owner's event loop with the wire, bus and registry locks held.
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import hashlib
 import os
 import sys
@@ -83,7 +84,7 @@ def selected_turn():
             comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
         root_id = comms.messaging.initialize_private_initial_protocol()
         record_context(comms, "Alice", 1)
-        message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
+        message = publish_initial(comms, "sender", "#team", "@Alice investigate")
         record_context(comms, "Alice", 2)
         initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:

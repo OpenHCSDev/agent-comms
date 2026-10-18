@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import asyncio
 import json
 import multiprocessing
@@ -129,14 +130,14 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
 
     # Real registry, private bus/cohort, slot acquisition and publication; only
     # the native model is fake. A different input must run, never the old one.
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     comms.registry.register(
         replace(
             comms.registry.require("beta"), process_identity=ProcessIdentity.capture(os.getpid())
         ),
         new_owner=True,
     )
-    source = comms.messaging.send_initial_cohort("sender", "beta", "New independent request")
+    source = publish_initial(comms, "sender", "beta", "New independent request")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, source.seq, store)
     fake, calls = _fake_model()
@@ -336,7 +337,7 @@ print(json.dumps({"type":"response", "id":request["id"],
         assert snapshot.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not snapshot.replay.replay_safe
     assert comms.registry.require("beta").active_turn is None
-    source = comms.messaging.send_initial_cohort(
+    source = publish_initial(comms, 
         "sender", "beta", "Independent after local failure"
     )
     with Coordination(str(root / "coordination.sqlite3")) as store:
