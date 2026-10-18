@@ -25,7 +25,7 @@ from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
-    from .historical_views import HistoryCursor
+    from .message_page import HistoryCursor
 
 
 class SendableMessageKind:

@@ -15,7 +15,7 @@ from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
 from .message_page import (
-    ConversationMessagePageRequest, MessagePage, MessagePageRequest,
+    NEWEST_PAGE, MessagePage, MessagePageRequest, NewerTraversal, PageBounds,
     UnreadBeforeRequest,
 )
 from .message_reference import MessageReference
@@ -27,7 +27,6 @@ from .read_basis import (
     DMDisplayScope,
     ListedDeliveries,
     DisplayBasis,
-    MessageDisplayScope,
     WatchAcknowledgment, ReadCursor,
 )
 from .routing import DeliveryScope
@@ -280,77 +279,27 @@ class MessageBus[Writes: Publisher]:
         rows = tuple(sorted(rows, key=lambda row: row.sender_lookup not in first))
         return (AwarenessSegment.capture(self.log.path, marker.root_id, rows),)
 
-    def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
+    def incoming_page(self, name: str, *, after: int) -> MessagePage:
         """A bounded delivery stream independent of UI read acknowledgments."""
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        return self.display_page(delivery, after=after, limit=limit)
+        return MessagePageRequest(delivery, PageBounds(NewerTraversal(after))).read(self.log)
 
-    def dm_history_page(
-        self,
-        a: str,
-        b: str,
-        *,
-        before: int | None = None,
-        after: int | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
-    ) -> MessagePage:
+    def dm_history_page(self, a: str, b: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Return one bounded page between two threads, either possibly deleted."""
         snapshot = self._registry.snapshot()
         scope = DMDisplayScope.capture(
             snapshot.participant(a).name, snapshot.participant(b).name, snapshot
         )
-        return self.display_page(
-            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
-        )
+        return MessagePageRequest(scope, bounds).read(self.log)
 
     def channel_history_page(
-        self,
-        target: ChannelTarget,
-        *,
-        before: int | None = None,
-        after: int | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
+        self, target: ChannelTarget, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
         """Return one bounded page from a channel in ascending order."""
         channel = self._channels.read().resolve(target.name)
-        return self.display_page(
-            ChannelDisplayScope(channel.name, channel.history_targets),
-            before=before,
-            after=after,
-            limit=limit,
-            max_bytes=max_bytes,
-        )
-
-    def display_page(
-        self,
-        scope: MessageDisplayScope,
-        *,
-        before: int | None = None,
-        after: int | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
-    ) -> MessagePage:
-        """Browse a captured presentation scope, not a delivery/history authority."""
-        return MessagePageRequest.capture(
-            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
-        ).read(self.log)
-
-    def conversation_page(
-        self,
-        scope: MessageDisplayScope,
-        *,
-        before: int | None = None,
-        after: int | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
-    ) -> MessagePage:
-        """Present only records whose declaring kind is conversation content."""
-        return ConversationMessagePageRequest.capture(
-            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
-        ).read(self.log)
+        scope = ChannelDisplayScope(channel.name, channel.history_targets)
+        return MessagePageRequest(scope, bounds).read(self.log)
 
     def conversation_older_unread(
         self, scope: DMDisplayScope, *, before: int, seen: ReadCursor
@@ -358,22 +307,10 @@ class MessageBus[Writes: Publisher]:
         """Ask the scoped offset reader, newest first, stopping at the first unread."""
         return UnreadBeforeRequest(scope, before, seen).read(self.log)
 
-    def full_history_page(
-        self,
-        *,
-        before: int | None = None,
-        after: int | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
-    ) -> MessagePage:
+    def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded combined view of explicit channel and direct wire messages."""
-        return self.display_page(
-            ChannelDisplayScope(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets),
-            before=before,
-            after=after,
-            limit=limit,
-            max_bytes=max_bytes,
-        )
+        scope = ChannelDisplayScope(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets)
+        return MessagePageRequest(scope, bounds).read(self.log)
 
     def channels(self) -> Sequence[str]:
         return list(self._channels.read().views(self._registry.all_threads()))
